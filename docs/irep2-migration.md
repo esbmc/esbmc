@@ -3182,7 +3182,58 @@ Resolution is a **two-phase source invariant**:
   shared IREP2-native adjust from the start (RV3). Recommend the Python-only
   pilot, then generalize.
 
-*(Investigation outcomes A/B/C are recorded in the following subsection.)*
+#### V.1k investigation outcomes (A/B/C) — the (b) core change is low-risk
+
+Read-only investigations (2026-06-02) run to harden the (b) spec before coding.
+
+**A — relaxing the construction assert has *zero* blast radius on existing
+frontends. ✅** There are **no** `member2tc(` construction sites in any frontend
+(`grep -rn 'member2tc(' src/{clang-c,clang-cpp,python}-frontend` → empty): the
+frontends build **legacy** `member_exprt`, and `member2t` is constructed only at
+goto-convert (via `migrate.cpp:1534-1541`) and inside symex — **both
+post-adjust**. The C++ pipeline is `convert → adjust → goto`
+(`clang_cpp_language.cpp:123,127`), identical to Python. Therefore `member2t` is
+built pre-adjust **only** in the new Python converter path; for every existing
+path it is already post-adjust over a resolved source, so the relaxed assert
+changes nothing for them. The two-phase invariant's risk surface is exactly the
+new Python window the adjuster closes — *not* the rest of the tree. This
+substantially de-risks the one IREP2-core change (b) needs.
+
+**B — the converter's inferred attribute type is already on the node as the
+`symbol_typet` tag; the adjuster needs no inference logic. ✅** The Python
+attribute inference (`flow_class_map_`, `python_converter.h:1078`, consumed at
+`converter_expr.cpp:590`; `infer_attr_type_from_usage`,
+`converter_class.cpp:659`) writes the inferred class onto the node as
+`gen_pointer_type(symbol_typet("tag-<inferred-class>"))`
+(`converter_class.cpp:279`). So for the `github_4117` flow cases
+(`n1.next = n2; n1.next.value`, `next: None`→`Node`), the member source already
+carries `symbol_typet("tag-Node")` — the adjuster simply follows that tag to the
+resolved struct. Design (a) missed these only because it patched **one** site
+(≈510) while these flow through the `flow_class_map_` path (590) and the nested
+handler (≈1002); a **holistic** adjuster that resolves *all* `member2t` nodes
+post-converter handles every path uniformly, regardless of which converter site
+or inference rule built the node. This is the strongest argument for (b) over
+(a): one pass, all paths.
+
+**C — Python-only pilot adjuster; the (shared) assert relaxation is safe by (A).
+✅** The two pieces have different scopes. The **assert relaxation** lives in
+IREP2 core (`irep2_expr.h:1499-1505`/`:1576`) and is unavoidably shared — but
+(A) proves it is a no-op for C/C++/CUDA/Solidity (they never build `member2t`
+pre-adjust). The **adjuster** can be **Python-only first**: a new IREP2-native
+pass replacing the `clang_cpp_adjust` round-trip on Python output only,
+generalised to a shared IREP2-native adjust later (RV3). **Recommended first
+cut:** (i) relax the two asserts to permit a transient `symbol_type2t` source
+(guarded so Release/`NDEBUG` is unaffected and the post-adjust verification is
+the real gate); (ii) build the Python-only IREP2-native adjuster against the
+20-test fixture; (iii) keep the legacy `clang_cpp_adjust` path for all other
+frontends until a later shared phase. Blast radius of the first cut: the two
+assert lines + the new Python adjuster + Phase V.3's converter flip — **not** the
+shared adjust, not symex.
+
+**Net:** all three investigations come back favourable. The one core change (the
+assert) is proven low-risk (A); the adjuster needs no inference of its own (B);
+and the first cut is cleanly Python-scoped (C). V.1k is ready to move from
+spike to a built **(b)** pilot, gated by the 20-test fixture.
 
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
