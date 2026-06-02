@@ -315,6 +315,12 @@ __ESBMC_HIDE:;
   return nondet_int();
 }
 
+int fseeko(FILE *stream, off_t offset, int whence)
+{
+__ESBMC_HIDE:;
+  return nondet_bool() ? 0 : -1;
+}
+
 long ftell(FILE *stream)
 {
 __ESBMC_HIDE:;
