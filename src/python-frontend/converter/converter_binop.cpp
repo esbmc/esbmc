@@ -406,8 +406,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bool is_none_check = handle_none_check_setup(op, lhs, rhs);
   if (!is_none_check)
   {
-    lhs = unwrap_optional_if_needed(lhs);
-    rhs = unwrap_optional_if_needed(rhs);
+    lhs = unwrap_optional_if_needed(lhs, element);
+    rhs = unwrap_optional_if_needed(rhs, element);
   }
 
   if (lhs.type() == none_type() || rhs.type() == none_type())

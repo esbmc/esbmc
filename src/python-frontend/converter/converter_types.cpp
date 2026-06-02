@@ -1,3 +1,4 @@
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple_handler.h>
@@ -11,7 +12,9 @@
 #include <functional>
 #include <set>
 
-exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
+exprt python_converter::unwrap_optional_if_needed(
+  const exprt &expr,
+  const nlohmann::json &element)
 {
   if (!expr.type().is_struct())
     return expr;
@@ -21,8 +24,34 @@ exprt python_converter::unwrap_optional_if_needed(const exprt &expr)
 
   if (tag.starts_with("tag-Optional_"))
   {
+    // A member can only be taken of an addressable value. When the optional is
+    // produced by a call used directly in a comparison -- e.g. f(...) == 2 --
+    // the operand is the call itself (a code_function_callt statement, or a
+    // side-effect call expression), and member_exprt(<call>, "value") is
+    // malformed: it aborts during goto migration (member2t requires a
+    // struct/union/complex source). Materialise the call result into a
+    // temporary first, mirroring the already-working assigned path
+    // (r = f(...); r.value == 2). See #4807.
+    exprt base = expr;
+    if (base.is_code() && base.is_function_call())
+      base = to_value_expr(base, name_space());
+
+    if (base.id() == "sideeffect")
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$optional_tmp$", base.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = base.location();
+      add_instruction(decl);
+
+      code_assignt assign(symbol_expr(tmp), base);
+      assign.location() = base.location();
+      add_instruction(assign);
+      base = symbol_expr(tmp);
+    }
+
     // Extract the value field
-    member_exprt value_field(expr, "value", struct_type.components()[1].type());
+    member_exprt value_field(base, "value", struct_type.components()[1].type());
     return value_field;
   }
 
