@@ -3115,6 +3115,75 @@ Reproduce: re-apply the prototype diff above and run
 `ctest -R 'regression/python/.*(attr|class|nested|dataclass|github_4117|math)'`
 — 20 failures, all in the four families; revert restores green.
 
+#### V.1k design (b) — IREP2-native Python adjuster: scope against the 20-test fixture
+
+The round-2 decision is **design (b)**: replace the legacy `clang_cpp_adjust`
+round-trip on Python output with an IREP2-native adjuster that runs the
+*complete* resolution as one IREP2 pass. This section specifies it against the
+20-test acceptance fixture.
+
+**What the fixture requires (resolution operations, by family):**
+
+| Family (count) | Representative | Resolution the adjuster must perform |
+|---|---|---|
+| `nested-attr-*` (8) | `self.b.a.get_value()` | **Recursive** struct-following: building `X.a` needs `X` (itself member `self.b`) already resolved to a struct. A single leaf follow (design (a)) handled only the outermost level — the exact gap that sank (a). |
+| `github_4117_*` (8) | `n1.next = n2; n1.next.value` (`next: None`→`Node`) | Honor the Python frontend's **attribute type inference** (`python_annotation` + flow-sensitive `flow_class_map_`): follow the *inferred* struct type, not the declared `None`. |
+| `dataclass_*` (2) | `fields(C)`, `is_dataclass(c)` | **Dataclass struct/field resolution** (fields are struct components via the `dataclasses` model). |
+| `self_ref_nested_attr_chain*` (2) | self-referential chains | Same recursive-following gap as `nested-attr`. |
+
+Net: recursive `symbol_type2t`→struct following + auto-deref (already in
+`adjust_member`) + consume the converter's inferred types + dataclass handling —
+i.e. `clang_cpp_adjust`'s complete completion, IREP2-native.
+
+**The core design problem — chicken-and-egg, and its resolution.**
+`member2t`/`index2t` assert a resolved struct/array source **at construction**
+(`irep2_expr.h:1499-1505`/`:1576`, `#ifndef NDEBUG`). So the converter cannot
+build the IREP2 node before resolution, yet the adjuster needs nodes to resolve.
+Resolution is a **two-phase source invariant**:
+1. **Relax** the construction assert to permit a `symbol_type2t` source *pending
+   resolution* (localized IREP2-core change at those two sites). The ~11
+   symex/simplifier consumers (`to_member2t(...).source_value`,
+   `struct_union_members(p->type)`, `to_struct_type(type).members[i]` — e.g.
+   `goto_symex_state.cpp:281`, `symex_main.cpp:1309`, `memory_ops.cpp:261`) need
+   **no change**: they all run strictly **post-adjust**.
+2. **Post-adjust verification:** the adjuster asserts, at exit, that every
+   `member2t`/`index2t` source is now a resolved `struct`/`union`/`array` —
+   restoring the strong invariant before symex/goto see any node.
+
+**Deliverable shape.**
+- *Where:* replaces the legacy `clang_cpp_adjust` round-trip on Python output
+  (`python_language.cpp:245`); walks the whole symbol table, mirroring
+  `clang_c_adjust::adjust()`.
+- *What, per IREP2 node:* recursively resolve `member2t`/`index2t` sources
+  (`symbol_type2t` → followed `struct_type2t`/`array_type2t` via the namespace),
+  auto-deref pointer sources, and carry `#cpp_type`/`#member_name` IREP2-natively
+  — **folding in W3 (§V.2)**, since the resolving pass is the natural home for
+  attribute carriage.
+- *Reuses:* the converter's already-computed inferred types — it does not
+  re-infer; it follows what `python_annotation`/`flow_class_map_` produced (which
+  is why `github_4117` resolves once following is recursive).
+
+**Acceptance criteria.**
+1. The **20-test fixture green** *and* the flat-member improvement retained
+   (`type-annotation-class`, `math-sqrt-any-typed`).
+2. Full `regression/python` + model `.py` corpus: verdict + matched-text parity,
+   **both solvers**, asserts build.
+3. **`esbmc-cpp` green** (the relaxed assert touches C++ too — RV3).
+4. **GOTO-byte parity** vs the legacy adjust path.
+
+**Open investigations before coding (resolve first):**
+- **A.** Confirm the relaxed assert has no *other* consumer that builds
+  `member2t` and reads its struct source *before* adjust (the shared clang-cpp
+  frontend builds `member2t` too).
+- **B.** Pin where the converter's inferred attribute type lands on the node, so
+  the adjuster follows the right symbol id for the `github_4117` flow cases
+  (trace `flow_class_map_` → the member source type).
+- **C.** Decide **Python-only pilot** adjuster first (lower blast radius) vs the
+  shared IREP2-native adjust from the start (RV3). Recommend the Python-only
+  pilot, then generalize.
+
+*(Investigation outcomes A/B/C are recorded in the following subsection.)*
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
