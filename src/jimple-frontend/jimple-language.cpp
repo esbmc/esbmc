@@ -134,17 +134,13 @@ void jimple_languaget::setup_main(contextt &context)
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map (it, context.symbol_base_map, main)
-  {
+  context.foreach_named_symbol_with_base(main, [&](irep_idt id) {
     // look it up
-    symbolt *s = context.find_symbol(it->second);
-
-    if (s == nullptr)
-      continue;
-
-    if (s->get_type().is_code())
-      matches.push_back(it->second);
-  }
+    symbolt *s = context.find_symbol(id);
+    if (s != nullptr && s->get_type().is_code())
+      matches.push_back(id);
+    return true; // collect all; ambiguity is reported after the scan
+  });
   if (matches.empty())
     abort();
 
