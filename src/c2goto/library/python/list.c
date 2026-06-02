@@ -457,6 +457,54 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+/* list.count(x) — number of elements equal to x. Mirrors __ESBMC_list_contains'
+ * element comparison (matching type_id, size, then value bytes). */
+size_t __ESBMC_list_count(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t cnt = 0;
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      ++cnt;
+    ++i;
+  }
+  return cnt;
+}
+
+/* list.index(x) — position of the first element equal to x. Raises ValueError
+ * (modelled as a failing assertion) when x is absent, matching CPython. */
+size_t __ESBMC_list_index(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
 /* ---------- extend list ---------- */
 
 void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)

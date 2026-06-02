@@ -1547,6 +1547,40 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+exprt function_call_expr::handle_list_count() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("list.count() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.build_count_list_call(*list_symbol, call_, value);
+}
+
+exprt function_call_expr::handle_list_index() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("list.index() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.build_index_list_call(*list_symbol, call_, value);
+}
+
 exprt function_call_expr::handle_list_sort() const
 {
   const auto &args = call_["args"];
@@ -1735,8 +1769,21 @@ bool function_call_expr::is_list_method_call() const
     method_name != "clear" && method_name != "extend" &&
     method_name != "copy" && method_name != "sort" &&
     method_name != "reverse" && method_name != "popleft" &&
-    method_name != "appendleft")
+    method_name != "appendleft" && method_name != "count" &&
+    method_name != "index")
     return false;
+
+  // "count" / "index" are shared with str and tuple. Tuple receivers are
+  // claimed earlier (is_tuple_method_call); claim a list receiver here only
+  // when it resolves to a list symbol, so a str receiver falls through to the
+  // string handler.
+  if (method_name == "count" || method_name == "index")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
+  }
 
   // "pop" is shared between list and dict. Disambiguate using the actual
   // symbol type: only treat as list.pop() when the receiver resolves to a
@@ -1806,6 +1853,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_sort();
   if (method_name == "reverse")
     return handle_list_reverse();
+  if (method_name == "count")
+    return handle_list_count();
+  if (method_name == "index")
+    return handle_list_index();
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);

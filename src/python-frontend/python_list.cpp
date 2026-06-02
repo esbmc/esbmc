@@ -4623,6 +4623,58 @@ exprt python_list::build_remove_list_call(
   return converter_.convert_expression_to_code(remove_call);
 }
 
+// list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a
+// C model that walks the list comparing elements (same plumbing as remove), and
+// return a size_t value. `func_id` selects the model; the only difference is
+// index() asserts the element is present (handled inside the model).
+exprt python_list::build_count_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem,
+  const std::string &func_id)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *func = converter_.symbol_table().find_symbol(func_id);
+  if (!func)
+    throw std::runtime_error(func_id + " function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  else
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*func);
+  call.arguments().push_back(symbol_expr(list));                  // list
+  call.arguments().push_back(element_arg);                        // &value/ptr
+  call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym)); // type_id
+  call.arguments().push_back(elem_info.elem_size);                // size
+  call.type() = size_type();
+  call.location() = elem_info.location;
+
+  return call;
+}
+
+exprt python_list::build_count_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_count");
+}
+
+exprt python_list::build_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_index");
+}
+
 size_t python_list::get_list_type_map_size(const std::string &list_id)
 {
   auto it = list_type_map.find(list_id);

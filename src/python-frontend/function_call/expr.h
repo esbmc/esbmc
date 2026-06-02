@@ -338,6 +338,8 @@ private:
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;
   exprt handle_list_reverse() const;
+  exprt handle_list_count() const;
+  exprt handle_list_index() const;
 
   /*
    * Check if the current function call is to a regular expression module function
