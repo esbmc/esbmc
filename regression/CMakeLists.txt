@@ -338,6 +338,14 @@ set(_slow_regression_tests
     # default budget. It stays KNOWNBUG; the larger inner timeout lets
     # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
     "regression/humaneval/humaneval_158"
+    # humaneval_39 used to fast-abort in get_significand_width when prime_fib's
+    # math.sqrt() was applied to an any-typed value. With the nondet
+    # over-approximation fix the abort is gone and ESBMC reaches the real
+    # prime_fib symex (a `while True` loop over a growing Fibonacci list),
+    # which does not converge under the default budget. It stays KNOWNBUG; the
+    # larger inner timeout lets testing_tool record the KNOWNBUG verdict
+    # instead of ctest hard-killing the run.
+    "regression/humaneval/humaneval_39"
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"

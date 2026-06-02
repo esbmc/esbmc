@@ -259,6 +259,25 @@ exprt python_math::promote_to_double_if_needed(exprt operand) const
     return from_double(*val, double_type());
   }
 
+  // A pointer-typed ("any") operand -- e.g. an unannotated parameter bound to
+  // a dynamic-list element, which the frontend types as void* (issue #2848) --
+  // has no statically known numeric value. Casting it to double builds an FP
+  // operation over a pointer sort, which aborts the SMT backend in
+  // get_significand_width() once an FP intrinsic such as ieee_sqrt consumes it
+  // (reproduced under --smt-during-symex --bitwuzla; see humaneval/39).
+  // Over-approximate soundly with a nondet double rather than emitting the
+  // malformed cast; the concrete value is recoverable by annotating the
+  // parameter's type.
+  if (operand.type().is_pointer())
+  {
+    log_warning(
+      "math on an unannotated (any-typed) value is over-approximated as "
+      "nondet; annotate the argument's type for a precise result (#2848)");
+    side_effect_expr_nondett nondet(double_type());
+    nondet.location() = operand.location();
+    return nondet;
+  }
+
   exprt double_operand = exprt("typecast", double_type());
   double_operand.copy_to_operands(operand);
   return double_operand;
