@@ -1496,12 +1496,26 @@ public:
     : expr2t(type, member_id), source_value(source), member(memb)
   {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
+    /* The source is normally a resolved struct/union/complex. A `symbol_id`
+       source is permitted ONLY as a transient pre-resolution state: the
+       IREP2-migration V.1k "two-phase source invariant" lets a frontend build a
+       member2t before type resolution (the Python converter, ahead of the
+       IREP2-native adjuster) hand a by-name `symbol_type2t` here; the adjuster
+       MUST follow it to a struct before symex. The strong invariant is
+       re-enforced post-adjust by that pass, not dropped. No existing frontend
+       builds member2t pre-adjust (all go through migrate at goto-convert, which
+       is post-adjust), so this disjunct is staged enabling infra, exercised
+       once the V.1k converter/adjuster pilot lands. */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
-      source->type->type_id == type2t::complex_id);
-    /* member must exist exactly once in the parent struct/union */
-    assert(struct_union_get_component_number(source->type, memb).has_value());
+      source->type->type_id == type2t::complex_id ||
+      source->type->type_id == type2t::symbol_id);
+    /* member must exist exactly once in the parent struct/union — only checkable
+       once the source type is resolved (skipped for the transient symbol case) */
+    assert(
+      source->type->type_id == type2t::symbol_id ||
+      struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }
   member2t(const member2t &ref) = default;
@@ -1573,7 +1587,12 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    assert(is_array_type(source) || is_vector_type(source));
+    /* A `symbol_id` source is permitted only as a transient pre-resolution
+       state (V.1k two-phase source invariant, see member2t above); the
+       IREP2-native adjuster resolves it to an array/vector before symex. */
+    assert(
+      is_array_type(source) || is_vector_type(source) ||
+      source->type->type_id == type2t::symbol_id);
   }
   index2t(const index2t &ref) = default;
 
