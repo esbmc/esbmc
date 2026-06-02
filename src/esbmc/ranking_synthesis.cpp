@@ -105,6 +105,13 @@ struct loop_skipt
     // `!guard` as a post-summary path condition (the only state we
     // know about after the inner exits is that its guard is false).
     expr2tc guard;
+    // The location_number of the loop's ORIGINAL head (back-edge
+    // target). May differ from the map key when --interval-analysis
+    // inserts ASSUMEs via insert_swap at the back-edge target — the
+    // entry key is then the effective head (the IF after the ASSUMEs)
+    // but the back-edge actually lands here. Prefix walkers mark
+    // BOTH locnums as justified targets.
+    unsigned original_head_locnum = 0;
   };
   std::map<unsigned, entry> by_head_locnum;
 };
@@ -404,9 +411,20 @@ prefix_defst scan_prefix_defs(
   // outer loop when we analyse a nested inner — the outer head
   // dominates the inner head and must be traversable, not treated as
   // an unjustified merge.
+  //
+  // Mark BOTH the effective head (map key) and the original head
+  // (entry.original_head_locnum). They differ when
+  // --interval-analysis has inserted ASSUMEs at the back-edge
+  // target — the back-edge actually lands on the original head
+  // (the ASSUME), not the effective head (the IF), so the walker
+  // encounters the original locnum first.
   if (skip)
     for (const auto &kv : skip->by_head_locnum)
+    {
       justified_targets.insert(kv.first);
+      if (kv.second.original_head_locnum != 0)
+        justified_targets.insert(kv.second.original_head_locnum);
+    }
 
   for (auto it = body.instructions.begin(); it != head;)
   {
@@ -467,6 +485,15 @@ prefix_defst scan_prefix_defs(
       continue;
     }
     if (it->is_function_call() && is_termination_irrelevant_call(*it))
+    {
+      ++it;
+      continue;
+    }
+    // ASSUMEs from --interval-analysis (and inductive-step preamble
+    // markers from goto_termination's havoc machinery). They constrain
+    // values but don't introduce new merge points and don't modify
+    // any symbol's def — treat as pass-through.
+    if (it->is_assume())
     {
       ++it;
       continue;
@@ -2218,6 +2245,12 @@ bool reaches_head(
       stack.push_back(std::next(it));
       continue;
     }
+    // ASSUMEs from --interval-analysis. Don't affect reachability.
+    if (it->is_assume())
+    {
+      stack.push_back(std::next(it));
+      continue;
+    }
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
@@ -2295,9 +2328,16 @@ prefix_seedst collect_seeds(
   std::set<unsigned> justified_targets;
   // Loop heads are auto-justified on a forward walk; see the matching
   // initialisation in scan_prefix_defs for the soundness argument.
+  // Both effective head (map key) and original head (entry's
+  // original_head_locnum) are marked — back-edge lands on the
+  // original when --interval-analysis has inserted ASSUMEs.
   if (loop_skip)
     for (const auto &kv : loop_skip->by_head_locnum)
+    {
       justified_targets.insert(kv.first);
+      if (kv.second.original_head_locnum != 0)
+        justified_targets.insert(kv.second.original_head_locnum);
+    }
   // Pending IF-derived atoms: free-vars set so a later assign to one of
   // those vars can invalidate the atom before it reaches the head.
   struct pending_atom
@@ -2353,6 +2393,37 @@ prefix_seedst collect_seeds(
       return {};
     if (it->is_skip() || it->is_location() || it->type == DECL)
     {
+      ++it;
+      continue;
+    }
+    // ASSUMEs from --interval-analysis (or k-induction's post-havoc
+    // entry condition). They constrain values along the dominator
+    // path, so their predicate's relational atoms are usable seeds —
+    // same treatment as the IF-derived path atoms below. Skip
+    // memory-touching guards (we can't lower them safely).
+    if (it->is_assume())
+    {
+      if (
+        !is_nil_expr(it->guard) && !is_true(it->guard) &&
+        !touches_memory(it->guard))
+      {
+        std::vector<expr2tc> conjuncts;
+        flatten_and(it->guard, conjuncts);
+        for (const expr2tc &c : conjuncts)
+        {
+          std::vector<expr2tc> atoms;
+          if (!decompose_relational(c, atoms))
+            continue;
+          for (const expr2tc &a : atoms)
+          {
+            std::set<irep_idt> fv;
+            collect_symbols(a, fv);
+            if (fv.empty())
+              continue;
+            pending.push_back({a, std::move(fv)});
+          }
+        }
+      }
       ++it;
       continue;
     }
@@ -3268,14 +3339,16 @@ tvt try_prove_termination_by_ranking(
     loop_skipt all_loops;
     for (const auto &loop : loops.get_loops())
     {
-      // Use the effective head — same reasoning as recognize_loop. The
-      // entries store the head's location_number as the key for the
-      // skip map, and the consumers (prefix walkers / body parser)
-      // also use effective heads, so the keys must match.
+      // Map key: effective head locnum (the IF after any
+      // interval-analysis-inserted ASSUMEs at the back-edge target).
+      // Consumers like the body parser see the IF when walking past
+      // the ASSUMEs and look it up by that locnum.
       auto head = loop.effective_loop_head();
+      auto orig_head = loop.get_original_loop_head();
       auto back = loop.get_original_loop_exit();
       loop_skipt::entry e;
       e.back = back;
+      e.original_head_locnum = orig_head->location_number;
       if (
         head->is_goto() && !head->targets.empty() && !head->is_backwards_goto())
         e.exit_target_locnum = head->targets.front()->location_number;
