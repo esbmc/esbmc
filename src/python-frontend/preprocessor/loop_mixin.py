@@ -2797,6 +2797,26 @@ class LoopMixin:
 
         return pre_stmts + [if_stmt], key_load
 
+    @staticmethod
+    def _defaultdict_key_signature(key_node):
+        """Return a stable signature for literal keys whose value is known."""
+        if isinstance(key_node, ast.Constant):
+            return ast.dump(key_node, include_attributes=False)
+        if isinstance(key_node, ast.Tuple) and all(
+                isinstance(elt, ast.Constant) for elt in key_node.elts):
+            return ast.dump(key_node, include_attributes=False)
+        return None
+
+    def _is_defaultdict_key_initialized(self, dict_name, key_node):
+        signature = self._defaultdict_key_signature(key_node)
+        return (signature is not None
+                and signature in self._defaultdict_initialized_keys.get(dict_name, set()))
+
+    def _record_defaultdict_key_initialized(self, dict_name, key_node):
+        signature = self._defaultdict_key_signature(key_node)
+        if signature is not None:
+            self._defaultdict_initialized_keys.setdefault(dict_name, set()).add(signature)
+
     def _lower_defaultdict_reads_in_expr(self, expr, template):
         """Walk expr, find all Load-context d[k] where d is a known defaultdict,
         generate missing-key init stmts, and rewrite each subscript slice to use
@@ -2812,6 +2832,7 @@ class LoopMixin:
         all_inits = []
         defaultdict_factory = self._defaultdict_factory
         make_missing_check = self._make_defaultdict_missing_check
+        is_key_initialized = self._is_defaultdict_key_initialized
 
         class _Lowerer(ast.NodeTransformer):
 
@@ -2822,6 +2843,8 @@ class LoopMixin:
                         and node.value.id in defaultdict_factory):
                     return node
                 dict_name = node.value.id
+                if is_key_initialized(dict_name, node.slice):
+                    return node
                 factory = defaultdict_factory[dict_name]
                 stmts, key_expr = make_missing_check(dict_name, node.slice, factory, template)
                 all_inits.extend(stmts)
