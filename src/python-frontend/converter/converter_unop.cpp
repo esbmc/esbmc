@@ -4,6 +4,8 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
@@ -90,14 +92,24 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     if (!strlen_sym)
       throw std::runtime_error("strlen not found for string truthiness check");
 
-    side_effect_expr_function_callt strlen_call;
-    strlen_call.function() = symbol_expr(*strlen_sym);
-    strlen_call.arguments().push_back(
-      string_handler_.get_array_base_address(unary_sub));
-    strlen_call.type() = size_type();
-    strlen_call.location() = location;
+    // Phase 4.4 (first wiring): build the `strlen(base) == 0` result in IREP2
+    // internally via the Phase 4.2 helpers, lowering to legacy `exprt` at a
+    // single seam (the `return`). The call argument comes back from the string
+    // handler as a legacy `exprt`, so migrate it forward; the whole subtree is
+    // then IREP2 until the one back-migration. This is statement-free, so no
+    // legacy `codet` shell is involved (P1 untouched).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc base2;
+    migrate_expr(string_handler_.get_array_base_address(unary_sub), base2);
 
-    return equality_exprt(strlen_call, gen_zero(size_type()));
+    expr2tc strlen_call2 = side_effect_function_call2tc(
+      size_t2, symbol_expr2tc(*strlen_sym), {base2});
+
+    expr2tc is_empty2 = equality2tc(strlen_call2, gen_zero(size_t2));
+
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
   }
 
   // Handle 'not' operator on list types: convert to emptiness check

@@ -1514,15 +1514,16 @@ the census row with the §2 commands before trusting it.
 |---|---|---|---|
 | 4.0 | Baseline harness + IREP2 type round-trip equivalence test | **LANDED** | `unit/python-frontend/irep2_type_roundtrip_test.cpp` (9 `TEST_CASE`s, lines 52/104/136/156/188/228/253/289/330); CMake target `irep2_type_roundtrip_test`. PR #4992 (commit `2b85d5a6ce`). |
 | 4.1 | Attribute-access encapsulation (`#cpp_type`/`#cformat`/`#member_name`) | **LANDED** | Typed accessors `type_utils::{set,get}_cpp_type`, `{set,remove}_member_name` (`type_utils.h:174-196`); `#cformat` routed through `irept::cformat()`. Raw `.set("#`/`.get("#` in `src/python-frontend` reduced to **2 each** (the accessor bodies). PR #4990 (commit `a99fc39171`). |
-| 4.2 | Enabling infrastructure (§6 factories, dead-but-tested) | **PARTIAL** | The `lower_to_seam` seam helper (`type_handler.cpp:46-52`) shipped with the 4.3 commits rather than as a standalone dead-but-tested PR. `symbol2tc`-from-`symbolt` and the `sideeffect2t(function_call)` wrapper (needed by 4.4) are **not yet landed** — build them before 4.4 starts (V-track lesson, §8). |
+| 4.2 | Enabling infrastructure (§6 factories, dead-but-tested) | **LANDED (#4997)** | Both expression-side helpers shipped dead-but-tested in PR #4997 (commit `f621558a3a`, 2026-05-31), **after** the prior reconcile that marked this row PARTIAL — see the §0.1 correction note: `symbol_expr2tc(const symbolt&)` and `side_effect_function_call2tc(return_type, function, arguments)` in `src/util/migrate.{h,cpp}` (decls `migrate.h:48-70`, defs `migrate.cpp:433,441`), each proven `==` to `migrate_expr` of the legacy form by round-trip unit tests `unit/util/migrate.test.cpp:225,246`. The `lower_to_seam` type seam (`type_handler.cpp:46-52`) shipped earlier with the 4.3 commits. **Phase 4.4's gating prerequisite is therefore satisfied — 4.4 is unblocked.** |
 | 4.3 | **Type** construction → `type2tc` (internal, lowered at seam) | **LANDED for elementary/float/array/pointer/NoneType-Optional/Callable**; struct families deferred | `type_handler.cpp` builders return `type2tc` then `lower_to_seam(...)`: int 492, uint 508, bool 512, uint256 546, float 486, str/char 587-589, NoneType/Optional 458/464, `build_array` 392, Callable 473-478, list pointees 951/964/1057. PRs #5000 (elementary), #5001 (float), #5002 (array), #5018 (Callable), + pointer-family commit `4ebe00eb2c`. Tuple/Optional **struct** builders are F-P5 seam cases deferred to 4.5 (§15.7). `python_int_typet` width logic **unchanged** (F-P7/RP4). |
-| 4.4 | **Expression** construction → `expr2tc` (internal) | **REMAINING — the bulk of the work** | Not started. Per-file execution guide in §7.2. Dominant risk RP13 (582 `move/copy_to_operands`, 167 `.operands()`, concentrated in the OM handlers). |
+| 4.4 | **Expression** construction → `expr2tc` (internal) | **IN PROGRESS — first subtree wired** | Unblocked by #4997; the first wiring commit landed the `converter_unop.cpp` `not`-on-string subtree (`strlen(base)==0` via `symbol_expr2tc` + `side_effect_function_call2tc` + `equality2tc` + `gen_zero(type2tc)`, one `migrate_expr_back` at the return), gated dual-solver with the asserts cross-check silent (tests `unary_not_string{,_fail}`). The bulk remains. Per-file execution guide in §7.2; worked operand-surgery examples in §7.2.5; the **subtree-not-site** rule that shaped commit #1 is in §7.2.3. Dominant risk RP13 (582 `move/copy_to_operands`, 167 `.operands()`, concentrated in the OM handlers). |
 | 4.5 | The legacy body seam (one documented `migrate_expr_back` hand-off) | **REMAINING** | Not started. Absorbs the tuple/optional struct builders (§15.7) and `#cpp_type`/`#member_name` re-attachment (F-P5). |
 | 4.6 | Tighten, census, go/stop decision | **REMAINING** | Not started. |
 
-**Census at this revision** (re-run §2): legacy IR mentions in
-`src/python-frontend` **≈4682**, IREP2 (`*2tc`) **≈23** (was 6 pre-4.3 — the
-rise is entirely Phase 4.3's `type_handler` migration). `set_type(2tc)` /
+**Census at this revision** (re-run §2; figures re-counted 2026-06-02):
+legacy IR mentions in `src/python-frontend` **4682**, IREP2 (`*2tc`) **31**
+(was 23 at the prior reconcile, 6 pre-4.3 — the continued rise is Phase 4.3's
+`type_handler` migration plus the Callable commit #5018). `set_type(2tc)` /
 `set_value(2tc)` at the symbol-write boundary: still **0** — i.e. types are
 built in IREP2 *internally* and back-migrated at `lower_to_seam`; the symbol
 table still receives legacy `typet` (F-P1). `migrate_{expr,type}` mention
@@ -1531,6 +1532,34 @@ seam) and `function_call/str_conv.cpp:559,573` (pre-existing simplifier
 round-trip). This is the expected mid-migration shape: the IREP2 surface
 grows *inside* the type builders while the seam back-migrates so externally
 observable bytes stay identical.
+
+## 0.1 Reconciliation correction (2026-06-02) — Phase 4.2 had already landed
+
+> Recorded here in the §15.1 spirit: a stale status in a verification-planning
+> document is the same class of defect the plan exists to prevent, so the
+> correction is logged rather than silently overwritten.
+
+A re-audit on 2026-06-02 (`git log -L 60,70:src/util/migrate.h`) found that
+**Phase 4.2 landed in PR #4997** (commit `f621558a3a`, 2026-05-31) — *before*
+the most recent doc reconcile (#5037, 2026-06-02) — yet that reconcile still
+marked 4.2 **PARTIAL** with its factories "not yet landed" and gating Phase
+4.4. The reconcile missed #4997. The two expression-side helpers the plan
+specified are present, named, and unit-tested:
+
+| Planned (anticipated) name | Landed name + location | Test |
+|---|---|---|
+| `symbol2tc`-from-`symbolt` | `symbol_expr2tc(const symbolt&)` — `migrate.h:61`, `migrate.cpp:433` (`return symbol2tc(migrate_symbol_type(sym), sym.id);`) | `unit/util/migrate.test.cpp:225` — asserts `symbol_expr2tc(sym) == migrate_expr(symbol_expr(sym))` and round-trips |
+| `sideeffect2t(function_call)` wrapper | `side_effect_function_call2tc(return_type, function, arguments)` — `migrate.h:67`, `migrate.cpp:441` (`sideeffect2tc(..., allockind::function_call)`) | `unit/util/migrate.test.cpp:246` — asserts `==` to `migrate_expr` of a real `side_effect_expr_function_callt` |
+
+**Consequences propagated through this part:** §0 ledger (4.2 → LANDED, 4.4 →
+unblocked), §4.2 prose, §6 gap table (two rows → LANDED), §7.2/§7.2.1
+(prerequisite satisfied; idiom table now cites the *actual* helper names, not
+the anticipated ones), and §8 dependencies. The helpers are **dead-but-tested**
+— `grep -rn 'symbol_expr2tc\|side_effect_function_call2tc' src/python-frontend`
+→ empty — exactly the V-track shape the plan asked for, so Phase 4.4 begins by
+*wiring* existing tested infrastructure, not by building it. (Update: the
+first wiring commit has since consumed both helpers in `converter_unop.cpp`, so
+that grep is no longer empty — see the §0 ledger 4.4 row.)
 
 ## 1. Scope, motivation, and the non-negotiable constraint
 
@@ -1936,8 +1965,8 @@ round-trip unit tests) **before** the phase that needs it; each is small.
 
 | Gap | Needed by | Disposition |
 |---|---|---|
-| `symbol2tc`-from-`symbolt` convenience | the ~842 `symbol_expr(symbolt)` sites | **NOT YET LANDED — gates Phase 4.4.** Trivial helper (Part II §5, Part III §6 list the same gap — build once, shared); ship dead-but-tested first (§8). |
-| Expression-context function call | the ~111 `side_effect_expr_function_callt` sites | **NOT YET LANDED — gates Phase 4.4.** `sideeffect2t(..., sideeffect_allockind::function_call)` (`irep2_expr.h:1749`). Ship with the symbol helper. |
+| `symbol2tc`-from-`symbolt` convenience | the ~842 `symbol_expr(symbolt)` sites | **LANDED (#4997)** as `symbol_expr2tc(const symbolt&)` (`migrate.h:61`, `migrate.cpp:433`): `symbol2tc(migrate_symbol_type(sym), sym.id)`. Unit-tested `==` to `migrate_expr(symbol_expr(sym))` at `unit/util/migrate.test.cpp:225`. Built once, shared across frontends (Part II §5, Part III §6 had the same gap). |
+| Expression-context function call | the ~111 `side_effect_expr_function_callt` sites | **LANDED (#4997)** as `side_effect_function_call2tc(return_type, function, arguments)` (`migrate.h:67`, `migrate.cpp:441`): `sideeffect2tc(..., allockind::function_call)` with nil size and empty (not nil) alloctype — the round-trip-stable form (see the in-code note, `migrate.cpp:446-450`). Unit-tested at `unit/util/migrate.test.cpp:246`. |
 | `from_double(double, type2tc)` → `constant_floatbv2tc` | float-literal construction (`convert_float_literal.cpp`) | Part II §5 gap; trivial port. |
 | `#cpp_type` re-attachment helper at the seam | float/char-typed symbols (F-P5) | **LANDED as `lower_to_seam(type2tc, cpp_type)` (`type_handler.cpp:46-52`):** builds `type2tc`, `migrate_type_back` to `typet`, re-attaches `#cpp_type` via `type_utils::set_cpp_type`. Reused by every 4.3 builder. |
 | `mb_value` on `constant_string2t` | `str` / `bytes` literals | **Q-P4 RESOLVED (§13): not needed.** String-literal lowering stays legacy at the seam; `mb_value()` keeps being read off the legacy `string_constantt`, so the R10 verbatim port is not required for the Python migration. |
@@ -1980,16 +2009,18 @@ milestone even if no further phase is taken up. The accessors live in
    the legacy seam node** — they are *not* migration targets. This gives a
    single repoint-point per attribute and matches the Solidity §14 outcome.
 
-### Phase 4.2 — Enabling infrastructure (§6 gaps, dead-but-tested) — **PARTIAL**
+### Phase 4.2 — Enabling infrastructure (§6 gaps, dead-but-tested) — **LANDED (#4997)**
 *The `lower_to_seam` type seam shipped inside the 4.3 commits (it was the
-enabling infra for type lowering). The **expression**-side factories below
-(`symbol2tc`-from-`symbolt`, `sideeffect2t(function_call)`) are **not yet
-landed** and gate Phase 4.4 — build them as a standalone dead-but-tested PR
-first (V-track lesson, §8), before any 4.4 call site changes.*
-4. Land the `symbol2tc`-from-`symbolt` helper and the
-   `sideeffect2t(function_call)` wrapper with round-trip unit tests **and no
-   converter call-site changes** (the Part I V-track lesson: ship tested
-   infrastructure separately so the wiring PR has zero coverage-axis risk).
+enabling infra for type lowering). The **expression**-side factories landed
+separately in PR #4997 (commit `f621558a3a`) as dead-but-tested infrastructure
+— the V-track shape the plan called for — so Phase 4.4 is now unblocked (§0.1).*
+4. **DONE (#4997).** `symbol_expr2tc(const symbolt&)` (`migrate.h:61`,
+   `migrate.cpp:433`) and `side_effect_function_call2tc(return_type, function,
+   arguments)` (`migrate.h:67`, `migrate.cpp:441`) landed with round-trip unit
+   tests (`unit/util/migrate.test.cpp:225,246`) and **no converter call-site
+   changes** (the Part I V-track lesson: ship tested infrastructure separately
+   so the wiring PR has zero coverage-axis risk). Both are proven `==` to
+   `migrate_expr` of the legacy constructor they replace. Phase 4.4 wires them.
 5. Resolve the string/`bytes` decoder question (Q-P4): port `mb_value` onto
    `constant_string2t` verbatim (R10) *or* decide string-literal lowering
    stays legacy at the seam. Land with property tests against the existing
@@ -2083,11 +2114,12 @@ boundaries, respecting the 5-minute cap by narrowing per commit).
 
 Phase 4.4 is the largest, highest-risk phase (RP13) and the next to execute.
 This section is the step-by-step recipe an engineer new to the frontend can
-follow. **Prerequisite:** Phase 4.2's expression-side factories
-(`symbol2tc`-from-`symbolt`, `sideeffect2t(function_call)`) must land first,
-dead-but-tested (§8). Each numbered file below is **one or more reviewable
-commits**; apply and gate (§10) one at a time; never batch; rebase daily
-(RP1).
+follow. **Prerequisite — SATISFIED (#4997, §0.1):** Phase 4.2's expression-side
+factories `symbol_expr2tc(const symbolt&)` and `side_effect_function_call2tc(...)`
+(`src/util/migrate.{h,cpp}`) have landed dead-but-tested; Phase 4.4 *wires*
+them — it does not build them. Each numbered file below is **one or more
+reviewable commits**; apply and gate (§10) one at a time; never batch; rebase
+daily (RP1).
 
 ### 7.2.1 The idiom → factory substitution table (the mechanical core)
 
@@ -2096,14 +2128,14 @@ gotcha. This is the lookup an engineer applies at each call site.
 
 | Legacy idiom | IREP2 replacement | Gotcha / verification |
 |---|---|---|
-| `symbol_expr(sym)` (842 sites) | `symbol2tc(type, sym.id)` via the Phase-4.2 helper | The helper must read `sym.get_type2()` (IREP2 source of truth), not back-migrate. RP9 overload hazard: `symbol_expr` vs `symbol2tc` both compile. |
+| `symbol_expr(sym)` (842 sites) | `symbol_expr2tc(sym)` (landed #4997, `migrate.h:61`) | The helper already reads the IREP2 source of truth via `migrate_symbol_type(sym)` (not a back-migrate) and is proven `==` to `migrate_expr(symbol_expr(sym))`. RP9 overload hazard: `symbol_expr` (legacy) vs `symbol_expr2tc` (IREP2) differ by one token and both compile — grep each converted site. |
 | `typecast_exprt(e, t)` (131) | `typecast2tc(t2, e2)` | Argument order flips (type first in IREP2). Width/signedness must match exactly (U3/RP4). |
 | `member_exprt(base, name, t)` (121) | `member2tc(t2, base2, name)` | `name` is the component `irep_idt`; for `#member_name`-tagged structs re-attach at the 4.5 seam (RP3). |
 | `index_exprt(arr, idx, t)` (22) | `index2tc(t2, arr2, idx2)` | The `index < l->size` bounds guard (`python_list.cpp`) is the **one** pretty-print gate (Q-P1/§15.6) — keep its rendered text byte-identical. |
 | `address_of_exprt(e)` (87) | `address_of2tc(subtype, e2)` | Pointer subtype must match `pointer_type2tc(e2->type)`. |
 | `dereference_exprt(p, t)` (37) | `dereference2tc(t2, p2)` | — |
 | `constant_exprt` int/float/bool (42) | `constant_int2tc` / `constant_floatbv2tc` / `gen_boolean` | `#cformat` is set by the legacy `constant_exprt` ctor (std_expr.h:1095); preserve via the standard mechanism (Q-P2). Use `from_double` (§6 gap) for floats. |
-| `side_effect_expr_function_callt` (111) | `sideeffect2tc(..., sideeffect_allockind::function_call)` (`irep2_expr.h:1749`) | The §6 wrapper. Function/args/type all required. |
+| `side_effect_expr_function_callt` (111) | `side_effect_function_call2tc(return_type, function, arguments)` (landed #4997, `migrate.h:67`) | The §6 wrapper; do not hand-roll `sideeffect2tc` — the helper fixes the nil-size / empty-alloctype canonical form (`migrate.cpp:446-450`). Function/args/return-type all required. |
 | `e.operands()[i]` / `e.op0()` (167) | typed field of the specific `*2t` kind | **The hard part.** Each access must be hand-translated to the named field (`.value`, `.ptr_obj`, `.side_1`…). A mis-indexed operand silently builds the wrong node (RP13). |
 | `e.id() == "constant"` (146) | `is_constant_int2t(e)` etc. | Compile-time predicate — a missed branch is now a *compile* error, which is the soundness win (Part I §"Why this mattered"). |
 | `e.find("...")` raw sub-irep (167) | typed field, or audit per site | No generic analogue; some have none — audit each. |
@@ -2118,42 +2150,79 @@ easy files before the dense OM handlers. Counts are this-revision snapshots
 
 | Order | File | ~LOC | Role | Surgery density | Notes |
 |---|---|---:|---|---|---|
-| 1 | `converter/converter_symbols.cpp` | 385 | symbol lookup/creation, `update_symbol` (`set_type`/`set_value` at 36/38-41) | low | Migrate symbol-ref construction first; it underpins every other file. |
-| 2 | `converter/converter_expr.cpp` | 1451 | central dispatch: Name/Attribute/Subscript/Constant/Call | low–med | The hub; member/index/typecast/const/deref live here. |
-| 3 | `converter/converter_unop.cpp` | 166 | unary ops | low | Small, good warm-up. |
-| 4 | `converter/converter_compare.cpp` | 632 | comparisons (incl. `in`/`not in`) | low | — |
-| 5 | `converter/converter_binop.cpp` | 1419 | binary ops; heavy `typecast` coercion (20) | med | Coercion width/signedness is U3/RP4-sensitive. |
-| 6 | `converter/converter_funcall.cpp` | 1185 | call dispatch, builtins/lambda/method routing | med | Feeds the OM handlers; migrate before them. |
-| 7 | `converter/converter_class.cpp` | 786 | class/inheritance/method extraction | med | `#member_name` struct components surface here (RP3). |
-| 8 | `converter/converter_dunder.cpp` | 273 | dunder dispatch | low | — |
-| 9 | `complex_handler.cpp` | — | complex arithmetic (23 `member_exprt`) | med | Pair with the `complex` struct (RP7, Q-P5 harness). |
-| 10 | `python_math.cpp` | 1404 | math model calls | med (44) | Simpler "wrap call" pattern. |
-| 11 | `numpy_call_expr.cpp` | 1037 | numpy model | low (8) | Sets `#cformat` (Q-P2/Q-P3) — preserve. |
-| 12 | `function_call/str_conv.cpp` + `string/` | — | string methods; already has the `migrate_*` round-trip (F-P9, 559/573) | med (53 in string_method_handler) | String **literals** stay legacy at the seam (Q-P4) — do not port `mb_value`. |
-| 13 | `python_dict_handler.cpp` | 3302 | dict model | **high (78)** | OM handler; run the dict regression stratum every commit (RP5). |
-| 14 | `python_set.cpp` | 1240 | set model; reads `mb_value()` at 107 (on a legacy node it just built — leave legacy) | **high (85)** | OM handler. |
-| 15 | `python_list.cpp` | 4905 | list model; the bounds guard (Q-P1) | **highest (132)** | **Most entangled file in the tree — last, most commits, most care.** Split by method family (`build_insert_list_call`, `build_split_list`, `handle_index_access`, slice/repetition). |
+| 1 | `converter/converter_unop.cpp` | 166 | unary ops | low (9 `symbol_expr`) | **START HERE — the genuine warm-up.** Holds statement-free `not`-on-{string,dict,list} truthiness subtrees that lower cleanly to one back-migrate. The first commit landed the `not`-on-string subtree (`strlen(base)==0`) via `symbol_expr2tc` + `side_effect_function_call2tc` + `equality2tc`; dict/list cases (which emit `code_*t` into `current_block`) follow. |
+| 2 | `converter/converter_expr.cpp` | 1451 | central dispatch: Name/Attribute/Subscript/Constant/Call | low–med (8) | The hub; member/index/typecast/const/deref live here. |
+| ~~—~~ | ~~`converter/converter_symbols.cpp`~~ | 385 | **NOT a wiring target** | n/a (**0** `symbol_expr`) | **Correction (earlier drafts listed this as "file 1, migrate symbol-ref construction first").** Re-audit shows it does symbol-table *lookup* (`find_symbol`/`find_imported_symbol`/… → `symbolt*`) and the *write boundary* (`update_symbol`/`create_tmp_symbol`, `set_type`/`set_value` at 36/40/382). The write boundary stays legacy (F-P1); there is **no `symbol_expr` construction here to migrate** (`grep -c 'symbol_expr(' = 0`). Skip it. |
+| 3 | `converter/converter_compare.cpp` | 632 | comparisons (incl. `in`/`not in`) | low | — |
+| 4 | `converter/converter_binop.cpp` | 1419 | binary ops; heavy `typecast` coercion (20) | med | Coercion width/signedness is U3/RP4-sensitive. |
+| 5 | `converter/converter_funcall.cpp` | 1185 | call dispatch, builtins/lambda/method routing | med | Feeds the OM handlers; migrate before them. |
+| 6 | `converter/converter_class.cpp` | 786 | class/inheritance/method extraction | med | `#member_name` struct components surface here (RP3). |
+| 7 | `converter/converter_dunder.cpp` | 273 | dunder dispatch | low | — |
+| 8 | `complex_handler.cpp` | — | complex arithmetic (23 `member_exprt`) | med | Pair with the `complex` struct (RP7, Q-P5 harness). |
+| 9 | `python_math.cpp` | 1404 | math model calls | med (44) | Simpler "wrap call" pattern. |
+| 10 | `numpy_call_expr.cpp` | 1037 | numpy model | low (8) | Sets `#cformat` (Q-P2/Q-P3) — preserve. |
+| 11 | `function_call/str_conv.cpp` + `string/` | — | string methods; already has the `migrate_*` round-trip (F-P9, 559/573) | med (53 in string_method_handler) | String **literals** stay legacy at the seam (Q-P4) — do not port `mb_value`. |
+| 12 | `python_dict_handler.cpp` | 3302 | dict model | **high (78)** | OM handler; run the dict regression stratum every commit (RP5). |
+| 13 | `python_set.cpp` | 1240 | set model; reads `mb_value()` at 107 (on a legacy node it just built — leave legacy) | **high (85)** | OM handler. |
+| 14 | `python_list.cpp` | 4905 | list model; the bounds guard (Q-P1) | **highest (132)** | **Most entangled file in the tree — last, most commits, most care.** Split by method family (`build_insert_list_call`, `build_split_list`, `handle_index_access`, slice/repetition). |
 
-**Why this order.** Files 1–8 are the converter core: low surgery density,
-high reuse, so the idiom table is debugged there. Files 9–12 are
-medium-density specialists. Files 13–15 are the operational-model handlers
+(`converter_symbols.cpp` is intentionally absent — see the struck row above.)
+
+**Why this order.** Files 1–7 are the converter core: low surgery density,
+high reuse, so the idiom table is debugged there. Files 8–11 are
+medium-density specialists. Files 12–14 are the operational-model handlers
 that hold ~80 % of the raw operand surgery (RP13) and are themselves
 converter *input* (§3.1, RP5) — a regression there breaks every program
 importing the model, so they go last, in the smallest commits, each gated by
 their own regression stratum on every commit.
 
+**Two converter files are handled outside the 1–15 expression sequence — by
+design, not omission** (re-verify counts with §2; figures are 2026-06-02):
+
+| File | ~LOC | Surgery | Where it belongs | Why not in the 1–15 list |
+|---|---:|---|---|---|
+| `converter/converter_funcdef.cpp` | 1235 | **low** (4 operand + 4 `.id()`) | fold into the **core pass** (between files 6 and 7) | It builds function-definition *symbols* and the body `code_blockt` shell. The shell stays legacy (P1); only its operand expressions and the synthesized `code_type2t` parameter names (RP6) move. Low surgery → safe early warm-up; it was missing from the original table — add it as an early core commit. |
+| `converter/converter_stmt.cpp` | 3624 | **high** (75 operand + 23 `.id()` + 9 `.find(`) | **Phase 4.5**, not 4.4 | This is the statement-assembly file and the **home of the single documented `migrate_expr_back` body seam** (Phase 4.5). Its `code_*t` statement *shells* (`while`/`ifthenelse`/`block`/`decl`/`assign`/`return`) stay legacy by design (P1, Q-P6); only the *operands* it stitches in are IREP2. So it is touched in 4.4 only to the extent of feeding it IREP2 operands, and *finalized* in 4.5 when the hand-off is localized. Do **not** migrate its statement shells in 4.4. |
+
+`converter/converter_types.cpp` (819 LOC, 5+2+2 surgery) is the JSON-class→
+`typet` bridge (`get_type_from_annotation`, §3.2 investigation note); it is
+**Phase 4.3** type-side work, mostly landed, and any unhandled annotation
+string it encounters is a pre-existing SM-class gap to preserve, not fix (§14).
+
 ### 7.2.3 The per-commit recipe
+
+> **The unit of migration is a *subtree*, not a *site* (learned wiring commit
+> #1).** A single leaf swap — replacing one `symbol_expr(sym)` with
+> `symbol_expr2tc(sym)` in isolation — buys **nothing**: its consumer is still a
+> legacy `exprt`/`codet` constructor, so the result must be `migrate_expr_back`'d
+> immediately, reproducing the identical node with an added round-trip. Net
+> IREP2 surface gained: zero. The migration only pays off when a **contiguous
+> expression subtree, from its leaves up to a statement/return boundary**, is
+> built in `expr2tc` and back-migrated **once** at that boundary. So pick the
+> work-unit by *subtree*: the smallest self-contained expression a function
+> *returns* or *assigns into a statement operand*, with one back-migrate at its
+> root. Statement-free subtrees (e.g. a function that returns a comparison
+> without emitting into `current_block`) are the cleanest starting units —
+> wiring commit #1 used exactly such a subtree (`converter_unop.cpp`'s
+> `not`-on-string `strlen(base)==0`, file 1 of §7.2.2).
 
 For each file (or each method family within `python_list.cpp`):
 
 1. **Read the whole function** before touching it. Note every `.operands()`,
    `.id()`, `.find(` — these are the RP13 sites that do not map mechanically.
+   Identify the **subtree boundaries**: where does an expression get returned or
+   stitched into a `code_*t` operand? Those roots are your back-migrate points.
 2. **Translate construction bottom-up**: build leaf `expr2tc` first, compose
-   upward with typed factories (idiom table §7.2.1).
-3. **At the statement-assembly point, back-migrate once** (`migrate_expr_back`)
-   so the legacy `codet` body still receives a legacy `exprt` (Phase 4.5 will
-   localize this into one documented helper; until then it is an explicit
-   call at the file's body-emit site). Do **not** migrate the `code_*t` shell.
+   upward with typed factories (idiom table §7.2.1). Migrate any *legacy* input
+   the function receives (e.g. a helper that still returns `exprt`) forward with
+   `migrate_expr` at the point it enters the subtree.
+3. **At the statement-assembly / return point, back-migrate once**
+   (`migrate_expr_back`) so the legacy `codet` body or the legacy-typed return
+   still receives a legacy `exprt` (Phase 4.5 will localize this into one
+   documented helper; until then it is an explicit call at the subtree root). Do
+   **not** migrate the `code_*t` shell. **Do not** swap a leaf whose subtree root
+   you are not also converting in the same commit — that adds a back-migrate for
+   no gain (the subtree-not-site rule above).
 4. **Build asserts-enabled** so `migrate.cpp`'s symbol round-trip cross-check
    runs live over the corpus (§10.3).
 5. **Gate** (§10): verdict set identical + matched-text identical, **both
@@ -2182,14 +2251,129 @@ verdicts hide. For each:
 - **Per-site review is mandatory** (RP9: name-identical overloads). `-Werror`
   on. Two reviewers on `python_list.cpp`.
 
+### 7.2.5 Worked operand-surgery examples (the non-mechanical core, verified)
+
+§7.2.4 states the protocol; this section *executes* it once per major `*2t`
+kind so an engineer who has never opened `irep2_expr.h` has a concrete
+before/after to copy. **Every field name below is verified against the cited
+`irep2_expr.h` line at this revision — re-confirm before relying on it, the
+header moves.** The factory call order follows each class's primary
+constructor: **type first**, then sources/operands.
+
+Field map for the kinds the Python converter builds most (from
+`src/irep2/irep2_expr.h`):
+
+| Kind | Class line | Constructor | Fields (in order) |
+|---|---|---|---|
+| `symbol2t` | 558 | `symbol2tc(type, name)` | `irep_idt thename` (l.563) — the identifier |
+| `typecast2t` | 662 | `typecast2tc(type, from)` | `expr2tc from` (l.665) |
+| `member2t` | 1485 | `member2tc(type, source, memb)` | `expr2tc source_value` (l.1488), `irep_idt member` (l.1489) |
+| `index2t` | 1563 | `index2tc(type, source, idx)` | `expr2tc source_value`, `expr2tc index` (l.1566-67) |
+| `dereference2t` | — | `dereference2tc(type, ptr)` | `expr2tc value` |
+| `address_of2t` | — | `address_of2tc(ptr_subtype, obj)` | `expr2tc ptr_obj` |
+| `sideeffect2t` (call) | 1749 | use `side_effect_function_call2tc(ret, fn, args)` | `kind == allockind::function_call` |
+
+**Example A — `member_exprt` → `member2t`** (the 121-site idiom; `complex`
+real/imag access in `complex_handler.cpp`, struct components in
+`converter_class.cpp`). Legacy:
+
+```cpp
+// base is an exprt of struct type; field "real" has type double
+member_exprt m(base, "real", double_type());
+```
+
+IREP2 (build the base `expr2tc` first, then compose):
+
+```cpp
+// base2 : expr2tc of struct type (already migrated upstream)
+expr2tc m2 = member2tc(double_type2(), base2, "real");
+```
+
+Gotcha: `member2t`'s constructor `assert`s `source->type` is a struct/union
+(`irep2_expr.h:1499`); an asserts build catches a mis-typed base immediately
+— which is the soundness win. For a `#member_name`-tagged component the *tag*
+is re-attached at the 4.5 seam, not on the IREP2 node (RP3/F-P5).
+
+**Example B — positional `.operands()` read → named field** (the dangerous
+167-site class). A legacy site that pulls operand 0 of a typecast:
+
+```cpp
+exprt inner = cast_expr.operands()[0];   // or cast_expr.op0()
+```
+
+becomes a *named* field access on the typed node — never a positional index:
+
+```cpp
+const expr2tc &inner = to_typecast2t(cast2).from;   // typecast2t::from, l.665
+```
+
+The failure mode this kills: `operands()[0]` on a node whose operand layout you
+misremember silently reads the wrong child; `to_typecast2t(x).from` cannot —
+the field is named and the cast asserts the kind.
+
+**Example C — `side_effect_expr_function_callt` → the landed helper** (111
+sites; the OM-call backbone). Legacy:
+
+```cpp
+side_effect_expr_function_callt call;
+call.function() = symbol_expr(model_fn_sym);
+call.arguments().push_back(arg0);
+call.arguments().push_back(arg1);
+call.type() = ret_typet;
+```
+
+IREP2 (Phase 4.2 helper — do **not** hand-roll `sideeffect2tc`):
+
+```cpp
+expr2tc call2 = side_effect_function_call2tc(
+  ret_type2,                          // type2tc
+  symbol_expr2tc(model_fn_sym),       // callee, also the landed helper
+  {arg0_2, arg1_2});                  // std::vector<expr2tc>
+```
+
+This is proven `==` to `migrate_expr` of the legacy form
+(`unit/util/migrate.test.cpp:246`), so the symex input is byte-stable.
+
+**Example D — `.id()` string branch → compile-time predicate** (146 sites).
+Legacy dispatch:
+
+```cpp
+if (e.id() == "constant")        { ... }
+else if (e.id() == "symbol")     { ... }
+```
+
+becomes:
+
+```cpp
+if (is_constant_int2t(e2))       { ... }   // or is_constant_*2t per the type
+else if (is_symbol2t(e2))        { ... }
+```
+
+The win (Part I "Why this mattered"): a branch you *forget* is now a compile
+error under `-Werror`, not a silently-untaken path at symex. The hazard (RP9):
+a branch you translate to the **wrong** predicate compiles and is wrong — so
+each `.id()==` string must be matched to its predicate against `migrate.cpp`'s
+forward switch (`src/util/migrate.cpp`, the `expr.id() == ...` ladder from
+l.711), which is the authority on which `id()` string lowers to which `*2t`.
+
+**The mandatory cross-check after every example.** Build asserts-enabled and
+let `migrate.cpp`'s symbol round-trip run over the corpus (§10.3): if your
+hand-built `expr2tc` is *not* what `migrate_expr` would have produced from the
+legacy node, the round-trip cross-check or a constructor assert fires before
+symex — which is exactly why the migration is done with asserts on.
+
 ## 8. Dependencies and prerequisites
 
 - **4.1 is independent and unblocking** — do it first; it is the milestone
   even if the project stops there (Part III §14 precedent).
-- **4.2 blocks 4.3/4.4** (factories must exist and be tested first — the
-  V-track lesson: land dead-but-tested infrastructure as its own PR).
+- **4.2 → DONE (#4997, §0.1).** The factories that gated 4.3/4.4 are landed
+  and tested; this dependency is discharged. (Kept here for the record: the
+  V-track lesson held — dead-but-tested infrastructure shipped as its own PR.)
 - **4.3 blocks 4.4** (expressions carry their `type2tc`; types must be
-  buildable first).
+  buildable first). Elementary/float/array/pointer/Callable types are landed
+  (§0); the tuple/optional struct builders are deferred to 4.5 (§15.7), so a
+  4.4 expression whose *type* is a tuple/optional struct must back-migrate that
+  type at the seam until 4.5 lands — not a blocker, but flag such sites.
 - **4.4's string/`bytes` work depends on Q-P4** (`mb_value`).
 - **4.5 depends on P1 staying pinned.** If the out-of-scope IREP2
   goto-convert ever lands, 4.5's hand-off is where it connects.
