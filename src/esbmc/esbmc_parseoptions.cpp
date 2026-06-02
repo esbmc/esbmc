@@ -36,6 +36,8 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_termination.h>
+#include <esbmc/ranking_synthesis.h>
+#include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
@@ -1674,6 +1676,29 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // need more iters. Disable the IS non-termination signal in
       // that mode and rely on FC alone.
       //
+      // A linear ranking function proved every loop terminates (checked
+      // once, before the havoc transform). This is k-independent, so
+      // report success immediately without unwinding.
+      if (options.get_bool_option("termination-ranking-proved"))
+      {
+        log_success(
+          "\nRanking function shows all executions terminate\n"
+          "VERIFICATION SUCCESSFUL");
+        return 0;
+      }
+
+      // A recurrent-set non-termination check found an inductive R such
+      // that every reachable state under R has an input continuation
+      // staying in R and avoiding all exits (Gupta et al., POPL 2008).
+      // The loop is non-terminating; report FAILED without unwinding.
+      if (options.get_bool_option("termination-non-termination-proved"))
+      {
+        log_fail(
+          "\nRecurrent set shows a non-terminating execution\n"
+          "VERIFICATION FAILED");
+        return 0;
+      }
+
       // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
@@ -2507,7 +2532,35 @@ bool esbmc_parseoptionst::process_goto_program(
     // would still see the original CLI value, incorrectly firing
     // goto_termination on k-induction-only runs.
     if (options.get_bool_option("termination"))
-      goto_termination(goto_functions, options);
+    {
+      // Recurrent-set non-termination check (Gupta et al., POPL 2008).
+      // Looks for `while(1)`-shaped loops with a constant-equality
+      // recurrent set R such that R is reachable from init, closed
+      // under some input choice, and disjoint from any exit path. If
+      // found, the program is non-terminating and we record it so the
+      // verdict loop can report FAILED without unwinding. Never
+      // returns TV_TRUE; only TV_FALSE (proved non-terminating) or
+      // TV_UNKNOWN.
+      bool non_term_proved =
+        try_prove_non_termination_by_recurrent_set(goto_functions, options, ns)
+          .is_false();
+      options.set_option("termination-non-termination-proved", non_term_proved);
+
+      // Ranking-function termination check, on the CLEAN (un-havoced)
+      // goto program. If it proves every loop terminates, record it so
+      // the verdict loop can report SUCCESSFUL without the marker/FC/IS
+      // machinery. Never returns TV_FALSE, so it can only upgrade an
+      // UNKNOWN to a proof, never produce a wrong verdict.
+      bool ranking_proved =
+        try_prove_termination_by_ranking(goto_functions, options, ns).is_true();
+      options.set_option("termination-ranking-proved", ranking_proved);
+
+      // Only run the marker/havoc transform when the ranking check did
+      // NOT settle it — otherwise the verdict loop short-circuits on the
+      // ranking flag and the havoc'd markers would just be dead work.
+      if (!ranking_proved)
+        goto_termination(goto_functions, options);
+    }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran
     // earlier and k-induction (or --termination's equivalent havoc) has
