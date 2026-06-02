@@ -323,6 +323,14 @@ set(_slow_regression_tests
     "regression/humaneval/humaneval_129"
     "regression/humaneval/humaneval_153"
     "regression/humaneval/humaneval_161"
+    # humaneval_90 used to fast-crash with the member2t assertion
+    # ("source->type->type_id == struct_id ...") when next_smallest()'s
+    # inline optional comparison (None | int == 2) was lowered. With the
+    # materialise-before-member fix the crash is gone and ESBMC reaches the
+    # real sorted(set(lst)) symex, which does not converge under the default
+    # budget. It stays KNOWNBUG; the larger inner timeout lets testing_tool
+    # record the KNOWNBUG verdict instead of ctest hard-killing the run.
+    "regression/humaneval/humaneval_90"
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
