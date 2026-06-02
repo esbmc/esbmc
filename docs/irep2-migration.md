@@ -3019,6 +3019,52 @@ src/clang-cpp-frontend/clang_cpp_adjust*`); decide whether that resolution can
 run pre-construction soundly, or whether construction must move below adjust
 (which makes the converter an adjust client — design implication for (a) vs (b)).
 
+#### V.1k spike outcome (round 1) — feasible; mechanism pinned; lean to (b)
+
+A read-only spike (2026-06-02) settled the feasibility question and the
+resolution locus. **Verdict: design (a) is feasible, but (b) is the cleaner
+target.** Findings, each with its anchor:
+
+1. **The mismatch is exact.** `migrate_type(symbol_typet)` returns
+   `symbol_type2tc` **by-name — it does not follow** (`migrate.cpp:188-189`).
+   `member2t` asserts its source is a **followed** `struct`/`union`/`complex`
+   *and* that the named component exists (`irep2_expr.h:1499-1505`); `index2t`
+   asserts `is_array_type`/`is_vector_type` (`:1576`). A base arriving as
+   `symbol_type2t` therefore aborts at construction — the §16/§16.1 wall.
+2. **Bases are symbol-typed by design.** Python class instances are stored as
+   `pointer→symbol_typet("tag-Cls")`, explicitly "resolved lazily via
+   `ns.follow()` at use time" (`converter_class.cpp:273-279`).
+3. **Resolution happens in `clang_cpp_adjust`, not in `migrate` or the
+   converter.** `goto_convert`'s `migrate_expr` builds
+   `member2tc(type, migrate(base), comp)` (`migrate.cpp:1534-1541`) with **no
+   follow**; `clang_c_adjust::adjust_member` only auto-derefs pointers/arrays
+   (`clang_c_adjust_expr.cpp`, the `adjust_member` body). The symbol→struct
+   completion is the `ns.follow`-based resolution inside `clang_c_adjust`
+   (`clang_c_adjust_expr.cpp:154,324,446,475,541,…`), which runs **after** the
+   converter (`python_language.cpp:245`) and **before** goto-convert. That is
+   the P2 boundary, precisely.
+4. **Design (a) is feasible** — the converter already holds the namespace and
+   the structs are registered (resolvable at use time by design, finding 2), so
+   it *can* `ns.follow` a base to its struct and build `member2tc`/`index2tc`
+   with the resolved `type2tc`. **RV2 proof obligation, made concrete:** prove
+   the converter-resolved type equals the `clang_cpp_adjust`-resolved type by
+   GOTO-byte + dual-solver + asserts equivalence over the corpus.
+5. **The (a)-vs-(b) decision, sharpened — lean (b).** `clang_cpp_adjust` does
+   type-following **and** pointer auto-deref **and** the `#cpp_type` reads (W3)
+   in one legacy pass. Replicating only the following converter-side (a) risks
+   duplicating resolution logic and leaving adjust running for the rest — a
+   two-places-resolve hazard. An **IREP2-native adjust (b)** that does
+   follow + deref + attribute-carriage in one IREP2 pass collapses **V.1k + V.2
+   + W3** into a single deliverable and avoids the duplication. Provisional
+   recommendation: pursue **(b)**, scoped as an IREP2-native Python adjuster.
+
+**Open sub-question for spike round 2 (the prototype):** pin the *exact* line at
+which a member/subscript base's `symbol_typet` is replaced by the resolved
+`struct_typet` on the node reaching goto-convert (confirm empirically with
+`esbmc <t>.py --goto-functions-only` on `type-annotation-class`, inspecting the
+member base type), then build the smallest converter-side resolve-then-build
+experiment that discharges or refutes RV2 on that one case.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
