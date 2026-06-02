@@ -31,6 +31,7 @@ void printf_formattert::print(std::ostream &out)
   next_operand = operands.begin();
   min_outlen = 0;
   max_outlen = 0;
+  bounded = true;
 
   try
   {
@@ -234,7 +235,11 @@ void printf_formattert::process_format(std::ostream &out)
   // record [1, max_digits] as the bound (widened by any explicit min-width).
   auto emit_int = [&](bool is_signed, int base, bool uppercase) {
     if (next_operand == operands.end())
+    {
+      // Expected an integer argument but none is available: cannot bound.
+      bounded = false;
       return;
+    }
     const type2tc target = pick_int_type(is_signed, length_mod);
     const expr2tc casted = make_type(*(next_operand++), target);
     std::string s;
@@ -267,6 +272,27 @@ void printf_formattert::process_format(std::ostream &out)
     max_outlen += max_chars;
   };
 
+  // Emit a floating-point conversion (%e/%f/%g). Only a constant argument has
+  // a statically-known rendering; a non-constant double can format to an
+  // arbitrarily long string (e.g. %f of 1e308), so we cannot bound the output
+  // and mark the whole result unbounded. The operand is still consumed to keep
+  // subsequent arguments aligned.
+  auto emit_float = [&](format_spect::stylet style) {
+    format_constant.style = style;
+    if (next_operand == operands.end())
+    {
+      bounded = false;
+      return;
+    }
+    const expr2tc farg = make_type(*(next_operand++), double_type2());
+    if (
+      is_constant_floatbv2t(farg) || is_constant_fixedbv2t(farg) ||
+      is_constant_int2t(farg))
+      emit(format_constant(farg));
+    else
+      bounded = false;
+  };
+
   switch (ch)
   {
   case '%':
@@ -275,39 +301,39 @@ void printf_formattert::process_format(std::ostream &out)
 
   case 'e':
   case 'E':
-    format_constant.style = format_spect::stylet::SCIENTIFIC;
-    if (next_operand == operands.end())
-      break;
-    emit(format_constant(make_type(*(next_operand++), double_type2())));
+    emit_float(format_spect::stylet::SCIENTIFIC);
     break;
 
   case 'f':
   case 'F':
-    format_constant.style = format_spect::stylet::DECIMAL;
-    if (next_operand == operands.end())
-      break;
-    emit(format_constant(make_type(*(next_operand++), double_type2())));
+    emit_float(format_spect::stylet::DECIMAL);
     break;
 
   case 'g':
   case 'G':
-    format_constant.style = format_spect::stylet::AUTOMATIC;
     if (format_constant.precision == 0)
       format_constant.precision = 1;
-    if (next_operand == operands.end())
-      break;
-    emit(format_constant(make_type(*(next_operand++), double_type2())));
+    emit_float(format_spect::stylet::AUTOMATIC);
     break;
 
   case 's':
   {
     if (next_operand == operands.end())
+    {
+      // A %s with no argument to inspect: length is unknown, so the output
+      // has no sound upper bound.
+      bounded = false;
       break;
+    }
     const expr2tc &op = *(next_operand++);
     const expr2tc symbol2 = get_base_object(op);
     exprt char_array = migrate_expr_back(symbol2);
     if (char_array.id() == "string-constant")
       emit(char_array.value().as_string());
+    else
+      // A non-literal string argument has no statically-known length, so the
+      // total output length cannot be bounded.
+      bounded = false;
   }
   break;
 
@@ -335,10 +361,25 @@ void printf_formattert::process_format(std::ostream &out)
     break;
 
   case 'c':
+  {
     if (next_operand == operands.end())
+    {
+      bounded = false;
       break;
-    emit(format_constant(make_type(*(next_operand++), char_type2())));
+    }
+    const expr2tc carg = make_type(*(next_operand++), char_type2());
+    if (is_constant_int2t(carg))
+      emit(format_constant(carg));
+    else
+    {
+      // %c writes exactly one character regardless of its value (padded to
+      // min_width). The length is value-independent, so this stays bounded.
+      const size_t clen =
+        format_constant.min_width > 1 ? format_constant.min_width : 1;
+      emit(std::string(clen, ' '));
+    }
     break;
+  }
 
   case 'x':
     emit_int(false, 16, false);

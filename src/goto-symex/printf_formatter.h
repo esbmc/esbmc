@@ -17,6 +17,13 @@ public:
   size_t min_outlen = 0;
   /** Maximum possible output length for the last print() call. */
   size_t max_outlen = 0;
+  /** False when print() could not compute a sound upper bound on the output
+   *  length: a value-dependent conversion (%s, %e/%f/%g) was given a
+   *  non-constant argument, or an expected argument was missing. When false,
+   *  max_outlen is NOT a valid upper bound and callers must treat the return
+   *  value as unbounded (unconstrained nondet). Always true after a run over
+   *  a format whose conversions are all constant-bounded. */
+  bool bounded = true;
 
 protected:
   std::string format;
