@@ -1225,6 +1225,48 @@ exprt function_call_expr::handle_list_pop() const
     index_expr = converter_.get_expr(args[0]);
   }
 
+  // cpp-throw IndexError on empty / out-of-range so try/except can catch it.
+  exprt size_call;
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    assert(size_func);
+    symbolt &size_ret = converter_.create_tmp_symbol(
+      call_, "pop_size_tmp", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_ret));
+    converter_.add_instruction(size_decl);
+    code_function_callt size_fcall;
+    size_fcall.function() = symbol_expr(*size_func);
+    size_fcall.lhs() = symbol_expr(size_ret);
+    size_fcall.arguments().push_back(symbol_expr(*list_symbol));
+    size_fcall.type() = size_type();
+    size_fcall.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(size_fcall);
+    size_call = symbol_expr(size_ret);
+  }
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "pop index out of range");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  // Signed comparison so a negative user index is well-defined against -size.
+  signedbv_typet ll_type(64);
+  exprt size_signed = typecast_exprt(size_call, ll_type);
+  exprt idx_signed = index_expr;
+  if (idx_signed.type() != ll_type)
+    idx_signed = typecast_exprt(idx_signed, ll_type);
+  exprt neg_size("unary-", ll_type);
+  neg_size.copy_to_operands(size_signed);
+  exprt size_is_zero = equality_exprt(size_signed, from_integer(0, ll_type));
+  exprt idx_ge_size(">=", bool_type());
+  idx_ge_size.copy_to_operands(idx_signed, size_signed);
+  exprt idx_lt_negsize("<", bool_type());
+  idx_lt_negsize.copy_to_operands(idx_signed, neg_size);
+  code_ifthenelset guard;
+  guard.cond() = or_exprt(size_is_zero, or_exprt(idx_ge_size, idx_lt_negsize));
+  guard.then_case() = throw_code;
+  guard.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(guard);
+
   // Delegate to python_list to build the pop operation
   python_list list_helper(converter_, call_);
   return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
@@ -1482,10 +1524,58 @@ exprt function_call_expr::handle_list_remove() const
   exprt value_to_remove = converter_.get_expr(args[0]);
 
   python_list list_helper(converter_, call_);
-  exprt result =
-    list_helper.build_remove_list_call(*list_symbol, call_, value_to_remove);
 
-  return result;
+  // Single scan + constant-time remove; cpp-throw ValueError on miss.
+  exprt idx_expr =
+    list_helper.find_index_or_max(value_to_remove, symbol_expr(*list_symbol));
+  exprt not_found =
+    equality_exprt(idx_expr, python_list::list_index_not_found_sentinel());
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.remove(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  code_ifthenelset guard;
+  guard.cond() = not_found;
+  guard.then_case() = throw_code;
+  guard.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(guard);
+
+  return list_helper.build_remove_at_call(*list_symbol, idx_expr);
+}
+
+exprt function_call_expr::handle_list_count() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("count() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.count(value, symbol_expr(*list_symbol));
+}
+
+exprt function_call_expr::handle_list_index() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error(
+      "index() takes exactly one argument (start/end forms not yet supported)");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.find_index(value, symbol_expr(*list_symbol));
 }
 
 exprt function_call_expr::handle_list_sort() const
@@ -1674,8 +1764,20 @@ bool function_call_expr::is_list_method_call() const
     method_name != "append" && method_name != "pop" &&
     method_name != "insert" && method_name != "remove" &&
     method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" && method_name != "reverse")
+    method_name != "copy" && method_name != "sort" &&
+    method_name != "reverse" && method_name != "count" &&
+    method_name != "index")
     return false;
+
+  // count/index are also tuple methods, dispatched earlier in
+  // is_tuple_method_call. Here we only match a list receiver.
+  if (method_name == "count" || method_name == "index")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
+  }
 
   // "pop" is shared between list and dict. Disambiguate using the actual
   // symbol type: only treat as list.pop() when the receiver resolves to a
@@ -1741,6 +1843,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_sort();
   if (method_name == "reverse")
     return handle_list_reverse();
+  if (method_name == "count")
+    return handle_list_count();
+  if (method_name == "index")
+    return handle_list_index();
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);

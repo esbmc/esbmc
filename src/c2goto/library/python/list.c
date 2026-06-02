@@ -457,6 +457,29 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+size_t __ESBMC_list_count(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return 0;
+
+  size_t hits = 0;
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      hits++;
+    ++i;
+  }
+  return hits;
+}
+
 /* ---------- extend list ---------- */
 
 void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)

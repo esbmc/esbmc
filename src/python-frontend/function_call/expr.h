@@ -332,6 +332,8 @@ private:
   exprt handle_list_copy() const;
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;
+  exprt handle_list_count() const;
+  exprt handle_list_index() const;
   exprt handle_list_reverse() const;
 
   /*

@@ -53,6 +53,39 @@ public:
 
   exprt contains(const exprt &item, const exprt &list);
 
+  exprt count(const exprt &item, const exprt &list);
+
+  /**
+   * @brief Raises ValueError (via cpp-throw) when the element is absent.
+   */
+  exprt find_index(const exprt &item, const exprt &list);
+
+  /**
+   * @brief No-throw variant of find_index: returns SIZE_MAX when the
+   * element is absent.
+   */
+  exprt find_index_or_max(const exprt &item, const exprt &list);
+
+  exprt build_remove_at_call(const symbolt &list, const exprt &idx);
+
+  /**
+   * @brief Sentinel returned by find_index_or_max on miss; mirrors
+   * SIZE_MAX in the C model.
+   */
+  static exprt list_index_not_found_sentinel();
+
+  /**
+   * @brief Emit a call to a C scan primitive of the shape
+   * `(PyListObject*, void*, type_id, size) -> ret_type`. Shared by
+   * contains(), count(), and find_index_or_max().
+   */
+  exprt build_list_scan_call(
+    const exprt &item,
+    const exprt &list,
+    const std::string &c_func_name,
+    const std::string &ret_var_name,
+    const typet &ret_type);
+
   exprt list_repetition(
     const nlohmann::json &left_node,
     const nlohmann::json &right_node,
@@ -229,15 +262,6 @@ public:
    */
   exprt
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
-
-  /**
-   * @brief Build a list remove operation (removes first matching element).
-   * Raises ValueError (via assertion) if element is not found.
-   */
-  exprt build_remove_list_call(
-    const symbolt &list,
-    const nlohmann::json &op,
-    const exprt &elem);
 
   /**
    * @brief Emit a call to a set membership-mutating C model function.
