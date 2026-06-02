@@ -977,21 +977,12 @@ bool recognize_loop(
   const goto_functionst *goto_functions = nullptr,
   const loop_skipt *loop_skip = nullptr)
 {
-  out.head = loop.get_original_loop_head();
+  // Use the effective loop head (skips ASSUMEs etc. inserted by
+  // --interval-analysis at the back-edge target). See
+  // loopst::effective_loop_head documentation for rationale.
+  out.head = loop.effective_loop_head();
   out.back = loop.get_original_loop_exit();
 
-  // Step past leading ASSUME / skip / location / decl / dead
-  // instructions to find the actual loop-head IF. --interval-analysis
-  // inserts ASSUME(bounds) at the back-edge target via insert_swap,
-  // so the natural loop's head iterator can point at an ASSUME rather
-  // than the IF. The ASSUMEs are extra facts about modified variables
-  // and don't change the loop's control-flow shape from the
-  // recogniser's POV; just skip past them.
-  while (out.head != out.back &&
-         (out.head->is_skip() || out.head->type == LOCATION ||
-          out.head->type == DECL || out.head->type == DEAD ||
-          out.head->is_assume()))
-    ++out.head;
   if (out.head == out.back)
     return false;
   if (!out.head->is_goto())
@@ -3277,7 +3268,11 @@ tvt try_prove_termination_by_ranking(
     loop_skipt all_loops;
     for (const auto &loop : loops.get_loops())
     {
-      auto head = loop.get_original_loop_head();
+      // Use the effective head — same reasoning as recognize_loop. The
+      // entries store the head's location_number as the key for the
+      // skip map, and the consumers (prefix walkers / body parser)
+      // also use effective heads, so the keys must match.
+      auto head = loop.effective_loop_head();
       auto back = loop.get_original_loop_exit();
       loop_skipt::entry e;
       e.back = back;
@@ -3316,7 +3311,7 @@ tvt try_prove_termination_by_ranking(
       // as that consumer filters; the consumer-side guard is the
       // source of truth.
       loop_skipt skip;
-      auto cur_head = loop.get_original_loop_head();
+      auto cur_head = loop.effective_loop_head();
       for (const auto &kv : all_loops.by_head_locnum)
         if (kv.first != cur_head->location_number)
           skip.by_head_locnum.insert(kv);

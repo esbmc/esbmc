@@ -242,19 +242,11 @@ bool recognize_eca_main_loop(
   std::vector<BigInt> &valid_inputs,
   irep_idt &callee_name)
 {
-  goto_programt::const_targett head = loop.get_original_loop_head();
+  // Use the effective loop head — skips ASSUMEs etc. that
+  // --interval-analysis inserts at the back-edge target. See
+  // loopst::effective_loop_head documentation.
+  goto_programt::const_targett head = loop.effective_loop_head();
   goto_programt::const_targett back = loop.get_original_loop_exit();
-  // Step past any leading ASSUME / skip / location / decl / dead
-  // instructions to find the `while(1)` head IF. --interval-analysis
-  // inserts an ASSUME(bounds) at the back-edge target via insert_swap,
-  // so the natural loop's head iterator points at the ASSUME rather
-  // than the IF. Skipping past it doesn't change the loop's shape
-  // from this recogniser's POV — the ASSUME is an extra fact about
-  // modified variables that doesn't alter control flow.
-  while (head != back &&
-         (head->is_skip() || head->type == LOCATION || head->type == DECL ||
-          head->type == DEAD || head->is_assume()))
-    ++head;
   if (head == back || !head->is_goto() || !is_constant_false(head->guard))
     return false;
   if (!back->is_goto() || !back->is_backwards_goto())
