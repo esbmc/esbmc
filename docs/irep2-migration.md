@@ -3065,6 +3065,56 @@ which a member/subscript base's `symbol_typet` is replaced by the resolved
 member base type), then build the smallest converter-side resolve-then-build
 experiment that discharges or refutes RV2 on that one case.
 
+#### V.1k spike outcome (round 2) — design (a) **REFUTED**; (b) confirmed required
+
+A working prototype of design (a) settled RV2 empirically (2026-06-02, asserts
+build, branch `spike/v1k-resolve-then-build-prototype`, **not merged** — it
+regresses). The prototype made the **one** change (a) requires at the
+attribute-access site (`converter_expr.cpp` ≈494-510): follow the dereferenced
+pointee so the base carries the resolved struct, then build `member2tc` over it
+and lower once:
+
+```cpp
+deref.type() = ns.follow(member_base.type().subtype());   // was: .subtype() (symbol_typet)
+// member_base.type() is now the resolved struct
+expr2tc src2; migrate_expr(member_base, src2);            // src2->type is struct
+return migrate_expr_back(member2tc(migrate_type(clean_type), src2, attr_name));
+```
+
+**Result:** the flat-member cases that aborted in §16/§16.1 now pass
+(`type-annotation-class`, `math-sqrt-any-typed`, a `p.x==5` probe → all
+SUCCESSFUL, no assert). **But the corpus refuted it: 20 of 488** attribute/class
+/arith tests **regressed**, *entirely* in four families:
+
+| Regressing family | # | What a single leaf-follow misses |
+|---|---:|---|
+| `nested-attr-*` (incl. chains) | 8 | `self.b.a`: the **inner** member is built over an **outer** member whose type a leaf-follow did not resolve — adjust follows at **every** level, recursively. |
+| `github_4117_*` (attr type-inference) | 8 | attribute **shadowing / conflict / `None`-typed** inference — adjust resolves these via more than a struct-name follow. |
+| `dataclass_*` | 2 | dataclass field access has adjust-stage handling beyond a plain `ns.follow`. |
+| `self_ref_nested_attr_chain*` | 2 | self-referential chains — same recursive-resolution gap as nested-attr. |
+
+**Verdict — RV2 is *not* dischargeable by design (a).** A converter-side
+single `ns.follow` replicates only the **flat, single-member** slice of
+`clang_cpp_adjust`'s resolution; nested chains, dataclass fields, and the
+attribute type-inference edge cases need adjust's **full recursive,
+dataclass-aware, inference-aware** completion. Replicating *all* of that in the
+converter would duplicate `clang_cpp_adjust` piecemeal and brittlely — exactly
+the two-places-resolve hazard flagged in round 1.
+
+**Consequence (decision recorded):** **adopt design (b)** — an **IREP2-native
+adjuster** that runs adjust's *complete* resolution (recursive following +
+auto-deref + dataclass/inference handling + `#cpp_type`/`#member_name` carriage)
+as one IREP2 pass, replacing the legacy `clang_cpp_adjust` round-trip on Python
+output. This is the keystone deliverable for V.1k and **also retires W3**
+(§V.2): the same pass that resolves types is the natural home for IREP2-native
+attribute carriage. The 20-test regression set above is the **acceptance
+fixture** for the (b) adjuster — it must take all four families back to green
+while keeping the flat-member improvement.
+
+Reproduce: re-apply the prototype diff above and run
+`ctest -R 'regression/python/.*(attr|class|nested|dataclass|github_4117|math)'`
+— 20 failures, all in the four families; revert restores green.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
