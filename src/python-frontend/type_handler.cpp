@@ -5,12 +5,66 @@
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
+#include <util/config.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
+#include <irep2/irep2_utils.h>
 
 #include <regex>
+
+namespace
+{
+// 512-bit signed bitvector for Python int under --ir. Roughly 154 decimal
+// digits; covers factorial(170), 64-byte from_bytes round-trips, bit_length
+// on values up to 2^509. Under int-encoding the SMT layer drops widths and
+// the value space is unbounded — the width here only sizes constant-fold
+// intermediates. Issue #4642.
+constexpr unsigned kPythonBignumWidth = 512;
+
+// The bit_length OM (`src/python-frontend/models/int.py`) caps its loop at
+// `length < kPythonBitLengthCap` so symex terminates without `--unwind`
+// (issue #4756). For soundness the cap must be at least
+// kPythonBignumWidth: any input representable in IntWide has bit_length
+// strictly less than kPythonBignumWidth, so the loop exits via `n == 0`
+// and never via the cap. If kPythonBignumWidth grows past the cap, the OM
+// silently underreports — bump kPythonBitLengthCap and the OM literal
+// together (the OM literal cannot read this constant; it is FLAIL-mangled
+// before the C++ side is touched).
+constexpr unsigned kPythonBitLengthCap = 512;
+static_assert(
+  kPythonBignumWidth <= kPythonBitLengthCap,
+  "bit_length OM cap (models/int.py) must cover the full Python int width");
+
+// Phase 4.3 seam (Part IV §5/§6): lower an internally-built IREP2 type to the
+// legacy `typet` the symbol table and shared downstream passes consume,
+// re-attaching the `#cpp_type` hint IREP2 cannot carry (F-P5). The elementary
+// builders construct `type2tc` via typed factories and pass through here, so
+// the legacy bytes reaching `create_symbol` stay byte-identical to before.
+typet lower_to_seam(const type2tc &t, const irep_idt &cpp_type = irep_idt())
+{
+  typet legacy = migrate_type_back(t);
+  if (!cpp_type.empty())
+    type_utils::set_cpp_type(legacy, cpp_type);
+  return legacy;
+}
+} // namespace
+
+unsigned type_handler::python_int_width()
+{
+  return config.options.get_bool_option("int-encoding")
+           ? kPythonBignumWidth
+           : static_cast<unsigned>(config.ansi_c.long_long_int_width);
+}
+
+typet type_handler::python_int_typet()
+{
+  if (config.options.get_bool_option("int-encoding"))
+    return signedbv_typet(kPythonBignumWidth);
+  return long_long_int_type();
+}
 
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
@@ -88,7 +142,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   const contextt &symbol_table = converter_.symbol_table();
 
   symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+    if (s.get_type().id() == "struct" && s.name == func_name)
     {
       is_ctor_call = true;
       return;
@@ -104,7 +158,11 @@ std::string type_handler::type_to_string(const typet &t) const
   if (t == double_type())
     return "float";
 
-  if (t == long_long_int_type())
+  // Both the default int64 lowering and the --ir bignum widening
+  // produced by python_int_typet() name the same Python type. Method
+  // dispatch (e.g. `(2 ** 64).bit_length()`) keys off this string, so
+  // both widths must map to "int". Issue #1964 / #4642.
+  if (t == long_long_int_type() || t == python_int_typet())
     return "int";
 
   if (t == long_long_uint_type())
@@ -323,18 +381,15 @@ typet type_handler::get_canonical_string_type(const typet &t) const
 /// It is typically used to model Python sequences like strings and byte arrays
 typet type_handler::build_array(const typet &sub_type, const size_t size) const
 {
-  // Use BigInt to ensure correctness for large sizes, though typical sizes are small.
-  const BigInt big_size = BigInt(size);
-  const typet size_t_type = size_type(); // An unsignedbv of platform word width
-
-  // Construct a constant expression for the array size.
-  constant_exprt array_size_expr(
-    integer2binary(big_size, bv_width(size_t_type)), // Binary representation
-    integer2string(big_size), // Decimal string for display
-    size_t_type);             // Size type
-
-  // Return the full array type
-  return array_typet(sub_type, array_size_expr);
+  // Phase 4.3 (Part IV §5): build the array type IREP2-internal and lower it
+  // back to the legacy `typet` at the seam. The element type arrives as a
+  // legacy `typet` (from the elementary builders / callers), so migrate it in;
+  // the size is a constant of the platform word-width unsignedbv (`size_type`),
+  // matching the legacy `constant_exprt` byte-for-byte after back-migration.
+  const type2tc subtype = migrate_type(sub_type);
+  const type2tc size_t_type = migrate_type(size_type());
+  const expr2tc array_size = constant_int2tc(size_t_type, BigInt(size));
+  return lower_to_seam(array_type2tc(subtype, array_size, false));
 }
 
 std::vector<int> type_handler::get_array_type_shape(const typet &type) const
@@ -396,23 +451,31 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "object")
     return any_type();
 
-  // NoneType — represents Python's None value
-  // Use a pointer type to void to represent None/null properly
+  // NoneType — represents Python's None value, modelled as a pointer-width
+  // unsigned integer (the legacy pointer_type() helper). Built IREP2-internal
+  // and lowered at the seam (Phase 4.3, Part IV §5).
   if (ast_type == "NoneType")
-    return pointer_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.pointer_width()));
 
   // Optional[T] - when type string is just "Optional" without inner type
-  // This can occur during type inference. Return pointer type as placeholder.
+  // This can occur during type inference. Same pointer-width unsigned integer
+  // placeholder as NoneType, lowered at the seam.
   if (ast_type == "Optional")
-    return pointer_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.pointer_width()));
 
   // Callable: represents function/callable types
-  // Return a pointer to a generic code type (function pointer)
+  // Return a pointer to a generic no-argument code type (function pointer),
+  // built IREP2-internal and lowered at the seam (Phase 4.3, Part IV §5). Empty
+  // argument/name vectors satisfy code_type2t's args.size()==argument_names
+  // .size() invariant (irep2_type.h).
   if (ast_type == "Callable")
   {
-    code_typet code_type;
-    code_type.return_type() = empty_typet();
-    return pointer_typet(code_type);
+    const type2tc code_t = code_type2tc(
+      std::vector<type2tc>{},
+      get_empty_type(),
+      std::vector<irep_idt>{},
+      /*ellipsis=*/false);
+    return lower_to_seam(pointer_type2tc(code_t));
   }
 
   // Python float type: IEEE 754 double-precision mapping
@@ -420,22 +483,44 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // as per Python documentation. This ensures proper precision, range, and
   // compatibility with Python's numeric type promotion (int -> float -> complex).
   if (ast_type == "float")
-    return double_type();
+    return lower_to_seam(double_type2());
 
   // int — arbitrarily large integers
   // We approximate using 64-bit signed integer here.
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
-    return long_long_int_type(); // FIXME: Support bignum for true Python semantics
+    // FIXME: Support bignum for true Python semantics
+    return lower_to_seam(signedbv_type2tc(config.ansi_c.long_long_int_width));
+
+  // Internal alias for operational models that need a width-polymorphic
+  // signed integer parameter — accepts both narrow and wide Python int
+  // values without truncating at the call boundary. Currently used by
+  // models/int.py::bit_length so that `int(2 ** 64).bit_length()` works
+  // under --ir without forcing every other `int`-typed callsite into the
+  // wider representation (which would cascade into the list/dict/set OM,
+  // see #4653). Issue #1964 / #4642.
+  if (ast_type == "IntWide")
+    return python_int_typet();
 
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
     ast_type == "Slot")
-    return long_long_uint_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
 
   // bool — represents True/False
   if (ast_type == "bool")
-    return bool_type();
+    return lower_to_seam(get_bool_type());
+
+  // slice — Python's slice() builtin, modelled as __ESBMC_PySliceObj.
+  // Only resolve to the slice struct if the operational model is loaded;
+  // otherwise fall through so early type-handler queries don't assert.
+  if (ast_type == "slice")
+  {
+    const symbolt *sym =
+      converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+    if (sym)
+      return symbol_typet(sym->id);
+  }
 
   if (ast_type == "complex")
   {
@@ -447,7 +532,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.type = get_complex_struct_type();
+      type_symbol.set_type(get_complex_struct_type());
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -458,7 +543,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return uint256_type();
+    return lower_to_seam(unsignedbv_type2tc(256));
 
   // bytes — immutable sequences of bytes
   // Here modeled as array of signed integers (8-bit).
@@ -486,19 +571,22 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "abs")
     return long_long_int_type();
 
-  // str: immutable sequences of Unicode characters
+  // str/string: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
   if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
+    ast_type == "str" || ast_type == "string" || ast_type == "chr" ||
+    ast_type == "hex" || ast_type == "oct")
   {
     if (type_size == 1)
     {
-      typet type = char_type();      // 8-bit char
-      type.set("#cpp_type", "char"); // For C backend compatibility
-      return type;
+      // 8-bit char built IREP2-internal; #cpp_type "char" is re-attached at the
+      // seam for C-backend compatibility (F-P5 — IREP2 cannot carry it).
+      const type2tc char_t = config.ansi_c.char_is_unsigned
+                               ? unsignedbv_type2tc(config.ansi_c.char_width)
+                               : signedbv_type2tc(config.ansi_c.char_width);
+      return lower_to_seam(char_t, "char");
     }
     return build_array(char_type(), type_size); // Array of characters
   }
@@ -545,7 +633,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
     if (s)
-      return s->type;
+      return s->get_type();
   }
 
   // Check if it's a built-in type (handles tuple, list, dict, etc.)
@@ -625,7 +713,7 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
     if (func_name == "randint" || func_name == "randrange")
       return long_long_int_type();
     if (func_name == "random" || func_name == "uniform")
-      return double_type();
+      return lower_to_seam(double_type2());
     if (type_utils::is_builtin_type(func_name))
       return get_typet(func_name);
   }
@@ -653,7 +741,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_boolean())
     return bool_type();
   else if (elem.is_number_float())
-    return double_type();
+    return lower_to_seam(double_type2());
   else if (elem.is_string())
   {
     size_t str_size = elem.get<std::string>().size();
@@ -675,6 +763,13 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
       // For unary operations, the result type is typically the same as the operand type
       return get_typet(elem["operand"]);
     }
+
+    // Handle Python AST BinOp node (e.g., 1 + 0, a * b). Reuse
+    // get_operand_type, which recursively resolves the operand types, then
+    // map the type name back to a typet. Without this, an expression-derived
+    // binding used as a list element aborted (issue #4909).
+    if (elem["_type"] == "BinOp")
+      return get_typet(get_operand_type(elem));
 
     // Handle Python AST List node
     if (elem["_type"] == "List" && elem.contains("elts"))
@@ -737,8 +832,13 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
     if (!var.empty() && var.contains("value") && !var["value"].is_null())
     {
+      // Resolve the type of the binding's right-hand side. Dispatch on the
+      // whole RHS node rather than assuming it is a Constant wrapper: a derived
+      // binding such as `X = Y` (alias) or `X = 1 + 0` (expression) has no
+      // nested "value" key, so the old `var["value"]["value"]` aborted. See
+      // issue #4909.
       if (var["value"]["_type"] != "Call")
-        return get_typet(var["value"]["value"]);
+        return get_typet(var["value"]);
 
       if (var["value"].contains("func"))
         return get_typet_from_call_func(var["value"]["func"]);
@@ -834,9 +934,21 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         std::string type_string = slice["value"].get<std::string>();
         t = get_typet(type_utils::remove_quotes(type_string));
       }
+      else if (
+        slice["_type"] == "Subscript" && slice.contains("value") &&
+        slice["value"].is_object() && slice["value"].contains("id") &&
+        slice["value"]["id"].is_string())
+      {
+        // Nested container like list[list[T]] or list[dict[K, V]] — resolve
+        // to the inner container's own type so subsequent subscripts route
+        // through the right element-access primitive.
+        t = get_typet(slice["value"]["id"].get<std::string>());
+      }
       else
         t = empty_typet();
-      return pointer_typet(t);
+      // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
+      // at the seam. The pointee arrives as a legacy typet, so migrate it in.
+      return lower_to_seam(pointer_type2tc(migrate_type(t)));
     }
 
     // Check if the nested structure exists before accessing
@@ -848,7 +960,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       assert(type_ann == "list" || type_ann == "List");
       typet t =
         get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-      return pointer_typet(t);
+      // Phase 4.3 (Part IV §5): pointer built IREP2-internal, lowered at seam.
+      return lower_to_seam(pointer_type2tc(migrate_type(t)));
     }
   }
 
@@ -905,7 +1018,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->type).return_type();
+    return static_cast<const code_typet &>(func_symbol->get_type())
+      .return_type();
   }
 
   if (list_value.contains("_type") && list_value["_type"] == "BinOp")
@@ -919,7 +1033,13 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
                                                 : right_expr.type().subtype();
       exprt size = (left_expr.is_symbol()) ? right_expr : left_expr;
-      return array_typet(list_type, size);
+      // Phase 4.3 (Part IV §5): build the array type IREP2-internal and lower
+      // at the seam. Unlike build_array the size here is a runtime expression
+      // (e.g. `x = [0] * n`), so it is migrated in rather than a constant.
+      expr2tc array_size;
+      migrate_expr(size, array_size);
+      return lower_to_seam(
+        array_type2tc(migrate_type(list_type), array_size, false));
     }
   }
 
@@ -932,7 +1052,9 @@ const typet type_handler::get_list_type() const
   const char *list_type_id = "tag-struct __ESBMC_PyListObj";
   list_type_symbol = converter_.symbol_table().find_symbol(list_type_id);
   assert(list_type_symbol);
-  return pointer_typet(symbol_typet(list_type_symbol->id));
+  // Phase 4.3 (Part IV §5): pointer-to-symbol built IREP2-internal (symbol type
+  // constructed natively, no legacy round-trip) and lowered at the seam.
+  return lower_to_seam(pointer_type2tc(symbol_type2tc(list_type_symbol->id)));
 }
 
 typet type_handler::get_list_element_type() const
@@ -942,6 +1064,14 @@ typet type_handler::get_list_element_type() const
   type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
+}
+
+typet type_handler::get_slice_type() const
+{
+  const symbolt *slice_type_symbol =
+    converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+  assert(slice_type_symbol);
+  return symbol_typet(slice_type_symbol->id);
 }
 
 /// This method inspects the JSON representation of a Python operand node and attempts to

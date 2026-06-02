@@ -3,13 +3,13 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/std_expr.h>
 
 class w_guardst
 {
 public:
-  w_guardst(contextt &_context) : context(_context)
+  explicit w_guardst(contextt &_context) : context(_context)
   {
   }
 
@@ -31,36 +31,36 @@ public:
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.type =
-      original_expr.is_index() ? migrate_type_back(index) : typet("bool");
+    set_symbol_type(
+      new_symbol, original_expr.is_index() ? index : get_bool_type());
     new_symbol.static_lifetime = true;
-    new_symbol.value.make_false();
+    {
+      exprt v = new_symbol.get_value();
+      v.make_false();
+      new_symbol.set_value(std::move(v));
+    }
 
     symbolt *symbol_ptr;
     context.move(new_symbol, symbol_ptr);
     return *symbol_ptr;
   }
 
-  const exprt get_guard_symbol_expr(const exprt &original_expr)
+  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
   {
     // introduce a new expression: RACE_CHECK(&x)
     // its operand is the address of the variable
     // which we will replace during symbolic execution.
-    exprt address = address_of_exprt(original_expr);
-    exprt check("races_check", typet("bool"));
-    check.move_to_operands(address);
-
-    return check;
+    return races_check2tc(address_of2tc(original_expr->type, original_expr));
   }
 
-  const exprt get_w_guard_expr(const rw_sett::entryt &entry)
+  expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
   {
     return get_guard_symbol_expr(entry.original_expr);
   }
 
-  const exprt get_assertion(const rw_sett::entryt &entry)
+  expr2tc get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(get_guard_symbol_expr(entry.original_expr));
+    return not2tc(get_guard_symbol_expr(entry.original_expr));
   }
 
   void add_initialization(goto_programt &goto_program);
@@ -82,9 +82,13 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   symbolt new_symbol;
   new_symbol.id = identifier;
   new_symbol.name = identifier;
-  new_symbol.type = migrate_type_back(arrayt);
+  set_symbol_type(new_symbol, arrayt);
   new_symbol.static_lifetime = true;
-  new_symbol.value.make_false();
+  {
+    exprt v = new_symbol.get_value();
+    v.make_false();
+    new_symbol.set_value(std::move(v));
+  }
   context.move_symbol_to_context(new_symbol);
 
   for (const auto &w_guard : w_guards)
@@ -94,8 +98,9 @@ void w_guardst::add_initialization(goto_programt &goto_program)
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 
-    expr2tc falsity = s.type.is_array() ? gen_zero(migrate_type(s.type), true)
-                                        : gen_false_expr();
+    expr2tc falsity = s.get_type().is_array()
+                        ? gen_zero(migrate_symbol_type(s), true)
+                        : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;
     t->code = code_assign2tc(new_sym, falsity);
@@ -104,21 +109,184 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   }
 }
 
+// Collect the root symbol of every object whose address is taken in `expr`,
+// recording it in `out`. The root is obtained by walking through member, index
+// and typecast selectors (`&s.f` -> s, `&a[k]` -> a, `&(T)x` -> x); a
+// dereference under address-of (`&*p`) yields no new escapee because it just
+// re-forms an existing pointer.
+static void
+collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_address_of2t(expr))
+  {
+    expr2tc obj = to_address_of2t(expr).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+    {
+      if (is_member2t(obj))
+        obj = to_member2t(obj).source_value;
+      else if (is_index2t(obj))
+        obj = to_index2t(obj).source_value;
+      else
+        obj = to_typecast2t(obj).from;
+    }
+    if (is_symbol2t(obj))
+      out.insert(to_symbol2t(obj).thename);
+  }
+
+  expr->foreach_operand(
+    [&out](const expr2tc &op) { collect_address_taken(op, out); });
+}
+
+// A stack local becomes shared between threads when its address is handed to a
+// newly spawned thread, i.e. passed as an argument to pthread_create. Only such
+// locals need to stay race-eligible when accessed directly by name (issue
+// #4424). Collecting *every* address-taken local instead floods large/CUDA
+// kernels with race guards, and because each guard inserts yield()
+// context-switch points it dilutes context-bounded search and can hide real
+// races. Restrict the escape set to the arguments of pthread_create calls.
+static void collect_thread_escaped_locals(
+  const goto_programt &goto_program,
+  rw_sett::shared_localst &out)
+{
+  forall_goto_program_instructions (i_it, goto_program)
+  {
+    if (!i_it->is_function_call())
+      continue;
+    const code_function_call2t &call = to_code_function_call2t(i_it->code);
+    if (!is_symbol2t(call.function))
+      continue;
+    if (
+      id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
+      std::string::npos)
+      continue;
+    for (const expr2tc &arg : call.operands)
+      collect_address_taken(arg, out);
+  }
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
-  w_guardst &w_guards)
+  w_guardst &w_guards,
+  const rw_sett::shared_localst &shared_locals)
 {
   namespacet ns(context);
 
   bool is_atomic = false;
+
+  // In data-races-check-only mode every interleaving point is derived from a
+  // yield() call, and add_race_assertions only emits those around *non-atomic*
+  // shared accesses (the branch below is guarded by !is_atomic). A thread that
+  // executes back-to-back atomic regions therefore has no interleaving point
+  // between them, so a data race that can only be exposed by another thread
+  // interleaving *between* two atomic regions of the same thread is never
+  // explored -> false negative (VERIFICATION SUCCESSFUL on a racy program).
+  // Track whether the current atomic region touched shared state and, if so,
+  // emit a yield() at its boundary (the ATOMIC_END handling below) so those
+  // interleavings are generated. See https://github.com/esbmc/esbmc/issues/4423
+  const bool races_only =
+    config.options.get_bool_option("data-races-check-only");
+  bool atomic_region_touched_shared = false;
+
+  // Write flags of the shared writes performed inside the atomic region
+  // currently being processed. They are set just before each in-region write
+  // but reset only *after* the region's boundary yield (see ATOMIC_END
+  // handling below), so the flag stays observable for one interleaving point.
+  // See https://github.com/esbmc/esbmc/issues/4975
+  std::list<expr2tc> atomic_write_guards;
 
   Forall_goto_program_instructions (i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
 
     if (instruction.is_atomic_begin())
+    {
       is_atomic = true;
+      atomic_region_touched_shared = false;
+      atomic_write_guards.clear();
+    }
+
+    // Accesses inside an atomic region are not individually instrumented, but
+    // we still need to know whether the region touched shared state so a
+    // context-switch point can be created at its boundary (see note above).
+    if (
+      races_only && is_atomic && !atomic_region_touched_shared &&
+      (instruction.is_assign() || instruction.is_other() ||
+       instruction.is_return() || instruction.is_goto() ||
+       instruction.is_assert() || instruction.is_function_call() ||
+       instruction.is_assume()))
+    {
+      const expr2tc &probe_expr =
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
+      if (!is_nil_expr(probe_expr))
+      {
+        rw_sett probe(ns, i_it, probe_expr);
+        if (!probe.entries.empty())
+          atomic_region_touched_shared = true;
+      }
+    }
+
+    // A shared write that occurs *inside* an atomic region (e.g. the body of a
+    // __VERIFIER_atomic_* function) is otherwise emitted as a bare assignment:
+    // its write flag is never set, so a concurrent *non-atomic* access to the
+    // same object in another thread can never observe a writer and the race is
+    // missed -> false negative (VERIFICATION SUCCESSFUL on a racy program).
+    // See https://github.com/esbmc/esbmc/issues/4975
+    //
+    // Set the write flag right before the in-region write; the matching reset
+    // is deferred until after the atomic-region boundary yield (emitted at
+    // ATOMIC_END below), so the flag stays observable across that single
+    // interleaving point, mirroring the non-atomic instrumentation. No
+    // assertion is added inside the atomic region on purpose: two
+    // mutually-exclusive atomic writers must never race with each other, and a
+    // check here would turn that race-free pattern into a spurious violation.
+    if (races_only && is_atomic && instruction.is_assign())
+    {
+      rw_sett rw_set(ns, i_it, instruction.code, &shared_locals);
+
+      bool has_write = false;
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+      {
+        has_write = true;
+        break;
+      }
+
+      if (has_write)
+      {
+        atomic_region_touched_shared = true;
+
+        goto_programt::instructiont original_instruction;
+        original_instruction.swap(instruction);
+
+        instruction.make_skip();
+        i_it++;
+
+        // set the write flag(s) immediately before the original write -- set
+        forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+        {
+          const expr2tc guard_expr = w_guards.get_w_guard_expr(e_it->second);
+
+          goto_programt::targett t = goto_program.insert(i_it);
+          t->type = ASSIGN;
+          t->code =
+            code_assign2tc(guard_expr, e_it->second.get_guard().as_expr());
+          t->location = original_instruction.location;
+          i_it = ++t;
+
+          // remember it so the reset can be emitted after the boundary yield
+          atomic_write_guards.push_back(guard_expr);
+        }
+
+        // re-insert the original write
+        goto_programt::targett t = goto_program.insert(i_it);
+        *t = original_instruction;
+        i_it = t; // loop's ++ advances past the original write
+      }
+    }
 
     if (
       (instruction.is_assign() || instruction.is_other() ||
@@ -127,13 +295,11 @@ void add_race_assertions(
        instruction.is_assume()) &&
       !is_atomic)
     {
-      exprt tmp_expr;
-      if (instruction.is_goto() || instruction.is_assert())
-        tmp_expr = migrate_expr_back(instruction.guard);
-      else
-        tmp_expr = migrate_expr_back(instruction.code);
+      const expr2tc &rw_expr =
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
 
-      rw_sett rw_set(ns, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, rw_expr, &shared_locals);
 
       if (rw_set.entries.empty())
         continue;
@@ -170,9 +336,7 @@ void add_race_assertions(
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
-        expr2tc assert;
-        migrate_expr(w_guards.get_assertion(e_it->second), assert);
-        t->make_assertion(assert);
+        t->make_assertion(w_guards.get_assertion(e_it->second));
         t->location = original_instruction.location;
         t->location.user_provided(false);
         t->location.comment(e_it->second.get_comment());
@@ -185,10 +349,9 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
 
         t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), e_it->second.get_guard());
-
-        migrate_expr(theassign, t->code);
+        t->code = code_assign2tc(
+          w_guards.get_w_guard_expr(e_it->second),
+          e_it->second.get_guard().as_expr());
 
         t->location = original_instruction.location;
         i_it = ++t;
@@ -213,7 +376,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (config.options.get_bool_option("data-races-check-only"))
+      if (races_only)
       {
         goto_programt::targett t = goto_program.insert(i_it);
         t->type = FUNCTION_CALL;
@@ -234,9 +397,8 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
 
         t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
+        t->code = code_assign2tc(
+          w_guards.get_w_guard_expr(e_it->second), gen_false_expr());
 
         t->location = original_instruction.location;
         i_it = ++t;
@@ -253,7 +415,46 @@ void add_race_assertions(
     }
 
     if (instruction.is_atomic_end())
+    {
       is_atomic = false;
+
+      // Emit an interleaving point right after an atomic region that accessed
+      // shared state, so other threads may interleave between consecutive
+      // atomic regions. Restricted to regions that touched shared state to
+      // avoid growing the interleaving space for purely thread-local atomics.
+      // See https://github.com/esbmc/esbmc/issues/4423
+      if (races_only && atomic_region_touched_shared)
+      {
+        atomic_region_touched_shared = false;
+
+        goto_programt::targett after = i_it;
+        ++after;
+        goto_programt::targett t = goto_program.insert(after);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+        migrate_expr(call, t->code);
+        t->location = instruction.location;
+        i_it = t; // loop's ++ advances past the inserted yield
+
+        // Reset the write flags of shared writes performed inside this atomic
+        // region, *after* the boundary yield: the flag therefore stayed
+        // observable for exactly one interleaving point (issue #4975). The
+        // resets are inserted before `after` so they land right after the
+        // yield, in order.
+        for (const expr2tc &guard_expr : atomic_write_guards)
+        {
+          goto_programt::targett r = goto_program.insert(after);
+          r->type = ASSIGN;
+          r->code = code_assign2tc(guard_expr, gen_false_expr());
+          r->location = instruction.location;
+          i_it = r;
+        }
+      }
+
+      atomic_write_guards.clear();
+    }
   }
 
   remove_no_op(goto_program);
@@ -263,7 +464,10 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
-  add_race_assertions(context, goto_program, w_guards);
+  rw_sett::shared_localst shared_locals;
+  collect_thread_escaped_locals(goto_program, shared_locals);
+
+  add_race_assertions(context, goto_program, w_guards, shared_locals);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
@@ -273,9 +477,17 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
 
+  // An escape analysis must see the whole program: a local declared in one
+  // function may have its address taken there and be dereferenced in another
+  // thread's entry function. Collect address-taken locals across every body
+  // before instrumenting any of them.
+  rw_sett::shared_localst shared_locals;
+  forall_goto_functions (f_it, goto_functions)
+    collect_thread_escaped_locals(f_it->second.body, shared_locals);
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(context, f_it->second.body, w_guards);
+      add_race_assertions(context, f_it->second.body, w_guards, shared_locals);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

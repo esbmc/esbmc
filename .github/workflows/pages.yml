@@ -6,7 +6,7 @@ on:
 
 jobs:
   trigger:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Repository Dispatch
         uses: peter-evans/repository-dispatch@v4
@@ -20,13 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Git repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Compile LaTeX document
-      uses: xu-cheng/latex-action@v2
+      uses: xu-cheng/latex-action@v4
       with:
         root_file: docs/manual.tex
     - name: Upload PDF file
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: Developer-Manual
         path: manual.pdf

@@ -81,7 +81,7 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
       return false; // they just don't match
     }
 
-    ot_it++;
+    ++ot_it;
   }
 
   return true; // ok, *this is a prefix of ot

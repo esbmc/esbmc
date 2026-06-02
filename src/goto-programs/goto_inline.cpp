@@ -28,20 +28,19 @@ static bool can_typecast_argument(const type2tc &formal, const type2tc &actual)
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,
-  const code_typet &code_type,
+  const code_type2t &code_type,
   const std::vector<expr2tc> &arguments,
   goto_programt &dest)
 {
-  const code_typet::argumentst &argument_types = code_type.arguments();
+  const std::vector<type2tc> &argument_types = code_type.arguments;
+  const std::vector<irep_idt> &argument_names = code_type.argument_names;
+  assert(argument_types.size() == argument_names.size());
 
   auto actual_it = arguments.begin();
-  for (const auto &argument_type : argument_types)
+  for (size_t i = 0; i < argument_types.size(); ++i)
   {
-    // The "argument_type" entry from a code_typet is itself an exprt that
-    // carries the formal parameter's name (#identifier) and type.
-    const exprt &formal = static_cast<const exprt &>(argument_type);
-    const irep_idt &identifier = formal.cmt_identifier();
-    const type2tc formal_type = migrate_type(ns.follow(formal.type()));
+    const irep_idt &identifier = argument_names[i];
+    const type2tc formal_type = ns.follow(argument_types[i]);
 
     // If the call site supplied fewer arguments than the function definition
     // declares, only declare the formal parameter (it remains unassigned and
@@ -239,7 +238,7 @@ void goto_inlinet::expand_function_call(
 
     goto_programt tmp;
     parameter_assignments(
-      tmp2.instructions.front().location, f.type, arguments, tmp);
+      tmp2.instructions.front().location, to_code_type(f.type), arguments, tmp);
     tmp.destructive_append(tmp2);
 
     if (f.body.hide)

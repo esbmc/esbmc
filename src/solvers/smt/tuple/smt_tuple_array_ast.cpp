@@ -18,11 +18,14 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   expr2tc result = symbol2tc(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+  const type2tc &eltype = is_pointer_type(array_type.subtype)
+                            ? ctx->pointer_struct
+                            : array_type.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
-  for (auto const &it : data.members)
+  for (auto const &it : members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -50,14 +53,16 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
   assert(is_array_type(sort->get_tuple_type()));
   const array_type2t &arrtype = to_array_type(sort->get_tuple_type());
-  const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
+  const type2tc &eltype =
+    is_pointer_type(arrtype.subtype) ? ctx->pointer_struct : arrtype.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
 
   smt_convt::ast_vec eqs;
-  eqs.reserve(data.members.size());
+  eqs.reserve(members.size());
 
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
-  for (auto const &it : data.members)
+  for (auto const &it : members)
   {
     type2tc tmparrtype =
       array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
@@ -75,10 +80,13 @@ smt_astt array_sym_smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   const array_type2t array_type = to_array_type(sort->get_tuple_type());
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+  const type2tc &eltype = is_pointer_type(array_type.subtype)
+                            ? ctx->pointer_struct
+                            : array_type.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
 
   expr2tc index;
   if (is_nil_expr(idx_expr))
@@ -95,7 +103,7 @@ smt_astt array_sym_smt_ast::update(
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
-  for (auto const &it : data.members)
+  for (auto const &it : members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -118,14 +126,17 @@ smt_astt array_sym_smt_ast::update(
 smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   const array_type2t &array_type = to_array_type(sort->get_tuple_type());
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+  const type2tc &eltype = is_pointer_type(array_type.subtype)
+                            ? ctx->pointer_struct
+                            : array_type.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
   smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
-  for (auto const &it : data.members)
+  for (auto const &it : members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -148,14 +159,16 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // array type.
 
   const array_type2t &arr = to_array_type(sort->get_tuple_type());
-  const struct_union_data &data = ctx->get_type_def(arr.subtype);
+  const type2tc &eltype =
+    is_pointer_type(arr.subtype) ? ctx->pointer_struct : arr.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
+  const std::vector<irep_idt> &member_names = struct_union_member_names(eltype);
 
-  assert(
-    idx < data.members.size() && "Out-of-bounds tuple-array element accessed");
-  const std::string &fieldname = data.member_names[idx].as_string();
+  assert(idx < members.size() && "Out-of-bounds tuple-array element accessed");
+  const std::string &fieldname = member_names[idx].as_string();
   std::string sym_name = name + fieldname;
 
-  const type2tc &restype = data.members[idx];
+  const type2tc &restype = members[idx];
   type2tc new_arr_type =
     array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);
@@ -180,10 +193,12 @@ void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   array_sym_smt_astt dst = to_array_sym_ast(sym);
 
   const array_type2t &arrtype = to_array_type(sort->get_tuple_type());
-  const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
+  const type2tc &eltype =
+    is_pointer_type(arrtype.subtype) ? ctx->pointer_struct : arrtype.subtype;
+  const std::vector<type2tc> &members = struct_union_members(eltype);
 
   unsigned int i = 0;
-  for (auto const &it : data.members)
+  for (auto const &it : members)
   {
     type2tc tmparrtype =
       array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);

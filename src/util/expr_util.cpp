@@ -139,7 +139,9 @@ exprt gen_one(const typet &type)
 
 exprt gen_not(const exprt &op)
 {
-  return gen_unary("not", typet("bool"), op);
+  exprt result("not", typet("bool"));
+  result.copy_to_operands(op);
+  return result;
 }
 
 exprt boolean_negate(const exprt &src)
@@ -154,13 +156,6 @@ exprt boolean_negate(const exprt &src)
     return true_exprt();
 
   return not_exprt(src);
-}
-
-exprt gen_unary(const std::string &id, const typet &type, const exprt &op)
-{
-  exprt result(id, type);
-  result.copy_to_operands(op);
-  return result;
 }
 
 exprt gen_binary(
@@ -209,11 +204,6 @@ exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3)
   return result;
 }
 
-exprt gen_implies(const exprt &op1, const exprt &op2)
-{
-  return gen_binary("=>", typet("bool"), op1, op2);
-}
-
 void gen_binary(exprt &expr, const std::string &id, bool default_value)
 {
   if (expr.operands().size() == 0)
@@ -248,7 +238,7 @@ void gen_or(exprt &expr)
 
 exprt symbol_expr(const symbolt &symbol)
 {
-  exprt tmp("symbol", symbol.type);
+  exprt tmp("symbol", symbol.get_type());
   tmp.identifier(symbol.id);
   tmp.name(symbol.name);
   return tmp;
@@ -278,37 +268,6 @@ exprt gen_boolean(bool value)
     expr.make_false();
 
   return expr;
-}
-
-void make_next_state(exprt &expr)
-{
-  Forall_operands (it, expr)
-    make_next_state(*it);
-
-  if (expr.id() == "symbol")
-    expr.id("next_symbol");
-}
-
-exprt make_binary(const exprt &expr)
-{
-  const exprt::operandst &operands = expr.operands();
-
-  if (operands.size() <= 2)
-    return expr;
-
-  exprt previous = operands[0];
-
-  for (unsigned i = 1; i < operands.size(); i++)
-  {
-    exprt tmp = expr;
-    tmp.operands().clear();
-    tmp.operands().resize(2);
-    tmp.op0().swap(previous);
-    tmp.op1() = operands[i];
-    previous.swap(tmp);
-  }
-
-  return previous;
 }
 
 bool expr_has_floatbv(const exprt &src)

@@ -1,7 +1,11 @@
 int Contains(float value)
 {
-  for (;;)
-    ;
+  // Force a counterexample so ESBMC emits a trace; the test checks that
+  // bitwuzla extracts the assumed bitvector/float values correctly. A plain
+  // reachable failure (not an infinite loop) keeps this robust to the
+  // goto-level loop-simplification pass.
+  __ESBMC_assert(0, "unreachable");
+  return 0;
 }
 float main_min = -0.0f;
 int main()

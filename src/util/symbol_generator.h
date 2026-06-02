@@ -45,6 +45,13 @@ public:
     contextt &context,
     const typet &type,
     const std::string &name_prefix = "");
+
+  // irep2 overload mirroring the above. Stores the type via
+  // symbolt::set_type(type2tc) so the IREP2 form is the authoritative one.
+  symbolt &new_symbol(
+    contextt &context,
+    const type2tc &type,
+    const std::string &name_prefix = "");
 };
 
 #endif

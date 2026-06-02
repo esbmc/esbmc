@@ -54,7 +54,7 @@ def cluster_tests(root):
         if not os.path.exists(src_path):
             continue
         with open(src_path, "rb") as sf:
-            src_hash = hashlib.sha1(sf.read()).hexdigest()
+            src_hash = hashlib.sha1(sf.read(), usedforsecurity=False).hexdigest()
         groups[(src_hash, args, regex)].append(tdir)
     return {k: v for k, v in groups.items() if len(v) > 1}
 

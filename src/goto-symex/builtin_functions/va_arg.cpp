@@ -10,7 +10,7 @@
 void goto_symext::symex_va_arg(
   const expr2tc &lhs,
   const sideeffect2t &code [[maybe_unused]],
-  const guardt &guard)
+  const guard2tc &guard)
 {
   std::string base =
     id2string(cur_state->top().function_identifier) + "::va_arg";
@@ -22,7 +22,7 @@ void goto_symext::symex_va_arg(
   const symbolt *s = new_context.find_symbol(id);
   if (s != nullptr)
   {
-    type2tc symbol_type = migrate_type(s->type);
+    type2tc symbol_type = migrate_symbol_type(*s);
 
     va_rhs = symbol2tc(symbol_type, s->id);
     cur_state->top().level1.get_ident_name(va_rhs);

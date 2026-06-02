@@ -46,6 +46,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -68,7 +69,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -306,6 +307,33 @@ void bmct::report_failure()
   log_fail("\nVERIFICATION FAILED");
 }
 
+void bmct::report_unknown()
+{
+  log_fail("\nVERIFICATION UNKNOWN");
+}
+
+smt_convt::resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
+{
+  // Re-encode in vacuity mode: each kept assertion contributes its path
+  // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
+  // The result is UNSAT iff the path to every kept claim is unreachable.
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  local_eq.convert(*solver, /*vacuity_mode=*/true);
+  return solver->dec_solve();
+}
+
+// True when a discharged claim is a candidate for vacuity probing. Skips
+// the loop-invariant pass's own synthetic sanity assertions: each is
+// sequenced under an ASSUME(false) terminator, so any claim appearing
+// after the first loop's inductive step would always probe vacuous. The
+// probe targets user-facing claims (contract ensures, user assertions),
+// not internal pass scaffolding.
+static bool is_vacuity_probe_candidate(const std::string &claim_property)
+{
+  return claim_property != "invariant-base-case" &&
+         claim_property != "invariant-inductive-step";
+}
+
 void bmct::show_program(const symex_target_equationt &eq)
 {
   unsigned int count = 1;
@@ -442,11 +470,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -704,6 +732,17 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   return j;
 }
 
+// Predicate used by both the final and the verbose k-path reporters.
+static bool is_kpath_maximal(const std::string &claim_sig)
+{
+  const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+  // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+  // future emission path puts a tab in msg.
+  const auto tab = claim_sig.rfind('\t');
+  return redundant.count(
+           {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -790,14 +829,16 @@ void report_coverage(
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-claims-rm");
 
-    // reached claims:
+    // Local copy: the JSON writer downstream reads the original
+    // reached_claims; mutating it here would mark every claim uncovered.
+    auto reached_claims_local = reached_claims;
     auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim_pair : total_cond_assert)
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
       std::string claim_sig = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim_sig))
+      if (reached_claims_local.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
@@ -811,7 +852,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        reached_claims.erase(claim_sig);
+        reached_claims_local.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -823,7 +864,7 @@ void report_coverage(
           claim_msg = "!(" + claim_msg + ")";
         std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim_sig))
+        if (reached_claims_local.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
@@ -840,7 +881,7 @@ void report_coverage(
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        reached_claims.erase(r_claim_sig);
+        reached_claims_local.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);
@@ -940,17 +981,8 @@ void report_coverage(
     // Bertolino, IEEE TSE 2003). Filter reached_claims against
     // k_path_spanning_redundant so a reached-but-subsumed goal does not
     // inflate the numerator against the maximal-only denominator.
-    const auto &redundant = goto_coveraget::k_path_spanning_redundant;
-    auto is_maximal = [&redundant](const std::string &claim_sig) {
-      // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
-      // future emission path puts a tab in msg.
-      const auto tab = claim_sig.rfind('\t');
-      return redundant.count(
-               {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
-    };
-
-    const size_t tracked_instance =
-      std::count_if(reached_claims.begin(), reached_claims.end(), is_maximal);
+    const size_t tracked_instance = std::count_if(
+      reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
 
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
@@ -1093,6 +1125,7 @@ void bmct::report_coverage_verbose(
   const bool &is_cond_cov,
   const bool &is_branch_cov,
   const bool &is_branch_func_cov,
+  const bool &is_k_path_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -1178,6 +1211,22 @@ void bmct::report_coverage_verbose(
       else
         log_result("Branch Function Coverage: 0%");
     }
+    else if (is_k_path_cov)
+    {
+      // Match the final reporter's spanning-set formula so per-witness
+      // progress agrees with the final summary.
+      const size_t tracked_instance = std::count_if(
+        reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+      if (options.get_bool_option("k-path-coverage-claims"))
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
+
+      // spanning >= 1 here: verbose only fires after a reached claim,
+      // which implies total_kpath >= 1 (Marré-Bertolino).
+      log_result(
+        "Current k-Path Coverage: {}%\n",
+        tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
+    }
     else
     {
       log_error("Unsupported coverage metrics");
@@ -1216,11 +1265,23 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
-        report_success();
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
+      {
+        if (vacuity_detected)
+          report_unknown();
+        else
+          report_success();
+      }
     }
     else
     {
@@ -1289,7 +1350,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
@@ -1418,7 +1479,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol_renaming_level::level0);
 
       if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -1595,7 +1657,42 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
-    return run_decision_procedure(*runtime_solver, *eq);
+    smt_convt::resultt result = run_decision_procedure(*runtime_solver, *eq);
+
+    // Per-claim vacuity probe in single-property mode: a whole-equation
+    // reachability check would silently miss a vacuous claim whenever some
+    // *other* claim has a reachable path.
+    if (
+      result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") && remaining_asserts > 0)
+    {
+      log_status(
+        "Probing {} claim(s) for vacuous discharge",
+        remaining_asserts.to_int64());
+
+      for (size_t i = 1; i <= remaining_asserts.to_uint64(); i++)
+      {
+        symex_target_equationt vac_eq = *eq;
+        claim_slicer keeper(
+          i, /*show_slice_info=*/false, /*is_goto_cov=*/false, ns);
+        keeper.run(vac_eq.SSA_steps);
+
+        if (!is_vacuity_probe_candidate(keeper.claim_property))
+          continue;
+
+        if (check_vacuity(vac_eq) == smt_convt::P_UNSATISFIABLE)
+        {
+          log_warning(
+            "Vacuous discharge: claim '{}' has unsatisfiable path "
+            "assumptions; possible causes include an over-constrained loop "
+            "invariant, requires clause, or upstream assume.",
+            keeper.claim_cstr);
+          vacuity_detected = true;
+        }
+      }
+    }
+
+    return result;
   }
 
   catch (std::string &error_str)
@@ -1890,6 +1987,19 @@ smt_convt::resultt bmct::multi_property_check(
       run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
 
+    // After UNSAT, probe whether the path to the kept claim is reachable.
+    // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
+    bool is_vacuous = false;
+    if (
+      solver_result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") &&
+      is_vacuity_probe_candidate(claim.claim_property))
+    {
+      is_vacuous = (check_vacuity(local_eq) == smt_convt::P_UNSATISFIABLE);
+      if (is_vacuous)
+        vacuity_detected = true;
+    }
+
     // Show colored result after solving
     const std::string GREEN = is_color ? "\033[32m" : "";
     const std::string RED = is_color ? "\033[31m" : "";
@@ -1899,12 +2009,21 @@ smt_convt::resultt bmct::multi_property_check(
     {
       if (solver_result == smt_convt::P_UNSATISFIABLE)
       {
-        // Claim passed - show in green
-        log_status(
-          "{}✓ PASSED{}: '{}'",
-          GREEN,
-          RESET,
-          prettify_solidity_expr(claim.claim_cstr));
+        if (is_vacuous)
+          log_status(
+            "{}? UNKNOWN{}: '{}' (vacuous discharge: path assumptions are "
+            "unsatisfiable; possible causes include an over-constrained "
+            "loop invariant, requires clause, or upstream assume)",
+            YELLOW,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
+        else
+          // Claim passed - show in green
+          log_status(
+            "{}✓ PASSED{}: '{}'",
+            GREEN,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
       }
       else if (solver_result == smt_convt::P_SATISFIABLE)
       {
@@ -1944,7 +2063,12 @@ smt_convt::resultt bmct::multi_property_check(
         summary.failed_properties++;
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
-      summary.passed_properties++;
+    {
+      if (is_vacuous)
+        summary.unknown_properties++;
+      else
+        summary.passed_properties++;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
@@ -2132,6 +2256,7 @@ smt_convt::resultt bmct::multi_property_check(
           is_cond_cov,
           is_branch_cov,
           is_branch_func_cov,
+          is_k_path_cov,
           reached_claims,
           reached_mul_claims);
       else if (!is_cov_silent)

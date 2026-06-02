@@ -6,7 +6,7 @@
 #include <queue>
 #include <stack>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/namespace.h>
 #include <util/options.h>
 #include <util/symbol_generator.h>
@@ -50,7 +50,7 @@ protected:
   void make_temp_symbol(exprt &expr, goto_programt &dest);
 
   // this produces if(guard) dest;
-  void guard_program(const guardt &guard, goto_programt &dest);
+  void guard_program(const guard2tc &guard, goto_programt &dest);
 
   void remove_sideeffects(
     exprt &expr,

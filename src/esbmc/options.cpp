@@ -439,7 +439,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
-     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"},
+    {"check-vacuity",
+     NULL,
+     "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
+     "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
+     "Default on when --loop-invariant or --loop-invariant-check is set."},
+    {"no-vacuity-check",
+     NULL,
+     "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",
@@ -584,6 +592,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"uninitialised-vars-check",
      NULL,
      "Enable check for reads of uninitialised local variables (CWE-457)"},
+    {"unchecked-return-value-check",
+     NULL,
+     "Enable check for unchecked return values of fallible calls (CWE-252)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(

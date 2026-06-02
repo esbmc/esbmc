@@ -3,236 +3,265 @@
 
 /** @file irep2.h
  *  Classes and definitions for non-stringy internal representation.
+ *
+ *  Threading contract: irep2 nodes (type2t, expr2t) are designed for
+ *  single-writer / thread-confined construction and rewriting.
+ *
+ *  Ownership is handled by an intrusive atomic refcount sitting on
+ *  every node (irep2t::refcount); irep_container is a raw pointer
+ *  that increments on copy, decrements on destruction, and deletes
+ *  the pointee when the count drops to zero. The refcount is atomic
+ *  so two containers holding the same node can be dropped from
+ *  different threads safely, but the *pointee's* state is not — only
+ *  one thread at a time may obtain a mutable view (the non-const
+ *  irep_container::get() / operator-> / operator*, which detach if
+ *  refcount > 1 and otherwise hand back the underlying object).
+ *
+ *  The CRC cache (irep2t::crc_val) is a single std::atomic<size_t>
+ *  with 0 meaning "not yet computed". Readers do an acquire load,
+ *  producers compute on a stack local and release-store the result,
+ *  so concurrent readers see either 0 (and recompute, getting the
+ *  same value) or the final cache entry — never a half-mixed state.
+ *
+ *  Treat an irep2 tree as owned by a single rewriter at a time;
+ *  publish to other threads only once mutation is complete and only
+ *  for read-only consumption.
  */
 
 #include <big-int/bigint.hh>
-#include <boost/crc.hpp>
-#include <boost/functional/hash_fwd.hpp>
-#include <boost/preprocessor/list/adt.hpp>
-#include <boost/preprocessor/list/for_each.hpp>
-#include <boost/mp11.hpp>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <mutex>
+#include <memory>
+#include <stdexcept>
+#include <thread>
+#include <type_traits>
+#include <utility>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/irep_idt.h>
 #include <util/irep.h>
 
-// Ahead of time: a list of all expressions and types, in a preprocessing
-// list, for enumerating later. Should avoid manually enumerating anywhere
-// else.
+// The list of irep2 expression kinds lives in expr_kinds.inc; the
+// list of type kinds lives in type_kinds.inc. Every consumer (the
+// enum entries, the per-kind forward declarations, the is/to/try_to
+// predicate generators, the pretty name tables) #include the matching
+// .inc with a redefining IREP2_EXPR / IREP2_TYPE macro.
 
-// clang-format off
-#define ESBMC_LIST_OF_EXPRS                                                    \
-  BOOST_PP_LIST_CONS(constant_int,                                             \
-  BOOST_PP_LIST_CONS(constant_fixedbv,                                         \
-  BOOST_PP_LIST_CONS(constant_floatbv,                                         \
-  BOOST_PP_LIST_CONS(constant_bool,                                            \
-  BOOST_PP_LIST_CONS(constant_string,                                          \
-  BOOST_PP_LIST_CONS(constant_struct,                                          \
-  BOOST_PP_LIST_CONS(constant_union,                                           \
-  BOOST_PP_LIST_CONS(constant_array,                                           \
-  BOOST_PP_LIST_CONS(constant_vector,                                          \
-  BOOST_PP_LIST_CONS(constant_array_of,                                        \
-  BOOST_PP_LIST_CONS(symbol,                                                   \
-  BOOST_PP_LIST_CONS(typecast,                                                 \
-  BOOST_PP_LIST_CONS(bitcast,                                                  \
-  BOOST_PP_LIST_CONS(nearbyint,                                                \
-  BOOST_PP_LIST_CONS(if,                                                       \
-  BOOST_PP_LIST_CONS(equality,                                                 \
-  BOOST_PP_LIST_CONS(notequal,                                                 \
-  BOOST_PP_LIST_CONS(lessthan,                                                 \
-  BOOST_PP_LIST_CONS(greaterthan,                                              \
-  BOOST_PP_LIST_CONS(lessthanequal,                                            \
-  BOOST_PP_LIST_CONS(greaterthanequal,                                         \
-  BOOST_PP_LIST_CONS(cmp_three_way,                                            \
-  BOOST_PP_LIST_CONS(not,                                                      \
-  BOOST_PP_LIST_CONS(and,                                                      \
-  BOOST_PP_LIST_CONS(or,                                                       \
-  BOOST_PP_LIST_CONS(xor,                                                      \
-  BOOST_PP_LIST_CONS(implies,                                                  \
-  BOOST_PP_LIST_CONS(bitand,                                                   \
-  BOOST_PP_LIST_CONS(bitor,                                                    \
-  BOOST_PP_LIST_CONS(bitxor,                                                   \
-  BOOST_PP_LIST_CONS(bitnot,                                                   \
-  BOOST_PP_LIST_CONS(lshr,                                                     \
-  BOOST_PP_LIST_CONS(neg,                                                      \
-  BOOST_PP_LIST_CONS(abs,                                                      \
-  BOOST_PP_LIST_CONS(add,                                                      \
-  BOOST_PP_LIST_CONS(sub,                                                      \
-  BOOST_PP_LIST_CONS(mul,                                                      \
-  BOOST_PP_LIST_CONS(div,                                                      \
-  BOOST_PP_LIST_CONS(ieee_add,                                                 \
-  BOOST_PP_LIST_CONS(ieee_sub,                                                 \
-  BOOST_PP_LIST_CONS(ieee_mul,                                                 \
-  BOOST_PP_LIST_CONS(ieee_div,                                                 \
-  BOOST_PP_LIST_CONS(ieee_fma,                                                 \
-  BOOST_PP_LIST_CONS(ieee_sqrt,                                                \
-  BOOST_PP_LIST_CONS(popcount,                                                 \
-  BOOST_PP_LIST_CONS(bswap,                                                    \
-  BOOST_PP_LIST_CONS(modulus,                                                  \
-  BOOST_PP_LIST_CONS(shl,                                                      \
-  BOOST_PP_LIST_CONS(ashr,                                                     \
-  BOOST_PP_LIST_CONS(dynamic_object,                                           \
-  BOOST_PP_LIST_CONS(same_object,                                              \
-  BOOST_PP_LIST_CONS(pointer_offset,                                           \
-  BOOST_PP_LIST_CONS(pointer_object,                                           \
-  BOOST_PP_LIST_CONS(pointer_capability,                                       \
-  BOOST_PP_LIST_CONS(address_of,                                               \
-  BOOST_PP_LIST_CONS(byte_extract,                                             \
-  BOOST_PP_LIST_CONS(byte_update,                                              \
-  BOOST_PP_LIST_CONS(with,                                                     \
-  BOOST_PP_LIST_CONS(member,                                                   \
-  BOOST_PP_LIST_CONS(member_ref,                                               \
-  BOOST_PP_LIST_CONS(ptr_mem,                                                  \
-  BOOST_PP_LIST_CONS(index,                                                    \
-  BOOST_PP_LIST_CONS(isnan,                                                    \
-  BOOST_PP_LIST_CONS(overflow,                                                 \
-  BOOST_PP_LIST_CONS(overflow_cast,                                            \
-  BOOST_PP_LIST_CONS(overflow_neg,                                             \
-  BOOST_PP_LIST_CONS(unknown,                                                  \
-  BOOST_PP_LIST_CONS(invalid,                                                  \
-  BOOST_PP_LIST_CONS(null_object,                                              \
-  BOOST_PP_LIST_CONS(dereference,                                              \
-  BOOST_PP_LIST_CONS(valid_object,                                             \
-  BOOST_PP_LIST_CONS(races_check,                                              \
-  BOOST_PP_LIST_CONS(deallocated_obj,                                          \
-  BOOST_PP_LIST_CONS(dynamic_size,                                             \
-  BOOST_PP_LIST_CONS(sideeffect,                                               \
-  BOOST_PP_LIST_CONS(code_block,                                               \
-  BOOST_PP_LIST_CONS(code_assign,                                              \
-  BOOST_PP_LIST_CONS(code_decl,                                                \
-  BOOST_PP_LIST_CONS(code_dead,                                                \
-  BOOST_PP_LIST_CONS(code_printf,                                              \
-  BOOST_PP_LIST_CONS(code_expression,                                          \
-  BOOST_PP_LIST_CONS(code_return,                                              \
-  BOOST_PP_LIST_CONS(code_skip,                                                \
-  BOOST_PP_LIST_CONS(code_free,                                                \
-  BOOST_PP_LIST_CONS(code_goto,                                                \
-  BOOST_PP_LIST_CONS(object_descriptor,                                        \
-  BOOST_PP_LIST_CONS(code_function_call,                                       \
-  BOOST_PP_LIST_CONS(code_comma,                                               \
-  BOOST_PP_LIST_CONS(invalid_pointer,                                          \
-  BOOST_PP_LIST_CONS(code_asm,                                                 \
-  BOOST_PP_LIST_CONS(code_cpp_del_array,                                       \
-  BOOST_PP_LIST_CONS(code_cpp_delete,                                          \
-  BOOST_PP_LIST_CONS(code_cpp_catch,                                           \
-  BOOST_PP_LIST_CONS(code_cpp_throw,                                           \
-  BOOST_PP_LIST_CONS(code_cpp_throw_decl,                                      \
-  BOOST_PP_LIST_CONS(code_cpp_throw_decl_end,                                  \
-  BOOST_PP_LIST_CONS(isinf,                                                    \
-  BOOST_PP_LIST_CONS(isnormal,                                                 \
-  BOOST_PP_LIST_CONS(isfinite,                                                 \
-  BOOST_PP_LIST_CONS(signbit,                                                  \
-  BOOST_PP_LIST_CONS(concat,                                                   \
-  BOOST_PP_LIST_CONS(extract,                                                  \
-  BOOST_PP_LIST_CONS(capability_base,                                          \
-  BOOST_PP_LIST_CONS(capability_top,                                           \
-  BOOST_PP_LIST_CONS(forall,                                                   \
-  BOOST_PP_LIST_CONS(exists,                                                   \
-  BOOST_PP_LIST_CONS(isinstance,                                               \
-  BOOST_PP_LIST_CONS(hasattr,                                                  \
-  BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-// clang-format on
-
-// Even crazier forward decls,
 namespace esbmct
 {
-template <typename... Args>
-class expr2t_traits;
-template <typename... Args>
-class type2t_traits;
+/** Type-erased callable reference: non-owning, two pointers wide, no
+ *  heap allocation. Replaces the historic `std::function` delegates
+ *  used by foreach_operand / foreach_subtype. The contract is a
+ *  borrowed reference to the underlying callable — the function_ref
+ *  must not outlive whatever it was constructed from.
+ *
+ *  The unparenthesised primary template is left undefined; only the
+ *  R(Args...) specialisation is usable, matching the std::function
+ *  surface we are replacing.
+ */
+template <typename Signature>
+class function_ref;
+
+template <typename R, typename... Args>
+class function_ref<R(Args...)>
+{
+public:
+  template <
+    typename F,
+    typename = std::enable_if_t<
+      !std::is_same_v<std::decay_t<F>, function_ref> &&
+      std::is_invocable_r_v<R, F &, Args...>>>
+  function_ref(F &&fn) noexcept
+    : invoke_(&function_ref::call<std::remove_reference_t<F>>),
+      ctx_(const_cast<void *>(static_cast<const void *>(std::addressof(fn))))
+  {
+  }
+
+  R operator()(Args... args) const
+  {
+    if constexpr (std::is_void_v<R>)
+      invoke_(ctx_, std::forward<Args>(args)...);
+    else
+      return invoke_(ctx_, std::forward<Args>(args)...);
+  }
+
+private:
+  template <typename F>
+  static R call(void *p, Args... args)
+  {
+    if constexpr (std::is_void_v<R>)
+      (*static_cast<F *>(p))(std::forward<Args>(args)...);
+    else
+      return (*static_cast<F *>(p))(std::forward<Args>(args)...);
+  }
+
+  R (*invoke_)(void *, Args...);
+  void *ctx_;
+};
+
+/** Mix a value into a running hash seed.
+ *
+ *  Traditional golden-ratio magic + shift mix. std::hash is used as
+ *  the per-type hasher. There is no std::hash_combine in the standard
+ *  library (yet — see WG21 proposals); this 3-line inline helper is
+ *  the stdlib-equivalent.
+ */
+template <class T>
+inline void hash_combine(std::size_t &seed, const T &v)
+{
+  seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
 } // namespace esbmct
 
 class type2t;
 class expr2t;
-class constant_array2t;
-class constant_vector2t;
 
-/** Reference counted container for expr2t based classes.
- *  This class extends  shared_ptr's to contain anything that's a subclass
- *  of expr2t. It provides several ways of accessing the contained pointer;
- *  crucially it ensures that the only way to get a non-const reference or
- *  pointer is via the get() method, which calls the detach() method. COW behaviour.
+/** Reference counted container for irep2 nodes.
  *
- *  This exists to ensure that we honor the model set forth by the old string
- *  based internal representation - specifically, that if you performed a const
- *  operation on an irept (fetching data) then the contained piece of data
- *  could continue to be shared between numerous data structures, for example
- *  a piece of code could exist in a contextt, a namespacet, and a goto_programt
- *  and all would share the same contained data structure, preventing additional
- *  memory consumption.
+ *  Holds a raw `T *` to an irep2-derived node and manages its intrusive
+ *  refcount: construction increments, destruction decrements, the
+ *  pointee is deleted when the count reaches zero. Single allocation
+ *  per node — no separate control block, no `shared_ptr` indirection.
  *
- *  If anything copied an irept from one of these place it'd also share that
- *  contained data; but if it made a modifying operation (add, set, or just
- *  taking a non-const reference the contained data,) then the detach() method
- *  would be called, which duplicated the contained item and let the current
- *  piece of code modify the duplicate copy, while all the other storage
- *  locations continued to share the original.
+ *  The container also implements the historic copy-on-write contract:
+ *  the only way to obtain a non-const `T *` / `T &` is via the
+ *  non-const `get()` / `operator*` / `operator->`, all of which call
+ *  `detach()` first. If the underlying node is shared (refcount > 1),
+ *  `detach()` allocates a fresh copy via `T::clone()` and rebinds the
+ *  container to that copy; the other holders keep observing the
+ *  original. This preserves the value semantics of the legacy
+ *  string-irep `irept` while letting most subtree copies be cheap.
  *
- *  So yeah, that's what this class attempts to implement, via the medium of
- *  std::shared_ptr. However, to the outside the shared_ptr is not accessible
- *  since that would break the const guarantees for operator* and .get() which
- *  this class provides.
+ *  Threading. See irep2.h's preamble. The refcount is atomic
+ *  (acq/rel on release/destruction, relaxed on construction copy)
+ *  but the container is *not* designed for concurrent mutation: under
+ *  the single-writer contract there is at most one mutator at a time,
+ *  while readers may share the same node.
  */
 template <class T>
-class irep_container : private std::shared_ptr<T>
+class irep_container
 {
+private:
+  // Private tag gate for the raw-pointer adopt constructor. Only
+  // `make_irep` and other befriended factories can construct one,
+  // which means user code cannot do `expr2tc(new foo2t(...))` — the
+  // canonical idiom is the per-kind `foo2tc(...)` factory (itself a
+  // thin wrapper over make_irep). The tag carries no state.
+  struct make_tag
+  {
+    explicit make_tag() = default;
+  };
+
+  // Adopt a freshly-allocated node. The pointee's refcount must be 0
+  // (i.e. just-new'd); we bump it to 1.
+  irep_container(T *raw, make_tag) noexcept : ptr_(raw)
+  {
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  template <class U, class... Args>
+  friend irep_container<typename U::base_type> make_irep(Args &&...args);
+
 public:
-  constexpr irep_container() noexcept = default;
-  constexpr irep_container(const irep_container &ref) = default;
-  constexpr irep_container(irep_container &&ref) = default;
-
-  irep_container &operator=(irep_container const &ref) = default;
-  irep_container &operator=(irep_container &&ref) = default;
-
-  // Move-construct from any std::shared_ptr of this type. That just moves the
-  // reference over and leaves our caller with an empty shared_ptr. Doesn't
-  // prevent copies from the original 'p' to exist, though.
-  // Obviously this is fairly unwise because any std::shared_ptr
-  // won't be using the detach facility to manipulate things, however it's
-  // necessary for std::make_shared.
-  explicit irep_container(std::shared_ptr<T> &&p)
-    : std::shared_ptr<T>(std::move(p))
+  // Default: empty container, nullptr inside. `noexcept`/`constexpr` to
+  // preserve the storage-class properties of the previous design.
+  constexpr irep_container() noexcept : ptr_(nullptr)
   {
   }
 
-  /* provide own definitions for
-   *   operator*
-   *   operator->
-   *   get()
-   * to account for const-ness and detach if necessary.
-   *
-   * This interface is not 'equal' to std::shared_ptr's in the sense of
-   * 'override' precisely because the const-ness of *this is moved to the
-   * pointee, which std::shared_ptr doesn't do. We can reuse the noexcept
-   * guarantee, though.
-   */
-
-  // the const versions just forward
-  const T &operator*() const noexcept
+  irep_container(const irep_container &ref) noexcept : ptr_(ref.ptr_)
   {
-    return *get();
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
   }
 
-  const T *operator->() const noexcept
+  irep_container(irep_container &&ref) noexcept : ptr_(ref.ptr_)
   {
-    return get();
+    ref.ptr_ = nullptr;
   }
 
-  const T *get() const noexcept
+  ~irep_container()
   {
-    return std::shared_ptr<T>::get();
+    release();
   }
 
-  // the non-const versions detach
-  T *get() // never throws
+  irep_container &operator=(const irep_container &ref) noexcept
+  {
+    if (this != &ref)
+    {
+      // Snapshot ref.ptr_ before calling release().  ref may alias a
+      // member of an object that release() destroys (e.g.
+      // `x = to_array_type(x).subtype` where x holds the only reference
+      // to the array): after release() runs, that storage is gone and
+      // any further access to ref is use-after-free.  Reading the
+      // pointer up-front and then working off the local copy keeps us
+      // correct regardless of whether the compiler caches or reloads
+      // ref.ptr_ (gcc on Linux happens to cache it, AppleClang on macOS
+      // reloads and crashes).
+      T *new_ptr = ref.ptr_;
+      if (new_ptr)
+        new_ptr->refcount.fetch_add(1, std::memory_order_relaxed);
+      release();
+      ptr_ = new_ptr;
+    }
+    return *this;
+  }
+
+  irep_container &operator=(irep_container &&ref) noexcept
+  {
+    if (this != &ref)
+    {
+      // Same use-after-free concern as the copy-assign path: snapshot
+      // and null out ref before release(), so even if release() ends
+      // up destroying the storage backing ref we never re-read it.
+      T *new_ptr = ref.ptr_;
+      ref.ptr_ = nullptr;
+      release();
+      ptr_ = new_ptr;
+    }
+    return *this;
+  }
+
+  // Const accessors: hand out the pointee without detaching, since
+  // they're const operations. Prefer these whenever you only need to
+  // read the node — they are O(1) atomic-free pointer loads.
+  [[nodiscard]] const T &operator*() const noexcept
+  {
+    return *ptr_;
+  }
+
+  [[nodiscard]] const T *operator->() const noexcept
+  {
+    return ptr_;
+  }
+
+  [[nodiscard]] const T *get() const noexcept
+  {
+    return ptr_;
+  }
+
+  // Non-const accessors detach: if the pointee is shared (refcount > 1)
+  // we clone into a fresh refcount-1 object and rebind, then invalidate
+  // the CRC cache on the (now uniquely-owned) copy. **WARNING:** even
+  // when no actual mutation follows, calling these allocates+copies on
+  // every shared node touch — favour the const overloads above when a
+  // read is enough.
+  T *get()
   {
     detach();
-    T *tmp = std::shared_ptr<T>::get();
-    tmp->crc_val = 0;
-    return tmp;
+    // Single-writer contract: relaxed is enough to invalidate the
+    // cache; the next crc() recomputation will publish via release.
+    ptr_->crc_val.store(0, std::memory_order_relaxed);
+#ifndef NDEBUG
+    // Stamp the current thread as the writer of this (now uniquely
+    // owned) node; if another thread is already inside a mutable
+    // access on the same node, mark_writer asserts.
+    ptr_->mark_writer();
+#endif
+    return ptr_;
   }
 
   T &operator*()
@@ -240,42 +269,46 @@ public:
     return *get();
   }
 
-  T *operator->() // never throws
+  T *operator->()
   {
     return get();
   }
 
+  explicit operator bool() const noexcept
+  {
+    return ptr_ != nullptr;
+  }
+
+  void reset() noexcept
+  {
+    release();
+    ptr_ = nullptr;
+  }
+
   void detach()
   {
-    /* TODO threads: this is unsafe for multi-threaded execution
-     *
-     * From the docs: In multithreaded environment, the value returned by
-     * use_count is approximate (typical implementations use a
-     * memory_order_relaxed load). */
-    if (this->use_count() == 1)
-      return; // No point remunging oneself if we're the only user of the ptr.
-
-    // Assign-operate ourself into containing a fresh copy of the data. This
-    // creates a new reference counted object, and assigns it to ourself,
-    // which causes the existing reference to be decremented.
-    const T *foo = std::shared_ptr<T>::get();
-    *this = foo->clone();
+    if (!ptr_)
+      return;
+    // Acquire so we observe whatever state the owner of the prior
+    // (about-to-be-replaced) reference flushed before storing here.
+    // Almost always 1 — only shared subtrees go down the clone path.
+    if (ptr_->refcount.load(std::memory_order_acquire) == 1)
+      return;
+    // Shared: clone into a fresh refcount-0 node and adopt it.
+    *this = ptr_->clone();
   }
 
-  using std::shared_ptr<T>::operator bool;
-  using std::shared_ptr<T>::reset;
+  friend void swap(irep_container &a, irep_container &b) noexcept
+  {
+    T *tmp = a.ptr_;
+    a.ptr_ = b.ptr_;
+    b.ptr_ = tmp;
+  }
 
-  friend void swap(irep_container &a, irep_container &b)
+  void swap(irep_container &b) noexcept
   {
     using std::swap;
-    swap(
-      static_cast<std::shared_ptr<T> &>(a),
-      static_cast<std::shared_ptr<T> &>(b));
-  }
-
-  void swap(irep_container &b)
-  {
-    std::shared_ptr<T>::swap(b);
+    swap(*this, b);
   }
 
   irep_container simplify() const
@@ -287,13 +320,13 @@ public:
   size_t crc() const
   {
     const T *foo = get();
-    {
-      std::lock_guard<std::mutex> lock(foo->crc_mutex);
-      if (foo->crc_val != 0)
-        return foo->crc_val;
-    }
-
-    return foo->do_crc();
+    // Acquire ordering on the load so a non-zero cached value also
+    // synchronises with the writer that produced it (crc()'s release
+    // store), and we observe whatever node state went into computing it.
+    if (size_t cached = foo->crc_val.load(std::memory_order_acquire);
+        cached != 0)
+      return cached;
+    return foo->crc();
   }
 
   /* Provide comparison operators here as inline friends so they don't pollute
@@ -357,25 +390,160 @@ public:
 private:
   static bool same(const irep_container &a, const irep_container &b) noexcept
   {
-    /* Note: Can't reliably test equality on pointers directly, see
-     * <https://eel.is/c++draft/expr.eq#3.1>
-     * Instead we'll use the implementation-defined total order guaranteed by
-     * std::less. */
-    const T *p = a.get(), *q = b.get();
-    if (!std::less{}(p, q) && !std::less{}(q, p))
-      return true; /* target is identical */
-    return false;
+    // Direct pointer equality is fine here because both pointers were
+    // obtained from `new` (or are nullptr), so they are valid objects
+    // of the same type and the comparison is well-defined.
+    return a.ptr_ == b.ptr_;
   }
+
+  // Drop our reference. Release ordering pairs with the acquire in
+  // detach()/destruction on whichever container observes refcount==1
+  // and is about to mutate or delete the pointee; this makes any
+  // prior writes through *this happen-before that observer's access.
+  void release() noexcept
+  {
+    if (!ptr_)
+      return;
+    unsigned int prev = ptr_->refcount.fetch_sub(1, std::memory_order_release);
+    if (prev == 1)
+    {
+      // Acquire fence prevents the delete (and any side-effects of
+      // the destructor) from being reordered before the final
+      // fetch_sub, ensuring we see the prior owner's writes.
+      std::atomic_thread_fence(std::memory_order_acquire);
+      delete ptr_;
+    }
+#ifndef NDEBUG
+    else if (prev == 2)
+    {
+      // We were one of exactly two owners and just dropped out; the
+      // remaining sole owner is free to mutate. Clear the writer
+      // stamp so they get a clean slate (the next non-const get()
+      // will re-stamp).
+      ptr_->clear_writer();
+    }
+#endif
+  }
+
+  T *ptr_;
 };
 
 typedef irep_container<type2t> type2tc;
 typedef irep_container<expr2t> expr2tc;
 
+/** Allocate a fresh irep2 node and adopt it into an `irep_container`.
+ *
+ *  The single canonical construction path for the intrusive refcount
+ *  scheme. `T` must derive from an irep2 base (`type2t` / `expr2t`)
+ *  that exposes `base_type` as its method-side base; the returned
+ *  container is `irep_container<T::base_type>` (i.e. `type2tc` or
+ *  `expr2tc`).
+ *
+ *  Single allocation, no separate control block, exception-safe (if
+ *  any argument constructor throws, the `new` hasn't run yet; if the
+ *  `new` itself throws, no leak; the only ordering between `new`
+ *  succeeding and the container adopting it is straight-line code
+ *  inside this function).
+ *
+ *  Callers should prefer this helper over a raw `new`-into-container
+ *  so the allocation site stays in one place.
+ */
+template <class T, class... Args>
+inline irep_container<typename T::base_type> make_irep(Args &&...args)
+{
+  using container_t = irep_container<typename T::base_type>;
+  return container_t(
+    new T(std::forward<Args>(args)...), typename container_t::make_tag{});
+}
+
 typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-class irep2t : public std::enable_shared_from_this<irep2t>
+/** Base class for every irep2 node. Carries the intrusive refcount
+ *  used by irep_container; the cell sits inside the node itself.
+ *  Container construction increments; container destruction
+ *  decrements and deletes when the count reaches zero. See irep2.h's
+ *  threading-contract preamble for the ordering rules.
+ */
+class irep2t
 {
+public:
+  irep2t() noexcept
+    : refcount(0)
+#ifndef NDEBUG
+      ,
+      writer_thread(0)
+#endif
+  {
+  }
+  // Copy constructor must NOT propagate the refcount: a fresh copy is
+  // a brand new object that no container has yet adopted. The single
+  // copy site that matters is clone(), which always wraps the result
+  // in an irep_container immediately afterwards.
+  irep2t(const irep2t &) noexcept
+    : refcount(0)
+#ifndef NDEBUG
+      ,
+      writer_thread(0)
+#endif
+  {
+  }
+  // Refcount is per-object identity; assignment is meaningless on the
+  // base. Subclasses' copy-assignment operators do not call into here.
+  irep2t &operator=(const irep2t &) = delete;
+  virtual ~irep2t() = default;
+
+  mutable std::atomic<unsigned int> refcount;
+
+#ifndef NDEBUG
+  // Debug-only writer-thread stamp. The threading contract says irep2
+  // nodes are single-writer; on the first mutable access through an
+  // irep_container, the container stamps this slot with a hash of the
+  // current thread id (0 means "no writer"). Subsequent mutable
+  // accesses compare — a mismatch means two threads are trying to
+  // mutate the same uniquely-owned node, which is the contract
+  // violation we want to catch. The stamp clears when the refcount
+  // drops back to 1 in release(), so a single-owner-handoff across
+  // threads (publish, then a new owner mutates) works correctly.
+  // Compiled out entirely under NDEBUG. uintptr_t is used (rather
+  // than std::thread::id directly) so the atomic is guaranteed
+  // lock-free on every platform we target.
+  mutable std::atomic<std::uintptr_t> writer_thread;
+
+  static std::uintptr_t current_thread_tag() noexcept
+  {
+    auto h = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // 0 is the "no writer" sentinel; if the hash collides with 0
+    // (vanishingly unlikely but possible), bump it.
+    return h == 0 ? 1 : static_cast<std::uintptr_t>(h);
+  }
+
+  void mark_writer() const noexcept
+  {
+    std::uintptr_t me = current_thread_tag();
+    std::uintptr_t prev = writer_thread.load(std::memory_order_acquire);
+    if (prev == me)
+      return; // already mine, common fast path
+    if (prev == 0)
+    {
+      // Race-free attempt to claim the slot. If we lose the CAS to a
+      // concurrent writer we fall through to the mismatch assert
+      // below, which is the contract violation.
+      if (writer_thread.compare_exchange_strong(
+            prev, me, std::memory_order_release, std::memory_order_acquire))
+        return;
+    }
+    assert(
+      prev == me &&
+      "irep2 single-writer contract violated: a second thread tried to "
+      "mutate a node already being mutated by another thread");
+  }
+
+  void clear_writer() const noexcept
+  {
+    writer_thread.store(0, std::memory_order_release);
+  }
+#endif
 };
 
 /** Base class for all types.
@@ -385,29 +553,16 @@ class irep2t : public std::enable_shared_from_this<irep2t>
 class type2t : public irep2t
 {
 public:
-  /** Enumeration identifying each sort of type. */
+  /** Enumeration identifying each sort of type. Driven by
+   *  type_kinds.inc; see that file's header for the IREP2_TYPE(kind,
+   *  pretty_name) contract. */
   enum type_ids
   {
-    bool_id,
-    empty_id,
-    symbol_id,
-    struct_id,
-    union_id,
-    code_id,
-    array_id,
-    vector_id,
-    pointer_id,
-    unsignedbv_id,
-    signedbv_id,
-    fixedbv_id,
-    floatbv_id,
-    complex_id,
-    cpp_name_id,
+#define IREP2_TYPE(kind, pretty) kind##_id,
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
     end_type_id
   };
-
-  /* Define default traits */
-  typedef typename esbmct::type2t_traits<> traits;
 
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
@@ -422,8 +577,13 @@ public:
     }
   };
 
-  typedef std::function<void(const type2tc &t)> const_subtype_delegate;
-  typedef std::function<void(type2tc &t)> subtype_delegate;
+  // Non-owning callable references. The historic typedefs were
+  // std::function<void(...)>, which allocated for any non-trivially-
+  // copyable lambda capture and indirected through the std::function
+  // type-erasure. function_ref is two pointers wide and inlines into
+  // the caller's stack frame.
+  typedef esbmct::function_ref<void(const type2tc &)> const_subtype_delegate;
+  typedef esbmct::function_ref<void(type2tc &)> subtype_delegate;
 
 protected:
   /** Primary constructor.
@@ -434,8 +594,8 @@ protected:
   /** Copy constructor */
   type2t(const type2t &ref);
 
-  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
-  virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
+  void foreach_subtype_impl_const(const_subtype_delegate &t) const;
+  void foreach_subtype_impl(subtype_delegate &t);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -458,16 +618,13 @@ public:
    *  @throws array_type2t::dyn_sized_array_excp
    *  @return Size of types byte representation, in bits
    */
-  virtual unsigned int get_width() const = 0;
+  unsigned int get_width() const;
 
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
 
-  /** Produce a string representation of type.
-   *  Takes body of the current type and produces a human readable
-   *  representation. Similar to the string-irept's pretty method, although a
-   *  different format.
+  /** Produce a human-readable string representation of type.
    *  @param indent Number of spaces to indent lines by in the output
    *  @return String obj containing representation of this object
    */
@@ -489,41 +646,19 @@ public:
    */
   size_t crc() const;
 
-  /** Perform checked invocation of cmp method.
-   *  Takes reference to another type - if they have the same type id, invoke
-   *  the cmp function and return its result. Otherwise, return false. Using
-   *  this method ensures thatthe implementer of cmp knows the reference it
-   *  operates on is on the same type as itself.
-   *  @param ref Reference to type to compare this object against
-   *  @return True if types are the same, false otherwise.
-   */
-  bool cmpchecked(const type2t &ref) const;
-
-  /** Perform checked invocation of lt method.
-   *  Identical to cmpchecked, except with the lt method.
-   *  @see cmpchecked
-   *  @param ref Reference to type to measure this against.
-   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const type2t &ref) const;
-
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
-   *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+  /** Structural comparison. Switch-dispatches on type_id and walks the
+   *  kind's K::fields; returns false immediately when the type_ids differ.
+   *  @param ref Reference to type to compare against
    *  @return True if types match, false otherwise
    */
-  virtual bool cmp(const type2t &ref) const = 0;
+  bool cmp(const type2t &ref) const;
 
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
-   *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched type_ids are ordered by the id itself.
+   *  @param ref Reference to type to measure against
    *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const type2t &ref) const;
+  int lt(const type2t &ref) const;
 
   /** Extract a list of members from type as strings.
    *  Produces a list of pairs, mapping a member name to a string value. Used
@@ -532,60 +667,51 @@ public:
    *  @param indent Number of spaces to indent output strings with, if multiline
    *  @return list of name:value pairs.
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
-
-  /** Perform crc operation accumulating into parameter.
-   *  Performs the operation of the crc method, but overridden to be specific to
-   *  a particular type. Accumulates data into the hash object parameter.
-   *  @see cmp
-   *  @param seed Hash to accumulate hash data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
-  virtual type2tc clone() const = 0;
+  type2tc clone() const;
 
   // Please see the equivalent methods in expr2t for documentation
   template <typename T>
   void foreach_subtype(T &&t) const
   {
-    const_subtype_delegate wrapped(std::cref(t));
+    const_subtype_delegate wrapped(t);
     foreach_subtype_impl_const(wrapped);
   }
 
   template <typename T>
   void Foreach_subtype(T &&t)
   {
-    subtype_delegate wrapped(std::ref(t));
+    subtype_delegate wrapped(t);
     foreach_subtype_impl(wrapped);
   }
 
   /** Instance of type_ids recording this types type. */
-  // XXX XXX XXX this should be const
-  type_ids type_id;
+  const type_ids type_id;
 
-  mutable size_t crc_val;
-  mutable std::mutex crc_mutex;
+  // CRC cache: 0 means "not yet computed". Atomic so concurrent readers
+  // see either the prior value or the fresh one — never a torn read.
+  // Writers respect the single-writer contract documented at the top of
+  // this header; the cache is therefore safe to set without a lock as
+  // long as readers and the (single) writer share happens-before via the
+  // atomic.
+  mutable std::atomic<size_t> crc_val;
 };
 
 /** Fetch identifying name for a type.
- *  I.E., this is the class of the type, what you'd get if you called type.id()
- *  with the old stringy irep. Ideally this should be a class method, but as it
- *  was added as a hack I haven't got round to it yet.
  *  @param type Type to fetch identifier for
  *  @return String containing name of type class.
  */
@@ -612,20 +738,18 @@ public:
    */
   enum expr_ids
   {
-// Boost preprocessor magic: enumerate over each expression and pump out
-// a foo_id enum element. See list of ireps at top of file.
-#define _ESBMC_IREP2_EXPRID_ENUM(r, data, elem) BOOST_PP_CAT(elem, _id),
-    BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPRID_ENUM, foo, ESBMC_LIST_OF_EXPRS)
-      end_expr_id
+// The single source of truth for the kind list lives in
+// expr_kinds.inc; see that file's header for the IREP2_EXPR(kind,
+// pretty_name) contract.
+#define IREP2_EXPR(kind, pretty) kind##_id,
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+    end_expr_id
   };
 
-  /** Type for list of constant expr operands */
-  typedef std::list<const expr2tc *> expr_operands;
-  /** Type for list of non-constant expr operands */
-  typedef std::list<expr2tc *> Expr_operands;
-
-  typedef std::function<void(const expr2tc &expr)> const_op_delegate;
-  typedef std::function<void(expr2tc &expr)> op_delegate;
+  // Non-owning callable references; see commentary on type2t's variants.
+  typedef esbmct::function_ref<void(const expr2tc &)> const_op_delegate;
+  typedef esbmct::function_ref<void(expr2tc &)> op_delegate;
 
 protected:
   /** Primary constructor.
@@ -636,40 +760,31 @@ protected:
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
-  virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
-  virtual void foreach_operand_impl(op_delegate &expr) = 0;
+  void foreach_operand_impl_const(const_op_delegate &expr) const;
+  void foreach_operand_impl(op_delegate &expr);
 
 public:
   // Provide base / container types for some templates stuck on top:
   typedef expr2tc container_type;
   typedef expr2t base_type;
-  // Also provide base traits
-  typedef esbmct::expr2t_traits<> traits;
 
   virtual ~expr2t() = default;
 
-  /** Clone method. Self explanatory. */
-  virtual expr2tc clone() const = 0;
+  expr2tc clone() const;
 
-  /* These are all self explanatory */
+  /** Build a fresh expression of the same kind and field values as this
+   *  one, but with a different type. Assumes every kind's primary
+   *  constructor takes (type, fields...) matching its K::fields tuple
+   *  in order. */
+  expr2tc with_type(const type2tc &new_type) const;
+
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
 
-  /** Perform type-checked call to lt method.
-   *  Checks that this object and the one we're comparing against have the same
-   *  expr class, so that the lt method can assume it's working on objects of
-   *  the same type.
-   *  @see type2t::ltchecked
-   *  @param ref Expression object we're comparing this object against.
-   *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const expr2t &ref) const;
-
   /** Produce textual representation of this expr.
-   *  Like the stringy-irep's pretty method, this takes the current object and
-   *  produces a textual representation that can be read by a human to
-   *  understand what's going on.
+   *  Takes the current object and produces a textual representation that
+   *  can be read by a human to understand what's going on.
    *  @param indent Number of spaces to indent the output string lines by
    *  @return String object containing textual expr representation.
    */
@@ -689,27 +804,21 @@ public:
    */
   size_t crc() const;
 
-  /** Perform comparison operation between this and another expr.
-   *  Overridden by subclasses of expr2t to compare different members of this
-   *  and the passed in object. Assumes that the passed in object is the same
-   *  class type as this; Should be called via operator==, which will do that
-   *  check automagically.
+  /** Structural comparison. The expr_id check is done by the switch
+   *  dispatcher inside, so callers don't have to gate the call on kind.
+   *  Should normally be reached via operator==.
    *  @see type2t::cmp
    *  @param ref Expr object to compare this against
    *  @return True if objects are the same; false otherwise.
    */
-  virtual bool cmp(const expr2t &ref) const;
+  bool cmp(const expr2t &ref) const;
 
-  /** Compare two expr objects.
-   *  Overridden by subclasses - takes two expr objects (this and ref) of the
-   *  same type, and compares them, in the same manner as memcmp. The assumption
-   *  that the objects are of the same type means lt should be called via
-   *  ltchecked to check for different expr types.
-   *  @see type2t::lt
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched expr_ids are ordered by the id itself.
    *  @param ref Expr object to compare this against
    *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const expr2t &ref) const;
+  int lt(const expr2t &ref) const;
 
   /** Convert fields of subclasses to a string representation.
    *  Used internally by the pretty method - creates a list of pairs
@@ -719,49 +828,30 @@ public:
    *  @param indent Number of spaces to indent multiline output by
    *  @return list of string pairs, of form fieldname:value
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
-
-  /** Perform digest/hash function on expr object.
-   *  Takes all fields in this exprs and adds them to the passed in hash object
-   *  to compute an expression-hash. Overridden by subclasses.
-   *  @param seed Hash to accumulate expression data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual const expr2tc *get_sub_expr(size_t idx) const = 0;
-
-  /** Fetch a sub-operand. Non-const version.
-   *  These can come out of any field that is an expr2tc, or contains them.
-   *  No particular numbering order is promised.
-   */
-  virtual expr2tc *get_sub_expr_nc(size_t idx) = 0;
+  const expr2tc *get_sub_expr(size_t idx) const;
 
   /** Count the number of sub-exprs there are.
    */
-  virtual size_t get_num_sub_exprs() const = 0;
+  size_t get_num_sub_exprs() const;
 
   /** Simplify an expression.
-   *  Similar to simplification in the string-based irep, this generates an
-   *  expression with any calculations or operations that can be simplified,
-   *  simplified. In contrast to the old form though, this creates a new expr
-   *  if something gets simplified, just to make it clear exactly what's
-   *  going on.
+   *  Returns a new expression when a calculation or operation can be folded.
    *  @return Either a nil expr (null pointer contents) if nothing could be
    *          simplified or a simplified expression.
    */
@@ -802,24 +892,20 @@ public:
    *  @return expr2tc A nil expression if no simplifcation could occur, or a new
    *          simplified object if it can.
    */
-  virtual expr2tc do_simplify() const;
+  [[nodiscard]] virtual expr2tc do_simplify() const;
 
   /** Indirect, abstract operand iteration.
    *
-   *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
-   *  where anonymous code (actually a delegate?) gets run over each operand
-   *  expression. Because the full type of the expression isn't known by the
-   *  caller, and each delegate is it's own type, we need to wrap it in a
-   *  std::function before funneling it through a virtual function.
+   *  Lambda-based accessor: the delegate is called on every expr2tc field
+   *  in this expression, in K::fields order. For a vector<expr2tc> field,
+   *  the delegate is called once per element. Delegates are wrapped in a
+   *  non-owning `function_ref` so any callable (lambda, free function,
+   *  member-pointer-with-bound-instance) flows through without dynamic
+   *  allocation.
    *
-   *  For the purpose of this method, an operand is another instance of an
-   *  expr2tc. This means the delegate will be called on any expr2tc field of
-   *  the expression, in the order they appear in the traits. For a vector of
-   *  expressions, the delegate will be called for each element, in order.
-   *
-   *  The uncapitalized version is const; the capitalized version is non-const
-   *  (and so one needs to .get() a mutable expr2t pointer when calling). When
-   *  modifying operands, preserving type correctness is imperative.
+   *  The lowercase version is const; the capitalised version is non-const
+   *  (and so one needs to .get() a mutable expr2t pointer when calling).
+   *  When modifying operands, preserving type correctness is imperative.
    *
    *  @param t A delegate to be called for each expression operand; must have
    *           a type of void f(const expr2tc &)
@@ -827,14 +913,14 @@ public:
   template <typename T>
   void foreach_operand(T &&t) const
   {
-    const_op_delegate wrapped(std::cref(t));
+    const_op_delegate wrapped(t);
     foreach_operand_impl_const(wrapped);
   }
 
   template <typename T>
   void Foreach_operand(T &&t)
   {
-    op_delegate wrapped(std::ref(t));
+    op_delegate wrapped(t);
     foreach_operand_impl(wrapped);
   }
 
@@ -842,10 +928,10 @@ public:
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  type2tc type;
+  const type2tc type;
 
-  mutable size_t crc_val;
-  mutable std::mutex crc_mutex;
+  // CRC cache; see commentary on type2t::crc_val.
+  mutable std::atomic<size_t> crc_val;
 };
 
 inline bool is_nil_expr(const expr2tc &exp)
@@ -865,9 +951,6 @@ inline std::size_t hash_value(const expr2tc &expr)
 }
 
 /** Fetch string identifier for an expression.
- *  Returns the class name of the expr passed in - this is equivalent to the
- *  result of expr.id() in old stringy irep. Should ideally be a method of
- *  expr2t, but haven't got around to moving it yet.
  *  @param expr Expression to operate upon
  *  @return String containing class name of expression.
  */
@@ -882,84 +965,33 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-/** Template for providing templated methods to irep classes (type2t/expr2t).
+/** Containers and field-walking infrastructure for irep2 nodes.
  *
- *  What this does: we give irep_methods2 a type trait record that contains
- *  a boost::mp11::mp_list, the elements of which describe each field in the
- *  class we're operating on. For each field we get:
+ *  Each concrete kind (e.g. `add2t`, `if2t`, `array_type2t`) inherits
+ *  directly from `expr2t` / `type2t` and carries:
  *
- *    - The type of the field
- *    - The class that field is part of
- *    - A pointer offset to that field.
+ *    static constexpr auto fields = std::make_tuple(&Kind::field1, ...);
+ *    static std::string field_names[num_type_fields];
  *
- *  What this means, is that we can @a type @a generically access a member
- *  of a class from within the template, without knowing what type it is,
- *  what its name is, or even what type contains it.
+ *  The generic_*<K> helpers in `irep2_dispatch.h` walk that tuple via
+ *  std::apply to implement clone/cmp/lt/crc/hash/tostring and operand
+ *  iteration. The switch-on-id dispatchers on `expr2t` / `type2t`
+ *  select the right K per kind from the X-macro manifests
+ *  (`expr_kinds.inc`, `type_kinds.inc`).
  *
- *  We can then use that to make all the boring methods of ireps type
- *  generic too. For example: we can make the comparision method by accessing
- *  each field in the class we're dealing with, passing them to another
- *  function to do the comparison (with the type resolved by templates or
- *  via overloading), and then inspecting the output of that.
+ *  Each kind also has a container alias `<kind>2tc` (alias for
+ *  `irep_container<expr2t>` / `irep_container<type2t>`) and a factory
+ *  `<kind>2tc(args...)` that wraps `make_irep<T>(args...)`. Containers
+ *  behave like value types via copy-on-write: const access shares the
+ *  pointee, non-const `get()` / `operator->` / `operator*` calls
+ *  `detach()` first (clones into a fresh refcount=1 object when shared).
  *
- *  In fact, we can make type generic implementations of all the following
- *  methods in expr2t: clone, tostring, cmp, lt, do_crc, hash.
- *  Similar methods, minus the operands, can be made generic in type2t.
- *
- *  So, that's what these templates provide; an irep class can be made by
- *  inheriting from this template, telling it what class it'll end up with,
- *  and what to subclass from, and what the fields in the class being derived
- *  from look like. This means we can construct a type hierarchy with whatever
- *  inheritance we like and whatever fields we like, then latch irep_methods2
- *  on top of that to implement all the anoying boring boilerplate code.
- *
- *  ----
- *
- *  In addition, we also define container types for each irep, which is
- *  essentially a type-safeish wrapper around a std::shared_ptr (i.e.,
- *  reference counter). One can create a new irep with syntax such as:
- *
- *    foo2tc bar(type, operand1, operand2);
- *
- *  One can transparently access the irep fields through dereference, such as:
- *
- *    bar->operand1 = 0;
- *
- *  This all replicates the CBMC expression situation, but with the addition
- *  of types.
- *
- *  ----
- *
- *  The following functions can be used to inspect an irep2 object:
- *
- *    is_${suffix}()
- *    to_${suffix}()
- *
- *  For expr2tc the suffix is the name of the class, while for type2t it is the
- *  name of the class without the trailing "2t", e.g.
- *
- *    is_bool_type(type)
- *    to_constant_int2t(expr)
- *
- *  The to_* functions return a (const) reference for a (const) expr2tc or
- *  type2tc parameter. The non-const versions perform a so-called "detach"
- *  operation, which ensures that the to-be-modified object is not referenced by
- *  any other irep2 terms in use. This detach operation is explained in more
- *  detail in the comment about irep_container. Because const-ness is used to
- *  decide whether to detach or not, when working with irep2 it is *critical*
- *  that const_cast<>() is used only where it's safe to. Best practice is to
- *  put a formal safety proof into the comment about const_cast usage.
- *
- *  The above functions are defined by type_macros and expr_macros in the
- *  respective irep2 header.
- *
- *  ----
- *
- *  The traits defined here are used to generically implement the functions
- *  operating on a type2t's or an expr2t's fields, like .dump() and the
- *  iterators foreach_subtype() and foreach_operand().
- *
- *  (The required traits hacks need cleaning up too).
+ *  Identification and downcasting helpers `is_<kind>2t(expr)`,
+ *  `to_<kind>2t(expr)`, `try_to_<kind>2t(expr)` are macro-generated by
+ *  `irep2_expr.h` / `irep2_type.h` from the same manifests. `to_*`
+ *  throws `irep2_cast_error` on a kind mismatch; `try_to_*` returns
+ *  `nullptr`. The non-const downcast goes through the non-const
+ *  container accessor, so it triggers detach automatically.
  */
 namespace esbmct
 {
@@ -970,384 +1002,130 @@ namespace esbmct
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
 
-/** Record for properties of an irep field.
- *  This type records, for any particular field:
- *    * It's type
- *    * The class that it's a member of
- *    * A class pointer to this field
- *  The aim being that we have enough information about the field to
- *  manipulate it without any further traits. */
-template <typename R, typename C, R C::*v>
-class field_traits
+// ---------------------------------------------------------------------------
+// Per-kind invariants for the flat irep2 layout.
+//
+// Each concrete kind exposes:
+//   * A `static constexpr auto fields` tuple of member pointers covering its
+//     user-visible storage. Pointers may refer to members of the kind itself
+//     OR of its base (e.g. `&expr2t::type` for kinds whose type slot is part
+//     of the trait set).
+//   * A `static std::string field_names[num_type_fields]` array of labels for
+//     the pretty-printer.
+//
+// `assert_kind_invariants<K>()` packages the two compile-time checks we want
+// every concrete kind to satisfy:
+//
+//   1. `fields_cover_class<K>()` — the member pointers in K::fields that
+//      refer to K (i.e. not to a base) collectively cover the derived-class
+//      storage span, modulo trailing padding (< alignof(K)). If someone
+//      adds a raw `BigInt extra;` to a kind and forgets to extend `fields`,
+//      this fires.
+//
+//   2. The number of derived-class entries in K::fields is at most
+//      num_type_fields, so the field_names[] array indexing in
+//      generic_tostring is in-bounds.
+//
+// Instantiated for every kind from the switch dispatchers (each `case`
+// references `K::fields`, which transitively forces the static_asserts in
+// the helpers below). Adding a new kind without listing its fields gets a
+// compile error from this site rather than a silent bug at cmp/crc/hash time.
+// ---------------------------------------------------------------------------
+
+template <class P>
+struct member_traits;
+template <class C, class M>
+struct member_traits<M C::*>
 {
-public:
-  typedef R result_type;
-  typedef C source_class;
-  typedef R C::*membr_ptr;
-  static constexpr membr_ptr value = v;
+  using class_t = C;
+  using member_t = M;
+};
+template <class C, class M>
+struct member_traits<const M C::*>
+{
+  using class_t = C;
+  using member_t = M;
 };
 
-template <typename R, typename C, R C::*v>
-constexpr
-  typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
-
-/** Trait class for type2t ireps.
- *  This takes a list of field traits and puts it in a vector, with the record
- *  for the type_id field (common to all type2t's) put that the front. */
-template <typename... Args>
-class type2t_traits
+// Sizeof the i-th K::fields entry, but only if it refers to K itself
+// (member pointers into the base class point at base storage, so they
+// shouldn't be counted against the derived-class storage span).
+template <class K, std::size_t I>
+constexpr std::size_t nth_field_size_in_derived()
 {
-public:
-  typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
-    type_id_field;
-  typedef typename boost::mp11::
-    mp_push_front<boost::mp11::mp_list<Args...>, type_id_field>
-      fields;
-  typedef type2t base2t;
-};
-
-/** Trait class for expr2t ireps.
- *  This takes a list of field traits and puts it in a vector, with the record
- *  for the expr_id field (common to all expr2t's) put that the front. Records
- *  some additional flags about the usage of the expression -- specifically
- *  what a unary constructor will do (@see something2tc::something2tc) */
-template <typename... Args>
-class expr2t_traits
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef typename boost::mp11::mp_push_front<
-    typename boost::mp11::
-      mp_push_front<boost::mp11::mp_list<Args...>, type_field>,
-    expr_id_field>
-    fields;
-  static constexpr unsigned int num_fields =
-    boost::mp11::mp_size<fields>::value;
-  typedef expr2t base2t;
-};
-
-// "Specialization" for expr kinds where the type is derived, like boolean
-// typed exprs. Should actually become a more structured expr2t_traits
-// that can be specialized in this way, at a later date. Might want to
-// move the presumed type down to the _data class at that time too.
-template <typename... Args>
-class expr2t_traits_notype
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef typename boost::mp11::
-    mp_push_front<boost::mp11::mp_list<Args...>, expr_id_field>
-      fields;
-  static constexpr unsigned int num_fields =
-    boost::mp11::mp_size<fields>::value;
-  typedef expr2t base2t;
-};
-
-// Declaration of irep and expr methods templates.
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
-class irep_methods2;
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
-class expr_methods2;
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
-class type_methods2;
-
-/** Definition of irep methods template.
- *
- *  @param derived The inheritor class, like add2t
- *  @param baseclass Class containing fields for methods to be defined over
- *  @param traits Type traits for baseclass
- *
- *  A typical irep inheritance looks like this, descending from the base
- *  irep class to the most derived class:
- *
- *    b          Base class, such as type2t or expr2t
- *    d          Data class, containing storage fields for ireps
- *    m          Terminal methods class (see below)
- *    M
- *    M            Recursive chain of irep_methods2 classes. Each one
- *    M            implements methods for one field, and calls to a superclass
- *    M            to handle remaining fields
- *    M
- *    t          Top level class such as add2t
- *
- *  The effect is thus: one takes a base class containing storage fields,
- *  instantiate irep_methods2 on top of it which unrolls to one template
- *  instance per field (plus a specialized terminal when there are no more
- *  fields). Then, have the top level class inherit from the chain of
- *  irep_methods classes. This avoids the writing of certain boilerplate
- *  methods at the expense of writing type trait information.
- *
- *  Technically one could typedef the top level irep_methods class to be the
- *  top level class itself; however putting a 'cap' on it (as it were) avoids
- *  decades worth of template errors if a programmer uses the irep
- *  incorrectly.
- */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class irep_methods2 : public irep_methods2<
-                        derived,
-                        baseclass,
-                        traits,
-                        typename boost::mp11::mp_pop_front<fields>>
-{
-public:
-  typedef irep_methods2<
-    derived,
-    baseclass,
-    traits,
-    typename boost::mp11::mp_pop_front<fields>>
-    superclass;
-  typedef typename baseclass::base_type base2t;
-  typedef irep_container<base2t> base_container2tc;
-
-  template <typename... Args>
-  irep_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // Copy constructor. Construct from derived ref rather than just
-  // irep_methods2, because the template above will be able to directly
-  // match a const derived &, and so the compiler won't cast it up to
-  // const irep_methods2 & and call the copy constructor. Fix this by
-  // defining a copy constructor that exactly matches the (only) use case.
-  irep_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  // Top level / public methods for this irep. These methods are virtual, set
-  // up any relevant computation, and then call the recursive instances below
-  // to perform the actual work over fields.
-  base_container2tc clone() const override;
-  list_of_memberst tostring(unsigned int indent) const override;
-  bool cmp(const base2t &ref) const override;
-  int lt(const base2t &ref) const override;
-  size_t do_crc() const override;
-  void hash(crypto_hash &hash) const override;
-
-protected:
-  // Fetch the type information about the field we are concerned with out
-  // of the current type trait we're working on.
-  typedef typename boost::mp11::mp_front<fields>::result_type cur_type;
-  typedef typename boost::mp11::mp_front<fields>::source_class base_class;
-  typedef typename boost::mp11::mp_front<fields> membr_ptr;
-
-  // Recursive instances of boilerplate methods.
-  void tostring_rec(
-    unsigned int idx,
-    list_of_memberst &vec,
-    unsigned int indent) const;
-  bool cmp_rec(const base2t &ref) const;
-  int lt_rec(const base2t &ref) const;
-  void do_crc_rec() const;
-  void hash_rec(crypto_hash &hash) const;
-
-  // These methods are specific to expressions rather than types, and are
-  // placed here to avoid un-necessary recursion in expr_methods2.
-  const expr2tc *get_sub_expr_rec(size_t cur_count, size_t desired) const;
-  expr2tc *get_sub_expr_nc_rec(size_t cur_count, size_t desired);
-  size_t get_num_sub_exprs_rec() const;
-
-  void foreach_operand_impl_rec(expr2t::op_delegate &f);
-  void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
-
-  // Similar story, but for type2tc
-  void foreach_subtype_impl_rec(type2t::subtype_delegate &t);
-  void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const;
-};
-
-// Base instance of irep_methods2. This is a template specialization that
-// matches (via std::enable_if) when the list of fields to operate on is
-// now empty. Finish up the remaining computation, if any.
-template <class derived, class baseclass, typename traits, typename fields>
-class irep_methods2<
-  derived,
-  baseclass,
-  traits,
-  fields,
-  std::enable_if_t<boost::mp11::mp_empty<fields>::value>> : public baseclass
-{
-public:
-  template <typename... Args>
-  irep_methods2(Args... args) : baseclass(args...)
-  {
-  }
-
-  // Copy constructor. See note for non-specialized definition.
-  irep_methods2(const derived &ref) : baseclass(ref)
-  {
-  }
-
-protected:
-  typedef typename baseclass::container_type container2tc;
-  typedef typename baseclass::base_type base2t;
-
-  void tostring_rec(
-    unsigned int idx,
-    list_of_memberst &vec,
-    unsigned int indent) const
-  {
-    (void)idx;
-    (void)vec;
-    (void)indent;
-  }
-
-  bool cmp_rec(const base2t &ref) const
-  {
-    // If it made it this far, we passed
-    (void)ref;
-    return true;
-  }
-
-  int lt_rec(const base2t &ref) const
-  {
-    // If it made it this far, we passed
-    (void)ref;
+  using P = std::remove_cvref_t<decltype(std::get<I>(K::fields))>;
+  using class_t = typename member_traits<P>::class_t;
+  if constexpr (std::is_same_v<class_t, K>)
+    return sizeof(typename member_traits<P>::member_t);
+  else
     return 0;
-  }
+}
 
-  void do_crc_rec() const
-  {
-  }
-
-  void hash_rec(crypto_hash &hash) const
-  {
-    (void)hash;
-  }
-
-  const expr2tc *get_sub_expr_rec(size_t cur_idx, size_t desired) const
-  {
-    // No result, so desired must exceed the number of idx's
-    assert(cur_idx >= desired);
-    (void)cur_idx;
-    (void)desired;
-    return nullptr;
-  }
-
-  expr2tc *get_sub_expr_nc_rec(size_t cur_idx, size_t desired)
-  {
-    // See above
-    assert(cur_idx >= desired);
-    (void)cur_idx;
-    (void)desired;
-    return nullptr;
-  }
-
-  size_t get_num_sub_exprs_rec() const
-  {
-    return 0;
-  }
-
-  void foreach_operand_impl_rec(expr2t::op_delegate &f)
-  {
-    (void)f;
-  }
-
-  void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
-  {
-    (void)f;
-  }
-
-  void foreach_subtype_impl_rec(type2t::subtype_delegate &t)
-  {
-    (void)t;
-  }
-
-  void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const
-  {
-    (void)t;
-  }
-};
-
-/** Expression methods template for expr ireps.
- *  This class works on the same principle as @irep_methods2 but provides
- *  head methods for get_sub_expr and so forth, which are
- *  specific to expression ireps. The actual implementation of these methods
- *  are provided in irep_methods to avoid un-necessary recursion but are
- *  protected; here we provide the head methods publically to allow the
- *  programmer to call in.
- *  */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class expr_methods2
-  : public irep_methods2<derived, baseclass, traits, fields, enable>
+template <class K, std::size_t... Is>
+constexpr std::size_t sum_derived_field_sizes(std::index_sequence<Is...>)
 {
-public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
+  return (nth_field_size_in_derived<K, Is>() + ... + std::size_t{0});
+}
 
-  template <typename... Args>
-  expr_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // See notes on irep_methods2 copy constructor
-  expr_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  const expr2tc *get_sub_expr(size_t i) const override;
-  expr2tc *get_sub_expr_nc(size_t i) override;
-  size_t get_num_sub_exprs() const override;
-
-  void
-  foreach_operand_impl_const(expr2t::const_op_delegate &expr) const override;
-  void foreach_operand_impl(expr2t::op_delegate &expr) override;
-};
-
-/** Type methods template for type ireps.
- *  Like @expr_methods2, but for types. Also; written on the quick.
- *  */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class type_methods2
-  : public irep_methods2<derived, baseclass, traits, fields, enable>
+template <class K, std::size_t... Is>
+constexpr std::size_t count_derived_field_entries(std::index_sequence<Is...>)
 {
-public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
+  return (
+    (std::is_same_v<
+       typename member_traits<
+         std::remove_cvref_t<decltype(std::get<Is>(K::fields))>>::class_t,
+       K>
+       ? std::size_t{1}
+       : std::size_t{0}) +
+    ... + std::size_t{0});
+}
 
-  template <typename... Args>
-  type_methods2(const Args &...args) : superclass(args...)
-  {
-  }
+// `fields_cover_class<K>()` — the sum of derived-class field sizes in
+// K::fields must equal `sizeof(K) - sizeof(base)`, modulo at most
+// `alignof(K) - 1` bytes of trailing padding. Catches missed-member-in-tuple
+// at compile time for any kind where the missed member is at least one byte
+// larger than the existing trailing padding (which covers every realistic
+// case — irep2 nodes use pointer-sized fields almost exclusively).
+template <class K>
+constexpr bool fields_cover_class()
+{
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  constexpr std::size_t derived_storage =
+    sizeof(K) - sizeof(typename K::base_type);
+  constexpr std::size_t covered = sum_derived_field_sizes<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+  return derived_storage - covered < alignof(K);
+}
 
-  // See notes on irep_methods2 copy constructor
-  type_methods2(const derived &ref) : superclass(ref)
-  {
-  }
+// `derived_field_count<K>()` — number of K::fields entries that live in K
+// itself (not in K::base_type). Compared against num_type_fields to ensure
+// the field_names[] indexing in generic_tostring stays in-bounds.
+template <class K>
+constexpr std::size_t derived_field_count()
+{
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  return count_derived_field_entries<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+}
 
-  void
-  foreach_subtype_impl_const(type2t::const_subtype_delegate &t) const override;
-  void foreach_subtype_impl(type2t::subtype_delegate &t) override;
-};
+template <class K>
+constexpr bool assert_kind_invariants()
+{
+  static_assert(
+    fields_cover_class<K>(),
+    "irep2 kind invariant: fields tuple does not cover the derived class "
+    "storage. Either add the missing member pointer to the kind's "
+    "`fields = std::make_tuple(...)`, or — if the member is intentionally "
+    "excluded from cmp/crc/hash — list every non-excluded member explicitly "
+    "and document the omission.");
+  static_assert(
+    derived_field_count<K>() <= num_type_fields,
+    "irep2 kind invariant: this kind has more derived-class field entries "
+    "than esbmct::num_type_fields. Either bump num_type_fields and the "
+    "corresponding field_names[] arrays, or replace the fixed-size array "
+    "with one sized by std::tuple_size_v<decltype(fields)>.");
+  return true;
+}
 
 } // namespace esbmct
 
@@ -1372,5 +1150,74 @@ struct type2_hash
     return ref->crc();
   }
 };
+
+// Exception thrown by irep2_checked_type_cast / irep2_checked_expr_cast when
+// the runtime id does not match the requested derived type. A bad to_*2t /
+// to_*_type was always a logic bug — surfacing it as an exception keeps the
+// failure deterministic in every build mode (rather than the undefined
+// behaviour the previous NDEBUG dynamic_cast→static_cast redefine produced)
+// while staying recoverable for callers that want to handle it.
+class irep2_cast_error : public std::logic_error
+{
+public:
+  using std::logic_error::logic_error;
+};
+
+// Diagnose a bad to_* downcast and throw irep2_cast_error. Out-of-line and
+// [[noreturn]] so the happy path stays a single compare+branch and the
+// compiler does not pessimise the inlined helpers.
+[[noreturn]] void
+irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
+[[noreturn]] void
+irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
+[[noreturn]] void irep2_bad_family_cast(unsigned actual, const char *accessor);
+
+// Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
+// predicates already do a single enum compare; these helpers do the same
+// check before a static_cast, so a bad to_*2t throws irep2_cast_error in
+// every build mode rather than invoking undefined behaviour under NDEBUG.
+template <typename Derived>
+inline Derived &irep2_checked_type_cast(
+  type2t &t,
+  type2t::type_ids expected,
+  const char *target_name)
+{
+  if (t.type_id != expected)
+    irep2_bad_type_cast(t.type_id, expected, target_name);
+  return static_cast<Derived &>(t);
+}
+
+template <typename Derived>
+inline const Derived &irep2_checked_type_cast(
+  const type2t &t,
+  type2t::type_ids expected,
+  const char *target_name)
+{
+  if (t.type_id != expected)
+    irep2_bad_type_cast(t.type_id, expected, target_name);
+  return static_cast<const Derived &>(t);
+}
+
+template <typename Derived>
+inline Derived &irep2_checked_expr_cast(
+  expr2t &e,
+  expr2t::expr_ids expected,
+  const char *target_name)
+{
+  if (e.expr_id != expected)
+    irep2_bad_expr_cast(e.expr_id, expected, target_name);
+  return static_cast<Derived &>(e);
+}
+
+template <typename Derived>
+inline const Derived &irep2_checked_expr_cast(
+  const expr2t &e,
+  expr2t::expr_ids expected,
+  const char *target_name)
+{
+  if (e.expr_id != expected)
+    irep2_bad_expr_cast(e.expr_id, expected, target_name);
+  return static_cast<const Derived &>(e);
+}
 
 #endif /* IREP2_H_ */

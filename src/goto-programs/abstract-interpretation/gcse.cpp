@@ -283,7 +283,7 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
     return e;
 
   expr2tc result = expr2tc();
-  e->foreach_operand([this, &result, &state](const expr2tc e_inner) {
+  e->foreach_operand([this, &result, &state](const expr2tc &e_inner) {
     if (!result && e_inner)
       result = obtain_max_sub_expr(e_inner, state);
   });
@@ -481,7 +481,7 @@ inline symbolt goto_cse::create_cse_symbol(
   const goto_programt::const_targett &to)
 {
   symbolt symbol;
-  symbol.type = migrate_type_back(t);
+  set_symbol_type(symbol, t);
   symbol.id = fmt::format("{}${}", prefix, symbol_counter++);
   symbol.name = symbol.id;
   symbol.mode = "C";

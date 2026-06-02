@@ -78,12 +78,20 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
-  virtual void convert(smt_convt &smt_conv);
+  // When `vacuity_mode` is true, each non-ignored assertion is encoded as
+  // its path assumption alone instead of `not(assumpt -> cond)`. The final
+  // OR over the assertions vector is then UNSAT iff every kept claim's path
+  // is unreachable — i.e. the discharge is vacuous.
+  // Note: `runtime_encoded_equationt` overrides `convert` and does NOT
+  // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
+  // callers must run vacuity probes through the non-incremental path.
+  virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
   void convert_internal_step(
     smt_convt &smt_conv,
     smt_astt &assumpt_ast,
     smt_convt::ast_vec &assertions,
-    SSA_stept &s);
+    SSA_stept &s,
+    bool vacuity_mode);
 
   // Pre-register address_of expressions over string/array literals so
   // int-to-ptr casts see them regardless of source-level declaration order
@@ -248,7 +256,7 @@ public:
 
   std::shared_ptr<symex_targett> clone() const override;
 
-  void convert(smt_convt &smt_conv) override;
+  void convert(smt_convt &smt_conv, bool vacuity_mode = false) override;
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);

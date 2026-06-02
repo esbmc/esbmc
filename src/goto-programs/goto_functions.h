@@ -21,7 +21,11 @@ class goto_functiont
 {
 public:
   goto_programt body;
-  code_typet type;
+  // The function signature (a code_type2t). Unlike the legacy code_typet this
+  // replaced, a default-constructed type2tc is nil rather than an empty code
+  // type, so it must be assigned (migrate_type(symbol.type)) before any read:
+  // to_code_type() dereferences it. All construction paths set it before use.
+  type2tc type;
   bool body_available = false;
 
   // The set of functions that have been inlined into this one. Necessary to
@@ -50,6 +54,12 @@ public:
 
   static std::mutex reached_claims_mutex;
   static std::mutex reached_mul_claims_mutex;
+
+  // Serialises clear_verified_claims_in_goto across parallel multi-property
+  // claims, which may concurrently make_skip() the same assert instruction.
+  // One shared lock replaces what used to be a per-instruction std::mutex
+  // (40 bytes on every GOTO instruction in the program).
+  static std::mutex clear_claims_mutex;
 
   void clear()
   {

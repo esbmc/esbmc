@@ -88,6 +88,16 @@ TEST_CASE("cwe_for matches uninitialised variable", "[util][cwe_mapping]")
     cwe_for("use of uninitialized variable: x") == std::vector<unsigned>{457});
 }
 
+TEST_CASE("cwe_for matches unchecked return value", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("unchecked return value of fopen: f") ==
+    std::vector<unsigned>{252});
+  REQUIRE(
+    std::string(cwe_rule_for("unchecked return value of calloc: p").sarif_id) ==
+    "unchecked-return-value");
+}
+
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("").empty());
@@ -112,6 +122,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(617) == "Reachable Assertion");
   REQUIRE(cwe_name(833) == "Deadlock");
   REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
+  REQUIRE(cwe_name(252) == "Unchecked Return Value");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -175,6 +186,7 @@ TEST_CASE(
         "data race on x",
         "Deadlocked state in pthread_mutex_lock",
         "use of uninitialized variable: foo",
+        "unchecked return value of fopen: f",
         "unreachable code reached",
         ""})
   {
@@ -208,6 +220,7 @@ TEST_CASE(
         "data race on x",
         "Deadlocked state in pthread_mutex_lock",
         "use of uninitialized variable: foo",
+        "unchecked return value of fopen: f",
         "Access to object out of bounds",
         "dereference failure: memset of memory segment of size 4",
         "undefined behavior on shift operation"})

@@ -1,7 +1,11 @@
-# pylint: disable=redefined-builtin
+# pylint: disable=redefined-builtin,undefined-variable
 # This class intentionally shadows the Python built-in `int`: it is the
 # operational model ESBMC uses to verify Python programs, so it must
-# match the built-in name exactly.
+# match the built-in name exactly. The `undefined-variable` disable covers
+# the internal `IntWide` annotation used by `bit_length` — see issues
+# #1964 / #4642. ESBMC's type_handler maps `IntWide` to a wider signed
+# bitvector; it is not a Python symbol, so defining it at module scope
+# here would interfere with ESBMC's symbol processing of the OM.
 class int:
 
     @classmethod
@@ -33,12 +37,29 @@ class int:
         return result
 
     @classmethod
-    # bit_lenght() count the bits needed to represent an integer in binary
-    def bit_length(cls, n: int) -> int:
+    # bit_length() counts the bits needed to represent an integer in binary.
+    # `n` is annotated `IntWide` so the OM accepts bignum scalars produced
+    # by ** under --ir (e.g. 2**64) without truncating at the call boundary.
+    # Narrow int inputs sign-extend on entry. `length` stays `int` — the
+    # bit count itself fits trivially. Issues #1964 (Part 2) and #4642.
+    #
+    # Implementation: loop bounded by `length`, not by the symbolic input n.
+    # The previous `while n > 0: n >>= 1` form forced ESBMC to unwind one
+    # symex iteration per bit for any symbolic n, which does not terminate
+    # without `--unwind` (issue #4756). Adding `length < 512` to the loop
+    # condition gives the unwinder a literal termination bound covering the
+    # full --ir bignum IntWide width (512-bit), and narrow callsites still
+    # exit at n == 0 well before that — incremental BMC terminates at the
+    # first k that proves the property.
+    def bit_length(cls, n: IntWide) -> int:
         length: int = 0
-
-        while n > 0:
-            n: int = n >> 1
-            length: int = length + 1  # Count how many times the number is shifted
-
+        # Soundness: the literal 512 must be >= kPythonBitLengthCap in
+        # src/python-frontend/type_handler.cpp, which a static_assert ties
+        # to kPythonBignumWidth. The OM is FLAIL-mangled before the C++
+        # side is touched, so the literal cannot read the constant — bump
+        # both together when widening Python int (#4642). The static_assert
+        # turns a silently-wrong bit_length into a build break.
+        while length < 512 and n > 0:
+            n: IntWide = n >> 1
+            length = length + 1
         return length

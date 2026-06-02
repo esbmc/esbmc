@@ -192,7 +192,7 @@ void solidity_convertert::get_default_symbol(
   symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
-  symbol.type = std::move(type);
+  symbol.set_type(std::move(type));
   symbol.name = name;
   symbol.id = id;
 }
@@ -666,7 +666,7 @@ void solidity_convertert::get_aux_array(
   std::string debug_modulename =
     get_modulename_from_path(loc.file().as_string());
 
-  assert(!new_src_expr.type().get("#sol_array_size").empty());
+  assert(has_sol_array_size(new_src_expr.type()));
   typet t = new_src_expr.type();
 
   symbolt sym;
@@ -676,7 +676,7 @@ void solidity_convertert::get_aux_array(
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
-  added_symbol.value = new_src_expr;
+  added_symbol.set_value(new_src_expr);
   new_expr = symbol_expr(added_symbol);
 }
 
@@ -685,10 +685,10 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
   typet rt = rhs.type();
 
   unsigned int arr_size = 0;
-  if (!rt.get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.get("#sol_array_size").as_string());
-  else if (rt.has_subtype() && !rt.subtype().get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
+  if (has_sol_array_size(rt))
+    arr_size = std::stoi(get_sol_array_size(rt));
+  else if (rt.has_subtype() && has_sol_array_size(rt.subtype()))
+    arr_size = std::stoi(get_sol_array_size(rt.subtype()));
   else
   {
     // arr_size = _ESBMC_array_length(rhs);
@@ -795,7 +795,7 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   aux_sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(aux_sym);
-  added_sym.value = val;
+  added_sym.set_value(val);
 
   code_declt decl(symbol_expr(added_sym));
   decl.operands().push_back(val);

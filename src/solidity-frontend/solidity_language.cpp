@@ -25,9 +25,25 @@ CC_DIAGNOSTIC_POP()
 #include <cstdlib>
 #include <regex>
 
-// Use boost::process v1 on macOS or when Boost >= 1.87
-#if defined(__APPLE__) || (BOOST_VERSION >= 108700)
+// Use boost::process v1 on macOS or when Boost >= 1.87. The umbrella
+// header layout differs between Boost releases:
+//
+//   - Boost <= 1.86: `boost/process.hpp` IS v1 (v2 not yet shipped),
+//                    namespace `boost::process`.
+//   - Boost == 1.87: `boost/process/v1.hpp` umbrella exists; the
+//                    default `boost/process.hpp` switched to v2.
+//                    Use the umbrella, namespace `boost::process::v1`.
+//   - Boost >= 1.88: the `boost/process/v1.hpp` umbrella was removed;
+//                    v1 is still shipped under `boost/process/v1/*.hpp`
+//                    subheaders. Include the ones we use.
+#if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
+namespace bp = boost::process::v1;
+#elif BOOST_VERSION >= 108800
+#  include <boost/process/v1/child.hpp>
+#  include <boost/process/v1/io.hpp>
+#  include <boost/process/v1/pipe.hpp>
+#  include <boost/process/v1/search_path.hpp>
 namespace bp = boost::process::v1;
 #else
 #  include <boost/process.hpp>
@@ -347,8 +363,8 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   // adjusted by c2goto's clang_c_adjust).
   std::unordered_map<std::string, exprt> saved_values;
   new_context.Foreach_operand([&](symbolt &s) {
-    if (lib_symbols.count(s.id.as_string()) && s.value.is_not_nil())
-      saved_values[s.id.as_string()] = s.value;
+    if (lib_symbols.count(s.id.as_string()) && s.get_value().is_not_nil())
+      saved_values[s.id.as_string()] = s.get_value();
   });
 
   clang_cpp_adjust adjuster(new_context);
@@ -360,7 +376,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   {
     symbolt *s = new_context.find_symbol(id);
     if (s)
-      s->value = std::move(val);
+      s->set_value(std::move(val));
   }
 
   if (c_link(

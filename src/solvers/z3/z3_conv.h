@@ -11,9 +11,11 @@ public:
   using solver_smt_ast<z3::expr>::solver_smt_ast;
   ~z3_smt_ast() override = default;
 
-  smt_astt
-  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr)
-    const override;
+  smt_astt update(
+    smt_convt *ctx,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr) const override;
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 

@@ -1,5 +1,6 @@
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/parse_float.h>
+#include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
@@ -22,17 +23,17 @@ void convert_float_literal(const std::string &src, exprt &dest)
   if (is_float)
   {
     dest.type() = float_type();
-    dest.type().set("#cpp_type", "float");
+    type_utils::set_cpp_type(dest.type(), "float");
   }
   else if (is_long)
   {
     dest.type() = long_double_type();
-    dest.type().set("#cpp_type", "long_double");
+    type_utils::set_cpp_type(dest.type(), "long_double");
   }
   else
   {
     dest.type() = double_type();
-    dest.type().set("#cpp_type", "double");
+    type_utils::set_cpp_type(dest.type(), "double");
   }
 
   if (config.ansi_c.use_fixed_for_float)
