@@ -614,8 +614,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "Enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"},
+     "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
+     "treats reach_error()/__VERIFIER_error() as error sentinels"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
