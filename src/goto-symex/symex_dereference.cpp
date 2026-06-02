@@ -78,9 +78,17 @@ void symex_dereference_statet::get_value_set(
       };
 
       // add each object to the resulting assume statement.
+      //
+      // The per-deref assume reads cur_state->value_set, which is the
+      // symex-prefix accumulation — not closed over loop back-edges. So if
+      // the value-set contains any unknown/invalid sink, the prefix does
+      // not over-approximate the full reachable set and the disjunction is
+      // an unsound restriction on the freshly-havoc'd pointer (see issue
+      // #5025: two of the 51 TDX wrong-SAFEs slip through here even after
+      // the havoc-time strengthening was made sound). Treat unknown/invalid
+      // or any unknown-offset entry as a reason to drop the whole assume.
       for (auto it = value_set.begin(); it != value_set.end(); ++it)
       {
-        // note that the set of objects are always encoded as object_descriptor.
         if (!is_object_descriptor2t(*it))
           return;
 
@@ -97,13 +105,10 @@ void symex_dereference_statet::get_value_set(
         }
         else if (is_unknown2t(obj.offset))
         {
-          // The offset is unknown but we still know which object the
-          // pointer could point at. Emit the weaker SAME-OBJECT(p,
-          // &obj) — any offset is allowed. Previously we returned
-          // here, dropping the entire disjunction (the assume became
-          // vacuously true) — sound but useless. The looser disjunct
-          // keeps the assume non-trivial while staying sound.
-          obj_ptr = address_of2tc(expr->type, obj.object);
+          // Unknown offset: drop the disjunction. Emitting the weaker
+          // SAME-OBJECT(p, &obj) over a symex-prefix set is the same
+          // unsoundness shape #5025 flagged on the havoc-time path.
+          return;
         }
         else
         {

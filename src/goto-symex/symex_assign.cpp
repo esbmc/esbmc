@@ -3,6 +3,7 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
+#include <pointer-analysis/value_set_analysis.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
@@ -209,6 +210,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
 
   dynamic_memory = sym.dynamic_memory;
   interval_domain_state = sym.interval_domain_state;
+  pre_symex_vsa_by_function = sym.pre_symex_vsa_by_function;
 
   stack_limit = sym.stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
@@ -342,41 +344,102 @@ void goto_symext::symex_assign(
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
-  // The k-induction `make_nondet_assign` pass emits, at every loop
-  // head it transforms, one `ASSIGN p = nondet()` per modified-loop
-  // variable, with `inductive_step_instruction = true`. For pointers
-  // the resulting nondet wipes p's value-set to {*}, and the
-  // dereference-time `--add-symex-value-sets` assume can only pin
-  // the *resolved* address — not the source pointer. The IS encoding
-  // then sees a completely unconstrained p, admitting models where
-  // (say) `step()` writes through one havoc'd alias and `property()`
-  // reads through another, returning SAT on programs that are
-  // actually true (e.g. linked-list traversals where every
-  // dereference goes through the same pointer chain).
+  // The k-induction `make_nondet_assign` pass emits, at every loop head it
+  // transforms, one `ASSIGN p = nondet()` per modified-loop variable, with
+  // `inductive_step_instruction = true`. For pointers the resulting nondet
+  // wipes p's value-set to {*}, and the dereference-time
+  // `--add-symex-value-sets` assume can only pin the *resolved* address —
+  // not the source pointer. The IS encoding then sees a completely
+  // unconstrained p, admitting models where (say) `step()` writes through
+  // one havoc'd alias and `property()` reads through another, returning SAT
+  // on programs that are actually true.
   //
-  // Snapshot p's pre-havoc value-set here, then re-assert it as a
-  // SAME-OBJECT disjunction *after* the assignment lands. This pins
-  // the freshly-nondet p to the set of dynamic objects the
-  // symex-time value-set analysis has accumulated so far (e.g. the
-  // chain of `dynamic_N_value` symbols allocated by prior loop
-  // iterations).
-  value_setst::valuest is_ptr_havoc_pre_values;
+  // To strengthen IS soundly we read the candidate object set from a
+  // *goto-program-level* value-set analysis (a worklist fixpoint that
+  // closes over loop back-edges) at the IS-havoc instruction's PC. That set
+  // is a sound over-approximation of every reachable loop-head value of p
+  // across all iterations. Using cur_state->value_set here instead would
+  // be unsound: it is the symex-prefix accumulation, not closed over the
+  // loop, so it can miss objects reachable only via iterations the symex
+  // prefix never executed (see issue #5025).
+  //
+  // The analysis is scoped to the *enclosing function* and built lazily on
+  // first IS havoc per function, then cached. Whole-program VSA at the
+  // driver level is too expensive (the operational-model library balloons
+  // the expression set); the function-level fixpoint still closes over
+  // every loop the IS havoc could possibly originate from, which is what
+  // soundness requires for this rewrite.
+  //
+  // The post-assignment assume + value-set restore (see below) reuses
+  // is_ptr_havoc_pre_object_map; the only thing that changes from the
+  // earlier (unsound) implementation is the *source* of the map.
   expr2tc is_ptr_havoc_lhs;
+  value_sett::object_mapt is_ptr_havoc_pre_object_map;
   if (
     inductive_step && cur_state->source.pc->inductive_step_instruction &&
     is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
     to_sideeffect2t(rhs).kind == sideeffect2t::allockind::nondet &&
     options.get_bool_option("add-symex-value-sets"))
   {
-    // Query the value-set using a freshly-renamed copy (the API wants
-    // a renamed pointer expression), but remember the unrenamed lhs
-    // for the assume — goto_symext::assume() renames again, and using
-    // the unrenamed form lets it pick up the post-havoc rename so the
-    // assume binds the *fresh* nondet symbol, not the pre-havoc one.
-    is_ptr_havoc_lhs = lhs;
-    expr2tc lhs_for_query = lhs;
-    cur_state->rename(lhs_for_query);
-    cur_state->value_set.get_value_set(lhs_for_query, is_ptr_havoc_pre_values);
+    // Lazy-init the per-function VSA cache. Shared via shared_ptr so
+    // execution-state clones reuse the same map.
+    if (!pre_symex_vsa_by_function)
+      pre_symex_vsa_by_function = std::make_shared<
+        std::unordered_map<irep_idt, std::shared_ptr<value_set_analysist>>>();
+
+    // The inserted IS-havoc instruction has an empty `pc->function`
+    // (make_nondet_assign doesn't fill it); use the active call-stack
+    // frame's function_identifier instead, which always reflects the
+    // function symex is currently executing.
+    const irep_idt &fname = cur_state->top().function_identifier;
+    auto it = pre_symex_vsa_by_function->find(fname);
+    if (it == pre_symex_vsa_by_function->end())
+    {
+      // First IS havoc in this function: build the fixpoint over its body.
+      // A failed build caches a null entry so we don't retry per havoc.
+      std::shared_ptr<value_set_analysist> vsa;
+      auto f_it = goto_functions.function_map.find(fname);
+      if (
+        f_it != goto_functions.function_map.end() &&
+        f_it->second.body_available)
+      {
+        vsa = std::make_shared<value_set_analysist>(ns);
+        try
+        {
+          (*vsa)(f_it->second.body);
+        }
+        catch (vsa_not_implemented_exception &)
+        {
+          vsa = nullptr;
+        }
+        catch (type2t::symbolic_type_excp &)
+        {
+          vsa = nullptr;
+        }
+        catch (const std::string &)
+        {
+          vsa = nullptr;
+        }
+      }
+      it = pre_symex_vsa_by_function->emplace(fname, std::move(vsa)).first;
+    }
+
+    if (it->second)
+    {
+      // Remember the unrenamed lhs for the assume: goto_symext::assume()
+      // renames again, so the unrenamed form picks up the post-havoc SSA
+      // name and the assume binds the *fresh* nondet symbol.
+      is_ptr_havoc_lhs = lhs;
+
+      // Query the fixpoint at this PC. The fixpoint stores a value_sett per
+      // location whose entries are keyed by L0 names; pass the unrenamed
+      // lhs (no L1/L2 renaming) so the lookup matches the keying. The
+      // result is dropped directly into an object_mapt — no valuest
+      // roundtrip — preserving the offset metadata the all-concrete gate
+      // below depends on.
+      (*it->second)[cur_state->source.pc].value_set->get_value_set(
+        lhs, is_ptr_havoc_pre_object_map);
+    }
   }
 
   replace_nondet(lhs);
@@ -427,13 +490,14 @@ void goto_symext::symex_assign(
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
 
-  // Re-assert the pre-havoc points-to set on the freshly-nondet
-  // pointer. See the snapshot above for the rationale. The disjunct
-  // construction mirrors the per-dereference assume in
-  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
-  // plain equality with NULL, and `unknown`/`invalid` entries abort
-  // the constraint (a partial set would be unsound).
-  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
+  // Re-assert the pre-havoc points-to set on the freshly-nondet pointer.
+  // Build the SAME-OBJECT disjunction directly from the pre-havoc object_map
+  // (keyed by L1 name) rather than from get_value_set(L2-renamed expr).
+  // get_value_set with a L2-renamed expression misses entries keyed by L1
+  // names and falls back to {unknown}, which makes the assume abort even
+  // when the pointer has concrete candidates. Using get_entry(L1-name)
+  // directly avoids this.
+  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_object_map.empty())
   {
     expr2tc or_accuml;
     auto add_disjunct = [&or_accuml](const expr2tc &eq) {
@@ -441,42 +505,64 @@ void goto_symext::symex_assign(
     };
 
     bool aborted = false;
-    for (const auto &v : is_ptr_havoc_pre_values)
+    for (const auto &entry : is_ptr_havoc_pre_object_map)
     {
-      if (is_unknown2t(v) || is_invalid2t(v))
+      const expr2tc &obj = value_sett::object_numbering[entry.first];
+      if (is_unknown2t(obj) || is_invalid2t(obj))
       {
         aborted = true;
         break;
       }
-      if (!is_object_descriptor2t(v))
+      // The goto-time VSA uses dynamic_object2t markers (per allocation
+      // site / location number) for heap allocations. There is no
+      // translation from those abstract markers to the symex-time
+      // dynamic_N_value SSA symbols actually live in the formula —
+      // symex's per-state allocation counter is independent of the goto
+      // site id, so one site can correspond to multiple SSA symbols and
+      // SMT cannot encode address_of(dynamic_object2t). Skip the entire
+      // strengthening when any candidate is a dynamic_object: the assume
+      // is silently dropped (sound), at the cost of losing the precision
+      // win on heap-traversing loops. See issue #5025 and the design
+      // discussion for the architectural follow-up that re-establishes
+      // this case.
+      if (is_dynamic_object2t(obj))
       {
         aborted = true;
         break;
       }
 
-      const object_descriptor2t &obj = to_object_descriptor2t(v);
       expr2tc obj_ptr;
-      if (is_null_object2t(obj.object))
+      if (is_null_object2t(obj))
       {
         type2tc nullptrtype = pointer_type2tc(is_ptr_havoc_lhs->type);
         obj_ptr = symbol2tc(nullptrtype, "NULL");
       }
-      else if (is_unknown2t(obj.offset))
+      else if (!entry.second.offset_is_set || entry.second.offset == 0)
       {
-        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj.object);
+        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj);
       }
       else
       {
         obj_ptr = add2tc(
           is_ptr_havoc_lhs->type,
-          address_of2tc(is_ptr_havoc_lhs->type, obj.object),
-          obj.offset);
+          address_of2tc(is_ptr_havoc_lhs->type, obj),
+          gen_ulong(entry.second.offset.to_int64()));
       }
       add_disjunct(same_object2tc(is_ptr_havoc_lhs, obj_ptr));
     }
 
     if (!aborted && or_accuml)
+    {
+      // Assume p_new ∈ {O1,...,Ok} where {Oi} is the sound
+      // over-approximation from the goto-program-level fixpoint. Do NOT
+      // restore the value-set entry — the VSA's object_map can contain
+      // dynamic_object markers that symex's assignment-LHS resolution does
+      // not handle, and a restore would inject them into cur_state's
+      // tracking (issue #5025 follow-up). The assume alone is the sound
+      // strengthening; deref-time --add-symex-value-sets precision is
+      // sacrificed here in exchange for soundness.
       assume(or_accuml);
+    }
   }
 }
 
