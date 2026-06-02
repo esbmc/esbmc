@@ -1516,7 +1516,7 @@ the census row with the §2 commands before trusting it.
 | 4.1 | Attribute-access encapsulation (`#cpp_type`/`#cformat`/`#member_name`) | **LANDED** | Typed accessors `type_utils::{set,get}_cpp_type`, `{set,remove}_member_name` (`type_utils.h:174-196`); `#cformat` routed through `irept::cformat()`. Raw `.set("#`/`.get("#` in `src/python-frontend` reduced to **2 each** (the accessor bodies). PR #4990 (commit `a99fc39171`). |
 | 4.2 | Enabling infrastructure (§6 factories, dead-but-tested) | **LANDED (#4997)** | Both expression-side helpers shipped dead-but-tested in PR #4997 (commit `f621558a3a`, 2026-05-31), **after** the prior reconcile that marked this row PARTIAL — see the §0.1 correction note: `symbol_expr2tc(const symbolt&)` and `side_effect_function_call2tc(return_type, function, arguments)` in `src/util/migrate.{h,cpp}` (decls `migrate.h:48-70`, defs `migrate.cpp:433,441`), each proven `==` to `migrate_expr` of the legacy form by round-trip unit tests `unit/util/migrate.test.cpp:225,246`. The `lower_to_seam` type seam (`type_handler.cpp:46-52`) shipped earlier with the 4.3 commits. **Phase 4.4's gating prerequisite is therefore satisfied — 4.4 is unblocked.** |
 | 4.3 | **Type** construction → `type2tc` (internal, lowered at seam) | **LANDED for elementary/float/array/pointer/NoneType-Optional/Callable**; struct families deferred | `type_handler.cpp` builders return `type2tc` then `lower_to_seam(...)`: int 492, uint 508, bool 512, uint256 546, float 486, str/char 587-589, NoneType/Optional 458/464, `build_array` 392, Callable 473-478, list pointees 951/964/1057. PRs #5000 (elementary), #5001 (float), #5002 (array), #5018 (Callable), + pointer-family commit `4ebe00eb2c`. Tuple/Optional **struct** builders are F-P5 seam cases deferred to 4.5 (§15.7). `python_int_typet` width logic **unchanged** (F-P7/RP4). |
-| 4.4 | **Expression** construction → `expr2tc` (internal) | **IN PROGRESS — first subtree wired** | Unblocked by #4997; the first wiring commit landed the `converter_unop.cpp` `not`-on-string subtree (`strlen(base)==0` via `symbol_expr2tc` + `side_effect_function_call2tc` + `equality2tc` + `gen_zero(type2tc)`, one `migrate_expr_back` at the return), gated dual-solver with the asserts cross-check silent (tests `unary_not_string{,_fail}`). The bulk remains. Per-file execution guide in §7.2; worked operand-surgery examples in §7.2.5; the **subtree-not-site** rule that shaped commit #1 is in §7.2.3. Dominant risk RP13 (582 `move/copy_to_operands`, 167 `.operands()`, concentrated in the OM handlers). |
+| 4.4 | **Expression** construction → `expr2tc` (internal) | **IN PROGRESS — file 1 (`converter_unop.cpp`) complete** | Unblocked by #4997. **File 1 done:** the `not`-on-string subtree landed in #5041 (`strlen(base)==0`) and the dict/list `not`-truthiness comparisons in #5045 (`size==0`, removing a `copy_to_operands` site), each built with `symbol_expr2tc` + `side_effect_function_call2tc`/`equality2tc` + `gen_zero(type2tc)` and lowered with one `migrate_expr_back`, gated dual-solver with the asserts cross-check silent (`unary_not_string{,_fail}`, `list_not_truthiness{,_fail}`, `dict40/43`). **File 2 (`converter_expr.cpp`) hit the §16 wall:** its attribute/subscript construction (`member2t`/`index2t`) is **blocked at the converter stage** by resolved-type asserts (F-P10/RP14) — migrate only assert-free / resolved-type subtrees per the refined §16 rule. Per-file guide in §7.2; subtree-not-site rule in §7.2.3; worked examples in §7.2.5. Dominant remaining risk RP13 (OM handlers). |
 | 4.5 | The legacy body seam (one documented `migrate_expr_back` hand-off) | **REMAINING** | Not started. Absorbs the tuple/optional struct builders (§15.7) and `#cpp_type`/`#member_name` re-attachment (F-P5). |
 | 4.6 | Tighten, census, go/stop decision | **REMAINING** | Not started. |
 
@@ -2778,3 +2778,90 @@ Reproduce: extend `irep2_type_roundtrip_test` with
 `migrate_type_back(migrate_type(t)) == t` (raw) and `migrate_type(migrated) ==
 migrate_type(legacy)` (IREP2) over each shape above; the raw ❌ rows fail the
 first but the Callable row passes the second.
+
+## 16. Converter-stage construction constraint — the pre-`adjust` resolved-type wall (F-P10 / RP14)
+
+> Discovered while executing Phase 4.4 on `converter_expr.cpp` (the hub, file 2
+> of §7.2.2), 2026-06-02. This is a **load-bearing correction to the §7.2.2
+> premise**: not every expression-construction idiom is migratable at the
+> converter stage. Recorded in the §15.1 spirit — a wrong difficulty/ordering
+> estimate in a verification plan is the defect the plan exists to prevent.
+
+**F-P10 — `member2t` and `index2t` carry resolved-type preconditions the
+converter cannot satisfy.** `member2t`'s constructor asserts
+`source->type ∈ {struct, union, complex}` (`irep2_expr.h:1502`); `index2t`
+asserts `is_array_type(source) || is_vector_type(source)` (`irep2_expr.h:1576`).
+The legacy `member_exprt` / `index_exprt` constructors assert **nothing** — they
+tolerate a `source` whose type is still a **`symbol`** (an unresolved struct/array
+reference). The Python converter builds expressions **before** `clang_cpp_adjust`
+runs (`python_language.cpp:245`, the §3 seam) and therefore routinely constructs
+member/subscript access over a `symbol`-typed base that only `ns.follow()`s to a
+struct/array **later**. So a mechanical `member_exprt → member2tc` /
+`index_exprt → index2tc` substitution **aborts at conversion time** on inputs the
+legacy path handled.
+
+**Evidence (reproduced, then reverted).** Migrating the two attribute-access
+`member_exprt` sites in `converter_expr.cpp` (≈510, ≈1002) to `member2tc` —
+following the §7.2.1 idiom table verbatim — fired, under the asserts build:
+
+```
+Assertion failed: (source->type->type_id == type2t::struct_id || ... union ...
+complex), function member2t, file irep2_expr.h, line 1502.
+```
+
+on `regression/python/type-annotation-class` (`class Point: __init__ → self.x=i;
+points=[Point(0)]`) and ~10 sibling `type-annotation-class*` /
+`typing_tuple_attr_annotation*` tests. The asserts-enabled build caught it at
+construction — exactly the IREP2 soundness benefit (a mis-typed node fails to
+build, not at symex), and exactly why every Phase 4.4 commit **must** run on an
+asserts build (§10.3).
+
+**RP14 (new risk) — mechanical idiom substitution over symbol-typed bases is a
+hard abort, not a silent miscompile.** Severity: **high** for effort/ordering
+(it invalidates the "files 1–8 are mechanical" framing for the *attribute and
+subscript* portions of the hub), **low** for soundness (it cannot ship — it
+crashes the asserts build and any asserts-enabled CI).
+
+**The refined migration rule (supersedes the §7.2.1 "apply at each call site"
+framing for member/index):**
+
+> Migrate only subtrees **rooted in already-resolved, concrete types** —
+> operational-model call results (`__ESBMC_list_size`, `strlen`), sizes,
+> primitives, pointers — using the **assert-free** IREP2 kinds (`symbol2t`,
+> `typecast2t`, `address_of2t`, `dereference2t`, `equality2t`,
+> `side_effect_function_call2t`). Do **not** migrate `member2t`/`index2t`
+> construction whose source is a Python class/list/dict value, because that
+> source is `symbol`-typed until `clang_cpp_adjust` (P2) follows it. This is
+> precisely why the `converter_unop.cpp` truthiness subtrees migrated cleanly
+> (#5041, #5045): their operands are `size_type`/`bool`/`strlen`-typed concretes,
+> not symbol-typed Python objects.
+
+**Consequence for the §7.2.2 order.** The attribute/subscript construction in
+`converter_expr.cpp` (member/index sites) and the string-char index/deref in
+`converter_compare.cpp` are **blocked at the converter stage** and move only
+once one of these enabling steps lands:
+
+| Option | What | Cost / status |
+|---|---|---|
+| (a) Type-following at construction | Build `member2tc`/`index2tc` over a source whose type is `migrate_type(ns.follow(base.type()))` | Unsound as a naive retype — the *expression's* type is intrinsic; you cannot restamp a `symbol2t`'s type without lying about the node. Needs a real "resolve then build" helper, and must prove the followed type equals what `adjust`+goto-convert would have produced. **Open design question — investigate before attempting.** |
+| (b) Defer to post-`adjust` | Migrate member/index where types are already resolved (a different pass than the converter) | Touches P2 (the shared `clang_cpp_adjust` boundary) — **out of scope** for Part IV (§Out-of-scope pins). |
+| (c) Restrict Phase 4.4 to assert-free / resolved-type subtrees | Cherry-pick the migratable subtrees per file; leave member/index legacy at the seam | **Recommended.** No new infra, behaviour-preserving, matches the merged #5041/#5045 shape. The hub's *non*-attribute construction (e.g. the numpy `.shape` length subtree, an assert-free `typecast(size_call,int)`) qualifies. |
+
+**The `.shape` caveat (test-coverage gap, not a soundness one).** The one
+assert-free migratable subtree found in `converter_expr.cpp` — the numpy list
+`.shape` length `(int)__ESBMC_list_size(&base)` (≈481–490, ≈830–837) — was
+migrated successfully (built, verified SUCCESSFUL) but **could not be gated**:
+the path is numpy-only (plain-list `.shape` is rejected at type-check), there are
+**zero** `import numpy` tests in `regression/python`, and numpy is not installable
+under the CPython-sanity harness (`scripts/check_python_tests.sh`). Shipping
+un-gateable code violates the §1 constraint, so it was reverted. **Gap to
+resolve before migrating it:** decide a numpy regression-test strategy (is numpy
+in CI's CPython? should numpy tests skip CPython sanity?) — investigate, do not
+guess.
+
+**Re-verification commands:**
+```sh
+grep -n 'type_id == type2t::struct_id' src/irep2/irep2_expr.h   # member2t assert (~1502)
+grep -n 'is_array_type(source)\|is_vector_type(source)' src/irep2/irep2_expr.h  # index2t assert (~1576)
+grep -rlE 'import numpy|np\.array' regression/python/*/main.py | wc -l           # 0 — no numpy coverage
+```
