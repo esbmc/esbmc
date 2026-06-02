@@ -469,8 +469,13 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
   {
     const PyObject *elem = &other->items[i];
 
-    void *copied_value = __ESBMC_alloca(elem->size);
-    memcpy(copied_value, elem->value, elem->size);
+    // Reuse the same value-copy helper as __ESBMC_list_push instead of an
+    // inline alloca+memcpy: memcpy's per-byte loop nested inside this loop
+    // left the resulting list's size unconstrained in the SMT model, so even
+    // len() after extend() became nondeterministic. float elements keep their
+    // original float_idx (copied below), so reads still hit __ESBMC_float_buf.
+    void *copied_value =
+      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;
