@@ -1148,6 +1148,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // An inline list-returning call used directly as a subscript base --
+    // e.g. sorted(words)[0] -- comes back as a code_function_callt statement.
+    // Indexing it builds __ESBMC_list_size over the call statement, whose
+    // operand type is empty, aborting symex ("got empty, expected pointer").
+    // Materialise the call into a temporary first, mirroring the assigned
+    // path (s = sorted(words); s[0]). See #4807.
+    if (current_block)
+      array =
+        materialize_list_function_call(array, element["value"], *current_block);
+
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
