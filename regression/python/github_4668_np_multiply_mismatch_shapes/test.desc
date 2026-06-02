@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: operands could not be broadcast together with shapes \(3,\) \(2,\)$

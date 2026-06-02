@@ -2113,7 +2113,40 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
       return array_api->mk_array_symbol(name, sort, subtype);
     }
 
-    return mk_smt_symbol(name, sort);
+    smt_astt sym_ast = mk_smt_symbol(name, sort);
+
+    // Under --ir-ieee only: assert the C integer type range for narrow integer
+    // types (width < 32 bits, i.e. char and short). This prevents Z3 from
+    // choosing out-of-range values for variables such as unsigned char, which
+    // can trigger spurious counterexamples when integer-to-float casts are
+    // encoded with round_int_to_fp.
+    //
+    // This fix is intentionally limited to narrow integer types because it is
+    // targeted at the float12 regression and avoids the overhead observed when
+    // adding range constraints to all 32/64-bit integer symbols.
+    //
+    // --ir is intentionally left unchanged; this fix is specific to --ir-ieee.
+    if (
+      ir_ieee && int_encoding &&
+      (is_unsignedbv_type(sym.type) || is_signedbv_type(sym.type)) &&
+      sym.type->get_width() < 32 && ir_ieee_ranged_syms.insert(name).second)
+    {
+      const unsigned w = sym.type->get_width();
+      if (is_unsignedbv_type(sym.type))
+      {
+        // 0 <= sym <= 2^w - 1
+        assert_ast(mk_le(mk_smt_int(BigInt(0)), sym_ast));
+        assert_ast(mk_le(sym_ast, mk_smt_int(BigInt::power2(w) - 1)));
+      }
+      else
+      {
+        // -2^(w-1) <= sym <= 2^(w-1) - 1
+        assert_ast(mk_le(mk_smt_int(-BigInt::power2(w - 1)), sym_ast));
+        assert_ast(mk_le(sym_ast, mk_smt_int(BigInt::power2(w - 1) - 1)));
+      }
+    }
+
+    return sym_ast;
   }
 
   default:

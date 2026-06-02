@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/function_call/expr.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
@@ -58,12 +59,46 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   element_exprs.reserve(elts.size());
   element_types.reserve(elts.size());
 
+  locationt elem_loc = converter_.get_location_from_decl(element);
+
+  // A tuple element that is itself a function call (e.g. ``(g(a), g(a))``)
+  // comes back from get_expr as a code_function_callt (a code statement).
+  // Embedding that directly as a struct operand leaks a call statement into
+  // the GOTO RETURN and crashes on a null operand (issue #5036). Normalise it
+  // to a value expression and spill it into a temporary, exactly as the list
+  // literal path does in python_list::get() for issue #4699.
+  auto materialize_tuple_elem = [&](const exprt &elem) -> exprt {
+    if (elem.is_symbol())
+      return elem;
+
+    const exprt value_elem = to_value_expr(elem, converter_.name_space());
+
+    symbolt &tmp = converter_.create_tmp_symbol(
+      element, "$tuple_elem$", value_elem.type(), value_elem);
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = elem_loc;
+    converter_.add_instruction(decl);
+
+    code_assignt assign(symbol_expr(tmp), value_elem);
+    assign.location() = elem_loc;
+    converter_.add_instruction(assign);
+    return symbol_expr(tmp);
+  };
+
   // First pass: get all expressions to determine types
   for (size_t i = 0; i < elts.size(); i++)
   {
+    // Clear current_lhs so that constructor calls inside tuple elements
+    // (e.g. (A(), B())) create their own self temp variable instead of
+    // inheriting the outer assignment target as self.
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt elem_expr = converter_.get_expr(elts[i]);
-    element_exprs.push_back(elem_expr);
+    converter_.current_lhs = saved_lhs;
+
+    elem_expr = materialize_tuple_elem(elem_expr);
     element_types.push_back(elem_expr.type());
+    element_exprs.push_back(elem_expr);
   }
 
   // Create struct type for the tuple

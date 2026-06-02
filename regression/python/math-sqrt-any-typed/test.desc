@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 6 --no-bounds-check --smt-during-symex --smt-symex-guard
+^VERIFICATION SUCCESSFUL$

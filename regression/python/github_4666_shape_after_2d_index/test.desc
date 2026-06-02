@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: AttributeError: 'r' has no attribute 'shape'

@@ -7,6 +7,7 @@
 #include <boost/multi_index_container.hpp>
 #include <cstdint>
 #include <mutex>
+#include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <irep2/irep2_utils.h>
@@ -943,6 +944,9 @@ public:
   bool int_encoding;
   /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
   bool ir_ieee;
+  /** Tracks symbols that have already received ir-ieee integer range assertions,
+   *  preventing duplicate assertions for the same SSA variable. */
+  std::unordered_set<std::string> ir_ieee_ranged_syms;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */

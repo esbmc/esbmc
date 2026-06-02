@@ -329,6 +329,11 @@ private:
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
+  // deque front-end methods, modelled on the list backing store
+  // (collections.deque is a list in our model): popleft() == pop(0),
+  // appendleft(x) == insert(0, x).
+  exprt handle_list_popleft() const;
+  exprt handle_list_appendleft() const;
   exprt handle_list_copy() const;
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;

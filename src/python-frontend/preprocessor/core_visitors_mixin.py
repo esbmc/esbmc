@@ -300,11 +300,13 @@ class CoreVisitorsMixin:
                 and node.value.value.id in self._defaultdict_factory):
             dict_name = node.value.value.id
             key_node = node.value.slice
-            factory = self._defaultdict_factory[dict_name]
-            init_stmts, key_expr = self._make_defaultdict_missing_check(
-                dict_name, key_node, factory, node)
-            node.value.slice = key_expr
-            return init_stmts + [node]
+            if not self._is_defaultdict_key_initialized(dict_name, key_node):
+                factory = self._defaultdict_factory[dict_name]
+                init_stmts, key_expr = self._make_defaultdict_missing_check(
+                    dict_name, key_node, factory, node)
+                node.value.slice = key_expr
+                self._record_defaultdict_assignment_target(node)
+                return init_stmts + [node]
 
         # Generic defaultdict-read lowering: when the RHS is not a direct
         # Subscript but contains defaultdict reads inside (e.g.,
@@ -315,8 +317,18 @@ class CoreVisitorsMixin:
         if node.value is not None:
             dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             if dd_inits:
+                self._record_defaultdict_assignment_target(node)
                 return dd_inits + [node]
+        self._record_defaultdict_assignment_target(node)
         return node
+
+    def _record_defaultdict_assignment_target(self, node):
+        if not node.targets:
+            return
+        target = node.targets[0]
+        if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                and target.value.id in self._defaultdict_factory):
+            self._record_defaultdict_key_initialized(target.value.id, target.slice)
 
     def _update_name_target_assignment_metadata(self, target_id, node):
         annotation_node = self._create_annotation_node_from_value(node.value)
@@ -361,6 +373,7 @@ class CoreVisitorsMixin:
             factory = self._get_defaultdict_factory(node.value)
             if factory is not None:
                 self._defaultdict_factory[target_id] = factory
+                self._defaultdict_initialized_keys[target_id] = set()
             empty_dict = ast.Dict(keys=[], values=[])
             ast.copy_location(empty_dict, node.value)
             ast.fix_missing_locations(empty_dict)
