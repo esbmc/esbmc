@@ -105,50 +105,9 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  // __builtin_clz / __builtin_clzl / __builtin_clzll: count leading zero bits.
-  // One handler covers all widths — the operand type fixes the bit width. The
-  // result is undefined for a zero argument (matching GCC), reported as UB.
-  // Match the three names exactly: a loose "__builtin_clz" prefix would also
-  // capture __builtin_clzs (16-bit) and the two-argument __builtin_clzg, the
-  // latter tripping the one-argument assertion below. See #4606.
-  if (
-    symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
-    symname == "c:@F@__builtin_clzll")
-  {
-    assert(
-      func_call.operands.size() == 1 &&
-      "__builtin_clz* must have one argument");
-
-    expr2tc arg = func_call.operands[0];
-    expr2tc ret = func_call.ret;
-
-    const type2tc &t = arg->type;
-    const unsigned width = t->get_width();
-
-    claim(
-      notequal2tc(arg, constant_int2tc(t, 0)),
-      "__builtin_clz: UB for x equal to 0");
-
-    // clz(x) = width - popcount(x with every bit below the most-significant set
-    // bit smeared down). Reusing the popcount irep means a constant argument
-    // folds to a constant (the popcount simplifier evaluates it, so no nondet
-    // variable and no extra VCC are produced), while a symbolic argument is
-    // handled by the backend's popcount encoding.
-    expr2tc smeared = arg;
-    for (unsigned shift = 1; shift < width; shift <<= 1)
-      smeared =
-        bitor2tc(t, smeared, lshr2tc(t, smeared, constant_int2tc(t, shift)));
-
-    expr2tc count = sub2tc(
-      get_int32_type(),
-      constant_int2tc(get_int32_type(), width),
-      popcount2tc(smeared));
-
-    if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
-
-    return true;
-  }
+  // __builtin_clz / __builtin_clzl / __builtin_clzll are lowered to a
+  // popcount-based expression in the frontend (clang_c_adjust_expr.cpp), so
+  // they never reach symex as a call.
 
   return false;
 }
