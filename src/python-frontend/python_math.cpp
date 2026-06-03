@@ -30,7 +30,7 @@ const BigInt kMaxConstantFoldExponent = 1024;
 exprt build_c_math_call_expr(
   const symbolt &func_sym,
   const typet &return_type,
-  std::vector<exprt> args)
+  const std::vector<exprt> &args)
 {
   std::vector<expr2tc> args2;
   args2.reserve(args.size());
