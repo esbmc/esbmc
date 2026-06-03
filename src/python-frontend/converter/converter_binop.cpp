@@ -9,11 +9,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -881,10 +883,18 @@ exprt python_converter::handle_array_operations(
                             : typecast_exprt(scalar_expr, elem_type);
 
     exprt result_array = array_expr;
+    // V.3: build the array element access in IREP2 (index2tc), the exact
+    // round-trip of index_exprt (behaviour-preserving). The array and element
+    // type are loop-invariant, so migrate them once.
+    expr2tc ar2;
+    migrate_expr(array_expr, ar2);
+    const type2tc elem_t2 = migrate_type(elem_type);
     for (long long i = 0; i < array_size; ++i)
     {
       exprt index = from_integer(i, size_type());
-      index_exprt array_item(array_expr, index, elem_type);
+      expr2tc ix2;
+      migrate_expr(index, ix2);
+      exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
       result_array = with_exprt(result_array, index, bin_elem);
