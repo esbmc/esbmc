@@ -4615,8 +4615,15 @@ exprt python_list::build_remove_list_call(
   else
     element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
 
+  // Raise ValueError from the frontend so Python try/except can catch it.
+  symbolt &remove_ret = converter_.create_tmp_symbol(
+    op, "remove_ret", bool_type(), gen_boolean(false));
+  code_declt remove_ret_decl(symbol_expr(remove_ret));
+  converter_.add_instruction(remove_ret_decl);
+
   code_function_callt remove_call;
   remove_call.function() = symbol_expr(*remove_func);
+  remove_call.lhs() = symbol_expr(remove_ret);
   remove_call.arguments().push_back(symbol_expr(list)); // list
   remove_call.arguments().push_back(element_arg);       // &value or ptr
   remove_call.arguments().push_back(
@@ -4624,8 +4631,18 @@ exprt python_list::build_remove_list_call(
   remove_call.arguments().push_back(elem_info.elem_size); // size
   remove_call.type() = bool_type();
   remove_call.location() = elem_info.location;
+  converter_.add_instruction(remove_call);
 
-  return converter_.convert_expression_to_code(remove_call);
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.remove(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = not_exprt(symbol_expr(remove_ret));
+  guard.then_case() = throw_code;
+  guard.location() = elem_info.location;
+  return guard;
 }
 
 // list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a

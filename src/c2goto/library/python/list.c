@@ -817,7 +817,6 @@ bool __ESBMC_list_remove(
   }
 
   /* Item not found */
-  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
   return false;
 }
 
