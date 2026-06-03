@@ -2455,8 +2455,39 @@ typet resolve_ternary_type(
   return default_type;
 }
 
+bool python_converter::contains_named_expr(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "NamedExpr")
+      return true;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (contains_named_expr(it.value()))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const auto &e : node)
+      if (contains_named_expr(e))
+        return true;
+  }
+  return false;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
+  // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
+  // emits the binding once into the enclosing block (it would go stale). Refuse
+  // with a clean diagnostic rather than return an unsound verdict. A plain `if`
+  // condition and a comprehension filter evaluate the walrus exactly once, so
+  // they remain supported. (Ternary-branch and short-circuit-operand walrus are
+  // refused at their own lowering sites: get_expr and get_logical_operator_expr.)
+  if (
+    ast_node.value("_type", "") == "While" && ast_node.contains("test") &&
+    contains_named_expr(ast_node["test"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a while-loop condition is not supported");
+
   // Copy current type
   typet t = current_element_type;
   // Change to boolean before extracting condition
