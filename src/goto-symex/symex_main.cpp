@@ -426,10 +426,12 @@ void goto_symext::symex_step(reachability_treet &art)
 
     // Violation-witness: handle function_enter waypoints in the current segment.
     // avoid, not matching: skip (persistent).
-    // avoid, matching: skip the call (pc++), segment does not advance.
+    // avoid, matching: skip the call, segment does not advance.
     // follow, not matching: stop (follows are ordered; cannot bypass).
     // follow, matching: advance to next segment; fall through to the call.
-    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    if (
+      validate_witness &&
+      cur_state->cur_seg < cur_state->witness_segs.size())
     {
       const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
       const auto &loc = cur_state->source.pc->location;
@@ -1141,10 +1143,8 @@ void goto_symext::run_intrinsic(
     if (seg_idx != cur_state->cur_seg)
       return;
 
-    // pc has already been incremented past this intrinsic call; step back one
-    // to get the location of the __ESBMC_witness_assume instruction itself.
-    const irep_idt cur_line =
-      std::prev(cur_state->source.pc)->location.get_line();
+    // Find the assumption waypoint in this segment by source line.
+    const irep_idt cur_line = cur_state->source.pc->location.get_line();
     const waypoint *matched = nullptr;
     for (const auto &wp : cur_state->witness_segs[seg_idx])
     {
