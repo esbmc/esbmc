@@ -530,7 +530,7 @@ static bool apply_numpy_binary_to_scalars(
     else if (function == "divide")
     {
       if (right == 0.0)
-        throw std::runtime_error("ZeroDivisionError: division by zero");
+        return false;
       folded = left / right;
     }
     else if (function == "power")
