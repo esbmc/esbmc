@@ -1,4 +1,6 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: ZeroDivisionError: division by zero$
+^VERIFICATION FAILED$
+^Violated property:$
+^  division by zero$

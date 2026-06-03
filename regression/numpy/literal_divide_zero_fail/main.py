@@ -1,3 +1,4 @@
 import numpy as np
 
-np.divide([[1]], [[0]])
+result = np.divide([[1]], [[0]])
+assert result[0][0] == 1
