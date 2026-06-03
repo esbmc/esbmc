@@ -105,9 +105,5 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  // __builtin_clz / __builtin_clzl / __builtin_clzll are lowered to a
-  // popcount-based expression in the frontend (clang_c_adjust_expr.cpp), so
-  // they never reach symex as a call.
-
   return false;
 }
