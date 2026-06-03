@@ -571,6 +571,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
 
+  if (cmdline.isset("clz-zero-check"))
+    options.set_option("clz-zero-check", true);
+
   if (cmdline.isset("timeout"))
   {
 #ifdef _WIN32

@@ -34,7 +34,8 @@ public:
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
-      enable_is_instance_check(options.get_bool_option("is-instance-check"))
+      enable_is_instance_check(options.get_bool_option("is-instance-check")),
+      enable_clz_zero_check(options.get_bool_option("clz-zero-check"))
   {
   }
 
@@ -84,6 +85,8 @@ protected:
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
+  /** check __builtin_clz* is not called with a zero argument (UB) */
+  void clz_zero_check(const expr2tc &code, const locationt &loc);
   /* check for signed/unsigned_bv */
   void input_overflow_check_int(
     const BigInt &width,
@@ -144,6 +147,7 @@ protected:
   bool enable_ub_shift_check;
   bool enable_nan_check;
   bool enable_is_instance_check;
+  bool enable_clz_zero_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -1183,6 +1187,35 @@ void goto_checkt::check(const expr2tc &expr, const locationt &loc)
   check_rec(expr, guard, loc, false);
 }
 
+void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return;
+
+  // __builtin_clz/clzl/clzll(0) is undefined behaviour (GCC); assert the
+  // argument is non-zero. Matched exactly so the two-argument __builtin_clzg is
+  // not caught.
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  if (
+    name != "c:@F@__builtin_clz" && name != "c:@F@__builtin_clzl" &&
+    name != "c:@F@__builtin_clzll")
+    return;
+
+  if (call.operands.size() != 1)
+    return;
+
+  const expr2tc &arg = call.operands[0];
+  expr2tc nonzero = notequal2tc(arg, gen_zero(arg->type));
+  guard2tc guard;
+  add_guarded_claim(
+    nonzero,
+    "__builtin_clz of zero is undefined",
+    "undef-behavior",
+    loc,
+    guard);
+}
+
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
   // Not a ranged loop because we need it to be an iterator :/
@@ -1266,6 +1299,9 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
       if (enable_overflow_check)
         input_overflow_check(i.code, loc);
+
+      if (enable_clz_zero_check)
+        clz_zero_check(i.code, loc);
     }
     else if (i.is_return())
     {
