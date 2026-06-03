@@ -116,6 +116,9 @@
       <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-Intel-TDX-Module.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
     </tasks>
+</rundefinition>
+
+<rundefinition name="SV-COMP26_unreach-call_witnesses">
     <tasks name="ReachSafety-ViolationWitnesses">
       <includesfile>$HOME/sv-benchmarks/c/ViolationWitnesses.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
