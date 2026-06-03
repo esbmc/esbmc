@@ -293,6 +293,16 @@ private:
 
   exprt get_unary_operator_expr(const nlohmann::json &element);
 
+  /// Walrus operator `(target := value)` (PEP 572): bind value to target as a
+  /// side effect (emitted into the current block) and evaluate to that value.
+  exprt get_named_expr(const nlohmann::json &element);
+
+  /// True if a walrus operator (NamedExpr) appears anywhere in `node`'s tree.
+  /// Used to refuse a walrus in conditionally / repeatedly evaluated positions
+  /// (while-test, ternary branch, short-circuit operand) where the single
+  /// unconditional binding emitted by get_named_expr would be unsound.
+  static bool contains_named_expr(const nlohmann::json &node);
+
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
   /// Coarse Python-level type category used to decide whether two operands
@@ -1011,6 +1021,11 @@ private:
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
+  /// The entry-point module AST, captured at construction. `ast_json` is
+  /// temporarily swapped to imported modules during conversion (see with_ast),
+  /// so this retains a stable handle to the top-level module whose body holds
+  /// the constructor call sites used by cross-module attribute-type inference.
+  const nlohmann::json *entry_ast_;
   const global_scope &global_scope_;
   type_handler type_handler_;
   string_builder *string_builder_;

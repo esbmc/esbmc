@@ -418,27 +418,22 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  /* We successfully constructed the type of this symbol; replace the
-   * symbol with the incomplete type by one with the now-complete type
-   * definition.
-   * Do this by erasing and re-inserting because the order of definitions in the
-   * context matters. This type should be defined after any of the types that it
-   * is composed of.
+  /* We successfully constructed the type of this symbol; complete the
+   * incomplete-type symbol with the now-complete type definition, in place.
+   * The order of definitions in the context matters — this type must be
+   * defined after any of the types it is composed of — so move it to the
+   * back of the insertion order afterwards.
    *
-   * Refresh `sym` here: get_struct_union_class_fields() above can recurse
-   * through field types into other records; any of those recursions may
-   * call erase_symbol() on the symbol table, and although unordered_map
-   * doesn't invalidate references on rehash, it *does* invalidate the
-   * specific element that was erased.  In the cross-record recursion case
-   * the same record can be processed twice, and the second pass's erase
-   * makes the outer `sym` dangling.  A fresh find_symbol() by id avoids
-   * the use-after-free. */
+   * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
+   * through field types into other records, and any of those recursions may
+   * reorder/complete the same record, leaving the outer `sym` stale. A fresh
+   * find_symbol() avoids using a stale pointer. (The symbol table is
+   * node-based, so updating in place and relocating no longer dangles or
+   * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
-  symbolt symbol = *sym;
-  context.erase_symbol(symbol.id);
-  symbol.set_type(t);
-  sym = context.move_symbol_to_context(symbol);
+  sym->set_type(t);
+  sym = context.reorder_symbol_to_back(id);
 
   {
     typet t = sym->get_type();
@@ -617,19 +612,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     if (vd.isStaticDataMember() && vd.isOutOfLine())
     {
-      // Reorder to respect definition order for static_lifetime_init()
-      // C++ class static members are inserted into ordered_symbols when the
-      // class body is processed (in declaration order), but their out-of-class
-      // definitions appear later in textual order. Both C and C++ require
-      // initialization in definition order
+      // Reorder to respect definition order for static_lifetime_init().
+      // C++ class static members are inserted when the class body is processed
+      // (in declaration order), but their out-of-class definitions appear later
+      // in textual order, and the later definition supplies the complete type
+      // (e.g. an array's real size). Erase the incomplete declaration-order
+      // symbol so move_symbol_to_context below re-adds the complete one at the
+      // end — both replacing its contents and fixing the init order.
       symbolt *s = context.find_symbol(symbol.id);
       if (
         s &&
         vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes will be generated for the template Instantiation.
-        // We have already initialized it, so skip it
-
-        // Remove the zero initialization symbol and re-arrange the initialization order
+        // In AST, nodes are also generated for the template instantiation,
+        // already initialized — skip those.
         context.erase_symbol(s->id);
     }
 

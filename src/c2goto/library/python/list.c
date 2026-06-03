@@ -457,6 +457,54 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+/* list.count(x) — number of elements equal to x. Mirrors __ESBMC_list_contains'
+ * element comparison (matching type_id, size, then value bytes). */
+size_t __ESBMC_list_count(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t cnt = 0;
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      ++cnt;
+    ++i;
+  }
+  return cnt;
+}
+
+/* list.index(x) — position of the first element equal to x. Raises ValueError
+ * (modelled as a failing assertion) when x is absent, matching CPython. */
+size_t __ESBMC_list_index(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
 /* ---------- extend list ---------- */
 
 void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
@@ -469,8 +517,13 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
   {
     const PyObject *elem = &other->items[i];
 
-    void *copied_value = __ESBMC_alloca(elem->size);
-    memcpy(copied_value, elem->value, elem->size);
+    // Reuse the same value-copy helper as __ESBMC_list_push instead of an
+    // inline alloca+memcpy: memcpy's per-byte loop nested inside this loop
+    // left the resulting list's size unconstrained in the SMT model, so even
+    // len() after extend() became nondeterministic. float elements keep their
+    // original float_idx (copied below), so reads still hit __ESBMC_float_buf.
+    void *copied_value =
+      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;

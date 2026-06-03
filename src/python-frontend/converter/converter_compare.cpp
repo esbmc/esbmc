@@ -2,8 +2,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -276,7 +278,13 @@ exprt python_converter::handle_string_comparison(
     auto char_at_index = [&](const exprt &expr, int idx) -> exprt {
       exprt index = from_integer(idx, index_type());
       if (expr.type().is_array())
-        return index_exprt(expr, index, char_type());
+      {
+        // V.3: IREP2 index access (exact round-trip of index_exprt).
+        expr2tc a2, i2;
+        migrate_expr(expr, a2);
+        migrate_expr(index, i2);
+        return migrate_expr_back(index2tc(migrate_type(char_type()), a2, i2));
+      }
 
       exprt ptr = expr;
       if (!ptr.type().is_pointer())
@@ -401,7 +409,11 @@ exprt python_converter::try_lower_slice_member_is_none(
     return nil_exprt();
   const typet flag_type = slice_struct.get_component(flag_name).type();
 
-  member_exprt flag_access(member_side->op0(), flag_name, flag_type);
+  // V.3: IREP2 member access (exact round-trip of member_exprt).
+  expr2tc fb2;
+  migrate_expr(member_side->op0(), fb2);
+  exprt flag_access =
+    migrate_expr_back(member2tc(migrate_type(flag_type), fb2, flag_name));
   // `sl.start is None` ⇔ flag is zero (bound was absent).
   // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
   equality_exprt eq(flag_access, gen_zero(flag_type));
