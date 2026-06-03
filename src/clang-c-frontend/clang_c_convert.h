@@ -100,6 +100,32 @@ protected:
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
 
+  // get_type() walks a clang type by native recursion (pointer/array/paren/...).
+  // A pathologically deep type — e.g. a long pointer chain `int ****…*p` — would
+  // recurse to the chain depth and overflow the call stack (SIGSEGV) instead of
+  // reporting an error. Track the current nesting depth and refuse once it
+  // exceeds a bound far above any real type but well below the stack limit, so
+  // adversarial/machine-generated input yields a clean diagnostic. The C++
+  // frontend's get_type override reuses the same guard. See #5048.
+  unsigned type_recursion_depth = 0;
+  static constexpr unsigned max_type_recursion_depth = 1000;
+
+  // RAII helper bumping type_recursion_depth for the lifetime of a get_type
+  // call; type_recursion_limit_reached() logs and signals when the bound is hit.
+  struct type_recursion_guardt
+  {
+    unsigned &depth;
+    explicit type_recursion_guardt(unsigned &d) : depth(d)
+    {
+      ++depth;
+    }
+    ~type_recursion_guardt()
+    {
+      --depth;
+    }
+  };
+  bool type_recursion_limit_reached();
+
   unsigned int current_scope_var_num;
   /**
    *  During get_expr(), which also transforms blocks/scopes, this represents
