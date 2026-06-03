@@ -10,11 +10,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -367,6 +369,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (dict_handler_->is_dict_type(obj_expr.type()))
       {
         typet list_type = type_handler_.get_list_type();
+        // V.3: IREP2 member access (exact round-trip of member_exprt);
+        // `obj_expr` is dict-typed (is_dict_type ⇒ struct), so the member2t
+        // source precondition holds.
+        expr2tc dict2;
+        migrate_expr(obj_expr, dict2);
         if (method_name == "items")
         {
           // For-loop uses of items() are rewritten by the preprocessor into
@@ -375,12 +382,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // return the keys member as a placeholder — same size as the dict,
           // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
           // Full (key, value) tuple semantics are not modelled.
-          member_exprt member(obj_expr, "keys", list_type);
-          return member;
+          return migrate_expr_back(
+            member2tc(migrate_type(list_type), dict2, "keys"));
         }
         // Return the keys or values member directly
-        member_exprt member(obj_expr, method_name, list_type);
-        return member;
+        return migrate_expr_back(
+          member2tc(migrate_type(list_type), dict2, method_name));
       }
     }
   }
