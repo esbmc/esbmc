@@ -1152,37 +1152,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(parity_expr);
     }
     else if (
-      identifier == "__builtin_clz" || identifier == "__builtin_clzl" ||
-      identifier == "__builtin_clzll")
-    {
-      // clz(x) = width - popcount(x with every bit below the most-significant
-      // set bit smeared down). Lowering to the popcount irep here (rather than a
-      // symex builtin) lets the simplifier fold a constant argument to a
-      // constant at GOTO-generation time, while a symbolic argument is handled
-      // by the backend's popcount encoding. clz(0) is undefined in C; this
-      // models it as the bit width (the smeared value stays 0). See #4606.
-      const exprt &arg = expr.arguments()[0];
-      const typet &arg_type = arg.type();
-      const std::size_t width = bv_width(arg_type);
-
-      exprt smeared = arg;
-      for (std::size_t shift = 1; shift < width; shift <<= 1)
-      {
-        exprt shifted("lshr", arg_type);
-        shifted.copy_to_operands(smeared, from_integer(shift, arg_type));
-        exprt ored("bitor", arg_type);
-        ored.copy_to_operands(smeared, shifted);
-        smeared = ored;
-      }
-
-      exprt popcount_expr("popcount", int_type());
-      popcount_expr.copy_to_operands(smeared);
-
-      exprt clz_expr("-", int_type());
-      clz_expr.copy_to_operands(from_integer(width, int_type()), popcount_expr);
-      expr.swap(clz_expr);
-    }
-    else if (
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
       identifier == "__builtin_bswap64")
     {
