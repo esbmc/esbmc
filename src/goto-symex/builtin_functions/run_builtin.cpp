@@ -106,11 +106,10 @@ bool goto_symext::run_builtin(
 
   // __builtin_clz / __builtin_clzl / __builtin_clzll: count leading zero bits.
   // One handler covers all widths — the operand type fixes the bit width. clz of
-  // zero is undefined in C, reported here as UB. Handled in symex (rather than a
-  // frontend value lowering) so this UB claim can be emitted; the popcount irep
-  // still folds a constant argument to a constant (no extra VCC). Match the
-  // three names exactly: a loose "__builtin_clz" prefix would also capture the
-  // two-argument __builtin_clzg, tripping the one-argument assertion. See #4606.
+  // zero is undefined; the optional UB assertion is added in goto-check
+  // (--clz-zero-check), with the other UB checks. Match the three names exactly:
+  // a loose "__builtin_clz" prefix would also capture the two-argument
+  // __builtin_clzg, tripping the one-argument assertion. See #4606.
   if (
     symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
     symname == "c:@F@__builtin_clzll")
@@ -124,10 +123,6 @@ bool goto_symext::run_builtin(
 
     const type2tc &t = arg->type;
     const unsigned width = t->get_width();
-
-    claim(
-      notequal2tc(arg, constant_int2tc(t, 0)),
-      "__builtin_clz: UB for x equal to 0");
 
     // clz(x) = width - popcount(x with every bit below the most-significant set
     // bit smeared down). Reusing the popcount irep means a constant argument
