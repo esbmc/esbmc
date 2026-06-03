@@ -1453,38 +1453,68 @@ string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
   return find_cached_symbol(symbol_id);
 }
 
-bool string_handler::extract_constant_string(
+// Recursively fold an AST node into a constant string: a string literal, a Name
+// bound to such a value, or a Python "+" concatenation of two foldable string
+// operands. Any non-constant operand yields false, so callers fall back to the
+// runtime string model. `depth` bounds the recursion against degenerate ASTs.
+static bool fold_constant_string(
   const nlohmann::json &node,
   python_converter &converter,
-  std::string &out)
+  std::string &out,
+  unsigned depth)
 {
-  if (
-    node.contains("_type") && node["_type"] == "Constant" &&
-    node.contains("value") && node["value"].is_string())
+  if (depth > 64 || !node.contains("_type"))
+    return false;
+
+  const auto &type = node["_type"];
+
+  // String literal.
+  if (type == "Constant" && node.contains("value") && node["value"].is_string())
   {
     out = node["value"].get<std::string>();
     return true;
   }
 
-  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  // Name reference: resolve its declaration and fold the bound value. This
+  // covers a Name bound to a literal as well as one bound to a concatenation.
+  // Note: get_var_value resolves the first binding, so a later reassignment of
+  // the name is a known limitation (the first constant value is folded).
+  if (type == "Name" && node.contains("id"))
   {
-    const std::string var_name = node["id"].get<std::string>();
-    nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter.get_current_func_name(), converter.get_ast_json());
+    nlohmann::json decl = json_utils::get_var_value(
+      node["id"].get<std::string>(),
+      converter.get_current_func_name(),
+      converter.get_ast_json());
+    if (!decl.empty() && decl.contains("value"))
+      return fold_constant_string(decl["value"], converter, out, depth + 1);
+    return false;
+  }
 
+  // String concatenation: "a" + "b".
+  if (
+    type == "BinOp" && node.contains("op") && node["op"].contains("_type") &&
+    node["op"]["_type"] == "Add" && node.contains("left") &&
+    node.contains("right"))
+  {
+    std::string lhs, rhs;
     if (
-      !var_value.empty() && var_value.contains("value") &&
-      var_value["value"].contains("_type") &&
-      var_value["value"]["_type"] == "Constant" &&
-      var_value["value"].contains("value") &&
-      var_value["value"]["value"].is_string())
+      fold_constant_string(node["left"], converter, lhs, depth + 1) &&
+      fold_constant_string(node["right"], converter, rhs, depth + 1))
     {
-      out = var_value["value"]["value"].get<std::string>();
+      out = lhs + rhs;
       return true;
     }
   }
 
   return false;
+}
+
+bool string_handler::extract_constant_string(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out)
+{
+  return fold_constant_string(node, converter, out, 0);
 }
 
 exprt string_handler::handle_string_to_int(
