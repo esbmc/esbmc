@@ -4647,12 +4647,13 @@ exprt python_list::build_count_index_list_call(
   else
     element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
 
+  // Args: (list, &value-or-ptr, type_id, size) — same shape as the remove call.
   side_effect_expr_function_callt call;
   call.function() = symbol_expr(*func);
-  call.arguments().push_back(symbol_expr(list));                  // list
-  call.arguments().push_back(element_arg);                        // &value/ptr
-  call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym)); // type_id
-  call.arguments().push_back(elem_info.elem_size);                // size
+  call.arguments().push_back(symbol_expr(list));
+  call.arguments().push_back(element_arg);
+  call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
+  call.arguments().push_back(elem_info.elem_size);
   call.type() = size_type();
   call.location() = elem_info.location;
 
