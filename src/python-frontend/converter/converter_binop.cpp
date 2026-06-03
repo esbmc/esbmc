@@ -9,11 +9,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -23,6 +25,14 @@
 
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
+  // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
+  // emits a walrus binding unconditionally, so a walrus inside any operand
+  // would bind even when Python would skip it. Refuse with a clean diagnostic
+  // rather than return an unsound verdict.
+  if (element.contains("values") && contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
     python_frontend::map_operator(op, bool_type()), bool_type());
@@ -755,6 +765,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (op == "FloorDiv")
     return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
 
+  // Python integer modulo `%` is floored (result takes the sign of the
+  // divisor), unlike C's truncated remainder. Correct it for integer operands;
+  // float `%` was already handled above via handle_modulo.
+  if (
+    op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
+
   // Promote operands for IEEE operations
   promote_ieee_operands(bin_expr, lhs, rhs);
 
@@ -865,10 +883,18 @@ exprt python_converter::handle_array_operations(
                             : typecast_exprt(scalar_expr, elem_type);
 
     exprt result_array = array_expr;
+    // V.3: build the array element access in IREP2 (index2tc), the exact
+    // round-trip of index_exprt (behaviour-preserving). The array and element
+    // type are loop-invariant, so migrate them once.
+    expr2tc ar2;
+    migrate_expr(array_expr, ar2);
+    const type2tc elem_t2 = migrate_type(elem_type);
     for (long long i = 0; i < array_size; ++i)
     {
       exprt index = from_integer(i, size_type());
-      index_exprt array_item(array_expr, index, elem_type);
+      expr2tc ix2;
+      migrate_expr(index, ix2);
+      exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
       result_array = with_exprt(result_array, index, bin_elem);
@@ -998,10 +1024,16 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
     for (const auto &c : lhs_components)
-      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1038,9 +1070,13 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc tuple2;
+    migrate_expr(tuple, tuple2);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+        result.copy_to_operands(migrate_expr_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);

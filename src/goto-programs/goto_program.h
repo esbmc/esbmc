@@ -397,6 +397,13 @@ public:
         location(other.location),
         type(other.type),
         guard(other.guard),
+        // Deep-copy the loop-contract payload. Without this, copying a
+        // LOOP_INVARIANT instruction silently drops its invariants and
+        // assigns-clause targets.
+        loop_contract_data(
+          other.loop_contract_data
+            ? std::make_unique<loop_contract_datat>(*other.loop_contract_data)
+            : nullptr),
         targets(other.targets),
         labels(other.labels),
         inductive_step_instruction(other.inductive_step_instruction),
@@ -423,6 +430,10 @@ public:
         location(std::move(other.location)),
         type(other.type),
         guard(std::move(other.guard)),
+        // Move the loop-contract payload — same reasoning as the copy
+        // ctor; without this, move-constructing a LOOP_INVARIANT
+        // instruction loses its invariants.
+        loop_contract_data(std::move(other.loop_contract_data)),
         targets(std::move(other.targets)),
         labels(std::move(other.labels)),
         inductive_step_instruction(other.inductive_step_instruction),
@@ -454,12 +465,20 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
+      // Swap the labels too — copy-assign goes through
+      // `instructiont(other).swap(*this)`, so without swapping
+      // labels here the assignment preserves the LHS's labels
+      // instead of taking the RHS's.
+      instruction.labels.swap(labels);
       loop_contract_data.swap(instruction.loop_contract_data);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
+      // Swap location_number too — same copy-assign-through-swap
+      // reasoning as for labels.
+      std::swap(instruction.location_number, location_number);
       std::swap(instruction.loop_number, loop_number);
       std::swap(instruction.pragma_unroll_count, pragma_unroll_count);
       std::swap(target_number, instruction.target_number);

@@ -3364,69 +3364,83 @@ exprt python_list::list_repetition(
   return symbol_expr(*list_symbol);
 }
 
-// Emit a call to a `(PyListObject*, void*, type_id, size) -> ret_type` scan helper;
-// the void*-to-char-array fixup is centralised here.
-exprt python_list::build_list_scan_call(
-  const exprt &item,
-  const exprt &list,
-  const std::string &c_func_name,
-  const std::string &ret_var_name,
-  const typet &ret_type)
+exprt python_list::contains(const exprt &item, const exprt &list)
 {
+  // Get type and size information for the item
   list_elem_info item_info = get_list_element_info(list_value_, item);
 
-  const symbolt *scan_func =
-    converter_.symbol_table().find_symbol("c:@F@" + c_func_name);
-  assert(scan_func);
+  // Find the list_contains function
+  const symbolt *list_contains_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_contains");
+  assert(list_contains_func);
 
-  symbolt &ret_sym = converter_.create_tmp_symbol(
-    list_value_, ret_var_name, ret_type, gen_zero(ret_type));
-  code_declt ret_decl(symbol_expr(ret_sym));
-  converter_.add_instruction(ret_decl);
+  // Create a temporary variable to store the result
+  symbolt &contains_ret = converter_.create_tmp_symbol(
+    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+  code_declt contains_ret_decl(symbol_expr(contains_ret));
+  converter_.add_instruction(contains_ret_decl);
 
-  code_function_callt fcall;
-  fcall.function() = symbol_expr(*scan_func);
-  fcall.lhs() = symbol_expr(ret_sym);
-  fcall.arguments().push_back(list);
+  // Build the function call as a statement
+  code_function_callt contains_call;
+  contains_call.function() = symbol_expr(*list_contains_func);
+  contains_call.lhs() = symbol_expr(contains_ret);
 
+  // Pass the list directly
+  contains_call.arguments().push_back(list);
+
+  // For pointer types (e.g., string parameters), use the pointer directly
+  // For value types, take the address
   exprt item_arg;
   if (item_info.elem_symbol->get_type().is_pointer())
+  {
+    // String parameters are pointers - use the pointer value directly
     item_arg = symbol_expr(*item_info.elem_symbol);
+  }
   else
+  {
+    // For arrays or other value types, take the address
     item_arg = address_of_exprt(symbol_expr(*item_info.elem_symbol));
-  fcall.arguments().push_back(item_arg);
+  }
 
+  contains_call.arguments().push_back(item_arg);
+
+  // For void/char pointers from iteration, use stored type info from list
   exprt type_hash = symbol_expr(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Recover the stored char-array type_id and runtime length when the item
-  // came in as void* (e.g. a loop variable over a string list).
+  // Check if item is a void pointer (from loop iteration over strings)
   if (item_info.elem_symbol->get_type() == pointer_typet(empty_typet()))
   {
-    assert(
-      list.is_symbol() &&
-      "build_list_scan_call: list operand must be a symbol expr");
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);
+
     if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
     {
+      // Look for a string array type (char array) in the list
       for (const auto &stored_entry : type_map_it->second)
       {
         const typet &stored_type = stored_entry.second;
+
+        // Check if stored type is a char array (string)
         if (stored_type.is_array() && stored_type.subtype() == char_type())
         {
-          const type_handler &th = converter_.get_type_handler();
-          const std::string stored_type_name = th.type_to_string(stored_type);
+          // Use the stored string array type instead of void pointer type
+          const type_handler type_handler_ = converter_.get_type_handler();
+          const std::string stored_type_name =
+            type_handler_.type_to_string(stored_type);
+
           constant_exprt stored_hash(size_type());
           stored_hash.set_value(integer2binary(
             std::hash<std::string>{}(stored_type_name),
             config.ansi_c.address_width));
           type_hash = stored_hash;
 
+          // Use strlen for void* strings from iteration
           const symbolt *strlen_symbol =
             converter_.symbol_table().find_symbol("c:@F@strlen");
           if (strlen_symbol)
           {
+            // Call strlen to get actual string length
             symbolt &strlen_result = converter_.create_tmp_symbol(
               list_value_,
               "$strlen_result$",
@@ -3450,81 +3464,25 @@ exprt python_list::build_list_scan_call(
             elem_size = exprt("+", strlen_result.get_type());
             elem_size.copy_to_operands(symbol_expr(strlen_result), one_const);
           }
-          break;
+
+          break; // Found string array type, use it
         }
       }
     }
   }
 
-  fcall.arguments().push_back(type_hash);
-  fcall.arguments().push_back(elem_size);
-  fcall.type() = ret_type;
-  fcall.location() = converter_.get_location_from_decl(list_value_);
-  converter_.add_instruction(fcall);
+  contains_call.arguments().push_back(type_hash);
+  contains_call.arguments().push_back(elem_size);
 
-  return symbol_expr(ret_sym);
-}
+  contains_call.type() = bool_type();
+  contains_call.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(contains_call);
 
-exprt python_list::contains(const exprt &item, const exprt &list)
-{
-  exprt contains_sym = build_list_scan_call(
-    item, list, "__ESBMC_list_contains", "contains_tmp", bool_type());
-  // Wrap the bool-typed result symbol as `sym == true`
-  // so downstream boolean simplification sees the same shape the pre-refactor contains() emitted.
   exprt result("=", bool_type());
-  result.copy_to_operands(contains_sym);
+  result.copy_to_operands(symbol_expr(contains_ret));
   result.copy_to_operands(gen_boolean(true));
+
   return result;
-}
-
-exprt python_list::count(const exprt &item, const exprt &list)
-{
-  return build_list_scan_call(
-    item, list, "__ESBMC_list_count", "count_tmp", size_type());
-}
-
-exprt python_list::find_index_or_max(const exprt &item, const exprt &list)
-{
-  return build_list_scan_call(
-    item, list, "__ESBMC_list_try_find_index", "find_idx_tmp", size_type());
-}
-
-exprt python_list::list_index_not_found_sentinel()
-{
-  return from_integer(BigInt(-1), size_type());
-}
-
-exprt python_list::find_index(const exprt &item, const exprt &list)
-{
-  exprt idx_expr = find_index_or_max(item, list);
-
-  // Raise ValueError via cpp-throw on missing element so try/except can catch it.
-  exprt not_found = equality_exprt(idx_expr, list_index_not_found_sentinel());
-  exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "ValueError", "list.index(x): x not in list");
-  codet throw_code("expression");
-  throw_code.operands().push_back(raise);
-  code_ifthenelset guard;
-  guard.cond() = not_found;
-  guard.then_case() = throw_code;
-  guard.location() = converter_.get_location_from_decl(list_value_);
-  converter_.add_instruction(guard);
-
-  return idx_expr;
-}
-
-exprt python_list::build_remove_at_call(const symbolt &list, const exprt &idx)
-{
-  const symbolt *func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_remove_at");
-  assert(func);
-  code_function_callt call;
-  call.function() = symbol_expr(*func);
-  call.arguments().push_back(symbol_expr(list));
-  call.arguments().push_back(idx);
-  call.type() = bool_type();
-  call.location() = converter_.get_location_from_decl(list_value_);
-  return converter_.convert_expression_to_code(call);
 }
 
 exprt python_list::build_extend_list_call(
@@ -4626,6 +4584,96 @@ exprt python_list::build_set_membership_call(
       elem_info.elem_symbol->get_type());
 
   return converter_.convert_expression_to_code(call);
+}
+
+exprt python_list::build_remove_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *remove_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_remove");
+
+  if (!remove_func)
+    throw std::runtime_error(
+      "__ESBMC_list_remove function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  else if (elem_info.elem_symbol->get_type().is_struct())
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+  else
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+
+  code_function_callt remove_call;
+  remove_call.function() = symbol_expr(*remove_func);
+  remove_call.arguments().push_back(symbol_expr(list)); // list
+  remove_call.arguments().push_back(element_arg);       // &value or ptr
+  remove_call.arguments().push_back(
+    symbol_expr(*elem_info.elem_type_sym));               // type_id
+  remove_call.arguments().push_back(elem_info.elem_size); // size
+  remove_call.type() = bool_type();
+  remove_call.location() = elem_info.location;
+
+  return converter_.convert_expression_to_code(remove_call);
+}
+
+// list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a
+// C model that walks the list comparing elements (same plumbing as remove), and
+// return a size_t value. `func_id` selects the model; the only difference is
+// index() asserts the element is present (handled inside the model).
+exprt python_list::build_count_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem,
+  const std::string &func_id)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *func = converter_.symbol_table().find_symbol(func_id);
+  if (!func)
+    throw std::runtime_error(func_id + " function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  else
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+
+  // Args: (list, &value-or-ptr, type_id, size) — same shape as the remove call.
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*func);
+  call.arguments().push_back(symbol_expr(list));
+  call.arguments().push_back(element_arg);
+  call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
+  call.arguments().push_back(elem_info.elem_size);
+  call.type() = size_type();
+  call.location() = elem_info.location;
+
+  return call;
+}
+
+exprt python_list::build_count_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_count");
+}
+
+exprt python_list::build_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_index");
 }
 
 size_t python_list::get_list_type_map_size(const std::string &list_id)

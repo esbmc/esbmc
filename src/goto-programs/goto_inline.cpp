@@ -56,7 +56,7 @@ void goto_inlinet::parameter_assignments(
       if (identifier != "")
       {
         goto_programt::targett decl = dest.add_instruction();
-        decl->make_other();
+        decl->make_decl();
         decl->code = code_decl2tc(formal_type, identifier);
         decl->location = location;
         decl->function = location.get_function();
@@ -73,7 +73,7 @@ void goto_inlinet::parameter_assignments(
 
     {
       goto_programt::targett decl = dest.add_instruction();
-      decl->make_other();
+      decl->make_decl();
       decl->code = code_decl2tc(formal_type, identifier);
       decl->location = location;
       decl->function = location.get_function();
@@ -403,9 +403,15 @@ void goto_inline(
 
   goto_inline.goto_inline(it->second.body);
 
-  // clean up
+  // clean up: every callee has been inlined into __ESBMC_main, so the
+  // other function bodies are stale and can be released. Preserve the
+  // one symex will actually execute -- the entry point keyed by the
+  // bare name "__ESBMC_main" (NOT the user's `main`, which is keyed by
+  // its mangled symbol identifier `c:@F@main`; comparing against the
+  // literal "main" matched nothing and silently cleared every body,
+  // including the entry, leaving symex with an empty program).
   for (auto &it : goto_functions.function_map)
-    if (it.first != "main")
+    if (it.first != "__ESBMC_main")
     {
       it.second.body_available = false;
       it.second.body.clear();

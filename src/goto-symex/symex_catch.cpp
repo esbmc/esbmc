@@ -406,15 +406,20 @@ void goto_symext::update_throw_target(
   expr2tc operand = throw_insn.operand;
   symex_assign(code_assign2tc(thrown_obj, operand));
 
-  // Now record that value for future reference.
-  if (!is_pointer_type(target->code->type))
-    cur_state->rename(thrown_obj);
-
   // Target is, as far as I can tell, always a declaration of the variable
   // that the thrown obj ends up in, and is followed by a (blank) assignment
   // to it. So point at the next insn.
+  //
+  // An ellipsis (catch-all) handler binds no exception variable: its target
+  // points straight at the first instruction of the handler body, which may be
+  // an ASSERT/ASSUME/GOTO whose `code` field is nil. Only inspect target->code
+  // (and record the thrown object for the bound variable) when one exists.
   if (!is_ellipsis)
   {
+    // Now record that value for future reference.
+    if (!is_pointer_type(target->code->type))
+      cur_state->rename(thrown_obj);
+
     assert(is_code_decl2t(target->code));
     target++;
     assert(is_code_assign2t(target->code));

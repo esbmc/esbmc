@@ -64,6 +64,8 @@ on:
           - ReachSafety-Combinations
           - ReachSafety-Hardware
           - ReachSafety-Hardness
+          - ReachSafety-CorrectnessWitnesses
+          - ReachSafety-ViolationWitnesses
           - ConcurrencySafety-Main
           - SoftwareSystems-AWS-C-Common-ReachSafety
           - SoftwareSystems-DeviceDriversLinux64-ReachSafety
@@ -71,6 +73,7 @@ on:
           - SoftwareSystems-Other-ReachSafety
           - SoftwareSystems-uthash-ReachSafety
           - SoftwareSystems-Intel-TDX-Module-ReachSafety
+          - Termination-ViolationWitnesses
           - NoDataRace-Main
           - MemSafety-MemCleanup
           - SoftwareSystems-uthash-MemCleanup

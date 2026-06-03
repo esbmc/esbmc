@@ -30,6 +30,16 @@ void loopst::set_original_loop_head(goto_programt::targett _loop_head)
   original_loop_head = _loop_head;
 }
 
+goto_programt::targett loopst::effective_loop_head() const
+{
+  goto_programt::targett it = original_loop_head;
+  while (it != original_loop_exit &&
+         (it->is_skip() || it->type == LOCATION || it->type == DECL ||
+          it->type == DEAD || it->is_assume()))
+    ++it;
+  return it;
+}
+
 void loopst::add_modified_var_to_loop(const expr2tc &expr)
 {
   modified_loop_vars.insert(expr);

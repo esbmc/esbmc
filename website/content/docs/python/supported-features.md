@@ -406,14 +406,14 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 ## NumPy Module (`numpy`)
 
-Partial stub-level support for type-inference and basic arithmetic verification. Arrays are modelled as plain Python lists.
+Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)`
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for supported 1D/2D shapes
 
-**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)`
+**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
 
-**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.arctan(x)`, `np.exp(x)` on scalar or literal list-backed 1D/2D inputs
 
-**Additional stubs** (return constant placeholder values for type inference only): `np.cos(x)`, `np.arccos(x)`, `np.arctan(x)`, `np.exp(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+**Additional stubs** (return constant placeholder values for type inference only): `np.arccos(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
 
-**Linear algebra** (`numpy.linalg`): `np.linalg.det(a, b)` (2×2 stub)
+**Linear algebra** (`numpy.linalg`): `np.linalg.det(a)` for constant numeric 2x2 and 3x3 matrices
