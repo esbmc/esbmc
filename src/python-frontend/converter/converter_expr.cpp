@@ -17,11 +17,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -476,7 +478,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               deref.move_to_operands(optional_base);
               optional_base = std::move(deref);
             }
-            base_expr = member_exprt(optional_base, "value", inner_raw);
+            expr2tc ob2;
+            migrate_expr(optional_base, ob2);
+            base_expr = migrate_expr_back(
+              member2tc(migrate_type(inner_raw), ob2, "value"));
             base_type = inner_raw;
             if (base_type.is_pointer())
               base_type = base_type.subtype();
@@ -560,7 +565,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               deref.move_to_operands(member_base);
               member_base = std::move(deref);
             }
-            return member_exprt(member_base, attr_name, clean_type);
+            // V.1k step-2 hypothesis: build member2t with the (possibly
+            // symbol-typed) source permitted by the step-1 relaxation, then
+            // back-migrate to the legacy body so the EXISTING adjust + goto
+            // -convert resolves it as today. No converter-side ns.follow.
+            expr2tc src2;
+            migrate_expr(member_base, src2);
+            return migrate_expr_back(
+              member2tc(migrate_type(clean_type), src2, attr_name));
           }
         }
 
@@ -611,7 +623,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                 {
                   const typet &vt =
                     clean_attribute_type(st.get_component("value").type());
-                  expr = member_exprt(base_expr, "value", vt);
+                  expr2tc bv2;
+                  migrate_expr(base_expr, bv2);
+                  expr = migrate_expr_back(
+                    member2tc(migrate_type(vt), bv2, "value"));
                   break;
                 }
               }
@@ -1052,7 +1067,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           base = std::move(deref);
         }
 
-        return member_exprt(base, attr_name, clean_type);
+        expr2tc b2;
+        migrate_expr(base, b2);
+        return migrate_expr_back(
+          member2tc(migrate_type(clean_type), b2, attr_name));
       };
 
       if (is_converting_lhs)
