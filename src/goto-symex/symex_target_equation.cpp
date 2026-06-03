@@ -42,7 +42,8 @@ void symex_target_equationt::assignment(
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -61,8 +62,9 @@ void symex_target_equationt::output(
   SSA_step.guard = guard;
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
-  SSA_step.output_args = args;
-  SSA_step.format_string = fmt;
+  auto &od = SSA_step.output_payload();
+  od.output_args = args;
+  od.format_string = fmt;
 
   if (debug_print)
     debug_print_step(SSA_step);
@@ -124,7 +126,8 @@ void symex_target_equationt::assertion(
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -190,8 +193,9 @@ void symex_target_equationt::pre_register_addresses(
     walk(step.cond);
     walk(step.lhs);
     walk(step.rhs);
-    for (const expr2tc &arg : step.output_args)
-      walk(arg);
+    if (step.output_data)
+      for (const expr2tc &arg : step.output_data->output_args)
+        walk(arg);
   }
 }
 
@@ -258,13 +262,11 @@ void symex_target_equationt::convert_internal_step(
   }
   else if (step.is_output())
   {
-    for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
-         o_it != step.output_args.end();
-         ++o_it)
+    SSA_stept::output_datat &od = step.output_payload();
+    for (const expr2tc &tmp : od.output_args)
     {
-      const expr2tc &tmp = *o_it;
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
-        step.converted_output_args.push_back(tmp);
+        od.converted_output_args.push_back(tmp);
       else
       {
         expr2tc sym =
@@ -273,7 +275,7 @@ void symex_target_equationt::convert_internal_step(
         smt_astt assign = smt_conv.convert_assign(eq);
         if (ssa_smt_trace)
           assign->dump();
-        step.converted_output_args.push_back(sym);
+        od.converted_output_args.push_back(sym);
       }
     }
   }

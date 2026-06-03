@@ -384,10 +384,10 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
         else
           // in goto-coverage mode, the assertions are converted to assert(0）
           // the original guards are stored in comment.
-          claim_msg = it->comment;
+          claim_msg = id2string(it->comment);
         claim_loc = it->source.pc->location.as_string();
         claim_property = it->source.pc->location.property().as_string();
-        claim_cstr = it->comment + " at " + claim_loc;
+        claim_cstr = id2string(it->comment) + " at " + claim_loc;
         continue;
       }
 

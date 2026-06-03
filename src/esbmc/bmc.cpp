@@ -19,7 +19,6 @@
 #include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
-#include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
@@ -1421,7 +1420,7 @@ void bmct::bidirectional_search(
         return;
 
       // Save the location of the failed assertion
-      frames = ssait.stack_trace;
+      frames = ssait.stack_trace();
       assert_loop_number = ssait.loop_number;
 
       // We are not interested in instructions before the failed assertion yet
@@ -1590,14 +1589,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    if (options.get_bool_option("document-subgoals"))
-    {
-      std::ostringstream oss;
-      document_subgoals(*eq, oss);
-      log_status("{}", oss.str());
-      return smt_convt::P_SMTLIB;
-    }
-
     if (options.get_bool_option("show-vcc"))
     {
       show_vcc(*eq);
@@ -1718,8 +1709,11 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
   /* LTL checking - first check for whether we have a negative prefix, then
    * the indeterminate ones. */
-  using Type = std::pair<std::string_view, ltl_res>;
-  static constexpr std::array seq = {
+  // Keys are interned irep_idt, matching SSA_stept::comment, so the
+  // comparisons below are dstring identity checks with no per-step
+  // string materialisation.
+  using Type = std::pair<irep_idt, ltl_res>;
+  static const std::array seq = {
     Type{"LTL_BAD", ltl_res_bad},
     Type{"LTL_FAILING", ltl_res_failing},
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
