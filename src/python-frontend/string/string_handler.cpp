@@ -1932,13 +1932,17 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_receiver_expr;
   };
 
-  // Tuple receivers reuse method names that overlap with string methods
-  // (count, index). Defer to the regular dispatch table so the tuple-aware
-  // handler runs instead of evaluating those as string methods.
+  // Tuple and list receivers reuse method names that overlap with string
+  // methods (count, index). Defer to the regular dispatch table so the
+  // tuple-/list-aware handlers run instead of evaluating those as str methods.
   if (method_name == "count" || method_name == "index")
   {
     exprt recv = get_receiver_expr();
-    if (converter_.get_tuple_handler().is_tuple_type(recv.type()))
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    if (
+      converter_.get_tuple_handler().is_tuple_type(recv.type()) ||
+      recv.type() == list_type ||
+      (recv.type().is_pointer() && recv.type().subtype() == list_type))
       return nil_exprt();
   }
 

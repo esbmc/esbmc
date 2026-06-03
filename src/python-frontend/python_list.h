@@ -240,6 +240,33 @@ public:
     const exprt &elem);
 
   /**
+   * @brief Build a list.count(x) call — number of elements equal to x.
+   * Returns a size_t-typed value expression.
+   */
+  exprt build_count_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /**
+   * @brief Build a list.index(x) call — position of the first element equal to
+   * x. Raises ValueError (via assertion) if x is not found. Returns a
+   * size_t-typed value expression.
+   */
+  exprt build_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /// Shared implementation of build_count_list_call / build_index_list_call;
+  /// @p func_id selects the `c:@F@__ESBMC_list_{count,index}` model.
+  exprt build_count_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const std::string &func_id);
+
+  /**
    * @brief Emit a call to a set membership-mutating C model function.
    *
    * Used to implement set.add() and set.discard(): both wrap the same C
