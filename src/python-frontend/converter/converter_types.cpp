@@ -55,8 +55,8 @@ exprt python_converter::unwrap_optional_if_needed(
     // Extract the value field. V.3: IREP2 member access (round-trip).
     expr2tc b2;
     migrate_expr(base, b2);
-    return migrate_expr_back(member2tc(
-      migrate_type(struct_type.components()[1].type()), b2, "value"));
+    return migrate_expr_back(
+      member2tc(migrate_type(struct_type.components()[1].type()), b2, "value"));
   }
 
   return expr;
