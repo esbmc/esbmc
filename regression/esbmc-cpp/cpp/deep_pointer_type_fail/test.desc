@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+^ERROR: type nesting exceeds the supported depth \(1000\); refusing to convert a pathologically deep type$
+^ERROR: CONVERSION ERROR$
