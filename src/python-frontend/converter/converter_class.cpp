@@ -6,9 +6,11 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 
@@ -68,7 +70,13 @@ exprt python_converter::make_enum_member_struct_expr(
   // name component: char* pointer to the first element of the name string
   exprt str_expr = symbol_expr(*str_sym);
   exprt zero_idx = from_integer(0, index_type());
-  exprt name_ptr = address_of_exprt(index_exprt(str_expr, zero_idx));
+  // V.3: IREP2 index access (exact round-trip of index_exprt); str_sym is a
+  // static char-array symbol, so the source is array-typed.
+  expr2tc se2, zi2;
+  migrate_expr(str_expr, se2);
+  migrate_expr(zero_idx, zi2);
+  exprt name_ptr = address_of_exprt(migrate_expr_back(
+    index2tc(migrate_type(str_expr.type().subtype()), se2, zi2)));
   name_ptr.type() = gen_pointer_type(char_type());
   struct_val.operands().push_back(name_ptr);
 
@@ -119,8 +127,11 @@ exprt python_converter::create_member_expression(
   if (!source_type.is_struct() && !source_type.is_union())
     return gen_zero(clean_type);
 
-  member_exprt member_expr(source, attr_name, clean_type);
-  return member_expr;
+  // V.3: IREP2 member access (exact round-trip of member_exprt). `source` is
+  // struct/union (checked above) or a by-name symbol; both are valid sources.
+  expr2tc s2;
+  migrate_expr(source, s2);
+  return migrate_expr_back(member2tc(migrate_type(clean_type), s2, attr_name));
 }
 
 // Register instance attribute in maps

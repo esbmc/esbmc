@@ -969,8 +969,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        member_exprt member_expr(deref_expr, attr_name, clean_type);
-        expr = member_expr;
+        // V.3: IREP2 member access (exact round-trip of member_exprt).
+        expr2tc de2;
+        migrate_expr(deref_expr, de2);
+        expr = migrate_expr_back(
+          member2tc(migrate_type(clean_type), de2, attr_name));
         break;
       }
 
