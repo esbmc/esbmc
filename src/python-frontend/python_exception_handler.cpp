@@ -65,17 +65,20 @@ void python_exception_handler::get_try_statement(
     return;
   }
 
-  // ESBMC's try lowering does not model the `else` clause: its body runs only
-  // when the try block completes without an exception, and (unlike the try
-  // body) exceptions it raises are not caught by this try's handlers. The
-  // current lowering would silently drop it, so refuse a non-empty `else`
-  // rather than return an unsound verdict.
-  if (element.contains("orelse") && !element["orelse"].empty())
-    throw std::runtime_error(
-      "try with a non-empty else clause is not supported");
-
   const bool has_finally =
     element.contains("finalbody") && !element["finalbody"].empty();
+
+  // The `else` clause runs only when the try body completes without an
+  // exception. ESBMC's try lowering does not model it (it is silently dropped) —
+  // a pre-existing limitation independent of this change. Combined with the
+  // finally lowering below, which duplicates the finally body on the normal and
+  // exception paths, a dropped `else` would also be skipped on the path where
+  // finally runs, compounding the unsoundness. So refuse a non-empty `else`
+  // only when a finally is present; plain try/except/else keeps its existing
+  // behaviour.
+  if (has_finally && element.contains("orelse") && !element["orelse"].empty())
+    throw std::runtime_error(
+      "try/finally with a non-empty else clause is not supported");
 
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
