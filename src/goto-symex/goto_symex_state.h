@@ -12,7 +12,6 @@
 #include <stack>
 #include <string>
 #include <unordered_set>
-#include <util/crypto_hash.h>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
@@ -221,10 +220,11 @@ public:
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
-    framet(unsigned int thread_id)
+    framet(unsigned int thread_id, const namespacet *ns = nullptr)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)
     {
       level1.thread_id = thread_id;
+      level1.ns = ns;
     }
   };
 
@@ -309,7 +309,7 @@ public:
    */
   inline framet &new_frame(unsigned int thread_id)
   {
-    call_stack.emplace_back(thread_id);
+    call_stack.emplace_back(thread_id, &ns);
     return call_stack.back();
   }
 

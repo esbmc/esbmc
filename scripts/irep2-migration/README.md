@@ -79,6 +79,36 @@ operands, guards, goto targets, file/line/column locations):
 If a future ESBMC change introduces a new non-deterministic line, add a rule to
 `irep2_canon` (and note it here) rather than weakening the diff.
 
+## Caveat: cross-build comparison is unreliable (operational-model nondeterminism)
+
+`diff_goto_baseline` compares a baseline captured on one build against dumps from
+a *later* build. That is only sound if goto generation is deterministic — and for
+ESBMC's **bundled operational models** it is **not**. The C models
+(`src/c2goto/library/*` → FLAIL-mangled `clib*.goto`) and Python models
+(`src/python-frontend/models/*`) are regenerated on every build, and that
+generation is non-deterministic: regenerating `clib*.goto` with the *same* `esbmc`
+binary yields **different SHA-256 digests** (confirmed 2026-05-29). It surfaces in
+the dump as per-run synthesized names — `esbmc-nested.<hex>-<hex>.c`,
+`ESBMC_unpack_temp_<address>`, and the `esbmc-python-astgen-<hex>` temp path encoded
+as a `__file__` char array — so any test whose dump pulls in an affected
+library/model function shows spurious diffs across builds, regardless of the source
+change. A "clean" cross-build diff can be coincidence; a "dirty" one can be pure
+build noise.
+
+Therefore:
+
+- **Within one build** the diff is sound — run the same binary twice (`run1` vs
+  `run2`) to isolate genuine runtime nondeterminism.
+- **Across builds** (the normal migration-PR case) prefer the **deterministic
+  regression-verdict comparison** instead: capture the pass/fail set on a clean
+  baseline build, then confirm the post-change build yields an identical set
+  (verdicts are unaffected by model symbol-naming nondeterminism). See
+  `docs/irep2-migration.md` §8.1 for the full rationale and procedure.
+- If you must diff across builds, first extend `irep2_canon` to mask the loci
+  above **and** the host's actual `$TMPDIR` shape (the current rules cover
+  `/tmp/esbmc-…` and `/var/folders/…/T/esbmc…` but not a nested
+  `/tmp/<dir>/esbmc.<hex>/headers/…` layout).
+
 ## Notes
 
 - Argument construction mirrors `regression/testing_tool.py` exactly, so each

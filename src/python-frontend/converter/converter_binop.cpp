@@ -9,19 +9,30 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <sstream>
 
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
+  // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
+  // emits a walrus binding unconditionally, so a walrus inside any operand
+  // would bind even when Python would skip it. Refuse with a clean diagnostic
+  // rather than return an unsound verdict.
+  if (element.contains("values") && contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
     python_frontend::map_operator(op, bool_type()), bool_type());
@@ -405,8 +416,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bool is_none_check = handle_none_check_setup(op, lhs, rhs);
   if (!is_none_check)
   {
-    lhs = unwrap_optional_if_needed(lhs);
-    rhs = unwrap_optional_if_needed(rhs);
+    lhs = unwrap_optional_if_needed(lhs, element);
+    rhs = unwrap_optional_if_needed(rhs, element);
   }
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
@@ -754,6 +765,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (op == "FloorDiv")
     return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
 
+  // Python integer modulo `%` is floored (result takes the sign of the
+  // divisor), unlike C's truncated remainder. Correct it for integer operands;
+  // float `%` was already handled above via handle_modulo.
+  if (
+    op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
+
   // Promote operands for IEEE operations
   promote_ieee_operands(bin_expr, lhs, rhs);
 
@@ -790,7 +809,22 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &element)
 {
   if (!lhs.type().is_array() && !rhs.type().is_array())
+  {
+    if (
+      op == "Mult" && lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      !type_utils::is_string_type(lhs.type()) &&
+      !type_utils::is_string_type(rhs.type()))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     return nil_exprt();
+  }
 
   // Check for zero-length array comparisons
   if (
@@ -798,6 +832,143 @@ exprt python_converter::handle_array_operations(
     string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
   {
     return gen_boolean(op == "Eq");
+  }
+
+  auto is_numeric_type = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
+  };
+
+  auto is_char_array = [](const typet &t) {
+    if (!t.is_array())
+      return false;
+    const typet &elt = t.subtype();
+    return elt == char_type() ||
+           (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+           (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+  };
+  auto is_list_model_type = [this](const typet &t) {
+    const typet list_type = type_handler_.get_list_type();
+    if (t == list_type)
+      return true;
+    if (t.is_pointer() && ns.follow(t.subtype()) == list_type)
+      return true;
+    return false;
+  };
+
+  auto build_scalar_broadcast =
+    [&](exprt &array_expr, exprt &scalar_expr) -> exprt {
+    const typet &array_type = array_expr.type();
+    if (!array_type.is_array())
+      return nil_exprt();
+
+    const typet &elem_type = array_type.subtype();
+    if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
+      return nil_exprt();
+
+    const exprt &size_expr = to_array_type(array_type).size();
+    if (!size_expr.is_constant())
+      return nil_exprt();
+
+    const BigInt size_big =
+      binary2integer(to_constant_expr(size_expr).value().c_str(), true);
+    if (size_big < 0)
+      return nil_exprt();
+
+    const long long array_size = size_big.to_int64();
+    if (array_size < 0)
+      return nil_exprt();
+
+    exprt casted_scalar = scalar_expr.type() == elem_type
+                            ? scalar_expr
+                            : typecast_exprt(scalar_expr, elem_type);
+
+    exprt result_array = array_expr;
+    // V.3: build the array element access in IREP2 (index2tc), the exact
+    // round-trip of index_exprt (behaviour-preserving). The array and element
+    // type are loop-invariant, so migrate them once.
+    expr2tc ar2;
+    migrate_expr(array_expr, ar2);
+    const type2tc elem_t2 = migrate_type(elem_type);
+    for (long long i = 0; i < array_size; ++i)
+    {
+      exprt index = from_integer(i, size_type());
+      expr2tc ix2;
+      migrate_expr(index, ix2);
+      exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
+      exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
+      bin_elem.copy_to_operands(array_item, casted_scalar);
+      result_array = with_exprt(result_array, index, bin_elem);
+    }
+    return result_array;
+  };
+
+  // For direct Python binary operators over arrays, keep behaviour explicit
+  // and conservative: broadcasting is not modelled in this path.
+  if ((op == "Add" || op == "Mult"))
+  {
+    const bool lhs_numeric_array = lhs.type().is_array() &&
+                                   is_numeric_type(lhs.type().subtype()) &&
+                                   !is_char_array(lhs.type());
+    const bool rhs_numeric_array = rhs.type().is_array() &&
+                                   is_numeric_type(rhs.type().subtype()) &&
+                                   !is_char_array(rhs.type());
+
+    // Numeric array +/-/* scalar (including chained forms) is supported here.
+    if (lhs_numeric_array && !rhs.type().is_array())
+    {
+      exprt lowered = build_scalar_broadcast(lhs, rhs);
+      if (!lowered.is_nil())
+        return lowered;
+    }
+    // Keep scalar + array as unsupported for now (matches regression
+    // expectations and avoids inconsistent with_expr construction paths).
+    if (op == "Add" && rhs_numeric_array && !lhs.type().is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    if (op == "Mult" && rhs_numeric_array && !lhs.type().is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    // Keep unsupported combinations explicit and deterministic.
+    if (op == "Mult" && lhs_numeric_array && rhs_numeric_array)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    // Defensive guard for list-model arrays (e.g. 2D numpy lowering) to avoid
+    // falling through to generic arithmetic paths that assert internally.
+    if (
+      op == "Mult" && is_list_model_type(lhs.type()) &&
+      is_list_model_type(rhs.type()))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
   }
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
@@ -808,16 +979,8 @@ exprt python_converter::handle_array_operations(
   // explicitly: broadcasting is unsupported.
   if (op == "Add")
   {
-    auto is_char_subtype = [](const typet &t) {
-      if (!t.is_array())
-        return false;
-      const typet &elt = t.subtype();
-      return elt == char_type() ||
-             (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
-             (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
-    };
-    const bool lhs_char = is_char_subtype(lhs.type());
-    const bool rhs_char = is_char_subtype(rhs.type());
+    const bool lhs_char = is_char_array(lhs.type());
+    const bool rhs_char = is_char_array(rhs.type());
     if (!lhs_char && !rhs_char)
     {
       std::ostringstream msg;
@@ -861,10 +1024,16 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
     for (const auto &c : lhs_components)
-      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -901,9 +1070,13 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc tuple2;
+    migrate_expr(tuple, tuple2);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+        result.copy_to_operands(migrate_expr_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -997,6 +1170,20 @@ exprt python_converter::handle_list_operations(
   // List repetition
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
+    const bool lhs_is_list = lhs.type() == list_type;
+    const bool rhs_is_list = rhs.type() == list_type;
+    // list * list is unsupported (Python raises TypeError); avoid routing to
+    // repetition lowering, which expects an integer repeat count.
+    if (lhs_is_list && rhs_is_list)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     if (is_right)
       return nil_exprt();
     python_list list(*this, element);

@@ -38,8 +38,12 @@ class PreprocessorStateMixin:
         self.generator_emitted_init = set()
         self.dict_items_vars = {}
         self._defaultdict_factory = {}
+        self._defaultdict_initialized_keys = {}
         self.het_dict_literals = {}
         self.het_value_dict_literals = {}
+        # Names currently bound to a dict literal (any key types). Used to
+        # rewrite list(d)/sorted(d) into the correctly-typed d.keys() path.
+        self.dict_literal_vars = set()
         self.bound_method_vars = {}
         self.called_names = set()
         self.list_literal_values = {}

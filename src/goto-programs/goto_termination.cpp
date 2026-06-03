@@ -781,6 +781,18 @@ void goto_termination(goto_functionst &goto_functions, optionst &options)
     // still has a termination claim for IS/FC to discharge.
     insert_markers_for_function(it->first, goto_functions, it->second);
 
+    // Re-number the function body before constructing another
+    // `goto_loopst`. The marker pass inserts fresh ASSERT/GOTO
+    // instructions (default `location_number == 0`) and retargets
+    // forward loop-exit edges at them. `is_backwards_goto()` compares
+    // target and source `location_number`; without an update pass,
+    // those retargeted forward edges look like back-edges to
+    // `goto_loopst::find_function_loops`, producing bogus loops whose
+    // `loop_head` sits physically after `loop_exit`. The
+    // `create_function_loop` walker then runs off the list and reads
+    // uninitialised memory.
+    it->second.body.update();
+
     // Abort-call markers: precede every direct call to an Aborts
     // function (abort/exit/__assert_fail/...) inside a loop body
     // with an ASSERT(false). This exposes abort paths to IS so the

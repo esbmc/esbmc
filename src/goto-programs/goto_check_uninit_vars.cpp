@@ -270,8 +270,7 @@ bool goto_check_uninit_vars::runOnFunction(
       type2tc shadow_t = s ? tracked_shadow_type(*s) : type2tc();
       if (!is_nil_type(shadow_t) && !shadows.count(decl.value))
       {
-        symbolt &shadow =
-          gen.new_symbol(context, migrate_type_back(shadow_t), "");
+        symbolt &shadow = gen.new_symbol(context, shadow_t, "");
         shadows.emplace(decl.value, shadow.id);
         by_sid.emplace(shadow.id, shadow_record{shadow_t, id2string(s->name)});
 

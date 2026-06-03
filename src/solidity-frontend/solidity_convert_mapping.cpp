@@ -75,7 +75,7 @@ void solidity_convertert::get_bytesN_size(
   const exprt &src_expr,
   exprt &len_expr)
 {
-  std::string byte_size = src_expr.type().get("#sol_bytesn_size").as_string();
+  std::string byte_size = get_sol_bytesn_size(src_expr.type());
   if (!byte_size.empty())
     len_expr = from_integer(std::stoul(byte_size), size_type());
   else

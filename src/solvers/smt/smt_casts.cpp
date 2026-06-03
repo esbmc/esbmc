@@ -707,13 +707,22 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     }
   }
 
-  // int -> fp: lift integer to real
+  // int -> fp: lift integer to float under integer encoding.
+  // Under --ir-ieee, plain integer (bv) sources apply IEEE 754 RNE
+  // quantization so that values above the target significand boundary are
+  // correctly rounded.  Plain --ir and fixedbv sources retain the previous
+  // exact-lift behaviour.
   if (
     int_encoding &&
     (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
     is_floatbv_type(cast.type))
   {
     smt_astt from_int = convert_ast(cast.from);
+    if (ir_ieee && is_bv_type(cast.from->type))
+    {
+      const floatbv_type2t &fbv_type = to_floatbv_type(cast.type);
+      return round_int_to_fp(from_int, fbv_type, cast.from->type->get_width());
+    }
     return mk_int2real(from_int);
   }
 

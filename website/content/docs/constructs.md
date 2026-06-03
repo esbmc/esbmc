@@ -150,3 +150,21 @@ int main() {
     return 0;
 }
 ```
+
+The intrinsic must be placed immediately before the loop it applies to. Only
+the loop's own setup (the declarations and initialisers of a `for` loop, or the
+declaration in a condition such as `while (int v = f())`) may appear between the
+intrinsic and the loop header. It binds to the nearest following loop, so for
+nested loops it annotates the inner loop:
+
+```c
+while (1) {
+    __ESBMC_unroll(10);
+    for (int i = 0, j = 10; i < j; i++, j--) // annotated with 10
+        ;
+}
+```
+
+If an `__ESBMC_unroll` call is not directly followed by a loop (for example, an
+unrelated statement is placed in between), ESBMC reports a warning and ignores
+the annotation.

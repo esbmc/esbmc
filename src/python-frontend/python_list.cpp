@@ -7,6 +7,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/string/string_builder.h>
+#include <python-frontend/type_utils.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
@@ -1819,10 +1820,25 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
+    // Both compile-time branches below assume the negated operand is a
+    // constant literal (a[-1]). For a non-constant operand (a[-i]) the value
+    // is only known at runtime, so leave pos_expr (= -i) and index untouched:
+    // build_list_at_call normalizes the negative index at runtime via
+    // __ESBMC_list_size, and the element-type lookup falls back to element 0,
+    // which is correct for the homogeneous lists ESBMC models (#4926).
+    const bool operand_is_constant =
+      slice_node.contains("operand") &&
+      slice_node["operand"]["_type"] == "Constant" &&
+      slice_node["operand"].contains("value");
+
+    if (!operand_is_constant)
+    {
+      // Nothing to do: runtime normalization handles a[-i].
+    }
     // For char* (string parameters), skip compile-time normalization: the size
     // is not known statically, so normalization happens at runtime in the
     // char* indexing block below.
-    if (
+    else if (
       !array.type().is_pointer() &&
       (list_node.is_null() || list_node["value"]["_type"] != "List"))
     {
@@ -2437,7 +2453,7 @@ exprt python_list::handle_index_access(
     // string element from an arbitrary 8-bit int (e.g. dtype=np.int8) without
     // resorting to a fragile width-only heuristic.
     typet char_t = char_type();
-    char_t.set("#cpp_type", "char");
+    type_utils::set_cpp_type(char_t, "char");
     return index_exprt(array, idx, char_t);
   }
 
@@ -4605,6 +4621,59 @@ exprt python_list::build_remove_list_call(
   remove_call.location() = elem_info.location;
 
   return converter_.convert_expression_to_code(remove_call);
+}
+
+// list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a
+// C model that walks the list comparing elements (same plumbing as remove), and
+// return a size_t value. `func_id` selects the model; the only difference is
+// index() asserts the element is present (handled inside the model).
+exprt python_list::build_count_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem,
+  const std::string &func_id)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *func = converter_.symbol_table().find_symbol(func_id);
+  if (!func)
+    throw std::runtime_error(func_id + " function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = symbol_expr(*elem_info.elem_symbol);
+  else
+    element_arg = address_of_exprt(symbol_expr(*elem_info.elem_symbol));
+
+  // Args: (list, &value-or-ptr, type_id, size) — same shape as the remove call.
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*func);
+  call.arguments().push_back(symbol_expr(list));
+  call.arguments().push_back(element_arg);
+  call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
+  call.arguments().push_back(elem_info.elem_size);
+  call.type() = size_type();
+  call.location() = elem_info.location;
+
+  return call;
+}
+
+exprt python_list::build_count_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_count");
+}
+
+exprt python_list::build_index_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_index");
 }
 
 size_t python_list::get_list_type_map_size(const std::string &list_id)

@@ -62,6 +62,7 @@ python_converter::python_converter(
   const global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
+    entry_ast_(ast),
     global_scope_(gs),
     type_handler_(*this),
     string_builder_(new string_builder(*this, &string_handler_)),
@@ -268,6 +269,13 @@ bool python_converter::import_module_into_block(
   imported_annotator.add_type_annotation();
 
   exprt imported_code = with_ast(&nested_module_json, [&]() {
+    // Pre-register this module's annotated globals before converting its body
+    // so that its methods can reference module globals declared textually
+    // after the class that uses them (Python LEGB forward reference). The main
+    // module already gets this treatment in convert(); imported modules need
+    // it here, otherwise a `from mod import *` whose method reads a global
+    // defined later in mod fails name resolution (GitHub #4970).
+    preregister_global_variables(nested_module_json["body"]);
     return get_block(nested_module_json["body"]);
   });
 

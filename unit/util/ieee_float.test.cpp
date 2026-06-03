@@ -30,3 +30,19 @@ TEST_CASE("ieee float can handle 1", "[core][util][ieee_floatt]")
     REQUIRE(std::isnormal(ieee_one.to_double())); // Holds
   }
 }
+
+TEST_CASE("ieee float converts zero to double", "[core][util][ieee_floatt]")
+{
+  // Zero is not "normal" (isnormal(0.0) is false) but it must still convert
+  // back to exactly 0.0 -- see #1037, where the interval domain mistook this
+  // for a conversion failure.
+  ieee_floatt ieee_zero(ieee_float_spect(52, 11));
+  ieee_zero.from_integer(0);
+
+  CAPTURE(
+    ieee_zero.get_exponent(), ieee_zero.get_fraction(), ieee_zero.get_sign());
+
+  REQUIRE(ieee_zero.is_zero());
+  REQUIRE_FALSE(std::isnormal(ieee_zero.to_double()));
+  REQUIRE(ieee_zero.to_double() == 0.0);
+}

@@ -787,14 +787,35 @@ exprt string_handler::handle_string_startswith(
   exprt str_addr = get_array_base_address(str_expr);
   exprt prefix_addr = get_array_base_address(prefix_expr);
 
-  // Calculate prefix length: len(prefix_expr) - 1 (exclude null terminator)
-  const array_typet &prefix_type = to_array_type(prefix_expr.type());
-  exprt prefix_len = prefix_type.size();
+  // Calculate the prefix length (excluding the null terminator).
+  // A string literal is lowered to a char array carrying a static size, but a
+  // symbolic str (e.g. a function parameter) is a char* with no static size,
+  // so to_array_type() would abort on it. Use strlen() for the pointer case,
+  // mirroring handle_string_endswith().
+  exprt actual_len;
+  if (prefix_expr.type().is_array())
+  {
+    const array_typet &prefix_type = to_array_type(prefix_expr.type());
+    exprt prefix_len = prefix_type.size();
 
-  // Subtract 1 for null terminator
-  exprt one = from_integer(1, prefix_len.type());
-  exprt actual_len("-", prefix_len.type());
-  actual_len.copy_to_operands(prefix_len, one);
+    // Subtract 1 for null terminator
+    exprt one = from_integer(1, prefix_len.type());
+    actual_len = exprt("-", prefix_len.type());
+    actual_len.copy_to_operands(prefix_len, one);
+  }
+  else
+  {
+    symbolt *strlen_symbol = find_cached_c_function_symbol("c:@F@strlen");
+    if (!strlen_symbol)
+      throw std::runtime_error("strlen function not found for startswith()");
+
+    side_effect_expr_function_callt prefix_strlen_call;
+    prefix_strlen_call.function() = symbol_expr(*strlen_symbol);
+    prefix_strlen_call.arguments() = {prefix_addr};
+    prefix_strlen_call.location() = location;
+    prefix_strlen_call.type() = size_type();
+    actual_len = prefix_strlen_call;
+  }
 
   // Find strncmp symbol
   symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
@@ -813,7 +834,17 @@ exprt string_handler::handle_string_startswith(
   exprt equal("=", bool_type());
   equal.copy_to_operands(strncmp_call, zero);
 
-  return equal;
+  // Python treats the empty string as a prefix of every string, so
+  // s.startswith("") is always True. Guard this case explicitly: it keeps the
+  // result correct for a symbolic empty prefix and is robust to strncmp(_,_,0),
+  // which the operational model evaluates to a non-zero value.
+  exprt is_empty("=", bool_type());
+  is_empty.copy_to_operands(actual_len, gen_zero(actual_len.type()));
+
+  exprt result("or", bool_type());
+  result.copy_to_operands(is_empty, equal);
+
+  return result;
 }
 
 exprt string_handler::handle_string_endswith(
@@ -1019,8 +1050,7 @@ exprt string_handler::handle_char_isspace(
   const locationt &location)
 {
   // For single characters, use the standard C isspace() function
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "isspace", int_type(), {int_type()}, location);
+  std::string func_symbol_id = ensure_string_function_symbol("isspace");
 
   // Convert char to int for isspace
   exprt char_as_int = char_expr;
@@ -1135,19 +1165,11 @@ exprt string_handler::handle_string_lstrip(
     }
   }
 
-  // If chars_arg is empty, strip whitespace (default behavior)
-  std::vector<typet> arg_types = {pointer_typet(char_type())};
-
   if (chars_arg.is_not_nil())
   {
     // With chars argument: __python_str_lstrip_chars(str, chars)
-    arg_types.push_back(pointer_typet(char_type()));
-
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_lstrip_chars",
-      pointer_typet(char_type()),
-      arg_types,
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_lstrip_chars");
 
     // Convert arguments to pointers if needed
     exprt str_ptr = str_expr;
@@ -1196,11 +1218,8 @@ exprt string_handler::handle_string_lstrip(
   else
   {
     // Without chars argument: __python_str_lstrip(str) - default whitespace
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_lstrip",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_lstrip");
 
     // Get the string pointer
     exprt str_ptr = str_expr;
@@ -1336,11 +1355,8 @@ exprt string_handler::handle_string_strip(
   // If chars_arg is provided, use __python_str_strip_chars
   if (chars_arg.is_not_nil())
   {
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_strip_chars",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type()), pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_strip_chars");
 
     exprt str_ptr = str_expr;
     if (str_expr.type().is_array())
@@ -1372,11 +1388,8 @@ exprt string_handler::handle_string_strip(
   }
 
   // Default behavior: strip whitespace
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_strip",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type())},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_strip");
 
   exprt str_ptr = str_expr;
 
@@ -1498,11 +1511,8 @@ exprt string_handler::handle_string_rstrip(
   // If chars_arg is provided, use __python_str_rstrip_chars
   if (chars_arg.is_not_nil())
   {
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_rstrip_chars",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type()), pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_rstrip_chars");
 
     exprt str_ptr = str_expr;
     if (str_expr.type().is_array())
@@ -1533,11 +1543,8 @@ exprt string_handler::handle_string_rstrip(
     return call;
   }
 
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_rstrip",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type())},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_rstrip");
 
   exprt str_ptr = str_expr;
 
@@ -1996,14 +2003,8 @@ exprt string_handler::handle_string_replace(
   exprt new_addr =
     new_expr.type().is_pointer() ? new_expr : get_array_base_address(new_expr);
 
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_replace",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type()),
-     pointer_typet(char_type()),
-     pointer_typet(char_type()),
-     int_type()},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_replace");
 
   side_effect_expr_function_callt replace_call;
   replace_call.function() = symbol_exprt(func_symbol_id, code_typet());
@@ -2040,9 +2041,10 @@ exprt string_handler::handle_string_capitalize(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string",
-      "capitalize() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.capitalize(): runtime model __python_str_capitalize not in the "
+      "symbol table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2087,8 +2089,10 @@ exprt string_handler::handle_string_title(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string", "title() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.title(): runtime model __python_str_title not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2140,8 +2144,10 @@ exprt string_handler::handle_string_swapcase(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string", "swapcase() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.swapcase(): runtime model __python_str_swapcase not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2226,6 +2232,16 @@ exprt string_handler::handle_string_count(
         call.type() = size_type();
         return call;
       }
+      // The default-range path tried the named model and missed: a silent
+      // degradation worth surfacing (#4827). __python_str_count is normally
+      // auto-registered from library/python/string.c by gen_python_c_models.py,
+      // so a miss means the model is absent or the build lacked the Python
+      // frontend. The outer log_debug still covers the start/end path, where
+      // no model is attempted.
+      log_warning(
+        "str.count(): runtime model __python_str_count not in the symbol "
+        "table -- falling back to nondet. Define it under "
+        "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     }
     log_debug(
       "python-string", "count() on non-constant receiver/needle: nondet int");
@@ -2649,8 +2665,10 @@ exprt string_handler::handle_string_isalnum(
       call.type() = bool_type();
       return call;
     }
-    log_debug(
-      "python-string", "isalnum() on non-constant receiver: nondet bool");
+    log_warning(
+      "str.isalnum(): runtime model __python_str_isalnum not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     side_effect_expr_nondett nondet(bool_type());
     nondet.location() = location;
     return nondet;
@@ -2692,8 +2710,10 @@ exprt string_handler::handle_string_isupper(
       call.type() = bool_type();
       return call;
     }
-    log_debug(
-      "python-string", "isupper() on non-constant receiver: nondet bool");
+    log_warning(
+      "str.isupper(): runtime model __python_str_isupper not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     side_effect_expr_nondett nondet(bool_type());
     nondet.location() = location;
     return nondet;

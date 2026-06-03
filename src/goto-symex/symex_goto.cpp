@@ -163,7 +163,17 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    if (goto_target == cur_state->source.pc)
+    // A bare self-loop `A: IF cond GOTO A` / `A: GOTO A` is normally
+    // shortcut to assume(!cond) (assume(false) for the unconditional case):
+    // the guard's truth value never changes, so the loop either exits
+    // immediately or spins forever, and assuming the exit condition kills the
+    // non-terminating path. That is sound for reachability but masks
+    // non-termination, so under --termination fall through to the normal
+    // backwards-goto unwinding instead, letting loop_bound_exceeded raise the
+    // forward-condition signal that the loop never exits. See issue #4426.
+    if (
+      goto_target == cur_state->source.pc &&
+      !config.options.get_bool_option("termination"))
     {
       assert(
         cur_state->source.pc->location_number == goto_target->location_number);

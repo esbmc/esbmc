@@ -1,6 +1,7 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
 #include <util/c_expr2string.h>
+#include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
@@ -453,25 +454,28 @@ void goto_checkt::input_overflow_check(
   for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
        i++)
   {
-    const expr2tc &base_expr = get_base_object(func_call.operands[i]);
+    expr2tc base_expr = get_base_object(func_call.operands[i]);
     irep_idt arg_name;
-    if (is_symbol2t(base_expr))
-      arg_name = to_symbol2t(base_expr).thename;
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));
     // scanf("%13d",&arr[0]);  --> overflow
-    if (arg_name.empty())
+    //
+    // `&arr[i]` is lowered to pointer arithmetic `arr + i` (an add2t),
+    // which get_base_object does not peel.  Descend into the pointer-typed
+    // operand to recover the underlying buffer symbol.
+    if (
+      (is_add2t(base_expr) || is_sub2t(base_expr)) &&
+      is_pointer_type(base_expr))
     {
-      expr2tc deref = get_base_object(func_call.operands[i]);
-      exprt ptr = migrate_expr_back(deref);
-
-      // not the format we expected
-      if (!ptr.type().is_pointer())
-        return;
-
-      arg_name = ptr.operands()[0].identifier();
+      const expr2tc &lhs = *base_expr->get_sub_expr(0);
+      const expr2tc &rhs = *base_expr->get_sub_expr(1);
+      base_expr = get_base_object(is_pointer_type(lhs) ? lhs : rhs);
     }
+
+    if (is_symbol2t(base_expr))
+      arg_name = to_symbol2t(base_expr).thename;
+
     arg_names.push_back(arg_name);
   }
 
@@ -587,8 +591,7 @@ void goto_checkt::input_overflow_check(
     t->location.user_provided(true);
     t->location.property("overflow");
     t->location.comment(
-      "buffer overflow on " +
-      c_expr2string(migrate_expr_back(func_call.function), ns));
+      "buffer overflow on " + from_expr(ns, "", func_call.function));
   }
 }
 

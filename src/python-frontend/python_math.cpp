@@ -259,6 +259,25 @@ exprt python_math::promote_to_double_if_needed(exprt operand) const
     return from_double(*val, double_type());
   }
 
+  // A pointer-typed ("any") operand -- e.g. an unannotated parameter bound to
+  // a dynamic-list element, which the frontend types as void* (issue #2848) --
+  // has no statically known numeric value. Casting it to double builds an FP
+  // operation over a pointer sort, which aborts the SMT backend in
+  // get_significand_width() once an FP intrinsic such as ieee_sqrt consumes it
+  // (reproduced under --smt-during-symex --bitwuzla; see humaneval/39).
+  // Over-approximate soundly with a nondet double rather than emitting the
+  // malformed cast; the concrete value is recoverable by annotating the
+  // parameter's type.
+  if (operand.type().is_pointer())
+  {
+    log_warning(
+      "math on an unannotated (any-typed) value is over-approximated as "
+      "nondet; annotate the argument's type for a precise result (#2848)");
+    side_effect_expr_nondett nondet(double_type());
+    nondet.location() = operand.location();
+    return nondet;
+  }
+
   exprt double_operand = exprt("typecast", double_type());
   double_operand.copy_to_operands(operand);
   return double_operand;
@@ -643,6 +662,62 @@ exprt python_math::handle_floor_division(
   floor_div.copy_to_operands(bin_expr, if_expr); // bin_expr contains lhs/rhs
 
   return floor_div;
+}
+
+exprt python_math::handle_int_modulo(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &bin_expr)
+{
+  const typet mod_type = bin_expr.type();
+
+  // Fold direct constants (matching handle_floor_division's caution: only
+  // literals, never symbols, whose symbol-table value may be stale).
+  if (
+    lhs.is_constant() && rhs.is_constant() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  {
+    const BigInt lhs_val =
+      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+    const BigInt rhs_val =
+      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+    if (rhs_val != 0)
+    {
+      BigInt rem = lhs_val % rhs_val; // C remainder, sign of dividend
+      const bool sign_diff = (lhs_val < 0) != (rhs_val < 0);
+      if (rem != 0 && sign_diff)
+        rem += rhs_val; // shift to the sign of the divisor (Python)
+      return from_integer(rem, mod_type);
+    }
+  }
+
+  // Symbolic: corrected = rem + (rhs if (rem != 0 and signs_differ) else 0),
+  // where rem is the C remainder already in bin_expr.
+  exprt is_num_neg("<", bool_type());
+  is_num_neg.copy_to_operands(lhs, gen_zero(mod_type));
+
+  exprt is_den_neg("<", bool_type());
+  is_den_neg.copy_to_operands(rhs, gen_zero(mod_type));
+
+  exprt rem_nonzero("notequal", bool_type());
+  rem_nonzero.copy_to_operands(bin_expr, gen_zero(mod_type));
+
+  // Boolean XOR (not bitxor — see handle_floor_division / GitHub #4548).
+  exprt diff_signals("xor", bool_type());
+  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+
+  exprt cond("and", bool_type());
+  cond.copy_to_operands(rem_nonzero, diff_signals);
+
+  exprt correction("if", mod_type);
+  correction.copy_to_operands(cond, rhs, gen_zero(mod_type));
+
+  exprt result("+", mod_type);
+  result.copy_to_operands(bin_expr, correction);
+  result.location() = bin_expr.location();
+
+  return result;
 }
 
 void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)

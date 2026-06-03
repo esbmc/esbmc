@@ -16,12 +16,10 @@
 
 #include <tuple>
 #include <type_traits>
-#include <util/crypto_hash.h>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
@@ -82,13 +80,6 @@ inline size_t do_type_crc(const T &theval)
     return std::hash<T>{}(theval);
 }
 
-// Raw POD bytes into the SHA-1 stream.
-template <class T>
-inline void do_type_hash(const T &theval, crypto_hash &hash)
-{
-  hash.ingest((void *)&theval, sizeof(theval));
-}
-
 // Explicit overloads for the field types whose semantics differ.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2);
@@ -112,18 +103,6 @@ size_t do_type_crc(const type2tc &theval);
 size_t do_type_crc(const irep_idt &theval);
 size_t do_type_crc(const type2t::type_ids &i);
 size_t do_type_crc(const expr2t::expr_ids &i);
-
-void do_type_hash(const BigInt &theint, crypto_hash &hash);
-void do_type_hash(const fixedbvt &theval, crypto_hash &hash);
-void do_type_hash(const ieee_floatt &theval, crypto_hash &hash);
-void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash);
-void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash);
-void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash);
-void do_type_hash(const expr2tc &theval, crypto_hash &hash);
-void do_type_hash(const type2tc &theval, crypto_hash &hash);
-void do_type_hash(const irep_idt &theval, crypto_hash &hash);
-void do_type_hash(const type2t::type_ids &, crypto_hash &);
-void do_type_hash(const expr2t::expr_ids &, crypto_hash &);
 
 template <typename T>
 void do_type2string(
@@ -287,16 +266,6 @@ size_t generic_do_crc(const K &a)
 }
 
 // --------------------------------------------------------------------------
-// generic_hash: ingest expr_id and each field into a SHA-1 state.
-// --------------------------------------------------------------------------
-template <class K>
-void generic_hash(const K &a, crypto_hash &h)
-{
-  do_type_hash(a.expr_id, h);
-  std::apply([&](auto... mp) { (do_type_hash(a.*mp, h), ...); }, K::fields);
-}
-
-// --------------------------------------------------------------------------
 // generic_tostring: build the pretty-print member list from K::fields.
 // K::field_names[i] names the i-th user field (0-based). When K is an expr
 // kind, any type2tc slot in K::fields is skipped — the type is shown by
@@ -419,13 +388,6 @@ size_t generic_do_crc_type(const K &a)
     [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); }, K::fields);
   a.crc_val.store(v, std::memory_order_release);
   return v;
-}
-
-template <class K>
-void generic_hash_type(const K &a, crypto_hash &h)
-{
-  do_type_hash(a.type_id, h);
-  std::apply([&](auto... mp) { (do_type_hash(a.*mp, h), ...); }, K::fields);
 }
 
 template <class K>

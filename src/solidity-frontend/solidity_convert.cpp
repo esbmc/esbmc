@@ -891,7 +891,7 @@ bool solidity_convertert::populate_auxiliary_vars()
     ct.cmt_constant(true);
     array_typet arr_t(ct, size_expr);
     set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
-    arr_t.set("#sol_array_size", std::to_string(length));
+    set_sol_array_size(arr_t, std::to_string(length));
 
     std::string aux_name, aux_id;
     aux_name = "$" + _cname + "_bind_cname_list";

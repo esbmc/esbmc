@@ -127,7 +127,7 @@ fixedbvt &fixedbvt::operator*=(const fixedbvt &o)
   spec.width += o.spec.width;
   spec.integer_bits += o.spec.integer_bits;
 
-  round(old_spec);
+  this->round(old_spec);
 
   return *this;
 }
@@ -205,7 +205,7 @@ fixedbvt &fixedbvt::operator+=(const fixedbvt &o)
   v += o.v;
 
   // No need to change the spec.
-  round(spec);
+  this->round(spec);
 
   return *this;
 }
@@ -215,7 +215,7 @@ fixedbvt &fixedbvt::operator-=(const fixedbvt &o)
   v -= o.v;
 
   // No need to change the spec.
-  round(spec);
+  this->round(spec);
 
   return *this;
 }

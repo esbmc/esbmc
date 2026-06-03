@@ -1200,6 +1200,98 @@ __ESBMC_HIDE:;
   return sign * result;
 }
 
+// Shared core for float(str): validates `s` as a Python float literal and, when
+// valid, writes the parsed value to *out. Returns 1 on success, 0 otherwise.
+// The accepted grammar is a subset of CPython's float(): optional surrounding
+// ASCII whitespace, an optional sign, and a decimal mantissa with at least one
+// digit and at most one '.'. Scientific notation, inf and nan are handled by
+// the frontend's compile-time strtod paths (string literals and constant
+// symbols); this runtime model deliberately stays a single bounded scan over
+// the string so it remains cheap on nondeterministic inputs.
+static _Bool __python_parse_float(const char *s, double *out)
+{
+__ESBMC_HIDE:;
+  *out = 0.0;
+  if (!s)
+    return 0;
+
+  size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
+  size_t i = 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  int sign = 1;
+  if (i < len && (s[i] == '+' || s[i] == '-'))
+  {
+    if (s[i] == '-')
+      sign = -1;
+    i++;
+  }
+
+  // Accumulate integer and fractional digits into a single mantissa and divide
+  // by 10^(fractional digit count) exactly once at the end. A single rounding
+  // step matches std::strtod for short decimal literals, so float("0.3") on a
+  // variable agrees with the compile-time strtod path; the alternative of
+  // accumulating with a repeatedly-scaled 0.1 weight compounds rounding error.
+  double value = 0.0;
+  double divisor = 1.0;
+  _Bool any_digit = 0;
+
+  while (i < len && s[i] >= '0' && s[i] <= '9')
+  {
+    value = value * 10.0 + (double)(s[i] - '0');
+    any_digit = 1;
+    i++;
+  }
+
+  if (i < len && s[i] == '.')
+  {
+    i++;
+    while (i < len && s[i] >= '0' && s[i] <= '9')
+    {
+      value = value * 10.0 + (double)(s[i] - '0');
+      divisor *= 10.0;
+      any_digit = 1;
+      i++;
+    }
+  }
+
+  if (!any_digit)
+    return 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  if (i != len)
+    return 0;
+
+  *out = (double)sign * (value / divisor);
+  return 1;
+}
+
+// Python float() builtin - converts a string to a double. Returns 0.0 when the
+// string is not a valid float literal; callers gate the conversion on
+// __python_str_is_float() and raise ValueError on the invalid path.
+double __python_str_to_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  __python_parse_float(s, &value);
+  return value;
+}
+
+// Returns 1 iff `s` is a valid Python float literal accepted by
+// __python_str_to_float, else 0.
+_Bool __python_str_is_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  return __python_parse_float(s, &value);
+}
+
 // Python chr() builtin - converts Unicode code point to string
 char *__python_chr(int codepoint)
 {

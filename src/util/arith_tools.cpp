@@ -39,6 +39,37 @@ bool to_integer(const exprt &expr, BigInt &int_value)
   return true;
 }
 
+bool to_integer(const expr2tc &expr, BigInt &int_value)
+{
+  if (is_nil_expr(expr))
+    return true;
+
+  if (is_constant_int2t(expr))
+  {
+    int_value = to_constant_int2t(expr).value;
+    return false;
+  }
+
+  if (is_constant_bool2t(expr))
+  {
+    int_value = to_constant_bool2t(expr).value ? 1 : 0;
+    return false;
+  }
+
+  // A typecast of a constant: fold it through the simplifier so the cast is
+  // applied (typecast2t::do_simplify truncates / sign-extends / converts),
+  // then retry on the folded result. Reading the operand's raw value across a
+  // cast would be wrong (e.g. (uint8_t)300 != 300).
+  if (is_typecast2t(expr) && is_constant_expr(to_typecast2t(expr).from))
+  {
+    expr2tc folded = expr->simplify();
+    if (!is_nil_expr(folded) && folded != expr)
+      return to_integer(folded, int_value);
+  }
+
+  return true;
+}
+
 exprt from_integer(const BigInt &int_value, const typet &type)
 {
   exprt expr;

@@ -1353,11 +1353,8 @@ exprt string_handler::handle_string_membership(
   return not_equal;
 }
 
-std::string string_handler::ensure_string_function_symbol(
-  const std::string &function_name,
-  const typet &return_type,
-  const std::vector<typet> &arg_types,
-  const locationt &location)
+std::string
+string_handler::ensure_string_function_symbol(const std::string &function_name)
 {
   symbol_id func_id;
   func_id.set_prefix("c:");
@@ -1365,24 +1362,20 @@ std::string string_handler::ensure_string_function_symbol(
 
   std::string func_symbol_id = func_id.to_string();
 
+  // The operational-model library is linked before conversion runs, so a
+  // registered model already has its body in the symbol table here. A missing
+  // symbol therefore means the model is absent from the goto allowlist; fail
+  // loudly rather than fabricate a body-less declaration that symex would
+  // silently treat as an unconstrained nondet value. Models defined under
+  // src/c2goto/library/python/ register automatically via
+  // scripts/gen_python_c_models.py; external dependencies are listed in
+  // python_c_extern_deps in src/c2goto/cprover_library.cpp.
   if (find_cached_symbol(func_symbol_id) == nullptr)
-  {
-    code_typet code_type;
-    code_type.return_type() = return_type;
-
-    for (const auto &arg_type : arg_types)
-    {
-      code_typet::argumentt arg;
-      arg.type() = arg_type;
-      code_type.arguments().push_back(arg);
-    }
-
-    symbolt symbol = converter_.create_symbol(
-      "", function_name, func_symbol_id, location, code_type);
-
-    converter_.add_symbol(symbol);
-    symbol_cache_[func_symbol_id] = find_cached_symbol(func_symbol_id);
-  }
+    throw std::runtime_error(
+      "Python operational model '" + function_name +
+      "' is dispatched but not registered (no body in the symbol table). "
+      "Define it under src/c2goto/library/python/ or add it to "
+      "python_c_extern_deps in src/c2goto/cprover_library.cpp.");
 
   return func_symbol_id;
 }
@@ -1556,6 +1549,55 @@ exprt string_handler::handle_int_conversion_with_base(
   }
 
   return handle_string_to_int(arg, base_expr, location);
+}
+
+exprt string_handler::handle_string_to_float(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Ensure we have a null-terminated string and take its base address.
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *float_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_to_float");
+  if (!float_symbol)
+    throw std::runtime_error(
+      "__python_str_to_float function not found in symbol table");
+
+  // Call __python_str_to_float(str)
+  side_effect_expr_function_callt float_call;
+  float_call.function() = symbol_expr(*float_symbol);
+  float_call.arguments().push_back(str_addr);
+  float_call.location() = location;
+  float_call.type() = double_type();
+
+  return float_call;
+}
+
+exprt string_handler::handle_string_is_float(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *check_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_is_float");
+  if (!check_symbol)
+    throw std::runtime_error(
+      "__python_str_is_float function not found in symbol table");
+
+  // Call __python_str_is_float(str)
+  side_effect_expr_function_callt check_call;
+  check_call.function() = symbol_expr(*check_symbol);
+  check_call.arguments().push_back(str_addr);
+  check_call.location() = location;
+  check_call.type() = bool_type();
+
+  return check_call;
 }
 
 exprt string_handler::handle_chr_conversion(
@@ -1890,13 +1932,17 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_receiver_expr;
   };
 
-  // Tuple receivers reuse method names that overlap with string methods
-  // (count, index). Defer to the regular dispatch table so the tuple-aware
-  // handler runs instead of evaluating those as string methods.
+  // Tuple and list receivers reuse method names that overlap with string
+  // methods (count, index). Defer to the regular dispatch table so the
+  // tuple-/list-aware handlers run instead of evaluating those as str methods.
   if (method_name == "count" || method_name == "index")
   {
     exprt recv = get_receiver_expr();
-    if (converter_.get_tuple_handler().is_tuple_type(recv.type()))
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    if (
+      converter_.get_tuple_handler().is_tuple_type(recv.type()) ||
+      recv.type() == list_type ||
+      (recv.type().is_pointer() && recv.type().subtype() == list_type))
       return nil_exprt();
   }
 

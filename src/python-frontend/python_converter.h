@@ -293,6 +293,16 @@ private:
 
   exprt get_unary_operator_expr(const nlohmann::json &element);
 
+  /// Walrus operator `(target := value)` (PEP 572): bind value to target as a
+  /// side effect (emitted into the current block) and evaluate to that value.
+  exprt get_named_expr(const nlohmann::json &element);
+
+  /// True if a walrus operator (NamedExpr) appears anywhere in `node`'s tree.
+  /// Used to refuse a walrus in conditionally / repeatedly evaluated positions
+  /// (while-test, ternary branch, short-circuit operand) where the single
+  /// unconditional binding emitted by get_named_expr would be unsound.
+  static bool contains_named_expr(const nlohmann::json &node);
+
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
   /// Coarse Python-level type category used to decide whether two operands
@@ -666,6 +676,19 @@ private:
     const nlohmann::json &target,
     codet &target_block);
 
+  /**
+   * Desugar a tuple/list unpacking whose targets include lvalues (a[i],
+   * obj.attr) into temp-mediated single assignments routed through the normal
+   * single-assignment path. Evaluates every RHS element into a temporary
+   * first (Python evaluates the whole RHS before assigning), then stores each
+   * target, so the swap a[i], a[j] = a[j], a[i] is handled soundly (#4792).
+   * Requires the RHS to be a Tuple/List literal of matching arity.
+   */
+  void desugar_unpacking_with_lvalue_targets(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
   // =========================================================================
   // Symbol creation helper methods
   // =========================================================================
@@ -966,7 +989,9 @@ private:
     const std::string &member_name);
 
   /// Handle Optional value access
-  exprt unwrap_optional_if_needed(const exprt &expr);
+  exprt unwrap_optional_if_needed(
+    const exprt &expr,
+    const nlohmann::json &element = nlohmann::json());
 
   // =========================================================================
   // Dunder method dispatch for user-defined struct types
@@ -996,6 +1021,11 @@ private:
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
+  /// The entry-point module AST, captured at construction. `ast_json` is
+  /// temporarily swapped to imported modules during conversion (see with_ast),
+  /// so this retains a stable handle to the top-level module whose body holds
+  /// the constructor call sites used by cross-module attribute-type inference.
+  const nlohmann::json *entry_ast_;
   const global_scope &global_scope_;
   type_handler type_handler_;
   string_builder *string_builder_;
@@ -1042,6 +1072,41 @@ private:
   /// Maps any symbol currently known to refer to an input() string
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
+
+  /// Straight-line dynamic-retyping support (#4770, #4774). Maps the original
+  /// (first-typed) symbol ID of a variable to the symbol that currently holds
+  /// its value after an incompatible numeric<->string reassignment. Loads of
+  /// the variable (and the LHS of a later reassignment) are redirected through
+  /// this map so they observe the new type. Only populated for retypes at
+  /// block_nesting_ == 1 (an unconditional top-level statement), where there is
+  /// no control-flow join that could make the runtime type ambiguous.
+  std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
+  /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
+  /// the class (struct tag, without the "tag-" prefix) most recently assigned
+  /// to it at the current program point, last-write-wins. Only written for
+  /// unconditional top-level (block_nesting_ == 1) assignments and cleared on
+  /// entry to any nested/conditional body, so a class is never carried across a
+  /// control-flow join. Read in converter_expr to resolve nested attribute
+  /// access on a field the usage-site scanner left as any_type().
+  std::unordered_map<std::string, std::string> flow_class_map_;
+
+  /// Canonicalise a Name / `Name.attr` AST node into a flow_class_map_ key.
+  /// Returns "" for any other shape (e.g. subscript, nested attribute base).
+  std::string flow_lvalue_path(const nlohmann::json &node) const;
+
+  /// Class name of an assignment RHS for flow_class_map_: a `Cls(...)` call to a
+  /// known class, or a Name already tracked in flow_class_map_. Else "".
+  std::string flow_rhs_class(const nlohmann::json &rhs) const;
+
+  /// Nesting depth of get_block() invocations. The module/imported-module body
+  /// is depth 1; every nested body (function, if/while/for, try/except) is
+  /// deeper because those bodies are converted through get_block() too. Gates
+  /// straight-line retyping to depth 1 only: a retype inside any nested or
+  /// conditionally-executed body cannot be modelled by a single static type,
+  /// so it is left to the existing fallback instead of being renamed.
+  unsigned block_nesting_ = 0;
 
   function_call_cache function_call_cache_;
 

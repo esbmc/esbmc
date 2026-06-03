@@ -3,7 +3,6 @@
 
 #include <optional>
 #include <irep2/irep2.h>
-#include <util/type.h>
 
 // Forward-declare a concrete <kind>_type2t class for every entry in
 // type_kinds.inc. The same manifest drives the type_ids enum in

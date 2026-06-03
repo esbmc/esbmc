@@ -18,12 +18,18 @@
 ///
 /// Iterates to a fixed point so nested no-op loops collapse outward.
 ///
-/// Gated on @p options: the dead-loop erasure (Path 1) is skipped under
-/// --termination (would erase non-terminating `while (1) {}`) and under
-/// coverage modes (drops branch points the instrumentation needs).
-/// Step recognition (Path 2) is safe under --termination because the
-/// pattern only matches strictly-terminating counter loops with
-/// overflow-checked bounds.
+/// Enabled by default. Skipped only where a loop rewrite is unsound or
+/// destroys a needed signal:
+///   - --termination: dead-loop erasure (Path 1) and the self-loop rewrite
+///     are skipped — rewriting an infinite empty loop to assume(false) would
+///     mask the non-termination verdict under test. Constant-bound counter
+///     step recognition (Path 2) still runs (it only matches strictly-
+///     terminating, overflow-checked loops).
+///   - Coverage modes: skipped entirely (erasing loops drops branch points
+///     the instrumentation needs).
+/// The unwinding-assertion signal is intentionally not preserved: removing a
+/// loop suppresses the "needs more unwinding" failure, which is preferable to
+/// leaving the loop unverifiable.
 void goto_loop_simplify(
   goto_functionst &goto_functions,
   const optionst &options);

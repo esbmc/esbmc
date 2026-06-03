@@ -1,9 +1,9 @@
 #ifndef IREP2_GUARD_H_
 #define IREP2_GUARD_H_
 
-#include <vector>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
+#include <irep2/guard_seq.h>
 
 /** Path-condition guard container.
  *
@@ -30,7 +30,7 @@
 class guard2tc : public expr2tc
 {
 public:
-  std::vector<expr2tc> guard_list;
+  guard_seq guard_list;
 
   guard2tc() = default;
   guard2tc(const guard2tc &) = default;
@@ -73,6 +73,8 @@ private:
    *  after operator-= / operator|= installs a fresh list. Asserts that
    *  the base is nil (callers reset it first). */
   void build_guard_expr();
+  void set_guard_list_and_rebuild(guard_seq &&new_guard_list);
+  void set_guard_list_and_base(guard_seq &&new_guard_list, const expr2tc &base);
 
   friend guard2tc &operator-=(guard2tc &g1, const guard2tc &g2);
   friend guard2tc &operator|=(guard2tc &g1, const guard2tc &g2);

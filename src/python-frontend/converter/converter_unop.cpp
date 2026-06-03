@@ -4,6 +4,8 @@
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
@@ -47,8 +49,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     locationt location = get_location_from_decl(element);
     typet list_type = type_handler_.get_list_type();
 
-    // Get dict.keys member
-    member_exprt keys_member(unary_sub, "keys", list_type);
+    // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+    // member_exprt); `unary_sub` is dict-typed (is_dict_type ⇒ struct), so the
+    // member2t source precondition holds.
+    expr2tc dict2;
+    migrate_expr(unary_sub, dict2);
+    exprt keys_member =
+      migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
 
     // Find __ESBMC_list_size function
     const symbolt *size_func =
@@ -73,11 +80,14 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     size_call.location() = location;
     current_block->copy_to_operands(size_call);
 
-    // Return comparison: size == 0 (empty dict is truthy for 'not')
-    exprt is_empty("=", bool_type());
-    is_empty.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+    // Return comparison: size == 0 (empty dict is truthy for 'not'). Phase 4.4:
+    // build the returned comparison in IREP2 and lower once at the return. The
+    // size_decl/size_call statements above stay legacy — their operands feed
+    // legacy code_*t shells, so moving them in isolation buys nothing (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
     is_empty.location() = location;
-
     return is_empty;
   }
 
@@ -90,14 +100,24 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     if (!strlen_sym)
       throw std::runtime_error("strlen not found for string truthiness check");
 
-    side_effect_expr_function_callt strlen_call;
-    strlen_call.function() = symbol_expr(*strlen_sym);
-    strlen_call.arguments().push_back(
-      string_handler_.get_array_base_address(unary_sub));
-    strlen_call.type() = size_type();
-    strlen_call.location() = location;
+    // Phase 4.4 (first wiring): build the `strlen(base) == 0` result in IREP2
+    // internally via the Phase 4.2 helpers, lowering to legacy `exprt` at a
+    // single seam (the `return`). The call argument comes back from the string
+    // handler as a legacy `exprt`, so migrate it forward; the whole subtree is
+    // then IREP2 until the one back-migration. This is statement-free, so no
+    // legacy `codet` shell is involved (P1 untouched).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc base2;
+    migrate_expr(string_handler_.get_array_base_address(unary_sub), base2);
 
-    return equality_exprt(strlen_call, gen_zero(size_type()));
+    expr2tc strlen_call2 = side_effect_function_call2tc(
+      size_t2, symbol_expr2tc(*strlen_sym), {base2});
+
+    expr2tc is_empty2 = equality2tc(strlen_call2, gen_zero(size_t2));
+
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
   }
 
   // Handle 'not' operator on list types: convert to emptiness check
@@ -140,11 +160,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     size_call.location() = location;
     current_block->copy_to_operands(size_call);
 
-    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true when empty)
-    exprt is_empty =
-      equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
+    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true
+    // when empty). Phase 4.4: build in IREP2, lower once at the return; the
+    // size_decl/size_call statements above stay legacy (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
     is_empty.location() = location;
-
     return is_empty;
   }
 

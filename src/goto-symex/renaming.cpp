@@ -3,7 +3,23 @@
 #include <irep2/irep2.h>
 #include <util/message.h>
 #include <util/migrate.h>
+#include <util/namespace.h>
 #include <util/prefix.h>
+#include <util/symbol.h>
+
+namespace
+{
+/** Treat a symbol with the `__thread` / `_Thread_local` qualifier as a
+ *  per-thread instance instead of a shared global. The C frontend already
+ *  sets symbolt::is_thread_local from clang::VarDecl::getTLSKind(). */
+bool is_thread_local(const namespacet *ns, const irep_idt &name)
+{
+  if (!ns)
+    return false;
+  const symbolt *sym = ns->lookup(name);
+  return sym && sym->is_thread_local;
+}
+} // namespace
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
@@ -20,28 +36,35 @@ unsigned renaming::level2t::current_number(const name_record &symbol) const
 
 unsigned int renaming::level1t::current_number(const irep_idt &name) const
 {
-  current_namest::const_iterator it = current_names.find(name_record(name));
-  if (it == current_names.end())
-    return 0;
-  return it->second;
+  const unsigned *it = current_names.find(name_record(name));
+  return it ? *it : 0;
 }
 
 void renaming::level1t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
-  current_namest::const_iterator it =
-    current_names.find(name_record(to_symbol2t(sym)));
+  const unsigned *it = current_names.find(name_record(to_symbol2t(sym)));
 
-  if (it == current_names.end())
+  if (it == nullptr)
   {
-    // can not find; it's a global symbol.
-    symbol.rlevel = symbol_renaming_level::level1_global;
+    // Not in this frame's locals. Either a regular global (shared across
+    // threads) or a `__thread`-qualified global (per-thread). For TLS,
+    // route to level1 with the active thread_id so level2 keys it
+    // separately for each thread.
+    if (is_thread_local(ns, symbol.thename))
+    {
+      symbol.rlevel = symbol_renaming_level::level1;
+      symbol.level1_num = 0;
+      symbol.thread_num = thread_id;
+    }
+    else
+      symbol.rlevel = symbol_renaming_level::level1_global;
     return;
   }
 
   symbol.rlevel = symbol_renaming_level::level1;
-  symbol.level1_num = it->second;
+  symbol.level1_num = *it;
   symbol.thread_num = thread_id;
 }
 
@@ -86,16 +109,28 @@ void renaming::level1t::rename(expr2tc &expr)
     if (sym.rlevel != symbol_renaming_level::level0)
       return;
 
-    const current_namest::const_iterator it =
-      current_names.find(name_record(sym));
+    const unsigned *it = current_names.find(name_record(sym));
 
-    if (it != current_names.end())
+    if (it != nullptr)
     {
       expr = symbol2tc(
         sym.type,
         sym.thename,
         symbol_renaming_level::level1,
-        it->second,
+        *it,
+        0,
+        thread_id,
+        0);
+    }
+    else if (is_thread_local(ns, sym.thename))
+    {
+      // `__thread` global: give each thread its own level1 instance so
+      // level2 keys the SSA chain separately per thread.
+      expr = symbol2tc(
+        sym.type,
+        sym.thename,
+        symbol_renaming_level::level1,
+        0,
         0,
         thread_id,
         0);

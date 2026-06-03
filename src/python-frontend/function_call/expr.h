@@ -308,6 +308,12 @@ private:
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
 
+  // True when the Name receiver positively resolves to a non-dict object type
+  // (a class instance, identified by a struct tag other than "__python_dict__").
+  // Used to stop dict-named methods (get/pop/keys/...) from shadowing a class's
+  // own same-named method (e.g. queue.Queue.get()).
+  bool receiver_is_non_dict_object() const;
+
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
   bool is_dict_class_method_call() const;
 
@@ -323,10 +329,17 @@ private:
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
+  // deque front-end methods, modelled on the list backing store
+  // (collections.deque is a list in our model): popleft() == pop(0),
+  // appendleft(x) == insert(0, x).
+  exprt handle_list_popleft() const;
+  exprt handle_list_appendleft() const;
   exprt handle_list_copy() const;
   exprt handle_list_remove() const;
   exprt handle_list_sort() const;
   exprt handle_list_reverse() const;
+  exprt handle_list_count() const;
+  exprt handle_list_index() const;
 
   /*
    * Check if the current function call is to a regular expression module function

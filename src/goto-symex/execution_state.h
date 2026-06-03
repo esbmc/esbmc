@@ -162,8 +162,8 @@ public:
       expr2tc &lhs_symbol,
       const expr2tc &const_value,
       const expr2tc &assigned_value) override;
-    crypto_hash generate_l2_state_hash() const;
-    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
+    std::size_t generate_l2_state_hash() const;
+    typedef std::map<irep_idt, std::size_t> current_state_hashest;
     current_state_hashest current_hashes;
   };
 
@@ -487,14 +487,14 @@ public:
    *  in a full hash of the current execution state.
    *  @return Hash of entire current execution state.
    */
-  crypto_hash generate_hash() const;
+  std::size_t generate_hash() const;
 
   /**
    *  Generate hash of an expression.
    *  @param rhs Expression to hash.
    *  @return Hash of passed in expression.
    */
-  crypto_hash update_hash_for_assignment(const expr2tc &rhs);
+  std::size_t update_hash_for_assignment(const expr2tc &rhs);
 
   /**
    *  Print stack trace of each thread to stdout.

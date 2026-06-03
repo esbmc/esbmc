@@ -1,0 +1,5 @@
+CORE
+main.c
+--data-races-check-only --no-assertions --context-bound 3
+^VERIFICATION FAILED$
+^.*R/W data race on c:@stopped$

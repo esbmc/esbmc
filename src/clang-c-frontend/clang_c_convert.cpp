@@ -418,27 +418,22 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  /* We successfully constructed the type of this symbol; replace the
-   * symbol with the incomplete type by one with the now-complete type
-   * definition.
-   * Do this by erasing and re-inserting because the order of definitions in the
-   * context matters. This type should be defined after any of the types that it
-   * is composed of.
+  /* We successfully constructed the type of this symbol; complete the
+   * incomplete-type symbol with the now-complete type definition, in place.
+   * The order of definitions in the context matters — this type must be
+   * defined after any of the types it is composed of — so move it to the
+   * back of the insertion order afterwards.
    *
-   * Refresh `sym` here: get_struct_union_class_fields() above can recurse
-   * through field types into other records; any of those recursions may
-   * call erase_symbol() on the symbol table, and although unordered_map
-   * doesn't invalidate references on rehash, it *does* invalidate the
-   * specific element that was erased.  In the cross-record recursion case
-   * the same record can be processed twice, and the second pass's erase
-   * makes the outer `sym` dangling.  A fresh find_symbol() by id avoids
-   * the use-after-free. */
+   * Refresh `sym` by id: get_struct_union_class_fields() above can recurse
+   * through field types into other records, and any of those recursions may
+   * reorder/complete the same record, leaving the outer `sym` stale. A fresh
+   * find_symbol() avoids using a stale pointer. (The symbol table is
+   * node-based, so updating in place and relocating no longer dangles or
+   * copies the symbol.) */
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
-  symbolt symbol = *sym;
-  context.erase_symbol(symbol.id);
-  symbol.set_type(t);
-  sym = context.move_symbol_to_context(symbol);
+  sym->set_type(t);
+  sym = context.reorder_symbol_to_back(id);
 
   {
     typet t = sym->get_type();
@@ -617,19 +612,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     if (vd.isStaticDataMember() && vd.isOutOfLine())
     {
-      // Reorder to respect definition order for static_lifetime_init()
-      // C++ class static members are inserted into ordered_symbols when the
-      // class body is processed (in declaration order), but their out-of-class
-      // definitions appear later in textual order. Both C and C++ require
-      // initialization in definition order
+      // Reorder to respect definition order for static_lifetime_init().
+      // C++ class static members are inserted when the class body is processed
+      // (in declaration order), but their out-of-class definitions appear later
+      // in textual order, and the later definition supplies the complete type
+      // (e.g. an array's real size). Erase the incomplete declaration-order
+      // symbol so move_symbol_to_context below re-adds the complete one at the
+      // end — both replacing its contents and fixing the init order.
       symbolt *s = context.find_symbol(symbol.id);
       if (
         s &&
         vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
-        // In AST, nodes will be generated for the template Instantiation.
-        // We have already initialized it, so skip it
-
-        // Remove the zero initialization symbol and re-arrange the initialization order
+        // In AST, nodes are also generated for the template instantiation,
+        // already initialized — skip those.
         context.erase_symbol(s->id);
     }
 
@@ -4531,12 +4526,36 @@ void clang_c_convertert::set_location(
     return;
   }
 
-  location.set_line(PLoc.getLine());
-  location.set_file(PLoc.getFilename());
-  location.set_column(PLoc.getColumn());
+  const unsigned line = PLoc.getLine();
+  const unsigned column = PLoc.getColumn();
+  const char *filename = PLoc.getFilename();
 
+  // Hot path: consecutive AST nodes almost always share file+function (and
+  // often line+column for compiler-generated decls and macro expansions).
+  // Reuse the previous locationt's dt (irept assignment is a refcount bump)
+  // rather than building a fresh irep with 4 named_sub entries — that
+  // path dominated peak heap on large benchmarks (168 MB / 2M detatches
+  // on a 590 KB ECA program).
+  if (
+    last_loc_valid && line == last_loc_line && column == last_loc_column &&
+    last_loc_function == function_name && last_loc_filename == filename)
+  {
+    location = last_loc;
+    return;
+  }
+
+  location.set_line(line);
+  location.set_file(filename);
+  location.set_column(column);
   if (!function_name.empty())
     location.set_function(function_name);
+
+  last_loc = location;
+  last_loc_line = line;
+  last_loc_column = column;
+  last_loc_filename = filename;
+  last_loc_function = function_name;
+  last_loc_valid = true;
 }
 
 std::string clang_c_convertert::get_modulename_from_path(std::string path)

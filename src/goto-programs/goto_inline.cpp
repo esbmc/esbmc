@@ -28,20 +28,19 @@ static bool can_typecast_argument(const type2tc &formal, const type2tc &actual)
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,
-  const code_typet &code_type,
+  const code_type2t &code_type,
   const std::vector<expr2tc> &arguments,
   goto_programt &dest)
 {
-  const code_typet::argumentst &argument_types = code_type.arguments();
+  const std::vector<type2tc> &argument_types = code_type.arguments;
+  const std::vector<irep_idt> &argument_names = code_type.argument_names;
+  assert(argument_types.size() == argument_names.size());
 
   auto actual_it = arguments.begin();
-  for (const auto &argument_type : argument_types)
+  for (size_t i = 0; i < argument_types.size(); ++i)
   {
-    // The "argument_type" entry from a code_typet is itself an exprt that
-    // carries the formal parameter's name (#identifier) and type.
-    const exprt &formal = static_cast<const exprt &>(argument_type);
-    const irep_idt &identifier = formal.cmt_identifier();
-    const type2tc formal_type = migrate_type(ns.follow(formal.type()));
+    const irep_idt &identifier = argument_names[i];
+    const type2tc formal_type = ns.follow(argument_types[i]);
 
     // If the call site supplied fewer arguments than the function definition
     // declares, only declare the formal parameter (it remains unassigned and
@@ -57,7 +56,7 @@ void goto_inlinet::parameter_assignments(
       if (identifier != "")
       {
         goto_programt::targett decl = dest.add_instruction();
-        decl->make_other();
+        decl->make_decl();
         decl->code = code_decl2tc(formal_type, identifier);
         decl->location = location;
         decl->function = location.get_function();
@@ -74,7 +73,7 @@ void goto_inlinet::parameter_assignments(
 
     {
       goto_programt::targett decl = dest.add_instruction();
-      decl->make_other();
+      decl->make_decl();
       decl->code = code_decl2tc(formal_type, identifier);
       decl->location = location;
       decl->function = location.get_function();
@@ -238,13 +237,8 @@ void goto_inlinet::expand_function_call(
     replace_return(tmp2, lhs);
 
     goto_programt tmp;
-    // parameter_assignments still consumes the legacy code_typet; recover it
-    // from the IREP2 goto-function type at this single call site.
     parameter_assignments(
-      tmp2.instructions.front().location,
-      to_code_type(migrate_type_back(f.type)),
-      arguments,
-      tmp);
+      tmp2.instructions.front().location, to_code_type(f.type), arguments, tmp);
     tmp.destructive_append(tmp2);
 
     if (f.body.hide)
@@ -409,9 +403,15 @@ void goto_inline(
 
   goto_inline.goto_inline(it->second.body);
 
-  // clean up
+  // clean up: every callee has been inlined into __ESBMC_main, so the
+  // other function bodies are stale and can be released. Preserve the
+  // one symex will actually execute -- the entry point keyed by the
+  // bare name "__ESBMC_main" (NOT the user's `main`, which is keyed by
+  // its mangled symbol identifier `c:@F@main`; comparing against the
+  // literal "main" matched nothing and silently cleared every body,
+  // including the entry, leaving symex with an empty program).
   for (auto &it : goto_functions.function_map)
-    if (it.first != "main")
+    if (it.first != "__ESBMC_main")
     {
       it.second.body_available = false;
       it.second.body.clear();

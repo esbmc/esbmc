@@ -1,4 +1,6 @@
 #include <memory>
+#include <charconv>
+#include <unordered_map>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -8,7 +10,6 @@
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
@@ -40,16 +41,6 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
     expected_name,
     actual_name,
     target));
-}
-
-void irep2_bad_family_cast(unsigned actual, const char *accessor)
-{
-  const char *actual_name =
-    (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: {}() called on incompatible expr (expr_id = {})",
-    accessor,
-    actual_name));
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -132,25 +123,105 @@ bool constant_bool2t::is_false() const
 
 std::string symbol2t::get_symbol_name() const
 {
+  // The fully-qualified SSA name is a pure function of the symbol's
+  // (thename, rlevel, l1, thread, node, l2) identity fields, which are
+  // immutable for a given node. symex requests the same symbol's name many
+  // times (~18x measured on test_locks_13), and each rebuild allocated
+  // several short-lived strings. Memoise via a thread-local side table keyed
+  // by that identity: the qualified name accounted for ~16% of runtime
+  // (mostly i2string + string concatenation), and caching removes the bulk
+  // of it.
+  //
+  // The cache lives outside the node because irep2's node-layout invariant
+  // (fields_cover_class) does not admit a non-identity member on the node.
+  // thread_local keeps it correct under the single-writer-per-thread
+  // contract without locking; values are interned irep_idt (4 bytes) so the
+  // table stays compact regardless of name length.
+  struct keyt
+  {
+    unsigned name_no, l1, thr, node, l2;
+    int lvl;
+    bool operator==(const keyt &o) const
+    {
+      return name_no == o.name_no && l1 == o.l1 && thr == o.thr &&
+             node == o.node && l2 == o.l2 && lvl == o.lvl;
+    }
+  };
+  struct key_hash
+  {
+    std::size_t operator()(const keyt &k) const
+    {
+      std::size_t h = k.name_no;
+      h = h * 1000003u + k.l1;
+      h = h * 1000003u + k.thr;
+      h = h * 1000003u + k.node;
+      h = h * 1000003u + k.l2;
+      h = h * 1000003u + (unsigned)k.lvl;
+      return h;
+    }
+  };
+  static thread_local std::unordered_map<keyt, irep_idt, key_hash> memo;
+
+  keyt key{
+    thename.get_no(),
+    level1_num,
+    thread_num,
+    node_num,
+    level2_num,
+    (int)rlevel};
+  auto it = memo.find(key);
+  if (it != memo.end())
+    return it->second.as_string();
+
+  // Build the qualified name into a single pre-sized buffer. The previous
+  // `as_string() + "?" + i2string(n) + ...` form allocated ~9 temporary
+  // strings per name (each i2string is an sprintf + heap string, and each
+  // operator+ reallocates the growing prefix). Appending decimal digits in
+  // place with std::to_chars keeps it to one allocation and no sprintf.
+  auto append_uint = [](std::string &out, unsigned v) {
+    char buf[10]; // unsigned <= 4294967295 -> at most 10 digits
+    auto [end, ec] = std::to_chars(buf, buf + sizeof(buf), v);
+    (void)ec;
+    out.append(buf, end);
+  };
+
+  const std::string &base = thename.as_string();
+  std::string built;
+  built.reserve(base.size() + 32);
+  built = base;
   switch (rlevel)
   {
   case symbol_renaming_level::level0:
-    return thename.as_string();
-  case symbol_renaming_level::level1:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num);
-  case symbol_renaming_level::level2:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num) + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
   case symbol_renaming_level::level1_global:
-    return thename.as_string();
+    break;
+  case symbol_renaming_level::level1:
+    built += '?';
+    append_uint(built, level1_num);
+    built += '!';
+    append_uint(built, thread_num);
+    break;
+  case symbol_renaming_level::level2:
+    built += '?';
+    append_uint(built, level1_num);
+    built += '!';
+    append_uint(built, thread_num);
+    built += '&';
+    append_uint(built, node_num);
+    built += '#';
+    append_uint(built, level2_num);
+    break;
   case symbol_renaming_level::level2_global:
-    return thename.as_string() + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
+    built += '&';
+    append_uint(built, node_num);
+    built += '#';
+    append_uint(built, level2_num);
+    break;
+  default:
+    assert(0 && "Unrecognized renaming level enum");
+    abort();
   }
-  assert(0 && "Unrecognized renaming level enum");
-  abort();
+  memo.emplace(key, irep_idt(built));
+  return built;
 }
 
 namespace
@@ -493,21 +564,6 @@ size_t expr2t::crc() const
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                              \
     return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  case end_expr_id:
-    break;
-  }
-  std::unreachable();
-}
-
-void expr2t::hash(crypto_hash &h) const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_hash(static_cast<const kind##2t &>(*this), h);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   case end_expr_id:

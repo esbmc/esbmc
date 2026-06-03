@@ -45,6 +45,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -468,11 +469,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -827,14 +828,16 @@ void report_coverage(
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-claims-rm");
 
-    // reached claims:
+    // Local copy: the JSON writer downstream reads the original
+    // reached_claims; mutating it here would mark every claim uncovered.
+    auto reached_claims_local = reached_claims;
     auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim_pair : total_cond_assert)
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
       std::string claim_sig = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim_sig))
+      if (reached_claims_local.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
@@ -848,7 +851,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        reached_claims.erase(claim_sig);
+        reached_claims_local.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -860,7 +863,7 @@ void report_coverage(
           claim_msg = "!(" + claim_msg + ")";
         std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim_sig))
+        if (reached_claims_local.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
@@ -877,7 +880,7 @@ void report_coverage(
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        reached_claims.erase(r_claim_sig);
+        reached_claims_local.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);

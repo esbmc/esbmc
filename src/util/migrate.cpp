@@ -7,7 +7,6 @@
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
@@ -150,8 +149,8 @@ static type2tc migrate_type0(const typet &type)
     else
     {
       exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-      simplify(sz);
       migrate_expr(sz, size);
+      simplify(size);
       size = fixup_containerof_in_sizeof(size);
     }
 
@@ -169,8 +168,8 @@ static type2tc migrate_type0(const typet &type)
       "https://clang.llvm.org/docs/"
       "LanguageExtensions.html#vectors-and-extended-vectors");
     exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-    simplify(sz);
     migrate_expr(sz, size);
+    simplify(size);
     size = fixup_containerof_in_sizeof(size);
     return vector_type2tc(subtype, size);
   }
@@ -429,6 +428,33 @@ void set_symbol_type(symbolt &sym, const type2tc &t)
   // as the source of truth; the legacy `typet` is derived lazily on the
   // next get_type() call via migrate_type_back.
   sym.set_type(t);
+}
+
+expr2tc symbol_expr2tc(const symbolt &sym)
+{
+  // IREP2 form of symbol_expr(sym): a level-0 symbol2t carrying the symbol's
+  // IREP2 type (B2 source of truth) and identifier. The legacy display name is
+  // not represented in IREP2 (and migrate_expr drops it on the same path).
+  return symbol2tc(migrate_symbol_type(sym), sym.id);
+}
+
+expr2tc side_effect_function_call2tc(
+  const type2tc &return_type,
+  const expr2tc &function,
+  const std::vector<expr2tc> &arguments)
+{
+  // Mirrors migrate_expr's lowering of side_effect_expr_function_callt:
+  // operand = callee, arguments = args, nil size, and an *empty* (not nil)
+  // alloctype -- the legacy node carries no #type, and migrate_type of the
+  // resulting empty typet is the empty type, so the empty type is the canonical
+  // round-trip-stable form here (a nil alloctype would canonicalise to empty).
+  return sideeffect2tc(
+    return_type,
+    function,
+    expr2tc(),
+    arguments,
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)

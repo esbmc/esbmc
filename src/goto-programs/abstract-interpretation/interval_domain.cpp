@@ -138,8 +138,6 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   return result;
 }
 
-#include <cmath>
-
 template <>
 interval_domaint::real_intervalt
 interval_domaint::get_interval_from_const(const expr2tc &e) const
@@ -150,15 +148,20 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
   auto real_value = to_constant_floatbv2t(e).value;
 
-  // Health check, is the conversion to double ok? See #1037
-  if (!real_value.is_normal() || real_value.is_zero())
+  // Zero is exactly representable as a double (#1037 was fixed in PR #1038);
+  // the tightest sound interval for a zero constant is [0, 0].
+  if (real_value.is_zero())
   {
-    if (real_value.is_double())
-      log_warning("ESBMC fails to convert {} into double", *e);
-
-    // Give up for top!
+    const double zero = real_value.to_double(); // exactly 0.0
+    result.make_le_than(zero);
+    result.make_ge_than(zero);
     return result;
   }
+
+  // We can only derive a finite real interval from a normal, double-precision
+  // constant. NaN/infinity, subnormals, or non-double specs stay at top.
+  if (!real_value.is_normal())
+    return result;
 
   auto value1 = to_constant_floatbv2t(e).value;
   auto value2 = to_constant_floatbv2t(e).value;

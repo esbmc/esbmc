@@ -681,7 +681,7 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
     return side1->lt(*side2.get());
 }
 
-// do_type_crc / do_type_hash overloads. Trivial cases (bool, unsigned
+// do_type_crc overloads. Trivial cases (bool, unsigned
 // int, small enums) use the primary templates in irep2_dispatch.h.
 
 // BigInt::dump writes only the magnitude (most-significant-byte first,
@@ -724,31 +724,14 @@ size_t do_type_crc(const BigInt &theint)
   return crc;
 }
 
-void do_type_hash(const BigInt &theint, crypto_hash &hash)
-{
-  feed_bigint(theint, [&](const unsigned char *data, size_t len) {
-    hash.ingest(data, len);
-  });
-}
-
 size_t do_type_crc(const fixedbvt &theval)
 {
   return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
 }
 
-void do_type_hash(const fixedbvt &theval, crypto_hash &hash)
-{
-  do_type_hash(BigInt(theval.to_ansi_c_string().c_str()), hash);
-}
-
 size_t do_type_crc(const ieee_floatt &theval)
 {
   return do_type_crc(theval.pack());
-}
-
-void do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
-{
-  do_type_hash(theval.pack(), hash);
 }
 
 size_t do_type_crc(const std::vector<expr2tc> &theval)
@@ -760,12 +743,6 @@ size_t do_type_crc(const std::vector<expr2tc> &theval)
   return crc;
 }
 
-void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
-{
-  for (auto const &it : theval)
-    it->hash(hash);
-}
-
 size_t do_type_crc(const std::vector<type2tc> &theval)
 {
   size_t crc = 0;
@@ -773,12 +750,6 @@ size_t do_type_crc(const std::vector<type2tc> &theval)
     esbmct::hash_combine(crc, it->crc());
 
   return crc;
-}
-
-void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
-{
-  for (auto const &it : theval)
-    it->hash(hash);
 }
 
 size_t do_type_crc(const std::vector<irep_idt> &theval)
@@ -794,26 +765,11 @@ size_t do_type_crc(const std::vector<irep_idt> &theval)
   return crc;
 }
 
-void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
-{
-  for (auto const &it : theval)
-  {
-    size_t id = it.hash();
-    hash.ingest(&id, sizeof(id));
-  }
-}
-
 size_t do_type_crc(const expr2tc &theval)
 {
   if (theval.get() != nullptr)
     return theval->crc();
   return std::hash<uint8_t>{}(0);
-}
-
-void do_type_hash(const expr2tc &theval, crypto_hash &hash)
-{
-  if (theval.get() != nullptr)
-    theval->hash(hash);
 }
 
 size_t do_type_crc(const type2tc &theval)
@@ -823,21 +779,9 @@ size_t do_type_crc(const type2tc &theval)
   return std::hash<uint8_t>{}(0);
 }
 
-void do_type_hash(const type2tc &theval, crypto_hash &hash)
-{
-  if (theval.get() != nullptr)
-    theval->hash(hash);
-}
-
 size_t do_type_crc(const irep_idt &theval)
 {
   return theval.hash();
-}
-
-void do_type_hash(const irep_idt &theval, crypto_hash &hash)
-{
-  size_t id = theval.hash();
-  hash.ingest(&id, sizeof(id));
 }
 
 size_t do_type_crc(const type2t::type_ids &i)
@@ -845,17 +789,7 @@ size_t do_type_crc(const type2t::type_ids &i)
   return std::hash<uint8_t>{}(i);
 }
 
-void do_type_hash(const type2t::type_ids &, crypto_hash &)
-{
-  // Dummy field crc
-}
-
 size_t do_type_crc(const expr2t::expr_ids &i)
 {
   return std::hash<uint8_t>{}(i);
-}
-
-void do_type_hash(const expr2t::expr_ids &, crypto_hash &)
-{
-  // Dummy field crc
 }
