@@ -426,7 +426,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
     // Violation-witness: handle function_enter waypoints in the current segment.
     // avoid, not matching: skip (persistent).
-    // avoid, matching: skip the call, segment does not advance.
+    // avoid, matching: skip the call (pc++), segment does not advance.
     // follow, not matching: stop (follows are ordered; cannot bypass).
     // follow, matching: advance to next segment; fall through to the call.
     if (
