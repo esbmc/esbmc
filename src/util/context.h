@@ -3,22 +3,55 @@
 
 #include <functional>
 
-#include <map>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/sequenced_index.hpp>
+#include <boost/multi_index_container.hpp>
+
 #include <util/config.h>
 #include <util/symbol.h>
 #include <util/type.h>
 
-typedef std::unordered_map<irep_idt, symbolt, irep_id_hash> symbolst;
-typedef std::vector<symbolt *> ordered_symbolst;
+/* Symbol table.
+ *
+ * A single boost::multi_index_container of symbolt holds every symbol and
+ * exposes the two views the codebase needs, kept in sync automatically:
+ *
+ *   - by_id:    hashed_unique on symbolt::id    — O(1) lookup by id
+ *   - by_order: sequenced                       — insertion order (init order)
+ *
+ * multi_index is node-based, so element references/pointers stay valid across
+ * insert and erase (only the erased element is invalidated). This replaces the
+ * former hand-synced trio (unordered_map + vector<symbolt*> + multimap), which
+ * leaked base-name entries on erase, did an O(n) scan to erase from the order
+ * vector, and stored raw symbolt* into the map (a documented use-after-free
+ * hazard on erase). Same pattern already used by smt_convt::smt_cache.
+ *
+ * There is no base-name index: the only base-name lookup is the one-shot
+ * entry-point search (find `main`) done once per run, served by a linear scan
+ * (foreach_named_symbol_with_base) — not worth a third index maintained on
+ * every insert/erase.
+ */
 
-typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
+namespace contextt_detail
+{
+struct by_id
+{
+};
+struct by_order
+{
+};
 
-#define forall_symbol_base_map(it, expr, base_name)                            \
-  for (symbol_base_mapt::const_iterator                                        \
-         it = (expr).lower_bound(base_name),                                   \
-         it_end = (expr).upper_bound(base_name);                               \
-       it != it_end;                                                           \
-       it++)
+typedef boost::multi_index_container<
+  symbolt,
+  boost::multi_index::indexed_by<
+    boost::multi_index::hashed_unique<
+      boost::multi_index::tag<by_id>,
+      BOOST_MULTI_INDEX_MEMBER(symbolt, irep_idt, id),
+      irep_id_hash>,
+    boost::multi_index::sequenced<boost::multi_index::tag<by_order>>>>
+  symbol_containert;
+} // namespace contextt_detail
 
 class contextt
 {
@@ -26,8 +59,6 @@ class contextt
   typedef std::function<void(symbolt &symbol)> symbol_delegate;
 
 public:
-  typedef ::symbolst symbolst;
-  typedef ::ordered_symbolst ordered_symbolst;
   explicit contextt()
   {
   }
@@ -57,8 +88,6 @@ public:
 
   contextt &operator=(contextt &&) noexcept = default;
 
-  symbol_base_mapt symbol_base_map;
-
   bool add(const symbolt &symbol);
   bool move(symbolt &symbol, symbolt *&new_symbol);
 
@@ -72,8 +101,6 @@ public:
   void clear()
   {
     symbols.clear();
-    symbol_base_map.clear();
-    ordered_symbols.clear();
   }
 
   DUMP_METHOD void dump() const;
@@ -81,8 +108,6 @@ public:
   void swap(contextt &other)
   {
     symbols.swap(other.symbols);
-    symbol_base_map.swap(other.symbol_base_map);
-    ordered_symbols.swap(other.ordered_symbols);
   }
 
   symbolt *find_symbol(const char *name)
@@ -93,6 +118,29 @@ public:
   const symbolt *find_symbol(irep_idt name) const;
 
   void erase_symbol(irep_idt name);
+
+  /// Move the symbol with id @p name to the end of the insertion-order view,
+  /// keeping it in the table. The C/C++ frontends need this when a symbol's
+  /// definition must sort after symbols it now depends on (a completed struct
+  /// after its field types; a static member in definition rather than
+  /// declaration order). O(1); replaces the former erase-and-reinsert, which
+  /// copied the symbol and briefly dangled any held symbolt*. Returns the
+  /// (stable) symbol, or nullptr if no such id exists.
+  symbolt *reorder_symbol_to_back(irep_idt name);
+
+  /// Invoke @p t(id) for every symbol whose base name equals @p base_name, in
+  /// insertion order (the former forall_symbol_base_map). @p t returns a bool:
+  /// false stops the scan early (the lambda equivalent of `break`). Implemented
+  /// as a linear scan: the sole caller is the once-per-run entry-point search,
+  /// so a dedicated base-name index is not worth maintaining on every insert.
+  template <typename T>
+  void foreach_named_symbol_with_base(irep_idt base_name, T &&t) const
+  {
+    for (const symbolt &s : symbols.get<contextt_detail::by_order>())
+      if (s.name == base_name)
+        if (!t(s.id))
+          break;
+  }
 
   template <typename T>
   void foreach_operand_in_order(T &&t) const
@@ -128,8 +176,7 @@ public:
   }
 
 private:
-  symbolst symbols;
-  ordered_symbolst ordered_symbols;
+  contextt_detail::symbol_containert symbols;
 
   void foreach_operand_impl_const(const_symbol_delegate &expr) const;
   void foreach_operand_impl(symbol_delegate &expr);
