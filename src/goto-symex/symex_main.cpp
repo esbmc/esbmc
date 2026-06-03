@@ -429,9 +429,7 @@ void goto_symext::symex_step(reachability_treet &art)
     // avoid, matching: skip the call (pc++), segment does not advance.
     // follow, not matching: stop (follows are ordered; cannot bypass).
     // follow, matching: advance to next segment; fall through to the call.
-    if (
-      validate_witness &&
-      cur_state->cur_seg < cur_state->witness_segs.size())
+    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
     {
       const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
       const auto &loc = cur_state->source.pc->location;
