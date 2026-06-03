@@ -49,8 +49,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     locationt location = get_location_from_decl(element);
     typet list_type = type_handler_.get_list_type();
 
-    // Get dict.keys member
-    member_exprt keys_member(unary_sub, "keys", list_type);
+    // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+    // member_exprt); `unary_sub` is dict-typed (is_dict_type ⇒ struct), so the
+    // member2t source precondition holds.
+    expr2tc dict2;
+    migrate_expr(unary_sub, dict2);
+    exprt keys_member =
+      migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
 
     // Find __ESBMC_list_size function
     const symbolt *size_func =

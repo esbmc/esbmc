@@ -17,6 +17,7 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/bitvector.h>
@@ -26,6 +27,7 @@
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -551,9 +553,16 @@ void python_converter::handle_array_unpacking(
       var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
     }
 
-    // Create subscript: rhs[i]
+    // Create subscript: rhs[i]. V.3: IREP2 index access (exact round-trip of
+    // index_exprt); this path runs only when rhs is array-typed (see the
+    // is_array() guard at the call site), so the index2t source precondition
+    // holds.
     exprt index_expr = from_integer(i, size_type());
-    index_exprt subscript(rhs, index_expr, rhs.type().subtype());
+    expr2tc rhs2, idx2;
+    migrate_expr(rhs, rhs2);
+    migrate_expr(index_expr, idx2);
+    exprt subscript = migrate_expr_back(
+      index2tc(migrate_type(rhs.type().subtype()), rhs2, idx2));
 
     code_assignt assign(symbol_expr(*var_symbol), subscript);
     assign.location() = get_location_from_decl(ast_node);
@@ -3294,8 +3303,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         locationt location = get_location_from_decl(element);
         typet list_type = type_handler_.get_list_type();
 
-        // Get dict.keys member
-        member_exprt keys_member(test, "keys", list_type);
+        // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+        // member_exprt); `test` is dict-typed (is_dict_type ⇒ struct), so the
+        // member2t source precondition holds.
+        expr2tc dict2;
+        migrate_expr(test, dict2);
+        exprt keys_member =
+          migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
 
         // Find __ESBMC_list_size function
         const symbolt *size_func =
