@@ -143,7 +143,6 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
         if (!seg || !seg.IsSequence())
           continue;
 
-        size_t wp_count = 0;
         for (const auto &wp_node : seg)
         {
           const auto &node = wp_node["waypoint"];
@@ -160,7 +159,6 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
             continue;
           }
           wp.segment_idx = seg_idx;
-          wp.wp_idx_in_seg = wp_count++;
           wp_cache.waypoints.push_back(std::move(wp));
         }
         ++seg_idx;
@@ -279,8 +277,8 @@ std::string yaml_parser::build_violation_witness_source(
       out << "#line " << line_num << " \"" << original_path << "\"\n";
       for (const waypoint *wp : it->second)
       {
-        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", "
-            << wp->wp_idx_in_seg << ", (_Bool)(" << wp->value << "));\n";
+        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
+            << wp->value << "));\n";
         log_progress(
           "Injecting {} assumption at line {}: {}",
           wp->action == waypoint::avoid ? "avoid" : "follow",

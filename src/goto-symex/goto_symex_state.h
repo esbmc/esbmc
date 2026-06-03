@@ -478,12 +478,11 @@ public:
 
   // --- Violation-witness replay state ---
 
-  /// witness_segs[seg][wp]: all actionable waypoints
+  /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  size_t cur_wp;
 
-  /// Advance the cursor to the next waypoint.
+  /// Advance to the next segment (called when a follow waypoint is matched).
   void advance_witness_position();
 };
 

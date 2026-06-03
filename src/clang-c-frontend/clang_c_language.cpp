@@ -579,8 +579,8 @@ _Bool __ESBMC_exists(void*, _Bool);
  */
 void __ESBMC_loop_invariant(_Bool);
 
-// Violation-witness: seg_idx/wp_idx uniquely identify the call site; constraint is the assumption.
-void __ESBMC_witness_assume(int, int, _Bool);
+// Violation-witness: seg_idx identifies the segment; constraint is the assumption.
+void __ESBMC_witness_assume(int, _Bool);
 
 /* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
  * Used with --loop-frame-rule for frame condition enforcement.
