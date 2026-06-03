@@ -8,9 +8,11 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
 #include <util/std_code.h>
@@ -34,6 +36,60 @@
 
 namespace
 {
+// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
+// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
+// nodes through these same paths downstream). Back-migrated for the legacy
+// adjust/goto-convert seam; the caller sets .location() where it did before.
+static exprt build_call_impl(
+  const expr2tc &fn,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(
+    side_effect_function_call2tc(migrate_type(return_type), fn, args2));
+}
+
+// Callee resolved from a symbol-table entry (legacy symbol_expr(symbolt)).
+static exprt build_call_expr(
+  const symbolt &fn,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  return build_call_impl(symbol_expr2tc(fn), return_type, args);
+}
+
+// Callee referenced by name with a placeholder code type (legacy
+// symbol_exprt(id, code_typet())); round-tripped through migrate_expr.
+static exprt build_call_expr(
+  const irep_idt &fn_id,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  expr2tc fn2;
+  migrate_expr(symbol_exprt(fn_id, code_typet()), fn2);
+  return build_call_impl(fn2, return_type, args);
+}
+
+static exprt build_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+
+static exprt build_symbol(const symbolt &sym)
+{
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
 static bool get_constant_int(const exprt &expr, long long &out)
 {
   if (expr.is_nil())
@@ -809,11 +865,9 @@ exprt string_handler::handle_string_startswith(
     if (!strlen_symbol)
       throw std::runtime_error("strlen function not found for startswith()");
 
-    side_effect_expr_function_callt prefix_strlen_call;
-    prefix_strlen_call.function() = symbol_expr(*strlen_symbol);
-    prefix_strlen_call.arguments() = {prefix_addr};
+    exprt prefix_strlen_call =
+      build_call_expr(*strlen_symbol, size_type(), {prefix_addr});
     prefix_strlen_call.location() = location;
-    prefix_strlen_call.type() = size_type();
     actual_len = prefix_strlen_call;
   }
 
@@ -823,11 +877,9 @@ exprt string_handler::handle_string_startswith(
     throw std::runtime_error("strncmp function not found for startswith()");
 
   // Call strncmp(str, prefix, len(prefix))
-  side_effect_expr_function_callt strncmp_call;
-  strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {str_addr, prefix_addr, actual_len};
+  exprt strncmp_call = build_call_expr(
+    *strncmp_symbol, int_type(), {str_addr, prefix_addr, actual_len});
   strncmp_call.location() = location;
-  strncmp_call.type() = int_type();
 
   // Check if result == 0 (strings match)
   exprt zero = gen_zero(int_type());
@@ -880,18 +932,14 @@ exprt string_handler::handle_string_endswith(
     throw std::runtime_error("strlen function not found for endswith()");
 
   // Get string length using strlen
-  side_effect_expr_function_callt str_strlen_call;
-  str_strlen_call.function() = symbol_expr(*strlen_symbol);
-  str_strlen_call.arguments() = {str_addr};
+  exprt str_strlen_call =
+    build_call_expr(*strlen_symbol, size_type(), {str_addr});
   str_strlen_call.location() = location;
-  str_strlen_call.type() = size_type();
 
   // Get suffix length using strlen
-  side_effect_expr_function_callt suffix_strlen_call;
-  suffix_strlen_call.function() = symbol_expr(*strlen_symbol);
-  suffix_strlen_call.arguments() = {suffix_addr};
+  exprt suffix_strlen_call =
+    build_call_expr(*strlen_symbol, size_type(), {suffix_addr});
   suffix_strlen_call.location() = location;
-  suffix_strlen_call.type() = size_type();
 
   // Check if suffix is longer than string
   exprt len_check(">", bool_type());
@@ -911,11 +959,9 @@ exprt string_handler::handle_string_endswith(
     throw std::runtime_error("strncmp function not found for endswith()");
 
   // Call strncmp(str + offset, suffix, strlen(suffix))
-  side_effect_expr_function_callt strncmp_call;
-  strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {offset_ptr, suffix_addr, suffix_strlen_call};
+  exprt strncmp_call = build_call_expr(
+    *strncmp_symbol, int_type(), {offset_ptr, suffix_addr, suffix_strlen_call});
   strncmp_call.location() = location;
-  strncmp_call.type() = int_type();
 
   // Check if result == 0 (strings match)
   exprt zero = gen_zero(int_type());
@@ -946,11 +992,9 @@ exprt string_handler::handle_string_isdigit(
       throw std::runtime_error(
         "__python_char_isdigit function not found in symbol table");
 
-    side_effect_expr_function_callt isdigit_call;
-    isdigit_call.function() = symbol_expr(*isdigit_symbol);
-    isdigit_call.arguments().push_back(string_obj);
+    exprt isdigit_call =
+      build_call_expr(*isdigit_symbol, bool_type(), {string_obj});
     isdigit_call.location() = location;
-    isdigit_call.type() = bool_type();
 
     return isdigit_call;
   }
@@ -969,11 +1013,9 @@ exprt string_handler::handle_string_isdigit(
     throw std::runtime_error("str_isdigit function not found in symbol table");
 
   // Call str_isdigit(str) - returns bool (0 or 1)
-  side_effect_expr_function_callt isdigit_call;
-  isdigit_call.function() = symbol_expr(*isdigit_str_symbol);
-  isdigit_call.arguments().push_back(str_addr);
+  exprt isdigit_call =
+    build_call_expr(*isdigit_str_symbol, bool_type(), {str_addr});
   isdigit_call.location() = location;
-  isdigit_call.type() = bool_type();
 
   return isdigit_call;
 }
@@ -992,11 +1034,9 @@ exprt string_handler::handle_string_isalpha(
       throw std::runtime_error(
         "__python_char_isalpha function not found in symbol table");
 
-    side_effect_expr_function_callt isalpha_call;
-    isalpha_call.function() = symbol_expr(*isalpha_symbol);
-    isalpha_call.arguments().push_back(string_obj);
+    exprt isalpha_call =
+      build_call_expr(*isalpha_symbol, bool_type(), {string_obj});
     isalpha_call.location() = location;
-    isalpha_call.type() = bool_type();
 
     return isalpha_call;
   }
@@ -1011,11 +1051,9 @@ exprt string_handler::handle_string_isalpha(
   if (!isalpha_str_symbol)
     throw std::runtime_error("str_isalpha function not found in symbol table");
 
-  side_effect_expr_function_callt isalpha_call;
-  isalpha_call.function() = symbol_expr(*isalpha_str_symbol);
-  isalpha_call.arguments().push_back(str_addr);
+  exprt isalpha_call =
+    build_call_expr(*isalpha_str_symbol, bool_type(), {str_addr});
   isalpha_call.location() = location;
-  isalpha_call.type() = bool_type();
 
   return isalpha_call;
 }
@@ -1036,11 +1074,8 @@ exprt string_handler::handle_string_isspace(
       std::string(isspace_str_symbol_id) +
       " function not found in symbol table");
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*isspace_str_symbol);
-  call.arguments().push_back(str_addr);
+  exprt call = build_call_expr(*isspace_str_symbol, bool_type(), {str_addr});
   call.location() = location;
-  call.type() = bool_type();
 
   return call;
 }
@@ -1056,14 +1091,11 @@ exprt string_handler::handle_char_isspace(
   exprt char_as_int = char_expr;
   if (char_expr.type() != int_type())
   {
-    char_as_int = typecast_exprt(char_expr, int_type());
+    char_as_int = build_typecast(char_expr, int_type());
   }
 
   // Create function call to C's isspace
-  side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(char_as_int);
-  call.type() = int_type();
+  exprt call = build_call_expr(func_symbol_id, int_type(), {char_as_int});
   call.location() = location;
 
   // Convert result to boolean (isspace returns non-zero for whitespace)
@@ -1195,10 +1227,6 @@ exprt string_handler::handle_string_lstrip(
     }
 
     // Create function call
-    side_effect_expr_function_callt call;
-    call.function() = symbol_exprt(func_symbol_id, code_typet());
-    call.arguments().push_back(str_ptr);
-
     exprt chars_ptr = chars_arg;
     if (chars_arg.type().is_array())
     {
@@ -1208,9 +1236,9 @@ exprt string_handler::handle_string_lstrip(
       index_expr.copy_to_operands(from_integer(0, int_type()));
       chars_ptr.copy_to_operands(index_expr);
     }
-    call.arguments().push_back(chars_ptr);
 
-    call.type() = pointer_typet(char_type());
+    exprt call = build_call_expr(
+      func_symbol_id, pointer_typet(char_type()), {str_ptr, chars_ptr});
     call.location() = location;
 
     return call;
@@ -1245,10 +1273,8 @@ exprt string_handler::handle_string_lstrip(
     }
 
     // Create function call
-    side_effect_expr_function_callt call;
-    call.function() = symbol_exprt(func_symbol_id, code_typet());
-    call.arguments().push_back(str_ptr);
-    call.type() = pointer_typet(char_type());
+    exprt call =
+      build_call_expr(func_symbol_id, pointer_typet(char_type()), {str_ptr});
     call.location() = location;
 
     return call;
@@ -1378,11 +1404,8 @@ exprt string_handler::handle_string_strip(
       chars_ptr.copy_to_operands(index_expr);
     }
 
-    side_effect_expr_function_callt call;
-    call.function() = symbol_exprt(func_symbol_id, code_typet());
-    call.arguments().push_back(str_ptr);
-    call.arguments().push_back(chars_ptr);
-    call.type() = pointer_typet(char_type());
+    exprt call = build_call_expr(
+      func_symbol_id, pointer_typet(char_type()), {str_ptr, chars_ptr});
     call.location() = location;
     return call;
   }
@@ -1413,10 +1436,8 @@ exprt string_handler::handle_string_strip(
     str_ptr.copy_to_operands(str_expr);
   }
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = pointer_typet(char_type());
+  exprt call =
+    build_call_expr(func_symbol_id, pointer_typet(char_type()), {str_ptr});
   call.location() = location;
 
   return call;
@@ -1534,11 +1555,8 @@ exprt string_handler::handle_string_rstrip(
       chars_ptr.copy_to_operands(index_expr);
     }
 
-    side_effect_expr_function_callt call;
-    call.function() = symbol_exprt(func_symbol_id, code_typet());
-    call.arguments().push_back(str_ptr);
-    call.arguments().push_back(chars_ptr);
-    call.type() = pointer_typet(char_type());
+    exprt call = build_call_expr(
+      func_symbol_id, pointer_typet(char_type()), {str_ptr, chars_ptr});
     call.location() = location;
     return call;
   }
@@ -1568,10 +1586,8 @@ exprt string_handler::handle_string_rstrip(
     str_ptr.copy_to_operands(str_expr);
   }
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_exprt(func_symbol_id, code_typet());
-  call.arguments().push_back(str_ptr);
-  call.type() = pointer_typet(char_type());
+  exprt call =
+    build_call_expr(func_symbol_id, pointer_typet(char_type()), {str_ptr});
   call.location() = location;
 
   return call;
@@ -1591,11 +1607,9 @@ exprt string_handler::handle_string_islower(
       throw std::runtime_error(
         "__python_char_islower function not found in symbol table");
 
-    side_effect_expr_function_callt islower_call;
-    islower_call.function() = symbol_expr(*islower_symbol);
-    islower_call.arguments().push_back(string_obj);
+    exprt islower_call =
+      build_call_expr(*islower_symbol, bool_type(), {string_obj});
     islower_call.location() = location;
-    islower_call.type() = bool_type();
 
     return islower_call;
   }
@@ -1610,11 +1624,9 @@ exprt string_handler::handle_string_islower(
   if (!islower_str_symbol)
     throw std::runtime_error("str_islower function not found in symbol table");
 
-  side_effect_expr_function_callt islower_call;
-  islower_call.function() = symbol_expr(*islower_str_symbol);
-  islower_call.arguments().push_back(str_addr);
+  exprt islower_call =
+    build_call_expr(*islower_str_symbol, bool_type(), {str_addr});
   islower_call.location() = location;
-  islower_call.type() = bool_type();
 
   return islower_call;
 }
@@ -1632,11 +1644,9 @@ exprt string_handler::handle_string_lower(
       throw std::runtime_error(
         "__python_char_lower function not found in symbol table");
 
-    side_effect_expr_function_callt lower_call;
-    lower_call.function() = symbol_expr(*lower_symbol);
-    lower_call.arguments().push_back(string_obj);
+    exprt lower_call =
+      build_call_expr(*lower_symbol, char_type(), {string_obj});
     lower_call.location() = location;
-    lower_call.type() = char_type();
 
     return lower_call;
   }
@@ -1651,11 +1661,9 @@ exprt string_handler::handle_string_lower(
   if (!lower_str_symbol)
     throw std::runtime_error("str_lower function not found in symbol table");
 
-  side_effect_expr_function_callt lower_call;
-  lower_call.function() = symbol_expr(*lower_str_symbol);
-  lower_call.arguments().push_back(str_addr);
+  exprt lower_call =
+    build_call_expr(*lower_str_symbol, pointer_typet(char_type()), {str_addr});
   lower_call.location() = location;
-  lower_call.type() = pointer_typet(char_type());
 
   return lower_call;
 }
@@ -1673,11 +1681,9 @@ exprt string_handler::handle_string_upper(
       throw std::runtime_error(
         "__python_char_upper function not found in symbol table");
 
-    side_effect_expr_function_callt upper_call;
-    upper_call.function() = symbol_expr(*upper_symbol);
-    upper_call.arguments().push_back(string_obj);
+    exprt upper_call =
+      build_call_expr(*upper_symbol, char_type(), {string_obj});
     upper_call.location() = location;
-    upper_call.type() = char_type();
 
     return upper_call;
   }
@@ -1692,11 +1698,9 @@ exprt string_handler::handle_string_upper(
   if (!upper_str_symbol)
     throw std::runtime_error("str_upper function not found in symbol table");
 
-  side_effect_expr_function_callt upper_call;
-  upper_call.function() = symbol_expr(*upper_str_symbol);
-  upper_call.arguments().push_back(str_addr);
+  exprt upper_call =
+    build_call_expr(*upper_str_symbol, pointer_typet(char_type()), {str_addr});
   upper_call.location() = location;
-  upper_call.type() = pointer_typet(char_type());
 
   return upper_call;
 }
@@ -1719,12 +1723,9 @@ exprt string_handler::handle_string_find(
   if (!find_str_symbol)
     throw std::runtime_error("str_find function not found in symbol table");
 
-  side_effect_expr_function_callt find_call;
-  find_call.function() = symbol_expr(*find_str_symbol);
-  find_call.arguments().push_back(str_addr);
-  find_call.arguments().push_back(arg_addr);
+  exprt find_call =
+    build_call_expr(*find_str_symbol, int_type(), {str_addr, arg_addr});
   find_call.location() = location;
-  find_call.type() = int_type();
 
   return find_call;
 }
@@ -1746,11 +1747,11 @@ exprt string_handler::handle_string_find_range(
 
   exprt start_expr = start_arg;
   if (start_expr.type() != int_type())
-    start_expr = typecast_exprt(start_expr, int_type());
+    start_expr = build_typecast(start_expr, int_type());
 
   exprt end_expr = end_arg;
   if (end_expr.type() != int_type())
-    end_expr = typecast_exprt(end_expr, int_type());
+    end_expr = build_typecast(end_expr, int_type());
 
   symbolt *find_range_symbol =
     find_cached_c_function_symbol("c:@F@__python_str_find_range");
@@ -1758,14 +1759,9 @@ exprt string_handler::handle_string_find_range(
     throw std::runtime_error(
       "str_find_range function not found in symbol table");
 
-  side_effect_expr_function_callt find_call;
-  find_call.function() = symbol_expr(*find_range_symbol);
-  find_call.arguments().push_back(str_addr);
-  find_call.arguments().push_back(arg_addr);
-  find_call.arguments().push_back(start_expr);
-  find_call.arguments().push_back(end_expr);
+  exprt find_call = build_call_expr(
+    *find_range_symbol, int_type(), {str_addr, arg_addr, start_expr, end_expr});
   find_call.location() = location;
-  find_call.type() = int_type();
 
   return find_call;
 }
@@ -1800,16 +1796,16 @@ exprt string_handler::build_string_index_result(
 {
   symbolt &find_result = converter_.create_tmp_symbol(
     call, "$str_index$", int_type(), gen_zero(int_type()));
-  code_declt decl(symbol_expr(find_result));
+  code_declt decl(build_symbol(find_result));
   decl.location() = location;
   converter_.add_instruction(decl);
 
-  code_assignt assign(symbol_expr(find_result), find_expr);
+  code_assignt assign(build_symbol(find_result), find_expr);
   assign.location() = location;
   converter_.add_instruction(assign);
 
   exprt not_found =
-    equality_exprt(symbol_expr(find_result), from_integer(-1, int_type()));
+    equality_exprt(build_symbol(find_result), from_integer(-1, int_type()));
   exprt raise = python_exception_utils::make_exception_raise(
     type_handler_, "ValueError", "substring not found", &location);
 
@@ -1822,7 +1818,7 @@ exprt string_handler::build_string_index_result(
   if_stmt.location() = location;
   converter_.add_instruction(if_stmt);
 
-  return symbol_expr(find_result);
+  return build_symbol(find_result);
 }
 
 exprt string_handler::handle_string_rfind(
@@ -1843,12 +1839,9 @@ exprt string_handler::handle_string_rfind(
   if (!rfind_str_symbol)
     throw std::runtime_error("str_rfind function not found in symbol table");
 
-  side_effect_expr_function_callt rfind_call;
-  rfind_call.function() = symbol_expr(*rfind_str_symbol);
-  rfind_call.arguments().push_back(str_addr);
-  rfind_call.arguments().push_back(arg_addr);
+  exprt rfind_call =
+    build_call_expr(*rfind_str_symbol, int_type(), {str_addr, arg_addr});
   rfind_call.location() = location;
-  rfind_call.type() = int_type();
 
   return rfind_call;
 }
@@ -1870,11 +1863,11 @@ exprt string_handler::handle_string_rfind_range(
 
   exprt start_expr = start_arg;
   if (start_expr.type() != int_type())
-    start_expr = typecast_exprt(start_expr, int_type());
+    start_expr = build_typecast(start_expr, int_type());
 
   exprt end_expr = end_arg;
   if (end_expr.type() != int_type())
-    end_expr = typecast_exprt(end_expr, int_type());
+    end_expr = build_typecast(end_expr, int_type());
 
   symbolt *rfind_range_symbol =
     find_cached_c_function_symbol("c:@F@__python_str_rfind_range");
@@ -1882,14 +1875,11 @@ exprt string_handler::handle_string_rfind_range(
     throw std::runtime_error(
       "str_rfind_range function not found in symbol table");
 
-  side_effect_expr_function_callt rfind_call;
-  rfind_call.function() = symbol_expr(*rfind_range_symbol);
-  rfind_call.arguments().push_back(str_addr);
-  rfind_call.arguments().push_back(arg_addr);
-  rfind_call.arguments().push_back(start_expr);
-  rfind_call.arguments().push_back(end_expr);
+  exprt rfind_call = build_call_expr(
+    *rfind_range_symbol,
+    int_type(),
+    {str_addr, arg_addr, start_expr, end_expr});
   rfind_call.location() = location;
-  rfind_call.type() = int_type();
 
   return rfind_call;
 }
@@ -2006,11 +1996,11 @@ exprt string_handler::handle_string_replace(
   std::string func_symbol_id =
     ensure_string_function_symbol("__python_str_replace");
 
-  side_effect_expr_function_callt replace_call;
-  replace_call.function() = symbol_exprt(func_symbol_id, code_typet());
-  replace_call.arguments() = {str_addr, old_addr, new_addr, count_arg};
+  exprt replace_call = build_call_expr(
+    func_symbol_id,
+    pointer_typet(char_type()),
+    {str_addr, old_addr, new_addr, count_arg});
   replace_call.location() = location;
-  replace_call.type() = pointer_typet(char_type());
 
   return replace_call;
 }
@@ -2034,11 +2024,9 @@ exprt string_handler::handle_string_capitalize(
       exprt s_expr = ensure_null_terminated_string(s_copy);
       exprt s_addr = get_array_base_address(s_expr);
 
-      side_effect_expr_function_callt call;
-      call.function() = symbol_expr(*capitalize_sym);
-      call.arguments().push_back(s_addr);
+      exprt call = build_call_expr(
+        *capitalize_sym, gen_pointer_type(char_type()), {s_addr});
       call.location() = location;
-      call.type() = gen_pointer_type(char_type());
       return call;
     }
     log_warning(
@@ -2082,11 +2070,9 @@ exprt string_handler::handle_string_title(
       exprt s_expr = ensure_null_terminated_string(s_copy);
       exprt s_addr = get_array_base_address(s_expr);
 
-      side_effect_expr_function_callt call;
-      call.function() = symbol_expr(*title_sym);
-      call.arguments().push_back(s_addr);
+      exprt call =
+        build_call_expr(*title_sym, gen_pointer_type(char_type()), {s_addr});
       call.location() = location;
-      call.type() = gen_pointer_type(char_type());
       return call;
     }
     log_warning(
@@ -2137,11 +2123,9 @@ exprt string_handler::handle_string_swapcase(
       exprt s_expr = ensure_null_terminated_string(s_copy);
       exprt s_addr = get_array_base_address(s_expr);
 
-      side_effect_expr_function_callt call;
-      call.function() = symbol_expr(*swapcase_sym);
-      call.arguments().push_back(s_addr);
+      exprt call =
+        build_call_expr(*swapcase_sym, gen_pointer_type(char_type()), {s_addr});
       call.location() = location;
-      call.type() = gen_pointer_type(char_type());
       return call;
     }
     log_warning(
@@ -2224,12 +2208,9 @@ exprt string_handler::handle_string_count(
         exprt sub_expr = ensure_null_terminated_string(sub_copy);
         exprt sub_addr = get_array_base_address(sub_expr);
 
-        side_effect_expr_function_callt call;
-        call.function() = symbol_expr(*count_sym);
-        call.arguments().push_back(s_addr);
-        call.arguments().push_back(sub_addr);
+        exprt call =
+          build_call_expr(*count_sym, size_type(), {s_addr, sub_addr});
         call.location() = location;
-        call.type() = size_type();
         return call;
       }
       // The default-range path tried the named model and missed: a silent
@@ -2658,11 +2639,8 @@ exprt string_handler::handle_string_isalnum(
       exprt s_expr = ensure_null_terminated_string(s_copy);
       exprt s_addr = get_array_base_address(s_expr);
 
-      side_effect_expr_function_callt call;
-      call.function() = symbol_expr(*isalnum_sym);
-      call.arguments().push_back(s_addr);
+      exprt call = build_call_expr(*isalnum_sym, bool_type(), {s_addr});
       call.location() = location;
-      call.type() = bool_type();
       return call;
     }
     log_warning(
@@ -2703,11 +2681,8 @@ exprt string_handler::handle_string_isupper(
       exprt s_expr = ensure_null_terminated_string(s_copy);
       exprt s_addr = get_array_base_address(s_expr);
 
-      side_effect_expr_function_callt call;
-      call.function() = symbol_expr(*isupper_sym);
-      call.arguments().push_back(s_addr);
+      exprt call = build_call_expr(*isupper_sym, bool_type(), {s_addr});
       call.location() = location;
-      call.type() = bool_type();
       return call;
     }
     log_warning(
