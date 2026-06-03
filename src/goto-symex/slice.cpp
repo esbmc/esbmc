@@ -63,6 +63,73 @@ void symex_slicet::collect_dependencies(const expr2tc &expr)
   }
 }
 
+void symex_slicet::scan_array_uses(const expr2tc &expr)
+{
+  // Same explicit two-color worklist as collect_dependencies, but it writes
+  // #index_reads / #array_disqualified instead of #depends, with its own memo
+  // (#scanned_cache). Both outputs are insert-only, so a BLACK skip is a no-op
+  // and the shared guard prefix is scanned once overall (kept O(N)).
+  struct FrameT
+  {
+    expr2tc expr;
+    bool children_done;
+  };
+
+  std::unordered_set<const expr2t *> grey_set;
+  std::vector<FrameT> worklist{FrameT{expr, false}};
+  while (!worklist.empty())
+  {
+    FrameT frame = std::move(worklist.back());
+    worklist.pop_back();
+    const expr2tc &cur = frame.expr;
+    if (is_nil_expr(cur))
+      continue;
+
+    if (frame.children_done)
+    {
+      grey_set.erase(cur.get());
+      scanned_cache.insert(cur.get());
+      continue;
+    }
+
+    if (scanned_cache.count(cur.get()))
+      continue;
+    if (!grey_set.insert(cur.get()).second)
+      continue;
+
+    // arr_symbol[constant_index]: record the read index and do NOT treat the
+    // array symbol as a wholesale use. We descend only into the index subtree
+    // (it may itself contain reads); the source symbol is intentionally left
+    // unvisited so it is neither disqualified nor marked BLACK here.
+    if (is_index2t(cur))
+    {
+      const index2t &index = to_index2t(cur);
+      if (
+        is_symbol2t(index.source_value) && is_constant_int2t(index.index) &&
+        !to_constant_int2t(index.index).value.is_negative())
+      {
+        index_reads[to_symbol2t(index.source_value).get_symbol_name()].insert(
+          to_constant_int2t(index.index).value.to_uint64());
+
+        worklist.push_back(FrameT{cur, true});
+        worklist.push_back(FrameT{index.index, false});
+        continue;
+      }
+    }
+
+    // Any array-typed symbol reached other than as the source of a constant
+    // index read defeats per-index reasoning for that version.
+    if (is_symbol2t(cur) && is_array_type(cur->type))
+      array_disqualified.insert(to_symbol2t(cur).get_symbol_name());
+
+    worklist.push_back(FrameT{cur, true});
+    cur->foreach_operand([&worklist](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        worklist.push_back(FrameT{e, false});
+    });
+  }
+}
+
 bool symex_slicet::depends_on_tracked(const expr2tc &expr)
 {
   // Read-only query; not memoised (depends mutates across steps). Only ever
@@ -86,6 +153,8 @@ bool symex_slicet::depends_on_tracked(const expr2tc &expr)
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
+  scan_array_uses(SSA_step.guard);
+  scan_array_uses(SSA_step.cond);
   collect_dependencies(SSA_step.guard);
   collect_dependencies(SSA_step.cond);
 }
@@ -94,6 +163,8 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
   if (!slice_assumes)
   {
+    scan_array_uses(SSA_step.guard);
+    scan_array_uses(SSA_step.cond);
     collect_dependencies(SSA_step.guard);
     collect_dependencies(SSA_step.cond);
     return;
@@ -115,6 +186,8 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   else
   {
     // If we need it, add the symbols to dependency
+    scan_array_uses(SSA_step.guard);
+    scan_array_uses(SSA_step.cond);
     collect_dependencies(SSA_step.guard);
     collect_dependencies(SSA_step.cond);
   }
@@ -126,15 +199,12 @@ void symex_slicet::run_on_assignment(
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
 
-  // An array write `arr_n = arr_m with [i:=v]` is treated as an ordinary
-  // assignment: kept iff its lhs is tracked. The former per-index path could
-  // additionally slice a write to an index no assertion reads — but that
-  // relied on tracking only the watched index, not the array symbol, which is
-  // non-monotone and incompatible with the collect_dependencies memo. Here a
-  // read of arr[i] collects the `arr` symbol itself (collect_dependencies has
-  // no array short-circuit), so any write to a read array is kept. This is a
-  // strict superset of the old behaviour (sound, slightly less precise): the
-  // per-index slicing fired once in 67 array tests and changed no verdict.
+  // An array write `arr_n = arr_m with [const_i := v]` whose lhs is tracked is
+  // still kept as a step, but the *store* is dropped (rewritten to the identity
+  // `arr_n == arr_m`) when index const_i is provably never read — see the kept
+  // branch below. Eligibility uses the monotone #index_reads /
+  // #array_disqualified maps populated by #scan_array_uses; dropping a store to
+  // an unread index is sound (a dead store) and keeps #depends monotone.
   if (!depends_on_tracked(SSA_step.lhs))
   {
     // Should we add nondet to the dependency list (mostly for test cases)?
@@ -159,6 +229,73 @@ void symex_slicet::run_on_assignment(
   }
   else
   {
+    scan_array_uses(SSA_step.guard);
+
+    const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
+
+    // Dead-store elimination for `lhs = src with [const_i := v]`: if index
+    // const_i of this array version is provably never read (not in the
+    // per-version read-set and the version is not disqualified), the store is
+    // dead. Rewrite the encoded condition to the identity `lhs == src`,
+    // dropping the store AND its update value v from dependency collection. If
+    // lhs[const_i] is never observed then the reads inside v are dead too, so we
+    // deliberately do NOT scan v in that case. Keep SSA_step.rhs unchanged:
+    // trace construction may use it to recover the source-level assigned value.
+    //
+    // The read-set propagation mirrors the original per-index slicer: src
+    // inherits lhs's read-set; when a store is KEPT (index const_i is read) the
+    // written index is omitted while propagating, since an earlier store to
+    // that same index produces a value that this store overwrites. Existing
+    // direct reads of src are preserved by inserting into src's current set.
+    if (
+      is_with2t(SSA_step.rhs) &&
+      is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
+      is_constant_int2t(to_with2t(SSA_step.rhs).update_field) &&
+      !to_constant_int2t(to_with2t(SSA_step.rhs).update_field)
+         .value.is_negative())
+    {
+      const with2t &with = to_with2t(SSA_step.rhs);
+      const expr2tc src = with.source_value;
+      const expr2tc update_value = with.update_value;
+      const std::string lhs_name = lhs.get_symbol_name();
+      const std::string src_name = to_symbol2t(src).get_symbol_name();
+      const size_t idx = to_constant_int2t(with.update_field).value.to_uint64();
+
+      const bool disq = array_disqualified.count(lhs_name) != 0;
+      if (!disq && !index_reads[lhs_name].count(idx))
+      {
+        // Dead store: encode identity, but leave rhs as the original WITH for
+        // counterexample reconstruction.
+        log_debug(
+          "slice",
+          "slice dropping dead store to array {} at index {}",
+          src_name,
+          idx);
+        SSA_step.cond = equality2tc(SSA_step.lhs, src);
+
+        // src inherits lhs's reads (monotone — over-approximate, never erase).
+        index_reads[src_name].insert(
+          index_reads[lhs_name].begin(), index_reads[lhs_name].end());
+
+        collect_dependencies(SSA_step.guard);
+        collect_dependencies(src);
+        return;
+      }
+
+      // Store kept: v is live, scan it for reads. src inherits lhs's reads
+      // except for the overwritten index. Do not assign the set wholesale:
+      // src may also have direct downstream reads already recorded.
+      scan_array_uses(update_value);
+      auto &src_reads = index_reads[src_name];
+      for (const auto read_index : index_reads[lhs_name])
+        if (read_index != idx)
+          src_reads.insert(read_index);
+      if (disq)
+        array_disqualified.insert(src_name);
+    }
+    else
+      scan_array_uses(SSA_step.rhs);
+
     collect_dependencies(SSA_step.guard);
     collect_dependencies(SSA_step.rhs);
 

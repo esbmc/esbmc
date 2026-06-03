@@ -108,6 +108,9 @@ public:
     sliced = 0;
     depends.clear();
     collected_cache.clear();
+    index_reads.clear();
+    array_disqualified.clear();
+    scanned_cache.clear();
 
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
@@ -134,6 +137,25 @@ public:
   /// and-chain prefix is walked once overall (Θ(N²) -> O(N)). Collection is
   /// purely monotone (depends.insert only), so the memo is unconditional.
   std::unordered_set<const expr2t *> collected_cache;
+
+  /// Per-array-version read map: versioned array-symbol name -> set of constant
+  /// indices that are actually read. Propagation through a kept store inserts
+  /// the live-out set minus the overwritten index, preserving any direct reads
+  /// already recorded for the source version. A store to an index NOT present
+  /// here is provably dead and may be elided. Populated by #scan_array_uses,
+  /// consulted by
+  /// #run_on_assignment to drop dead array stores.
+  std::unordered_map<std::string, std::unordered_set<size_t>> index_reads;
+
+  /// Array versions whose element reads cannot be reasoned about per-index
+  /// (whole-array use, symbolic index, array-as-value, …). INSERT-ONLY. A
+  /// disqualified array never has any of its stores dropped.
+  std::unordered_set<std::string> array_disqualified;
+
+  /// BLACK set for the #scan_array_uses two-color DFS — independent of
+  /// #collected_cache. Sound for the same reason: index_reads/array_disqualified
+  /// are insert-only, so re-skipping an already-scanned subtree adds nothing.
+  std::unordered_set<const expr2t *> scanned_cache;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
@@ -176,6 +198,21 @@ protected:
    * @param expr expression whose symbols are added to #depends
    */
   void collect_dependencies(const expr2tc &expr);
+
+  /**
+   * Record the array-element reads in \expr into #index_reads, and disqualify
+   * (#array_disqualified) any array version used in a way that defeats
+   * per-index reasoning. Run on the guard/cond/rhs of every RETAINED step so
+   * that, by the time a store is examined in reverse order, every downstream
+   * read of that array version has already been recorded.
+   *
+   * Walked with the same explicit two-color worklist as #collect_dependencies
+   * but with its own memo (#scanned_cache); both outputs are insert-only, so
+   * skipping an already-scanned subtree is sound and keeps the scan O(N).
+   *
+   * @param expr expression whose array reads are recorded
+   */
+  void scan_array_uses(const expr2tc &expr);
 
   /**
    * Read-only: does \expr reference a tracked dependency (a symbol in #depends
