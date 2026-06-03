@@ -3,12 +3,14 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/symbol_id.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/std_expr.h>
 #include <util/std_code.h>
 
@@ -20,6 +22,42 @@
 
 const char *kConstant = "Constant";
 const char *kName = "Name";
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
+// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
+// nodes through these same paths downstream). Back-migrated for the legacy
+// adjust/goto-convert seam.
+
+// member_exprt(base, name, t): base is complex-typed (is_complex_type-guarded:
+// the `complex` struct or the transient `tag-complex` symbol), both permitted
+// member2t sources.
+exprt np_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
+
+// typecast_exprt(from, t): rounding mode defaults to __ESBMC_rounding_mode,
+// matching migrate_expr's lowering of a legacy typecast.
+exprt np_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+
+// address_of_exprt(obj): result type is pointer-to-obj-type, reproduced by
+// address_of2tc(obj2->type, obj2) == pointer_type2tc(obj2->type).
+exprt np_address_of(const exprt &obj)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 struct numeric_value
 {
@@ -1216,8 +1254,8 @@ exprt numpy_call_expr::create_expr_from_call()
       const typet &dt = cached_double_type();
       if (is_complex_type(arg_expr.type()))
       {
-        exprt real = member_exprt(arg_expr, "real", dt);
-        exprt imag = member_exprt(arg_expr, "imag", dt);
+        exprt real = np_member(arg_expr, "real", dt);
+        exprt imag = np_member(arg_expr, "imag", dt);
         if (function == "real")
           return real;
         if (function == "imag")
@@ -1240,13 +1278,13 @@ exprt numpy_call_expr::create_expr_from_call()
         if (function == "abs")
         {
           exprt real =
-            arg_expr.type() == dt ? arg_expr : typecast_exprt(arg_expr, dt);
+            arg_expr.type() == dt ? arg_expr : np_typecast(arg_expr, dt);
           return converter_.get_math_handler().handle_fabs(real, call_);
         }
         if (function == "angle")
         {
           exprt real =
-            arg_expr.type() == dt ? arg_expr : typecast_exprt(arg_expr, dt);
+            arg_expr.type() == dt ? arg_expr : np_typecast(arg_expr, dt);
           return converter_.get_math_handler().handle_atan2(
             from_double(0.0, dt), real, call_);
         }
@@ -1358,7 +1396,7 @@ exprt numpy_call_expr::create_expr_from_call()
         typet t = call.arguments().at(0).type().subtype();
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
-        call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
+        call.arguments().push_back(np_address_of(*converter_.current_lhs));
         std::vector<int> shape = type_handler_.get_array_type_shape(t);
         call.arguments().push_back(from_integer(shape[0], int_type()));
         call.arguments().push_back(from_integer(shape[1], int_type()));
@@ -1439,7 +1477,7 @@ exprt numpy_call_expr::create_expr_from_call()
         // The lines below add the output array and size arguments to the call.
 
         // Add output argument
-        call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
+        call.arguments().push_back(np_address_of(*converter_.current_lhs));
 
         // Add array size arguments
         if (t.subtype().is_array())
@@ -1813,7 +1851,7 @@ exprt numpy_call_expr::create_expr_from_call()
         // 3. n = inner dimension (shared)
         // 4. p = number of columns in rhs (or 1 for 1D rhs)
         auto &args = call.arguments();
-        args.push_back(address_of_exprt(*converter_.current_lhs));
+        args.push_back(np_address_of(*converter_.current_lhs));
         args.push_back(from_integer(m, int_type()));
         args.push_back(from_integer(n, int_type()));
         args.push_back(from_integer(p, int_type()));
@@ -1887,7 +1925,7 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         auto &args = call.arguments();
-        args.push_back(address_of_exprt(*converter_.current_lhs));
+        args.push_back(np_address_of(*converter_.current_lhs));
         args.push_back(as_dim(lhs_shape, 0));
         args.push_back(as_dim(lhs_shape, 1));
         args.push_back(as_dim(rhs_shape, 0));
