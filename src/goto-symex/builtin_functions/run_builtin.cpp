@@ -125,35 +125,27 @@ bool goto_symext::run_builtin(
     const type2tc &t = arg->type;
     const unsigned width = t->get_width();
 
-    expr2tc zero = constant_int2tc(t, 0);
-    expr2tc one = constant_int2tc(t, 1);
-    expr2tc upper = constant_int2tc(t, width - 1);
+    claim(
+      notequal2tc(arg, constant_int2tc(t, 0)),
+      "__builtin_clz: UB for x equal to 0");
 
-    claim(notequal2tc(arg, zero), "__builtin_clz: UB for x equal to 0");
+    // clz(x) = width - popcount(x with every bit below the most-significant set
+    // bit smeared down). Reusing the popcount irep means a constant argument
+    // folds to a constant (the popcount simplifier evaluates it, so no nondet
+    // variable and no extra VCC are produced), while a symbolic argument is
+    // handled by the backend's popcount encoding.
+    expr2tc smeared = arg;
+    for (unsigned shift = 1; shift < width; shift <<= 1)
+      smeared =
+        bitor2tc(t, smeared, lshr2tc(t, smeared, constant_int2tc(t, shift)));
 
-    // Introduce a nondet symbolic variable clz_sym for the number of leading
-    // zeros, constrained to 0 <= clz_sym <= width - 1.
-    unsigned int &nondet_count = get_nondet_counter();
-    expr2tc clz_sym = symbol2tc(t, "nondet$symex::" + i2string(nondet_count++));
-
-    expr2tc ge = greaterthanequal2tc(clz_sym, zero);
-    expr2tc le = lessthanequal2tc(clz_sym, upper);
-    assume(and2tc(ge, le));
-
-    // idx = (width - 1) - clz_sym is the position of the most-significant set
-    // bit. Force that bit to 1 and every bit above it to 0.
-    expr2tc idx = sub2tc(t, upper, clz_sym);
-
-    expr2tc shift = lshr2tc(t, arg, idx);
-    expr2tc bit1 = bitand2tc(t, shift, one);
-    assume(notequal2tc(bit1, zero));
-
-    expr2tc next = add2tc(t, idx, one);
-    expr2tc shift2 = lshr2tc(t, arg, next);
-    assume(equality2tc(shift2, zero));
+    expr2tc count = sub2tc(
+      get_int32_type(),
+      constant_int2tc(get_int32_type(), width),
+      popcount2tc(smeared));
 
     if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, clz_sym)));
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
 
     return true;
   }
