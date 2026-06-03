@@ -194,6 +194,22 @@ public:
   exprt handle_modulo(exprt lhs, exprt rhs, const nlohmann::json &element);
 
   /**
+   * @brief Handle Python's integer modulo operator (%)
+   *
+   * Python's `%` result has the sign of the *divisor* (floored modulo), unlike
+   * C's truncated remainder which has the sign of the dividend. Corrects the
+   * C remainder `bin_expr` so that, e.g., `-7 % 3 == 2` and `7 % -3 == -2`:
+   * result = rem + (rhs if (rem != 0 and signs_differ) else 0)
+   *
+   * @param lhs Dividend expression
+   * @param rhs Divisor expression
+   * @param bin_expr The C remainder expression (lhs % rhs) to correct
+   * @return Expression implementing Python integer modulo
+   */
+  exprt
+  handle_int_modulo(const exprt &lhs, const exprt &rhs, const exprt &bin_expr);
+
+  /**
    * @brief Handle Python's floor division operator (//)
    * 
    * Implements floor division: (lhs // rhs) = floor(lhs / rhs)

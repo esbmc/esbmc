@@ -763,6 +763,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (op == "FloorDiv")
     return math_handler_.handle_floor_division(lhs, rhs, bin_expr);
 
+  // Python integer modulo `%` is floored (result takes the sign of the
+  // divisor), unlike C's truncated remainder. Correct it for integer operands;
+  // float `%` was already handled above via handle_modulo.
+  if (
+    op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
+
   // Promote operands for IEEE operations
   promote_ieee_operands(bin_expr, lhs, rhs);
 
