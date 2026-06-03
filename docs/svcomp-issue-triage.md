@@ -1,9 +1,10 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-02 (Pass 3 re-validation — see §7)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
-**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `95be952e8a`.
+**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `4f12db8419` (Pass 3);
+prior passes on `95be952e8a`.
 **Verification policy:** ESBMC is a formal-verification tool. No unsound fix, heuristic
 workaround, silent behaviour change, or unverified assumption is shipped. Where an issue cannot
 be fixed *soundly* with a localized change, the blocker and the required design change are
@@ -283,3 +284,117 @@ Verified against current open/closed state; all consistent.
   soundness before merge, per the project's "correctness over speed" mandate.
 * Benchmarks were fetched read-only from the public sv-benchmarks repository and treated as
   untrusted input.
+
+---
+
+## 7. Pass 3 — re-validation on 2026-06-02 (x86_64 Linux host, current master)
+
+Passes 1–2 were performed on an **aarch64 macOS** host against master `95be952e8a`. Pass 3 re-runs
+the still-open batch on an **x86_64 Linux** host against master `4f12db8419`, after several relevant
+PRs landed: **#4919** (`[termination] ranking-function checker`, merged 2026-06-02), **#5017**
+(`[symex] sound printf return-length`, merged 2026-06-02), **#5038** (`[witness] drop
+aggregate-initialiser assumptions`), and **#5013** (`keep overflow2t operand intact in interval
+analysis`). Two Pass-1/2 blockers were *environmental* (aarch64 parse failure / unavailable witness
+validator) and are re-examined here. All verdicts below are **`repro`** (locally reproduced in this
+environment) unless stated.
+
+### 7.1 #4976–#4979 — busybox no-overflow: STILL REPRODUCES; defer to #5012 (unchanged)
+
+`sync-1.i` re-run with the issue's exact flags → `arithmetic overflow on add` in `bb_verror_msg`,
+`used = 2147483642 (≈ INT_MAX)`, `VERIFICATION FAILED / Bug found (k = 11)`. **#5017 did not and
+cannot resolve this**: #5017 hardened the `symex_printf` *format* under-approximation, but the root
+cause is the **unmodeled `vasprintf` return** (no OM ⇒ unconstrained nondet `int`), which is a *sound*
+over-approximation. The sound fix is the multi-phase, gated `(v)asprintf` return-length OM tracked by
+open issue **#5012** (design PR **#5011**, `docs/design-printf-return-length-om.md`); even that closes
+only *constant-format* call sites and keeps symbolic formats sound-but-unbounded. **No competing PR —
+would duplicate #5012's in-flight design.** (Task disposition: precision/incompleteness limitation,
+not a soundness bug.)
+
+### 7.2 #4980 — turbografx termination: STILL REPRODUCES post-#4919 (triage correction)
+
+§3.2 expected open PR #4919 to resolve this. **#4919 is now merged and the false alarm STILL
+reproduces** (`Inductive step shows a non-terminating execution (k = 3)` → `FALSE_TERMINATION`).
+Root cause, confirmed by source inspection + minimal probes:
+
+* Loop 8 (`tgfx_init`, line 3123) is a bounded counter `for (i = 0; i <= 2; i++)` lowered by CIL to a
+  **bottom-test goto loop with early-exit `break`s** whose body contains FUNCTION_CALLs
+  (`tgfx_probe`, `IS_ERR`, `PTR_ERR`) and pointer stores.
+* #4919's ranking checker (`try_prove_termination_by_ranking`) only recognises straight-line scalar
+  or sequential-if/else *scalar* bodies and rejects FUNCTION_CALL/OTHER instructions, so it returns
+  UNKNOWN here; the recurrent-set non-termination prover also returns UNKNOWN. Control therefore
+  falls through to `goto_termination`'s **havoc + the inductive-step lasso signal**, which havocs the
+  counter `i` to an arbitrary (possibly large-negative) value — making the bounded loop appear
+  unbounded. The missing piece is the `i >= 0` supporting invariant, which the recogniser never
+  reaches because it bails on the body shape.
+* Confirmed the recogniser *does* prove the same loop when the body is pure scalar (`Ranking function
+  shows all executions terminate`), and that the false alarm needs the exact `--k-step 2
+  --max-inductive-step 3` cadence (the IS fires at k=3 before the forward condition can fully unwind
+  the 3-trip loop at k=5).
+
+**Why no PR.** The IS-lasso non-termination verdict is the historically-unsound fallback that #4919's
+*sound* recurrent-set prover was added to supersede; making it sound (or extending the ranking
+recogniser to project FUNCTION_CALL/pointer-store bodies onto the measure variables with escape
+analysis, or injecting interval-derived `i >= 0` bounds into the termination IS) is a change to a
+just-merged, 3400-line subsystem that **requires full SV-COMP termination-set (2413 benchmark)
+validation to rule out a completeness regression** — infeasible to discharge soundly in this
+environment, and overlapping the #4919 author's domain and the in-flight interval-bounds work in
+PR #4480. **Recommended:** re-open the analysis with the #4919 author; extend the ranking recogniser
+to tolerate side-effect-only calls (sound only with a "does this call/store touch the measure or
+invariant variables?" check). Keep #4980 open; the triage's "overlaps #4919" note is hereby corrected
+to "**not** covered by #4919 as merged."
+
+### 7.3 #4432 — mcslock no-data-race: x86 blocker removed, NEW scalability blocker found
+
+The Pass-1/2 blocker (aarch64 rejects the x86-only `__attribute__((regparm(1)))`) **does not apply on
+this x86_64 Linux host** — `mcslock.i` parses and reaches symbolic execution. However the false alarm
+**still could not be reproduced to a verdict**, for a *different, newly-identified* reason:
+
+* The issue's exact flags (`--data-races-check-only --smt-symex-guard --no-por --incremental-bmc`,
+  3 threads with CAS spin-acquire) did **not** terminate in **>6 min**; a POR-enabled variant and a
+  bounded `--context-bound 3 --unwind 4` variant both **timed out (4 min)**.
+* Reduced to a **minimal 2-thread, single-`__atomic_compare_exchange_n`, single shared-write**
+  program: plain reachability succeeds (`VERIFICATION SUCCESSFUL`) but only after **2515 thread
+  interleavings**, while `--data-races-check-only` **times out (>90 s)** even there. So the cost
+  driver is the **data-race checker's interleaving explosion on GCC `__atomic_*` builtins** (each
+  lowered to `ATOMIC_BEGIN…ATOMIC_END` + a `yield()` context-switch point, multiplying interleavings,
+  with a RACE_CHECK VCC per shared access), not the benchmark size or the host architecture.
+* The CAS itself is modelled **soundly and atomically** (`clang_c_adjust_polymorphic_functions.cpp`
+  emits `__ESBMC_atomic_begin … __ESBMC_atomic_end` around the strong-CAS body), so the spurious
+  W/W race is **not** a CAS-atomicity bug; it would have to be in the data-race checker's
+  happens-before reasoning through the atomics — unconfirmable until the run reaches a verdict.
+
+**Disposition update.** #4432's blocker is **no longer "needs an x86 host"** (it has one here) — it is
+now **data-race-checker performance on atomic-heavy code**. A fix needs either that performance work
+(interleaving reduction / POR for atomic regions) or a much larger compute/time budget. Recommend
+filing the data-race-checker performance pathology (minimal 2-thread CAS reproducer above) as its own
+issue, as the true prerequisite for #4432. Keep #4432 open.
+
+### 7.4 #4438 — confirmed covered by **open** PR #4480 (skip, unchanged)
+
+PR #4480 (`fix/4438-kind-interval-float-nan`) is still open and directly targets this float-NaN
+k-induction-base-case false alarm. No separate PR.
+
+### 7.5 #1470 — overflow witness: reported resolved on master (recommend close, no PR)
+
+Per the issue's 2026-05-31 maintainer comment, the GraphML violation witness now emits the violating
+input on current master; recommend closing. (Confirming the *witness validates* still needs the
+CPAchecker / cpa-witness2test validator, unavailable here, as for #1471/#1492/#4611.)
+
+### 7.6 Net Pass-3 outcome
+
+| Issue | Pass-2 disposition | Pass-3 re-validation | New PR? |
+|---|---|---|---|
+| #4976–#4979 | precision limit (defer #5012) | unchanged — #5017 doesn't touch the `vasprintf` root cause | no (would duplicate #5012/#5011) |
+| #4980 | "overlaps #4919" | **corrected** — STILL reproduces post-#4919; ranking recogniser gap | no (research-grade; full-set validation needed) |
+| #4432 | aarch64 host blocker | **refined** — x86 host OK; blocker is data-race-checker perf on atomics | no (not reproducible-to-verdict here) |
+| #4438 | open PR #4480 | unchanged — PR #4480 still open | no (duplicate) |
+| #1470 | needs validator | reported resolved on master | no (recommend close) |
+
+**No new PRs are opened by Pass 3.** Every still-open SV-COMP issue is, on current master, one of:
+already covered by an open PR (#4438→#4480), an in-flight gated design effort that a competing PR
+would duplicate (#4976–#4979→#5012/#5011), a research-grade change to a just-merged subsystem that
+cannot be soundness/completeness-validated in this environment (#4980), not reproducible-to-verdict
+here (#4432), already fixed on master (#1470), blocked on an unavailable witness validator
+(#1471/#1492/#4611), or a research-grade LDV driver / latent / umbrella item (#4427, #4439, #1440,
+#1447). This is the correctness-first outcome mandated by the task: no unsound or unvalidated patch is
+shipped to manufacture a PR count.
