@@ -414,6 +414,55 @@ exprt function_call_expr::build_constant_from_arg() const
 
   auto arg = call_["args"][0];
 
+  // bytes(...) constructor. The generic constructor path below relabels the
+  // argument expression's type as the bytes array type without converting the
+  // value; for a list/int argument that yields a list-pointer (or scalar) value
+  // tagged as an array, which trips base_type_eq in value_set (a crash). Build
+  // a real byte array here instead, matching the bytes-literal representation.
+  if (func_name == "bytes")
+  {
+    // bytes([i0, i1, ...]) — a list of constant ints in range(0, 256).
+    if (
+      arg.is_object() && arg.value("_type", "") == "List" &&
+      arg.contains("elts"))
+    {
+      std::vector<uint8_t> bytes;
+      for (const auto &e : arg["elts"])
+      {
+        if (
+          !e.is_object() || e.value("_type", "") != "Constant" ||
+          !e.contains("value") || !e["value"].is_number_integer())
+          throw std::runtime_error(
+            "bytes(): only a list of constant integers is supported");
+        const long long v = e["value"].get<long long>();
+        if (v < 0 || v > 255)
+          throw std::runtime_error(
+            "ValueError: bytes must be in range(0, 256)");
+        bytes.push_back(static_cast<uint8_t>(v));
+      }
+      // An empty byte array is modelled as a size-0 (variable-length) array,
+      // which len()/iteration then route through strlen; reuse the no-argument
+      // bytes() representation, which the size-0 path handles correctly.
+      if (bytes.empty())
+        return exprt("constant", type_handler_.get_typet("bytes", 0));
+      return converter_.get_string_builder().build_raw_byte_array(bytes);
+    }
+
+    // bytes(n) — a constant non-negative count of zero bytes.
+    if (
+      arg.is_object() && arg.value("_type", "") == "Constant" &&
+      arg.contains("value") && arg["value"].is_number_integer())
+    {
+      const long long n = arg["value"].get<long long>();
+      if (n < 0)
+        throw std::runtime_error("ValueError: negative count");
+      if (n == 0)
+        return exprt("constant", type_handler_.get_typet("bytes", 0));
+      return converter_.get_string_builder().build_raw_byte_array(
+        std::vector<uint8_t>(static_cast<size_t>(n), 0));
+    }
+  }
+
   // Handle str(z) / repr(z) where z is a complex expression.
   // Must check before the arg["value"]-based dispatch below, since
   // complex args come from Name/Call nodes without a "value" field.
