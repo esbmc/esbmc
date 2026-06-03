@@ -1,13 +1,53 @@
 #include "string_builder.h"
 #include "python_converter.h"
 #include "type_handler.h"
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
 #include <python-frontend/python_frontend_limits.h>
 #include <optional>
 #include <stdexcept>
 #include <limits>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
+// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
+// nodes through these same paths downstream). Back-migrated for the legacy
+// adjust/goto-convert seam; the caller sets .location() where it did before.
+exprt build_call_expr(
+  const symbolt &fn,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(side_effect_function_call2tc(
+    migrate_type(return_type), symbol_expr2tc(fn), args2));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)
@@ -397,12 +437,8 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
     }
 
-    side_effect_expr_function_callt repeat_call;
-    repeat_call.function() = symbol_expr(*repeat_symbol);
-    repeat_call.arguments().push_back(str_addr);
-    repeat_call.arguments().push_back(count);
-    repeat_call.type() = gen_pointer_type(char_type());
-    return repeat_call;
+    return build_call_expr(
+      *repeat_symbol, gen_pointer_type(char_type()), {str_addr, count});
   };
 
   // Get size (e.g.: "a" * 3)
@@ -553,12 +589,9 @@ exprt string_builder::concatenate_strings_via_c_function(
   }
 
   // Create the function call: __python_str_concat(lhs, rhs)
-  side_effect_expr_function_callt concat_call;
-  concat_call.function() = symbol_expr(*concat_symbol);
-  concat_call.arguments().push_back(lhs_addr);
-  concat_call.arguments().push_back(rhs_addr);
+  exprt concat_call = build_call_expr(
+    *concat_symbol, gen_pointer_type(char_type()), {lhs_addr, rhs_addr});
   concat_call.location() = location;
-  concat_call.type() = gen_pointer_type(char_type());
 
   return concat_call;
 }
@@ -589,14 +622,9 @@ exprt string_builder::build_runtime_str_conversion_call(
 
   exprt arg_expr = arg;
   if (arg_expr.type() != arg_type)
-    arg_expr = typecast_exprt(arg_expr, arg_type);
+    arg_expr = build_typecast(arg_expr, arg_type);
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*fn_symbol);
-  call.arguments().push_back(arg_expr);
-  call.type() = gen_pointer_type(char_type());
-
-  return call;
+  return build_call_expr(*fn_symbol, gen_pointer_type(char_type()), {arg_expr});
 }
 
 exprt string_builder::build_runtime_str_join_call(
@@ -630,15 +658,9 @@ exprt string_builder::build_runtime_str_join_call(
   exprt sep_arg = str_handler_->get_array_base_address(separator);
 
   exprt list_arg =
-    list_expr.type().is_pointer() ? list_expr : address_of_exprt(list_expr);
+    list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr);
   if (list_arg.type() != list_ptr)
-    list_arg = typecast_exprt(list_arg, list_ptr);
+    list_arg = build_typecast(list_arg, list_ptr);
 
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*fn_symbol);
-  call.arguments().push_back(sep_arg);
-  call.arguments().push_back(list_arg);
-  call.type() = char_ptr;
-
-  return call;
+  return build_call_expr(*fn_symbol, char_ptr, {sep_arg, list_arg});
 }
