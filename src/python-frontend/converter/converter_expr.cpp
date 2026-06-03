@@ -1227,33 +1227,37 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
     // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
-    // Keep rejecting all other tuple index arities for this model.
     if (
       tuple_index_targets_list_model && slice.contains("_type") &&
       slice["_type"] == "Tuple")
     {
       if (
-        !slice.contains("elts") || !slice["elts"].is_array() ||
-        slice["elts"].empty())
-        throw_numpy_multidim_index_error(*this, element);
-
-      python_list list(*this, element);
-      exprt current = array;
-      for (const auto &index_node : slice["elts"])
+        slice.contains("elts") && slice["elts"].is_array() &&
+        slice["elts"].size() == 2)
       {
-        const nlohmann::json normalized_index =
-          normalize_bool_index_node(index_node);
-        current = list.index(current, normalized_index);
-        if (contains_cpp_throw(current))
+        const auto &row_idx_raw = slice["elts"][0];
+        const auto &col_idx_raw = slice["elts"][1];
+        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
+        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
+        const bool has_slice_dim =
+          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
+          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
+        if (has_slice_dim)
+          throw_numpy_multidim_index_error(*this, element);
+
+        python_list list(*this, element);
+        exprt row = list.index(array, row_idx);
+        if (contains_cpp_throw(row))
         {
-          expr = current;
+          expr = row;
           break;
         }
+
+        expr = list.index(row, col_idx);
+        break;
       }
 
-      if (expr.is_nil())
-        expr = current;
-      break;
+      throw_numpy_multidim_index_error(*this, element);
     }
 
     // Handle object subscripting through __getitem__:
