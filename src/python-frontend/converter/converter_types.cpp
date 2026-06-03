@@ -3,8 +3,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 #include <algorithm>
@@ -50,9 +52,11 @@ exprt python_converter::unwrap_optional_if_needed(
       base = symbol_expr(tmp);
     }
 
-    // Extract the value field
-    member_exprt value_field(base, "value", struct_type.components()[1].type());
-    return value_field;
+    // Extract the value field. V.3: IREP2 member access (round-trip).
+    expr2tc b2;
+    migrate_expr(base, b2);
+    return migrate_expr_back(member2tc(
+      migrate_type(struct_type.components()[1].type()), b2, "value"));
   }
 
   return expr;

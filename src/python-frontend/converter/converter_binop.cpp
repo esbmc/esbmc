@@ -1024,10 +1024,16 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
     for (const auto &c : lhs_components)
-      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+      result.copy_to_operands(migrate_expr_back(
+        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1064,9 +1070,13 @@ exprt python_converter::handle_tuple_operations(
       tuple_handler_->create_tuple_struct_type(element_types);
 
     struct_exprt result(new_type);
+    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    expr2tc tuple2;
+    migrate_expr(tuple, tuple2);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+        result.copy_to_operands(migrate_expr_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
