@@ -1298,7 +1298,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
     // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
-    // Keep rejecting all other tuple index arities for this model.
     if (
       tuple_index_targets_list_model && slice.contains("_type") &&
       slice["_type"] == "Tuple")

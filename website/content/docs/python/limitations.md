@@ -27,8 +27,8 @@ weight: 4
 
 ## Complex Numbers
 
-- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
-- `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
+- The `complex()` constructor accepts literal strings and a limited set of frontend-folded string expressions (for example, conditionals between literal complex strings). Arbitrary runtime strings are still rejected with the error `complex() does not support non-literal string arguments`.
+
 
 ## Built-in Functions
 
@@ -108,11 +108,11 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, 2D indexing (`a[i, j]`) is supported via chained indexing, and scalar broadcasting in direct binary operators supports `a + n` and `a * n`. General NumPy broadcasting rules, full dtype semantics, and higher-dimensional indexing remain unsupported.
-- Numeric-array arithmetic outside the supported subset is still rejected with `TypeError: arithmetic on numeric arrays is not supported (numpy broadcasting is not modelled)` to avoid SMT backend aborts (see [#4668](https://github.com/esbmc/esbmc/issues/4668)).
-- Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
-- Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
-- `numpy.linalg.det` is a 2-scalar stub; general matrix operations are not supported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Higher-dimensional arrays are rejected explicitly; full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
+- Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
+- The remaining type-inference-only stubs are `np.arccos`, `np.fmod`, `np.dot`, `np.matmul`, and `np.transpose`.
+- `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
 
 ## Exception Handling
 
