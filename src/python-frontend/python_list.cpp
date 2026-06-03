@@ -76,6 +76,24 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// index2t requires an array/vector/symbol source; a pointer source (e.g. the
+// array/pointer iterable branch) and dyn-sized arrays (slice results) fall
+// back to the legacy node. dyn-array types are checked first to avoid
+// migrating an expr whose type would not round-trip.
+exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
+{
+  if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
+    return index_exprt(arr, idx, t);
+  expr2tc arr2, idx2;
+  migrate_expr(arr, arr2);
+  migrate_expr(idx, idx2);
+  if (
+    is_array_type(arr2->type) || is_vector_type(arr2->type) ||
+    is_symbol_type(arr2->type))
+    return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
+  return index_exprt(arr, idx, t);
+}
 } // namespace
 
 // Default depth for list comparison if option not set
@@ -1559,8 +1577,8 @@ exprt python_list::handle_range_slice(
       src_idx = size_add(to_size_expr(lower_expr), build_symbol(idx));
     }
 
-    index_exprt src(array, src_idx, elem_type);
-    index_exprt dst(build_symbol(result), build_symbol(idx), elem_type);
+    exprt src = build_index(array, src_idx, elem_type);
+    exprt dst = build_index(build_symbol(result), build_symbol(idx), elem_type);
     code_assignt assign(dst, src);
     body.copy_to_operands(assign);
 
@@ -1575,7 +1593,7 @@ exprt python_list::handle_range_slice(
     converter_.add_instruction(loop);
 
     // Add null terminator at result[slice_len]
-    index_exprt null_pos(build_symbol(result), slice_len, elem_type);
+    exprt null_pos = build_index(build_symbol(result), slice_len, elem_type);
     code_assignt add_null(null_pos, gen_zero(elem_type));
     add_null.location() = location;
     converter_.add_instruction(add_null);
@@ -2510,7 +2528,7 @@ exprt python_list::handle_index_access(
     // resorting to a fragile width-only heuristic.
     typet char_t = char_type();
     type_utils::set_cpp_type(char_t, "char");
-    return index_exprt(array, idx, char_t);
+    return build_index(array, idx, char_t);
   }
 
   // For char* (string function parameter), implement Python single-index
@@ -2609,7 +2627,7 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
-  return index_exprt(array, pos_expr, array.type().subtype());
+  return build_index(array, pos_expr, array.type().subtype());
 }
 
 void python_list::get_list_type_flags(
@@ -3650,18 +3668,18 @@ exprt python_list::build_extend_list_call(
     code_blockt loop_body;
 
     // Get character at index: str[idx]
-    index_exprt char_at(other_list, build_symbol(idx), char_type());
+    exprt char_at = build_index(other_list, build_symbol(idx), char_type());
 
     // Update char_elem[0] = str[idx]
-    index_exprt elem_0(
-      build_symbol(char_elem), gen_zero(size_type()), char_type());
+    exprt elem_0 =
+      build_index(build_symbol(char_elem), gen_zero(size_type()), char_type());
     code_assignt assign_char(elem_0, char_at);
     assign_char.location() = location;
     loop_body.copy_to_operands(assign_char);
 
     // Update char_elem[1] = '\0'
-    index_exprt elem_1(
-      build_symbol(char_elem), gen_one(size_type()), char_type());
+    exprt elem_1 =
+      build_index(build_symbol(char_elem), gen_one(size_type()), char_type());
     code_assignt assign_null(elem_1, gen_zero(char_type()));
     assign_null.location() = location;
     loop_body.copy_to_operands(assign_null);
@@ -3971,8 +3989,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   else if (iterable_expr.type().is_array() || iterable_expr.type().is_pointer())
   {
     // For arrays/strings, use direct indexing
-    index_exprt array_index(
-      iterable_expr, build_symbol(index_var), loop_var_type);
+    exprt array_index =
+      build_index(iterable_expr, build_symbol(index_var), loop_var_type);
     current_element = array_index;
   }
   else
@@ -4153,7 +4171,8 @@ exprt python_list::extract_pyobject_value(
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
 
     // Build __ESBMC_float_buf[item->float_idx]
-    index_exprt float_val(build_symbol(*fbuf_sym), float_idx_member, elem_type);
+    exprt float_val =
+      build_index(build_symbol(*fbuf_sym), float_idx_member, elem_type);
     return float_val;
   }
 
