@@ -1143,12 +1143,17 @@ void goto_symext::run_intrinsic(
     if (seg_idx != cur_state->cur_seg)
       return;
 
-    // Find the assumption waypoint in this segment by source line.
-    const irep_idt cur_line = cur_state->source.pc->location.get_line();
+    // pc has already been incremented past this intrinsic call; step back one
+    // to get the location of the __ESBMC_witness_assume instruction itself.
+    const irep_idt cur_line =
+      std::prev(cur_state->source.pc)->location.get_line();
     const waypoint *matched = nullptr;
     for (const auto &wp : cur_state->witness_segs[seg_idx])
     {
-      if (wp.type == waypoint::assumption && wp.line_id == cur_line)
+      if (
+        (wp.type == waypoint::assumption ||
+         wp.type == waypoint::function_return) &&
+        wp.line_id == cur_line)
       {
         matched = &wp;
         break;
