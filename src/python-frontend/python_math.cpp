@@ -4,11 +4,13 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
 #include <python-frontend/type_handler.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/ieee_float.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/message.h>
@@ -19,6 +21,38 @@
 namespace
 {
 const BigInt kMaxConstantFoldExponent = 1024;
+
+// V.3: build an IREP2 expression-context call `func(args...)` returning
+// `return_type` (side_effect_function_call2tc + symbol_expr2tc), back-migrated
+// for the legacy adjust/goto-convert seam. Behaviour-preserving exact
+// round-trip of the side_effect_expr_function_callt the call sites hand-built.
+// Caller sets `.location()` on the result where the legacy code did.
+exprt build_c_math_call_expr(
+  const symbolt &func_sym,
+  const typet &return_type,
+  std::vector<exprt> args)
+{
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(side_effect_function_call2tc(
+    migrate_type(return_type), symbol_expr2tc(func_sym), args2));
+}
+
+// V.3: IREP2 struct-component access (exact round-trip of member_exprt). The
+// source is struct-typed (the caller reads its .components()), so the member2t
+// precondition holds.
+exprt math_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
 
 std::string make_math_dispatch_cache_key(
   const std::string &caller,
@@ -289,11 +323,10 @@ exprt python_math::build_unary_c_math_call(
   exprt operand,
   const nlohmann::json &element)
 {
-  side_effect_expr_function_callt call;
-  call.function() =
-    symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
-  call.arguments() = {promote_to_double_if_needed(std::move(operand))};
-  call.type() = double_type();
+  exprt call = build_c_math_call_expr(
+    get_c_math_symbol_cached(symbol_id, display_name),
+    double_type(),
+    {promote_to_double_if_needed(std::move(operand))});
   call.location() = converter.get_location_from_decl(element);
   return call;
 }
@@ -353,15 +386,12 @@ exprt python_math::handle_power_symbolic(exprt base, exprt exp)
   exprt double_base = promote_to_double_if_needed(std::move(base));
   exprt double_exp = promote_to_double_if_needed(std::move(exp));
 
-  // Create the function call
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {double_base, double_exp};
-  pow_call.type() = double_type();
-
+  // Create the function call.
   // Always return double result: Python power with float operands returns float
-  return pow_call;
+  return build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"),
+    double_type(),
+    {double_base, double_exp});
 }
 
 exprt python_math::build_power_expression(const exprt &base, const BigInt &exp)
@@ -556,11 +586,8 @@ exprt python_math::handle_modulo(
   div_expr.copy_to_operands(double_lhs, double_rhs);
 
   // Create floor(x / y)
-  side_effect_expr_function_callt floor_call;
-  floor_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-  floor_call.arguments() = {div_expr};
-  floor_call.type() = double_type();
+  exprt floor_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@floor", "floor"), double_type(), {div_expr});
   floor_call.location() = converter.get_location_from_decl(element);
 
   // Create floor(x/y) * y
@@ -593,11 +620,10 @@ exprt python_math::handle_floor_division(
     div_expr.copy_to_operands(
       promote_to_double_if_needed(lhs), promote_to_double_if_needed(rhs));
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = double_type();
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"),
+      double_type(),
+      {div_expr});
     floor_call.location() = bin_expr.location();
     return floor_call;
   }
@@ -933,11 +959,8 @@ exprt python_math::handle_divmod(
     exprt div_expr("ieee_div", result_type);
     div_expr.copy_to_operands(dividend, divisor);
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = result_type;
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"), result_type, {div_expr});
     floor_call.location() = converter.get_location_from_decl(element);
     quotient = floor_call;
   }
@@ -1065,11 +1088,10 @@ exprt python_math::handle_atan2(
   x_operand = promote_to_double_if_needed(std::move(x_operand));
 
   // Create the function call expression
-  side_effect_expr_function_callt atan2_call;
-  atan2_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@atan2", "atan2"));
-  atan2_call.arguments() = {y_operand, x_operand};
-  atan2_call.type() = double_type();
+  exprt atan2_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@atan2", "atan2"),
+    double_type(),
+    {y_operand, x_operand});
   atan2_call.location() = converter.get_location_from_decl(element);
 
   return atan2_call;
@@ -1109,11 +1131,8 @@ exprt python_math::handle_pow(
   exp = promote_to_double_if_needed(std::move(exp));
 
   // Create the function call expression
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {base, exp};
-  pow_call.type() = double_type();
+  exprt pow_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"), double_type(), {base, exp});
   pow_call.location() = converter.get_location_from_decl(element);
 
   return pow_call;
@@ -1166,11 +1185,8 @@ exprt python_math::handle_fmod(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt fmod_call;
-  fmod_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@fmod", "fmod"));
-  fmod_call.arguments() = {lhs, rhs};
-  fmod_call.type() = double_type();
+  exprt fmod_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@fmod", "fmod"), double_type(), {lhs, rhs});
   fmod_call.location() = converter.get_location_from_decl(element);
 
   return fmod_call;
@@ -1192,11 +1208,10 @@ exprt python_math::handle_copysign(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt copysign_call;
-  copysign_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@copysign", "copysign"));
-  copysign_call.arguments() = {lhs, rhs};
-  copysign_call.type() = double_type();
+  exprt copysign_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@copysign", "copysign"),
+    double_type(),
+    {lhs, rhs});
   copysign_call.location() = converter.get_location_from_decl(element);
 
   return copysign_call;
@@ -1338,11 +1353,8 @@ exprt python_math::handle_hypot(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt hypot_call;
-  hypot_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@hypot", "hypot"));
-  hypot_call.arguments() = {lhs, rhs};
-  hypot_call.type() = double_type();
+  exprt hypot_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@hypot", "hypot"), double_type(), {lhs, rhs});
   hypot_call.location() = converter.get_location_from_decl(element);
 
   return hypot_call;
@@ -1412,8 +1424,8 @@ exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
     std::string member_name = "element_" + std::to_string(i);
     const typet &comp_type = p_type.components()[i].type();
 
-    exprt pi = member_exprt(p, member_name, comp_type);
-    exprt qi = member_exprt(q, member_name, q_type.components()[i].type());
+    exprt pi = math_member(p, member_name, comp_type);
+    exprt qi = math_member(q, member_name, q_type.components()[i].type());
 
     // Cast to double if needed
     if (!pi.type().is_floatbv())
