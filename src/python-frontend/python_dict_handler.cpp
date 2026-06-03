@@ -5,16 +5,42 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/context.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 
 #include <algorithm>
 #include <functional>
 #include <sstream>
+
+namespace
+{
+// V.3: IREP2 member access (exact round-trip of member_exprt;
+// behaviour-preserving -- migrate_expr already lowers the legacy node through
+// this same path downstream). Back-migrated for the legacy adjust/goto-convert
+// seam.
+//
+// member2t requires a struct/union/symbol source. In this handler a few member
+// sites have a source whose type is still a pointer at construction time (the
+// dict/PyObject layout is resolved later by the adjuster), which legacy
+// member_exprt tolerates but eager member2tc cannot. For those we fall back to
+// the legacy node, leaving the downstream migration to lower it as before.
+exprt dict_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+    return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+  return member_exprt(base, name, t);
+}
+} // namespace
 
 python_dict_handler::python_dict_handler(
   python_converter &converter,
@@ -580,12 +606,12 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   // Assign keys and values to target dict struct members
-  member_exprt keys_member(dict_target, "keys", list_type);
+  exprt keys_member = dict_member(dict_target, "keys", list_type);
   code_assignt keys_assign(keys_member, symbol_expr(keys_list));
   keys_assign.location() = location;
   converter_.add_instruction(keys_assign);
 
-  member_exprt values_member(dict_target, "values", list_type);
+  exprt values_member = dict_member(dict_target, "values", list_type);
   code_assignt values_assign(values_member, symbol_expr(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
@@ -614,8 +640,8 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // Use try_find_index so a missing key returns SIZE_MAX instead of asserting.
   // We then emit a cpp-throw KeyError for the not-found case, which allows
@@ -747,7 +773,8 @@ exprt python_dict_handler::handle_dict_subscript(
   // Create dereference and explicitly set its type
   dereference_exprt deref_obj(symbol_expr(obj_var), element_type);
   deref_obj.type() = element_type;
-  member_exprt obj_value(deref_obj, "value", pointer_typet(empty_typet()));
+  exprt obj_value =
+    dict_member(deref_obj, "value", pointer_typet(empty_typet()));
 
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
@@ -908,8 +935,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 {
   typet list_type = type_handler_.get_list_type();
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // Check if key exists using membership test
   nlohmann::json dummy_json;
@@ -1050,7 +1077,7 @@ exprt python_dict_handler::handle_dict_membership(
   bool negated)
 {
   typet list_type = type_handler_.get_list_type();
-  member_exprt keys_member(dict_expr, "keys", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
 
   nlohmann::json dummy_json;
   python_list list_handler(converter_, dummy_json);
@@ -1074,8 +1101,8 @@ void python_dict_handler::handle_dict_delete(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // First, check if key exists using membership test
   // This avoids calling __ESBMC_list_find_index on empty dict or missing key
@@ -1841,8 +1868,8 @@ exprt python_dict_handler::handle_dict_get(
                  : normalized_result_type;
 
   // Get dict members
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -1917,7 +1944,7 @@ exprt python_dict_handler::handle_dict_get(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
+  exprt obj_value = dict_member(
     dereference_exprt(
       symbol_expr(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -2066,8 +2093,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   const bool is_list_result = (result_type == list_type);
 
   // Get dict members
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2142,7 +2169,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
+  exprt obj_value = dict_member(
     dereference_exprt(
       symbol_expr(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -2337,8 +2364,8 @@ exprt python_dict_handler::handle_dict_copy(
   // Copy each list independently so mutating the copy leaves the source
   // untouched.
   auto copy_list_member = [&](const irep_idt &name) {
-    member_exprt src(dict_expr, name, list_type);
-    member_exprt dst(symbol_expr(new_dict_sym), name, list_type);
+    exprt src = dict_member(dict_expr, name, list_type);
+    exprt dst = dict_member(symbol_expr(new_dict_sym), name, list_type);
     code_function_callt copy_call;
     copy_call.function() = symbol_expr(*list_copy_func);
     copy_call.arguments().push_back(src);
@@ -2419,8 +2446,8 @@ exprt python_dict_handler::handle_dict_pop(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2499,7 +2526,7 @@ exprt python_dict_handler::handle_dict_pop(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
+  exprt obj_value = dict_member(
     dereference_exprt(
       symbol_expr(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -2675,8 +2702,8 @@ exprt python_dict_handler::handle_dict_popitem(
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   typet tuple_type = get_popitem_tuple_type(dict_expr);
   const struct_typet &tuple_struct = to_struct_type(tuple_type);
@@ -2793,12 +2820,13 @@ exprt python_dict_handler::handle_dict_popitem(
     nonempty_block.copy_to_operands(key_at_call);
 
     // Assign key into tuple before removing from list
-    member_exprt key_obj_value(
+    exprt key_obj_value = dict_member(
       dereference_exprt(
         symbol_expr(key_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
-    member_exprt key_field(symbol_expr(result_var), "element_0", key_type);
+    exprt key_field =
+      dict_member(symbol_expr(result_var), "element_0", key_type);
     code_assignt key_assign(
       key_field, retrieve_list_value(key_obj_value, key_type));
     key_assign.location() = location;
@@ -2821,12 +2849,13 @@ exprt python_dict_handler::handle_dict_popitem(
     nonempty_block.copy_to_operands(val_at_call);
 
     // Assign value into tuple before removing from list.
-    member_exprt val_obj_value(
+    exprt val_obj_value = dict_member(
       dereference_exprt(
         symbol_expr(val_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
-    member_exprt val_field(symbol_expr(result_var), "element_1", val_type);
+    exprt val_field =
+      dict_member(symbol_expr(result_var), "element_1", val_type);
     code_assignt val_assign(
       val_field, retrieve_list_value(val_obj_value, val_type));
     val_assign.location() = location;
@@ -3062,8 +3091,8 @@ exprt python_dict_handler::handle_dict_update(
   // Read entries from the source dict through its internal keys/values lists.
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
-  member_exprt keys_member(other_dict, "keys", list_type);
-  member_exprt values_member(other_dict, "values", list_type);
+  exprt keys_member = dict_member(other_dict, "keys", list_type);
+  exprt values_member = dict_member(other_dict, "values", list_type);
 
   // Get the helper used to determine how many entries need to be copied.
   const symbolt *size_func =
@@ -3149,10 +3178,10 @@ exprt python_dict_handler::compare(
   typet list_type = type_handler_.get_list_type();
 
   // Get keys and values from both dicts
-  member_exprt lhs_keys(lhs, "keys", list_type);
-  member_exprt lhs_values(lhs, "values", list_type);
-  member_exprt rhs_keys(rhs, "keys", list_type);
-  member_exprt rhs_values(rhs, "values", list_type);
+  exprt lhs_keys = dict_member(lhs, "keys", list_type);
+  exprt lhs_values = dict_member(lhs, "values", list_type);
+  exprt rhs_keys = dict_member(rhs, "keys", list_type);
+  exprt rhs_values = dict_member(rhs, "values", list_type);
 
   // Find __ESBMC_dict_eq function
   const symbolt *dict_eq_func =
