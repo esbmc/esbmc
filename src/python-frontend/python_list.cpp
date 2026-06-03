@@ -3408,8 +3408,13 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt type_hash = symbol_expr(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Check if item is a void pointer (from loop iteration over strings)
-  if (item_info.elem_symbol->get_type() == pointer_typet(empty_typet()))
+  // void* items (e.g. a loop variable over a string list) need the stored
+  // char-array type_id and runtime length recovered from list_type_map.
+  // The lookup is keyed by symbol name, so non-symbol receivers cannot carry
+  // void* elements; skipping them is sound.
+  if (
+    item_info.elem_symbol->get_type() == pointer_typet(empty_typet()) &&
+    list.is_symbol())
   {
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);

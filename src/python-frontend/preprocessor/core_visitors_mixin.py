@@ -55,8 +55,11 @@ class CoreVisitorsMixin:
         # Track `x = Call(...)` so eq-shape rewrites can recover the inline
         # form on `x == ...`; all other target shapes invalidate.
 
+        rebound = set()
+
         def invalidate(target):
             if isinstance(target, ast.Name):
+                rebound.add(target.id)
                 self._assignment_call_origins.pop(target.id, None)
             elif isinstance(target, (ast.Tuple, ast.List)):
                 for elt in target.elts:
@@ -65,10 +68,21 @@ class CoreVisitorsMixin:
                 invalidate(target.value)
             elif isinstance(target, ast.Subscript) and isinstance(
                     target.value, ast.Name):
+                rebound.add(target.value.id)
                 self._assignment_call_origins.pop(target.value.id, None)
 
         for target in targets:
             invalidate(target)
+
+        # Drop tracked origins that reference a rebound free variable —
+        # otherwise the cascade rewrites against the new binding.
+        if rebound:
+            for tracked, origin in list(self._assignment_call_origins.items()):
+                for n in ast.walk(origin):
+                    if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                            and n.id in rebound):
+                        self._assignment_call_origins.pop(tracked, None)
+                        break
 
         if (len(targets) == 1 and isinstance(targets[0], ast.Name)
                 and isinstance(value, ast.Call)):
@@ -80,13 +94,15 @@ class CoreVisitorsMixin:
         (iteration, len, subscript, rebinding) would observe the placeholder
         instead of the cascade-rewritten value.
         """
-        candidates = set()
+        candidates = {}  # target name -> receiver name
         synthetic = ast.Module(body=list(body), type_ignores=[])
         for stmt in ast.walk(synthetic):
             if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
                     and isinstance(stmt.targets[0], ast.Name)
                     and self._is_items_view_call(stmt.value)):
-                candidates.add(stmt.targets[0].id)
+                recv = self._items_view_receiver_name(stmt.value)
+                if recv is not None:
+                    candidates[stmt.targets[0].id] = recv
         if not candidates:
             return set()
 
@@ -115,16 +131,21 @@ class CoreVisitorsMixin:
                 if i > 0:
                     _add_names(gen.iter)
 
-        store_count = {n: 0 for n in candidates}
+        # Watch receivers too: a rebound dict would let the cascade rewrite
+        # against a different value than the captured origin.
+        watched = set(candidates) | set(candidates.values())
+        store_count = {n: 0 for n in watched}
         disqualified = set()
         for parent in ast.walk(synthetic):
             for child in ast.iter_child_nodes(parent):
-                if not isinstance(child, ast.Name) or child.id not in candidates:
+                if not isinstance(child, ast.Name) or child.id not in watched:
                     continue
                 if id(child) in comp_local_ids:
                     continue
                 if isinstance(child.ctx, ast.Store):
                     store_count[child.id] += 1
+                    continue
+                if child.id not in candidates:
                     continue
                 # Load is safe only on one side of an Eq compare.
                 if (isinstance(parent, ast.Compare) and len(parent.ops) == 1
@@ -134,8 +155,10 @@ class CoreVisitorsMixin:
                                  and parent.comparators[0] is child))):
                     continue
                 disqualified.add(child.id)
-        return {n for n in candidates
-                if store_count[n] == 1 and n not in disqualified}
+        return {n for n, recv in candidates.items()
+                if store_count[n] == 1
+                and store_count.get(recv, 0) <= 1
+                and n not in disqualified}
 
     def _is_items_view_call(self, node):
         """True if node is W(d.<attr>()) or sorted(list(d.<attr>())) with
@@ -762,26 +785,34 @@ class CoreVisitorsMixin:
         """
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
-        # Replace `x = items-view-call` with `x = []` only when the scan
-        # certified `x` as eq-only AND the receiver is a known dict; the
-        # cascade rewrites the assertion against the tracked Call origin.
+        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
+        # certified x as eq-only with a known dict receiver; the cascade
+        # then recovers the assert against the tracked Call origin.
+        # Only sorted() is neutralised: plain `list(d.items())` still has a
+        # materialised list path elsewhere that other rewrites depend on.
+        neutralized_target = None
         if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id in self._eq_only_items_view_targets
-                and self._is_items_view_call(node.value)):
+                and self._is_items_view_call(node.value)
+                and node.value.func.id == "sorted"):
             recv = self._items_view_receiver_name(node.value)
             if recv is not None and self._is_known_dict_name(recv):
                 placeholder = ast.List(elts=[], ctx=ast.Load())
                 ast.copy_location(placeholder, node.value)
                 ast.fix_missing_locations(placeholder)
                 node.value = placeholder
-                # Prevent constant-folding `x` to `[]` outside the cascade.
-                self._known_literal_values.pop(node.targets[0].id, None)
+                neutralized_target = node.targets[0].id
 
         if self._maybe_record_type_alias_assign(node):
             return None
 
         node = self.generic_visit(node)
         self._update_known_literal_for_simple_assign(node)
+        # Drop any literal recorded by _update_known_literal_for_simple_assign
+        # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
+        # the cascade transforms decline) cannot constant-fold `x` to `[]`.
+        if neutralized_target is not None:
+            self._known_literal_values.pop(neutralized_target, None)
 
         expanded = self._maybe_expand_nondet_assign(node)
         if expanded is not None:

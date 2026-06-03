@@ -1822,10 +1822,8 @@ bool function_call_expr::is_list_method_call() const
     method_name != "index")
     return false;
 
-  // "count" / "index" are shared with str and tuple. Tuple receivers are
-  // claimed earlier (is_tuple_method_call); claim a list receiver here only
-  // when it resolves to a list symbol, so a str receiver falls through to the
-  // string handler.
+  // Tuples are claimed earlier; only claim count/index here when the receiver
+  // resolves to a list symbol so str receivers fall through.
   if (method_name == "count" || method_name == "index")
   {
     std::string dummy;

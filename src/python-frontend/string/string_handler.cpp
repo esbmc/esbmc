@@ -1932,9 +1932,7 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_receiver_expr;
   };
 
-  // Tuple and list receivers reuse method names that overlap with string
-  // methods (count, index). Defer to the regular dispatch table so the
-  // tuple-/list-aware handlers run instead of evaluating those as str methods.
+  // Defer count/index to tuple/list handlers when the receiver is one.
   if (method_name == "count" || method_name == "index")
   {
     exprt recv = get_receiver_expr();
