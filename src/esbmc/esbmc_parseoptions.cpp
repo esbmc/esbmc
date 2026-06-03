@@ -1823,8 +1823,22 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // to close at the hinted value. Raise max_k_step if the hint
     // exceeds it, since otherwise we'd hit the cap before the proof
     // closes.
+    //
+    // GATING the jump on `next_k > max_inductive_step` (when the cap
+    // is finite): IS UNSAT at small k is a primary win condition
+    // (proves the property by showing the post-havoc state is
+    // unreachable at depth k), and skipping past those k values
+    // silently hides the proof. The hint is a FC-speedup, not an
+    // IS-replacement, so let IS run at every k up to its cap before
+    // letting the hint take over. When --max-inductive-step is the
+    // default -1 (unlimited), the user hasn't asked for the IS cap
+    // so the hint fires as before.
     uint64_t next_k = k_step + k_step_inc;
-    if (!hint_consumed && fc_hint > next_k)
+    long max_is_raw = strtol(cmdline.getval("max-inductive-step"), nullptr, 10);
+    bool is_capped = max_is_raw >= 0;
+    bool past_is_cap = is_capped && next_k > static_cast<uint64_t>(max_is_raw);
+    bool hint_safe = !is_capped || past_is_cap;
+    if (!hint_consumed && fc_hint > next_k && hint_safe)
     {
       log_status(
         "Goto program exposes loop bound {:d}; "
@@ -1962,6 +1976,16 @@ static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions)
   for (const auto &fn : goto_functions.function_map)
   {
     if (!fn.second.body_available)
+      continue;
+    // Skip library helpers (operational models, frontend scaffolding).
+    // Their loops are not the user-program loops we're trying to
+    // hint, and they routinely contain large integer constants
+    // (e.g. ldexp's 2047 exponent range, strtol's 120 char-class
+    // tables) that would mislead the hint to jump to k values
+    // unrelated to any user loop -- causing FC at k=2047 to unwind
+    // every user-side nested loop 2047 times each, hanging the
+    // verification.
+    if (fn.second.body.hide)
       continue;
     for (const auto &ins : fn.second.body.instructions)
     {
