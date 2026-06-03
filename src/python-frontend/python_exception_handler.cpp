@@ -65,15 +65,137 @@ void python_exception_handler::get_try_statement(
     return;
   }
 
-  exprt new_expr = codet("cpp-catch");
+  // ESBMC's try lowering does not model the `else` clause: its body runs only
+  // when the try block completes without an exception, and (unlike the try
+  // body) exceptions it raises are not caught by this try's handlers. The
+  // current lowering would silently drop it, so refuse a non-empty `else`
+  // rather than return an unsound verdict.
+  if (element.contains("orelse") && !element["orelse"].empty())
+    throw std::runtime_error(
+      "try with a non-empty else clause is not supported");
+
+  const bool has_finally =
+    element.contains("finalbody") && !element["finalbody"].empty();
+
+  // Python's `finally` runs on every exit path: normal completion, a caught
+  // exception, an *uncaught* exception (run finally, then re-raise), and a
+  // return/break/continue that leaves the try. We model the first three by
+  // duplicating the finally body on the normal path (after the try/catch) and
+  // inside a catch-all handler that re-raises. A return/break/continue inside
+  // the try body, an except handler, or the finally body would bypass that
+  // appended finally and silently change the result, so refuse those with a
+  // clean diagnostic rather than return an unsound verdict.
+  if (has_finally)
+  {
+    bool escapes = body_has_escaping_control_flow(element["body"], false) ||
+                   body_has_escaping_control_flow(element["finalbody"], false);
+    for (const auto &h : element["handlers"])
+      if (h.contains("body"))
+        escapes = escapes || body_has_escaping_control_flow(h["body"], false);
+    if (escapes)
+      throw std::runtime_error(
+        "try/finally with return/break/continue in the try, except, or finally "
+        "body is not supported");
+  }
+
   exprt try_block = converter_.get_block(element["body"]);
   exprt handler = converter_.get_block(element["handlers"]);
+
+  // A bare `except:` already catches every exception, so the fall-through
+  // finally below runs after it on the exception path too. Appending a second
+  // catch-all here would collide with the user's one in symex's catch_map
+  // (both lower to the "ellipsis" exception id, and the later entry wins),
+  // dropping the user's handler. So synthesise the finally-rethrow catch-all
+  // only when no bare `except:` is present.
+  bool has_catch_all = false;
+  for (const auto &h : element["handlers"])
+    if (h["type"].is_null())
+      has_catch_all = true;
+
+  // Build a catch-all handler `{ finally; re-raise; }` so the finally runs on
+  // the exception-propagation path. Appended after any specific handlers, it
+  // only fires for exceptions none of them caught.
+  std::vector<exprt> handler_ops(
+    handler.operands().begin(), handler.operands().end());
+  if (has_finally && !has_catch_all)
+  {
+    exprt finally_handler = converter_.get_block(element["finalbody"]);
+    finally_handler.type().set("ellipsis", true); // catch-all
+    side_effect_exprt rethrow("cpp-throw", empty_typet());
+    rethrow.location() = converter_.get_location_from_decl(element);
+    codet rethrow_code("expression");
+    rethrow_code.operands().push_back(rethrow);
+    finally_handler.copy_to_operands(rethrow_code);
+    handler_ops.push_back(finally_handler);
+  }
+
+  // A valid Python `try` always has at least one handler or a finally, so
+  // handler_ops is non-empty and the cpp-catch has the >= 2 operands it needs
+  // (the try block plus at least one handler).
+  exprt new_expr = codet("cpp-catch");
   new_expr.move_to_operands(try_block);
-
-  for (const auto &op : handler.operands())
+  for (const auto &op : handler_ops)
     new_expr.copy_to_operands(op);
-
   block.move_to_operands(new_expr);
+
+  // finally on the normal-completion path (and after a caught exception).
+  if (has_finally)
+  {
+    exprt final_block = converter_.get_block(element["finalbody"]);
+    for (const auto &op : final_block.operands())
+      block.copy_to_operands(op);
+  }
+}
+
+// True if `node` contains a return/break/continue that transfers control out of
+// the enclosing try. `return` always escapes (we never descend into a nested
+// function/lambda, which would capture it); `break`/`continue` escape only when
+// not inside a nested loop (`in_loop`). Used to refuse try/finally shapes whose
+// appended finally this lowering would skip.
+bool python_exception_handler::body_has_escaping_control_flow(
+  const nlohmann::json &node,
+  bool in_loop)
+{
+  if (node.is_array())
+  {
+    for (const auto &stmt : node)
+      if (body_has_escaping_control_flow(stmt, in_loop))
+        return true;
+    return false;
+  }
+  if (!node.is_object())
+    return false;
+
+  const std::string t = node.value("_type", "");
+  if (t == "Return")
+    return true;
+  if (t == "Break" || t == "Continue")
+    return !in_loop;
+  // Nested functions/lambdas capture every return/break/continue within them.
+  if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "Lambda")
+    return false;
+
+  // A loop captures break/continue in its own body/orelse.
+  const bool child_in_loop =
+    in_loop || t == "For" || t == "AsyncFor" || t == "While";
+
+  for (const char *key : {"body", "orelse", "finalbody"})
+    if (
+      node.contains(key) &&
+      body_has_escaping_control_flow(node[key], child_in_loop))
+      return true;
+  if (node.contains("handlers") && node["handlers"].is_array())
+    for (const auto &h : node["handlers"])
+      if (
+        h.is_object() && h.contains("body") &&
+        body_has_escaping_control_flow(h["body"], child_in_loop))
+        return true;
+  // NOTE: `match` arms (cases[*].body) are not traversed because `match` is not
+  // yet supported by the frontend (a try containing one already errors during
+  // conversion). When match support lands, this predicate must recurse into the
+  // case bodies, or a return inside a match arm under a try/finally would
+  // silently escape the appended finally.
+  return false;
 }
 
 void python_exception_handler::get_raise_statement(
