@@ -74,9 +74,7 @@ def cat(tensors: list[list[list[float]]], dim: int) -> list[list[float]]:
     return out
 
 
-def split(
-    tensor: list[list[float]], sizes: list[int], dim: int
-) -> list[list[list[float]]]:
+def split(tensor: list[list[float]], sizes: list[int], dim: int) -> list[list[list[float]]]:
     # Split a 2-D tensor along columns (dim == 1) into chunks of the given widths.
     parts = []
     start = 0
