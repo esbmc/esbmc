@@ -13,6 +13,57 @@
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
+// guards the dyn-sized-array round-trip hazard (fall back to legacy), and
+// build_typecast restores the exact target type (#cpp_type that migrate_type
+// drops).
+bool contains_dyn_array(const typet &t)
+{
+  if (t.is_array())
+  {
+    const array_typet &at = to_array_type(t);
+    if (at.size().is_nil() || !at.size().is_constant())
+      return true;
+    return contains_dyn_array(at.subtype());
+  }
+  if (t.is_pointer())
+    return contains_dyn_array(t.subtype());
+  return false;
+}
+
+exprt build_symbol(const symbolt &sym)
+{
+  if (contains_dyn_array(sym.get_type()))
+    return symbol_expr(sym);
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
+    return typecast_exprt(from, t);
+  expr2tc from2;
+  migrate_expr(from, from2);
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  result.type() = t;
+  return result;
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  if (contains_dyn_array(obj.type()))
+    return address_of_exprt(obj);
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -280,7 +331,7 @@ void python_exception_handler::get_raise_statement(
 
     raise.id("struct");
     raise.type() = type;
-    raise.copy_to_operands(address_of_exprt(arg));
+    raise.copy_to_operands(build_address_of(arg));
   }
   else
   {
@@ -329,7 +380,7 @@ void python_exception_handler::get_raise_statement(
       if (type.is_empty())
         type = any_type();
       if (raise.type() != type)
-        raise = typecast_exprt(raise, type);
+        raise = build_typecast(raise, type);
     }
   }
 
@@ -392,7 +443,7 @@ void python_exception_handler::get_except_handler_statement(
   if (exception_symbol != nullptr)
   {
     catch_block.type() = exception_type;
-    exprt sym = symbol_expr(*exception_symbol);
+    exprt sym = build_symbol(*exception_symbol);
     code_declt decl(sym);
     exprt decl_code = converter_.convert_expression_to_code(decl);
     decl_code.location() = exception_symbol->location;
@@ -430,16 +481,16 @@ void python_exception_handler::handle_list_assertion(
   {
     symbolt &list_temp = converter_.create_tmp_symbol(
       element, "$list_assert_temp$", test.type(), exprt());
-    code_declt list_decl(symbol_expr(list_temp));
+    code_declt list_decl(build_symbol(list_temp));
     list_decl.location() = location;
     block.move_to_operands(list_decl);
 
     code_function_callt &func_call =
       static_cast<code_function_callt &>(const_cast<exprt &>(test));
-    func_call.lhs() = symbol_expr(list_temp);
+    func_call.lhs() = build_symbol(list_temp);
     block.move_to_operands(func_call);
 
-    list_expr = symbol_expr(list_temp);
+    list_expr = build_symbol(list_temp);
   }
 
   // Get list size via __ESBMC_list_size
@@ -450,24 +501,24 @@ void python_exception_handler::handle_list_assertion(
 
   symbolt &size_result = converter_.create_tmp_symbol(
     element, "$list_size_result$", size_type(), gen_zero(size_type()));
-  code_declt size_decl(symbol_expr(size_result));
+  code_declt size_decl(build_symbol(size_result));
   size_decl.location() = location;
   block.move_to_operands(size_decl);
 
   code_function_callt size_func_call;
-  size_func_call.function() = symbol_expr(*size_sym);
+  size_func_call.function() = build_symbol(*size_sym);
   if (list_expr.type().is_pointer())
     size_func_call.arguments().push_back(list_expr);
   else
-    size_func_call.arguments().push_back(address_of_exprt(list_expr));
-  size_func_call.lhs() = symbol_expr(size_result);
+    size_func_call.arguments().push_back(build_address_of(list_expr));
+  size_func_call.lhs() = build_symbol(size_result);
   size_func_call.type() = size_type();
   size_func_call.location() = location;
   block.move_to_operands(size_func_call);
 
   // Assert size > 0
   exprt assertion(">", bool_type());
-  assertion.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+  assertion.copy_to_operands(build_symbol(size_result), gen_zero(size_type()));
 
   code_assertt assert_code;
   assert_code.assertion() = assertion;
@@ -504,7 +555,7 @@ void python_exception_handler::handle_function_call_assertion(
 
   symbolt temp_symbol = create_assert_temp_variable(location);
   converter_.symbol_table().add(temp_symbol);
-  exprt temp_var_expr = symbol_expr(temp_symbol);
+  exprt temp_var_expr = build_symbol(temp_symbol);
 
   code_function_callt function_call =
     create_function_call_statement(func_call_expr, temp_var_expr, location);
@@ -517,7 +568,7 @@ void python_exception_handler::handle_function_call_assertion(
   }
   else
   {
-    exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
+    exprt cast_expr = build_typecast(temp_var_expr, signedbv_typet(32));
     exprt one_expr = constant_exprt("1", signedbv_typet(32));
     assertion_expr = equality_exprt(cast_expr, one_expr);
   }
