@@ -27,13 +27,11 @@ A goto-functions transformation, `remove_exceptions`
 
 ### Global exception state (`exception_globals.{h,cpp}`)
 
-Three zero-initialised globals carry the in-flight exception (names deliberately
-avoid the `__ESBMC_` prefix, which triggers intrinsic special-casing that breaks
-cross-function global tracking):
+Three zero-initialised globals carry the in-flight exception:
 
-- `$esbmc_exc_thrown : _Bool` — is an exception propagating?
-- `$esbmc_exc_typeid : size_t` — dynamic type id of the thrown object.
-- `$esbmc_exc_value  : void*`  — pointer to a static copy of the object.
+- `__ESBMC_exc_thrown : _Bool` — is an exception propagating?
+- `__ESBMC_exc_typeid : size_t` — dynamic type id of the thrown object.
+- `__ESBMC_exc_value  : void*`  — pointer to a static copy of the object.
 
 ### Type-id registry (`exception_typeid.{h,cpp}`)
 
@@ -42,7 +40,7 @@ integer id and a reflexive-transitive subtype closure, built from the symbol
 table's `bases` metadata and from THROW `exception_list` chains
 (`register_chain`, for frontends like Python whose exception classes have no
 `tag-` symbol). A `catch (C)` becomes the finite guard
-`$esbmc_exc_typeid ∈ { id(T) : T <: C }`; `catch (...)` is `thrown == true`.
+`__ESBMC_exc_typeid ∈ { id(T) : T <: C }`; `catch (...)` is `thrown == true`.
 
 ### Lowering (`remove_exceptions.cpp`)
 
@@ -51,7 +49,7 @@ interoperate across a call, so unless every function is in the supported subset
 (and a `main` exists) the pass lowers nothing. Per function it:
 
 - recovers the try-region tree from positional `CATCH` push/pop;
-- copies each thrown object into a static slot (`$esbmc_exc_obj$N`) so it
+- copies each thrown object into a static slot (`__ESBMC_exc_obj$N`) so it
   outlives the throwing frame;
 - replaces `THROW` with: arm the globals, `goto` the enclosing region's dispatch
   block (or the epilogue);

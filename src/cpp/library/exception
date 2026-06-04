@@ -54,8 +54,7 @@ typedef void (*unexpected_handler)();
 // Currently installed handlers (null == library default). Header-scope, so use
 // internal linkage to avoid a multiple-definition ODR violation when <exception>
 // is included in more than one translation unit (matching <new>'s static
-// current_handler). The name also avoids the __ESBMC_ prefix, which would
-// trigger intrinsic special-casing of cross-function global tracking.
+// current_handler).
 static terminate_handler esbmc_cur_terminate_handler = 0;
 static unexpected_handler esbmc_cur_unexpected_handler = 0;
 
