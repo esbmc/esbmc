@@ -1861,7 +1861,8 @@ exprt python_list::handle_range_slice(
     {
       const size_t elts_size = list_node["value"]["elts"].size();
       const size_t begin = has_lower ? std::min(lower_bound, elts_size) : 0;
-      const size_t end = has_upper ? std::min(upper_bound, elts_size) : elts_size;
+      const size_t end =
+        has_upper ? std::min(upper_bound, elts_size) : elts_size;
 
       for (size_t i = begin; i < end; ++i)
       {
