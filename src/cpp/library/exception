@@ -49,27 +49,45 @@ inline bool uncaught_exception() _ESBMC_NOEXCEPT
 }
 
 typedef void (*terminate_handler)();
+typedef void (*unexpected_handler)();
 
-// Stubbed: ESBMC does not model the terminate handler call chain.
+// Currently installed handlers (null == library default). Plain globals — the
+// name avoids the __ESBMC_ prefix so cross-function tracking works.
+terminate_handler esbmc_cur_terminate_handler = 0;
+unexpected_handler esbmc_cur_unexpected_handler = 0;
+
+// Install a handler and return the previously installed one (per
+// [handler.functions]); a null result means the library default was active.
 inline terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
 {
-  return f;
+  terminate_handler old = esbmc_cur_terminate_handler;
+  esbmc_cur_terminate_handler = f;
+  return old;
 }
 
 inline void terminate() _ESBMC_NOEXCEPT
 {
-  __ESBMC_assert(0, "std::terminate called");
+  // Dispatch to the installed handler if any; it must not return (it should
+  // abort/exit/loop). Reaching past it is the default: a hard failure.
+  if (esbmc_cur_terminate_handler)
+    esbmc_cur_terminate_handler();
+  __ESBMC_assert(0, "terminate called after throwing an exception");
+  while (1)
+  {
+  }
 }
-
-typedef void (*unexpected_handler)();
 
 inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
 {
-  return f;
+  unexpected_handler old = esbmc_cur_unexpected_handler;
+  esbmc_cur_unexpected_handler = f;
+  return old;
 }
 
 inline void unexpected()
 {
+  if (esbmc_cur_unexpected_handler)
+    esbmc_cur_unexpected_handler();
   terminate();
 }
 
