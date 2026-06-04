@@ -170,6 +170,36 @@ bool __ESBMC_list_push_object(
     l, o->value, o->type_id, o->size, float_type_id, ptr_free);
 }
 
+// Per-element append for list copy / assignment / slice / concat that handles
+// nested lists correctly (esbmc/esbmc#5102).
+//
+// A nested-list element stores the inner PyListObject* directly in `value`, so
+// the generic byte-copy (__ESBMC_copy_value copies `size` bytes of `*value`)
+// yields a bogus pointer and the copied list reads garbage. For such elements
+// — identified by o->type_id == list_type_id — we copy the PyObject record
+// verbatim, preserving the inner pointer. This matches Python's shallow-copy
+// semantics: nested lists are shared by reference.
+//
+// Scalar elements must NOT share their buffer: Python subscript assignment
+// (l[i] = x) writes through the element's value pointer in place, so two lists
+// sharing a scalar buffer would alias. Scalars therefore keep the independent
+// byte-copy via __ESBMC_list_push_object (pass list_type_id=0 to force it).
+bool __ESBMC_list_push_shallow(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (list_type_id != 0 && o->type_id == list_type_id)
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_object(l, o, 0, 0);
+}
+
 // Store a dict pointer directly in the list without byte-copying.
 // Used for nested dicts so that pointer identity is preserved in the SMT model.
 bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)

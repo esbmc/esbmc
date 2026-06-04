@@ -725,8 +725,11 @@ void python_list::emit_list_copy(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  // Shallow per-element append: preserves element value pointers so nested
+  // lists are shared (Python shallow-copy semantics) rather than corrupted by
+  // a pointee byte-copy (esbmc/esbmc#5102).
   const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
   assert(size_sym && at_sym && push_obj_sym);
 
   // list_size / list_at take `const List*`
@@ -780,14 +783,18 @@ void python_list::emit_list_copy(
   tmp_obj_decl.copy_to_operands(at_call);
   body.copy_to_operands(tmp_obj_decl);
 
-  // list_push_object(dst_list, tmp_obj). ptr_free=0 (generic source).
+  // list_push_shallow(dst_list, tmp_obj, list_type_id): nested-list elements
+  // (type_id == list_type_id) keep their inner pointer; scalars are byte-copied
+  // independently, so they are not corrupted by a pointee byte-copy (#5102).
+  constant_exprt list_type_id_arg(size_type());
+  list_type_id_arg.set_value(integer2binary(
+    std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+      converter_.get_type_handler().get_list_type())),
+    config.ansi_c.address_width));
   exprt push_call = build_call_expr(
     *push_obj_sym,
     bool_type(),
-    {build_symbol(dst),
-     build_symbol(tmp_obj),
-     from_integer(BigInt(0), size_type()),
-     from_integer(BigInt(0), int_type())});
+    {build_symbol(dst), build_symbol(tmp_obj), list_type_id_arg});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1765,18 +1772,24 @@ exprt python_list::handle_range_slice(
   at_decl.copy_to_operands(list_at_call);
   loop_body.copy_to_operands(at_decl);
 
+  // Shallow append: preserve element value pointers so nested lists survive the
+  // slice copy uncorrupted (esbmc/esbmc#5102).
   const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
   if (!push_func)
     throw std::runtime_error("Push function symbol not found");
 
+  // Nested-list elements keep their inner pointer; scalars are byte-copied, so
+  // the slice copy does not corrupt nested lists (#5102).
+  constant_exprt slice_list_type_id(size_type());
+  slice_list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+      converter_.get_type_handler().get_list_type())),
+    config.ansi_c.address_width));
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
-    {build_symbol(sliced_list),
-     build_symbol(at_result),
-     from_integer(BigInt(0), size_type()),
-     from_integer(BigInt(0), int_type())});
+    {build_symbol(sliced_list), build_symbol(at_result), slice_list_type_id});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -5029,18 +5042,23 @@ void python_list::handle_list_var_unpacking(
     tmp_at_decl.copy_to_operands(at_call);
     loop_body.copy_to_operands(tmp_at_decl);
 
-    // __ESBMC_list_push_object(star_list, tmp_at)
+    // __ESBMC_list_push_shallow(star_list, tmp_at): preserve element value
+    // pointers so nested lists survive the unpack copy uncorrupted (#5102).
     const symbolt *push_obj_func =
-      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
     assert(push_obj_func);
 
+    // Nested-list elements keep their inner pointer; scalars are byte-copied,
+    // so the unpack copy does not corrupt nested lists (#5102).
+    constant_exprt star_list_type_id(size_type());
+    star_list_type_id.set_value(integer2binary(
+      std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+        converter_.get_type_handler().get_list_type())),
+      config.ansi_c.address_width));
     exprt push_call = build_call_expr(
       *push_obj_func,
       bool_type(),
-      {build_symbol(star_list),
-       build_symbol(tmp_at),
-       from_integer(BigInt(0), size_type()),
-       from_integer(BigInt(0), int_type())});
+      {build_symbol(star_list), build_symbol(tmp_at), star_list_type_id});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));
