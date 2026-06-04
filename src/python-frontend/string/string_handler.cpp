@@ -1516,8 +1516,9 @@ static bool fold_string_method_call(
   if (method == "join")
   {
     std::string sep;
-    if (args.size() != 1 ||
-        !fold_constant_string(func["value"], converter, sep, depth + 1))
+    if (
+      args.size() != 1 ||
+      !fold_constant_string(func["value"], converter, sep, depth + 1))
       return false;
 
     // Resolve the iterable, following a single Name binding, to a literal
@@ -1566,12 +1567,11 @@ static bool fold_string_method_call(
 
     long long count = -1;
     if (
-      args.size() == 3 &&
-      !json_utils::extract_constant_integer(
-        args[2],
-        converter.get_current_func_name(),
-        converter.get_ast_json(),
-        count))
+      args.size() == 3 && !json_utils::extract_constant_integer(
+                            args[2],
+                            converter.get_current_func_name(),
+                            converter.get_ast_json(),
+                            count))
       return false;
 
     return python_str_replace(subject, old_sub, new_sub, count, out);
@@ -1661,9 +1661,10 @@ static bool fold_constant_string(
       // Bound the materialized string so a large factor cannot exhaust memory;
       // beyond the cap, defer to the runtime model.
       constexpr unsigned long long max_len = 1ull << 16;
-      if (static_cast<unsigned long long>(s.size()) *
-            static_cast<unsigned long long>(n) >
-          max_len)
+      if (
+        static_cast<unsigned long long>(s.size()) *
+          static_cast<unsigned long long>(n) >
+        max_len)
         return false;
       out.clear();
       out.reserve(s.size() * static_cast<std::size_t>(n));
