@@ -426,7 +426,7 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for supported 1D/2D shapes
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for supported 1D/2D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs
 
 **Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
 
