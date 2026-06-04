@@ -75,6 +75,7 @@ struct scalar_value
 static bool
 try_extract_scalar_constant(const nlohmann::json &node, scalar_value &out);
 static bool is_complex_annotated_constant(const nlohmann::json &node);
+static nlohmann::json to_json_constant(const scalar_value &v);
 static scalar_value apply_complex_binary(
   const std::string &function,
   const scalar_value &lhs,
@@ -881,6 +882,18 @@ static auto create_list(int size, T default_value)
   return list;
 }
 
+static auto create_list(int size, const nlohmann::json &default_value)
+{
+  nlohmann::json list;
+  list["_type"] = "List";
+  list["elts"] = nlohmann::json::array();
+  for (int i = 0; i < size; ++i)
+  {
+    list["elts"].push_back(default_value);
+  }
+  return list;
+}
+
 template <typename T>
 static auto create_list(const std::vector<T> &vector)
 {
@@ -922,6 +935,128 @@ static auto create_binary_op(
   return bin_op;
 }
 
+static std::string normalize_numpy_dtype_name(const std::string &dtype)
+{
+  if (dtype == "bool" || dtype == "bool_")
+    return "bool";
+  if (dtype == "int" || dtype == "int_")
+    return "int64";
+  if (dtype == "uint" || dtype == "uint_")
+    return "uint64";
+  if (dtype == "float" || dtype == "float_")
+    return "float64";
+  if (dtype == "complex" || dtype == "complex_")
+    return "complex128";
+  return dtype;
+}
+
+static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node)
+{
+  if (!dtype_node.is_object() || !dtype_node.contains("_type"))
+    throw std::runtime_error("Unsupported dtype value");
+
+  const std::string node_type = dtype_node["_type"].get<std::string>();
+  if (node_type == "Attribute" && dtype_node.contains("attr"))
+    return normalize_numpy_dtype_name(dtype_node["attr"].get<std::string>());
+  if (node_type == "Name" && dtype_node.contains("id"))
+    return normalize_numpy_dtype_name(dtype_node["id"].get<std::string>());
+
+  throw std::runtime_error("Unsupported dtype value");
+}
+
+static bool is_numpy_integer_dtype(const std::string &dtype)
+{
+  return dtype.find("int") != std::string::npos;
+}
+
+static bool is_numpy_float_dtype(const std::string &dtype)
+{
+  return dtype.find("float") != std::string::npos;
+}
+
+static bool is_numpy_complex_dtype(const std::string &dtype)
+{
+  return dtype == "complex64" || dtype == "complex128" || dtype == "complex";
+}
+
+static nlohmann::json
+make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
+{
+  const std::string normalized = normalize_numpy_dtype_name(dtype);
+
+  if (normalized.empty())
+    return {{"_type", "Constant"}, {"value", value.value.real()}};
+
+  if (normalized == "bool")
+  {
+    const bool bool_value =
+      value.value.real() != 0.0 || value.value.imag() != 0.0;
+    return {{"_type", "Constant"}, {"value", bool_value}};
+  }
+
+  if (is_numpy_integer_dtype(normalized))
+  {
+    if (value.is_complex && value.value.imag() != 0.0)
+    {
+      throw std::runtime_error(
+        "TypeError: casting complex literals to integer dtype is not "
+        "supported");
+    }
+    return {
+      {"_type", "Constant"},
+      {"value", static_cast<int64_t>(std::llround(value.value.real()))}};
+  }
+
+  if (is_numpy_float_dtype(normalized))
+  {
+    if (value.is_complex && value.value.imag() != 0.0)
+    {
+      throw std::runtime_error(
+        "TypeError: casting complex literals to float dtype is not supported");
+    }
+    return {{"_type", "Constant"}, {"value", value.value.real()}};
+  }
+
+  if (is_numpy_complex_dtype(normalized))
+  {
+    throw std::runtime_error(
+      "TypeError: complex dtype is not supported in NumPy constructors yet");
+  }
+
+  throw std::runtime_error("Unsupported dtype value: " + normalized);
+}
+
+static nlohmann::json cast_numpy_literal_to_dtype(
+  const nlohmann::json &node,
+  const std::string &dtype)
+{
+  if (dtype.empty())
+    return node;
+
+  if (!node.is_object() || !node.contains("_type"))
+  {
+    throw std::runtime_error(
+      "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+  }
+
+  const std::string node_type = node["_type"].get<std::string>();
+  if ((node_type == "List" || node_type == "Tuple") && node.contains("elts"))
+  {
+    nlohmann::json casted = node;
+    casted["elts"] = nlohmann::json::array();
+    for (const auto &elt : node["elts"])
+      casted["elts"].push_back(cast_numpy_literal_to_dtype(elt, dtype));
+    return casted;
+  }
+
+  scalar_value value;
+  if (try_extract_scalar_constant(node, value))
+    return make_numpy_typed_constant(value, dtype);
+
+  throw std::runtime_error(
+    "TypeError: np.array(..., dtype=...) requires literal numeric elements");
+}
+
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
@@ -946,7 +1081,7 @@ std::string numpy_call_expr::get_dtype() const
     for (const auto &kw : call_["keywords"])
     {
       if (kw["_type"] == "keyword" && kw["arg"] == "dtype")
-        return kw["value"]["attr"];
+        return extract_numpy_dtype_name(kw["value"]);
     }
   }
   return {};
@@ -968,6 +1103,9 @@ size_t numpy_call_expr::get_dtype_size() const
     {"float64", sizeof(double)}};
 
   const std::string dtype = get_dtype();
+  if (dtype == "bool" || is_numpy_complex_dtype(dtype))
+    return 0;
+
   if (!dtype.empty())
   {
     auto it = dtype_sizes.find(dtype);
@@ -989,6 +1127,8 @@ size_t count_effective_bits(const std::string &binary)
 typet numpy_call_expr::get_typet_from_dtype() const
 {
   std::string dtype = get_dtype();
+  if (dtype == "bool")
+    return bool_type();
   if (dtype.find("int") != std::string::npos)
   {
     if (dtype[0] == 'u')
@@ -1952,7 +2092,12 @@ exprt numpy_call_expr::get()
   // Create array from numpy.array()
   if (function == "array")
   {
-    int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
+    nlohmann::json array_arg = call_["args"][0];
+    const std::string dtype = get_dtype();
+    if (!dtype.empty())
+      array_arg = cast_numpy_literal_to_dtype(array_arg, dtype);
+
+    int array_dims = type_handler_.get_array_dimensions(array_arg);
     if (array_dims >= 3)
     {
       throw std::runtime_error(
@@ -1961,8 +2106,8 @@ exprt numpy_call_expr::get()
         "D array creation. Please use 1D or 2D arrays only.");
     }
 
-    typet size = type_handler_.get_typet(call_["args"][0]["elts"]);
-    return converter_.get_static_array(call_["args"][0], size);
+    typet size = type_handler_.get_typet(array_arg["elts"]);
+    return converter_.get_static_array(array_arg, size);
   }
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {
@@ -1972,8 +2117,56 @@ exprt numpy_call_expr::get()
   auto it = array_creation_funcs.find(function);
   if (it != array_creation_funcs.end())
   {
-    auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
-    return converter_.get_expr(list);
+    const scalar_value fill = make_real_scalar(it->second);
+    const std::string dtype = get_dtype();
+    const nlohmann::json fill_value = make_numpy_typed_constant(fill, dtype);
+    const auto &shape_arg = call_["args"][0];
+    const std::string arg_type = shape_arg["_type"];
+
+    if (arg_type == "Constant")
+    {
+      // np.zeros(n) or np.ones(n) — 1D
+      auto list = create_list(shape_arg["value"].get<int>(), fill_value);
+      return converter_.get_expr(list);
+    }
+
+    if (arg_type == "Tuple")
+    {
+      const auto &elts = shape_arg["elts"];
+      const std::size_t ndim = elts.size();
+      if (ndim == 0)
+      {
+        throw std::runtime_error(
+          "TypeError: " + function + "() shape tuple must be non-empty");
+      }
+      if (ndim == 1)
+      {
+        // np.zeros((n,)) — treat as 1D
+        auto list = create_list(elts[0]["value"].get<int>(), fill_value);
+        return converter_.get_expr(list);
+      }
+      if (ndim == 2)
+      {
+        // np.zeros((rows, cols)) — 2D nested list
+        const int rows = elts[0]["value"].get<int>();
+        const int cols = elts[1]["value"].get<int>();
+        nlohmann::json outer;
+        outer["_type"] = "List";
+        outer["elts"] = nlohmann::json::array();
+        for (int r = 0; r < rows; ++r)
+        {
+          outer["elts"].push_back(create_list(cols, fill_value));
+        }
+        return converter_.get_expr(outer);
+      }
+      throw std::runtime_error(
+        "ESBMC does not support 3D or higher dimensional arrays. Found " +
+        std::to_string(ndim) + "D array creation in " + function +
+        "(). Please use 1D or 2D arrays only.");
+    }
+
+    throw std::runtime_error(
+      "TypeError: " + function + "() argument must be int or tuple of ints");
   }
 
   // Handle math function calls
