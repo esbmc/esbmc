@@ -1745,6 +1745,8 @@ class GeneratorMixin:
             ast.fix_missing_locations(len_eq)
             return len_eq
 
+        # d[k] emits THROW KeyError, use d.get(k) on Name receivers.
+        use_get = isinstance(dict_expr, ast.Name)
         value_checks = [len_eq]
         for k, v in pairs:
             key_in_dict = ast.Compare(
@@ -1752,12 +1754,21 @@ class GeneratorMixin:
                 ops=[ast.In()],
                 comparators=[copy.deepcopy(dict_expr)],
             )
-            subscript = ast.Subscript(
-                value=copy.deepcopy(dict_expr),
-                slice=copy.deepcopy(k),
-                ctx=ast.Load(),
-            )
-            val_eq = ast.Compare(left=subscript,
+            if use_get:
+                value_lookup = ast.Call(
+                    func=ast.Attribute(value=copy.deepcopy(dict_expr),
+                                       attr="get",
+                                       ctx=ast.Load()),
+                    args=[copy.deepcopy(k)],
+                    keywords=[],
+                )
+            else:
+                value_lookup = ast.Subscript(
+                    value=copy.deepcopy(dict_expr),
+                    slice=copy.deepcopy(k),
+                    ctx=ast.Load(),
+                )
+            val_eq = ast.Compare(left=value_lookup,
                                  ops=[ast.Eq()],
                                  comparators=[copy.deepcopy(v)])
             value_checks.append(key_in_dict)
