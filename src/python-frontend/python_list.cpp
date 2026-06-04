@@ -91,7 +91,15 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
   if (
     is_array_type(arr2->type) || is_vector_type(arr2->type) ||
     is_symbol_type(arr2->type))
-    return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
+  {
+    exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
+    // migrate_type does not round-trip type attributes such as #cpp_type
+    // (load-bearing here: it distinguishes a 1-char string element from an
+    // 8-bit int). Restore the exact element type so legacy index_exprt(arr,
+    // idx, t) is reproduced faithfully.
+    result.type() = t;
+    return result;
+  }
   return index_exprt(arr, idx, t);
 }
 } // namespace
