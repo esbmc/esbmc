@@ -2003,14 +2003,41 @@ exprt python_list::handle_index_access(
 
           if (elem_type == converter_.get_type_handler().get_list_type())
           {
-            // Compile-time symbol resolution is only valid when the entry
-            // records a concrete inner-list symbol (literal case).  For
-            // parameter-annotation-only entries (elem_id is empty), fall
-            // through to the dynamic __ESBMC_list_at path below.
+            // Nested-list element.  The recorded elem_id names the inner-list
+            // symbol, but copy_type_info copies that id verbatim across a
+            // function-return boundary (Q = build()), where it is a *callee*
+            // frame local — returning build_symbol(elem_id) would reference a
+            // symbol that is never assigned in the caller's symex frame, so its
+            // value is nondet (float_buf OOB / wrong value, #5103/#5102).
+            //
+            // Instead, read the inner list pointer at runtime from `array`
+            // (valid in every scope: list_at returns the stored pointer, so
+            // aliasing/mutation semantics are preserved), bind it to a fresh
+            // caller-scope symbol, and copy the inner element-type map onto
+            // that symbol so deeper subscripts (Q[i][j]) still resolve
+            // int/float.  For parameter-annotation-only entries (elem_id
+            // empty) fall through to the dynamic __ESBMC_list_at path below.
             if (!elem_id.empty())
             {
-              if (symbolt *nested_list = converter_.find_symbol(elem_id))
-                return build_symbol(*nested_list);
+              const locationt loc =
+                converter_.get_location_from_decl(list_value_);
+
+              exprt list_at_call =
+                build_list_at_call(array, pos_expr, list_value_);
+              exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
+
+              symbolt &inner_sym = converter_.create_tmp_symbol(
+                list_value_, "$nested_list$", elem_type, exprt());
+              code_declt inner_decl(build_symbol(inner_sym));
+              inner_decl.location() = loc;
+              converter_.add_instruction(inner_decl);
+
+              code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
+              inner_assign.location() = loc;
+              converter_.add_instruction(inner_assign);
+
+              copy_type_info(elem_id, inner_sym.id.as_string());
+              return build_symbol(inner_sym);
             }
           }
         }
