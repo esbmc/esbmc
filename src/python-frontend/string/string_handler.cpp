@@ -1453,10 +1453,138 @@ string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
   return find_cached_symbol(symbol_id);
 }
 
+static bool fold_constant_string(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out,
+  unsigned depth);
+
+// Python str.replace(old, new, count): replace up to `count` non-overlapping
+// occurrences of `old` with `new`, scanning left to right; a negative `count`
+// replaces every occurrence. Returns false for an empty `old` (Python inserts
+// `new` between every character), so the caller defers to the runtime model
+// (which still under-approximates split — see #5096).
+static bool python_str_replace(
+  const std::string &subject,
+  const std::string &old_sub,
+  const std::string &new_sub,
+  long long count,
+  std::string &out)
+{
+  if (old_sub.empty())
+    return false;
+
+  out.clear();
+  std::size_t pos = 0;
+  for (long long done = 0; count < 0 || done < count; ++done)
+  {
+    std::size_t hit = subject.find(old_sub, pos);
+    if (hit == std::string::npos)
+      break;
+    out.append(subject, pos, hit - pos);
+    out += new_sub;
+    pos = hit + old_sub.size();
+  }
+  out.append(subject, pos, std::string::npos);
+  return true;
+}
+
+// Fold a constant string-valued method call: `sep.join([...])` over a literal
+// list/tuple of constant strings, or `subject.replace(old, new[, count])`.
+// Only positional, constant-foldable arguments are handled; anything else
+// returns false so the caller falls back to the runtime string model (which
+// still under-approximates split — see #5096).
+static bool fold_string_method_call(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out,
+  unsigned depth)
+{
+  const auto &func = node["func"];
+  if (
+    !func.contains("_type") || func["_type"] != "Attribute" ||
+    !func.contains("attr") || !func.contains("value"))
+    return false;
+
+  // Keyword arguments are not folded.
+  if (node.contains("keywords") && !node["keywords"].empty())
+    return false;
+
+  const std::string method = func["attr"].get<std::string>();
+  const nlohmann::json &args = node["args"];
+
+  if (method == "join")
+  {
+    std::string sep;
+    if (
+      args.size() != 1 ||
+      !fold_constant_string(func["value"], converter, sep, depth + 1))
+      return false;
+
+    // Resolve the iterable, following a single Name binding, to a literal
+    // list/tuple of constant strings.
+    nlohmann::json seq = args[0];
+    if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
+    {
+      nlohmann::json decl = json_utils::get_var_value(
+        seq["id"].get<std::string>(),
+        converter.get_current_func_name(),
+        converter.get_ast_json());
+      if (decl.empty() || !decl.contains("value"))
+        return false;
+      seq = decl["value"];
+    }
+    if (
+      !seq.contains("_type") ||
+      (seq["_type"] != "List" && seq["_type"] != "Tuple") ||
+      !seq.contains("elts"))
+      return false;
+
+    out.clear();
+    bool first = true;
+    for (const auto &elt : seq["elts"])
+    {
+      std::string piece;
+      if (!fold_constant_string(elt, converter, piece, depth + 1))
+        return false;
+      if (!first)
+        out += sep;
+      out += piece;
+      first = false;
+    }
+    return true;
+  }
+
+  if (method == "replace")
+  {
+    std::string subject, old_sub, new_sub;
+    if (
+      args.size() < 2 || args.size() > 3 ||
+      !fold_constant_string(func["value"], converter, subject, depth + 1) ||
+      !fold_constant_string(args[0], converter, old_sub, depth + 1) ||
+      !fold_constant_string(args[1], converter, new_sub, depth + 1))
+      return false;
+
+    long long count = -1;
+    if (
+      args.size() == 3 && !json_utils::extract_constant_integer(
+                            args[2],
+                            converter.get_current_func_name(),
+                            converter.get_ast_json(),
+                            count))
+      return false;
+
+    return python_str_replace(subject, old_sub, new_sub, count, out);
+  }
+
+  return false;
+}
+
 // Recursively fold an AST node into a constant string: a string literal, a Name
-// bound to such a value, or a Python "+" concatenation of two foldable string
-// operands. Any non-constant operand yields false, so callers fall back to the
-// runtime string model. `depth` bounds the recursion against degenerate ASTs.
+// bound to such a value, a Python "+" concatenation, a "*" repetition, or a
+// constant-foldable join()/replace() method call. Any non-constant operand
+// yields false, so callers fall back to the runtime string model. `depth`
+// bounds the recursion against degenerate ASTs.
 static bool fold_constant_string(
   const nlohmann::json &node,
   python_converter &converter,
@@ -1505,6 +1633,56 @@ static bool fold_constant_string(
       return true;
     }
   }
+
+  // String repetition: "ab" * n  or  n * "ab".
+  if (
+    type == "BinOp" && node.contains("op") && node["op"].contains("_type") &&
+    node["op"]["_type"] == "Mult" && node.contains("left") &&
+    node.contains("right"))
+  {
+    auto fold_repeat = [&](
+                         const nlohmann::json &str_node,
+                         const nlohmann::json &count_node) -> bool {
+      std::string s;
+      long long n = 0;
+      if (
+        !fold_constant_string(str_node, converter, s, depth + 1) ||
+        !json_utils::extract_constant_integer(
+          count_node,
+          converter.get_current_func_name(),
+          converter.get_ast_json(),
+          n))
+        return false;
+      if (n <= 0)
+      {
+        out.clear();
+        return true;
+      }
+      // Bound the materialized string so a large factor cannot exhaust memory;
+      // beyond the cap, defer to the runtime model.
+      constexpr unsigned long long max_len = 1ull << 16;
+      if (
+        static_cast<unsigned long long>(s.size()) *
+          static_cast<unsigned long long>(n) >
+        max_len)
+        return false;
+      out.clear();
+      out.reserve(s.size() * static_cast<std::size_t>(n));
+      for (long long i = 0; i < n; ++i)
+        out += s;
+      return true;
+    };
+    if (
+      fold_repeat(node["left"], node["right"]) ||
+      fold_repeat(node["right"], node["left"]))
+      return true;
+  }
+
+  // Constant-foldable string method call: join()/replace().
+  if (
+    type == "Call" && node.contains("func") && node.contains("args") &&
+    node["args"].is_array())
+    return fold_string_method_call(node, converter, out, depth);
 
   return false;
 }
