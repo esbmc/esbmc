@@ -414,18 +414,14 @@ private:
 
   goto_programt::targett make_epilogue(goto_programt &body)
   {
-    auto end = body.instructions.end();
-    auto last = end;
-    for (auto it = body.instructions.begin(); it != end; ++it)
-      if (it->type == END_FUNCTION)
-        last = it;
+    // A function body always terminates with END_FUNCTION as its last
+    // instruction, so there is no need to scan for it.
+    auto last = std::prev(body.instructions.end());
+    assert(last->type == END_FUNCTION);
     auto epilogue = body.insert(last);
     epilogue->make_skip();
-    if (last != end)
-    {
-      epilogue->location = last->location;
-      epilogue->function = last->function;
-    }
+    epilogue->location = last->location;
+    epilogue->function = last->function;
     return epilogue;
   }
 
@@ -464,7 +460,9 @@ private:
           catch_all = true;
           break;
         }
-        g->make_goto(h.landing, and2tc(thrown, match_guard(h.type)));
+        // A dispatch block is only ever reached with an exception in flight
+        // (thrown == true), so the type-match guard alone is sufficient.
+        g->make_goto(h.landing, match_guard(h.type));
       }
       if (!catch_all)
         add()->make_goto(target_for(regions, r.parent, epilogue));
