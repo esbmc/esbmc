@@ -9,6 +9,7 @@
 #include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
+#include <memory>
 #include <solvers/smt/smt_conv.h>
 #include <util/config.h>
 #include <irep2/irep2.h>
@@ -111,11 +112,6 @@ public:
     sourcet source;
     goto_trace_stept::typet type;
 
-    // One stack trace recorded per function activation record. Valid for
-    // assignment and assert steps only. In reverse order (most recent in idx
-    // 0).
-    std::vector<stack_framet> stack_trace;
-
     bool is_assert() const
     {
       return type == goto_trace_stept::ASSERT;
@@ -151,17 +147,38 @@ public:
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // for ASSUME/ASSERT
+    // for ASSUME/ASSERT. Interned: assertion messages are a small,
+    // highly repetitive set ("dereference failure", "array bounds
+    // violated", ...), so irep_idt both shrinks the inline footprint
+    // (4 bytes vs a 32-byte std::string) and dedups the payload across
+    // the many steps that share a message.
     expr2tc cond;
-    std::string comment;
+    irep_idt comment;
 
-    // for OUTPUT
-    std::string format_string;
-    std::list<expr2tc> output_args;
+    // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
+    // side effects produce them), so the format string and argument
+    // lists live in a lazily-allocated side struct rather than inline
+    // on every SSA step. This keeps sizeof(SSA_stept) ~80 bytes smaller
+    // on the assignment/assume/assert steps that dominate large
+    // equations. Access through the output_* helpers below.
+    struct output_datat
+    {
+      std::string format_string;
+      std::list<expr2tc> output_args;
+      std::list<expr2tc> converted_output_args; // filled during conversion
+    };
+    std::unique_ptr<output_datat> output_data;
+
+    // One stack trace recorded per function activation record, in reverse
+    // order (most recent in idx 0). Only assignment and assert steps ever
+    // populate it, so — like output_data — it lives in a lazily-allocated
+    // side vector rather than costing 24 bytes inline on the assume/branch/
+    // renumber/output steps that never use it. Read through stack_trace(),
+    // write through stack_trace_payload().
+    std::unique_ptr<std::vector<stack_framet>> stack_trace_box;
 
     // for conversion
     smt_astt guard_ast, cond_ast;
-    std::list<expr2tc> converted_output_args;
 
     // for slicing
     bool ignore;
@@ -174,6 +191,63 @@ public:
 
     SSA_stept() : ignore(false), hidden(false)
     {
+    }
+
+    // SSA_stept is copied wholesale (e.g. the per-claim local_eq in
+    // bmc.cpp), so the unique_ptr payload needs deep-copy semantics.
+    // Moves stay default (cheap pointer steal).
+    SSA_stept(const SSA_stept &o)
+      : source(o.source),
+        type(o.type),
+        guard(o.guard),
+        lhs(o.lhs),
+        rhs(o.rhs),
+        original_lhs(o.original_lhs),
+        original_rhs(o.original_rhs),
+        cond(o.cond),
+        comment(o.comment),
+        output_data(
+          o.output_data ? std::make_unique<output_datat>(*o.output_data)
+                        : nullptr),
+        stack_trace_box(
+          o.stack_trace_box
+            ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
+            : nullptr),
+        guard_ast(o.guard_ast),
+        cond_ast(o.cond_ast),
+        ignore(o.ignore),
+        hidden(o.hidden),
+        loop_number(o.loop_number)
+    {
+    }
+    SSA_stept &operator=(const SSA_stept &o)
+    {
+      if (this != &o)
+        *this = SSA_stept(o); // copy-and-move
+      return *this;
+    }
+    SSA_stept(SSA_stept &&) = default;
+    SSA_stept &operator=(SSA_stept &&) = default;
+
+    output_datat &output_payload()
+    {
+      if (!output_data)
+        output_data = std::make_unique<output_datat>();
+      return *output_data;
+    }
+
+    // Read-only view of the stack trace; empty when none was recorded.
+    const std::vector<stack_framet> &stack_trace() const
+    {
+      static const std::vector<stack_framet> empty;
+      return stack_trace_box ? *stack_trace_box : empty;
+    }
+
+    std::vector<stack_framet> &stack_trace_payload()
+    {
+      if (!stack_trace_box)
+        stack_trace_box = std::make_unique<std::vector<stack_framet>>();
+      return *stack_trace_box;
     }
 
     void output(const namespacet &ns, std::ostream &out) const;

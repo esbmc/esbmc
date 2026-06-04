@@ -604,8 +604,11 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  bool is_assume =
-    (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  // __builtin_assume(cond) is GCC/Clang's assumption hint; model it as an
+  // assume, like __ESBMC_assume / __VERIFIER_assume. See #4606.
+  bool is_assume = (base_name == "__ESBMC_assume") ||
+                   (base_name == "__VERIFIER_assume") ||
+                   (base_name == "__builtin_assume");
   bool is_assert = (base_name == "assert");
 
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");

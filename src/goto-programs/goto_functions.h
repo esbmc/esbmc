@@ -44,7 +44,22 @@ public:
 class goto_functionst
 {
 public:
-  typedef std::map<irep_idt, goto_functiont> function_mapt;
+  /// Order function_map by the id's string content, not by irep_idt's default
+  /// operator< (which compares the string-pool interning index). That index is
+  /// assigned in first-interned order, so it varies between builds/link orders
+  /// and made GOTO output (e.g. goto2c's emitted C, --goto-functions-only
+  /// dumps) reorder nondeterministically. Comparing the string makes iteration
+  /// reproducible. function_map is small and string compares are cheap, so the
+  /// O(log n) cost is negligible; nothing relies on the previous ordering.
+  struct id_string_order
+  {
+    bool operator()(const irep_idt &a, const irep_idt &b) const
+    {
+      return a.as_string() < b.as_string();
+    }
+  };
+
+  typedef std::map<irep_idt, goto_functiont, id_string_order> function_mapt;
   function_mapt function_map;
 
   // For coverage and multi-property

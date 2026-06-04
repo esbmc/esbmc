@@ -65,6 +65,13 @@ struct ranking_loopt
   // additional invariant facts conjoined into `inv` during the
   // discharge of ranking obligations.
   std::vector<expr2tc> body_assumes;
+  // Substitution map: `*p` (loop-invariant dereference) → fresh scalar
+  // symbol. Used by the supporting-invariant synthesiser to rewrite
+  // prefix instructions of the form `*p = c` into a synthetic scalar
+  // seed `fresh_p_scalar = c`, so seed-based bounds (`fresh_p >= c`)
+  // are visible to the invariant fixpoint exactly as they would be for
+  // a scalar-typed `p`.
+  std::map<expr2tc, expr2tc> deref_map;
 };
 
 /// A table of "other loops in this function" plus their modified sets.
@@ -787,7 +794,8 @@ bool collect_straight_line(
   const goto_functionst *goto_functions = nullptr,
   std::vector<expr2tc> *out_assumes = nullptr,
   const loop_skipt *loop_skip = nullptr,
-  const std::map<expr2tc, expr2tc> *deref_map = nullptr)
+  const std::map<expr2tc, expr2tc> *deref_map = nullptr,
+  const std::set<expr2tc> *elidable_write_targets = nullptr)
 {
   for (auto it = first; it != last;)
   {
@@ -813,6 +821,18 @@ bool collect_straight_line(
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
+      // Elide writes-through-pointers to memory the loop never
+      // reads. compute_safe_derefs has confirmed the LHS deref
+      // doesn't appear anywhere as a read; the write therefore has
+      // no effect on the guard or any other body expression, so it
+      // can't influence whether the loop terminates.
+      if (
+        elidable_write_targets != nullptr && is_dereference2t(a.target) &&
+        elidable_write_targets->count(a.target))
+      {
+        ++it;
+        continue;
+      }
       if (
         touches_memory(a.target, exempt_derefs) ||
         touches_memory(a.source, exempt_derefs))
@@ -888,38 +908,72 @@ bool collect_straight_line(
 /// a DISTINCT fresh symbol is sound even when several derefs appear.
 bool compute_safe_derefs(
   goto_programt::const_targett head,
+  goto_programt::const_targett body_begin,
   goto_programt::const_targett back,
   const expr2tc &guard,
   const goto_programt &fn_body,
   std::set<expr2tc> &out_exempt,
   std::map<expr2tc, expr2tc> &out_map,
+  std::set<expr2tc> &out_elidable_write_targets,
   const loop_skipt *loop_skip = nullptr)
 {
   out_exempt.clear();
   out_map.clear();
+  out_elidable_write_targets.clear();
 
-  // Walk every instruction in (head, back) and collect derefs from the
-  // expressions we'll later analyse (ASSIGN target/source, IF guard).
-  std::set<expr2tc> derefs;
-  collect_derefs(guard, derefs);
-  for (auto it = std::next(head); it != back; ++it)
+  // First pass: collect derefs separately by role. A deref that ONLY
+  // appears as the simple top-level target of an ASSIGN (e.g. `*d = c`
+  // where `d` is body-modified) is a write-through-pointer to memory
+  // we never read. Eliding such writes is sound for termination
+  // analysis — the loop's iteration count depends on the guard and
+  // read values, not on the memory it writes.
+  std::set<expr2tc> read_derefs;
+  std::set<expr2tc> write_only_targets;
+  collect_derefs(guard, read_derefs);
+  for (auto it = body_begin; it != back; ++it)
   {
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
-      collect_derefs(a.target, derefs);
-      collect_derefs(a.source, derefs);
+      collect_derefs(a.source, read_derefs);
+      if (is_dereference2t(a.target))
+      {
+        // Simple `*p = ...` write. Track for elision unless the same
+        // deref is also used as a read elsewhere (handled below).
+        write_only_targets.insert(a.target);
+      }
+      else
+      {
+        // Complex LHS (index, member, ...). Treat its derefs as reads
+        // -- substituting them with scalars wouldn't preserve the
+        // structural address computation.
+        collect_derefs(a.target, read_derefs);
+      }
     }
     else if (it->is_goto() && !is_nil_expr(it->guard))
-      collect_derefs(it->guard, derefs);
+      collect_derefs(it->guard, read_derefs);
   }
-  if (derefs.empty())
+
+  // A deref that appears both as a read AND as a write-target is NOT
+  // write-only -- the read constrains the rank/guard. Promote it back
+  // to read_derefs.
+  for (auto it = write_only_targets.begin(); it != write_only_targets.end();)
+  {
+    if (read_derefs.count(*it))
+      it = write_only_targets.erase(it);
+    else
+      ++it;
+  }
+
+  if (read_derefs.empty() && write_only_targets.empty())
     return true; // nothing to do; existing pipeline handles it
 
   // Identify every body-assigned scalar symbol — pointers in this set
-  // are NOT loop-invariant, so their derefs are unsafe.
+  // are NOT loop-invariant, so their read derefs are unsafe to
+  // substitute with scalars. Write-only targets don't care (they get
+  // elided, not substituted).
   std::set<irep_idt> body_assigned;
-  for (auto it = std::next(head); it != back; ++it)
+  for (auto it = body_begin; it != back; ++it)
   {
     if (!it->is_assign())
       continue;
@@ -928,15 +982,13 @@ bool compute_safe_derefs(
       body_assigned.insert(to_symbol2t(a.target).thename);
   }
 
-  // Validate each deref: pointer must be a plain symbol, loop-invariant,
-  // have distinct-allocation provenance in the prefix, AND its memory cell
-  // must be disjoint from every other dereffed pointer's cell. Two
-  // pointers reaching the same allocation (or both `&` of the same local)
-  // would alias at runtime, so substituting them by distinct fresh scalars
-  // would be unsound.
+  // Validate each READ deref: pointer must be a plain symbol, loop-
+  // invariant, have distinct-allocation provenance in the prefix, AND
+  // its memory cell must be disjoint from every other dereffed
+  // pointer's cell.
   prefix_defst defs = scan_prefix_defs(fn_body, head, loop_skip);
   std::set<std::string> seen_cells;
-  for (const expr2tc &d : derefs)
+  for (const expr2tc &d : read_derefs)
   {
     const dereference2t &deref = to_dereference2t(d);
     if (!is_symbol2t(deref.value))
@@ -951,13 +1003,21 @@ bool compute_safe_derefs(
       return false; // two pointers share this cell — aliasing risk
   }
 
-  // Build the substitution: each unique deref maps to a fresh free symbol
-  // of the dereferenced type. The name is salted with the deref node's
-  // raw pointer value so collisions with program-defined symbols (or with
-  // synthetic symbols from other recognize_loop invocations) are
-  // essentially impossible — the prefix `$rank_deref$` is not a legal C
-  // identifier and the hex tail makes each fresh symbol unique.
-  for (const expr2tc &d : derefs)
+  // Write-only targets: the pointer can be body-assigned (e.g. `d++;
+  // *d = c`) -- we don't care, we elide the write entirely. But we
+  // still require the target to be a plain `*p` (no compound
+  // addressing), so the elision is structurally trivial.
+  for (const expr2tc &d : write_only_targets)
+  {
+    const dereference2t &deref = to_dereference2t(d);
+    if (!is_symbol2t(deref.value))
+      return false;
+  }
+
+  // Build the substitution map for READ derefs only. Write-only
+  // targets do NOT get a map entry — the body parser elides their
+  // assigns instead.
+  for (const expr2tc &d : read_derefs)
   {
     const dereference2t &deref = to_dereference2t(d);
     const irep_idt &p = to_symbol2t(deref.value).thename;
@@ -967,7 +1027,8 @@ bool compute_safe_derefs(
     std::string sym_name = std::string(buf) + id2string(p);
     out_map[d] = symbol2tc(d->type, sym_name);
   }
-  out_exempt = std::move(derefs);
+  out_exempt = std::move(read_derefs);
+  out_elidable_write_targets = std::move(write_only_targets);
   return true;
 }
 
@@ -1012,14 +1073,46 @@ bool recognize_loop(
 
   if (out.head == out.back)
     return false;
-  if (!out.head->is_goto())
-    return false;
-  if (is_nil_expr(out.head->guard) || is_true(out.head->guard))
-    return false;
 
-  expr2tc pos_guard = out.head->guard;
-  make_not(pos_guard);
-  simplify(pos_guard);
+  // Two shapes:
+  //   - Top-test (`while (G) {B}`):
+  //       head: IF !G GOTO exit
+  //       body: [head+1, back)
+  //       back: GOTO head (unconditional)
+  //   - Bottom-test (`do {B} while (G)`):
+  //       head: <first body instr>
+  //       body: [head, back)
+  //       back: IF G GOTO head (conditional backwards goto)
+  //
+  // For top-test, the guard's continue-direction is the NEGATION of
+  // the head IF's branch direction (`IF !G THEN ...` means continue
+  // when G).
+  // For bottom-test, the guard's continue-direction IS the back
+  // edge's branch condition (`IF G THEN GOTO head` means continue
+  // when G).
+  bool bottom_test = false;
+  expr2tc pos_guard;
+  if (out.head->is_goto())
+  {
+    // Top-test shape.
+    if (is_nil_expr(out.head->guard) || is_true(out.head->guard))
+      return false;
+    pos_guard = out.head->guard;
+    make_not(pos_guard);
+    simplify(pos_guard);
+  }
+  else if (
+    out.back->is_goto() && out.back->is_backwards_goto() &&
+    !is_nil_expr(out.back->guard) && !is_true(out.back->guard))
+  {
+    // Bottom-test (do-while): the back edge carries the continue
+    // condition directly.
+    bottom_test = true;
+    pos_guard = out.back->guard;
+    simplify(pos_guard);
+  }
+  else
+    return false;
 
   // Compute safe dereferences: any *p where p is a loop-invariant pointer
   // with distinct-allocation provenance from the function prefix. Each is
@@ -1029,15 +1122,23 @@ bool recognize_loop(
   // analysis fails for any deref, we treat the loop as memory-touching and
   // fall back to UNKNOWN (the substitution either succeeds for all derefs
   // or not at all — partial substitution would be unsound).
+  // Body window: top-test loops have head=IF, so the body is
+  // strictly after head. Bottom-test loops have head as the first
+  // body instruction, so head itself is in the body window.
+  auto body_begin = bottom_test ? out.head : std::next(out.head);
+
   std::set<expr2tc> exempt_derefs;
   std::map<expr2tc, expr2tc> deref_map;
+  std::set<expr2tc> elidable_write_targets;
   if (!compute_safe_derefs(
         out.head,
+        body_begin,
         out.back,
         pos_guard,
         fn_body,
         exempt_derefs,
         deref_map,
+        elidable_write_targets,
         loop_skip))
     return false;
 
@@ -1053,15 +1154,19 @@ bool recognize_loop(
     return false;
   out.guard =
     deref_map.empty() ? pos_guard : subst_parallel(pos_guard, deref_map);
+  // Stash the map so the supporting-invariant synthesiser can rewrite
+  // prefix `*p = c` assigns into seed constraints on the fresh scalar.
+  out.deref_map = deref_map;
 
   if (!out.back->is_goto() || !out.back->is_backwards_goto())
     return false;
 
   out.paths.clear();
 
-  // Shape (A): straight-line body — no GOTO/IF instructions between head
-  // and back-edge.
-  auto body_begin = std::next(out.head);
+  // Shape (A): straight-line body — no GOTO/IF instructions between
+  // head and back-edge. (For bottom-test loops, the back edge IS an
+  // IF -- but it's the loop-exit conditional, not a body branch. We
+  // already pinned body_begin above so we only iterate the body.)
   bool has_internal_goto = false;
   for (auto it = body_begin; it != out.back; ++it)
     if (it->is_goto())
@@ -1088,7 +1193,10 @@ bool recognize_loop(
           path,
           exempt_derefs,
           goto_functions,
-          &out.body_assumes))
+          &out.body_assumes,
+          /*loop_skip*/ nullptr,
+          /*deref_map*/ nullptr,
+          &elidable_write_targets))
       return false;
     rewrite(path);
     ranking_loopt::loop_patht p;
@@ -2320,7 +2428,8 @@ bool reaches_head(
 prefix_seedst collect_seeds(
   const goto_programt &body,
   goto_programt::const_targett head,
-  const loop_skipt *loop_skip = nullptr)
+  const loop_skipt *loop_skip = nullptr,
+  const std::map<expr2tc, expr2tc> *deref_map = nullptr)
 {
   prefix_seedst seeds;
   // Targets we've justified by an earlier accepted IF jump (so meeting one
@@ -2430,6 +2539,33 @@ prefix_seedst collect_seeds(
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
+      // Prefix assignment through a loop-invariant pointer: `*p = c`
+      // where `*p` is in the recogniser's deref_map. Treat as if the
+      // fresh scalar were assigned -- the synthesiser sees a seed
+      // constraint for the substituted scalar exactly as it would
+      // for a scalar-typed `p`.
+      if (
+        deref_map != nullptr && is_dereference2t(a.target) &&
+        !touches_memory(a.source))
+      {
+        auto map_it = deref_map->find(a.target);
+        if (map_it != deref_map->end() && is_symbol2t(map_it->second))
+        {
+          const irep_idt &fname = to_symbol2t(map_it->second).thename;
+          if (is_constant_int2t(a.source))
+            seeds.constants[fname] = to_constant_int2t(a.source).value;
+          else
+            seeds.constants.erase(fname);
+          pending.erase(
+            std::remove_if(
+              pending.begin(),
+              pending.end(),
+              [&](const pending_atom &p) { return p.free_vars.count(fname); }),
+            pending.end());
+          ++it;
+          continue;
+        }
+      }
       if (touches_memory(a.target) || touches_memory(a.source))
         return {};
       if (!is_symbol2t(a.target))
@@ -2528,7 +2664,7 @@ expr2tc synthesize_invariant(
   const namespacet &ns,
   const loop_skipt *loop_skip = nullptr)
 {
-  prefix_seedst seeds = collect_seeds(body, rl.head, loop_skip);
+  prefix_seedst seeds = collect_seeds(body, rl.head, loop_skip, &rl.deref_map);
   if (seeds.constants.empty() && seeds.path_atoms.empty())
     return gen_true_expr();
 

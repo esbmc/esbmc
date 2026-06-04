@@ -1140,6 +1140,18 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(popcount_expr);
     }
     else if (
+      identifier == "__builtin_parity" || identifier == "__builtin_parityl" ||
+      identifier == "__builtin_parityll")
+    {
+      // parity(x) = popcount(x) & 1: number of set bits, modulo two. See #4606.
+      exprt popcount_expr("popcount", int_type());
+      popcount_expr.operands() = expr.arguments();
+
+      exprt parity_expr("bitand", int_type());
+      parity_expr.copy_to_operands(popcount_expr, from_integer(1, int_type()));
+      expr.swap(parity_expr);
+    }
+    else if (
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||
       identifier == "__builtin_bswap64")
     {

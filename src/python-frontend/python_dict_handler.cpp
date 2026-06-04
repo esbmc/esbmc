@@ -5,16 +5,72 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/context.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 
 #include <algorithm>
 #include <functional>
 #include <sstream>
+
+namespace
+{
+// V.3: IREP2 member access (exact round-trip of member_exprt;
+// behaviour-preserving -- migrate_expr already lowers the legacy node through
+// this same path downstream). Back-migrated for the legacy adjust/goto-convert
+// seam.
+//
+// member2t requires a struct/union/symbol source. In this handler a few member
+// sites have a source whose type is still a pointer at construction time (the
+// dict/PyObject layout is resolved later by the adjuster), which legacy
+// member_exprt tolerates but eager member2tc cannot. For those we fall back to
+// the legacy node, leaving the downstream migration to lower it as before.
+exprt dict_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+    return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+  return member_exprt(base, name, t);
+}
+
+// V.3: IREP2 symbol/typecast/dereference/address-of construction (exact
+// round-trip; behaviour-preserving). Back-migrated for the legacy seam.
+exprt build_symbol(const symbolt &sym)
+{
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+
+exprt build_dereference(const exprt &ptr, const typet &t)
+{
+  expr2tc ptr2;
+  migrate_expr(ptr, ptr2);
+  return migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
+}
+
+// address_of2t's source here is an lvalue (symbol/member/deref), never a
+// constant_int or nested address_of, so no guard is needed.
+exprt build_address_of(const exprt &obj)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 python_dict_handler::python_dict_handler(
   python_converter &converter,
@@ -139,35 +195,36 @@ exprt python_dict_handler::safe_cast_to_dict_pointer(
   const locationt &location)
 {
   // Step 1: Cast void* to pointer_type* and dereference to get pointer_type value
-  typecast_exprt as_ptr_type_ptr(obj_value, pointer_typet(pointer_type()));
-  dereference_exprt ptr_as_ptr_type(as_ptr_type_ptr, pointer_type());
+  exprt as_ptr_type_ptr =
+    build_typecast(obj_value, pointer_typet(pointer_type()));
+  exprt ptr_as_ptr_type = build_dereference(as_ptr_type_ptr, pointer_type());
 
   // Step 2: Store pointer_type value in temporary to ensure proper evaluation order
   symbolt &ptr_type_var = converter_.create_tmp_symbol(
     node, "$dict_ptr_as_int$", pointer_type(), exprt());
-  code_declt ptr_type_decl(symbol_expr(ptr_type_var));
+  code_declt ptr_type_decl(build_symbol(ptr_type_var));
   ptr_type_decl.location() = location;
   converter_.add_instruction(ptr_type_decl);
 
-  code_assignt ptr_type_assign(symbol_expr(ptr_type_var), ptr_as_ptr_type);
+  code_assignt ptr_type_assign(build_symbol(ptr_type_var), ptr_as_ptr_type);
   ptr_type_assign.location() = location;
   converter_.add_instruction(ptr_type_assign);
 
   // Step 3: Cast pointer_type value to target pointer type
-  typecast_exprt dict_ptr(symbol_expr(ptr_type_var), target_ptr_type);
+  exprt dict_ptr = build_typecast(build_symbol(ptr_type_var), target_ptr_type);
 
   // Step 4: Store the typed pointer
   symbolt &dict_ptr_var = converter_.create_tmp_symbol(
     node, "$dict_ptr_typed$", target_ptr_type, exprt());
-  code_declt ptr_decl(symbol_expr(dict_ptr_var));
+  code_declt ptr_decl(build_symbol(dict_ptr_var));
   ptr_decl.location() = location;
   converter_.add_instruction(ptr_decl);
 
-  code_assignt ptr_assign(symbol_expr(dict_ptr_var), dict_ptr);
+  code_assignt ptr_assign(build_symbol(dict_ptr_var), dict_ptr);
   ptr_assign.location() = location;
   converter_.add_instruction(ptr_assign);
 
-  return symbol_expr(dict_ptr_var);
+  return build_symbol(dict_ptr_var);
 }
 
 void python_dict_handler::store_nested_dict_value(
@@ -190,12 +247,12 @@ void python_dict_handler::store_nested_dict_value(
   typet ptr_type = pointer_typet(value_expr.type());
   symbolt &ptr_var = converter_.create_tmp_symbol(
     element, "$nested_dict_ptr$", ptr_type, exprt());
-  code_declt ptr_decl(symbol_expr(ptr_var));
+  code_declt ptr_decl(build_symbol(ptr_var));
   ptr_decl.location() = location;
   converter_.add_instruction(ptr_decl);
 
   // Store the address of the dict
-  code_assignt ptr_assign(symbol_expr(ptr_var), address_of_exprt(value_expr));
+  code_assignt ptr_assign(build_symbol(ptr_var), build_address_of(value_expr));
   ptr_assign.location() = location;
   converter_.add_instruction(ptr_assign);
 
@@ -208,9 +265,9 @@ void python_dict_handler::store_nested_dict_value(
   // Call __ESBMC_list_push_dict_ptr(list, ptr_var, type_hash)
   // ptr_var (dict*) is stored directly in item->value — no byte extraction needed
   code_function_callt push_call;
-  push_call.function() = symbol_expr(*push_func);
-  push_call.arguments().push_back(symbol_expr(values_list));
-  push_call.arguments().push_back(symbol_expr(ptr_var));
+  push_call.function() = build_symbol(*push_func);
+  push_call.arguments().push_back(build_symbol(values_list));
+  push_call.arguments().push_back(build_symbol(ptr_var));
   push_call.arguments().push_back(type_hash);
   push_call.type() = bool_type();
   push_call.location() = location;
@@ -234,23 +291,23 @@ exprt python_dict_handler::retrieve_nested_dict_value(
   // obj_value = item->value = the dict* stored directly by __ESBMC_list_push_dict_ptr
   // Cast void* to dict* directly (no byte extraction needed)
   pointer_typet dict_ptr_type(expected_type);
-  typecast_exprt dict_ptr(obj_value, dict_ptr_type);
+  exprt dict_ptr = build_typecast(obj_value, dict_ptr_type);
 
   // Dereference to get the actual dict struct
-  dereference_exprt dict_struct(dict_ptr, expected_type);
+  exprt dict_struct = build_dereference(dict_ptr, expected_type);
 
   // Store in final temporary for return
   symbolt &result_dict = converter_.create_tmp_symbol(
     slice_node, "$dict_retrieved$", expected_type, exprt());
-  code_declt temp_decl(symbol_expr(result_dict));
+  code_declt temp_decl(build_symbol(result_dict));
   temp_decl.location() = location;
   converter_.add_instruction(temp_decl);
 
-  code_assignt result_assign(symbol_expr(result_dict), dict_struct);
+  code_assignt result_assign(build_symbol(result_dict), dict_struct);
   result_assign.location() = location;
   converter_.add_instruction(result_assign);
 
-  return symbol_expr(result_dict);
+  return build_symbol(result_dict);
 }
 
 exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
@@ -271,15 +328,15 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   symbolt &dict_sym =
     converter_.create_tmp_symbol(element, dict_name, dict_type, exprt());
 
-  code_declt dict_decl(symbol_expr(dict_sym));
+  code_declt dict_decl(build_symbol(dict_sym));
   dict_decl.location() = location;
   converter_.add_instruction(dict_decl);
 
   // Initialize the dictionary with its literal values
-  create_dict_from_literal(element, symbol_expr(dict_sym));
+  create_dict_from_literal(element, build_symbol(dict_sym));
 
   // Return the symbol expression pointing to the initialized dictionary
-  return symbol_expr(dict_sym);
+  return build_symbol(dict_sym);
 }
 
 exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
@@ -301,7 +358,7 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
   symbolt &dict_sym =
     converter_.create_tmp_symbol(element, dict_name, dict_type, exprt());
-  code_declt dict_decl(symbol_expr(dict_sym));
+  code_declt dict_decl(build_symbol(dict_sym));
   dict_decl.location() = location;
   converter_.add_instruction(dict_decl);
 
@@ -310,7 +367,7 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   empty_dict["_type"] = "Dict";
   empty_dict["keys"] = nlohmann::json::array();
   empty_dict["values"] = nlohmann::json::array();
-  create_dict_from_literal(empty_dict, symbol_expr(dict_sym));
+  create_dict_from_literal(empty_dict, build_symbol(dict_sym));
 
   exprt iterable_expr = converter_.get_expr(iter);
   // If the iterable comes from a call such as range(...), store it first so
@@ -325,19 +382,19 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
       element, "$dictcomp_iter$", list_type, gen_zero(list_type));
 
-    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    code_declt tmp_var_decl(build_symbol(tmp_var_symbol));
     tmp_var_decl.location() = location;
     converter_.add_instruction(tmp_var_decl);
 
     code_function_callt new_call;
     new_call.function() = call.function();
     new_call.arguments() = call.arguments();
-    new_call.lhs() = symbol_expr(tmp_var_symbol);
+    new_call.lhs() = build_symbol(tmp_var_symbol);
     new_call.type() = list_type;
     new_call.location() = location;
     converter_.add_instruction(new_call);
 
-    iterable_expr = symbol_expr(tmp_var_symbol);
+    iterable_expr = build_symbol(tmp_var_symbol);
   }
 
   if (target["_type"] != "Name")
@@ -373,11 +430,11 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
   symbolt &index_var = converter_.create_tmp_symbol(
     element, "$dictcomp_i$", size_type(), gen_zero(size_type()));
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
-  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
   index_init.location() = location;
   converter_.add_instruction(index_init);
 
@@ -391,21 +448,21 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
     symbolt &length_var = converter_.create_tmp_symbol(
       element, "$dictcomp_len$", size_type(), gen_zero(size_type()));
-    code_declt length_decl(symbol_expr(length_var));
+    code_declt length_decl(build_symbol(length_var));
     length_decl.location() = location;
     converter_.add_instruction(length_decl);
 
     code_function_callt size_call;
-    size_call.function() = symbol_expr(*size_func);
+    size_call.function() = build_symbol(*size_func);
     size_call.arguments().push_back(
       iterable_expr.type().is_pointer() ? iterable_expr
-                                        : address_of_exprt(iterable_expr));
-    size_call.lhs() = symbol_expr(length_var);
+                                        : build_address_of(iterable_expr));
+    size_call.lhs() = build_symbol(length_var);
     size_call.type() = size_type();
     size_call.location() = location;
     converter_.add_instruction(size_call);
 
-    length_expr = symbol_expr(length_var);
+    length_expr = build_symbol(length_var);
   }
   else
   {
@@ -420,11 +477,11 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // Read the current element from the list and assign it to the
   // comprehension target before evaluating key and value
   exprt current_element = list_handler.build_list_at_call(
-    iterable_expr, symbol_expr(index_var), element);
+    iterable_expr, build_symbol(index_var), element);
   current_element =
     list_handler.extract_pyobject_value(current_element, loop_var_type);
 
-  code_assignt loop_var_assign(symbol_expr(*loop_var), current_element);
+  code_assignt loop_var_assign(build_symbol(*loop_var), current_element);
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
@@ -442,7 +499,12 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // Reuse the normal dict assignment path for each generated pair
   code_blockt pair_block;
   handle_dict_subscript_assign(
-    symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+    build_symbol(dict_sym),
+    key_expr,
+    value_expr,
+    location,
+    element,
+    pair_block);
   converter_.current_block = saved_block;
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
@@ -475,13 +537,13 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   }
 
   exprt increment("+", size_type());
-  increment.copy_to_operands(symbol_expr(index_var), gen_one(size_type()));
-  code_assignt index_increment(symbol_expr(index_var), increment);
+  increment.copy_to_operands(build_symbol(index_var), gen_one(size_type()));
+  code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
 
   exprt loop_condition("<", bool_type());
-  loop_condition.copy_to_operands(symbol_expr(index_var), length_expr);
+  loop_condition.copy_to_operands(build_symbol(index_var), length_expr);
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -489,7 +551,7 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
-  return symbol_expr(dict_sym);
+  return build_symbol(dict_sym);
 }
 
 exprt python_dict_handler::create_dict_from_literal(
@@ -506,13 +568,13 @@ exprt python_dict_handler::create_dict_from_literal(
 
   // Freeze the target as dict-typed lvalue so previously emitted member
   // accesses remain valid even if the frontend later mutates the symbol type.
-  exprt dict_target = typecast_exprt(target_symbol, dict_type);
+  exprt dict_target = build_typecast(target_symbol, dict_type);
 
   // Create keys list
   symbolt &keys_list = converter_.create_tmp_symbol(
     element, dict_name + "_keys", list_type, exprt());
 
-  code_declt keys_decl(symbol_expr(keys_list));
+  code_declt keys_decl(build_symbol(keys_list));
   keys_decl.location() = location;
   converter_.add_instruction(keys_decl);
 
@@ -522,8 +584,8 @@ exprt python_dict_handler::create_dict_from_literal(
     throw std::runtime_error("__ESBMC_list_create not found");
 
   code_function_callt keys_create;
-  keys_create.function() = symbol_expr(*create_func);
-  keys_create.lhs() = symbol_expr(keys_list);
+  keys_create.function() = build_symbol(*create_func);
+  keys_create.lhs() = build_symbol(keys_list);
   keys_create.type() = list_type;
   keys_create.location() = location;
   converter_.add_instruction(keys_create);
@@ -532,13 +594,13 @@ exprt python_dict_handler::create_dict_from_literal(
   symbolt &values_list = converter_.create_tmp_symbol(
     element, dict_name + "_values", list_type, exprt());
 
-  code_declt values_decl(symbol_expr(values_list));
+  code_declt values_decl(build_symbol(values_list));
   values_decl.location() = location;
   converter_.add_instruction(values_decl);
 
   code_function_callt values_create;
-  values_create.function() = symbol_expr(*create_func);
-  values_create.lhs() = symbol_expr(values_list);
+  values_create.function() = build_symbol(*create_func);
+  values_create.lhs() = build_symbol(values_list);
   values_create.type() = list_type;
   values_create.location() = location;
   converter_.add_instruction(values_create);
@@ -560,7 +622,7 @@ exprt python_dict_handler::create_dict_from_literal(
 
     // Convert lambda/function symbol to function pointer for dict storage
     if (value_expr.type().is_code() && value_expr.is_symbol())
-      value_expr = address_of_exprt(value_expr);
+      value_expr = build_address_of(value_expr);
 
     // Check if this is a nested dict that needs special pointer storage
     if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
@@ -580,13 +642,13 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   // Assign keys and values to target dict struct members
-  member_exprt keys_member(dict_target, "keys", list_type);
-  code_assignt keys_assign(keys_member, symbol_expr(keys_list));
+  exprt keys_member = dict_member(dict_target, "keys", list_type);
+  code_assignt keys_assign(keys_member, build_symbol(keys_list));
   keys_assign.location() = location;
   converter_.add_instruction(keys_assign);
 
-  member_exprt values_member(dict_target, "values", list_type);
-  code_assignt values_assign(values_member, symbol_expr(values_list));
+  exprt values_member = dict_member(dict_target, "values", list_type);
+  code_assignt values_assign(values_member, build_symbol(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
 
@@ -614,8 +676,8 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // Use try_find_index so a missing key returns SIZE_MAX instead of asserting.
   // We then emit a cpp-throw KeyError for the not-found case, which allows
@@ -630,7 +692,7 @@ exprt python_dict_handler::handle_dict_subscript(
   symbolt &index_var = converter_.create_tmp_symbol(
     slice_node, "$dict_idx$", size_type(), gen_zero(size_type()));
 
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
@@ -641,20 +703,20 @@ exprt python_dict_handler::handle_dict_subscript(
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if absent
   code_function_callt find_call;
-  find_call.function() = symbol_expr(*find_func);
-  find_call.lhs() = symbol_expr(index_var);
+  find_call.function() = build_symbol(*find_func);
+  find_call.lhs() = build_symbol(index_var);
   find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   find_call.arguments().push_back(key_arg);
-  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   find_call.arguments().push_back(key_info.elem_size);
   find_call.type() = size_type();
   find_call.location() = location;
@@ -665,7 +727,7 @@ exprt python_dict_handler::handle_dict_subscript(
   {
     const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
     constant_exprt size_max(size_max_val, size_type());
-    exprt key_not_found = equality_exprt(symbol_expr(index_var), size_max);
+    exprt key_not_found = equality_exprt(build_symbol(index_var), size_max);
 
     std::string keyerror_msg = "KeyError: key not found in dictionary";
     std::string keyerror_type_str = "KeyError";
@@ -679,16 +741,16 @@ exprt python_dict_handler::handle_dict_subscript(
 
     symbolt &err_msg_var = converter_.create_tmp_symbol(
       slice_node, "$keyerror_msg$", str_arr_type, exprt());
-    code_declt err_msg_decl(symbol_expr(err_msg_var));
+    code_declt err_msg_decl(build_symbol(err_msg_var));
     err_msg_decl.location() = location;
 
     exprt err_str =
       converter_.get_string_builder().build_string_literal(keyerror_msg);
-    code_assignt err_msg_assign(symbol_expr(err_msg_var), err_str);
+    code_assignt err_msg_assign(build_symbol(err_msg_var), err_str);
     err_msg_assign.location() = location;
 
     exprt exc_struct("struct", keyerror_type);
-    exc_struct.copy_to_operands(address_of_exprt(symbol_expr(err_msg_var)));
+    exc_struct.copy_to_operands(build_address_of(build_symbol(err_msg_var)));
 
     exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
     raise_keyerror.move_to_operands(exc_struct);
@@ -718,16 +780,16 @@ exprt python_dict_handler::handle_dict_subscript(
   symbolt &obj_var = converter_.create_tmp_symbol(
     slice_node, "$dict_val_obj$", obj_ptr_type, exprt());
 
-  code_declt obj_decl(symbol_expr(obj_var));
+  code_declt obj_decl(build_symbol(obj_var));
   obj_decl.location() = location;
   converter_.add_instruction(obj_decl);
 
   // Call list_at(values, index)
   code_function_callt at_call;
-  at_call.function() = symbol_expr(*at_func);
-  at_call.lhs() = symbol_expr(obj_var);
+  at_call.function() = build_symbol(*at_func);
+  at_call.lhs() = build_symbol(obj_var);
   at_call.arguments().push_back(values_member);
-  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.arguments().push_back(build_symbol(index_var));
   at_call.type() = obj_ptr_type;
   at_call.location() = location;
   converter_.add_instruction(at_call);
@@ -745,9 +807,10 @@ exprt python_dict_handler::handle_dict_subscript(
   }
 
   // Create dereference and explicitly set its type
-  dereference_exprt deref_obj(symbol_expr(obj_var), element_type);
+  exprt deref_obj = build_dereference(build_symbol(obj_var), element_type);
   deref_obj.type() = element_type;
-  member_exprt obj_value(deref_obj, "value", pointer_typet(empty_typet()));
+  exprt obj_value =
+    dict_member(deref_obj, "value", pointer_typet(empty_typet()));
 
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
@@ -759,19 +822,20 @@ exprt python_dict_handler::handle_dict_subscript(
   // Handle list types
   if (resolved_type == list_type)
   {
-    typecast_exprt value_as_list_ptr_ptr(obj_value, pointer_typet(list_type));
-    dereference_exprt list_ptr(value_as_list_ptr_ptr, list_type);
+    exprt value_as_list_ptr_ptr =
+      build_typecast(obj_value, pointer_typet(list_type));
+    exprt list_ptr = build_dereference(value_as_list_ptr_ptr, list_type);
     list_ptr.type() = list_type;
 
     // Create a temporary symbol for this list to store in the type map
     symbolt &list_result = converter_.create_tmp_symbol(
       slice_node, "$dict_list_result$", list_type, exprt());
 
-    code_declt list_decl(symbol_expr(list_result));
+    code_declt list_decl(build_symbol(list_result));
     list_decl.location() = location;
     converter_.add_instruction(list_decl);
 
-    code_assignt list_assign(symbol_expr(list_result), list_ptr);
+    code_assignt list_assign(build_symbol(list_result), list_ptr);
     list_assign.location() = location;
     converter_.add_instruction(list_assign);
 
@@ -834,14 +898,15 @@ exprt python_dict_handler::handle_dict_subscript(
       }
     }
 
-    return symbol_expr(list_result);
+    return build_symbol(list_result);
   }
 
   // Handle float types
   if (resolved_type.is_floatbv())
   {
-    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(resolved_type));
-    dereference_exprt result(value_as_float_ptr, resolved_type);
+    exprt value_as_float_ptr =
+      build_typecast(obj_value, pointer_typet(resolved_type));
+    exprt result = build_dereference(value_as_float_ptr, resolved_type);
     result.type() = resolved_type;
     return result;
   }
@@ -849,8 +914,9 @@ exprt python_dict_handler::handle_dict_subscript(
   // Handle integer types
   if (resolved_type.is_signedbv() || resolved_type.is_unsignedbv())
   {
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(resolved_type));
-    dereference_exprt result(value_as_int_ptr, resolved_type);
+    exprt value_as_int_ptr =
+      build_typecast(obj_value, pointer_typet(resolved_type));
+    exprt result = build_dereference(value_as_int_ptr, resolved_type);
     result.type() = resolved_type;
     return result;
   }
@@ -858,8 +924,9 @@ exprt python_dict_handler::handle_dict_subscript(
   // Handle boolean types
   if (resolved_type.is_bool())
   {
-    typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
-    dereference_exprt result(value_as_bool_ptr, bool_type());
+    exprt value_as_bool_ptr =
+      build_typecast(obj_value, pointer_typet(bool_type()));
+    exprt result = build_dereference(value_as_bool_ptr, bool_type());
     result.type() = bool_type();
     return result;
   }
@@ -872,8 +939,9 @@ exprt python_dict_handler::handle_dict_subscript(
     resolved_type.is_pointer() && resolved_type.subtype() != char_type() &&
     !resolved_type.is_nil())
   {
-    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(resolved_type));
-    dereference_exprt result(value_as_ptr_ptr, resolved_type);
+    exprt value_as_ptr_ptr =
+      build_typecast(obj_value, pointer_typet(resolved_type));
+    exprt result = build_dereference(value_as_ptr_ptr, resolved_type);
     result.type() = resolved_type;
     return result;
   }
@@ -886,15 +954,17 @@ exprt python_dict_handler::handle_dict_subscript(
       underlying = ns.follow(underlying);
     if (underlying.is_struct() && !is_dict_type(underlying))
     {
-      typecast_exprt value_as_struct_ptr(obj_value, pointer_typet(underlying));
-      dereference_exprt result(value_as_struct_ptr, underlying);
+      exprt value_as_struct_ptr =
+        build_typecast(obj_value, pointer_typet(underlying));
+      exprt result = build_dereference(value_as_struct_ptr, underlying);
       result.type() = underlying;
       return result;
     }
   }
 
   // Default: cast void* to char* for string values
-  typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
+  exprt value_as_string =
+    build_typecast(obj_value, gen_pointer_type(char_type()));
   return value_as_string;
 }
 
@@ -908,8 +978,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 {
   typet list_type = type_handler_.get_list_type();
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // Check if key exists using membership test
   nlohmann::json dummy_json;
@@ -938,7 +1008,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   symbolt &index_var = converter_.create_tmp_symbol(
     node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
 
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   update_block.copy_to_operands(index_decl);
 
@@ -947,20 +1017,20 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   // Call find_index(keys, key, type_hash, size) to get the index
   code_function_callt find_call;
-  find_call.function() = symbol_expr(*find_func);
-  find_call.lhs() = symbol_expr(index_var);
+  find_call.function() = build_symbol(*find_func);
+  find_call.lhs() = build_symbol(index_var);
   find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   find_call.arguments().push_back(key_arg);
-  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   find_call.arguments().push_back(key_info.elem_size);
   find_call.type() = size_type();
   find_call.location() = location;
@@ -970,20 +1040,20 @@ void python_dict_handler::handle_dict_subscript_assign(
   list_elem_info value_info = list_handler.get_list_element_info(node, value);
 
   code_function_callt set_value_call;
-  set_value_call.function() = symbol_expr(*set_func);
+  set_value_call.function() = build_symbol(*set_func);
   set_value_call.arguments().push_back(values_member);
-  set_value_call.arguments().push_back(symbol_expr(index_var));
+  set_value_call.arguments().push_back(build_symbol(index_var));
 
   exprt value_arg;
   if (
     value_info.elem_symbol->get_type().is_pointer() &&
     value_info.elem_symbol->get_type().subtype() == char_type())
-    value_arg = symbol_expr(*value_info.elem_symbol);
+    value_arg = build_symbol(*value_info.elem_symbol);
   else
-    value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
+    value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
   set_value_call.arguments().push_back(value_arg);
-  set_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
+  set_value_call.arguments().push_back(build_symbol(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
   set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   set_value_call.arguments().push_back(from_integer(
@@ -1004,10 +1074,10 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   // Push key
   code_function_callt push_key_call;
-  push_key_call.function() = symbol_expr(*push_func);
+  push_key_call.function() = build_symbol(*push_func);
   push_key_call.arguments().push_back(keys_member);
   push_key_call.arguments().push_back(key_arg);
-  push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
   push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_key_call.arguments().push_back(from_integer(
@@ -1020,10 +1090,11 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   // Push value
   code_function_callt push_value_call;
-  push_value_call.function() = symbol_expr(*push_func);
+  push_value_call.function() = build_symbol(*push_func);
   push_value_call.arguments().push_back(values_member);
   push_value_call.arguments().push_back(value_arg);
-  push_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
+  push_value_call.arguments().push_back(
+    build_symbol(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
   push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_value_call.arguments().push_back(from_integer(
@@ -1050,7 +1121,7 @@ exprt python_dict_handler::handle_dict_membership(
   bool negated)
 {
   typet list_type = type_handler_.get_list_type();
-  member_exprt keys_member(dict_expr, "keys", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
 
   nlohmann::json dummy_json;
   python_list list_handler(converter_, dummy_json);
@@ -1074,8 +1145,8 @@ void python_dict_handler::handle_dict_delete(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   // First, check if key exists using membership test
   // This avoids calling __ESBMC_list_find_index on empty dict or missing key
@@ -1100,21 +1171,21 @@ void python_dict_handler::handle_dict_delete(
   symbolt &error_msg_var = converter_.create_tmp_symbol(
     slice_node, "$keyerror_msg$", str_type, exprt());
 
-  code_declt error_msg_decl(symbol_expr(error_msg_var));
+  code_declt error_msg_decl(build_symbol(error_msg_var));
   error_msg_decl.location() = location;
   target_block.copy_to_operands(error_msg_decl);
 
   // Assign the string literal to the temp variable
   exprt error_string =
     converter_.get_string_builder().build_string_literal(error_msg);
-  code_assignt error_msg_assign(symbol_expr(error_msg_var), error_string);
+  code_assignt error_msg_assign(build_symbol(error_msg_var), error_string);
   error_msg_assign.location() = location;
   target_block.copy_to_operands(error_msg_assign);
 
   // Construct exception struct with address of the temp variable
   exprt exception_struct("struct", keyerror_type);
   exception_struct.copy_to_operands(
-    address_of_exprt(symbol_expr(error_msg_var)));
+    build_address_of(build_symbol(error_msg_var)));
 
   // Create the throw expression
   exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
@@ -1142,7 +1213,7 @@ void python_dict_handler::handle_dict_delete(
   symbolt &index_var = converter_.create_tmp_symbol(
     slice_node, "$dict_del_idx$", size_type(), gen_zero(size_type()));
 
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   delete_block.copy_to_operands(index_decl);
 
@@ -1153,20 +1224,20 @@ void python_dict_handler::handle_dict_delete(
 
   // Call find_index(keys, key, type_hash, size) to get the index of the key
   code_function_callt find_call;
-  find_call.function() = symbol_expr(*find_func);
-  find_call.lhs() = symbol_expr(index_var);
+  find_call.function() = build_symbol(*find_func);
+  find_call.lhs() = build_symbol(index_var);
   find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   find_call.arguments().push_back(key_arg);
-  find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   find_call.arguments().push_back(key_info.elem_size);
   find_call.type() = size_type();
   find_call.location() = location;
@@ -1174,18 +1245,18 @@ void python_dict_handler::handle_dict_delete(
 
   // Call list_remove_at(keys, index) to remove the key
   code_function_callt remove_key_call;
-  remove_key_call.function() = symbol_expr(*remove_func);
+  remove_key_call.function() = build_symbol(*remove_func);
   remove_key_call.arguments().push_back(keys_member);
-  remove_key_call.arguments().push_back(symbol_expr(index_var));
+  remove_key_call.arguments().push_back(build_symbol(index_var));
   remove_key_call.type() = bool_type();
   remove_key_call.location() = location;
   delete_block.copy_to_operands(remove_key_call);
 
   // Call list_remove_at(values, index) to remove the corresponding value
   code_function_callt remove_value_call;
-  remove_value_call.function() = symbol_expr(*remove_func);
+  remove_value_call.function() = build_symbol(*remove_func);
   remove_value_call.arguments().push_back(values_member);
-  remove_value_call.arguments().push_back(symbol_expr(index_var));
+  remove_value_call.arguments().push_back(build_symbol(index_var));
   remove_value_call.type() = bool_type();
   remove_value_call.location() = location;
   delete_block.copy_to_operands(remove_value_call);
@@ -1233,7 +1304,7 @@ void python_dict_handler::resolve_dict_subscript_types(
       lhs = handle_dict_subscript(dict_expr, left["slice"], rhs.type());
       // Dereference the pointer to get the actual value
       if (lhs.type().is_pointer())
-        lhs = dereference_exprt(lhs, lhs.type().subtype());
+        lhs = build_dereference(lhs, lhs.type().subtype());
     }
   }
 
@@ -1246,7 +1317,7 @@ void python_dict_handler::resolve_dict_subscript_types(
       rhs = handle_dict_subscript(dict_expr, right["slice"], lhs.type());
       // Dereference the pointer to get the actual value
       if (rhs.type().is_pointer())
-        rhs = dereference_exprt(rhs, rhs.type().subtype());
+        rhs = build_dereference(rhs, rhs.type().subtype());
     }
   }
 
@@ -1263,7 +1334,7 @@ void python_dict_handler::resolve_dict_subscript_types(
       lhs = handle_dict_subscript(lhs_dict, left["slice"], default_type);
       // Dereference the pointer to get the actual value
       if (lhs.type().is_pointer())
-        lhs = dereference_exprt(lhs, lhs.type().subtype());
+        lhs = build_dereference(lhs, lhs.type().subtype());
     }
 
     exprt rhs_dict = converter_.get_expr(right["value"]);
@@ -1273,7 +1344,7 @@ void python_dict_handler::resolve_dict_subscript_types(
       // Dereference the pointer to get the actual value
       if (rhs.type().is_pointer())
       {
-        rhs = dereference_exprt(rhs, rhs.type().subtype());
+        rhs = build_dereference(rhs, rhs.type().subtype());
       }
     }
   }
@@ -1841,8 +1912,8 @@ exprt python_dict_handler::handle_dict_get(
                  : normalized_result_type;
 
   // Get dict members
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -1852,7 +1923,7 @@ exprt python_dict_handler::handle_dict_get(
   // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
     call_node, "$dict_get_idx$", size_type(), exprt());
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
@@ -1863,20 +1934,20 @@ exprt python_dict_handler::handle_dict_get(
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;
-  try_find_call.function() = symbol_expr(*try_find_func);
-  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.function() = build_symbol(*try_find_func);
+  try_find_call.lhs() = build_symbol(index_var);
   try_find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   try_find_call.arguments().push_back(key_arg);
-  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   try_find_call.arguments().push_back(key_info.elem_size);
   try_find_call.type() = size_type();
   try_find_call.location() = location;
@@ -1885,12 +1956,13 @@ exprt python_dict_handler::handle_dict_get(
   // Check if key was found (index != SIZE_MAX)
   const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
   constant_exprt size_max(size_max_val, size_type());
-  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+  exprt key_found =
+    not_exprt(equality_exprt(build_symbol(index_var), size_max));
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
     call_node, "$dict_get_result$", effective_result_type, exprt());
-  code_declt result_decl(symbol_expr(result_var));
+  code_declt result_decl(build_symbol(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
@@ -1904,22 +1976,22 @@ exprt python_dict_handler::handle_dict_get(
   typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
   symbolt &obj_var = converter_.create_tmp_symbol(
     call_node, "$dict_get_obj$", obj_ptr_type, exprt());
-  code_declt obj_decl(symbol_expr(obj_var));
+  code_declt obj_decl(build_symbol(obj_var));
   obj_decl.location() = location;
   then_block.copy_to_operands(obj_decl);
 
   code_function_callt at_call;
-  at_call.function() = symbol_expr(*at_func);
-  at_call.lhs() = symbol_expr(obj_var);
+  at_call.function() = build_symbol(*at_func);
+  at_call.lhs() = build_symbol(obj_var);
   at_call.arguments().push_back(values_member);
-  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.arguments().push_back(build_symbol(index_var));
   at_call.type() = obj_ptr_type;
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
-    dereference_exprt(
-      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+  exprt obj_value = dict_member(
+    build_dereference(
+      build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
     pointer_typet(empty_typet()));
 
@@ -1927,35 +1999,39 @@ exprt python_dict_handler::handle_dict_get(
   exprt retrieved_value;
   if (result_type.is_floatbv())
   {
-    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(result_type));
-    retrieved_value = dereference_exprt(value_as_float_ptr, result_type);
+    exprt value_as_float_ptr =
+      build_typecast(obj_value, pointer_typet(result_type));
+    retrieved_value = build_dereference(value_as_float_ptr, result_type);
   }
   else if (result_type.is_signedbv() || result_type.is_unsignedbv())
   {
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(result_type));
-    retrieved_value = dereference_exprt(value_as_int_ptr, result_type);
+    exprt value_as_int_ptr =
+      build_typecast(obj_value, pointer_typet(result_type));
+    retrieved_value = build_dereference(value_as_int_ptr, result_type);
   }
   else if (result_type.is_bool())
   {
-    typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
-    retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
+    exprt value_as_bool_ptr =
+      build_typecast(obj_value, pointer_typet(bool_type()));
+    retrieved_value = build_dereference(value_as_bool_ptr, bool_type());
   }
   else if (result_type == none_type())
   {
     // For none_type, just cast the void* directly
-    typecast_exprt value_as_none(obj_value, result_type);
+    exprt value_as_none = build_typecast(obj_value, result_type);
     retrieved_value = value_as_none;
   }
   else if (is_string_result)
   {
     // For string types: cast void* directly to char* (same as
     // handle_dict_subscript). Avoid casting to char[0] which is unusable.
-    typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
+    exprt value_as_string =
+      build_typecast(obj_value, gen_pointer_type(char_type()));
     retrieved_value = value_as_string;
   }
   else
   {
-    typecast_exprt value_as_typed(obj_value, result_type);
+    exprt value_as_typed = build_typecast(obj_value, result_type);
     retrieved_value = value_as_typed;
   }
 
@@ -1963,7 +2039,7 @@ exprt python_dict_handler::handle_dict_get(
     use_optional
       ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
       : retrieved_value;
-  code_assignt value_assign(symbol_expr(result_var), then_value);
+  code_assignt value_assign(build_symbol(result_var), then_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
 
@@ -1977,7 +2053,7 @@ exprt python_dict_handler::handle_dict_get(
     none_expr.set_value("NULL");
     exprt optional_none =
       converter_.wrap_in_optional(none_expr, effective_result_type);
-    code_assignt default_assign(symbol_expr(result_var), optional_none);
+    code_assignt default_assign(build_symbol(result_var), optional_none);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
@@ -1987,21 +2063,21 @@ exprt python_dict_handler::handle_dict_get(
     // represent None. The isnone evaluator's pointer path handles
     // `result is None` by checking pointer == NULL.
     code_assignt default_assign(
-      symbol_expr(result_var), gen_zero(effective_result_type));
+      build_symbol(result_var), gen_zero(effective_result_type));
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
   else if (default_value.type() == none_type() && result_type != none_type())
   {
     // Explicit None default: cast to result_type (represents None as zero)
-    typecast_exprt casted_default(default_value, result_type);
-    code_assignt default_assign(symbol_expr(result_var), casted_default);
+    exprt casted_default = build_typecast(default_value, result_type);
+    code_assignt default_assign(build_symbol(result_var), casted_default);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
   else
   {
-    code_assignt default_assign(symbol_expr(result_var), default_value);
+    code_assignt default_assign(build_symbol(result_var), default_value);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
@@ -2014,7 +2090,7 @@ exprt python_dict_handler::handle_dict_get(
   if_stmt.location() = location;
   converter_.add_instruction(if_stmt);
 
-  return symbol_expr(result_var);
+  return build_symbol(result_var);
 }
 
 exprt python_dict_handler::handle_dict_setdefault(
@@ -2066,8 +2142,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   const bool is_list_result = (result_type == list_type);
 
   // Get dict members
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2077,7 +2153,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
     call_node, "$dict_setdefault_idx$", size_type(), exprt());
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
@@ -2091,17 +2167,17 @@ exprt python_dict_handler::handle_dict_setdefault(
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;
-  try_find_call.function() = symbol_expr(*try_find_func);
-  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.function() = build_symbol(*try_find_func);
+  try_find_call.lhs() = build_symbol(index_var);
   try_find_call.arguments().push_back(keys_member);
   try_find_call.arguments().push_back(key_arg);
-  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   try_find_call.arguments().push_back(key_info.elem_size);
   try_find_call.type() = size_type();
   try_find_call.location() = location;
@@ -2110,12 +2186,13 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Check if key was found (index != SIZE_MAX)
   const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
   constant_exprt size_max(size_max_val, size_type());
-  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+  exprt key_found =
+    not_exprt(equality_exprt(build_symbol(index_var), size_max));
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
     call_node, "$dict_setdefault_result$", result_type, exprt());
-  code_declt result_decl(symbol_expr(result_var));
+  code_declt result_decl(build_symbol(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
@@ -2129,22 +2206,22 @@ exprt python_dict_handler::handle_dict_setdefault(
   typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
   symbolt &obj_var = converter_.create_tmp_symbol(
     call_node, "$dict_setdefault_obj$", obj_ptr_type, exprt());
-  code_declt obj_decl(symbol_expr(obj_var));
+  code_declt obj_decl(build_symbol(obj_var));
   obj_decl.location() = location;
   then_block.copy_to_operands(obj_decl);
 
   code_function_callt at_call;
-  at_call.function() = symbol_expr(*at_func);
-  at_call.lhs() = symbol_expr(obj_var);
+  at_call.function() = build_symbol(*at_func);
+  at_call.lhs() = build_symbol(obj_var);
   at_call.arguments().push_back(values_member);
-  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.arguments().push_back(build_symbol(index_var));
   at_call.type() = obj_ptr_type;
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
-    dereference_exprt(
-      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+  exprt obj_value = dict_member(
+    build_dereference(
+      build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
     pointer_typet(empty_typet()));
 
@@ -2152,24 +2229,27 @@ exprt python_dict_handler::handle_dict_setdefault(
   exprt retrieved_value;
   if (result_type.is_floatbv())
   {
-    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(result_type));
-    retrieved_value = dereference_exprt(value_as_float_ptr, result_type);
+    exprt value_as_float_ptr =
+      build_typecast(obj_value, pointer_typet(result_type));
+    retrieved_value = build_dereference(value_as_float_ptr, result_type);
   }
   else if (result_type.is_signedbv() || result_type.is_unsignedbv())
   {
-    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(result_type));
-    retrieved_value = dereference_exprt(value_as_int_ptr, result_type);
+    exprt value_as_int_ptr =
+      build_typecast(obj_value, pointer_typet(result_type));
+    retrieved_value = build_dereference(value_as_int_ptr, result_type);
   }
   else if (result_type.is_bool())
   {
-    typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
-    retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
+    exprt value_as_bool_ptr =
+      build_typecast(obj_value, pointer_typet(bool_type()));
+    retrieved_value = build_dereference(value_as_bool_ptr, bool_type());
   }
   else if (is_list_result)
   {
     // List values are stored as raw PyListObject*, so cast the void*
     // straight back, no extra dereference.
-    retrieved_value = typecast_exprt(obj_value, result_type);
+    retrieved_value = build_typecast(obj_value, result_type);
   }
   else if (
     result_type.is_pointer() && result_type.subtype() != char_type() &&
@@ -2177,21 +2257,22 @@ exprt python_dict_handler::handle_dict_setdefault(
   {
     // Non-char pointer (e.g., Optional[T] stored as T*): stored by-reference,
     // so dereference as T** to recover the stored T* value.
-    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(result_type));
-    retrieved_value = dereference_exprt(value_as_ptr_ptr, result_type);
+    exprt value_as_ptr_ptr =
+      build_typecast(obj_value, pointer_typet(result_type));
+    retrieved_value = build_dereference(value_as_ptr_ptr, result_type);
   }
   else if (result_type == none_type())
   {
-    typecast_exprt value_as_none(obj_value, result_type);
+    exprt value_as_none = build_typecast(obj_value, result_type);
     retrieved_value = value_as_none;
   }
   else
   {
-    typecast_exprt value_as_typed(obj_value, result_type);
+    exprt value_as_typed = build_typecast(obj_value, result_type);
     retrieved_value = value_as_typed;
   }
 
-  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  code_assignt value_assign(build_symbol(result_var), retrieved_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
 
@@ -2219,10 +2300,10 @@ exprt python_dict_handler::handle_dict_setdefault(
 
     // Push key into keys list
     code_function_callt push_key_call;
-    push_key_call.function() = symbol_expr(*push_func);
+    push_key_call.function() = build_symbol(*push_func);
     push_key_call.arguments().push_back(keys_member);
     push_key_call.arguments().push_back(key_arg);
-    push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+    push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
     push_key_call.arguments().push_back(key_info.elem_size);
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_key_call.arguments().push_back(from_integer(
@@ -2248,7 +2329,7 @@ exprt python_dict_handler::handle_dict_setdefault(
         config.ansi_c.address_width));
 
       code_function_callt push_list_call;
-      push_list_call.function() = symbol_expr(*push_ptr_func);
+      push_list_call.function() = build_symbol(*push_ptr_func);
       push_list_call.arguments().push_back(values_member);
       push_list_call.arguments().push_back(effective_default);
       push_list_call.arguments().push_back(list_type_hash);
@@ -2264,16 +2345,16 @@ exprt python_dict_handler::handle_dict_setdefault(
       if (
         value_info.elem_symbol->get_type().is_pointer() &&
         value_info.elem_symbol->get_type().subtype() == char_type())
-        value_arg = symbol_expr(*value_info.elem_symbol);
+        value_arg = build_symbol(*value_info.elem_symbol);
       else
-        value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
+        value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
       code_function_callt push_value_call;
-      push_value_call.function() = symbol_expr(*push_func);
+      push_value_call.function() = build_symbol(*push_func);
       push_value_call.arguments().push_back(values_member);
       push_value_call.arguments().push_back(value_arg);
       push_value_call.arguments().push_back(
-        symbol_expr(*value_info.elem_type_sym));
+        build_symbol(*value_info.elem_type_sym));
       push_value_call.arguments().push_back(value_info.elem_size);
       push_value_call.arguments().push_back(
         from_integer(BigInt(0), size_type()));
@@ -2293,7 +2374,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   // For all other types, effective_default already has the correct type.
   {
     exprt result_expr = is_string_result ? value_arg : effective_default;
-    code_assignt default_assign(symbol_expr(result_var), result_expr);
+    code_assignt default_assign(build_symbol(result_var), result_expr);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
@@ -2306,7 +2387,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   if_stmt.location() = location;
   converter_.add_instruction(if_stmt);
 
-  return symbol_expr(result_var);
+  return build_symbol(result_var);
 }
 
 exprt python_dict_handler::handle_dict_copy(
@@ -2330,17 +2411,17 @@ exprt python_dict_handler::handle_dict_copy(
   // Allocate destination dict.
   symbolt &new_dict_sym =
     converter_.create_tmp_symbol(call_node, "$dict_copy$", dict_type, exprt());
-  code_declt new_dict_decl(symbol_expr(new_dict_sym));
+  code_declt new_dict_decl(build_symbol(new_dict_sym));
   new_dict_decl.location() = location;
   converter_.add_instruction(new_dict_decl);
 
   // Copy each list independently so mutating the copy leaves the source
   // untouched.
   auto copy_list_member = [&](const irep_idt &name) {
-    member_exprt src(dict_expr, name, list_type);
-    member_exprt dst(symbol_expr(new_dict_sym), name, list_type);
+    exprt src = dict_member(dict_expr, name, list_type);
+    exprt dst = dict_member(build_symbol(new_dict_sym), name, list_type);
     code_function_callt copy_call;
-    copy_call.function() = symbol_expr(*list_copy_func);
+    copy_call.function() = build_symbol(*list_copy_func);
     copy_call.arguments().push_back(src);
     copy_call.lhs() = dst;
     copy_call.type() = list_type;
@@ -2351,7 +2432,7 @@ exprt python_dict_handler::handle_dict_copy(
   copy_list_member("keys");
   copy_list_member("values");
 
-  return symbol_expr(new_dict_sym);
+  return build_symbol(new_dict_sym);
 }
 
 bool python_dict_handler::is_value_returning_method(
@@ -2368,17 +2449,17 @@ static exprt
 retrieve_list_value(const exprt &obj_value, const typet &result_type)
 {
   if (result_type.is_pointer() && result_type.subtype() == char_type())
-    return typecast_exprt(obj_value, gen_pointer_type(char_type()));
+    return build_typecast(obj_value, gen_pointer_type(char_type()));
   if (result_type.is_floatbv())
-    return dereference_exprt(
-      typecast_exprt(obj_value, pointer_typet(result_type)), result_type);
+    return build_dereference(
+      build_typecast(obj_value, pointer_typet(result_type)), result_type);
   if (result_type.is_signedbv() || result_type.is_unsignedbv())
-    return dereference_exprt(
-      typecast_exprt(obj_value, pointer_typet(result_type)), result_type);
+    return build_dereference(
+      build_typecast(obj_value, pointer_typet(result_type)), result_type);
   if (result_type.is_bool())
-    return dereference_exprt(
-      typecast_exprt(obj_value, pointer_typet(bool_type())), bool_type());
-  return typecast_exprt(obj_value, result_type);
+    return build_dereference(
+      build_typecast(obj_value, pointer_typet(bool_type())), bool_type());
+  return build_typecast(obj_value, result_type);
 }
 
 exprt python_dict_handler::handle_dict_pop(
@@ -2419,8 +2500,8 @@ exprt python_dict_handler::handle_dict_pop(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2439,7 +2520,7 @@ exprt python_dict_handler::handle_dict_pop(
   // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
     call_node, "$dict_pop_idx$", size_type(), exprt());
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
@@ -2450,20 +2531,20 @@ exprt python_dict_handler::handle_dict_pop(
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;
-  try_find_call.function() = symbol_expr(*try_find_func);
-  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.function() = build_symbol(*try_find_func);
+  try_find_call.lhs() = build_symbol(index_var);
   try_find_call.arguments().push_back(keys_member);
 
   exprt key_arg;
   if (
     key_info.elem_symbol->get_type().is_pointer() &&
     key_info.elem_symbol->get_type().subtype() == char_type())
-    key_arg = symbol_expr(*key_info.elem_symbol);
+    key_arg = build_symbol(*key_info.elem_symbol);
   else
-    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+    key_arg = build_address_of(build_symbol(*key_info.elem_symbol));
 
   try_find_call.arguments().push_back(key_arg);
-  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   try_find_call.arguments().push_back(key_info.elem_size);
   try_find_call.type() = size_type();
   try_find_call.location() = location;
@@ -2471,12 +2552,13 @@ exprt python_dict_handler::handle_dict_pop(
 
   const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
   constant_exprt size_max(size_max_val, size_type());
-  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+  exprt key_found =
+    not_exprt(equality_exprt(build_symbol(index_var), size_max));
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
     call_node, "$dict_pop_result$", result_type, exprt());
-  code_declt result_decl(symbol_expr(result_var));
+  code_declt result_decl(build_symbol(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
@@ -2486,44 +2568,44 @@ exprt python_dict_handler::handle_dict_pop(
   typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
   symbolt &obj_var = converter_.create_tmp_symbol(
     call_node, "$dict_pop_obj$", obj_ptr_type, exprt());
-  code_declt obj_decl(symbol_expr(obj_var));
+  code_declt obj_decl(build_symbol(obj_var));
   obj_decl.location() = location;
   then_block.copy_to_operands(obj_decl);
 
   code_function_callt at_call;
-  at_call.function() = symbol_expr(*at_func);
-  at_call.lhs() = symbol_expr(obj_var);
+  at_call.function() = build_symbol(*at_func);
+  at_call.lhs() = build_symbol(obj_var);
   at_call.arguments().push_back(values_member);
-  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.arguments().push_back(build_symbol(index_var));
   at_call.type() = obj_ptr_type;
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  member_exprt obj_value(
-    dereference_exprt(
-      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+  exprt obj_value = dict_member(
+    build_dereference(
+      build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
     pointer_typet(empty_typet()));
 
   exprt retrieved_value = retrieve_list_value(obj_value, result_type);
 
-  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  code_assignt value_assign(build_symbol(result_var), retrieved_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
 
   // Remove key and value at found index from both lists
   code_function_callt remove_key_call;
-  remove_key_call.function() = symbol_expr(*remove_func);
+  remove_key_call.function() = build_symbol(*remove_func);
   remove_key_call.arguments().push_back(keys_member);
-  remove_key_call.arguments().push_back(symbol_expr(index_var));
+  remove_key_call.arguments().push_back(build_symbol(index_var));
   remove_key_call.type() = bool_type();
   remove_key_call.location() = location;
   then_block.copy_to_operands(remove_key_call);
 
   code_function_callt remove_value_call;
-  remove_value_call.function() = symbol_expr(*remove_func);
+  remove_value_call.function() = build_symbol(*remove_func);
   remove_value_call.arguments().push_back(values_member);
-  remove_value_call.arguments().push_back(symbol_expr(index_var));
+  remove_value_call.arguments().push_back(build_symbol(index_var));
   remove_value_call.type() = bool_type();
   remove_value_call.location() = location;
   then_block.copy_to_operands(remove_value_call);
@@ -2535,8 +2617,8 @@ exprt python_dict_handler::handle_dict_pop(
   {
     exprt coerced_default = default_value;
     if (default_value.type() != result_type)
-      coerced_default = typecast_exprt(default_value, result_type);
-    code_assignt default_assign(symbol_expr(result_var), coerced_default);
+      coerced_default = build_typecast(default_value, result_type);
+    code_assignt default_assign(build_symbol(result_var), coerced_default);
     default_assign.location() = location;
     else_block.copy_to_operands(default_assign);
   }
@@ -2552,13 +2634,13 @@ exprt python_dict_handler::handle_dict_pop(
 
     symbolt &error_msg_var = converter_.create_tmp_symbol(
       call_node, "$keyerror_msg$", str_type, exprt());
-    code_declt error_msg_decl(symbol_expr(error_msg_var));
+    code_declt error_msg_decl(build_symbol(error_msg_var));
     error_msg_decl.location() = location;
     else_block.copy_to_operands(error_msg_decl);
 
     exprt error_string =
       converter_.get_string_builder().build_string_literal(error_msg);
-    code_assignt error_msg_assign(symbol_expr(error_msg_var), error_string);
+    code_assignt error_msg_assign(build_symbol(error_msg_var), error_string);
     error_msg_assign.location() = location;
     else_block.copy_to_operands(error_msg_assign);
 
@@ -2566,7 +2648,7 @@ exprt python_dict_handler::handle_dict_pop(
     typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
     exprt exception_struct("struct", keyerror_type);
     exception_struct.copy_to_operands(
-      address_of_exprt(symbol_expr(error_msg_var)));
+      build_address_of(build_symbol(error_msg_var)));
 
     exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
     raise_keyerror.move_to_operands(exception_struct);
@@ -2584,7 +2666,7 @@ exprt python_dict_handler::handle_dict_pop(
   if_stmt.location() = location;
   converter_.add_instruction(if_stmt);
 
-  return symbol_expr(result_var);
+  return build_symbol(result_var);
 }
 
 typet python_dict_handler::get_dict_key_type_from_annotation(
@@ -2675,8 +2757,8 @@ exprt python_dict_handler::handle_dict_popitem(
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
 
-  member_exprt keys_member(dict_expr, "keys", list_type);
-  member_exprt values_member(dict_expr, "values", list_type);
+  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt values_member = dict_member(dict_expr, "values", list_type);
 
   typet tuple_type = get_popitem_tuple_type(dict_expr);
   const struct_typet &tuple_struct = to_struct_type(tuple_type);
@@ -2700,20 +2782,20 @@ exprt python_dict_handler::handle_dict_popitem(
   // Create result variable (tuple)
   symbolt &result_var = converter_.create_tmp_symbol(
     call_node, "$dict_popitem_result$", tuple_type, exprt());
-  code_declt result_decl(symbol_expr(result_var));
+  code_declt result_decl(build_symbol(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
   // Get size of the keys list
   symbolt &size_var = converter_.create_tmp_symbol(
     call_node, "$dict_popitem_size$", size_type(), exprt());
-  code_declt size_decl(symbol_expr(size_var));
+  code_declt size_decl(build_symbol(size_var));
   size_decl.location() = location;
   converter_.add_instruction(size_decl);
 
   code_function_callt size_call;
-  size_call.function() = symbol_expr(*size_func);
-  size_call.lhs() = symbol_expr(size_var);
+  size_call.function() = build_symbol(*size_func);
+  size_call.lhs() = build_symbol(size_var);
   // list_type is already a pointer (PyListObject*), pass directly
   size_call.arguments().push_back(keys_member);
   size_call.type() = size_type();
@@ -2721,7 +2803,8 @@ exprt python_dict_handler::handle_dict_popitem(
   converter_.add_instruction(size_call);
 
   // Empty dict → raise KeyError
-  exprt is_empty = equality_exprt(symbol_expr(size_var), gen_zero(size_type()));
+  exprt is_empty =
+    equality_exprt(build_symbol(size_var), gen_zero(size_type()));
 
   code_blockt empty_block;
   {
@@ -2734,20 +2817,20 @@ exprt python_dict_handler::handle_dict_popitem(
 
     symbolt &err_var = converter_.create_tmp_symbol(
       call_node, "$popitem_err$", str_type, exprt());
-    code_declt err_decl(symbol_expr(err_var));
+    code_declt err_decl(build_symbol(err_var));
     err_decl.location() = location;
     empty_block.copy_to_operands(err_decl);
 
     exprt err_str =
       converter_.get_string_builder().build_string_literal(error_msg);
-    code_assignt err_assign(symbol_expr(err_var), err_str);
+    code_assignt err_assign(build_symbol(err_var), err_str);
     err_assign.location() = location;
     empty_block.copy_to_operands(err_assign);
 
     std::string keyerror_type_str = "KeyError";
     typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
     exprt exc_struct("struct", keyerror_type);
-    exc_struct.copy_to_operands(address_of_exprt(symbol_expr(err_var)));
+    exc_struct.copy_to_operands(build_address_of(build_symbol(err_var)));
 
     exprt raise = side_effect_exprt("cpp-throw", keyerror_type);
     raise.move_to_operands(exc_struct);
@@ -2764,13 +2847,14 @@ exprt python_dict_handler::handle_dict_popitem(
     // last_idx = size - 1
     symbolt &last_idx_var = converter_.create_tmp_symbol(
       call_node, "$dict_popitem_last_idx$", size_type(), exprt());
-    code_declt last_idx_decl(symbol_expr(last_idx_var));
+    code_declt last_idx_decl(build_symbol(last_idx_var));
     last_idx_decl.location() = location;
     nonempty_block.copy_to_operands(last_idx_decl);
 
     exprt last_idx_expr("-", size_type());
-    last_idx_expr.copy_to_operands(symbol_expr(size_var), gen_one(size_type()));
-    code_assignt last_idx_assign(symbol_expr(last_idx_var), last_idx_expr);
+    last_idx_expr.copy_to_operands(
+      build_symbol(size_var), gen_one(size_type()));
+    code_assignt last_idx_assign(build_symbol(last_idx_var), last_idx_expr);
     last_idx_assign.location() = location;
     nonempty_block.copy_to_operands(last_idx_assign);
 
@@ -2779,26 +2863,27 @@ exprt python_dict_handler::handle_dict_popitem(
     // Retrieve key
     symbolt &key_obj_var = converter_.create_tmp_symbol(
       call_node, "$dict_popitem_key_obj$", obj_ptr_type, exprt());
-    code_declt key_obj_decl(symbol_expr(key_obj_var));
+    code_declt key_obj_decl(build_symbol(key_obj_var));
     key_obj_decl.location() = location;
     nonempty_block.copy_to_operands(key_obj_decl);
 
     code_function_callt key_at_call;
-    key_at_call.function() = symbol_expr(*at_func);
-    key_at_call.lhs() = symbol_expr(key_obj_var);
+    key_at_call.function() = build_symbol(*at_func);
+    key_at_call.lhs() = build_symbol(key_obj_var);
     key_at_call.arguments().push_back(keys_member);
-    key_at_call.arguments().push_back(symbol_expr(last_idx_var));
+    key_at_call.arguments().push_back(build_symbol(last_idx_var));
     key_at_call.type() = obj_ptr_type;
     key_at_call.location() = location;
     nonempty_block.copy_to_operands(key_at_call);
 
     // Assign key into tuple before removing from list
-    member_exprt key_obj_value(
-      dereference_exprt(
-        symbol_expr(key_obj_var), type_handler_.get_list_element_type()),
+    exprt key_obj_value = dict_member(
+      build_dereference(
+        build_symbol(key_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
-    member_exprt key_field(symbol_expr(result_var), "element_0", key_type);
+    exprt key_field =
+      dict_member(build_symbol(result_var), "element_0", key_type);
     code_assignt key_assign(
       key_field, retrieve_list_value(key_obj_value, key_type));
     key_assign.location() = location;
@@ -2807,26 +2892,27 @@ exprt python_dict_handler::handle_dict_popitem(
     // Retrieve value
     symbolt &val_obj_var = converter_.create_tmp_symbol(
       call_node, "$dict_popitem_val_obj$", obj_ptr_type, exprt());
-    code_declt val_obj_decl(symbol_expr(val_obj_var));
+    code_declt val_obj_decl(build_symbol(val_obj_var));
     val_obj_decl.location() = location;
     nonempty_block.copy_to_operands(val_obj_decl);
 
     code_function_callt val_at_call;
-    val_at_call.function() = symbol_expr(*at_func);
-    val_at_call.lhs() = symbol_expr(val_obj_var);
+    val_at_call.function() = build_symbol(*at_func);
+    val_at_call.lhs() = build_symbol(val_obj_var);
     val_at_call.arguments().push_back(values_member);
-    val_at_call.arguments().push_back(symbol_expr(last_idx_var));
+    val_at_call.arguments().push_back(build_symbol(last_idx_var));
     val_at_call.type() = obj_ptr_type;
     val_at_call.location() = location;
     nonempty_block.copy_to_operands(val_at_call);
 
     // Assign value into tuple before removing from list.
-    member_exprt val_obj_value(
-      dereference_exprt(
-        symbol_expr(val_obj_var), type_handler_.get_list_element_type()),
+    exprt val_obj_value = dict_member(
+      build_dereference(
+        build_symbol(val_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
-    member_exprt val_field(symbol_expr(result_var), "element_1", val_type);
+    exprt val_field =
+      dict_member(build_symbol(result_var), "element_1", val_type);
     code_assignt val_assign(
       val_field, retrieve_list_value(val_obj_value, val_type));
     val_assign.location() = location;
@@ -2834,17 +2920,17 @@ exprt python_dict_handler::handle_dict_popitem(
 
     // Now safe to remove: tuple fields are already populated.
     code_function_callt remove_key;
-    remove_key.function() = symbol_expr(*remove_func);
+    remove_key.function() = build_symbol(*remove_func);
     remove_key.arguments().push_back(keys_member);
-    remove_key.arguments().push_back(symbol_expr(last_idx_var));
+    remove_key.arguments().push_back(build_symbol(last_idx_var));
     remove_key.type() = bool_type();
     remove_key.location() = location;
     nonempty_block.copy_to_operands(remove_key);
 
     code_function_callt remove_val;
-    remove_val.function() = symbol_expr(*remove_func);
+    remove_val.function() = build_symbol(*remove_func);
     remove_val.arguments().push_back(values_member);
-    remove_val.arguments().push_back(symbol_expr(last_idx_var));
+    remove_val.arguments().push_back(build_symbol(last_idx_var));
     remove_val.type() = bool_type();
     remove_val.location() = location;
     nonempty_block.copy_to_operands(remove_val);
@@ -2857,7 +2943,7 @@ exprt python_dict_handler::handle_dict_popitem(
   if_stmt.location() = location;
   converter_.add_instruction(if_stmt);
 
-  return symbol_expr(result_var);
+  return build_symbol(result_var);
 }
 
 exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
@@ -2938,12 +3024,12 @@ exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
 
   symbolt &dict_sym =
     converter_.create_tmp_symbol(call_node, dict_name, dict_type, exprt());
-  code_declt dict_decl(symbol_expr(dict_sym));
+  code_declt dict_decl(build_symbol(dict_sym));
   dict_decl.location() = location;
   converter_.add_instruction(dict_decl);
 
-  create_dict_from_literal(synthetic_dict, symbol_expr(dict_sym));
-  return symbol_expr(dict_sym);
+  create_dict_from_literal(synthetic_dict, build_symbol(dict_sym));
+  return build_symbol(dict_sym);
 }
 
 exprt python_dict_handler::handle_dict_constructor(
@@ -3062,8 +3148,8 @@ exprt python_dict_handler::handle_dict_update(
   // Read entries from the source dict through its internal keys/values lists.
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
-  member_exprt keys_member(other_dict, "keys", list_type);
-  member_exprt values_member(other_dict, "values", list_type);
+  exprt keys_member = dict_member(other_dict, "keys", list_type);
+  exprt values_member = dict_member(other_dict, "values", list_type);
 
   // Get the helper used to determine how many entries need to be copied.
   const symbolt *size_func =
@@ -3081,13 +3167,13 @@ exprt python_dict_handler::handle_dict_update(
   // Compute the number of entries in the source dict
   symbolt &size_var = converter_.create_tmp_symbol(
     call_node, "$dict_update_size$", size_type(), exprt());
-  code_declt size_decl(symbol_expr(size_var));
+  code_declt size_decl(build_symbol(size_var));
   size_decl.location() = location;
   converter_.add_instruction(size_decl);
 
   code_function_callt size_call;
-  size_call.function() = symbol_expr(*size_func);
-  size_call.lhs() = symbol_expr(size_var);
+  size_call.function() = build_symbol(*size_func);
+  size_call.lhs() = build_symbol(size_var);
   size_call.arguments().push_back(keys_member);
   size_call.type() = size_type();
   size_call.location() = location;
@@ -3096,24 +3182,24 @@ exprt python_dict_handler::handle_dict_update(
   // Create the loop index used to walk over the source entries.
   symbolt &index_var = converter_.create_tmp_symbol(
     call_node, "$dict_update_iter$", size_type(), gen_zero(size_type()));
-  code_declt index_decl(symbol_expr(index_var));
+  code_declt index_decl(build_symbol(index_var));
   index_decl.location() = location;
   converter_.add_instruction(index_decl);
 
-  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
   index_init.location() = location;
   converter_.add_instruction(index_init);
 
   exprt loop_cond("<", bool_type());
-  loop_cond.copy_to_operands(symbol_expr(index_var), symbol_expr(size_var));
+  loop_cond.copy_to_operands(build_symbol(index_var), build_symbol(size_var));
 
   // Rebuild the current key/value pair from the source lists.
   code_blockt loop_body;
   exprt key_obj = list_handler.build_list_at_call(
-    keys_member, symbol_expr(index_var), call_node);
+    keys_member, build_symbol(index_var), call_node);
   exprt key_expr = list_handler.extract_pyobject_value(key_obj, key_type);
   exprt value_obj = list_handler.build_list_at_call(
-    values_member, symbol_expr(index_var), call_node);
+    values_member, build_symbol(index_var), call_node);
   exprt value_expr = list_handler.extract_pyobject_value(value_obj, val_type);
 
   // Reuse dict[key] = value handling for each copied entry.
@@ -3123,8 +3209,8 @@ exprt python_dict_handler::handle_dict_update(
   loop_body.copy_to_operands(pair_block);
 
   // Advance to the next source entry.
-  exprt next_index = plus_exprt(symbol_expr(index_var), gen_one(size_type()));
-  code_assignt index_update(symbol_expr(index_var), next_index);
+  exprt next_index = plus_exprt(build_symbol(index_var), gen_one(size_type()));
+  code_assignt index_update(build_symbol(index_var), next_index);
   index_update.location() = location;
   loop_body.copy_to_operands(index_update);
 
@@ -3149,10 +3235,10 @@ exprt python_dict_handler::compare(
   typet list_type = type_handler_.get_list_type();
 
   // Get keys and values from both dicts
-  member_exprt lhs_keys(lhs, "keys", list_type);
-  member_exprt lhs_values(lhs, "values", list_type);
-  member_exprt rhs_keys(rhs, "keys", list_type);
-  member_exprt rhs_values(rhs, "values", list_type);
+  exprt lhs_keys = dict_member(lhs, "keys", list_type);
+  exprt lhs_values = dict_member(lhs, "values", list_type);
+  exprt rhs_keys = dict_member(rhs, "keys", list_type);
+  exprt rhs_values = dict_member(rhs, "values", list_type);
 
   // Find __ESBMC_dict_eq function
   const symbolt *dict_eq_func =
@@ -3164,14 +3250,14 @@ exprt python_dict_handler::compare(
   // Create temp for result
   symbolt &result_var = converter_.create_tmp_symbol(
     nlohmann::json(), "$dict_eq_result$", bool_type(), exprt());
-  code_declt result_decl(symbol_expr(result_var));
+  code_declt result_decl(build_symbol(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
   // Call __ESBMC_dict_eq(lhs_keys, lhs_values, rhs_keys, rhs_values)
   code_function_callt dict_eq_call;
-  dict_eq_call.function() = symbol_expr(*dict_eq_func);
-  dict_eq_call.lhs() = symbol_expr(result_var);
+  dict_eq_call.function() = build_symbol(*dict_eq_func);
+  dict_eq_call.lhs() = build_symbol(result_var);
   dict_eq_call.arguments().push_back(lhs_keys);
   dict_eq_call.arguments().push_back(lhs_values);
   dict_eq_call.arguments().push_back(rhs_keys);
@@ -3181,7 +3267,7 @@ exprt python_dict_handler::compare(
   converter_.add_instruction(dict_eq_call);
 
   // Return result
-  exprt result = symbol_expr(result_var);
+  exprt result = build_symbol(result_var);
   result.location() = location;
 
   if (op == "NotEq")

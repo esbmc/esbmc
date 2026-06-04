@@ -1,4 +1,4 @@
 CORE
 main.c
---clz-zero-check
+
 ^VERIFICATION FAILED$
