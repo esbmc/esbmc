@@ -1,7 +1,8 @@
-# Regression for esbmc/esbmc#5102: copying a list must preserve the values of
-# nested-list elements. The per-element copy used to byte-copy the inner list
-# pointer's pointee, corrupting nested elements on concat / copy() / list() /
-# repeat / variable assignment.
+# Regression for esbmc/esbmc#5102: every list-copy-like operation must preserve
+# the values of nested-list elements. The per-element copy used to byte-copy the
+# inner list pointer's pointee, corrupting nested elements. This exercises each
+# path the fix touches: concatenation, copy()/list(), slicing, repetition, and
+# starred-unpacking assignment.
 a = nondet_int()
 __ESBMC_assume(a >= 0)
 __ESBMC_assume(a <= 9)
@@ -19,9 +20,20 @@ c2 = list(src)
 assert c1[0][0] == a
 assert c2[1][0] == 7
 
-# repeat-then-concat
-rep = [[1], [2]] + [[a]]
+# slicing
+sl = src[:]
+assert sl[0][0] == a
+assert sl[1][0] == 7
+
+# repetition: the three elements share the same inner list object
+rep = [[a]] * 3
+assert rep[0][0] == a
 assert rep[2][0] == a
+
+# starred-unpacking assignment: rest is a fresh list of the trailing elements
+first, *rest = src
+assert first[0] == a
+assert rest[0][0] == 7
 
 # variable assignment aliases the same nested elements
 alias = src

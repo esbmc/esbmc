@@ -171,19 +171,25 @@ bool __ESBMC_list_push_object(
 }
 
 // Per-element append for list copy / assignment / slice / concat that handles
-// nested lists correctly (esbmc/esbmc#5102).
+// elements stored by reference correctly (esbmc/esbmc#5102).
 //
-// A nested-list element stores the inner PyListObject* directly in `value`, so
-// the generic byte-copy (__ESBMC_copy_value copies `size` bytes of `*value`)
-// yields a bogus pointer and the copied list reads garbage. For such elements
-// — identified by o->type_id == list_type_id — we copy the PyObject record
-// verbatim, preserving the inner pointer. This matches Python's shallow-copy
-// semantics: nested lists are shared by reference.
+// An element whose payload is a pointer to a shared object must keep that
+// pointer, not have its pointee byte-copied. Two such elements exist:
+//   * nested lists — the inner PyListObject* is stored in `value`
+//     (type_id == list_type_id);
+//   * pointer-only payloads stored with size == 0 — e.g. nested dicts inserted
+//     via __ESBMC_list_push_dict_ptr (value holds the dict*), and None
+//     (value == NULL).
+// For these we copy the PyObject record verbatim, preserving the pointer. The
+// generic byte-copy would run __ESBMC_copy_value with size == 0 (alloca(0) +
+// memcpy of 0 bytes) and drop the stored pointer, so the copied list would read
+// garbage. Sharing the reference also matches Python's shallow-copy semantics:
+// nested containers are shared, not deep-copied.
 //
-// Scalar elements must NOT share their buffer: Python subscript assignment
-// (l[i] = x) writes through the element's value pointer in place, so two lists
-// sharing a scalar buffer would alias. Scalars therefore keep the independent
-// byte-copy via __ESBMC_list_push_object (pass list_type_id=0 to force it).
+// Scalar elements (size > 0) must NOT share their buffer: Python subscript
+// assignment (l[i] = x) writes through the element's value pointer in place, so
+// two lists sharing a scalar buffer would alias. Scalars therefore keep the
+// independent byte-copy via __ESBMC_list_push_object.
 bool __ESBMC_list_push_shallow(
   PyListObject *l,
   PyObject *o,
@@ -191,7 +197,7 @@ bool __ESBMC_list_push_shallow(
 {
   assert(l != NULL);
   assert(o != NULL);
-  if (list_type_id != 0 && o->type_id == list_type_id)
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
   {
     l->items[l->size] = *o;
     l->size++;
