@@ -1114,9 +1114,14 @@ std::string python_annotation<Json>::get_function_return_type(
           return elem["returns"]["id"];
         }
 
-        // Try to infer from return statements (excluding recursive calls)
+        // Try to infer from return statements (excluding recursive calls).
+        // Resolve names in func_name's own scope (see the non-recursive path
+        // below; GitHub #5104, #5105).
+        std::string saved_rec_ctx = current_func_name_context_;
+        current_func_name_context_ = func_name;
         std::string inferred =
           infer_from_return_statements(elem["body"], func_name);
+        current_func_name_context_ = saved_rec_ctx;
         if (!inferred.empty())
         {
           functions_in_analysis_.erase(func_name);
@@ -1245,9 +1250,18 @@ std::string python_annotation<Json>::get_function_return_type(
     }
 
     // Try to infer return type from actual return statements
-    // Use recursive inference to find return types in all blocks
+    // Use recursive inference to find return types in all blocks.
+    // Names in a return expression resolve in THIS function's scope, not the
+    // caller's. Switch the inference context to func_name so a local variable
+    // referenced by a return statement (e.g. `return v` where
+    // `v = nondet_float()`) is found; otherwise the type cannot be inferred
+    // and the parameter/return default to a pointer, crashing the FP backend
+    // (GitHub #5104, #5105).
+    std::string saved_return_ctx = current_func_name_context_;
+    current_func_name_context_ = func_name;
     std::string inferred_type =
       infer_from_return_statements(func_elem["body"], func_name);
+    current_func_name_context_ = saved_return_ctx;
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
@@ -1267,6 +1281,8 @@ std::string python_annotation<Json>::get_function_return_type(
     if (!return_node.empty())
     {
       std::string fallback_type;
+      std::string saved_fallback_ctx = current_func_name_context_;
+      current_func_name_context_ = func_name;
       try
       {
         infer_type(return_node, func_elem, fallback_type);
@@ -1276,6 +1292,7 @@ std::string python_annotation<Json>::get_function_return_type(
         // Return value type could not be inferred (e.g. call through a
         // function-pointer parameter); leave fallback_type empty.
       }
+      current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
       return fallback_type;
     }

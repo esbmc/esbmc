@@ -181,6 +181,16 @@ for dir in */; do
     matched_tests=$((matched_tests + 1))
   fi
 
+  # Skip tests that use ESBMC verification intrinsics. Names like __ESBMC_*,
+  # __VERIFIER_* and nondet_* are not defined in CPython, so the test raises
+  # NameError under direct execution and can only be validated via ESBMC.
+  # Detecting them by content means an intrinsic-using test no longer needs a
+  # manual ignore-list entry (e.g. github_5104, github_5105).
+  if grep -qE '__ESBMC|__VERIFIER_|nondet_' "$dir/main.py"; then
+    echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
+    continue
+  fi
+
   # Always keep legacy ignore behavior, with or without query mode.
   if echo "$dir" | grep -iq 'nondet'; then
     echo "🚫 IGNORED: $dir (contains 'nondet')"
