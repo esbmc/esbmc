@@ -8,6 +8,37 @@
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam.
+exprt build_symbol(const symbolt &sym)
+{
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+// member2t needs a struct/union/symbol source (tuple component access here is
+// always over a tuple struct). Restore the exact component type
+// (result.type() = t) so the #cpp_type attribute migrate_type drops is
+// preserved; fall back to legacy for any non-matching source.
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+  {
+    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+    result.type() = t;
+    return result;
+  }
+  return member_exprt(base, name, t);
+}
+} // namespace
 
 tuple_handler::tuple_handler(
   python_converter &converter,
@@ -75,14 +106,14 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
 
     symbolt &tmp = converter_.create_tmp_symbol(
       element, "$tuple_elem$", value_elem.type(), value_elem);
-    code_declt decl(symbol_expr(tmp));
+    code_declt decl(build_symbol(tmp));
     decl.location() = elem_loc;
     converter_.add_instruction(decl);
 
-    code_assignt assign(symbol_expr(tmp), value_elem);
+    code_assignt assign(build_symbol(tmp), value_elem);
     assign.location() = elem_loc;
     converter_.add_instruction(assign);
-    return symbol_expr(tmp);
+    return build_symbol(tmp);
   };
 
   // First pass: get all expressions to determine types
@@ -217,7 +248,7 @@ exprt tuple_handler::handle_tuple_subscript(
     struct_exprt result(new_type);
     for (size_t k : kept)
       result.copy_to_operands(
-        member_exprt(array, components[k].get_name(), components[k].type()));
+        build_member(array, components[k].get_name(), components[k].type()));
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
@@ -288,11 +319,11 @@ exprt tuple_handler::handle_tuple_subscript(
     converter_.add_instruction(bounds_assert);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
-    exprt chain = member_exprt(array, components[0].get_name(), first_type);
+    exprt chain = build_member(array, components[0].get_name(), first_type);
     for (size_t k = 1; k < n; ++k)
     {
       exprt member =
-        member_exprt(array, components[k].get_name(), components[k].type());
+        build_member(array, components[k].get_name(), components[k].type());
       exprt cond =
         binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
       if_exprt sel(cond, member, chain);
@@ -326,7 +357,7 @@ exprt tuple_handler::handle_tuple_subscript(
   std::string member_name = "element_" + integer2string(index_val);
   const struct_typet::componentt &comp = tuple_type.components()[idx];
 
-  exprt result = member_exprt(array, member_name, comp.type());
+  exprt result = build_member(array, member_name, comp.type());
 
   if (element.contains("lineno"))
   {
@@ -367,7 +398,7 @@ exprt tuple_handler::prepare_rhs_for_unpacking(
 
     symbolt *added_temp =
       converter_.symbol_table().move_symbol_to_context(temp_symbol);
-    exprt temp_var = symbol_expr(*added_temp);
+    exprt temp_var = build_symbol(*added_temp);
 
     if (rhs.is_function_call())
     {
@@ -447,11 +478,11 @@ void tuple_handler::handle_tuple_unpacking(
 
     // Create member access: temp.element_i
     std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(
-      rhs, member_name, tuple_type.components()[i].type());
+    exprt member_access =
+      build_member(rhs, member_name, tuple_type.components()[i].type());
 
     // Create assignment
-    code_assignt assign(symbol_expr(*var_symbol), member_access);
+    code_assignt assign(build_symbol(*var_symbol), member_access);
     assign.location() = converter_.get_location_from_decl(ast_node);
     target_block.copy_to_operands(assign);
   }
@@ -521,7 +552,7 @@ exprt tuple_handler::handle_tuple_membership(
   for (size_t i = 0; i < components.size(); i++)
   {
     std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(rhs, member_name, components[i].type());
+    exprt member_access = build_member(rhs, member_name, components[i].type());
 
     exprt equality = equality_exprt(lhs, member_access);
 
