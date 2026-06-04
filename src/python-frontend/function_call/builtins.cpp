@@ -22,6 +22,8 @@
 #include <util/python_types.h>
 #include <util/std_expr.h>
 #include <util/string_constant.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
 
 #include <algorithm>
 #include <cmath>
@@ -31,6 +33,105 @@
 #include <stdexcept>
 
 using namespace json_utils;
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam.
+//
+// Two migrate_type round-trip hazards are guarded: a dynamically-sized array
+// type (non-constant size) throws get_width downstream, and type attributes
+// such as #cpp_type are dropped. So the helpers fall back to the legacy node
+// for dyn-sized arrays / non-matching sources, and restore the exact result
+// type (result.type() = t) on the member/index/typecast nodes.
+bool contains_dyn_array(const typet &t)
+{
+  if (t.is_array())
+  {
+    const array_typet &at = to_array_type(t);
+    if (at.size().is_nil() || !at.size().is_constant())
+      return true;
+    return contains_dyn_array(at.subtype());
+  }
+  if (t.is_pointer())
+    return contains_dyn_array(t.subtype());
+  return false;
+}
+
+exprt build_symbol(const symbolt &sym)
+{
+  if (contains_dyn_array(sym.get_type()))
+    return symbol_expr(sym);
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
+    return typecast_exprt(from, t);
+  expr2tc from2;
+  migrate_expr(from, from2);
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  result.type() = t;
+  return result;
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  if (contains_dyn_array(obj.type()))
+    return address_of_exprt(obj);
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+
+// member2t needs a struct/union/symbol source; fall back to legacy otherwise
+// (and for dyn-array result types).
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  if (contains_dyn_array(t))
+    return member_exprt(base, name, t);
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+  {
+    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+    result.type() = t;
+    return result;
+  }
+  return member_exprt(base, name, t);
+}
+
+// index2t needs an array/vector/symbol source; fall back to legacy otherwise
+// (and for dyn-array source/result types -- string indexing relies on the
+// #cpp_type attribute that migrate_type drops, hence result.type() = t).
+exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
+{
+  if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
+    return index_exprt(arr, idx, t);
+  expr2tc arr2, idx2;
+  migrate_expr(arr, arr2);
+  migrate_expr(idx, idx2);
+  if (
+    is_array_type(arr2->type) || is_vector_type(arr2->type) ||
+    is_symbol_type(arr2->type))
+  {
+    exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
+    result.type() = t;
+    return result;
+  }
+  return index_exprt(arr, idx, t);
+}
+
+// 2-arg form: element type is the source array's subtype (matches the legacy
+// index_exprt(arr, idx) constructor).
+exprt build_index(const exprt &arr, const exprt &idx)
+{
+  return build_index(arr, idx, arr.type().subtype());
+}
+} // namespace
 
 namespace
 {
@@ -128,38 +229,38 @@ exprt function_call_expr::handle_input() const
 
   symbolt &input_sym =
     converter_.create_tmp_symbol(call_, "$input_str$", string_type, exprt());
-  code_declt decl(symbol_expr(input_sym));
+  code_declt decl(build_symbol(input_sym));
   decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(decl);
 
   exprt nondet_value("sideeffect", string_type);
   nondet_value.statement("nondet");
-  code_assignt nondet_assign(symbol_expr(input_sym), nondet_value);
+  code_assignt nondet_assign(build_symbol(input_sym), nondet_value);
   nondet_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(nondet_assign);
 
   symbolt &len_sym =
     converter_.create_tmp_symbol(call_, "$input_len$", size_type(), exprt());
-  code_declt len_decl(symbol_expr(len_sym));
+  code_declt len_decl(build_symbol(len_sym));
   len_decl.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_decl);
 
   exprt len_nondet("sideeffect", size_type());
   len_nondet.statement("nondet");
-  code_assignt len_assign(symbol_expr(len_sym), len_nondet);
+  code_assignt len_assign(build_symbol(len_sym), len_nondet);
   len_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_assign);
 
   exprt len_bound("<", bool_type());
   len_bound.copy_to_operands(
-    symbol_expr(len_sym), from_integer(max_str_length, size_type()));
+    build_symbol(len_sym), from_integer(max_str_length, size_type()));
   codet assume_len("assume");
   assume_len.copy_to_operands(len_bound);
   assume_len.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(assume_len);
 
-  index_exprt term_pos(
-    symbol_expr(input_sym), symbol_expr(len_sym), char_type());
+  exprt term_pos =
+    build_index(build_symbol(input_sym), build_symbol(len_sym), char_type());
   code_assignt term_assign(term_pos, from_integer(0, char_type()));
   term_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(term_assign);
@@ -170,7 +271,7 @@ exprt function_call_expr::handle_input() const
   converter_.input_str_to_len_sym_[input_sym.id.as_string()] =
     len_sym.id.as_string();
 
-  return symbol_expr(input_sym);
+  return build_symbol(input_sym);
 }
 
 exprt function_call_expr::build_nondet_call() const
@@ -193,7 +294,7 @@ exprt function_call_expr::build_nondet_call() const
       call_, "$nondet_str$", char_array_type, exprt());
 
     // Declare the temporary
-    code_declt decl(symbol_expr(nondet_str_symbol));
+    code_declt decl(build_symbol(nondet_str_symbol));
     decl.location() = converter_.get_location_from_decl(call_);
     converter_.add_instruction(decl);
 
@@ -201,7 +302,7 @@ exprt function_call_expr::build_nondet_call() const
     exprt nondet_value("sideeffect", char_array_type);
     nondet_value.statement("nondet");
 
-    code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+    code_assignt nondet_assign(build_symbol(nondet_str_symbol), nondet_value);
     nondet_assign.location() = converter_.get_location_from_decl(call_);
     converter_.add_instruction(nondet_assign);
 
@@ -209,15 +310,15 @@ exprt function_call_expr::build_nondet_call() const
     exprt last_index = from_integer(max_str_length - 1, size_type());
     exprt null_char = from_integer(0, char_type());
 
-    index_exprt last_elem(symbol_expr(nondet_str_symbol), last_index);
+    exprt last_elem = build_index(build_symbol(nondet_str_symbol), last_index);
     code_assignt null_assign(last_elem, null_char);
     null_assign.location() = converter_.get_location_from_decl(call_);
     converter_.add_instruction(null_assign);
 
     // Return address of first element: &arr[0] which is char*
-    index_exprt first_elem(
-      symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
-    return address_of_exprt(first_elem);
+    exprt first_elem = build_index(
+      build_symbol(nondet_str_symbol), from_integer(0, size_type()));
+    return build_address_of(first_elem);
   }
 
   if (type == "complex")
@@ -400,7 +501,7 @@ exprt function_call_expr::handle_isinstance() const
         if (!symbol)
           throw std::runtime_error(
             "Could not find symbol for type: " + type_name);
-        t = symbol_expr(*symbol);
+        t = build_symbol(*symbol);
       }
       else
         t = gen_zero(pointee_type);
@@ -411,7 +512,7 @@ exprt function_call_expr::handle_isinstance() const
       if (!symbol)
         throw std::runtime_error(
           "Could not find symbol for type: " + type_name);
-      t = symbol_expr(*symbol);
+      t = build_symbol(*symbol);
     }
     else
       t = gen_zero(expected_type);
@@ -889,7 +990,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       // then typecast to int — matching Python's round() semantics.
       exprt nearbyint_expr("nearbyint", float_type);
       nearbyint_expr.copy_to_operands(operand_expr);
-      return typecast_exprt(nearbyint_expr, int_type);
+      return build_typecast(nearbyint_expr, int_type);
     }
     catch (const std::exception &)
     {
@@ -1026,7 +1127,7 @@ exprt function_call_expr::handle_complex() const
       if (!is_python_int)
         return raise_type_error("__index__ returned non-int");
       if (index_result.type() != double_type())
-        index_result = typecast_exprt(index_result, double_type());
+        index_result = build_typecast(index_result, double_type());
       return make_complex(index_result, zero());
     }
 
@@ -1283,7 +1384,7 @@ exprt function_call_expr::handle_complex() const
 
     if (value.type() != double_type())
     {
-      value = typecast_exprt(value, double_type());
+      value = build_typecast(value, double_type());
     }
 
     return make_complex(value, zero());
@@ -1356,9 +1457,9 @@ exprt function_call_expr::handle_complex() const
   if (!real_is_complex && !imag_is_complex)
   {
     if (real_arg.type() != double_type())
-      real_arg = typecast_exprt(real_arg, double_type());
+      real_arg = build_typecast(real_arg, double_type());
     if (imag_arg.type() != double_type())
-      imag_arg = typecast_exprt(imag_arg, double_type());
+      imag_arg = build_typecast(imag_arg, double_type());
     return make_complex(real_arg, imag_arg);
   }
 
@@ -1366,10 +1467,10 @@ exprt function_call_expr::handle_complex() const
   real_arg = promote_to_complex(real_arg);
   imag_arg = promote_to_complex(imag_arg);
 
-  exprt a = member_exprt(real_arg, "real", double_type());
-  exprt b = member_exprt(real_arg, "imag", double_type());
-  exprt c = member_exprt(imag_arg, "real", double_type());
-  exprt d = member_exprt(imag_arg, "imag", double_type());
+  exprt a = build_member(real_arg, "real", double_type());
+  exprt b = build_member(real_arg, "imag", double_type());
+  exprt c = build_member(imag_arg, "real", double_type());
+  exprt d = build_member(imag_arg, "imag", double_type());
 
   exprt real_part("ieee_sub", double_type());
   real_part.copy_to_operands(a, d);
@@ -1413,13 +1514,13 @@ exprt function_call_expr::handle_min_max(
 
         // Start with first element: result = t.element_0
         exprt result =
-          member_exprt(arg, components[0].get_name(), components[0].type());
+          build_member(arg, components[0].get_name(), components[0].type());
 
         // Compare with remaining elements
         for (size_t i = 1; i < components.size(); ++i)
         {
-          member_exprt elem(
-            arg, components[i].get_name(), components[i].type());
+          exprt elem =
+            build_member(arg, components[i].get_name(), components[i].type());
 
           // Create comparison: elem < result (for min) or elem > result (for max)
           exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
@@ -1473,7 +1574,7 @@ exprt function_call_expr::handle_min_max(
   // Cast all args to the common type.
   for (auto &e : exprs)
     if (!base_type_eq(e.type(), result_type, converter_.ns))
-      e = typecast_exprt(e, result_type);
+      e = build_typecast(e, result_type);
 
   // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
   exprt result = exprs[0];
@@ -1633,7 +1734,8 @@ exprt function_call_expr::reduce_tuple_expr_truthiness(
   std::optional<exprt> result;
   for (const auto &component : components)
   {
-    member_exprt member(tuple_expr, component.get_name(), component.type());
+    exprt member =
+      build_member(tuple_expr, component.get_name(), component.type());
     exprt is_truthy = compute_element_truthiness(member);
     result = result ? combine_truthiness(std::move(*result), is_truthy, op)
                     : is_truthy;
@@ -1679,7 +1781,7 @@ exprt function_call_expr::handle_math_comb() const
   locationt location = converter_.get_location_from_decl(call_);
   code_function_callt call;
   call.location() = location;
-  call.function() = symbol_expr(*comb_func);
+  call.function() = build_symbol(*comb_func);
   call.type() = int_type();
   call.arguments().push_back(n_expr);
   call.arguments().push_back(k_expr);

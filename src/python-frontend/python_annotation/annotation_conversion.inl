@@ -2223,6 +2223,17 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         }
       }
     }
+
+    // Method call chained on another call's result, e.g.
+    // ",".join([...]).split(",") or "a-b".replace("-", ".").split("."). The
+    // inner receiver is a temporary with no symbol name and no class to
+    // resolve, so report an unknown type instead of throwing.
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"].contains("_type") &&
+      call["func"]["value"]["_type"] == "Call")
+      return "Any";
+
     throw std::runtime_error("Object \"" + obj + "\" not found.");
   }
 

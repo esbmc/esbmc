@@ -102,6 +102,39 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
   }
   return index_exprt(arr, idx, t);
 }
+
+// Expression-context call `fn(args...)` returning return_type. If the return
+// type or any argument type contains a dyn-sized array (which does not
+// round-trip), build the legacy side_effect_expr_function_callt instead.
+// Caller sets .location() on the result where it did before.
+exprt build_call_expr(
+  const symbolt &fn,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  bool dyn = contains_dyn_array(return_type);
+  for (const exprt &a : args)
+    dyn = dyn || contains_dyn_array(a.type());
+  if (dyn)
+  {
+    side_effect_expr_function_callt call;
+    call.function() = build_symbol(fn);
+    for (const exprt &a : args)
+      call.arguments().push_back(a);
+    call.type() = return_type;
+    return call;
+  }
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(side_effect_function_call2tc(
+    migrate_type(return_type), symbol_expr2tc(fn), args2));
+}
 } // namespace
 
 // Default depth for list comparison if option not set
@@ -732,12 +765,10 @@ void python_list::emit_list_copy(
   code_blockt body;
 
   // tmp_obj = list_at(src, i)
-  side_effect_expr_function_callt at_call;
-  at_call.function() = build_symbol(*at_sym);
-  at_call.arguments().push_back(as_list_ptr(src));
-  at_call.arguments().push_back(build_symbol(i_sym));
-  at_call.type() =
-    pointer_typet(converter_.get_type_handler().get_list_element_type());
+  exprt at_call = build_call_expr(
+    *at_sym,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {as_list_ptr(src), build_symbol(i_sym)});
   at_call.location() = loc;
 
   symbolt &tmp_obj = converter_.create_tmp_symbol(
@@ -750,13 +781,13 @@ void python_list::emit_list_copy(
   body.copy_to_operands(tmp_obj_decl);
 
   // list_push_object(dst_list, tmp_obj). ptr_free=0 (generic source).
-  side_effect_expr_function_callt push_call;
-  push_call.function() = build_symbol(*push_obj_sym);
-  push_call.arguments().push_back(build_symbol(dst));
-  push_call.arguments().push_back(build_symbol(tmp_obj));
-  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
-  push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
-  push_call.type() = bool_type();
+  exprt push_call = build_call_expr(
+    *push_obj_sym,
+    bool_type(),
+    {build_symbol(dst),
+     build_symbol(tmp_obj),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -952,12 +983,11 @@ exprt python_list::build_list_at_call(
   }
 
   // Use the converted expression directly in the call
-  side_effect_expr_function_callt list_at_call;
-  list_at_call.function() = build_symbol(*list_at_func_sym);
-  list_at_call.arguments().push_back(
-    list.type().is_pointer() ? list : build_address_of(list));
-  list_at_call.arguments().push_back(converted_index);
-  list_at_call.type() = obj_type;
+  exprt list_at_call = build_call_expr(
+    *list_at_func_sym,
+    obj_type,
+    {list.type().is_pointer() ? list : build_address_of(list),
+     converted_index});
   list_at_call.location() = location;
 
   return list_at_call;
@@ -1393,14 +1423,11 @@ exprt python_list::handle_range_slice(
       exprt step_expr = from_integer(step_val, signedbv_typet(64));
 
       // Call __python_str_slice(s, start, end, step) as side-effect expression
-      side_effect_expr_function_callt slice_call;
-      slice_call.function() = build_symbol(slice_func_ref);
-      slice_call.arguments().push_back(array);
-      slice_call.arguments().push_back(start_expr);
-      slice_call.arguments().push_back(end_expr);
-      slice_call.arguments().push_back(step_expr);
+      exprt slice_call = build_call_expr(
+        slice_func_ref,
+        pointer_typet(char_type()),
+        {array, start_expr, end_expr, step_expr});
       slice_call.location() = location;
-      slice_call.type() = pointer_typet(char_type());
 
       return slice_call;
     }
@@ -1621,13 +1648,10 @@ exprt python_list::handle_range_slice(
   if (!size_func)
     throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
-  side_effect_expr_function_callt size_call;
-  size_call.function() = build_symbol(*size_func);
-  if (array.type().is_pointer())
-    size_call.arguments().push_back(array);
-  else
-    size_call.arguments().push_back(build_address_of(array));
-  size_call.type() = size_type();
+  exprt size_call = build_call_expr(
+    *size_func,
+    size_type(),
+    {array.type().is_pointer() ? array : build_address_of(array)});
   size_call.location() = location;
 
   symbolt &size_sym = converter_.create_tmp_symbol(
@@ -1746,13 +1770,13 @@ exprt python_list::handle_range_slice(
   if (!push_func)
     throw std::runtime_error("Push function symbol not found");
 
-  side_effect_expr_function_callt push_call;
-  push_call.function() = build_symbol(*push_func);
-  push_call.arguments().push_back(build_symbol(sliced_list));
-  push_call.arguments().push_back(build_symbol(at_result));
-  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
-  push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
-  push_call.type() = bool_type();
+  exprt push_call = build_call_expr(
+    *push_func,
+    bool_type(),
+    {build_symbol(sliced_list),
+     build_symbol(at_result),
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -2623,13 +2647,10 @@ exprt python_list::handle_index_access(
     exprt end_expr("+", ll_type);
     end_expr.copy_to_operands(build_symbol(idx_sym), from_integer(1, ll_type));
 
-    side_effect_expr_function_callt slice_call;
-    slice_call.function() = build_symbol(get_str_slice_sym());
-    slice_call.arguments().push_back(array);
-    slice_call.arguments().push_back(build_symbol(idx_sym));
-    slice_call.arguments().push_back(end_expr);
-    slice_call.arguments().push_back(from_integer(1, ll_type));
-    slice_call.type() = gen_pointer_type(char_type());
+    exprt slice_call = build_call_expr(
+      get_str_slice_sym(),
+      gen_pointer_type(char_type()),
+      {array, build_symbol(idx_sym), end_expr, from_integer(1, ll_type)});
     slice_call.location() = loc;
     return slice_call;
   }
@@ -4098,11 +4119,8 @@ exprt python_list::build_pop_list_call(
   const typet pyobject_ptr_type =
     pointer_typet(converter_.get_type_handler().get_list_element_type());
 
-  side_effect_expr_function_callt pop_call;
-  pop_call.function() = build_symbol(*pop_func);
-  pop_call.arguments().push_back(build_symbol(list));
-  pop_call.arguments().push_back(index);
-  pop_call.type() = pyobject_ptr_type;
+  exprt pop_call =
+    build_call_expr(*pop_func, pyobject_ptr_type, {build_symbol(list), index});
   pop_call.location() = location;
 
   // Determine the element type from the list's type map
@@ -4753,13 +4771,13 @@ exprt python_list::build_count_index_list_call(
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
 
   // Args: (list, &value-or-ptr, type_id, size) — same shape as the remove call.
-  side_effect_expr_function_callt call;
-  call.function() = build_symbol(*func);
-  call.arguments().push_back(build_symbol(list));
-  call.arguments().push_back(element_arg);
-  call.arguments().push_back(build_symbol(*elem_info.elem_type_sym));
-  call.arguments().push_back(elem_info.elem_size);
-  call.type() = size_type();
+  exprt call = build_call_expr(
+    *func,
+    size_type(),
+    {build_symbol(list),
+     element_arg,
+     build_symbol(*elem_info.elem_type_sym),
+     elem_info.elem_size});
   call.location() = elem_info.location;
 
   return call;
@@ -5011,13 +5029,13 @@ void python_list::handle_list_var_unpacking(
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
     assert(push_obj_func);
 
-    side_effect_expr_function_callt push_call;
-    push_call.function() = build_symbol(*push_obj_func);
-    push_call.arguments().push_back(build_symbol(star_list));
-    push_call.arguments().push_back(build_symbol(tmp_at));
-    push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
-    push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
-    push_call.type() = bool_type();
+    exprt push_call = build_call_expr(
+      *push_obj_func,
+      bool_type(),
+      {build_symbol(star_list),
+       build_symbol(tmp_at),
+       from_integer(BigInt(0), size_type()),
+       from_integer(BigInt(0), int_type())});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));

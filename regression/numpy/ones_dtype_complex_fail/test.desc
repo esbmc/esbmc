@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: complex dtype is not supported in NumPy constructors yet$

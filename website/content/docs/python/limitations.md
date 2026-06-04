@@ -114,7 +114,7 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Higher-dimensional arrays are rejected explicitly; full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Array constructors preserve explicit `dtype` for supported literal `bool`/`int`/`float` inputs in the 1D/2D recorte; unsupported constructor dtypes and higher-dimensional arrays are rejected explicitly. Full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
 - Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
 - Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
 - The remaining type-inference-only stubs are `np.arccos`, `np.fmod`, `np.dot`, `np.matmul`, and `np.transpose`.
