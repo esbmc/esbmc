@@ -51,29 +51,59 @@ inline bool uncaught_exception() _ESBMC_NOEXCEPT
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
-// Currently installed handlers (null == library default). Header-scope, so use
-// internal linkage to avoid a multiple-definition ODR violation when <exception>
-// is included in more than one translation unit (matching <new>'s static
-// current_handler).
-static terminate_handler esbmc_cur_terminate_handler = 0;
-static unexpected_handler esbmc_cur_unexpected_handler = 0;
+void terminate() _ESBMC_NOEXCEPT; // forward decl: __gnu_cxx default uses it
 
-// Install a handler and return the previously installed one (per
-// [handler.functions]); a null result means the library default was active.
+} // namespace std
+
+// Mirror libstdc++: the installed handlers live in __gnu_cxx as plain globals
+// initialised to the library defaults, and set/get/terminate operate on them.
+// Replicating the standard structure (rather than inventing a separate handler)
+// keeps the model faithful — set_terminate/get_terminate and the unexpected
+// variants fall out directly. libstdc++ uses __atomic_{exchange,load}_n for
+// thread safety; a plain access is observationally identical here (BMC is
+// single-threaded and the lowering rejects concurrent programs).
+namespace __gnu_cxx
+{
+// Default terminate handler (models __verbose_terminate_handler): aborts.
+inline void __verbose_terminate_handler()
+{
+  __ESBMC_assert(0, "terminate called after throwing an exception");
+  while (1)
+  {
+  }
+}
+
+inline void __default_unexpected_handler()
+{
+  std::terminate();
+}
+
+static std::terminate_handler __terminate_handler = __verbose_terminate_handler;
+static std::unexpected_handler __unexpected_handler =
+  __default_unexpected_handler;
+} // namespace __gnu_cxx
+
+namespace std
+{
+
 inline terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
 {
-  terminate_handler old = esbmc_cur_terminate_handler;
-  esbmc_cur_terminate_handler = f;
+  terminate_handler old = __gnu_cxx::__terminate_handler;
+  __gnu_cxx::__terminate_handler = f;
   return old;
+}
+
+inline terminate_handler get_terminate() _ESBMC_NOEXCEPT
+{
+  return __gnu_cxx::__terminate_handler;
 }
 
 inline void terminate() _ESBMC_NOEXCEPT
 {
-  // Dispatch to the installed handler if any; it must not return (it should
-  // abort/exit/loop). Reaching past it is the default: a hard failure.
-  if (esbmc_cur_terminate_handler)
-    esbmc_cur_terminate_handler();
-  __ESBMC_assert(0, "terminate called after throwing an exception");
+  // The installed handler is never null (it defaults to the verbose handler),
+  // and must not return; if it does, abort.
+  (*__gnu_cxx::__terminate_handler)();
+  __ESBMC_assert(0, "terminate handler unexpectedly returned");
   while (1)
   {
   }
@@ -81,16 +111,20 @@ inline void terminate() _ESBMC_NOEXCEPT
 
 inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
 {
-  unexpected_handler old = esbmc_cur_unexpected_handler;
-  esbmc_cur_unexpected_handler = f;
+  unexpected_handler old = __gnu_cxx::__unexpected_handler;
+  __gnu_cxx::__unexpected_handler = f;
   return old;
+}
+
+inline unexpected_handler get_unexpected() _ESBMC_NOEXCEPT
+{
+  return __gnu_cxx::__unexpected_handler;
 }
 
 inline void unexpected()
 {
-  if (esbmc_cur_unexpected_handler)
-    esbmc_cur_unexpected_handler();
-  terminate();
+  (*__gnu_cxx::__unexpected_handler)();
+  std::terminate();
 }
 
 } // namespace std
