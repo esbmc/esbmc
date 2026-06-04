@@ -76,6 +76,11 @@ def cat(tensors: list[list[list[float]]], dim: int) -> list[list[float]]:
 
 def split(tensor: list[list[float]], sizes: list[int], dim: int) -> list[list[list[float]]]:
     # Split a 2-D tensor along columns (dim == 1) into chunks of the given widths.
+    # NOTE: torch.split now dispatches here (it is no longer shadowed by the
+    # builtin str.split handler), but the chunk width comes from a list element
+    # (sizes[si]) whose value is not a concrete loop bound, so the inner
+    # range(width) loop is unwinding-heavy. Prefer manual column indexing for
+    # now; a leaner encoding is tracked as follow-up work.
     parts = []
     start = 0
     si = 0

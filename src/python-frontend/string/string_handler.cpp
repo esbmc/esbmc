@@ -2176,6 +2176,15 @@ exprt string_handler::handle_string_attribute_call(
       ? call_json["keywords"]
       : empty_json_array;
 
+  // Calls on an imported module (e.g. torch.split, numpy.split) are not string
+  // methods even though the attribute name overlaps with one (split, count,
+  // ...). Defer to the regular dispatch so the module's operational model runs.
+  if (
+    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
+    receiver_json.contains("id") && receiver_json["id"].is_string() &&
+    converter_.is_imported_module(receiver_json["id"].get<std::string>()))
+    return nil_exprt();
+
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
