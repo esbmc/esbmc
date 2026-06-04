@@ -10,9 +10,93 @@
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/std_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
+// guards the dyn-sized-array round-trip hazard (fall back to legacy), and the
+// member/index/typecast variants restore the exact result type (#cpp_type that
+// migrate_type drops).
+bool contains_dyn_array(const typet &t)
+{
+  if (t.is_array())
+  {
+    const array_typet &at = to_array_type(t);
+    if (at.size().is_nil() || !at.size().is_constant())
+      return true;
+    return contains_dyn_array(at.subtype());
+  }
+  if (t.is_pointer())
+    return contains_dyn_array(t.subtype());
+  return false;
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  if (contains_dyn_array(obj.type()))
+    return address_of_exprt(obj);
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  if (contains_dyn_array(t))
+    return member_exprt(base, name, t);
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+  {
+    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+    result.type() = t;
+    return result;
+  }
+  return member_exprt(base, name, t);
+}
+
+// Expression-context call `callee(args...)` returning return_type, where the
+// callee is an already-built function expression (here a by-name symbol_exprt
+// carrying a code_typet). Falls back to the legacy node for a dyn-sized-array
+// return/argument type.
+exprt build_call(
+  const exprt &callee,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  bool dyn = contains_dyn_array(return_type);
+  for (const exprt &a : args)
+    dyn = dyn || contains_dyn_array(a.type());
+  if (dyn)
+  {
+    side_effect_expr_function_callt call(return_type);
+    call.function() = callee;
+    for (const exprt &a : args)
+      call.arguments().push_back(a);
+    return call;
+  }
+  expr2tc callee2;
+  migrate_expr(callee, callee2);
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(
+    side_effect_function_call2tc(migrate_type(return_type), callee2, args2));
+}
+} // namespace
 
 static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
 {
@@ -637,13 +721,11 @@ exprt function_call_builder::build() const
 
           symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-          side_effect_expr_function_callt call_expr(size_type());
-          call_expr.function() = list_size_func;
-          if (arg_expr.type().is_pointer())
-            call_expr.arguments().push_back(arg_expr);
-          else
-            call_expr.arguments().push_back(address_of_exprt(arg_expr));
-          return call_expr;
+          return build_call(
+            list_size_func,
+            size_type(),
+            {arg_expr.type().is_pointer() ? arg_expr
+                                          : build_address_of(arg_expr)});
         }
       }
     }
@@ -694,16 +776,12 @@ exprt function_call_builder::build() const
 
       symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-      side_effect_expr_function_callt call_expr(size_type());
-      call_expr.function() = list_size_func;
-      call_expr.arguments().push_back(obj_expr);
-
-      return call_expr;
+      return build_call(list_size_func, size_type(), {obj_expr});
     }
 
     // It's genuinely a dict: get the keys member
     typet keys_type = pointer_typet(struct_typet());
-    member_exprt keys_member(obj_expr, "keys", keys_type);
+    exprt keys_member = build_member(obj_expr, "keys", keys_type);
 
     // Create the list_get_size function symbol
     code_typet list_get_size_type;
@@ -716,11 +794,7 @@ exprt function_call_builder::build() const
       "c:@F@__ESBMC_list_size", list_get_size_type);
 
     // Create the function call
-    side_effect_expr_function_callt call_expr(size_type());
-    call_expr.function() = list_get_size_func;
-    call_expr.arguments().push_back(keys_member);
-
-    return call_expr;
+    return build_call(list_get_size_func, size_type(), {keys_member});
   }
 
   // Special handling for assume calls: convert to code_assume instead of function call
@@ -886,7 +960,7 @@ exprt function_call_builder::build() const
         throw std::runtime_error(func_name + " takes exactly one argument");
       exprt arg = converter_.get_expr(call_["args"][0]);
       if (arg.type().is_code())
-        arg = address_of_exprt(arg);
+        arg = build_address_of(arg);
       if (arg.type() != param_type)
         arg = typecast_exprt(arg, param_type);
 
