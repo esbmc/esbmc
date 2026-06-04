@@ -30,11 +30,12 @@ program build(std::string code)
 
 TEST_CASE("single-chain subtype closure", "[exception_typeid]")
 {
-  std::string code = "struct A { int a; };\n"
-                     "struct B : A { int b; };\n"
-                     "struct C : B { int c; };\n"
-                     "struct X { int x; };\n"
-                     "int main() { A a; B b; C c; X x; return 0; }\n";
+  std::string code =
+    "struct A { int a; };\n"
+    "struct B : A { int b; };\n"
+    "struct C : B { int c; };\n"
+    "struct X { int x; };\n"
+    "int main() { A a; B b; C c; X x; return 0; }\n";
   program P = build(code);
   exception_typeidt reg(P.ns);
 
@@ -69,9 +70,10 @@ TEST_CASE("single-chain subtype closure", "[exception_typeid]")
 
 TEST_CASE("ids are unique, stable, and non-zero", "[exception_typeid]")
 {
-  std::string code = "struct A { int a; };\n"
-                     "struct B : A { int b; };\n"
-                     "int main() { A a; B b; return 0; }\n";
+  std::string code =
+    "struct A { int a; };\n"
+    "struct B : A { int b; };\n"
+    "int main() { A a; B b; return 0; }\n";
   program P = build(code);
   exception_typeidt reg(P.ns);
 
@@ -93,7 +95,9 @@ TEST_CASE("ids are unique, stable, and non-zero", "[exception_typeid]")
   REQUIRE(reg.id_of("NotAProgramType") == iu); // stable once assigned
 }
 
-TEST_CASE("exception-state globals are created idempotently", "[exception_typeid]")
+TEST_CASE(
+  "exception-state globals are created idempotently",
+  "[exception_typeid]")
 {
   std::string code = "int main() { return 0; }\n";
   program P = build(code);
@@ -124,11 +128,12 @@ TEST_CASE("exception-state globals are created idempotently", "[exception_typeid
 TEST_CASE("multiple and diamond inheritance", "[exception_typeid]")
 {
   // D derives from A through two paths (B and C); A is a shared base.
-  std::string code = "struct A { int a; };\n"
-                     "struct B : A { int b; };\n"
-                     "struct C : A { int c; };\n"
-                     "struct D : B, C { int d; };\n"
-                     "int main() { A a; B b; C c; D d; return 0; }\n";
+  std::string code =
+    "struct A { int a; };\n"
+    "struct B : A { int b; };\n"
+    "struct C : A { int c; };\n"
+    "struct D : B, C { int d; };\n"
+    "int main() { A a; B b; C c; D d; return 0; }\n";
   program P = build(code);
   exception_typeidt reg(P.ns);
 

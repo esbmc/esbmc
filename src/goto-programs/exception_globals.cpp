@@ -32,5 +32,6 @@ void create_exception_state_symbols(contextt &context)
 {
   add_global(context, exception_globals::thrown_id, bool_typet());
   add_global(context, exception_globals::typeid_id, size_type());
-  add_global(context, exception_globals::value_id, pointer_typet(empty_typet()));
+  add_global(
+    context, exception_globals::value_id, pointer_typet(empty_typet()));
 }

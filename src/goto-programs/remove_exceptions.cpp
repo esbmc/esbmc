@@ -108,7 +108,9 @@ public:
     // initialisation, so seed them at entry; otherwise symex does not track the
     // cross-frame writes that carry an exception out of a callee.
     auto entry = goto_functions.function_map.find("__ESBMC_main");
-    if (entry != goto_functions.function_map.end() && entry->second.body_available)
+    if (
+      entry != goto_functions.function_map.end() &&
+      entry->second.body_available)
       init_globals(entry->second.body);
   }
 
@@ -379,9 +381,7 @@ private:
     // at both main's epilogue and __ESBMC_main's: the latter also catches
     // exceptions thrown during static initialisation (global constructors),
     // which run before main. The id is the mangled "c:@F@main#<params>".
-    if (
-      id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
-      fn_id == "__ESBMC_main")
+    if (id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main")
     {
       auto a = body.insert(std::next(epilogue));
       a->make_assertion(equality2tc(thrown, gen_false_expr()));
