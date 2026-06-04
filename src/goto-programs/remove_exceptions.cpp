@@ -260,9 +260,10 @@ private:
           if (ty == ellipsis_id)
             continue;
           // Reference, value and pointer (`_ptr`) catches are all bindable, as
-          // long as the catch type is a known type and the handler is the
-          // expected DECL + binding-ASSIGN pair.
-          if (!registry.is_registered(ty) || !is_code_decl2t(tgt->code))
+          // long as the handler is the expected DECL + binding-ASSIGN pair. The
+          // catch type need not be registered: an unregistered type is one no
+          // throw can match, so its guard is simply false (a dead handler).
+          if (!is_code_decl2t(tgt->code))
             return false;
           auto bind = std::next(tgt);
           if (bind == end || !is_code_assign2t(bind->code))

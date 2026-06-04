@@ -10,8 +10,7 @@ namespace
 {
 const std::string tag_prefix = "tag-";
 
-/// "tag-Foo" -> "Foo"; anything without the prefix is returned unchanged so
-/// the function is safe to apply to already-unprefixed names.
+/// "tag-Foo" -> "Foo"; anything without the prefix is returned unchanged.
 irep_idt strip_tag(const irep_idt &id)
 {
   const std::string &s = id.as_string();
@@ -23,25 +22,23 @@ irep_idt strip_tag(const irep_idt &id)
 
 exception_typeidt::exception_typeidt(const namespacet &ns)
 {
-  // First pass: collect every type symbol's unprefixed name and its direct
-  // bases. Names are gathered into a sorted set so id assignment is
-  // deterministic and independent of symbol insertion order.
+  // Seed each type symbol's direct bases from the "bases" metadata. This is
+  // needed where a THROW list is not the full ancestry — e.g. the Python
+  // frontend stops at Exception, so catch(BaseException) needs the
+  // Exception->BaseException link from the symbol table. (C++ throw lists are
+  // already fully flattened, so for them register_chain alone suffices.)
   std::set<irep_idt> names;
-
   ns.get_context().foreach_operand_in_order([&](const symbolt &s) {
     if (!s.is_type)
       return;
-
     const irep_idt name = strip_tag(s.id);
     names.insert(name);
-
     std::vector<irep_idt> bases;
     const irept &base_list = s.get_type().find("bases");
     for (const irept &base : base_list.get_sub())
       bases.push_back(strip_tag(base.id()));
     direct_bases.emplace(name, std::move(bases));
   });
-
   for (const irep_idt &name : names)
     name_to_id.emplace(name, next_id++);
   registered_count = name_to_id.size();

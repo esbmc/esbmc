@@ -1,11 +1,12 @@
 /*******************************************************************
  Module: exception_typeidt unit tests (issue #5075, phase P0)
 
- Test plan: build small C++ class hierarchies, then check that the
- closed-world type-id registry assigns stable unique ids and that its
- reflexive-transitive subtype closure matches the hierarchy — including
- transitive, multiple, and diamond inheritance, which the symbolic
- catch-match guard relies on.
+ Test plan: register exception hierarchies the way the frontends do —
+ as flattened THROW exception_list chains (front = dynamic type, rest =
+ its transitive bases) — and check that the type-id registry assigns
+ stable unique ids and that its reflexive-transitive subtype closure
+ matches the hierarchy, including the multiple-inheritance case where the
+ flattened tail must NOT be read as a linear ancestry.
 
 \*******************************************************************/
 
@@ -18,26 +19,15 @@
 #include <util/context.h>
 #include <util/symbol.h>
 
-namespace
-{
-/// Parse @p code as C++ and build the type-id registry over its symbols.
-program build(std::string code)
-{
-  return goto_factory::get_goto_functions(
-    code, goto_factory::Architecture::BIT_64, "test.cpp");
-}
-} // namespace
-
 TEST_CASE("single-chain subtype closure", "[exception_typeid]")
 {
-  std::string code =
-    "struct A { int a; };\n"
-    "struct B : A { int b; };\n"
-    "struct C : B { int c; };\n"
-    "struct X { int x; };\n"
-    "int main() { A a; B b; C c; X x; return 0; }\n";
-  program P = build(code);
-  exception_typeidt reg(P.ns);
+  // struct A; struct B : A; struct C : B; struct X; — registered as the throw
+  // lists the frontend would emit for each type.
+  exception_typeidt reg;
+  reg.register_chain({"C", "B", "A"});
+  reg.register_chain({"B", "A"});
+  reg.register_chain({"A"});
+  reg.register_chain({"X"});
 
   // Reflexive.
   REQUIRE(reg.is_subtype("A", "A"));
@@ -70,12 +60,8 @@ TEST_CASE("single-chain subtype closure", "[exception_typeid]")
 
 TEST_CASE("ids are unique, stable, and non-zero", "[exception_typeid]")
 {
-  std::string code =
-    "struct A { int a; };\n"
-    "struct B : A { int b; };\n"
-    "int main() { A a; B b; return 0; }\n";
-  program P = build(code);
-  exception_typeidt reg(P.ns);
+  exception_typeidt reg;
+  reg.register_chain({"B", "A"});
 
   unsigned ia = reg.id_of("A");
   unsigned ib = reg.id_of("B");
@@ -100,7 +86,8 @@ TEST_CASE(
   "[exception_typeid]")
 {
   std::string code = "int main() { return 0; }\n";
-  program P = build(code);
+  program P =
+    goto_factory::get_goto_functions(code, goto_factory::Architecture::BIT_64);
 
   REQUIRE(P.context.find_symbol(exception_globals::thrown_id) == nullptr);
 
@@ -127,15 +114,13 @@ TEST_CASE(
 
 TEST_CASE("multiple and diamond inheritance", "[exception_typeid]")
 {
-  // D derives from A through two paths (B and C); A is a shared base.
-  std::string code =
-    "struct A { int a; };\n"
-    "struct B : A { int b; };\n"
-    "struct C : A { int c; };\n"
-    "struct D : B, C { int d; };\n"
-    "int main() { A a; B b; C c; D d; return 0; }\n";
-  program P = build(code);
-  exception_typeidt reg(P.ns);
+  // struct A; struct B : A; struct C : A; struct D : B, C; — D's flattened
+  // throw list reaches A through both arms, and B/C are independent bases.
+  exception_typeidt reg;
+  reg.register_chain({"D", "B", "C", "A"});
+  reg.register_chain({"B", "A"});
+  reg.register_chain({"C", "A"});
+  reg.register_chain({"A"});
 
   // D is a subtype of every ancestor, reached through both diamond arms,
   // and the cycle-guarded walk terminates.
@@ -144,6 +129,11 @@ TEST_CASE("multiple and diamond inheritance", "[exception_typeid]")
   REQUIRE(reg.is_subtype("D", "A"));
   REQUIRE(reg.is_subtype("B", "A"));
   REQUIRE(reg.is_subtype("C", "A"));
+
+  // Independent bases are NOT subtypes of each other (the flattened list must
+  // not be read as a linear ancestry).
+  REQUIRE_FALSE(reg.is_subtype("B", "C"));
+  REQUIRE_FALSE(reg.is_subtype("C", "B"));
 
   // A `catch (A)` catches the whole hierarchy.
   std::set<unsigned> caught_by_A = reg.concrete_subtype_ids("A");

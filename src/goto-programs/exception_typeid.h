@@ -13,15 +13,13 @@ class namespacet;
 ///
 /// ESBMC sees the whole program, so the set of exception types and the
 /// subtype ("is-a") relation between them are fixed once the GOTO program is
-/// built. This table assigns every class type a stable integer id and records
-/// each type's direct bases from the symbol table's "bases" metadata, deriving
-/// the reflexive-transitive subtype relation on demand. Both the C++ and
-/// Python frontends record bases
-/// the same way: a "bases" sub on the struct/class type whose entries have
-/// id() == "tag-<ClassName>" (see clang_cpp_convertert::get_base_components_
-/// methods and goto_symext::is_python_exception_subtype). A single table
-/// therefore serves both frontends, giving the issue's "shared semantics"
-/// for free.
+/// built. The relation is populated from two sources: the symbol table's
+/// "bases" metadata (the namespacet constructor) and THROW `exception_list`s
+/// (register_chain). C++ throw lists carry a type's full flattened ancestry, so
+/// register_chain alone suffices for them; Python lists stop short (e.g. at
+/// Exception), so the symbol-table bases supply the rest (Exception ->
+/// BaseException). The typeid the dispatch guards compare against is always a
+/// thrown dynamic type.
 ///
 /// The match guard for `catch (C)` becomes the finite disjunction
 ///   __ESBMC_exc_typeid in concrete_subtype_ids(C)
@@ -31,18 +29,21 @@ class namespacet;
 class exception_typeidt
 {
 public:
-  /// Builds the table by enumerating every type symbol reachable through
-  /// @p ns and reading its direct bases. @p ns must outlive this object.
+  /// Empty registry (populate with register_chain).
+  exception_typeidt() = default;
+
+  /// Seed the table from every type symbol's "bases" metadata reachable
+  /// through @p ns; register_chain then adds throw-list ancestry on top.
   explicit exception_typeidt(const namespacet &ns);
 
   /// Reserved id meaning "no in-flight exception type".
   static constexpr unsigned no_type = 0;
 
   /// Ingest an exception type's ancestry from a THROW's exception_list
-  /// (front = dynamic type, rest = its bases, most-derived first). This is how
-  /// the Python frontend conveys its exception hierarchy — those types have no
-  /// `tag-` symbol, so they are unknown to the symbol-table-built table until
-  /// registered here. Idempotent; unions into any existing bases.
+  /// (front = dynamic type, rest = its flattened transitive bases). Only the
+  /// front is a subtype of the rest; the tail are independent bases, so they
+  /// are not chained (`struct D : A, B` throws as [D, A, B], NOT A <: B).
+  /// Idempotent; unions into any existing bases.
   void register_chain(const std::vector<irep_idt> &chain);
 
   /// Stable id for @p name. Names use the unprefixed convention of
@@ -51,7 +52,7 @@ public:
   /// id on first request, so opaque/library types remain dispatchable.
   unsigned id_of(const irep_idt &name);
 
-  /// True iff @p name is an actual program type recorded at construction
+  /// True iff @p name is an actual program type seen in a throw list
   /// (not a primitive `#cpp_type`, opaque, or lazily-minted name). The
   /// lowering pass only matches over registered types, so this gates whether a
   /// throw/catch can be lowered at all.
@@ -78,11 +79,12 @@ public:
   }
 
 private:
-  // Deterministic, build-stable name<->id mapping: ids are assigned in sorted
-  // name order so they do not depend on symbol insertion order.
+  // name <-> id mapping. Ids are assigned in register_chain call order, which
+  // is deterministic for a given program (throws are visited in function-map
+  // then instruction order).
   std::map<irep_idt, unsigned> name_to_id;
 
-  // Direct base names (unprefixed) per registered class, from "bases".
+  // Flattened transitive bases per registered type, from throw lists.
   std::map<irep_idt, std::vector<irep_idt>> direct_bases;
 
   std::size_t registered_count = 0;
