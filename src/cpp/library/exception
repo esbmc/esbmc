@@ -51,10 +51,13 @@ inline bool uncaught_exception() _ESBMC_NOEXCEPT
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
-// Currently installed handlers (null == library default). Plain globals — the
-// name avoids the __ESBMC_ prefix so cross-function tracking works.
-terminate_handler esbmc_cur_terminate_handler = 0;
-unexpected_handler esbmc_cur_unexpected_handler = 0;
+// Currently installed handlers (null == library default). Header-scope, so use
+// internal linkage to avoid a multiple-definition ODR violation when <exception>
+// is included in more than one translation unit (matching <new>'s static
+// current_handler). The name also avoids the __ESBMC_ prefix, which would
+// trigger intrinsic special-casing of cross-function global tracking.
+static terminate_handler esbmc_cur_terminate_handler = 0;
+static unexpected_handler esbmc_cur_unexpected_handler = 0;
 
 // Install a handler and return the previously installed one (per
 // [handler.functions]); a null result means the library default was active.
