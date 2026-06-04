@@ -95,10 +95,11 @@ ignored on all paths).
 ## Roadmap to default-on
 
 The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: primitive throws + `std` interop; pointer/`void*`
-catches; Python handler shapes; destructor unwinding; `bad_cast`; throw-spec /
-`noexcept`. Then: two green full-suite differential runs (`--lower-exceptions`
-ON vs OFF) before flipping the default and deleting `symex_catch.cpp`.
+Remaining work, roughly ordered: throw-spec / `noexcept` (a throw escaping the
+spec'd function should route to terminate rather than force fallback); the broader
+`std` exception surface; destructor unwinding; `bad_cast` from `dynamic_cast<T&>`.
+Then: two green full-suite differential runs (`--lower-exceptions` ON vs OFF)
+before flipping the default and deleting `symex_catch.cpp`.
 
 ## Testing
 
