@@ -49,18 +49,27 @@ exception_typeidt::exception_typeidt(const namespacet &ns)
 
 void exception_typeidt::register_chain(const std::vector<irep_idt> &chain)
 {
-  for (std::size_t i = 0; i < chain.size(); ++i)
-  {
-    if (name_to_id.emplace(chain[i], next_id).second)
+  if (chain.empty())
+    return;
+
+  // Give every name an id.
+  for (const irep_idt &name : chain)
+    if (name_to_id.emplace(name, next_id).second)
     {
       ++next_id;
       ++registered_count;
     }
-    std::vector<irep_idt> &bases = direct_bases[chain[i]];
-    for (std::size_t j = i + 1; j < chain.size(); ++j)
-      if (std::find(bases.begin(), bases.end(), chain[j]) == bases.end())
-        bases.push_back(chain[j]);
-  }
+
+  // Only the dynamic type (front) is a subtype of the rest. The frontend emits
+  // a *flattened* ancestry: `struct D : A, B` throws as [D, A, B], where A and
+  // B are independent bases of D — NOT A <: B. Recording the tail as a linear
+  // chain would invent false subtype relations (a later `throw A()` could then
+  // wrongly match `catch (B&)`). Each dynamic type registers its own ancestry
+  // from its own throw, so the relation stays complete without that inference.
+  std::vector<irep_idt> &bases = direct_bases[chain.front()];
+  for (std::size_t j = 1; j < chain.size(); ++j)
+    if (std::find(bases.begin(), bases.end(), chain[j]) == bases.end())
+      bases.push_back(chain[j]);
 }
 
 unsigned exception_typeidt::id_of(const irep_idt &name)

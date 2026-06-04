@@ -69,17 +69,36 @@ public:
   {
     may_throw = compute_may_throw(goto_functions);
 
-    // Teach the registry any exception hierarchy that lives only in THROW
-    // exception_lists (the Python frontend's classes have no `tag-` symbol).
+    // Single scan: teach the registry any exception hierarchy that lives only in
+    // THROW exception_lists (the Python frontend's classes have no `tag-`
+    // symbol), and detect concurrency. The exception state is one global tuple,
+    // not per-thread, so the lowered dispatch is unsound for concurrent programs
+    // (one thread could observe, catch, or clear another thread's in-flight
+    // exception). Until the state is modeled per thread, leave concurrent
+    // programs to the imperative path.
     for (const auto &fn : goto_functions.function_map)
-      if (fn.second.body_available)
-        for (const auto &ins : fn.second.body.instructions)
-          if (ins.type == THROW)
-          {
-            const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
-            if (!is_nil_expr(t.operand))
-              registry.register_chain(t.exception_list);
-          }
+    {
+      if (!fn.second.body_available)
+        continue;
+      for (const auto &ins : fn.second.body.instructions)
+      {
+        if (ins.type == THROW)
+        {
+          const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
+          if (!is_nil_expr(t.operand))
+            registry.register_chain(t.exception_list);
+        }
+        else if (ins.type == FUNCTION_CALL)
+        {
+          const code_function_call2t &c = to_code_function_call2t(ins.code);
+          if (
+            is_symbol2t(c.function) &&
+            id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
+              std::string::npos)
+            return; // concurrent program — not yet modelled
+        }
+      }
+    }
 
     // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
     // interoperate across a call, so unless every participating function is in
@@ -157,7 +176,7 @@ private:
   expr2tc make_exception_storage(const type2tc &obj_type)
   {
     const std::string id =
-      "c:@$esbmc_exc_obj$" + std::to_string(storage_counter++);
+      "c:@__ESBMC_exc_obj$" + std::to_string(storage_counter++);
     symbolt sym;
     sym.id = id;
     sym.name = id;

@@ -21,11 +21,9 @@ class contextt;
 /// value is a void* the handler static_casts to the caught type.
 namespace exception_globals
 {
-// NB: avoid the __ESBMC_ prefix — that is reserved for intrinsics and triggers
-// special symex handling that breaks ordinary cross-function global tracking.
-constexpr const char *thrown_id = "c:@$esbmc_exc_thrown";
-constexpr const char *typeid_id = "c:@$esbmc_exc_typeid";
-constexpr const char *value_id = "c:@$esbmc_exc_value";
+constexpr const char *thrown_id = "c:@__ESBMC_exc_thrown";
+constexpr const char *typeid_id = "c:@__ESBMC_exc_typeid";
+constexpr const char *value_id = "c:@__ESBMC_exc_value";
 } // namespace exception_globals
 
 /// Idempotently register the three exception-state globals in @p context,
