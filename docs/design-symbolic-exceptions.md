@@ -83,10 +83,16 @@ entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). 26 of 
 `regression/python/exception*`/`try_finally*`/`try_else*` tests lower at 0
 divergences (the rest fall back).
 
-Not yet lowered (fall back): parts of the `std` exception surface;
-`bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications with real
-types (`throw(T...)`, a C++14-only form the frontend rejects under C++17, so it
-forces fallback only under `--std c++14`).
+A failing `dynamic_cast<T&>` lowers to a call to the bodyless intrinsic
+`__ESBMC_throw_bad_cast`; the pass rewrites that call into an ordinary `THROW` of
+a synthesized `std::bad_cast` (mirroring `goto_symext::symex_throw_bad_cast`) so
+the rest of the pipeline lowers it like any other throw. If `<typeinfo>`'s
+`std::bad_cast` is not in the symbol table the call is left in place and the
+program falls back to the imperative path.
+
+Not yet lowered (fall back): parts of the `std` exception surface; dynamic
+exception specifications with real types (`throw(T...)`, a C++14-only form the
+frontend rejects under C++17, so it forces fallback only under `--std c++14`).
 
 **Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
 in the lowering pass, so it applies on **both** the imperative and lowered
@@ -103,10 +109,9 @@ ignored on all paths).
 ## Roadmap to default-on
 
 The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: the broader `std` exception surface; `bad_cast`
-from `dynamic_cast<T&>`. Then: two green full-suite differential runs
-(`--lower-exceptions` ON vs OFF) before flipping the default and deleting
-`symex_catch.cpp`.
+Remaining work, roughly ordered: the broader `std` exception surface. Then: two
+green full-suite differential runs (`--lower-exceptions` ON vs OFF) before
+flipping the default and deleting `symex_catch.cpp`.
 
 ## Testing
 
