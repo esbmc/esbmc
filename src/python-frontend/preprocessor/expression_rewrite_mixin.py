@@ -364,17 +364,48 @@ class ExpressionRewriteMixin:
         "_try_transform_list_tuple_eq",
     )
 
+    def _resolve_call_origin(self, node):
+        """Return a deepcopy of ``x``'s tracked Call origin when ``node`` is
+        the Name ``x``, else return ``node`` unchanged. Refuse the inline
+        for items-view origins on non-dict receivers — the downstream
+        cascade only rejects receivers explicitly recorded as non-dict, so
+        an unannotated user class with .items() would otherwise be rewritten
+        into a dict-membership check.
+        """
+        if isinstance(node, ast.Name):
+            origin = self._assignment_call_origins.get(node.id)
+            if origin is None:
+                return node
+            if self._is_items_view_call(origin):
+                recv = self._items_view_receiver_name(origin)
+                if recv is None or not self._is_known_dict_name(recv):
+                    return node
+            return copy.deepcopy(origin)
+        return node
+
     def _apply_assert_eq_rewrites(self, node):
         if not (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
                 and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
             return [], None
         left, right = node.test.left, node.test.comparators[0]
+        left_inlined = self._resolve_call_origin(left)
+        right_inlined = self._resolve_call_origin(right)
+        # Cross-product of raw and origin-substituted sides so transforms
+        # that match Name on one side and Call on the other still fire.
+        candidate_pairs = [(left, right)]
+        if left_inlined is not left:
+            candidate_pairs.append((left_inlined, right))
+        if right_inlined is not right:
+            candidate_pairs.append((left, right_inlined))
+        if left_inlined is not left and right_inlined is not right:
+            candidate_pairs.append((left_inlined, right_inlined))
         for name in self._SYMMETRIC_EQ_TRANSFORMS:
             fn = getattr(self, name)
-            for lhs, rhs in ((left, right), (right, left)):
-                rewritten = fn(lhs, rhs, node)
-                if rewritten is not None:
-                    return [], rewritten
+            for pair_left, pair_right in candidate_pairs:
+                for lhs, rhs in ((pair_left, pair_right), (pair_right, pair_left)):
+                    rewritten = fn(lhs, rhs, node)
+                    if rewritten is not None:
+                        return [], rewritten
         for lhs, rhs in ((left, right), (right, left)):
             prefix, rewritten = self._try_lower_expr_tuple_literal_eq(lhs, rhs, node)
             if rewritten is not None:

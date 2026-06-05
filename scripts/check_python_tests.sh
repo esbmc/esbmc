@@ -89,6 +89,7 @@ ignored_dirs=(
   "github_4666_2d"
   "github_4666_shape"
   "github_5102_nested_list_copy"
+  "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"

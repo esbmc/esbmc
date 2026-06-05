@@ -13,10 +13,32 @@
 namespace
 {
 const irep_idt ellipsis_id = "ellipsis";
+const irep_idt noexcept_id = "noexcept";
 
 bool is_pointer_catch(const irep_idt &type)
 {
   return type.as_string().find("_ptr") != std::string::npos;
+}
+
+/// A THROW_DECL marking a *no-throw* specification (`noexcept` or `throw()`):
+/// its list is empty or names only the "noexcept" marker. A list naming real
+/// types is a dynamic exception specification (throw(T...), C++14-only) which
+/// the lowering does not model.
+bool is_no_throw_decl(const expr2tc &code)
+{
+  for (const irep_idt &t : to_code_cpp_throw_decl2t(code).exception_list)
+    if (t != noexcept_id)
+      return false;
+  return true;
+}
+
+/// True iff the function body carries a no-throw specification.
+bool function_is_noexcept(const goto_programt &body)
+{
+  for (const auto &ins : body.instructions)
+    if (ins.type == THROW_DECL && is_no_throw_decl(ins.code))
+      return true;
+  return false;
 }
 
 /// One catch clause: its static type (or "ellipsis"), the instruction that
@@ -241,13 +263,14 @@ private:
   {
     const auto end = body.instructions.end();
     int depth = 0;
-    bool in_spec = false; // inside a THROW_DECL..THROW_DECL_END region
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      if (it->type == THROW_DECL)
-        in_spec = true;
-      else if (it->type == THROW_DECL_END)
-        in_spec = false;
+      // A dynamic exception specification with real types (throw(T...)) routes
+      // a non-listed throw to unexpected/terminate, which is not modelled —
+      // leave such a program to the imperative path. A no-throw spec
+      // (noexcept / throw()) is fine: it is enforced at the function epilogue.
+      if (it->type == THROW_DECL && !is_no_throw_decl(it->code))
+        return false;
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -281,18 +304,25 @@ private:
       }
       else if (it->type == THROW)
       {
-        // A throw under an active exception specification / noexcept may route
-        // to unexpected/terminate, which the lowering does not model yet —
-        // leave such a program to the imperative path. (A THROW_DECL with no
-        // throw inside, as for implicit noexcept special members, is harmless.)
-        if (in_spec)
-          return false;
         const code_cpp_throw2t &t = to_code_cpp_throw2t(it->code);
         if (is_nil_expr(t.operand))
           continue; // rethrow
         if (
           t.exception_list.empty() ||
           !registry.is_registered(t.exception_list.front()))
+          return false;
+      }
+      else if (it->type == FUNCTION_CALL)
+      {
+        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
+        // std::bad_cast throw using the imperative stack_catch — which is empty
+        // once the surrounding catch is lowered, so the throw would be reported
+        // uncaught. The lowering cannot see this hidden throw to wire it, so
+        // leave such a program (dynamic_cast<T&>) to the imperative path.
+        const code_function_call2t &c = to_code_function_call2t(it->code);
+        if (
+          is_symbol2t(c.function) &&
+          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
           return false;
       }
     }
@@ -373,6 +403,14 @@ private:
     std::vector<regiont> regions;
     std::vector<sitet> throws, calls;
     collect(body, regions, throws, calls);
+
+    // Throw-spec markers are consumed here; once the throws are lowered the
+    // imperative throw-decl machinery has nothing to act on.
+    const bool noexcept_fn = function_is_noexcept(body);
+    for (auto &ins : body.instructions)
+      if (ins.type == THROW_DECL || ins.type == THROW_DECL_END)
+        ins.make_skip();
+
     if (regions.empty() && throws.empty() && calls.empty())
       return;
 
@@ -397,16 +435,21 @@ private:
       r.pop->make_skip();
     }
 
-    // An exception escaping main() is uncaught (std::terminate). It is checked
-    // at both main's epilogue and __ESBMC_main's: the latter also catches
-    // exceptions thrown during static initialisation (global constructors),
-    // which run before main. The id is the mangled "c:@F@main#<params>".
-    if (id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main")
+    // An exception in flight at the epilogue is a hard failure in two cases:
+    //  - main / __ESBMC_main: it is uncaught (escapes the program → terminate);
+    //    __ESBMC_main also covers static-init throws from global constructors.
+    //  - a noexcept function: the exception escapes the no-throw boundary →
+    //    terminate ([except.spec]). A locally-caught throw clears `thrown`, so
+    //    this fires only on a genuine escape.
+    const bool is_entry =
+      id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
+    if (is_entry || noexcept_fn)
     {
       auto a = body.insert(std::next(epilogue));
       a->make_assertion(equality2tc(thrown, gen_false_expr()));
       a->location.property("exception");
-      a->location.comment("uncaught exception");
+      a->location.comment(
+        is_entry ? "uncaught exception" : "noexcept specification violated");
     }
 
     body.update();

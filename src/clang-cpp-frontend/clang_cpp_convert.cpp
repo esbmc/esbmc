@@ -1863,6 +1863,7 @@ bool clang_cpp_convertert::get_function_body(
     if (fpt->hasExceptionSpec())
     {
       codet decl = codet("throw_decl");
+      bool emit = true;
       if (fpt->hasDynamicExceptionSpec())
       {
         // e.g: void func() throw(int) { throw 1;}
@@ -1879,11 +1880,20 @@ bool clang_cpp_convertert::get_function_body(
       }
       else if (fpt->hasNoexceptExceptionSpec())
       {
-        codet tmp;
-        tmp.type() = typet("noexcept");
-        decl.move_to_operands(tmp);
+        // hasNoexceptExceptionSpec() is also true for noexcept(false), which
+        // permits exceptions to escape — record the no-throw marker only when
+        // the function genuinely cannot throw.
+        if (fpt->canThrow() == clang::CT_Cannot)
+        {
+          codet tmp;
+          tmp.type() = typet("noexcept");
+          decl.move_to_operands(tmp);
+        }
+        else
+          emit = false;
       }
-      body.operands().insert(body.operands().begin(), decl);
+      if (emit)
+        body.operands().insert(body.operands().begin(), decl);
     }
   }
 

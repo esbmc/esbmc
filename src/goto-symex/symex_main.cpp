@@ -424,6 +424,38 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
+    // Violation-witness: handle function_enter waypoints in the current segment.
+    // avoid, not matching: skip (persistent).
+    // avoid, matching: skip the call (pc++), segment does not advance.
+    // follow, not matching: stop (follows are ordered; cannot bypass).
+    // follow, matching: advance to next segment; fall through to the call.
+    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    {
+      const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+      const auto &loc = cur_state->source.pc->location;
+      for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
+      {
+        const waypoint &wp = seg[wp_idx];
+        if (wp.type != waypoint::function_enter)
+          continue;
+        const bool loc_matches =
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function());
+        if (loc_matches)
+        {
+          if (wp.action == waypoint::avoid)
+          {
+            cur_state->source.pc++;
+            return;
+          }
+          cur_state->advance_witness_position();
+          break;
+        }
+        if (wp.action != waypoint::avoid)
+          break;
+      }
+    }
+
     symex_function_call(deref_code);
   }
   break;
@@ -1102,24 +1134,39 @@ void goto_symext::run_intrinsic(
     if (!validate_witness)
       return;
 
-    // operands: [seg_idx_const, wp_idx_const, constraint]
-    if (func_call.operands.size() < 3)
+    // operands: [seg_idx_const, constraint]
+    if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    size_t wp_idx = to_constant_int2t(func_call.operands[1]).value.to_uint64();
-
-    if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
+    if (seg_idx != cur_state->cur_seg)
       return;
 
-    const waypoint &wp = cur_state->witness_segs[seg_idx][wp_idx];
-    expr2tc arg = func_call.operands[2];
+    // pc has already been incremented past this intrinsic call; step back one
+    // to get the location of the __ESBMC_witness_assume instruction itself.
+    const irep_idt cur_line =
+      std::prev(cur_state->source.pc)->location.get_line();
+    const waypoint *matched = nullptr;
+    for (const auto &wp : cur_state->witness_segs[seg_idx])
+    {
+      if (wp.type == waypoint::assumption && wp.line_id == cur_line)
+      {
+        matched = &wp;
+        break;
+      }
+    }
+    if (!matched)
+      return;
+
+    expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
-    if (wp.action == waypoint::avoid)
+    if (matched->action == waypoint::avoid)
       assume(not2tc(arg));
     else
       assume(arg);
-    cur_state->advance_witness_position();
+
+    if (matched->action != waypoint::avoid)
+      cur_state->advance_witness_position();
     return;
   }
 

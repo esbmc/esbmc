@@ -2029,10 +2029,24 @@ exprt python_list::handle_index_access(
       auto type_map_it = list_type_map.find(key);
       if (type_map_it != list_type_map.end())
       {
-        if (index < type_map_it->second.size())
+        if (!type_map_it->second.empty())
         {
-          const std::string &elem_id = type_map_it->second.at(index).first;
-          elem_type = type_map_it->second.at(index).second;
+          // Homogeneous lists (e.g. list comprehensions) record a single
+          // element-type entry; ESBMC models lists as homogeneous, so reuse
+          // that entry for any in-structure index.  Without this, a constant
+          // outer index >= 1 into a comprehension-built nested list skips the
+          // nested-element handling below, the inner element type (float) is
+          // lost, and the value reaches the SMT FP encoder as a non-FP sort
+          // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
+          // lists record one entry per element, so for an in-bounds index
+          // eff_index == index and behaviour is unchanged.  The runtime value
+          // is still read at pos_expr below, so only the static type is taken
+          // from the homogeneous entry.
+          const size_t eff_index = index < type_map_it->second.size()
+                                     ? index
+                                     : type_map_it->second.size() - 1;
+          const std::string &elem_id = type_map_it->second.at(eff_index).first;
+          elem_type = type_map_it->second.at(eff_index).second;
 
           if (elem_type == converter_.get_type_handler().get_list_type())
           {
@@ -3571,8 +3585,13 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt type_hash = build_symbol(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Check if item is a void pointer (from loop iteration over strings)
-  if (item_info.elem_symbol->get_type() == pointer_typet(empty_typet()))
+  // void* items (e.g. a loop variable over a string list) need the stored
+  // char-array type_id and runtime length recovered from list_type_map.
+  // The lookup is keyed by symbol name, so non-symbol receivers cannot carry
+  // void* elements; skipping them is sound.
+  if (
+    item_info.elem_symbol->get_type() == pointer_typet(empty_typet()) &&
+    list.is_symbol())
   {
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);
@@ -4771,8 +4790,15 @@ exprt python_list::build_remove_list_call(
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
 
+  // Raise ValueError from the frontend so Python try/except can catch it.
+  symbolt &remove_ret = converter_.create_tmp_symbol(
+    op, "remove_ret", bool_type(), gen_boolean(false));
+  code_declt remove_ret_decl(build_symbol(remove_ret));
+  converter_.add_instruction(remove_ret_decl);
+
   code_function_callt remove_call;
   remove_call.function() = build_symbol(*remove_func);
+  remove_call.lhs() = build_symbol(remove_ret);
   remove_call.arguments().push_back(build_symbol(list)); // list
   remove_call.arguments().push_back(element_arg);        // &value or ptr
   remove_call.arguments().push_back(
@@ -4780,8 +4806,18 @@ exprt python_list::build_remove_list_call(
   remove_call.arguments().push_back(elem_info.elem_size); // size
   remove_call.type() = bool_type();
   remove_call.location() = elem_info.location;
+  converter_.add_instruction(remove_call);
 
-  return converter_.convert_expression_to_code(remove_call);
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.remove(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = not_exprt(build_symbol(remove_ret));
+  guard.then_case() = throw_code;
+  guard.location() = elem_info.location;
+  return guard;
 }
 
 // list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a
