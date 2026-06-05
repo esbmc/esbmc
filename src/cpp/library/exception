@@ -1,11 +1,16 @@
 #ifndef ESBMC_EXCEPTION
 #define ESBMC_EXCEPTION
 
-// noexcept is C++11; use a compat macro so this header parses in C++03 mode.
+// ESBMC model for <exception>.
+//
+// Keep this header to the standard C++ surface.  Do not mirror libstdc++ or
+// libc++ private ABI details here; non-template behavior is provided by ESBMC
+// model hooks and the exception lowering machinery.
+
 #if __cplusplus >= 201103L
-#define _ESBMC_NOEXCEPT noexcept
+#  define _ESBMC_NOEXCEPT noexcept
 #else
-#define _ESBMC_NOEXCEPT
+#  define _ESBMC_NOEXCEPT throw()
 #endif
 
 namespace std
@@ -17,9 +22,20 @@ public:
   exception() _ESBMC_NOEXCEPT
   {
   }
+
+  exception(const exception &) _ESBMC_NOEXCEPT
+  {
+  }
+
+  exception &operator=(const exception &) _ESBMC_NOEXCEPT
+  {
+    return *this;
+  }
+
   virtual ~exception() _ESBMC_NOEXCEPT
   {
   }
+
   virtual const char *what() const _ESBMC_NOEXCEPT
   {
     return "std::exception";
@@ -32,100 +48,157 @@ public:
   bad_exception() _ESBMC_NOEXCEPT
   {
   }
+
+  bad_exception(const bad_exception &) _ESBMC_NOEXCEPT
+  {
+  }
+
+  bad_exception &operator=(const bad_exception &) _ESBMC_NOEXCEPT
+  {
+    return *this;
+  }
+
   virtual ~bad_exception() _ESBMC_NOEXCEPT
   {
   }
+
   virtual const char *what() const _ESBMC_NOEXCEPT
   {
     return "std::bad_exception";
   }
 };
 
-// Returns true if stack unwinding is in progress due to an uncaught exception.
-// Modelled as nondeterministic for BMC purposes.
-inline bool uncaught_exception() _ESBMC_NOEXCEPT
-{
-  return nondet_bool();
-}
-
 typedef void (*terminate_handler)();
-typedef void (*unexpected_handler)();
 
 void terminate() _ESBMC_NOEXCEPT; // forward decl: __gnu_cxx default uses it
 
 } // namespace std
 
-// Mirror libstdc++: the installed handlers live in __gnu_cxx as plain globals
-// initialised to the library defaults, and set/get/terminate operate on them.
-// Replicating the standard structure (rather than inventing a separate handler)
-// keeps the model faithful — set_terminate/get_terminate and the unexpected
-// variants fall out directly. libstdc++ uses __atomic_{exchange,load}_n for
-// thread safety; a plain access is observationally identical here (BMC is
-// single-threaded and the lowering rejects concurrent programs).
-//
-// The handler variables have external linkage (not static): like the real
-// __gnu_cxx::__terminate_handler they must be ONE program-wide object, so a
-// handler installed in one translation unit is seen by terminate() in another.
-// (A file-local `static` would give each TU its own copy.)
-namespace __gnu_cxx
-{
-// Default terminate handler (models __verbose_terminate_handler): aborts.
-inline void __verbose_terminate_handler()
-{
-  __ESBMC_assert(0, "terminate called after throwing an exception");
-  __ESBMC_assume(0); // terminate never returns
-}
-
-inline void __default_unexpected_handler()
-{
-  std::terminate();
-}
-
-std::terminate_handler __terminate_handler = __verbose_terminate_handler;
-std::unexpected_handler __unexpected_handler = __default_unexpected_handler;
-} // namespace __gnu_cxx
-
 namespace std
 {
 
-inline terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
+terminate_handler set_terminate(terminate_handler) _ESBMC_NOEXCEPT;
+terminate_handler get_terminate() _ESBMC_NOEXCEPT;
+void terminate() _ESBMC_NOEXCEPT;
+
+#if __cplusplus < 201703L
+typedef void (*unexpected_handler)();
+
+unexpected_handler set_unexpected(unexpected_handler) _ESBMC_NOEXCEPT;
+unexpected_handler get_unexpected() _ESBMC_NOEXCEPT;
+
+void unexpected();
+#endif
+
+#if __cplusplus < 202002L
+bool uncaught_exception() _ESBMC_NOEXCEPT;
+#endif
+
+#if __cplusplus >= 201703L
+int uncaught_exceptions() _ESBMC_NOEXCEPT;
+#endif
+
+#if __cplusplus >= 201103L
+
+class exception_ptr
 {
-  terminate_handler old = __gnu_cxx::__terminate_handler;
-  __gnu_cxx::__terminate_handler = f;
-  return old;
+  void *object;
+
+  friend bool
+  operator==(const exception_ptr &, const exception_ptr &) _ESBMC_NOEXCEPT;
+
+public:
+  exception_ptr() _ESBMC_NOEXCEPT : object(0)
+  {
+  }
+
+  exception_ptr(decltype(nullptr)) _ESBMC_NOEXCEPT : object(0)
+  {
+  }
+
+  explicit operator bool() const _ESBMC_NOEXCEPT
+  {
+    return object != 0;
+  }
+};
+
+inline bool
+operator==(const exception_ptr &lhs, const exception_ptr &rhs) _ESBMC_NOEXCEPT
+{
+  return lhs.object == rhs.object;
 }
 
-inline terminate_handler get_terminate() _ESBMC_NOEXCEPT
+inline bool
+operator!=(const exception_ptr &lhs, const exception_ptr &rhs) _ESBMC_NOEXCEPT
 {
-  return __gnu_cxx::__terminate_handler;
+  return !(lhs == rhs);
 }
 
-inline void terminate() _ESBMC_NOEXCEPT
+exception_ptr current_exception() _ESBMC_NOEXCEPT;
+void rethrow_exception(exception_ptr);
+
+template <class E>
+exception_ptr make_exception_ptr(E e) _ESBMC_NOEXCEPT
 {
-  // The installed handler is never null (it defaults to the verbose handler),
-  // and must not return; if it does, abort.
-  (*__gnu_cxx::__terminate_handler)();
-  __ESBMC_assert(0, "terminate handler unexpectedly returned");
-  __ESBMC_assume(0); // terminate never returns
+  try
+  {
+    throw e;
+  }
+  catch (...)
+  {
+    return current_exception();
+  }
 }
 
-inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
+class nested_exception
 {
-  unexpected_handler old = __gnu_cxx::__unexpected_handler;
-  __gnu_cxx::__unexpected_handler = f;
-  return old;
+  exception_ptr ptr;
+
+public:
+  nested_exception() _ESBMC_NOEXCEPT : ptr(current_exception())
+  {
+  }
+
+  nested_exception(const nested_exception &) _ESBMC_NOEXCEPT
+    : ptr(current_exception())
+  {
+  }
+
+  nested_exception &operator=(const nested_exception &) _ESBMC_NOEXCEPT
+  {
+    return *this;
+  }
+
+  virtual ~nested_exception() _ESBMC_NOEXCEPT
+  {
+  }
+
+  void rethrow_nested() const
+  {
+    if (ptr)
+      rethrow_exception(ptr);
+
+    terminate();
+  }
+
+  exception_ptr nested_ptr() const _ESBMC_NOEXCEPT
+  {
+    return ptr;
+  }
+};
+
+template <class T>
+void throw_with_nested(T &&t)
+{
+  throw static_cast<T &&>(t);
 }
 
-inline unexpected_handler get_unexpected() _ESBMC_NOEXCEPT
+template <class T>
+void rethrow_if_nested(const T &)
 {
-  return __gnu_cxx::__unexpected_handler;
 }
 
-inline void unexpected()
-{
-  (*__gnu_cxx::__unexpected_handler)();
-  std::terminate();
-}
+#endif // __cplusplus >= 201103L
 
 } // namespace std
 
