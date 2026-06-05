@@ -62,15 +62,18 @@ void terminate() _ESBMC_NOEXCEPT; // forward decl: __gnu_cxx default uses it
 // variants fall out directly. libstdc++ uses __atomic_{exchange,load}_n for
 // thread safety; a plain access is observationally identical here (BMC is
 // single-threaded and the lowering rejects concurrent programs).
+//
+// The handler variables have external linkage (not static): like the real
+// __gnu_cxx::__terminate_handler they must be ONE program-wide object, so a
+// handler installed in one translation unit is seen by terminate() in another.
+// (A file-local `static` would give each TU its own copy.)
 namespace __gnu_cxx
 {
 // Default terminate handler (models __verbose_terminate_handler): aborts.
 inline void __verbose_terminate_handler()
 {
   __ESBMC_assert(0, "terminate called after throwing an exception");
-  while (1)
-  {
-  }
+  __ESBMC_assume(0); // terminate never returns
 }
 
 inline void __default_unexpected_handler()
@@ -78,9 +81,8 @@ inline void __default_unexpected_handler()
   std::terminate();
 }
 
-static std::terminate_handler __terminate_handler = __verbose_terminate_handler;
-static std::unexpected_handler __unexpected_handler =
-  __default_unexpected_handler;
+std::terminate_handler __terminate_handler = __verbose_terminate_handler;
+std::unexpected_handler __unexpected_handler = __default_unexpected_handler;
 } // namespace __gnu_cxx
 
 namespace std
@@ -104,9 +106,7 @@ inline void terminate() _ESBMC_NOEXCEPT
   // and must not return; if it does, abort.
   (*__gnu_cxx::__terminate_handler)();
   __ESBMC_assert(0, "terminate handler unexpectedly returned");
-  while (1)
-  {
-  }
+  __ESBMC_assume(0); // terminate never returns
 }
 
 inline unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
