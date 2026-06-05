@@ -131,6 +131,21 @@ exception-bearing regression test it runs ESBMC with and without the flag (the
 exact command `regression/testing_tool.py` would build) and fails on any verdict
 divergence. Two green full-suite runs are required before the flip.
 
+**Verdict parity is necessary but not sufficient.** Because the pass is
+all-or-nothing, a program outside the supported subset silently *falls back* to
+the imperative path, so an ON run that fell back is identical to OFF by
+construction — 0 divergences does not establish the lowered path is
+self-sufficient. The `--check-firing` mode of the harness measures this directly
+(it counts `THROW`/`CATCH` GOTO instructions ON vs OFF; lowering that fired
+rewrites them, a fall-back leaves them unchanged). A current local survey shows
+**~57/73 C++ and ~132/158 Python** exception programs actually lower; the rest
+still depend on the imperative path. The dominant fall-back categories are
+**dynamic exception specifications** (`try-catch_decl_*`) and **`unexpected`
+handlers** (`try-catch_unexpected_*`) in C++, and a set of model-raised
+exceptions in Python. Before `symex_catch.cpp` can be deleted, these must either
+be brought into the lowered subset (so nothing falls back) or be given a defined
+behaviour once the imperative fallback is gone.
+
 ## Testing
 
 `regression/esbmc-cpp/try_catch/lower-exceptions_*` exercise the lowered path
