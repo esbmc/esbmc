@@ -71,11 +71,15 @@ single-inheritance base-by-value slicing), pointer (`catch (T*)`) and `void*`
 catches, and catch-all; nested try with inner→outer propagation; inter-procedural
 propagation through direct and indirect calls; rethrow; uncaught detection at both
 `main` and `__ESBMC_main` (the latter covers exceptions from global constructors
-during static initialisation); and `noexcept` / `throw()` enforcement (an exception
-escaping a no-throw function → terminate, asserted at its epilogue). Reaching
-outside the subset makes the whole program fall back to the imperative path. About
-**47 of 67** `regression/esbmc-cpp/try_catch` CORE tests currently lower, at 0
-differential divergences.
+during static initialisation); `noexcept` / `throw()` enforcement (an exception
+escaping a no-throw function → terminate, asserted at its epilogue); and
+**dynamic exception specifications** (`throw(T...)`): the epilogue check
+generalises the noexcept one — an exception in flight whose type is not in the
+specification's allowed set (`__ESBMC_exc_typeid ∈ { id(U) : U <: some listed T }`)
+is a specification violation. This mirrors the imperative path, which reports an
+out-of-spec escape as "not allowed by declaration" (`std::unexpected` / handler
+dispatch is modelled on neither path). Reaching outside the subset makes the whole
+program fall back to the imperative path.
 
 **Python** lowers too: try/except/raise share the same THROW/CATCH machinery, the
 registry ingests Python exception ancestry from THROW `exception_list`s, and the
@@ -102,9 +106,10 @@ model, so such programs need an `--unwind` bound; and the frontend can omit
 intermediate bases from the flattened chain, so a catch on a mid-hierarchy base
 may not match — a frontend chain-completeness matter, not a lowering one.)
 
-Not yet lowered (fall back): dynamic exception specifications with real types
-(`throw(T...)`, a C++14-only form the frontend rejects under C++17, so it forces
-fallback only under `--std c++14`).
+Not yet lowered (fall back): a residual set including `dynamic_cast<T&>`/`bad_cast`
+(see above) and `std::bad_exception` value-catches. Dynamic exception
+specifications themselves now lower (above); the `try-catch_decl_*` /
+`try-catch_unexpected_*` tests exercise them.
 
 **Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
 in the lowering pass, so it applies on **both** the imperative and lowered

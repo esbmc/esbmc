@@ -22,18 +22,6 @@ bool is_pointer_catch(const irep_idt &type)
   return type.as_string().find("_ptr") != std::string::npos;
 }
 
-/// A THROW_DECL marking a *no-throw* specification (`noexcept` or `throw()`):
-/// its list is empty or names only the "noexcept" marker. A list naming real
-/// types is a dynamic exception specification (throw(T...), C++14-only) which
-/// the lowering does not model.
-bool is_no_throw_decl(const expr2tc &code)
-{
-  for (const irep_idt &t : to_code_cpp_throw_decl2t(code).exception_list)
-    if (t != noexcept_id)
-      return false;
-  return true;
-}
-
 /// One catch clause: its static type (or "ellipsis"), the instruction that
 /// begins its handler, and — once lowered — the landing instruction the
 /// dispatch branches to (which clears the in-flight flag before the body).
@@ -106,6 +94,15 @@ public:
           const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
           if (!is_nil_expr(t.operand))
             registry.register_chain(t.exception_list);
+        }
+        else if (ins.type == THROW_DECL)
+        {
+          // A dynamic exception specification's allowed types must each have an
+          // id so the epilogue can test the in-flight exception's membership.
+          for (const irep_idt &ty :
+               to_code_cpp_throw_decl2t(ins.code).exception_list)
+            if (ty != noexcept_id)
+              registry.register_chain({ty});
         }
         else if (ins.type == FUNCTION_CALL)
         {
@@ -328,12 +325,9 @@ private:
     int depth = 0;
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      // A dynamic exception specification with real types (throw(T...)) routes
-      // a non-listed throw to unexpected/terminate, which is not modelled —
-      // leave such a program to the imperative path. A no-throw spec
-      // (noexcept / throw()) is fine: it is enforced at the function epilogue.
-      if (it->type == THROW_DECL && !is_no_throw_decl(it->code))
-        return false;
+      // Both no-throw specs (noexcept / throw()) and dynamic exception
+      // specifications (throw(T...)) are enforced at the function epilogue
+      // (see lower_ip), so a THROW_DECL never forces fallback.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -468,15 +462,21 @@ private:
     collect(body, regions, throws, calls);
 
     // Throw-spec markers are consumed here; once the throws are lowered the
-    // imperative throw-decl machinery has nothing to act on. Record whether the
-    // function is no-throw in the same pass.
-    bool noexcept_fn = false;
+    // imperative throw-decl machinery has nothing to act on. Record the
+    // function's exception specification (if any) in the same pass: `has_spec`
+    // is set by any THROW_DECL, and `spec_types` collects its allowed types
+    // (empty for a no-throw spec — noexcept / throw()).
+    bool has_spec = false;
+    std::vector<irep_idt> spec_types;
     for (auto &ins : body.instructions)
     {
       if (ins.type == THROW_DECL)
       {
-        if (is_no_throw_decl(ins.code))
-          noexcept_fn = true;
+        has_spec = true;
+        for (const irep_idt &ty :
+             to_code_cpp_throw_decl2t(ins.code).exception_list)
+          if (ty != noexcept_id)
+            spec_types.push_back(ty);
         ins.make_skip();
       }
       else if (ins.type == THROW_DECL_END)
@@ -510,20 +510,34 @@ private:
     // An exception in flight at the epilogue is a hard failure in two cases:
     //  - main / __ESBMC_main: it is uncaught (escapes the program → terminate);
     //    __ESBMC_main also covers static-init throws from global constructors.
-    //  - a noexcept function: the exception escapes the no-throw boundary →
-    //    terminate ([except.spec]). A locally-caught throw clears `thrown`, so
-    //    this fires only on a genuine escape.
+    //  - an exception specification is violated: the escaping exception's type
+    //    is not permitted by the function's `throw(...)` / noexcept declaration
+    //    ([except.spec]). A no-throw spec permits nothing, so any escape fails;
+    //    a dynamic spec permits its listed types (and their subtypes). This
+    //    mirrors the imperative path, which reports an escaping out-of-spec
+    //    throw as "not allowed by declaration" (unexpected()/handler dispatch is
+    //    not modelled on either path). A locally-caught throw clears `thrown`,
+    //    so the check fires only on a genuine escape.
     const bool is_entry =
       id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
-    if (is_entry || noexcept_fn)
+    if (is_entry || has_spec)
     {
+      // The assertion is `!thrown || in_spec`; for an uncaught (entry) or
+      // no-throw boundary `in_spec` is empty, leaving the original `!thrown`.
+      expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
+      expr2tc in_spec = is_entry ? expr2tc() : spec_guard(spec_types);
       auto a = body.insert(std::next(epilogue));
-      a->make_assertion(equality2tc(thrown, gen_false_expr()));
+      a->make_assertion(
+        is_nil_expr(in_spec) ? not_thrown : or2tc(not_thrown, in_spec));
       a->location = epilogue->location;
       a->function = epilogue->function;
       a->location.property("exception");
+      // A no-throw spec (empty allowed set) keeps the distinct "noexcept"
+      // wording; a dynamic spec reports a specification violation.
       a->location.comment(
-        is_entry ? "uncaught exception" : "noexcept specification violated");
+        is_entry             ? "uncaught exception"
+        : spec_types.empty() ? "noexcept specification violated"
+                             : "exception specification violated");
     }
 
     body.update();
@@ -630,6 +644,23 @@ private:
       disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
     }
     return is_nil_expr(disj) ? gen_false_expr() : disj;
+  }
+
+  /// `__ESBMC_exc_typeid ∈ { id(T) : T <: some allowed type }` — the in-flight
+  /// exception is permitted by a dynamic exception specification. Nil when the
+  /// specification allows nothing (a no-throw spec), so callers fall back to the
+  /// plain `!thrown` boundary check.
+  expr2tc spec_guard(const std::vector<irep_idt> &spec_types)
+  {
+    expr2tc disj;
+    for (const irep_idt &t : spec_types)
+      for (unsigned id : registry.concrete_subtype_ids(t))
+      {
+        expr2tc eq =
+          equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id)));
+        disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
+      }
+    return disj;
   }
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise
