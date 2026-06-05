@@ -144,6 +144,10 @@ locally as
 scripts/lower_exceptions_differential.py --esbmc build/src/esbmc/esbmc
 ```
 
-to diff every CORE exception-bearing C++ and Python test, or narrow with
-`--root regression/esbmc-cpp/try_catch`. CI runs the same gate via the
-`lower-exceptions-differential` workflow on a clean Linux runner.
+to diff every CORE exception-bearing C++ and Python test that asserts a
+`VERIFICATION` verdict (tests expecting a frontend/parse error or an
+unsupported-feature message are excluded — the post-GOTO lowering pass cannot
+affect them), or narrow with `--root regression/esbmc-cpp/try_catch`. CI runs
+the same gate via the `lower-exceptions-differential` workflow on a clean Linux
+runner. The first full-suite run is green: 0 divergences across the comparable
+C++ and Python exception corpus.
