@@ -2029,10 +2029,24 @@ exprt python_list::handle_index_access(
       auto type_map_it = list_type_map.find(key);
       if (type_map_it != list_type_map.end())
       {
-        if (index < type_map_it->second.size())
+        if (!type_map_it->second.empty())
         {
-          const std::string &elem_id = type_map_it->second.at(index).first;
-          elem_type = type_map_it->second.at(index).second;
+          // Homogeneous lists (e.g. list comprehensions) record a single
+          // element-type entry; ESBMC models lists as homogeneous, so reuse
+          // that entry for any in-structure index.  Without this, a constant
+          // outer index >= 1 into a comprehension-built nested list skips the
+          // nested-element handling below, the inner element type (float) is
+          // lost, and the value reaches the SMT FP encoder as a non-FP sort
+          // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
+          // lists record one entry per element, so for an in-bounds index
+          // eff_index == index and behaviour is unchanged.  The runtime value
+          // is still read at pos_expr below, so only the static type is taken
+          // from the homogeneous entry.
+          const size_t eff_index = index < type_map_it->second.size()
+                                     ? index
+                                     : type_map_it->second.size() - 1;
+          const std::string &elem_id = type_map_it->second.at(eff_index).first;
+          elem_type = type_map_it->second.at(eff_index).second;
 
           if (elem_type == converter_.get_type_handler().get_list_type())
           {
