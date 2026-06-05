@@ -323,6 +323,80 @@ static int count_name_assignments_in_node(
   return count;
 }
 
+// Returns true if `var_name` is mutated in place anywhere within `node`: an
+// in-place list method call (append/extend/insert/remove/pop/clear/sort/
+// reverse) or a subscript store (`var_name[i] = ...`). str.join uses this to
+// decide whether the static fold of a list variable's initializer is still
+// valid: once the list is mutated, the declaration initialiser no longer
+// reflects the runtime contents (e.g. `new_lst = []; new_lst.append(w)` folds
+// to "", #5163), so the join must go through the runtime model instead.
+// Conservative by design -- a false "mutated" only costs the (correct)
+// runtime dispatch, never correctness.
+static bool
+list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object() && node.contains("_type"))
+  {
+    const std::string type = node["_type"].get<std::string>();
+
+    // <var_name>.<mutator>(...): in-place list mutators
+    if (type == "Call" && node.contains("func"))
+    {
+      const auto &func = node["func"];
+      if (
+        func.contains("_type") && func["_type"] == "Attribute" &&
+        func.contains("attr") && func.contains("value") &&
+        func["value"].contains("_type") && func["value"]["_type"] == "Name" &&
+        func["value"].contains("id") && func["value"]["id"] == var_name)
+      {
+        static const std::array<const char *, 8> mutators = {
+          {"append",
+           "extend",
+           "insert",
+           "remove",
+           "pop",
+           "clear",
+           "sort",
+           "reverse"}};
+        const std::string attr = func["attr"].get<std::string>();
+        for (const char *m : mutators)
+          if (attr == m)
+            return true;
+      }
+    }
+
+    // <var_name>[i] = ...: subscript store
+    if (type == "Assign" && node.contains("targets"))
+    {
+      for (const auto &tgt : node["targets"])
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+          tgt["value"]["id"] == var_name)
+          return true;
+    }
+  }
+
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (list_var_is_mutated(elem, var_name))
+        return true;
+  }
+  else if (node.is_object())
+  {
+    for (const auto &item : node.items())
+      if (list_var_is_mutated(item.value(), var_name))
+        return true;
+  }
+
+  return false;
+}
+
 } // namespace
 
 // Narrow AST-level constant propagation for a Name receiver:
@@ -2465,6 +2539,29 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
         var_name);
       exprt list_expr = converter_.get_expr(list_arg);
       return string_builder_->build_runtime_str_join_call(separator, list_expr);
+    }
+
+    // If the list is mutated in place after initialisation (e.g.
+    // new_lst = []; new_lst.append(w)), its declaration initialiser no longer
+    // reflects the runtime contents, so the static fold below would join the
+    // stale value -- an appended-to empty list folds to "" (#5163). Dispatch
+    // to the runtime model, which reads the actual list object. Scope the scan
+    // to the variable's own function (module body when at top level), matching
+    // how find_var_decl resolved it above.
+    {
+      const std::string &scope_func = converter_.get_current_func_name();
+      const nlohmann::json &ast = converter_.get_ast_json();
+      const nlohmann::json func_node =
+        scope_func.empty() ? nlohmann::json()
+                           : json_utils::find_function(ast["body"], scope_func);
+      const nlohmann::json &scan_body =
+        func_node.contains("body") ? func_node["body"] : ast["body"];
+      if (list_var_is_mutated(scan_body, var_name))
+      {
+        exprt list_expr = converter_.get_expr(list_arg);
+        return string_builder_->build_runtime_str_join_call(
+          separator, list_expr);
+      }
     }
 
     list_node = &var_decl["value"];
