@@ -261,7 +261,8 @@ static std::string extract_lhs(const std::string &line)
   return {};
 }
 
-static void replace_all(std::string &s, const std::string &from, const std::string &to)
+static void
+replace_all(std::string &s, const std::string &from, const std::string &to)
 {
   std::string::size_type pos = 0;
   while ((pos = s.find(from, pos)) != std::string::npos)
@@ -282,7 +283,8 @@ std::string yaml_parser::build_violation_witness_source(
   for (const auto &wp : waypoints)
   {
     if (
-      (wp.type != waypoint::assumption && wp.type != waypoint::function_return) ||
+      (wp.type != waypoint::assumption &&
+       wp.type != waypoint::function_return) ||
       wp.line == c_nonset)
       continue;
     by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
