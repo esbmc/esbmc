@@ -14,7 +14,7 @@ target_include_directories(c2goto
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
     )
 target_link_libraries(c2goto
-  clangcfrontend clangcppfrontend langapi c2gotoheaders
+  clangcfrontend langapi c2gotoheaders
   filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
@@ -126,8 +126,6 @@ function(mangle_clib output)
   # Extract a list of C's operational models
   file(GLOB c2goto_library_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/*.c")
-  file(GLOB c2goto_cpp_library_files CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/library/*.cpp")
   # Extract a list of C's math operational models
   file(GLOB c2goto_libm_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/library/libm/*.c"
@@ -162,7 +160,7 @@ function(mangle_clib output)
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
-    set(inputs_c ${c2goto_library_files} ${c2goto_cpp_library_files})
+    set(inputs_c ${c2goto_library_files})
 
     if(ENABLE_LIBM)
       list(APPEND inputs_c ${c2goto_libm_files})
@@ -185,8 +183,8 @@ function(mangle_clib output)
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${run_c2goto}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_cpp_library_files}
-              ${c2goto_libm_files} ${c2goto_header_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files}
+              ${c2goto_header_files}
               ${c2goto_python_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
@@ -348,4 +346,3 @@ if(ENABLE_SOLIDITY_FRONTEND)
 endif()
 
 set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${private_headers}")
-
