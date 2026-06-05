@@ -90,9 +90,21 @@ the rest of the pipeline lowers it like any other throw. If `<typeinfo>`'s
 `std::bad_cast` is not in the symbol table the call is left in place and the
 program falls back to the imperative path.
 
-Not yet lowered (fall back): parts of the `std` exception surface; dynamic
-exception specifications with real types (`throw(T...)`, a C++14-only form the
-frontend rejects under C++17, so it forces fallback only under `--std c++14`).
+The **`std` exception hierarchy** lowers through the same machinery, with no
+std-specific handling: the frontend flattens a thrown std type's base chain into
+the `THROW` `exception_list` (e.g. `THROW std::runtime_error, std::exception`),
+which `register_chain` ingests, so a `catch (std::exception&)` base handler's
+guard matches. Throwing `std::bad_alloc` from `new`, calling `what()` in a
+handler, and user types deriving from `std::exception` all lower at 0
+differential divergences. (Two orthogonal caveats, both affecting the imperative
+path equally: a `std::string` exception message drives the unbounded `strlen`
+model, so such programs need an `--unwind` bound; and the frontend can omit
+intermediate bases from the flattened chain, so a catch on a mid-hierarchy base
+may not match — a frontend chain-completeness matter, not a lowering one.)
+
+Not yet lowered (fall back): dynamic exception specifications with real types
+(`throw(T...)`, a C++14-only form the frontend rejects under C++17, so it forces
+fallback only under `--std c++14`).
 
 **Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
 in the lowering pass, so it applies on **both** the imperative and lowered
@@ -108,16 +120,16 @@ ignored on all paths).
 
 ## Roadmap to default-on
 
-The imperative path can only be removed once the lowered path reaches parity.
-The remaining gate is two green full-suite differential runs
-(`--lower-exceptions` ON vs OFF) before flipping the default and deleting
-`symex_catch.cpp`. That gate is automated by
-`scripts/lower_exceptions_differential.py` and the
+The main exception constructs now lower (class/primitive/std throws, the catch
+forms, propagation, rethrow, noexcept, bad_cast); the remaining gate is an
+exhaustive full-suite `--lower-exceptions` ON-vs-OFF differential (across all C++
+and Python suites, not just `try_catch`) to surface any residual divergence,
+after which the default can be flipped and `symex_catch.cpp` deleted. That gate
+is automated by `scripts/lower_exceptions_differential.py` and the
 `lower-exceptions-differential` GitHub Actions workflow: for every
 exception-bearing regression test it runs ESBMC with and without the flag (the
 exact command `regression/testing_tool.py` would build) and fails on any verdict
-divergence. The std exception surface (`std::exception` hierarchy, `bad_alloc`,
-`what()`) was confirmed to already lower at 0 divergences (PR #5170).
+divergence. Two green full-suite runs are required before the flip.
 
 ## Testing
 
