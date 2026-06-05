@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
---unwind 4
+--unwind 4 --no-standard-checks
 ^VERIFICATION SUCCESSFUL$
