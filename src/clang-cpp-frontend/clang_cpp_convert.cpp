@@ -1241,7 +1241,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*init_stmt, init))
         return true;
 
-      decls.move_to_operands(init.op0());
+      exprt init_decl;
+      init_decl.swap(init.op0());
+      decls.move_to_operands(init_decl);
     }
 
     exprt cond;
@@ -1269,7 +1271,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // The corresponding decls are taken from
     // decl-blocks and integrated in the one decl-block
-    decls.move_to_operands(range.op0(), begin.op0(), end.op0());
+    exprt range_decl, begin_decl, end_decl;
+    range_decl.swap(range.op0());
+    begin_decl.swap(begin.op0());
+    end_decl.swap(end.op0());
+    decls.move_to_operands(range_decl, begin_decl, end_decl);
     convert_expression_to_code(decls);
 
     codet body = code_skipt();
