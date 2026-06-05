@@ -312,6 +312,19 @@ private:
           !registry.is_registered(t.exception_list.front()))
           return false;
       }
+      else if (it->type == FUNCTION_CALL)
+      {
+        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
+        // std::bad_cast throw using the imperative stack_catch — which is empty
+        // once the surrounding catch is lowered, so the throw would be reported
+        // uncaught. The lowering cannot see this hidden throw to wire it, so
+        // leave such a program (dynamic_cast<T&>) to the imperative path.
+        const code_function_call2t &c = to_code_function_call2t(it->code);
+        if (
+          is_symbol2t(c.function) &&
+          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+          return false;
+      }
     }
     return depth == 0;
   }
