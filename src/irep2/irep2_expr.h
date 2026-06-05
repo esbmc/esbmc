@@ -207,8 +207,6 @@ irep_typedefs(code_cpp_del_array);
 irep_typedefs(code_cpp_delete);
 irep_typedefs(code_cpp_catch);
 irep_typedefs(code_cpp_throw);
-irep_typedefs(code_cpp_throw_decl);
-irep_typedefs(code_cpp_throw_decl_end);
 irep_typedefs(isinf);
 irep_typedefs(isnormal);
 irep_typedefs(isfinite);
@@ -1102,29 +1100,6 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 ESBMC_DEFINE_CODE_DECL(code_decl);
 ESBMC_DEFINE_CODE_DECL(code_dead);
 #undef ESBMC_DEFINE_CODE_DECL
-
-/** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
- *  of exception names. Used for `code_cpp_throw_decl`/
- *  `code_cpp_throw_decl_end`. */
-#define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
-  class name##2t : public expr2t                                               \
-  {                                                                            \
-  public:                                                                      \
-    std::vector<irep_idt> exception_list;                                      \
-    name##2t(const std::vector<irep_idt> &names)                               \
-      : expr2t(get_empty_type(), name##_id), exception_list(names)             \
-    {                                                                          \
-    }                                                                          \
-    name##2t(const name##2t & ref) = default;                                  \
-    expr2tc do_simplify() const override;                                      \
-    static constexpr auto fields =                                             \
-      std::make_tuple(&expr2t::type, &name##2t ::exception_list);              \
-    static std::string field_names[esbmct::num_type_fields];                   \
-  }
-
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl);
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
-#undef ESBMC_DEFINE_CODE_CPP_THROW_DECL
 
 /** C++20 three-way comparison `a <=> b`. Result type is the
  * comparison-category struct (`std::strong_ordering` /

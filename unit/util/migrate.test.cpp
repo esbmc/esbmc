@@ -184,24 +184,6 @@ TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
 }
 
 TEST_CASE(
-  "migrate expr round-trips for code_cpp_throw_decl",
-  "[migrate][b2-vtrack]")
-{
-  // Forward direction already existed pre-V1; V1 added the back-arm so this
-  // round-trips here without the legacy form being constructed by hand.
-  std::vector<irep_idt> exceptions{"std::bad_alloc"};
-  require_expr_roundtrip(code_cpp_throw_decl2tc(exceptions));
-}
-
-TEST_CASE(
-  "migrate expr round-trips for code_cpp_throw_decl_end",
-  "[migrate][b2-vtrack]")
-{
-  std::vector<irep_idt> exceptions{"std::bad_alloc"};
-  require_expr_roundtrip(code_cpp_throw_decl_end2tc(exceptions));
-}
-
-TEST_CASE(
   "migrate expr round-trips for pointer_capability",
   "[migrate][b2-vtrack]")
 {

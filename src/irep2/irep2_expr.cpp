@@ -461,7 +461,7 @@ namespace
 // starts with `&expr2t::type` for cmp/crc/hash purposes but whose
 // constructor synthesises the type from operands and rejects a leading
 // `type2tc` (e.g. and/or/xor/implies/isinstance/hasattr/isnone,
-// signbit/popcount, code_cpp_throw_decl[_end]). Treating those as
+// signbit/popcount). Treating those as
 // supported would silently fail to instantiate at the make_irep call
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
@@ -865,10 +865,6 @@ std::string code_cpp_catch2t::field_names[esbmct::num_type_fields] =
   {"exception_list", "", "", "", ""};
 std::string code_cpp_throw2t::field_names[esbmct::num_type_fields] =
   {"operand", "exception_list", "", "", ""};
-std::string code_cpp_throw_decl2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
-std::string code_cpp_throw_decl_end2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
 std::string isinf2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string isnormal2t::field_names[esbmct::num_type_fields] =
