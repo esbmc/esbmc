@@ -217,6 +217,7 @@ class LoopMixin:
         their `while ... orelse=[]` shape uniformly without each having to
         remember to preserve the original `orelse`.
         """
+        self._update_assignment_call_origins([node.target], None)
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):

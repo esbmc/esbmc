@@ -51,6 +51,144 @@ class CoreVisitorsMixin:
         "zip",
     }
 
+    def _update_assignment_call_origins(self, targets, value):
+        # Track `x = Call(...)` so eq-shape rewrites can recover the inline
+        # form on `x == ...`; all other target shapes invalidate.
+
+        rebound = set()
+
+        def invalidate(target):
+            if isinstance(target, ast.Name):
+                rebound.add(target.id)
+                self._assignment_call_origins.pop(target.id, None)
+            elif isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif isinstance(target, ast.Subscript) and isinstance(
+                    target.value, ast.Name):
+                rebound.add(target.value.id)
+                self._assignment_call_origins.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
+
+        # Drop tracked origins that reference a rebound free variable —
+        # otherwise the cascade rewrites against the new binding.
+        if rebound:
+            for tracked, origin in list(self._assignment_call_origins.items()):
+                for n in ast.walk(origin):
+                    if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                            and n.id in rebound):
+                        self._assignment_call_origins.pop(tracked, None)
+                        break
+
+        if (len(targets) == 1 and isinstance(targets[0], ast.Name)
+                and isinstance(value, ast.Call)):
+            self._assignment_call_origins[targets[0].id] = value
+
+    def _scan_eq_only_items_view_targets(self, body):
+        """Return target names safe to neutralise: exactly one Store and
+        every Load on one side of an equality compare. Any other use
+        (iteration, len, subscript, rebinding) would observe the placeholder
+        instead of the cascade-rewritten value.
+        """
+        candidates = {}  # target name -> receiver name
+        synthetic = ast.Module(body=list(body), type_ignores=[])
+        for stmt in ast.walk(synthetic):
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and self._is_items_view_call(stmt.value)):
+                recv = self._items_view_receiver_name(stmt.value)
+                if recv is not None:
+                    candidates[stmt.targets[0].id] = recv
+        if not candidates:
+            return set()
+
+        # Names inside a comprehension/generator are scope-local in Python 3
+        # except the outermost iter of the first generator.
+        comp_local_ids = set()
+
+        def _add_names(sub_tree):
+            for n in ast.walk(sub_tree):
+                if isinstance(n, ast.Name):
+                    comp_local_ids.add(id(n))
+
+        for node in ast.walk(synthetic):
+            if not isinstance(node, (ast.ListComp, ast.SetComp,
+                                     ast.DictComp, ast.GeneratorExp)):
+                continue
+            if isinstance(node, ast.DictComp):
+                _add_names(node.key)
+                _add_names(node.value)
+            else:
+                _add_names(node.elt)
+            for i, gen in enumerate(node.generators):
+                _add_names(gen.target)
+                for if_node in gen.ifs:
+                    _add_names(if_node)
+                if i > 0:
+                    _add_names(gen.iter)
+
+        # Watch receivers too: a rebound dict would let the cascade rewrite
+        # against a different value than the captured origin.
+        watched = set(candidates) | set(candidates.values())
+        store_count = {n: 0 for n in watched}
+        disqualified = set()
+        for parent in ast.walk(synthetic):
+            for child in ast.iter_child_nodes(parent):
+                if not isinstance(child, ast.Name) or child.id not in watched:
+                    continue
+                if id(child) in comp_local_ids:
+                    continue
+                if isinstance(child.ctx, ast.Store):
+                    store_count[child.id] += 1
+                    continue
+                if child.id not in candidates:
+                    continue
+                # Load is safe only on one side of an Eq compare.
+                if (isinstance(parent, ast.Compare) and len(parent.ops) == 1
+                        and isinstance(parent.ops[0], ast.Eq)
+                        and (parent.left is child
+                             or (len(parent.comparators) == 1
+                                 and parent.comparators[0] is child))):
+                    continue
+                disqualified.add(child.id)
+        return {n for n, recv in candidates.items()
+                if store_count[n] == 1
+                and store_count.get(recv, 0) <= 1
+                and n not in disqualified}
+
+    def _is_items_view_call(self, node):
+        """True if node is W(d.<attr>()) or sorted(list(d.<attr>())) with
+        W in (list, sorted) and attr in (items, keys, values)."""
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
+            return False
+        arg = node.args[0]
+        if node.func.id == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
+        return (isinstance(arg, ast.Call)
+                and isinstance(arg.func, ast.Attribute)
+                and arg.func.attr in ("items", "keys", "values")
+                and not arg.args and not getattr(arg, "keywords", []))
+
+    def _items_view_receiver_name(self, node):
+        """Return the receiver Name id of an items-view-call, else None."""
+        if not self._is_items_view_call(node):
+            return None
+        arg = node.args[0]
+        if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                and arg.func.id == "list"):
+            arg = arg.args[0]
+        receiver = arg.func.value
+        return receiver.id if isinstance(receiver, ast.Name) else None
+
     def _invalidate_list_literals_for_assign_targets(self, targets):
 
         def invalidate(target):
@@ -646,12 +784,35 @@ class CoreVisitorsMixin:
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
         self._invalidate_list_literals_for_assign_targets(node.targets)
+        self._update_assignment_call_origins(node.targets, node.value)
+        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
+        # certified x as eq-only with a known dict receiver; the cascade
+        # then recovers the assert against the tracked Call origin.
+        # Only sorted() is neutralised: plain `list(d.items())` still has a
+        # materialised list path elsewhere that other rewrites depend on.
+        neutralized_target = None
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value)
+                and node.value.func.id == "sorted"):
+            recv = self._items_view_receiver_name(node.value)
+            if recv is not None and self._is_known_dict_name(recv):
+                placeholder = ast.List(elts=[], ctx=ast.Load())
+                ast.copy_location(placeholder, node.value)
+                ast.fix_missing_locations(placeholder)
+                node.value = placeholder
+                neutralized_target = node.targets[0].id
 
         if self._maybe_record_type_alias_assign(node):
             return None
 
         node = self.generic_visit(node)
         self._update_known_literal_for_simple_assign(node)
+        # Drop any literal recorded by _update_known_literal_for_simple_assign
+        # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
+        # the cascade transforms decline) cannot constant-fold `x` to `[]`.
+        if neutralized_target is not None:
+            self._known_literal_values.pop(neutralized_target, None)
 
         expanded = self._maybe_expand_nondet_assign(node)
         if expanded is not None:
@@ -758,6 +919,12 @@ class CoreVisitorsMixin:
         # restore on exit so a dict named `d` in one function does not make a
         # same-named plain parameter in another function look like a dict.
         saved_dict_vars = set(self.dict_literal_vars)
+        # Per-function scope for call-origin tracking and the eq-only set.
+        saved_call_origins = dict(self._assignment_call_origins)
+        self._assignment_call_origins.clear()
+        saved_eq_only = set(self._eq_only_items_view_targets)
+        self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(
+            node.body)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -789,3 +956,5 @@ class CoreVisitorsMixin:
             return return_nodes
         finally:
             self.dict_literal_vars = saved_dict_vars
+            self._assignment_call_origins = saved_call_origins
+            self._eq_only_items_view_targets = saved_eq_only

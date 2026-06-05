@@ -47,6 +47,12 @@ class PreprocessorStateMixin:
         self.bound_method_vars = {}
         self.called_names = set()
         self.list_literal_values = {}
+        # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
+        # substitute the Name back to its defining call.
+        self._assignment_call_origins = {}
+        # Items-view target names safe to neutralise to `[]` at Assign time.
+        # Populated by _scan_eq_only_items_view_targets per scope.
+        self._eq_only_items_view_targets = set()
         self.newtype_vars = set()
         self.newtype_names = {"NewType"}
         self.typing_module_names = set()

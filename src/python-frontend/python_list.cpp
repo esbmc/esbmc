@@ -3571,8 +3571,13 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt type_hash = build_symbol(*item_info.elem_type_sym);
   exprt elem_size = item_info.elem_size;
 
-  // Check if item is a void pointer (from loop iteration over strings)
-  if (item_info.elem_symbol->get_type() == pointer_typet(empty_typet()))
+  // void* items (e.g. a loop variable over a string list) need the stored
+  // char-array type_id and runtime length recovered from list_type_map.
+  // The lookup is keyed by symbol name, so non-symbol receivers cannot carry
+  // void* elements; skipping them is sound.
+  if (
+    item_info.elem_symbol->get_type() == pointer_typet(empty_typet()) &&
+    list.is_symbol())
   {
     const std::string &list_name = list.identifier().as_string();
     auto type_map_it = list_type_map.find(list_name);
@@ -4771,8 +4776,15 @@ exprt python_list::build_remove_list_call(
   else
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
 
+  // Raise ValueError from the frontend so Python try/except can catch it.
+  symbolt &remove_ret = converter_.create_tmp_symbol(
+    op, "remove_ret", bool_type(), gen_boolean(false));
+  code_declt remove_ret_decl(build_symbol(remove_ret));
+  converter_.add_instruction(remove_ret_decl);
+
   code_function_callt remove_call;
   remove_call.function() = build_symbol(*remove_func);
+  remove_call.lhs() = build_symbol(remove_ret);
   remove_call.arguments().push_back(build_symbol(list)); // list
   remove_call.arguments().push_back(element_arg);        // &value or ptr
   remove_call.arguments().push_back(
@@ -4780,8 +4792,18 @@ exprt python_list::build_remove_list_call(
   remove_call.arguments().push_back(elem_info.elem_size); // size
   remove_call.type() = bool_type();
   remove_call.location() = elem_info.location;
+  converter_.add_instruction(remove_call);
 
-  return converter_.convert_expression_to_code(remove_call);
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.remove(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = not_exprt(build_symbol(remove_ret));
+  guard.then_case() = throw_code;
+  guard.location() = elem_info.location;
+  return guard;
 }
 
 // list.count(x) / list.index(x): both pass (list, &value, type_id, size) to a

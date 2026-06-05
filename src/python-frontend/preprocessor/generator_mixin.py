@@ -1433,13 +1433,20 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         apply soundness checks that depend on which wrapper is in use
-        (list/sorted/set differ in ordering semantics).
+        (list/sorted/set differ in ordering semantics). ``sorted(list(...))``
+        folds to ``sorted(...)`` (list() is identity on a view) so the
+        cascade matches both idioms.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id
                 in wrappers and len(node.args) == 1 and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         arg = node.args[0]
+        if wrapper == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
             return self.dict_items_vars[arg.id], wrapper
         dict_expr = self._get_dict_expr_from_items_call(arg)
@@ -1489,7 +1496,8 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         enforce wrapper-vs-literal-type compatibility (e.g. set wrapper
-        requires a Set literal, list/sorted requires a List literal).
+        requires a Set literal). ``sorted(list(...))`` is peeled to
+        ``sorted(...)`` since list() is identity on a view.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 and node.func.id in ("list", "sorted", "set")
@@ -1497,6 +1505,11 @@ class GeneratorMixin:
             return None, None
         wrapper = node.func.id
         inner = node.args[0]
+        if wrapper == "sorted":
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "list" and len(inner.args) == 1
+                    and not getattr(inner, "keywords", [])):
+                inner = inner.args[0]
         if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
                 and inner.func.attr == attr and not inner.args
                 and not getattr(inner, "keywords", [])):
@@ -1732,6 +1745,8 @@ class GeneratorMixin:
             ast.fix_missing_locations(len_eq)
             return len_eq
 
+        # d[k] emits THROW KeyError, use d.get(k) on Name receivers.
+        use_get = isinstance(dict_expr, ast.Name)
         value_checks = [len_eq]
         for k, v in pairs:
             key_in_dict = ast.Compare(
@@ -1739,12 +1754,21 @@ class GeneratorMixin:
                 ops=[ast.In()],
                 comparators=[copy.deepcopy(dict_expr)],
             )
-            subscript = ast.Subscript(
-                value=copy.deepcopy(dict_expr),
-                slice=copy.deepcopy(k),
-                ctx=ast.Load(),
-            )
-            val_eq = ast.Compare(left=subscript,
+            if use_get:
+                value_lookup = ast.Call(
+                    func=ast.Attribute(value=copy.deepcopy(dict_expr),
+                                       attr="get",
+                                       ctx=ast.Load()),
+                    args=[copy.deepcopy(k)],
+                    keywords=[],
+                )
+            else:
+                value_lookup = ast.Subscript(
+                    value=copy.deepcopy(dict_expr),
+                    slice=copy.deepcopy(k),
+                    ctx=ast.Load(),
+                )
+            val_eq = ast.Compare(left=value_lookup,
                                  ops=[ast.Eq()],
                                  comparators=[copy.deepcopy(v)])
             value_checks.append(key_in_dict)
