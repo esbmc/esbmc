@@ -2188,8 +2188,7 @@ exprt string_handler::handle_string_attribute_call(
   if (
     receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
     receiver_json.contains("id") && receiver_json["id"].is_string() &&
-    !converter_
-       .get_imported_module_path(receiver_json["id"].get<std::string>())
+    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
        .empty())
     return nil_exprt();
 
