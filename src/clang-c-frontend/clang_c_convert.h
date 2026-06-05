@@ -136,9 +136,8 @@ protected:
    *  C++ frontend to record noexcept / dynamic-throw specifications as
    *  function-boundary metadata on the function type.
    */
-  virtual void annotate_exception_specification(
-    const clang::FunctionDecl &,
-    typet &)
+  virtual void
+  annotate_exception_specification(const clang::FunctionDecl &, typet &)
   {
   }
 

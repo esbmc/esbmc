@@ -26,22 +26,22 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,            // branch, possibly guarded
-  ASSUME = 2,          // non-failing guarded self loop
-  ASSERT = 3,          // assertions
-  OTHER = 4,           // anything else
-  SKIP = 5,            // just advance the PC
-  LOCATION = 8,        // semantically like SKIP
-  END_FUNCTION = 9,    // exit point of a function
-  ATOMIC_BEGIN = 10,   // marks a block without interleavings
-  ATOMIC_END = 11,     // end of a block without interleavings
-  RETURN = 12,         // return from a function
-  ASSIGN = 13,         // assignment lhs:=rhs
-  DECL = 14,           // declare a local variable
-  DEAD = 15,           // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16,  // call a function
-  THROW = 17,          // throw an exception
-  CATCH = 18,          // catch an exception
+  GOTO = 1,           // branch, possibly guarded
+  ASSUME = 2,         // non-failing guarded self loop
+  ASSERT = 3,         // assertions
+  OTHER = 4,          // anything else
+  SKIP = 5,           // just advance the PC
+  LOCATION = 8,       // semantically like SKIP
+  END_FUNCTION = 9,   // exit point of a function
+  ATOMIC_BEGIN = 10,  // marks a block without interleavings
+  ATOMIC_END = 11,    // end of a block without interleavings
+  RETURN = 12,        // return from a function
+  ASSIGN = 13,        // assignment lhs:=rhs
+  DECL = 14,          // declare a local variable
+  DEAD = 15,          // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16, // call a function
+  THROW = 17,         // throw an exception
+  CATCH = 18,         // catch an exception
   // 19 and 20 were THROW_DECL / THROW_DECL_END, removed in favour of
   // function-level exception-specification metadata. The numeric values are
   // left as a gap so the remaining kinds keep their GOTO-binary encoding (and
@@ -49,7 +49,7 @@ typedef enum
   // actually contains 19/20 -- only produced from C++ exception-spec code by an
   // older ESBMC -- has no handler and fails loudly at the symex_step default,
   // like any other unsupported instruction in a cross-version binary.
-  LOOP_INVARIANT = 21  // loop invariant
+  LOOP_INVARIANT = 21 // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
