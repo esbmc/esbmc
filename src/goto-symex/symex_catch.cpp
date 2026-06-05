@@ -276,7 +276,13 @@ bool goto_symext::symex_throw_bad_cast()
   // Reuse the previously constructed instruction if available.
   if (!bad_cast_throw.code)
   {
+    // Depending on the Clang/LLVM version the <typeinfo> model's class is
+    // recorded either with the un-elaborated name ("tag-std::bad_cast") or with
+    // the elaborated one ("tag-class std::bad_cast"); newer LLVM uses the
+    // latter, which must match the name the catch clause carries. Try both.
     const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
+    if (!bad_cast_sym)
+      bad_cast_sym = ns.lookup("tag-class std::bad_cast");
     if (!bad_cast_sym)
     {
       // <typeinfo> not included — emit a hard failure directly.

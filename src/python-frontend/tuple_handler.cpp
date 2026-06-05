@@ -524,7 +524,8 @@ typet tuple_handler::get_tuple_type_from_annotation(
 exprt tuple_handler::handle_tuple_membership(
   const exprt &lhs,
   const exprt &rhs,
-  bool invert) const
+  bool invert,
+  const nlohmann::json &element)
 {
   assert(rhs.type().is_struct());
   const struct_typet &tuple_type = to_struct_type(rhs.type());
@@ -547,14 +548,55 @@ exprt tuple_handler::handle_tuple_membership(
       return false_exprt();
   }
 
-  // Build OR chain: lhs == tuple.element_0 || lhs == tuple.element_1 || ...
+  // Python's `x in (a, b, c)` is element-wise equality: x == a or x == b or ...
+  // Strings are compared by content (strcmp), not by pointer/array identity, so
+  // each string element needs handle_string_comparison rather than equality_exprt.
+  const bool lhs_is_string = lhs.type().is_array() || lhs.type().is_pointer();
+
+  // An inline tuple literal `(a, b, c)` is a struct_exprt whose operands are
+  // already-materialised, addressable element symbols. A member access into
+  // such a constant struct is not addressable, so taking the base address for
+  // strcmp would crash; use the operand directly. A named tuple variable is a
+  // symbol, for which a member access is a proper lvalue.
+  const bool rhs_is_struct_literal =
+    rhs.id() == "struct" && rhs.operands().size() == components.size();
+
   exprt result;
   for (size_t i = 0; i < components.size(); i++)
   {
     std::string member_name = "element_" + std::to_string(i);
-    exprt member_access = build_member(rhs, member_name, components[i].type());
+    exprt member_access =
+      rhs_is_struct_literal
+        ? rhs.operands()[i]
+        : build_member(rhs, member_name, components[i].type());
 
-    exprt equality = equality_exprt(lhs, member_access);
+    const bool comp_is_string =
+      components[i].type().is_array() || components[i].type().is_pointer();
+
+    exprt equality;
+    if (lhs_is_string && comp_is_string)
+    {
+      // String content equality via the shared comparison machinery, which
+      // either folds to a boolean or sets up a strcmp(...) == 0 expression
+      // (signalled by a nil return — assemble it like the binop caller does).
+      exprt l = lhs;
+      exprt r = member_access;
+      equality = converter_.handle_string_comparison("Eq", l, r, element);
+      if (equality.is_nil())
+      {
+        equality = exprt("=", bool_type());
+        equality.copy_to_operands(l, r);
+      }
+    }
+    else if (lhs_is_string != comp_is_string)
+    {
+      // Cross-type: a string is never == a non-string in Python.
+      equality = false_exprt();
+    }
+    else
+    {
+      equality = equality_exprt(lhs, member_access);
+    }
 
     if (i == 0)
       result = equality;
