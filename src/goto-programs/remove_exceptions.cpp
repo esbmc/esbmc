@@ -32,15 +32,6 @@ bool is_no_throw_decl(const expr2tc &code)
   return true;
 }
 
-/// True iff the function body carries a no-throw specification.
-bool function_is_noexcept(const goto_programt &body)
-{
-  for (const auto &ins : body.instructions)
-    if (ins.type == THROW_DECL && is_no_throw_decl(ins.code))
-      return true;
-  return false;
-}
-
 /// One catch clause: its static type (or "ellipsis"), the instruction that
 /// begins its handler, and — once lowered — the landing instruction the
 /// dispatch branches to (which clears the in-flight flag before the body).
@@ -405,11 +396,20 @@ private:
     collect(body, regions, throws, calls);
 
     // Throw-spec markers are consumed here; once the throws are lowered the
-    // imperative throw-decl machinery has nothing to act on.
-    const bool noexcept_fn = function_is_noexcept(body);
+    // imperative throw-decl machinery has nothing to act on. Record whether the
+    // function is no-throw in the same pass.
+    bool noexcept_fn = false;
     for (auto &ins : body.instructions)
-      if (ins.type == THROW_DECL || ins.type == THROW_DECL_END)
+    {
+      if (ins.type == THROW_DECL)
+      {
+        if (is_no_throw_decl(ins.code))
+          noexcept_fn = true;
         ins.make_skip();
+      }
+      else if (ins.type == THROW_DECL_END)
+        ins.make_skip();
+    }
 
     if (regions.empty() && throws.empty() && calls.empty())
       return;
@@ -447,6 +447,8 @@ private:
     {
       auto a = body.insert(std::next(epilogue));
       a->make_assertion(equality2tc(thrown, gen_false_expr()));
+      a->location = epilogue->location;
+      a->function = epilogue->function;
       a->location.property("exception");
       a->location.comment(
         is_entry ? "uncaught exception" : "noexcept specification violated");
