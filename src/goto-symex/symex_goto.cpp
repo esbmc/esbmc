@@ -398,8 +398,38 @@ void goto_symext::merge_gotos()
     cur_state->guard = std::move(new_guard);
   }
 
+  // Collapse the freshly-merged path condition into a single hidden guard
+  // variable. The next merge then sees a single-symbol incoming guard, so the
+  // merge itself stays cheap too.
+  collapse_guard();
+
   // clean up to save some memory
   frame.merge_state_map.erase(state_map_it);
+}
+
+void goto_symext::collapse_guard()
+{
+  // Nothing to gain unless the guard is an actual conjunction.
+  if (cur_state->guard.guard_list.size() <= 1)
+    return;
+
+  expr2tc guard_expr = guard_identifier();
+  expr2tc guard_rhs = cur_state->guard.as_expr();
+  cur_state->assignment(guard_expr, guard_rhs);
+
+  target->assignment(
+    gen_true_expr(),
+    guard_expr,
+    guard_expr,
+    guard_rhs,
+    expr2tc(),
+    cur_state->source,
+    cur_state->gen_stack_trace(),
+    true,
+    first_loop);
+
+  cur_state->guard.make_true();
+  cur_state->guard.add(guard_expr);
 }
 
 void goto_symext::merge_locality(const statet::merge_statet &src)

@@ -291,6 +291,16 @@ protected:
   void merge_gotos();
 
   /**
+   *  Replace the current path guard with a single fresh hidden SSA variable,
+   *  pushing the accumulated path condition to the solver via a hidden
+   *  assignment. Keeps the symex-side guard O(1) across branches/merges so the
+   *  guard does not grow and get re-simplified on every loop-back, and so the
+   *  encoder does not re-walk an ever-deepening guard and-chain. No-op when the
+   *  guard is already trivial or a single conjunct.
+   */
+  void collapse_guard();
+
+  /**
    *  Merge pointer tracking value sets in a phi function.
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
