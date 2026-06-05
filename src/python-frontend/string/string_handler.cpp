@@ -2176,6 +2176,22 @@ exprt string_handler::handle_string_attribute_call(
       ? call_json["keywords"]
       : empty_json_array;
 
+  // Calls on an imported module (e.g. torch.split, numpy.split) are not string
+  // methods even though the attribute name overlaps with one (split, count,
+  // ...). Defer to the regular dispatch so the module's operational model runs.
+  //
+  // Use get_imported_module_path() (non-empty only for a name actually present
+  // in imported_modules) rather than is_imported_module(), which also returns
+  // true when a model .py file merely exists. The latter would misfire for a
+  // local variable that shares a module's name (e.g. a parameter named
+  // `string`), wrongly diverting `string.lower()` away from the str handler.
+  if (
+    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
+    receiver_json.contains("id") && receiver_json["id"].is_string() &&
+    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
+       .empty())
+    return nil_exprt();
+
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
