@@ -42,8 +42,13 @@ typedef enum
   FUNCTION_CALL = 16,  // call a function
   THROW = 17,          // throw an exception
   CATCH = 18,          // catch an exception
-  THROW_DECL = 19,     // list of throws that a function can throw
-  THROW_DECL_END = 20, // end of throw declaration
+  // 19 and 20 were THROW_DECL / THROW_DECL_END, removed in favour of
+  // function-level exception-specification metadata. The numeric values are
+  // left as a gap so the remaining kinds keep their GOTO-binary encoding (and
+  // the in-repo v1 binary fixtures keep loading). A pre-removal binary that
+  // actually contains 19/20 -- only produced from C++ exception-spec code by an
+  // older ESBMC -- has no handler and fails loudly at the symex_step default,
+  // like any other unsupported instruction in a cross-version binary.
   LOOP_INVARIANT = 21  // loop invariant
 } goto_program_instruction_typet;
 
@@ -217,16 +222,6 @@ public:
     inline void make_catch()
     {
       clear(CATCH);
-    }
-
-    inline void make_throw_decl()
-    {
-      clear(THROW_DECL);
-    }
-
-    inline void make_throw_decl_end()
-    {
-      clear(THROW_DECL_END);
     }
 
     inline void make_assertion(const expr2tc &g)

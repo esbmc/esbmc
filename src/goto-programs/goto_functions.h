@@ -16,6 +16,7 @@
 #include <goto-programs/goto_program.h>
 #include <util/std_types.h>
 #include <util/options.h>
+#include <util/exception_specification.h>
 
 class goto_functiont
 {
@@ -27,6 +28,13 @@ public:
   // to_code_type() dereferences it. All construction paths set it before use.
   type2tc type;
   bool body_available = false;
+
+  // Cached, decoded copy of the function's C++ exception specification. The
+  // canonical representation lives on the function symbol's typet (and so
+  // survives GOTO-binary serialization); this is derived from it whenever the
+  // function type is (re)built. Used by symex to enforce the specification at
+  // the function-frame boundary.
+  exception_specificationt exception_spec;
 
   // The set of functions that have been inlined into this one. Necessary to
   // make symex renaming work.

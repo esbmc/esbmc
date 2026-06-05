@@ -217,6 +217,12 @@ public:
     /** Record if the function body is hidden */
     bool hidden;
 
+    /** This function's C++ exception specification, copied from the callee's
+     *  goto_functiont when the frame is created. Enforced at the function
+     *  boundary: a restrictive specification is violated when exception
+     *  handler search exits this frame with a disallowed exception. */
+    exception_specificationt exception_spec;
+
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
@@ -233,7 +239,7 @@ public:
   class exceptiont
   {
   public:
-    exceptiont() : has_throw_decl(false)
+    exceptiont() : owner_frame_depth(0)
     {
     }
 
@@ -245,11 +251,11 @@ public:
     typedef std::map<irep_idt, unsigned> catch_ordert;
     catch_ordert catch_order;
 
-    // list of exception types than can be thrown
-    typedef std::set<irep_idt> throw_list_sett;
-    throw_list_sett throw_list_set;
-
-    bool has_throw_decl;
+    // call_stack index of the function frame that owns this try/catch region
+    // (the function executing the CATCH instruction). Used to determine which
+    // frames an exception exits before reaching this handler, so each exited
+    // frame's exception specification can be enforced at its boundary.
+    std::size_t owner_frame_depth;
   };
 
   // Macros
@@ -467,6 +473,13 @@ public:
 
   /** Stack of framet's recording current function call stack */
   call_stackt call_stack;
+
+  /** Stack of active try/catch regions for this thread.
+   *  Exception handling is per-thread: each thread's catch regions live on its
+   *  own state, so a context switch never exposes one thread's handlers to
+   *  another's throw. Innermost active region is on top. */
+  typedef std::stack<exceptiont> stack_catcht;
+  stack_catcht stack_catch;
 
   /** Namespace to work with. */
   const namespacet &ns;

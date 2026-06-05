@@ -9,11 +9,8 @@ void goto_symext::symex_catch()
 
   if (instruction.targets.empty()) // The second catch, pop from the stack
   {
-    // Copy the exception before pop
-    goto_symex_statet::exceptiont exception = stack_catch.top();
-
     // Pop from the stack
-    stack_catch.pop();
+    cur_state->stack_catch.pop();
 
     // Increase the program counter
     cur_state->source.pc++;
@@ -38,8 +35,14 @@ void goto_symext::symex_catch()
       exception.catch_order[catch_ref.exception_list[i]] = i;
     }
 
+    // Remember which function frame owns this try/catch region, so exception
+    // dispatch can tell which frames an exception exits before being caught
+    // here and enforce their specifications at the boundary.
+    assert(!cur_state->call_stack.empty());
+    exception.owner_frame_depth = cur_state->call_stack.size() - 1;
+
     // Stack it
-    stack_catch.push(exception);
+    cur_state->stack_catch.push(exception);
 
     // Increase the program counter
     cur_state->source.pc++;
@@ -88,6 +91,110 @@ bool goto_symext::is_python_exception_subtype(
   return false;
 }
 
+bool goto_symext::exception_caught_in_top(
+  const std::vector<irep_idt> &exception_list,
+  std::size_t &owner_frame_depth)
+{
+  if (cur_state->stack_catch.empty())
+    return false;
+
+  const goto_symex_statet::exceptiont &top = cur_state->stack_catch.top();
+
+  for (const auto &it : exception_list)
+  {
+    // Exact match, or (for Python exceptions) a base-class match.
+    if (top.catch_map.find(it) != top.catch_map.end())
+    {
+      owner_frame_depth = top.owner_frame_depth;
+      return true;
+    }
+    for (const auto &entry : top.catch_map)
+      if (is_python_exception_subtype(it, entry.first))
+      {
+        owner_frame_depth = top.owner_frame_depth;
+        return true;
+      }
+
+    // A pointer can be caught by catch(void*); anything by catch(...).
+    if (
+      (it.as_string().find("_ptr") != std::string::npos &&
+       top.catch_map.find("void_ptr") != top.catch_map.end()) ||
+      top.catch_map.find("ellipsis") != top.catch_map.end())
+    {
+      owner_frame_depth = top.owner_frame_depth;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool goto_symext::enforce_exception_specifications(
+  const std::vector<irep_idt> &exception_list,
+  bool caught,
+  std::size_t handler_owner_depth,
+  bool &dispatch_result)
+{
+  // A frame allows the exception if any of the thrown ids (the dynamic type
+  // and its bases) is permitted by the frame's specification.
+  auto frame_allows = [&exception_list](const exception_specificationt &spec) {
+    if (!spec.is_restrictive())
+      return true;
+    for (const auto &id : exception_list)
+      if (spec.allows(id))
+        return true;
+    return false;
+  };
+
+  // The exception exits every frame between the throw point (the top frame)
+  // and the frame that catches it. If it is never caught, it exits all frames.
+  // The handler's own frame is entered, not exited, so it is not checked.
+  const std::size_t top_depth = cur_state->call_stack.size() - 1;
+  const std::size_t lowest_exited = caught ? handler_owner_depth + 1 : 0;
+
+  // Enforce the innermost violated specification first.
+  for (std::size_t depth = top_depth + 1; depth-- > lowest_exited;)
+  {
+    const exception_specificationt &spec =
+      cur_state->call_stack[depth].exception_spec;
+    if (frame_allows(spec))
+      continue;
+
+    if (spec.kind == exception_specificationt::kindt::non_throwing)
+    {
+      // noexcept boundary crossed by an exception: std::terminate.
+      if (!terminate_handler())
+      {
+        claim(
+          gen_false_expr(),
+          "An exception escapes a noexcept function; std::terminate is "
+          "called.");
+        cur_state->guard.make_false();
+      }
+      dispatch_result = false;
+      return true;
+    }
+
+    // Legacy dynamic specification throw(T...) violated: std::unexpected.
+    if (!unexpected_handler())
+    {
+      std::string msg =
+        "Trying to throw an exception but it's not allowed by declaration.\n\n";
+      msg += "  Exception type: " + exception_list.begin()->as_string();
+      msg += "\n  Allowed exceptions:";
+      for (const auto &allowed : spec.allowed_types)
+        msg += "\n   - " + allowed.as_string();
+      claim(gen_false_expr(), msg);
+      dispatch_result = true;
+      return true;
+    }
+    dispatch_result = false;
+    return true;
+  }
+
+  return false;
+}
+
 bool goto_symext::symex_throw_dispatch(const expr2tc &throw_code)
 {
   irep_idt catch_name = "missing";
@@ -95,9 +202,25 @@ bool goto_symext::symex_throw_dispatch(const expr2tc &throw_code)
   const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(throw_code);
   const std::vector<irep_idt> &exceptions_thrown = throw_ref.exception_list;
 
+  // Determine whether the innermost active catch region handles this throw and,
+  // if so, which function frame owns that handler.
+  std::size_t handler_owner_depth = 0;
+  bool caught = exception_caught_in_top(exceptions_thrown, handler_owner_depth);
+
+  // Enforce the exception specification of every frame the exception exits
+  // before being caught (all frames if it is never caught). A restrictive
+  // specification violated at a frame boundary triggers std::terminate (for a
+  // non-throwing spec) or std::unexpected (for a legacy dynamic spec), and the
+  // exception is never delivered to the handler.
+  bool dispatch_result = false;
+  if (enforce_exception_specifications(
+        exceptions_thrown, caught, handler_owner_depth, dispatch_result))
+    return dispatch_result;
+
+  // No specification was violated; fall back to normal handler search.
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
-  if (!stack_catch.size())
+  if (!cur_state->stack_catch.size())
   {
     if (!unexpected_handler())
     {
@@ -115,7 +238,7 @@ bool goto_symext::symex_throw_dispatch(const expr2tc &throw_code)
   }
 
   // Get the list of catchs
-  goto_symex_statet::exceptiont *except = &stack_catch.top();
+  goto_symex_statet::exceptiont *except = &cur_state->stack_catch.top();
 
   // It'll be used for catch ordering when throwing
   // a derived object with multiple inheritance
@@ -124,25 +247,6 @@ bool goto_symext::symex_throw_dispatch(const expr2tc &throw_code)
   goto_symex_statet::call_stackt old_stack = cur_state->call_stack;
   for (auto const &it : throw_ref.exception_list)
   {
-    // Handle throw declarations
-    switch (handle_throw_decl(except, it))
-    {
-    case 0:
-      return true;
-      break;
-
-    case 1:
-      return false;
-      break;
-
-    case 2:
-      break;
-
-    default:
-      assert(0);
-      break;
-    }
-
     // Search for a catch with a matching type (including base classes)
     goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it =
       except->catch_map.find(it);
@@ -466,40 +570,6 @@ void goto_symext::update_throw_target(
   }
 }
 
-int goto_symext::handle_throw_decl(
-  goto_symex_statet::exceptiont *except,
-  const irep_idt &id)
-{
-  // Check if we can throw the exception
-  if (except->has_throw_decl)
-  {
-    goto_symex_statet::exceptiont::throw_list_sett::const_iterator s_it =
-      except->throw_list_set.find(id);
-
-    // Is it allowed?
-    if (s_it == except->throw_list_set.end())
-    {
-      if (!unexpected_handler())
-      {
-        std::string msg =
-          std::string("Trying to throw an exception ") +
-          std::string("but it's not allowed by declaration.\n\n");
-        msg += "  Exception type: " + id.as_string();
-        msg += "\n  Allowed exceptions:";
-
-        for (const auto &s_it1 : except->throw_list_set)
-          msg += "\n   - " + std::string(s_it1.c_str());
-
-        claim(gen_false_expr(), msg);
-        return 0;
-      }
-
-      return 1;
-    }
-  }
-  return 2;
-}
-
 bool goto_symext::handle_rethrow(
   const expr2tc &operand,
   const goto_programt::instructiont &instruction)
@@ -530,31 +600,4 @@ bool goto_symext::handle_rethrow(
     return true;
   }
   return false;
-}
-
-void goto_symext::symex_throw_decl()
-{
-  // Check if we have a previous try-block catch
-  if (stack_catch.size())
-  {
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
-
-    // Get throw list
-    const std::vector<irep_idt> &throw_decl_list =
-      to_code_cpp_throw_decl2t(instruction.code).exception_list;
-
-    // Get to the correct try (always the last one)
-    goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-    // Set the flag that this frame has throw list
-    // This is important because we can have empty throw lists
-    except->has_throw_decl = true;
-
-    // Clear before insert new types
-    except->throw_list_set.clear();
-
-    // Copy throw list to the set
-    for (const auto &i : throw_decl_list)
-      except->throw_list_set.insert(i);
-  }
 }

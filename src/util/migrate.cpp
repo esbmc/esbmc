@@ -2121,19 +2121,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "code" && expr.statement() == "throw-decl")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &exceptions_thrown = expr.find("throw_list").get_sub();
-    for (const auto &e_it : exceptions_thrown)
-    {
-      expr_list.push_back(e_it.id());
-    }
-
-    new_expr_ref = code_cpp_throw_decl2tc(expr_list);
-    return;
-  }
-
   // V1 of the symbol-table V-track (esbmc/esbmc#4715). Four kinds had only
   // a back-arm (or neither direction) and could not round-trip through the
   // migration layer. Adding the forward arms here -- with the matching back
@@ -2162,16 +2149,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     for (const auto &e_it : exceptions)
       expr_list.push_back(e_it.id());
     new_expr_ref = code_cpp_catch2tc(expr_list);
-    return;
-  }
-
-  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &throw_list = expr.find("throw_list").get_sub();
-    for (const auto &e_it : throw_list)
-      expr_list.push_back(e_it.id());
-    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
     return;
   }
 
@@ -3619,26 +3596,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
     for (auto const &it : ref2.exception_list)
       exceptions.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_id:
-  {
-    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw-decl");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_end_id:
-  {
-    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw_decl_end");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
     return codeexpr;
   }
   case expr2t::pointer_capability_id:

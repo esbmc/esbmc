@@ -262,14 +262,6 @@ void goto_symext::symex_step(reachability_treet &art)
     }
 
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -492,25 +484,6 @@ void goto_symext::symex_step(reachability_treet &art)
     {
       cur_state->source.pc++;
     }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
     break;
 
   default:

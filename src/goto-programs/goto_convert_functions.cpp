@@ -102,6 +102,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   goto_functiont &f = functions.function_map.at(identifier);
   f.type = migrate_symbol_type(symbol);
+  f.exception_spec = exception_specificationt::from_type(symbol.get_type());
   f.body_available = symbol.get_value().is_not_nil();
 
   if (!f.body_available)

@@ -555,8 +555,9 @@ protected:
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
-  /** Core throw dispatch: match throw_code against stack_catch and jump.
-   *  Called by symex_throw() and symex_throw_bad_cast(). */
+  /** Core throw dispatch: match throw_code against the current thread's
+   *  stack_catch and jump, enforcing exception specifications on every frame
+   *  the exception exits. Called by symex_throw() and symex_throw_bad_cast(). */
   bool symex_throw_dispatch(const expr2tc &throw_code);
 
   /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
@@ -565,9 +566,6 @@ protected:
 
   /** Register exception handler on stack. */
   void symex_catch();
-
-  /** Register throw handler on stack. */
-  void symex_throw_decl();
 
   /** Update throw target. */
   void update_throw_target(
@@ -584,12 +582,24 @@ protected:
     const expr2tc &operand,
     const goto_programt::instructiont &instruction);
 
-  /** Check if we can throw an exception:
-   *  if we can't then gives a error.
-   */
-  int handle_throw_decl(
-    goto_symex_statet::exceptiont *frame,
-    const irep_idt &id);
+  /** True if the innermost active catch region handles any of the thrown
+   *  exception types. When true, owner_frame_depth is set to the call_stack
+   *  index of the frame that owns that handler. */
+  bool exception_caught_in_top(
+    const std::vector<irep_idt> &exception_list,
+    std::size_t &owner_frame_depth);
+
+  /** Enforce the exception specifications of every frame the exception exits.
+   *  `caught` and `handler_owner_depth` describe where (if anywhere) the
+   *  exception is handled. Returns true (and sets `dispatch_result`) when a
+   *  restrictive specification is violated and the throw has been handled via
+   *  std::terminate / std::unexpected; returns false when no specification is
+   *  violated and normal dispatch should continue. */
+  bool enforce_exception_specifications(
+    const std::vector<irep_idt> &exception_list,
+    bool caught,
+    std::size_t handler_owner_depth,
+    bool &dispatch_result);
 
   /**
    *  Finalize the result of a realloc operation.
@@ -1195,14 +1205,9 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  /* Exception Handling.
-   * This will stack the try-catch blocks, so we always know which catch
-   * we should jump.
-   */
-  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
-
-  /** Stack of try-catch blocks. */
-  stack_catcht stack_catch;
+  /* Exception handling. The stack of active try/catch regions lives on each
+   * thread's goto_symex_statet (cur_state->stack_catch), not here, so exception
+   * state is per-thread. */
 
   /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;

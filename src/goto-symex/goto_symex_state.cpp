@@ -44,6 +44,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  stack_catch = state.stack_catch;
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
   return *this;
