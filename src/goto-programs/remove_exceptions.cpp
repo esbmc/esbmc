@@ -8,6 +8,8 @@
 #include <util/symbol.h>
 #include <util/migrate.h>
 #include <util/expr_util.h>
+#include <util/std_types.h>
+#include <util/std_expr.h>
 #include <irep2/irep2_utils.h>
 
 namespace
@@ -80,6 +82,10 @@ public:
 
   void run(goto_functionst &goto_functions)
   {
+    // Turn dynamic_cast<T&> bad_cast intrinsics into ordinary THROWs first, so
+    // every later step (may-throw, registry, dispatch) treats them uniformly.
+    lower_bad_cast_calls(goto_functions);
+
     may_throw = compute_may_throw(goto_functions);
 
     // Single scan: teach the registry any exception hierarchy that lives only in
@@ -202,6 +208,72 @@ private:
     sym.file_local = false;
     context.move_symbol_to_context(sym);
     return symbol2tc(obj_type, irep_idt(id));
+  }
+
+  // ---- bad_cast lowering -------------------------------------------------
+
+  /// THROW code for a synthesized std::bad_cast (operand + exception_list =
+  /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
+  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
+  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
+  /// older, so try both. Built once and reused across call sites (a single
+  /// exception is in flight at a time).
+  expr2tc build_bad_cast_throw()
+  {
+    const symbolt *sym = ns.lookup("tag-std::bad_cast");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_cast");
+    if (!sym)
+      return expr2tc();
+
+    std::vector<irep_idt> exception_list;
+    const std::string tag = id2string(sym->id);
+    exception_list.emplace_back(tag.substr(4)); // strip "tag-"
+    if (sym->get_type().id() == "struct")
+    {
+      const struct_typet &st = to_struct_type(sym->get_type());
+      const exprt &bases = static_cast<const exprt &>(st.find("bases"));
+      if (bases.is_not_nil())
+        for (const auto &base : bases.get_sub())
+          exception_list.emplace_back(id2string(base.id()).substr(4));
+    }
+
+    // A static slot holds the thrown bad_cast object (its state is irrelevant —
+    // only its type identity and address matter to the handler).
+    expr2tc operand = make_exception_storage(migrate_symbol_type(*sym));
+    return code_cpp_throw2tc(operand, exception_list);
+  }
+
+  /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
+  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
+  /// of the pass lowers it like any other throw. If std::bad_cast is
+  /// unresolvable the calls are left in place and program_supported's bad_cast
+  /// guard makes the program fall back to the imperative path.
+  void lower_bad_cast_calls(goto_functionst &goto_functions)
+  {
+    expr2tc bad_cast_throw = build_bad_cast_throw();
+    if (is_nil_expr(bad_cast_throw))
+      return;
+
+    for (auto &fn : goto_functions.function_map)
+    {
+      if (!fn.second.body_available)
+        continue;
+      for (auto &ins : fn.second.body.instructions)
+      {
+        if (ins.type != FUNCTION_CALL)
+          continue;
+        const code_function_call2t &c = to_code_function_call2t(ins.code);
+        if (
+          is_symbol2t(c.function) &&
+          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+        {
+          // make_throw() preserves location/function (clear() leaves them).
+          ins.make_throw();
+          ins.code = bad_cast_throw;
+        }
+      }
+    }
   }
 
   // ---- may-throw analysis ------------------------------------------------
