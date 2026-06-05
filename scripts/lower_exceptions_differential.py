@@ -33,7 +33,11 @@ import concurrent.futures
 import os
 import re
 import shlex
-import subprocess
+# A developer tool, not a service: every argv comes from the repo's own
+# test.desc files plus the CLI-supplied esbmc path, and is passed as an argv
+# list (never a shell string, never shell=True), so there is no shell or
+# untrusted-input injection surface.
+import subprocess  # nosec B404
 import sys
 
 # Substrings selecting exception-bearing tests. A test is in the corpus if any
@@ -137,13 +141,16 @@ def collect_tests(roots, modes):
 def run_esbmc(cmd, timeout):
     """Run one ESBMC command; return its verdict / ERROR / TIMEOUT."""
     try:
-        proc = subprocess.run(cmd,
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT,
-                              timeout=timeout,
-                              text=True,
-                              errors="replace",
-                              check=False)
+        # cmd is an argv list (no shell=True) of repo-controlled test flags and
+        # the CLI-supplied esbmc binary; no shell/untrusted-input injection.
+        proc = subprocess.run(
+            cmd,  # nosec B603
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            text=True,
+            errors="replace",
+            check=False)
     except subprocess.TimeoutExpired:
         return TIMEOUT
     match = VERDICT_RE.search(proc.stdout)
