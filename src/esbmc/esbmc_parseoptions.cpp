@@ -47,6 +47,7 @@ extern "C"
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -2406,6 +2407,11 @@ bool esbmc_parseoptionst::process_goto_program(
         algorithm->setTarget(cmdline.getval("function"));
       algorithm->run(goto_functions);
     }
+
+    // Lower throw/catch to symbolic guarded control flow (#5075). Run before
+    // inlining so per-call-site exception propagation is still explicit.
+    if (cmdline.isset("lower-exceptions"))
+      remove_exceptions(goto_functions, context, ns);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
