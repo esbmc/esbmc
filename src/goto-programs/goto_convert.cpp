@@ -331,8 +331,63 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   migrate_expr(c, throw_decl_instruction->code);
 }
 
+/// The automatic object a destructor-stack entry cleans up: the symbol of a
+/// `dead` entry, or the `this` argument of a destructor call. Empty if neither.
+static irep_idt destructor_entry_symbol(const codet &entry)
+{
+  if (entry.get_statement() == "dead" && entry.operands().size() == 1)
+  {
+    if (entry.op0().id() == "symbol")
+      return entry.op0().identifier();
+  }
+  else if (entry.get_statement() == "function_call")
+  {
+    const code_function_callt &call = to_code_function_call(entry);
+    if (!call.arguments().empty() && call.arguments()[0].id() == "address_of")
+    {
+      const exprt &obj = call.arguments()[0].op0();
+      if (obj.id() == "symbol")
+        return obj.identifier();
+    }
+  }
+  return irep_idt();
+}
+
 void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
+  // C++ stack unwinding: before the throw, run the destructors of the automatic
+  // objects constructed since the nearest enclosing try block, in reverse
+  // construction order ([except.ctor]). throw_stack_size is the destructor-stack
+  // level at that try's entry — or 0 when the throw is not in any try, so an
+  // exception propagating out of the function destroys all of its locals.
+  //
+  // The thrown object itself must NOT be unwound: its lifetime is owned by the
+  // exception machinery and it has to survive the throw. It is the most-recently
+  // constructed full-expression temporary, so its destructor entries sit on top
+  // of the stack (above the enclosing try's locals). Detach them, run the
+  // (non-destructive) unwind of the try-block locals, then restore them so the
+  // normal fall-through cleanup after the throw is unchanged.
+  destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt thrown_id =
+    expr.operands().empty() || expr.op0().id() != "symbol"
+      ? irep_idt()
+      : expr.op0().identifier();
+
+  // One object contributes up to two adjacent top entries (a `dead` and a
+  // destructor call), both naming the thrown symbol; the loop drains them all.
+  destructor_stackt detached;
+  while (!thrown_id.empty() && stack.size() > targets.throw_stack_size &&
+         destructor_entry_symbol(stack.back()) == thrown_id)
+  {
+    detached.push_back(stack.back());
+    stack.pop_back();
+  }
+
+  unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
+
+  for (auto it = detached.rbegin(); it != detached.rend(); ++it)
+    stack.push_back(*it);
+
   // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
 
@@ -359,10 +414,19 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   goto_programt::targett end_target = end.add_instruction();
   end_target->make_skip();
 
+  // Record the destructor-stack level at try-block entry so a throw inside the
+  // body unwinds exactly the body's locals (not the enclosing scope's objects,
+  // which outlive the handler). Restore afterwards so the catch handlers — and
+  // any enclosing try — use the outer level. Save/restore handles nesting.
+  const std::size_t old_throw_stack_size = targets.throw_stack_size;
+  targets.throw_stack_size = targets.destructor_stack.size();
+
   // the first operand is the 'try' block
   goto_programt tmp;
   convert(to_code(code.op0()), tmp);
   dest.destructive_append(tmp);
+
+  targets.throw_stack_size = old_throw_stack_size;
 
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction = dest.add_instruction();
