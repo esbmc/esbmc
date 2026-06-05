@@ -83,10 +83,17 @@ entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). 26 of 
 `regression/python/exception*`/`try_finally*`/`try_else*` tests lower at 0
 divergences (the rest fall back).
 
-Not yet lowered (fall back): parts of the `std` exception surface; destructor
-unwinding; `bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications
-with real types (`throw(T...)`, a C++14-only form the frontend rejects under
-C++17, so it forces fallback only under `--std c++14`).
+Not yet lowered (fall back): parts of the `std` exception surface;
+`bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications with real
+types (`throw(T...)`, a C++14-only form the frontend rejects under C++17, so it
+forces fallback only under `--std c++14`).
+
+**Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
+in the lowering pass, so it applies on **both** the imperative and lowered
+paths: a throw runs the destructors of the automatic objects between the throw
+point and the nearest enclosing try block ([except.ctor]), excluding the thrown
+object itself. (Multi-level inner→outer propagation of those destructors within
+a function relies on the lowered path's nested dispatch.)
 
 `std::set_terminate` / `std::set_unexpected` are honoured: the operational model
 (`src/cpp/library/exception`) now stores the installed handler and `terminate()`
@@ -96,10 +103,10 @@ ignored on all paths).
 ## Roadmap to default-on
 
 The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: the broader `std` exception surface; destructor
-unwinding; `bad_cast` from `dynamic_cast<T&>`. Then: two green full-suite
-differential runs (`--lower-exceptions` ON vs OFF) before flipping the default and
-deleting `symex_catch.cpp`.
+Remaining work, roughly ordered: the broader `std` exception surface; `bad_cast`
+from `dynamic_cast<T&>`. Then: two green full-suite differential runs
+(`--lower-exceptions` ON vs OFF) before flipping the default and deleting
+`symex_catch.cpp`.
 
 ## Testing
 
