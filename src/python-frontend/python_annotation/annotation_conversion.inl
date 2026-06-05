@@ -127,6 +127,26 @@ bool python_annotation<Json>::extract_type_info(
 
     return true;
   }
+
+  // Handle generic annotations represented as Subscript nodes, e.g. the
+  // `list[int]` written `Subscript(value=Name("list"), slice=Name("int"))`.
+  // The previous Name-only path missed these, so an annotated `list[T]`
+  // without a usable initializer degraded to "Any" (Fixes #5122 review).
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    base_type = annotation["value"]["id"];
+
+    // Only a Name slice yields a concrete element type (list[int]). A
+    // Subscript slice (list[list[int]]) or Tuple slice (dict[K, V]) is left
+    // unresolved, matching the prior behaviour for those shapes.
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      element_type = annotation["slice"]["id"];
+
+    return true;
+  }
+
   return false;
 }
 
@@ -964,57 +984,11 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
     else if (lhs["_type"] == "Subscript")
     {
-      // Handle subscript operations like dp[i-1], prices[i], etc.
-      const std::string &var_name = lhs["value"]["id"];
-      Json var_node =
-        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
-
-      if (!var_node.empty() && var_node.contains("annotation"))
-      {
-        std::string var_type;
-
-        // Handle generic type annotations like list[int] (Subscript nodes)
-        if (
-          var_node["annotation"].contains("_type") &&
-          var_node["annotation"]["_type"] == "Subscript" &&
-          var_node["annotation"].contains("value") &&
-          var_node["annotation"]["value"].contains("id"))
-        {
-          var_type = var_node["annotation"]["value"]["id"];
-
-          // For list[T], return T directly from slice
-          if (
-            var_type == "list" && var_node["annotation"].contains("slice") &&
-            var_node["annotation"]["slice"].contains("id"))
-          {
-            type = var_node["annotation"]["slice"]["id"];
-          }
-        }
-        // Handle simple type annotations like int, str (Name nodes)
-        else if (
-          var_node["annotation"].contains("id") &&
-          var_node["annotation"]["id"].is_string())
-        {
-          var_type = var_node["annotation"]["id"];
-
-          // For list[T], return T. For other types, return the type itself
-          if (var_type == "list")
-          {
-            // Try to get subtype from list initialization
-            if (var_node.contains("value") && !var_node["value"].is_null())
-            {
-              std::string subtype = get_list_subtype(var_node["value"]);
-              type = subtype.empty() ? "Any" : subtype;
-            }
-            else
-              type = "Any"; // Unknown list element type
-          }
-          else
-          {
-            type = var_type;
-          }
-        }
-      }
+      // Handle subscript operations like dp[i-1], prices[i], M[0][0], etc.
+      // Delegate to the nested-aware resolver so multi-level subscripts
+      // (e.g. M[0][0], whose value is itself a Subscript rather than a Name)
+      // do not blindly dereference lhs["value"]["id"] (Fixes #5122).
+      type = resolve_subscript_type(lhs, body);
     }
     else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
     {

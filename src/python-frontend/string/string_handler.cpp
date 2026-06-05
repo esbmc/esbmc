@@ -2669,9 +2669,24 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
-  // Edge case: empty list returns empty string
+  // Edge case: empty list literal
   if (elements.empty())
   {
+    // A Name variable whose declared initialiser is an empty list may still be
+    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+    // the empty initialiser here would wrongly yield "". Dispatch to the
+    // runtime __python_str_join model, which reads the list's runtime contents
+    // (and still returns "" for a genuinely empty list).
+    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
+    {
+      log_debug(
+        "python-string",
+        "join() iterable is a runtime-built list: runtime dispatch");
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+    }
+
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());

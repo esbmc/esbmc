@@ -3192,41 +3192,59 @@ exprt python_list::compare(
 
 exprt python_list::create_vla(
   const nlohmann::json &element,
-  const symbolt *list,
-  symbolt *size_var,
+  const exprt &count,
   const exprt &list_elem)
 {
-  // Add counter for while loop
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Fresh result list: a literal source (e.g. [0]) already holds its initial
+  // element, so pushing onto it would yield count + 1 elements.
+  symbolt &result = create_list();
+
+  // Materialise the count (which may be a compound expression such as m + 1)
+  // into an int symbol to use as the loop bound.
+  exprt bound_value =
+    (count.type() == int_type()) ? count : typecast_exprt(count, int_type());
+  symbolt &bound = converter_.create_tmp_symbol(
+    element, "$list_rep_count$", int_type(), exprt());
+  code_declt bound_decl(build_symbol(bound));
+  bound_decl.location() = location;
+  converter_.add_instruction(bound_decl);
+  code_assignt bound_assign(build_symbol(bound), bound_value);
+  bound_assign.location() = location;
+  converter_.add_instruction(bound_assign);
+
+  // counter = 0
   symbolt &counter = converter_.create_tmp_symbol(
     element, "counter", int_type(), gen_zero(int_type()));
-
   code_assignt counter_code(build_symbol(counter), gen_zero(int_type()));
+  counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
-  // Build conditional for while loop (counter < len(arr))
+  // while (counter < bound) { result.push(list_elem); counter += 1; }
   exprt cond("<", bool_type());
   cond.operands().push_back(build_symbol(counter));
-  cond.operands().push_back(build_symbol(*size_var));
+  cond.operands().push_back(build_symbol(bound));
 
-  // Build block with lish_push() calls and counter increment
   code_blockt then;
-  exprt list_push_call = build_push_list_call(*list, element, list_elem);
-  then.copy_to_operands(list_push_call);
+  then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
-  // increment counter
-  exprt incr("+");
+  exprt incr("+", int_type());
   incr.copy_to_operands(build_symbol(counter));
   incr.copy_to_operands(gen_one(int_type()));
   code_assignt update(build_symbol(counter), incr);
   then.copy_to_operands(update);
 
-  // add while block for list_push() calls
   codet while_cod;
   while_cod.set_statement("while");
   while_cod.copy_to_operands(cond, then);
   converter_.add_instruction(while_cod);
 
-  return build_symbol(*list);
+  // Record the element type so downstream indexing resolves it.
+  list_type_map[result.id.as_string()].push_back(
+    std::make_pair(std::string(), list_elem.type()));
+
+  return build_symbol(result);
 }
 
 exprt python_list::list_repetition(
@@ -3394,27 +3412,9 @@ exprt python_list::list_repetition(
     return build_symbol(*elem_sym);
   };
 
-  // Get list size from lhs (e.g.: 3 * [1] or 3 * lst)
+  // Count on the lhs (e.g.: 3 * [1] or n * lst). The list operand is the rhs.
   if (lhs.type() != list_type)
   {
-    if (lhs.is_symbol())
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(lhs).get_identifier().as_string());
-      assert(size_var);
-
-      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
-      assert(list_symbol);
-
-      if (!parse_size_from_symbol(size_var, list_size))
-        return create_vla(list_value_, list_symbol, size_var, list_elem);
-    }
-    else if (lhs.is_constant())
-    {
-      assert(is_integer_type(lhs.type()));
-      list_size = binary2integer(lhs.value().c_str(), true);
-    }
-
     // List element comes from the rhs operand
     if (right_node.contains("elts"))
       list_elem = converter_.get_expr(right_node["elts"][0]);
@@ -3426,9 +3426,20 @@ exprt python_list::list_repetition(
         return build_symbol(create_list());
       is_variable_list = true;
     }
+
+    if (lhs.is_constant())
+    {
+      assert(is_integer_type(lhs.type()));
+      list_size = binary2integer(lhs.value().c_str(), true);
+    }
+    else
+    {
+      // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
+      return create_vla(list_value_, lhs, list_elem);
+    }
   }
 
-  // Get list size from rhs (e.g.: [1] * 3 or lst * 3)
+  // Count on the rhs (e.g.: [1] * 3 or lst * n). The list operand is the lhs.
   if (rhs.type() != list_type)
   {
     // List element comes from the lhs operand
@@ -3443,22 +3454,15 @@ exprt python_list::list_repetition(
       is_variable_list = true;
     }
 
-    if (rhs.is_symbol()) // (e.g.: [1] * n or lst * n)
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(rhs).get_identifier().as_string());
-      assert(size_var);
-
-      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
-      assert(list_symbol);
-
-      if (!parse_size_from_symbol(size_var, list_size))
-        return create_vla(list_value_, list_symbol, size_var, list_elem);
-    }
-    else if (rhs.is_constant())
+    if (rhs.is_constant())
     {
       assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
+    }
+    else
+    {
+      // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
+      return create_vla(list_value_, rhs, list_elem);
     }
   }
 
