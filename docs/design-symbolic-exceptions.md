@@ -120,12 +120,16 @@ ignored on all paths).
 
 ## Roadmap to default-on
 
-The imperative path can only be removed once the lowered path reaches parity.
 The main exception constructs now lower (class/primitive/std throws, the catch
 forms, propagation, rethrow, noexcept, bad_cast); the remaining gate is an
 exhaustive full-suite `--lower-exceptions` ON-vs-OFF differential (across all C++
 and Python suites, not just `try_catch`) to surface any residual divergence,
-after which the default can be flipped and `symex_catch.cpp` deleted.
+after which the default can be flipped and `symex_catch.cpp` deleted. That gate
+is automated by `scripts/lower_exceptions_differential.py` and the
+`lower-exceptions-differential` GitHub Actions workflow: for every
+exception-bearing regression test it runs ESBMC with and without the flag (the
+exact command `regression/testing_tool.py` would build) and fails on any verdict
+divergence. Two green full-suite runs are required before the flip.
 
 ## Testing
 
@@ -133,4 +137,13 @@ after which the default can be flipped and `symex_catch.cpp` deleted.
 (simple, value-fail, nested, uncaught, rethrow, inter-procedural, indirect-call,
 value-catch, slice, primitive-fallback). `unit/goto-programs/exception_typeid.test.cpp`
 covers the registry. The development gate is differential equivalence
-(ON vs OFF) across `regression/esbmc-cpp/try_catch`.
+(ON vs OFF), automated by `scripts/lower_exceptions_differential.py` — run it
+locally as
+
+```sh
+scripts/lower_exceptions_differential.py --esbmc build/src/esbmc/esbmc
+```
+
+to diff every CORE exception-bearing C++ and Python test, or narrow with
+`--root regression/esbmc-cpp/try_catch`. CI runs the same gate via the
+`lower-exceptions-differential` workflow on a clean Linux runner.
