@@ -64,6 +64,16 @@ interoperate across a call, so unless every function is in the supported subset
 - `throw;` (rethrow) re-raises from the globals;
 - asserts *uncaught* at `main`'s epilogue.
 
+**Unclosed-region rebalancing.** `remove_unreachable` runs before this pass and
+prunes the empty `CATCH` pop + skip-GOTO of a try whose body cannot complete
+normally — the common `try: <op that raises>; assert False; except E:` idiom,
+where a model- or user-raised throw makes the fall-through dead. That leaves the
+`CATCH` push unbalanced, which the positional region recovery cannot pair.
+`rebalance_removed_pops` re-inserts a synthetic pop + skip-GOTO before each
+unclosed push's first handler, restoring the balanced shape. Because a push only
+goes unclosed when its normal-completion path is unreachable, the synthetic
+skip-GOTO sits on a dead path and its target is immaterial.
+
 ## Supported subset (current)
 
 Lowered: C++ class **and primitive** throws (`throw 1`); reference, value (incl.
@@ -79,9 +89,12 @@ differential divergences.
 
 **Python** lowers too: try/except/raise share the same THROW/CATCH machinery, the
 registry ingests Python exception ancestry from THROW `exception_list`s, and the
-entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). 26 of 29
-`regression/python/exception*`/`try_finally*`/`try_else*` tests lower at 0
-divergences (the rest fall back).
+entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). All
+comparable `regression/python` exception tests lower at 0 divergences (including
+model-raised exceptions — a `KeyError` from `del d[k]`, a `TypeError` from
+mutating a tuple, a `ValueError` from `math.factorial(-1)` — and the common
+`try: <raises>; assert False; except E:` idiom; see *unclosed-region rebalancing*
+below).
 
 A failing `dynamic_cast<T&>` lowers to a call to the bodyless intrinsic
 `__ESBMC_throw_bad_cast`; the pass rewrites that call into an ordinary `THROW` of
