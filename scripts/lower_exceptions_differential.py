@@ -104,16 +104,24 @@ class Test:  # pylint: disable=too-few-public-methods
 
 
 def parse_test(test_dir):
-    """Parse a test.desc into a Test, or None if it is not a runnable case."""
+    """Parse a test.desc into (Test, expected_output) or None if not runnable.
+
+    ``expected_output`` is the regex section (line 4+), used to decide whether
+    the test asserts a VERIFICATION verdict — the only case the differential can
+    compare. A test that expects a frontend error (``PARSING ERROR``), an
+    unsupported-feature message (``ERROR: ... not supported``), or anything else
+    non-verdict never reaches or is unaffected by the post-GOTO lowering pass.
+    """
     desc = os.path.join(test_dir, "test.desc")
     if not os.path.isfile(desc):
         return None
     with open(desc, encoding="utf-8", errors="replace") as fp:
-        lines = [fp.readline().strip() for _ in range(3)]
-    mode, source, args = lines[0], lines[1], lines[2]
+        head = [fp.readline().strip() for _ in range(3)]
+        expected = fp.read()
+    mode, source, args = head
     if not source or not os.path.exists(os.path.join(test_dir, source)):
         return None
-    return Test(test_dir, mode, source, args)
+    return Test(test_dir, mode, source, args), expected
 
 
 def collect_tests(roots, modes):
@@ -123,13 +131,17 @@ def collect_tests(roots, modes):
         for dirpath, _subdirs, files in os.walk(root):  # noqa: B007
             if "test.desc" not in files:
                 continue
-            test = parse_test(dirpath)
-            if test is None:
+            parsed = parse_test(dirpath)
+            if parsed is None:
                 continue
+            test, expected = parsed
             if modes and test.mode not in modes:
                 continue
             # The dedicated lowered-path tests have no OFF baseline.
             if "--lower-exceptions" in test.args:
+                continue
+            # Only verdict tests are differential-comparable.
+            if not VERDICT_RE.search(expected):
                 continue
             if not is_exception_bearing(dirpath, test.source):
                 continue
@@ -182,9 +194,10 @@ def is_divergence(off, on):
 
 
 def run_suite(tests, args):
-    """Run every test OFF/ON in parallel; return (matched, skipped, divergences)."""
+    """Run every test OFF/ON in parallel; return (matched, no_baseline, divergences)."""
     divergences = []
-    matched = skipped = 0
+    no_baseline = []
+    matched = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [pool.submit(run_one, t, args.esbmc, args.timeout) for t in tests]
         for done in concurrent.futures.as_completed(futures):
@@ -196,11 +209,11 @@ def run_suite(tests, args):
                 matched += 1
                 tag = "ok"
             else:
-                skipped += 1
+                no_baseline.append((test, off, on))
                 tag = "skip"  # both errored/timed out — no usable baseline
             if args.verbose or tag == "DIVERGE":
                 print(f"  [{tag}] {test.name}: OFF={off} ON={on}", flush=True)
-    return matched, skipped, divergences
+    return matched, no_baseline, divergences
 
 
 def main():
@@ -266,12 +279,19 @@ def main():
     if not os.path.exists(args.esbmc):
         sys.exit(f"error: esbmc binary not found: {args.esbmc}")
 
-    matched, skipped, divergences = run_suite(tests, args)
+    matched, no_baseline, divergences = run_suite(tests, args)
 
     print()
     print(f"matched (ON==OFF, both verdicts): {matched}")
-    print(f"no-baseline (both error/timeout): {skipped}")
+    print(f"no-baseline (both error/timeout): {len(no_baseline)}")
     print(f"divergences:                      {len(divergences)}")
+
+    if no_baseline:
+        # Surface these so a reviewer can confirm they are genuinely
+        # incomparable (e.g. a timeout) rather than a masked regression.
+        print("\nno-baseline tests (both paths produced no verdict):")
+        for test, off, on in sorted(no_baseline, key=lambda d: d[0].name):
+            print(f"  {test.name}: OFF={off} ON={on}")
 
     if divergences:
         print("\nDIVERGENCES (lowered path disagrees with imperative path):")
