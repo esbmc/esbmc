@@ -89,10 +89,14 @@ public:
    * @param lhs The element to search for
    * @param rhs The tuple to search in
    * @param invert Whether this is "not in" operation
+   * @param element The original AST node (for location and string comparison)
    * @return exprt Boolean expression representing membership test
    */
-  exprt handle_tuple_membership(const exprt &lhs, const exprt &rhs, bool invert)
-    const;
+  exprt handle_tuple_membership(
+    const exprt &lhs,
+    const exprt &rhs,
+    bool invert,
+    const nlohmann::json &element);
 
   /**
    * @brief Create a tuple struct type from element types
