@@ -99,7 +99,6 @@ public:
   Type type = unknown;
   Action action = follow;
   size_t segment_idx = 0;
-  size_t wp_idx_in_seg = 0;
   std::string file;
   std::string value;
   std::string format;
