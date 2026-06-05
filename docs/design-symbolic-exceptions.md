@@ -71,9 +71,11 @@ single-inheritance base-by-value slicing), pointer (`catch (T*)`) and `void*`
 catches, and catch-all; nested try with inner→outer propagation; inter-procedural
 propagation through direct and indirect calls; rethrow; uncaught detection at both
 `main` and `__ESBMC_main` (the latter covers exceptions from global constructors
-during static initialisation). Reaching outside the subset makes the whole program
-fall back to the imperative path. About **39 of 67** `regression/esbmc-cpp/try_catch`
-CORE tests currently lower, at 0 differential divergences.
+during static initialisation); and `noexcept` / `throw()` enforcement (an exception
+escaping a no-throw function → terminate, asserted at its epilogue). Reaching
+outside the subset makes the whole program fall back to the imperative path. About
+**47 of 67** `regression/esbmc-cpp/try_catch` CORE tests currently lower, at 0
+differential divergences.
 
 **Python** lowers too: try/except/raise share the same THROW/CATCH machinery, the
 registry ingests Python exception ancestry from THROW `exception_list`s, and the
@@ -82,8 +84,9 @@ entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). 26 of 
 divergences (the rest fall back).
 
 Not yet lowered (fall back): parts of the `std` exception surface; destructor
-unwinding; `bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications /
-`noexcept` (a throw inside a `THROW_DECL` spec region forces fallback).
+unwinding; `bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications
+with real types (`throw(T...)`, a C++14-only form the frontend rejects under
+C++17, so it forces fallback only under `--std c++14`).
 
 `std::set_terminate` / `std::set_unexpected` are honoured: the operational model
 (`src/cpp/library/exception`) now stores the installed handler and `terminate()`
@@ -93,11 +96,10 @@ ignored on all paths).
 ## Roadmap to default-on
 
 The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: throw-spec / `noexcept` (a throw escaping the
-spec'd function should route to terminate rather than force fallback); the broader
-`std` exception surface; destructor unwinding; `bad_cast` from `dynamic_cast<T&>`.
-Then: two green full-suite differential runs (`--lower-exceptions` ON vs OFF)
-before flipping the default and deleting `symex_catch.cpp`.
+Remaining work, roughly ordered: the broader `std` exception surface; destructor
+unwinding; `bad_cast` from `dynamic_cast<T&>`. Then: two green full-suite
+differential runs (`--lower-exceptions` ON vs OFF) before flipping the default and
+deleting `symex_catch.cpp`.
 
 ## Testing
 
