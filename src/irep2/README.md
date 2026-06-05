@@ -156,6 +156,389 @@ Notes:
 - `src/util/std_expr.h`, `src/util/std_types.h` — legacy counterparts on the
   string-irep side.
 
+## Grammar
+
+The two manifests (`expr_kinds.inc` / `type_kinds.inc`) plus each kind's
+`fields` tuple define an abstract grammar for the IR. The productions
+below are that grammar; the *Reference* tables that follow enumerate every
+terminal in prose. This is abstract syntax — the structure walked by
+`get_sub_expr`, the comparison/crc dispatchers, and `clone` — not a
+surface syntax any parser reads.
+
+**Notation.** `::=` is a production, `|` alternation, `( … )` grouping,
+`{ x }` zero-or-more, `[ x ]` optional, `"lit"` a terminal keyword (the
+identifier as it appears in the `.inc` manifest). Lower-case words are
+non-terminals; leaf terminals (`nat`, `name`, `int-lit`, …) are defined
+at the end. `; …` is a comment. Every expression carries a result type,
+written `«T»` after the keyword: `«type»` when the type is a free operand,
+or a concrete type when the kind fixes it (`«bool»` for predicates,
+`«empty»` for statements, `«pointer»` for `address_of`). Operand lists
+appear in **`fields`-tuple order** — the order `get_sub_expr` and the
+dispatchers walk.
+
+### Types
+
+```
+type        ::= "bool"
+              | "empty"
+              | "symbol" "(" name ")"
+              | aggregate-type
+              | "code" "(" [ type { "," type } ] [ "," "..." ] ")" "->" type
+              | "array" "(" type "," ( expr | "infinite" ) ")"
+              | "vector" "(" type "," expr ")"
+              | "pointer" "(" type [ "," "provenance" ] ")"
+              | "unsignedbv" "(" nat ")"
+              | "signedbv" "(" nat ")"
+              | "fixedbv" "(" nat "," nat ")"     ; total width, integer bits
+              | "floatbv" "(" nat "," nat ")"     ; fraction bits, exponent bits
+              | "complex" "(" type ")"
+              | "cpp_name" "(" name [ "<" type { "," type } ">" ] ")"
+
+aggregate-type ::= ( "struct" | "union" ) name
+                   "{" [ member { "," member } ] "}" [ "packed" ]
+member      ::= name ":" type
+```
+
+`code` stores `argument_names` parallel to its argument types and an
+`ellipsis` flag (the `...`). `struct`/`union` additionally carry
+`member_pretty_names` parallel to `member` (elided above). An `array`
+whose `size_is_infinite` flag is set has size `infinite` and a nil
+`array_size`; a non-constant `array_size` is a dynamically-sized array.
+
+### Expressions
+
+```
+expr        ::= constant | symbol | cast | control | relation | logical
+              | bitwise | arithmetic | ieee | bitlevel | overflow
+              | pointer-expr | aggregate-expr | quantifier | python-pred
+              | cheri | sideeffect | statement
+```
+
+Constants:
+
+```
+constant    ::= "constant_int"      «type» int-lit
+              | "constant_fixedbv"  «type» fixedbv-lit
+              | "constant_floatbv"  «type» float-lit
+              | "constant_bool"     «bool» bool-lit
+              | "constant_string"   «type» string-lit
+              | "constant_struct"   «type» "{" [ expr { "," expr } ] "}"
+              | "constant_union"    «type» name "=" "{" [ expr { "," expr } ] "}"
+              | "constant_array"    «type» "{" [ expr { "," expr } ] "}"
+              | "constant_vector"   «type» "{" [ expr { "," expr } ] "}"
+              | "constant_array_of" «type» "(" expr ")"
+```
+
+Symbols and casts:
+
+```
+symbol      ::= "symbol" «type» name
+cast        ::= "typecast"  «type» "(" expr "," rmode ")"
+              | "bitcast"   «type» "(" expr ")"
+              | "nearbyint" «type» "(" expr "," rmode ")"
+```
+
+Control, comparison and logical:
+
+```
+control     ::= "if" «type» "(" expr "," expr "," expr ")"   ; cond, then, else
+relation    ::= relop «bool» "(" expr "," expr ")"
+              | "cmp_three_way" «type» "(" expr "," expr ")"
+relop       ::= "equality" | "notequal" | "lessthan" | "greaterthan"
+              | "lessthanequal" | "greaterthanequal"
+logical     ::= "not" «bool» "(" expr ")"
+              | logop2 «bool» "(" expr "," expr ")"
+logop2      ::= "and" | "or" | "xor" | "implies"
+```
+
+Bitwise and arithmetic:
+
+```
+bitwise     ::= "bitnot" «type» "(" expr ")"
+              | bitop2 «type» "(" expr "," expr ")"
+bitop2      ::= "bitand" | "bitor" | "bitxor" | "shl" | "lshr" | "ashr"
+arithmetic  ::= aunop «type» "(" expr ")"
+              | abinop «type» "(" expr "," expr ")"
+aunop       ::= "neg" | "abs"
+abinop      ::= "add" | "sub" | "mul" | "div" | "modulus"
+```
+
+IEEE-754 floating point:
+
+```
+ieee        ::= ieee-bin   «type» "(" rmode "," expr "," expr ")"
+              | "ieee_fma"  «type» "(" expr "," expr "," expr "," rmode ")"
+              | "ieee_sqrt" «type» "(" expr "," rmode ")"
+              | fp-class    «bool» "(" expr ")"
+              | "signbit"   «type» "(" expr ")"
+ieee-bin    ::= "ieee_add" | "ieee_sub" | "ieee_mul" | "ieee_div"
+fp-class    ::= "isnan" | "isinf" | "isnormal" | "isfinite"
+```
+
+Bit-level utilities and overflow checks:
+
+```
+bitlevel    ::= "popcount" «type» "(" expr ")"
+              | "bswap"    «type» "(" expr ")"
+              | "concat"   «type» "(" expr "," expr ")"
+              | "extract"  «type» "(" expr "," nat "," nat ")"  ; value, upper, lower
+overflow    ::= "overflow"      «bool» "(" expr ")"  ; operand is an add/sub/mul
+              | "overflow_cast" «bool» "(" expr "," nat ")"  ; operand, target width
+              | "overflow_neg"  «bool» "(" expr ")"
+```
+
+Pointers and the memory model:
+
+```
+pointer-expr ::= "address_of"         «pointer» "(" expr ")"
+               | "dereference"        «type» "(" expr ")"
+               | "same_object"        «bool» "(" expr "," expr ")"
+               | "pointer_offset"     «type» "(" expr ")"
+               | "pointer_object"     «type» "(" expr ")"
+               | "pointer_capability" «type» "(" expr ")"
+               | "valid_object"       «bool» "(" expr ")"
+               | "invalid_pointer"    «bool» "(" expr ")"
+               | "deallocated_obj"    «bool» "(" expr ")"
+               | "races_check"        «bool» "(" expr ")"
+               | "dynamic_size"       «type» "(" expr ")"
+               | "dynamic_object"     «type» "(" expr "," bool-lit "," bool-lit ")"
+               | "object_descriptor"  «type» "(" expr "," expr "," nat ")"
+               | "null_object"        «type»
+               | "unknown"            «type»
+               | "invalid"            «type»
+```
+
+Aggregate access and update:
+
+```
+aggregate-expr ::= "index"        «type» "(" expr "," expr ")"  ; array, index
+                 | "member"       «type» "(" expr "," name ")"  ; aggregate, field
+                 | "member_ref"   «type» "(" name ")"
+                 | "ptr_mem"      «type» "(" expr "," expr ")"
+                 | "with"         «type» "(" expr "," field "," expr ")"  ; src, field, val
+                 | "byte_extract" «type» "(" expr "," expr "," endian ")"
+                 | "byte_update"  «type» "(" expr "," expr "," expr "," endian ")"
+field          ::= name | expr     ; field name for struct/union, index for array
+endian         ::= "little" | "big"
+```
+
+Quantifiers, Python predicates and CHERI:
+
+```
+quantifier  ::= ( "forall" | "exists" ) «bool» "(" symbol "," expr ")"  ; bound var, body
+python-pred ::= ( "isinstance" | "hasattr" | "isnone" ) «bool» "(" expr "," expr ")"
+cheri       ::= ( "capability_base" | "capability_top" ) «type» "(" expr ")"
+```
+
+Side effects:
+
+```
+sideeffect  ::= "sideeffect" «type» "(" expr "," expr "," "[" { expr } "]"
+                              "," type "," allockind ")"  ; operand, size, args, alloc-type
+allockind   ::= "malloc" | "realloc" | "alloca" | "cpp_new" | "cpp_new_arr"
+              | "nondet" | "va_arg" | "printf2" | "function_call"
+              | "preincrement" | "postincrement" | "predecrement"
+              | "postdecrement" | "old_snapshot" | "assigns_target"
+```
+
+GOTO statements (`code_*`):
+
+```
+statement   ::= "code_block"         «empty» "(" { statement } ")"
+              | "code_assign"        «empty» "(" expr "," expr ")"  ; target, source
+              | "code_decl"          «type»  name
+              | "code_dead"          «type»  name
+              | "code_return"        «empty» "(" expr ")"
+              | "code_skip"          «type»
+              | "code_free"          «empty» "(" expr ")"
+              | "code_goto"          «empty» name                   ; target label
+              | "code_function_call" «empty» "(" expr "," expr ","
+                                              "[" { expr } "]" ")"  ; ret, func, args
+              | "code_printf"        «empty» "(" "[" { expr } "]" ")"
+              | "code_expression"    «empty» "(" expr ")"
+              | "code_comma"         «type»  "(" expr "," expr ")"
+              | "code_asm"           «type»  string-lit
+              | cpp-statement
+cpp-statement ::= "code_cpp_delete"         «empty» "(" expr ")"
+                | "code_cpp_del_array"      «empty» "(" expr ")"
+                | "code_cpp_throw"          «empty» "(" expr "," "[" { name } "]" ")"
+                | "code_cpp_catch"          «empty» "(" "[" { name } "]" ")"
+                | "code_cpp_throw_decl"     «empty» "(" "[" { name } "]" ")"
+                | "code_cpp_throw_decl_end" «empty» "(" "[" { name } "]" ")"
+```
+
+Leaf terminals:
+
+```
+nat         ::= unsigned decimal integer (a bit-width or field index)
+int-lit     ::= arbitrary-precision signed integer (BigInt)
+fixedbv-lit ::= fixed-point literal (fixedbvt)
+float-lit   ::= IEEE-754 literal (ieee_floatt)
+bool-lit    ::= "true" | "false"
+string-lit  ::= interned string literal (irep_idt)
+name        ::= interned identifier (irep_idt) — variable, field, label or type name
+rmode       ::= expr   ; rounding-mode operand, int32; defaults to __ESBMC_rounding_mode
+```
+
+Notes:
+
+- **Type slot.** The `«…»` annotation is the node's `type` field. Whether
+  it participates in structural equality depends on whether
+  `&expr2t::type` is the first entry of the kind's `fields` tuple (see
+  *Anatomy of a node*); a few kinds — `constant_bool`, `not` — omit it.
+- **Rounding mode.** Operand order follows `fields`, and the rounding-mode
+  operand's position is not uniform: the binary `ieee_*` ops list it
+  first, while `ieee_fma` / `ieee_sqrt` list it last.
+- **No conditional `code_goto`.** `code_*` statements carry `empty` type
+  and live inside GOTO programs. Conditional branches are encoded on the
+  GOTO *instruction*, not as an expression, so only the unconditional
+  `code_goto` appears here.
+
+## Examples
+
+Each example shows the source, the C++ construction with the generated
+`*2tc` factories, and the resulting tree in the grammar notation above.
+Assume `type2tc i32 = signedbv_type2tc(32);` throughout.
+
+**Leaves — a variable and a literal.**
+
+```cpp
+expr2tc x   = symbol2tc(i32, "x");
+expr2tc one = constant_int2tc(i32, BigInt(1));
+```
+```
+symbol       «signedbv(32)» "x"
+constant_int «signedbv(32)» 1
+```
+
+**Arithmetic — `x + 2`.** `add` takes its result type plus two operands:
+
+```cpp
+expr2tc two = constant_int2tc(i32, BigInt(2));
+expr2tc sum = add2tc(i32, x, two);
+```
+```
+add «signedbv(32)» (
+  symbol       «signedbv(32)» "x",
+  constant_int «signedbv(32)» 2)
+```
+
+**Comparison + ternary — `y > 2 ? y : 0`.** Relations have boolean
+result and take only their two operands (no explicit type):
+
+```cpp
+expr2tc y    = symbol2tc(i32, "y");
+expr2tc gt   = greaterthan2tc(y, two);
+expr2tc zero = constant_int2tc(i32, BigInt(0));
+expr2tc tern = if2tc(i32, gt, y, zero);
+```
+```
+if «signedbv(32)» (
+  greaterthan «bool» (symbol «signedbv(32)» "y",
+                      constant_int «signedbv(32)» 2),
+  symbol       «signedbv(32)» "y",
+  constant_int «signedbv(32)» 0)
+```
+
+**Struct member — `p.y`** for `struct point { int x; int y; }`:
+
+```cpp
+type2tc point = struct_type2tc(
+  {i32, i32},      // members
+  {"x", "y"},      // member_names
+  {"x", "y"},      // member_pretty_names
+  "point",         // tag
+  false);          // not packed
+expr2tc p   = symbol2tc(point, "p");
+expr2tc p_y = member2tc(i32, p, "y");   // result type is the member's type
+```
+```
+member «signedbv(32)» (
+  symbol «struct point {x: signedbv(32), y: signedbv(32)}» "p",
+  "y")
+```
+
+**Array and pointers — `a[i]`, `&x`, `*p`.** Note `address_of2tc` takes
+the *pointee* type as its first argument; the node's own type is the
+pointer to it:
+
+```cpp
+expr2tc a    = symbol2tc(
+  array_type2tc(i32, constant_int2tc(i32, BigInt(3)), false), "a");
+expr2tc i    = symbol2tc(signedbv_type2tc(64), "i");
+expr2tc elem = index2tc(i32, a, i);          // a[i]
+expr2tc addr = address_of2tc(i32, x);        // &x : pointer(signedbv(32))
+expr2tc p    = symbol2tc(pointer_type2tc(i32), "p");
+expr2tc star = dereference2tc(i32, p);       // *p
+```
+```
+index       «signedbv(32)»          (symbol «array(signedbv(32), 3)» "a",
+                                     symbol «signedbv(64)» "i")
+address_of  «pointer(signedbv(32))» (symbol «signedbv(32)» "x")
+dereference «signedbv(32)»          (symbol «pointer(signedbv(32))» "p")
+```
+
+**Statements — a function body.** `code_*` nodes nest inside a
+`code_block`; their type is `empty`:
+
+```cpp
+expr2tc body = code_block2tc(std::vector<expr2tc>{
+  code_decl2tc(i32, "x"),
+  code_assign2tc(x, one),
+  code_decl2tc(i32, "y"),
+  code_assign2tc(y, add2tc(i32, x, two)),
+  code_return2tc(y),
+});
+```
+```
+code_block «empty» (
+  code_decl   «signedbv(32)» "x",
+  code_assign «empty» (symbol «signedbv(32)» "x", constant_int «signedbv(32)» 1),
+  code_decl   «signedbv(32)» "y",
+  code_assign «empty» (symbol «signedbv(32)» "y",
+                       add «signedbv(32)» (symbol «signedbv(32)» "x",
+                                           constant_int «signedbv(32)» 2)),
+  code_return «empty» (symbol «signedbv(32)» "y"))
+```
+
+**Seeing the IR for real code.** `esbmc file.c --goto-functions-only`
+dumps the GOTO program, where the same `code_*` / expression nodes print
+in a compact concrete syntax. For
+
+```c
+int f(int *a, int i) {
+  struct point p;
+  int x = 1;
+  int y = x + 2;
+  p.y = y;
+  int z = a[i];
+  if (y > 2) return p.y;
+  return z;
+}
+```
+
+the listing (comments and `p`'s nondet-init trimmed) is:
+
+```
+DECL signed int x;
+ASSIGN x=1;
+DECL signed int y;
+ASSIGN y=x + 2;
+ASSIGN p.y=y;
+DECL signed int z;
+ASSIGN z=a[(signed long int)i];
+IF !(y > 2) THEN GOTO 1
+RETURN: p.y
+1: RETURN: z
+```
+
+Reading it back to the grammar: `ASSIGN y=x + 2;` is
+`code_assign(symbol "y", add(symbol "x", constant_int 2))`; `p.y` is
+`member(symbol "p", "y")`; `a[(signed long int)i]` is
+`index(symbol "a", typecast(symbol "i"))`; and the `IF … GOTO` is the
+conditional branch carried on the GOTO instruction itself — not a
+`code_goto` expression (see the grammar note above).
+
 ## Reference: types
 
 Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
