@@ -88,6 +88,7 @@ ignored_dirs=(
   "github_4668"
   "github_4666_2d"
   "github_4666_shape"
+  "github_5102_nested_list_copy"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
@@ -179,6 +180,16 @@ for dir in */; do
       continue
     fi
     matched_tests=$((matched_tests + 1))
+  fi
+
+  # Skip tests that use ESBMC verification intrinsics. Names like __ESBMC_*,
+  # __VERIFIER_* and nondet_* are not defined in CPython, so the test raises
+  # NameError under direct execution and can only be validated via ESBMC.
+  # Detecting them by content means an intrinsic-using test no longer needs a
+  # manual ignore-list entry (e.g. github_5104, github_5105).
+  if grep -qE '__ESBMC|__VERIFIER_|nondet_' "$dir/main.py"; then
+    echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
+    continue
   fi
 
   # Always keep legacy ignore behavior, with or without query mode.

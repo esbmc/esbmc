@@ -588,8 +588,17 @@ void goto_convertt::do_function_call_symbol(
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
-  // the builtin function, we should honor the user function and call it
-  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
+  // the builtin function, we should honor the user function and call it.
+  // Exception: under --enable-unreachability-intrinsic, reach_error and
+  // __VERIFIER_error are treated as error sentinels -- skip any user body and
+  // insert ASSERT false at the call site so the violation location in the
+  // counterexample/witness points to the call site, not inside the body.
+  const bool skip_body =
+    options.get_bool_option("enable-unreachability-intrinsic") &&
+    (symbol->name == "reach_error" || symbol->name == "__VERIFIER_error");
+  if (
+    symbol->get_value().is_not_nil() && symbol->get_value().has_operands() &&
+    !skip_body)
   {
     // insert function call
     code_function_callt function_call;
@@ -1008,11 +1017,20 @@ void goto_convertt::do_function_call_symbol(
       return;
 #endif
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(base_name);
+    }
+    else
+      // Under --no-assertions, trigger the memory-leak-check walker on this
+      // abnormal-termination path (mirrors __assert_fail's handling and what
+      // abort() does in the stdlib operational model).
+      emit_assert_fail_noreturn(function.location(), dest);
 
     if (lhs.is_not_nil())
     {
@@ -1020,8 +1038,6 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    // __VERIFIER_error has abort() semantics, even if no assertions
-    // are being checked
     goto_programt::targett a = dest.add_instruction(ASSUME);
     a->guard = gen_false_expr();
     a->location = function.location();

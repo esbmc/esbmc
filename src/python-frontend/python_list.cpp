@@ -725,8 +725,11 @@ void python_list::emit_list_copy(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   const symbolt *at_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_at");
+  // Shallow per-element append: preserves element value pointers so nested
+  // lists are shared (Python shallow-copy semantics) rather than corrupted by
+  // a pointee byte-copy (esbmc/esbmc#5102).
   const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
   assert(size_sym && at_sym && push_obj_sym);
 
   // list_size / list_at take `const List*`
@@ -780,14 +783,18 @@ void python_list::emit_list_copy(
   tmp_obj_decl.copy_to_operands(at_call);
   body.copy_to_operands(tmp_obj_decl);
 
-  // list_push_object(dst_list, tmp_obj). ptr_free=0 (generic source).
+  // list_push_shallow(dst_list, tmp_obj, list_type_id): nested-list elements
+  // (type_id == list_type_id) keep their inner pointer; scalars are byte-copied
+  // independently, so they are not corrupted by a pointee byte-copy (#5102).
+  constant_exprt list_type_id_arg(size_type());
+  list_type_id_arg.set_value(integer2binary(
+    std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+      converter_.get_type_handler().get_list_type())),
+    config.ansi_c.address_width));
   exprt push_call = build_call_expr(
     *push_obj_sym,
     bool_type(),
-    {build_symbol(dst),
-     build_symbol(tmp_obj),
-     from_integer(BigInt(0), size_type()),
-     from_integer(BigInt(0), int_type())});
+    {build_symbol(dst), build_symbol(tmp_obj), list_type_id_arg});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1765,18 +1772,24 @@ exprt python_list::handle_range_slice(
   at_decl.copy_to_operands(list_at_call);
   loop_body.copy_to_operands(at_decl);
 
+  // Shallow append: preserve element value pointers so nested lists survive the
+  // slice copy uncorrupted (esbmc/esbmc#5102).
   const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
   if (!push_func)
     throw std::runtime_error("Push function symbol not found");
 
+  // Nested-list elements keep their inner pointer; scalars are byte-copied, so
+  // the slice copy does not corrupt nested lists (#5102).
+  constant_exprt slice_list_type_id(size_type());
+  slice_list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+      converter_.get_type_handler().get_list_type())),
+    config.ansi_c.address_width));
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
-    {build_symbol(sliced_list),
-     build_symbol(at_result),
-     from_integer(BigInt(0), size_type()),
-     from_integer(BigInt(0), int_type())});
+    {build_symbol(sliced_list), build_symbol(at_result), slice_list_type_id});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1793,18 +1806,40 @@ exprt python_list::handle_range_slice(
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements (only if both bounds are constant
-  // literals AND step is the default 1 — for step != 1 the slice index
-  // mapping is no longer lower + i, so the per-index type map would be
-  // wrong; skip the refinement in that case).
-  if (
-    step_val == 1 && slice_node.contains("lower") &&
-    slice_node["lower"].is_object() && slice_node["lower"].contains("_type") &&
-    slice_node["lower"]["_type"] == "Constant" &&
-    slice_node["lower"].contains("value") && slice_node.contains("upper") &&
-    slice_node["upper"].is_object() && slice_node["upper"].contains("_type") &&
-    slice_node["upper"]["_type"] == "Constant" &&
-    slice_node["upper"].contains("value"))
+  // Update type map for sliced elements. Element types are taken positionally
+  // from the source list literal. This is valid when step == 1 and each bound
+  // is either absent (defaulting to the full range) or a non-negative constant
+  // literal. Absent bounds cover the idiomatic full copy src[:] and half-open
+  // slices like src[1:] / src[:2], whose nested-list element types would
+  // otherwise be lost — corrupting reads such as sl[0][0] (esbmc/esbmc#5102).
+  // For step != 1 the index mapping is no longer lower + i, and for negative or
+  // non-constant bounds the static range is unknown; both keep the generic
+  // fallback below.
+  bool bounds_usable = true;
+  bool has_lower = false;
+  bool has_upper = false;
+  size_t lower_bound = 0;
+  size_t upper_bound = 0;
+  for (int which = 0; which < 2; ++which)
+  {
+    const char *key = which == 0 ? "lower" : "upper";
+    bool &present = which == 0 ? has_lower : has_upper;
+    size_t &out = which == 0 ? lower_bound : upper_bound;
+
+    present = slice_node.contains(key) && !slice_node[key].is_null();
+    if (!present)
+      continue; // absent / None: defaults to the list bound below
+    const nlohmann::json &b = slice_node[key];
+    if (
+      b.is_object() && b.contains("_type") && b["_type"] == "Constant" &&
+      b.contains("value") && b["value"].is_number_integer() &&
+      b["value"].get<long long>() >= 0)
+      out = b["value"].get<size_t>();
+    else
+      bounds_usable = false; // negative or non-constant: not known statically
+  }
+
+  if (step_val == 1 && bounds_usable)
   {
     nlohmann::json list_node;
     if (
@@ -1818,9 +1853,6 @@ exprt python_list::handle_range_slice(
         converter_.ast());
     }
 
-    const size_t lower_bound = slice_node["lower"]["value"].get<size_t>();
-    const size_t upper_bound = slice_node["upper"]["value"].get<size_t>();
-
     // Only update type map for actual lists (not strings or other types)
     if (
       !list_node.is_null() && list_node.contains("value") &&
@@ -1828,8 +1860,9 @@ exprt python_list::handle_range_slice(
       list_node["value"]["elts"].is_array())
     {
       const size_t elts_size = list_node["value"]["elts"].size();
-      const size_t begin = std::min(lower_bound, elts_size);
-      const size_t end = std::min(upper_bound, elts_size);
+      const size_t begin = has_lower ? std::min(lower_bound, elts_size) : 0;
+      const size_t end =
+        has_upper ? std::min(upper_bound, elts_size) : elts_size;
 
       for (size_t i = begin; i < end; ++i)
       {
@@ -2003,14 +2036,41 @@ exprt python_list::handle_index_access(
 
           if (elem_type == converter_.get_type_handler().get_list_type())
           {
-            // Compile-time symbol resolution is only valid when the entry
-            // records a concrete inner-list symbol (literal case).  For
-            // parameter-annotation-only entries (elem_id is empty), fall
-            // through to the dynamic __ESBMC_list_at path below.
+            // Nested-list element.  The recorded elem_id names the inner-list
+            // symbol, but copy_type_info copies that id verbatim across a
+            // function-return boundary (Q = build()), where it is a *callee*
+            // frame local — returning build_symbol(elem_id) would reference a
+            // symbol that is never assigned in the caller's symex frame, so its
+            // value is nondet (float_buf OOB / wrong value, #5103/#5102).
+            //
+            // Instead, read the inner list pointer at runtime from `array`
+            // (valid in every scope: list_at returns the stored pointer, so
+            // aliasing/mutation semantics are preserved), bind it to a fresh
+            // caller-scope symbol, and copy the inner element-type map onto
+            // that symbol so deeper subscripts (Q[i][j]) still resolve
+            // int/float.  For parameter-annotation-only entries (elem_id
+            // empty) fall through to the dynamic __ESBMC_list_at path below.
             if (!elem_id.empty())
             {
-              if (symbolt *nested_list = converter_.find_symbol(elem_id))
-                return build_symbol(*nested_list);
+              const locationt loc =
+                converter_.get_location_from_decl(list_value_);
+
+              exprt list_at_call =
+                build_list_at_call(array, pos_expr, list_value_);
+              exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
+
+              symbolt &inner_sym = converter_.create_tmp_symbol(
+                list_value_, "$nested_list$", elem_type, exprt());
+              code_declt inner_decl(build_symbol(inner_sym));
+              inner_decl.location() = loc;
+              converter_.add_instruction(inner_decl);
+
+              code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
+              inner_assign.location() = loc;
+              converter_.add_instruction(inner_assign);
+
+              copy_type_info(elem_id, inner_sym.id.as_string());
+              return build_symbol(inner_sym);
             }
           }
         }
@@ -5024,18 +5084,23 @@ void python_list::handle_list_var_unpacking(
     tmp_at_decl.copy_to_operands(at_call);
     loop_body.copy_to_operands(tmp_at_decl);
 
-    // __ESBMC_list_push_object(star_list, tmp_at)
+    // __ESBMC_list_push_shallow(star_list, tmp_at): preserve element value
+    // pointers so nested lists survive the unpack copy uncorrupted (#5102).
     const symbolt *push_obj_func =
-      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
     assert(push_obj_func);
 
+    // Nested-list elements keep their inner pointer; scalars are byte-copied,
+    // so the unpack copy does not corrupt nested lists (#5102).
+    constant_exprt star_list_type_id(size_type());
+    star_list_type_id.set_value(integer2binary(
+      std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
+        converter_.get_type_handler().get_list_type())),
+      config.ansi_c.address_width));
     exprt push_call = build_call_expr(
       *push_obj_func,
       bool_type(),
-      {build_symbol(star_list),
-       build_symbol(tmp_at),
-       from_integer(BigInt(0), size_type()),
-       from_integer(BigInt(0), int_type())});
+      {build_symbol(star_list), build_symbol(tmp_at), star_list_type_id});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));
