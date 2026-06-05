@@ -898,6 +898,13 @@ exprt python_list::get()
     return build_symbol(tmp);
   };
 
+  // Convert every element once, recording whether the literal mixes integer and
+  // floating-point values. Python promotes such a list to a homogeneous float
+  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would leave
+  // their float_buf slot unset and read back as a stale float (issue #5156).
+  std::vector<exprt> elems;
+  elems.reserve(list_value_["elts"].size());
+  bool has_int = false, has_float = false;
   for (auto &e : list_value_["elts"])
   {
     // Clear current_lhs so that constructor calls inside list elements
@@ -905,8 +912,26 @@ exprt python_list::get()
     // inheriting the outer assignment target as self.
     exprt *saved_lhs = converter_.current_lhs;
     converter_.current_lhs = nullptr;
-    exprt elem = converter_.get_expr(e);
+    elems.push_back(converter_.get_expr(e));
     converter_.current_lhs = saved_lhs;
+
+    const typet &t = elems.back().type();
+    if (t.is_floatbv())
+      has_float = true;
+    else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+      has_int = true; // bool is int-like in Python (True == 1)
+  }
+
+  const bool promote_ints = has_int && has_float;
+
+  for (exprt &elem : elems)
+  {
+    // Promote integer (and bool) elements to double in a mixed int/float
+    // literal, matching the list[float] annotation Python infers for the mix.
+    const typet &t = elem.type();
+    if (promote_ints && (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()))
+      elem = build_typecast(elem, double_type());
+
     exprt map_elem = materialize_list_elem(elem);
 
     exprt list_push_func_call =
