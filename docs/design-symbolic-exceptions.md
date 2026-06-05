@@ -90,9 +90,21 @@ the rest of the pipeline lowers it like any other throw. If `<typeinfo>`'s
 `std::bad_cast` is not in the symbol table the call is left in place and the
 program falls back to the imperative path.
 
-Not yet lowered (fall back): parts of the `std` exception surface; dynamic
-exception specifications with real types (`throw(T...)`, a C++14-only form the
-frontend rejects under C++17, so it forces fallback only under `--std c++14`).
+The **`std` exception hierarchy** lowers through the same machinery, with no
+std-specific handling: the frontend flattens a thrown std type's base chain into
+the `THROW` `exception_list` (e.g. `THROW std::runtime_error, std::exception`),
+which `register_chain` ingests, so a `catch (std::exception&)` base handler's
+guard matches. Throwing `std::bad_alloc` from `new`, calling `what()` in a
+handler, and user types deriving from `std::exception` all lower at 0
+differential divergences. (Two orthogonal caveats, both affecting the imperative
+path equally: a `std::string` exception message drives the unbounded `strlen`
+model, so such programs need an `--unwind` bound; and the frontend can omit
+intermediate bases from the flattened chain, so a catch on a mid-hierarchy base
+may not match — a frontend chain-completeness matter, not a lowering one.)
+
+Not yet lowered (fall back): dynamic exception specifications with real types
+(`throw(T...)`, a C++14-only form the frontend rejects under C++17, so it forces
+fallback only under `--std c++14`).
 
 **Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
 in the lowering pass, so it applies on **both** the imperative and lowered
@@ -109,9 +121,11 @@ ignored on all paths).
 ## Roadmap to default-on
 
 The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: the broader `std` exception surface. Then: two
-green full-suite differential runs (`--lower-exceptions` ON vs OFF) before
-flipping the default and deleting `symex_catch.cpp`.
+The main exception constructs now lower (class/primitive/std throws, the catch
+forms, propagation, rethrow, noexcept, bad_cast); the remaining gate is an
+exhaustive full-suite `--lower-exceptions` ON-vs-OFF differential (across all C++
+and Python suites, not just `try_catch`) to surface any residual divergence,
+after which the default can be flipped and `symex_catch.cpp` deleted.
 
 ## Testing
 
