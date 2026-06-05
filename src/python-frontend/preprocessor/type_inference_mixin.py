@@ -105,8 +105,7 @@ class TypeInferenceMixin:
         which breaks ``if x`` truthiness and the use of x as a dict key (spurious
         KeyError).
         """
-        if (isinstance(iterable_node, ast.Call)
-                and isinstance(iterable_node.func, ast.Attribute)
+        if (isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute)
                 and iterable_node.func.attr in ("split", "splitlines")):
             return "str"
         return None
