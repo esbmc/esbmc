@@ -95,6 +95,22 @@ class TypeInferenceMixin:
             return "str"
         return "list"
 
+    @staticmethod
+    def _extract_str_method_element_type(iterable_node):
+        """Element type for iterables produced by str methods returning list[str].
+
+        ``s.split(...)`` and ``s.splitlines(...)`` yield a list of str, so a
+        ``for x in s.split(...)`` loop variable is a str. Without this the element
+        type falls back to "Any" and the loop variable is mis-typed as a scalar,
+        which breaks ``if x`` truthiness and the use of x as a dict key (spurious
+        KeyError).
+        """
+        if (isinstance(iterable_node, ast.Call)
+                and isinstance(iterable_node.func, ast.Attribute)
+                and iterable_node.func.attr in ("split", "splitlines")):
+            return "str"
+        return None
+
     def _get_element_type_from_container(self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks
         dict_method_type = self._extract_dict_method_element_type(iterable_node)
         if dict_method_type is not None:
@@ -103,6 +119,10 @@ class TypeInferenceMixin:
         dict_name_type = self._extract_dict_name_element_type(iterable_node)
         if dict_name_type is not None:
             return dict_name_type
+
+        str_method_type = self._extract_str_method_element_type(iterable_node)
+        if str_method_type is not None:
+            return str_method_type
 
         if container_type == "str":
             return "str"

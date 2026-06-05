@@ -976,9 +976,54 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-// Python string split - splits a string by separator
-// Returns a Python list (represented as PyListObject*)
-// For ESBMC, we'll return a simple structure representing the split result
+// Whitespace predicate matching CPython str.split(None) and the constant-fold
+// path in python_list.cpp (space, tab, newline, vertical tab, form feed, CR).
+static _Bool __python_str_split_isspace(char c)
+{
+__ESBMC_HIDE:;
+  return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+         c == '\r';
+}
+
+// Copy str[start, end) into a fresh NUL-terminated __ESBMC_alloca buffer and
+// append it as the next list element. Each token gets its own allocation (the
+// frontend reads element pointers independently); __ESBMC_alloca survives the
+// function return (see python_list.cpp), so the buffer stays valid.
+static void __python_str_split_emit(
+  PyObject *items,
+  size_t *count,
+  const char *str,
+  size_t start,
+  size_t end)
+{
+__ESBMC_HIDE:;
+  size_t tok_len = end - start;
+  char *buf = __ESBMC_alloca(tok_len + 1);
+  size_t k = 0;
+  while (k < tok_len)
+  {
+    buf[k] = str[start + k];
+    k++;
+  }
+  buf[tok_len] = '\0';
+  items[*count].value = buf;
+  items[*count].type_id = 0;
+  items[*count].size = tok_len + 1;
+  (*count)++;
+}
+
+// Python string split - splits a string by separator and returns a Python list
+// (PyListObject*) of the substring tokens. Mirrors CPython semantics and the
+// constant-fold path in python_list.cpp::build_split_list:
+//   - sep == "" (str.split() / sep=None): split on whitespace runs, drop empty
+//     tokens.
+//   - non-empty sep: split on each occurrence, keep empty tokens.
+//   - maxsplit >= 0 caps the number of splits; the remainder becomes the final
+//     token. maxsplit < 0 means unlimited.
+//
+// The string is traversed with a single monotonic scan (O(n)); each token is
+// copied into its own buffer. Keeping the scan linear (rather than re-searching
+// from each token start) matters under tight --unwind bounds.
 struct __ESBMC_PyListObj *
 __python_str_split(const char *str, const char *sep, long long maxsplit)
 {
@@ -989,60 +1034,75 @@ __ESBMC_HIDE:;
     return (PyListObject *)0;
 
   size_t len_sep = __python_strnlen_bounded(sep, 64);
-  size_t len_str = __python_strnlen_bounded(str, 256);
-  _Bool has_empty = 0;
+  size_t len_str = __python_strnlen_bounded(str, ESBMC_PY_STRNLEN_BOUND);
 
-  (void)maxsplit;
+  // At most len_str + 1 tokens (every character a separator boundary).
+  PyObject *items = __ESBMC_alloca((len_str + 1) * sizeof(PyObject));
+  PyListObject *list = __ESBMC_alloca(sizeof(PyListObject));
+  size_t count = 0;
 
-  if (len_sep == 1)
+  if (len_sep == 0)
   {
-    char sep_ch = sep[0];
-
-    if (len_str == 0)
+    // Whitespace split: collapse runs and drop empty tokens.
+    long long splits = 0;
+    size_t i = 0;
+    while (i < len_str)
     {
-      has_empty = 1;
-    }
-    else
-    {
-      if (str[0] == sep_ch || str[len_str - 1] == sep_ch)
-        has_empty = 1;
-
-      size_t i = 1;
-      while (i < len_str && !has_empty)
-      {
-        if (str[i] == sep_ch && str[i - 1] == sep_ch)
-          has_empty = 1;
+      while (i < len_str && __python_str_split_isspace(str[i]))
         i++;
-      }
-    }
-  }
+      if (i == len_str)
+        break;
 
-  if (has_empty)
-  {
-    const char *empty = "";
-    static PyObject empty_items[1];
-    static PyListObject empty_list;
-    empty_items[0].value = empty;
-    empty_items[0].type_id = 0;
-    empty_items[0].size = 1;
-    empty_list.type = NULL;
-    empty_list.items = empty_items;
-    empty_list.size = 1;
-    return &empty_list;
+      size_t start = i;
+      if (maxsplit >= 0 && splits >= maxsplit)
+      {
+        // Remainder is a single token kept verbatim. Leading whitespace was
+        // already skipped above; CPython keeps any trailing whitespace here
+        // (e.g. 'a  b  '.split(None, 1) == ['a', 'b  ']).
+        __python_str_split_emit(items, &count, str, start, len_str);
+        break;
+      }
+
+      while (i < len_str && !__python_str_split_isspace(str[i]))
+        i++;
+      __python_str_split_emit(items, &count, str, start, i);
+      splits++;
+    }
   }
   else
   {
-    const char *nonempty = "a";
-    static PyObject nonempty_items[1];
-    static PyListObject nonempty_list;
-    nonempty_items[0].value = nonempty;
-    nonempty_items[0].type_id = 0;
-    nonempty_items[0].size = 2;
-    nonempty_list.type = NULL;
-    nonempty_list.items = nonempty_items;
-    nonempty_list.size = 1;
-    return &nonempty_list;
+    // Explicit separator: one linear scan, keeping empty tokens.
+    long long splits = 0;
+    size_t start = 0;
+    size_t i = 0;
+    while (i + len_sep <= len_str)
+    {
+      if (maxsplit >= 0 && splits >= maxsplit)
+        break;
+
+      size_t j = 0;
+      while (j < len_sep && str[i + j] == sep[j])
+        j++;
+
+      if (j == len_sep)
+      {
+        __python_str_split_emit(items, &count, str, start, i);
+        i += len_sep;
+        start = i;
+        splits++;
+      }
+      else
+        i++;
+    }
+
+    // Final token: the remainder of the string.
+    __python_str_split_emit(items, &count, str, start, len_str);
   }
+
+  list->type = NULL;
+  list->items = items;
+  list->size = count;
+  return list;
 }
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)

@@ -1030,10 +1030,9 @@ exprt python_list::build_split_list(
         return list.get();
       }
 
-      size_t last = input.size();
-      while (last > first && is_space(input[last - 1]))
-        --last;
-
+      // Remainder kept verbatim: leading whitespace is skipped, but CPython
+      // keeps trailing whitespace for split(None, 0)
+      // (e.g. '  a  '.split(None, 0) == ['a  ']).
       nlohmann::json list_node;
       list_node["_type"] = "List";
       list_node["elts"] = nlohmann::json::array();
@@ -1041,7 +1040,7 @@ exprt python_list::build_split_list(
 
       nlohmann::json elem;
       elem["_type"] = "Constant";
-      elem["value"] = input.substr(first, last - first);
+      elem["value"] = input.substr(first);
       converter.copy_location_fields_from_decl(call_node, elem);
       list_node["elts"].push_back(elem);
 
