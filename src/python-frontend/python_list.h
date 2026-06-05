@@ -342,10 +342,13 @@ public:
 private:
   friend class python_dict_handler;
 
+  // Repeat `list_elem` a runtime number of times (`count` may be any integer
+  // expression: a constant, a symbol like `n`, or a compound like `m + 1`).
+  // Builds a fresh list, so a literal source's pre-populated element is not
+  // reused (avoids an off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
-    const symbolt *list,
-    symbolt *size_var,
+    const exprt &count,
     const exprt &list_elem);
 
   exprt build_list_at_call(
