@@ -1,4 +1,5 @@
 CORE
 main.py
---unwind 5 --no-standard
+--unwind 1 --lower-exceptions
+
 ^VERIFICATION SUCCESSFUL$

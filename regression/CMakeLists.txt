@@ -323,6 +323,12 @@ set(_slow_regression_tests
     "regression/humaneval/humaneval_129"
     "regression/humaneval/humaneval_153"
     "regression/humaneval/humaneval_161"
+    # humaneval_109 (move_one_ball) verifies SUCCESSFUL but is slow: ~32s on a
+    # fast local build, and it exceeds the 120s per-test cap on the DebugOpt
+    # static Linux runner (sorted()/min()/index()/slice+concat over a list under
+    # --smt-during-symex --smt-symex-guard --bitwuzla). Give it the 2x budget so
+    # transient CI slowness doesn't time it out (#5189).
+    "regression/humaneval/humaneval_109"
     # humaneval_90 used to fast-crash with the member2t assertion
     # ("source->type->type_id == struct_id ...") when next_smallest()'s
     # inline optional comparison (None | int == 2) was lowered. With the

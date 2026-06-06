@@ -733,6 +733,17 @@ exprt function_call_builder::build() const
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
 
+    // len() of a tuple-typed expression (e.g. an inline str.partition() result
+    // that is not bound to a Name, so the __ESBMC_len_tuple routing above never
+    // fires) is the number of components. Without this the call falls through to
+    // strlen() and reports the wrong length (#5114).
+    if (arg_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_expr.type());
+      if (struct_type.tag().as_string().find("tag-tuple") == 0)
+        return from_integer(struct_type.components().size(), size_type());
+    }
+
     exprt len_string_fast_path =
       converter_.get_string_handler().try_handle_len_string_fast_path(
         call_, arg_expr);
