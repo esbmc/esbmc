@@ -1992,10 +1992,9 @@ exprt numpy_call_expr::create_expr_from_call()
         // dot_double(), which accumulates into double. Using the integer dot()
         // on double data reinterprets the float bit pattern as int64 and is
         // unsound (#5115). "matmul" is normalised to the matching backend.
-        // Cover both real encodings: floatbv (default) and fixedbv (--fixedbv);
-        // under --fixedbv the model's `double` lowers to fixedbv too, so the
-        // base_type-typed pointer cast below stays consistent with dot_double.
-        const bool is_float = base_type.is_floatbv() || base_type.is_fixedbv();
+        // Scoped to the default floatbv encoding; the non-default --fixedbv
+        // float path is left as-is (a separate, pre-existing concern).
+        const bool is_float = base_type.is_floatbv();
         function_id_.set_function(is_float ? "dot_double" : "dot");
         // Update the symbol associated with the result
         if (converter_.current_lhs != nullptr)
