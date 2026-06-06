@@ -2678,11 +2678,45 @@ bool python_annotation<Json>::append_arg_is_plain_int(const Json &arg)
   return false;
 }
 
-// Infer return type from non-recursive return statements
 template <class Json>
-std::string python_annotation<Json>::infer_from_return_statements(
-  const Json &body,
+bool python_annotation<Json>::expr_calls_function(
+  const Json &node,
   const std::string &func_name)
+{
+  if (node.is_object())
+  {
+    auto type_it = node.find("_type");
+    if (type_it != node.end() && *type_it == "Call")
+    {
+      auto func_it = node.find("func");
+      if (func_it != node.end() && func_it->is_object())
+      {
+        auto ft = func_it->find("_type");
+        auto fid = func_it->find("id");
+        if (
+          ft != func_it->end() && *ft == "Name" && fid != func_it->end() &&
+          *fid == func_name)
+          return true;
+      }
+    }
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (expr_calls_function(*it, func_name))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const Json &child : node)
+      if (expr_calls_function(child, func_name))
+        return true;
+  }
+  return false;
+}
+
+template <class Json>
+void python_annotation<Json>::collect_return_types(
+  const Json &body,
+  const std::string &func_name,
+  std::set<std::string> &types)
 {
   for (const Json &stmt : body)
   {
@@ -2704,14 +2738,13 @@ std::string python_annotation<Json>::infer_from_return_statements(
     {
       const Json &return_val = stmt["value"];
 
-      // Skip recursive calls
-      if (
-        return_val["_type"] == "Call" && return_val.contains("func") &&
-        return_val["func"]["_type"] == "Name" &&
-        return_val["func"]["id"] == func_name)
-      {
-        continue; // Skip this recursive call
-      }
+      // Skip self-recursive returns. A bare `return f(...)` or a compound
+      // expression embedding a recursive call (e.g. `return f(n-1) + f(n-2)`)
+      // would re-enter return-type inference for `f` while `f` is still under
+      // analysis, recursing until the stack overflows. The base-case returns
+      // supply the type; the recursive combination cannot add a new one.
+      if (expr_calls_function(return_val, func_name))
+        continue;
 
       // Handle function calls (including nested functions)
       if (
@@ -2726,7 +2759,10 @@ std::string python_annotation<Json>::infer_from_return_statements(
           std::string called_func_type =
             get_function_return_type(called_func, ast_);
           if (!called_func_type.empty() && called_func_type != "NoneType")
-            return called_func_type;
+          {
+            types.insert(called_func_type);
+            continue;
+          }
         }
         catch (std::runtime_error &)
         {
@@ -2737,28 +2773,67 @@ std::string python_annotation<Json>::infer_from_return_statements(
       // Reuse get_argument_type to infer the return value type
       std::string inferred_type = get_argument_type(return_val);
       if (!inferred_type.empty())
-        return inferred_type;
+        types.insert(inferred_type);
     }
 
     // Recursively check nested blocks (if/while/for/try)
     if (stmt.contains("body") && stmt["body"].is_array())
-    {
-      std::string nested_type =
-        infer_from_return_statements(stmt["body"], func_name);
-      if (!nested_type.empty())
-        return nested_type;
-    }
+      collect_return_types(stmt["body"], func_name, types);
 
     if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      collect_return_types(stmt["orelse"], func_name, types);
+  }
+}
+
+template <class Json>
+std::string python_annotation<Json>::infer_from_return_statements(
+  const Json &body,
+  const std::string &func_name)
+{
+  std::set<std::string> types;
+  collect_return_types(body, func_name, types);
+
+  // Exactly one inferred return type: narrow the function to it.
+  if (types.size() == 1)
+    return *types.begin();
+
+  // Branches return different numeric-tower types (e.g. `int` on one path and
+  // `float` on another). Python promotes within bool < int < float < complex,
+  // so widen to the broadest present rather than leaving it unannotated. This
+  // matches the int->float promotion the ternary (IfExp) inference already
+  // applies and keeps numeric functions concretely typed.
+  if (!types.empty())
+  {
+    static const std::map<std::string, int> numeric_rank = {
+      {"bool", 0}, {"int", 1}, {"float", 2}, {"complex", 3}};
+    std::string widest;
+    int best = -1;
+    for (const std::string &t : types)
     {
-      std::string nested_type =
-        infer_from_return_statements(stmt["orelse"], func_name);
-      if (!nested_type.empty())
-        return nested_type;
+      auto it = numeric_rank.find(t);
+      if (it == numeric_rank.end())
+      {
+        widest.clear();
+        break;
+      }
+      if (it->second > best)
+      {
+        best = it->second;
+        widest = t;
+      }
     }
+    if (!widest.empty())
+      return widest;
   }
 
-  return ""; // Couldn't infer
+  // Either no return value could be typed, or distinct branches return
+  // incompatible types (e.g. a `return -1` sentinel alongside a `return
+  // bin(...)` string, the common HumanEval shape). Leaving the function
+  // unannotated keeps the converter from narrowing it to one branch's type,
+  // which would otherwise make the cross-type `==`/`!=` fold collapse a valid
+  // comparison against the other branch's type to a constant False
+  // (GitHub #5157). Mirrors the mixed value+None -> Optional handling above.
+  return "";
 }
 
 template <class Json>
