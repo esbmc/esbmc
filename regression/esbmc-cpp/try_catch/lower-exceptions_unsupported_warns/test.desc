@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--lower-exceptions
+
+^VERIFICATION SUCCESSFUL$
+--lower-exceptions: cannot lower an unsupported try-block layout
