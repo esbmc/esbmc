@@ -320,7 +320,7 @@ same callee at every call site is eliminated.
 `__ESBMC_loop_assigns` and `--loop-frame-rule` extend loop invariants with a
 frame claim — which variables a loop may change — and check that all others
 are untouched. These are documented in the
-[Loop Invariant Support](/docs/#loop-invariants) section.
+[Loop Invariant Support](/docs/loop-invariants) section.
 
 ## Quantified conditions
 
@@ -446,7 +446,7 @@ functions.
 | `--replace-call-with-contract <f>` | Replace calls to `f` with its contract |
 | `--enforce-all-contracts` | Enforce all `__ESBMC_contract`-annotated functions |
 | `--replace-all-contracts` | Replace calls to all `__ESBMC_contract`-annotated functions |
-| `--loop-invariant-check` | Enable loop invariant checking (see [Loop Invariant Support](/docs/#loop-invariants)) |
+| `--loop-invariant-check` | Enable loop invariant checking (see [Loop Invariant Support](/docs/loop-invariants)) |
 | `--loop-frame-rule` | Enable loop frame rule (requires `--loop-invariant-check`) |
 
 ## Known limitations

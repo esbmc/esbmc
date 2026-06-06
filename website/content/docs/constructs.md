@@ -168,3 +168,66 @@ while (1) {
 If an `__ESBMC_unroll` call is not directly followed by a loop (for example, an
 unrelated statement is placed in between), ESBMC reports a warning and ignores
 the annotation.
+
+## Quantifiers
+
+ESBMC supports universal (`forall`) and existential (`exists`) quantifiers in
+SMT-based verification. Two expressions are available:
+
+- `bool forall(symbol, predicate)` — holds if the predicate holds for all values of `symbol`.
+- `bool exists(symbol, predicate)` — holds if the predicate holds for at least one value of `symbol`.
+
+They are declared as:
+
+```c
+extern void __ESBMC_assume(_Bool);
+extern _Bool __ESBMC_forall(void *, _Bool);
+extern _Bool __ESBMC_exists(void *, _Bool);
+```
+
+### Example
+
+```c
+int main() {
+  unsigned n;
+  int arr[n];
+  unsigned i;
+
+  __ESBMC_assume(__ESBMC_forall(&i, !(i < n) || arr[i] == 2));
+  __ESBMC_assert(!__ESBMC_exists(&i, (i < n) && arr[i] == 42), "forall init");
+
+  arr[n/2] = 42;
+  __ESBMC_assert(!__ESBMC_exists(&i, (i < n) && arr[i] == 42), "this should fail");
+}
+```
+
+```c
+int zero_array[10];
+int main() {
+  int sym;
+  __ESBMC_assert(
+    __ESBMC_forall(&sym, !(sym >= 0 && sym < 10) || zero_array[sym] == 0),
+    "array is zero initialized");
+
+  const unsigned N = 10;
+  char c[N];
+  for (unsigned i = 0; i < N; ++i) c[i] = i;
+
+  unsigned j;
+  __ESBMC_assert(__ESBMC_forall(&j, j > 9 || c[j] == j),
+    "array is initialized correctly");
+}
+```
+
+Run with a supported solver:
+
+```sh
+esbmc file.c --z3
+```
+
+### Limitations
+
+- Supported solvers are Z3 and CVC5 (no SMT-LIB support).
+- Z3 supports only one symbol per quantifier; CVC5 supports multiple.
+- Recursive quantifiers (e.g. nested `forall`) are supported.
+- A constant-bounded symbol might cause incorrect simplifications (known issue).

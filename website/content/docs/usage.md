@@ -411,6 +411,144 @@ file file.c line 5 function main
 unwinding assertion loop
 ```
 
+## Verification Strategies
+
+ESBMC offers several incremental strategies that control how loops are unwound
+and whether correctness can be proven. For an in-depth explanation of how each
+algorithm works, see
+[Verification Algorithms](/docs/theory/verification-algorithms).
+
+| Flag | Strategy | Proves correctness? |
+|---|---|---|
+| `--falsification` | Iteratively unwind, looking only for bugs | No (bug-finding only) |
+| `--incremental-bmc` | Iteratively unwind; also detect full unrolling | Yes, once all loops fully unwind |
+| `--k-induction` | Base case + forward condition + inductive step | Yes |
+
+`--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
+increment granularity.
+
+## Verifying modules that span multiple files
+
+ESBMC can verify code that relies on existing infrastructure. Consider a program
+whose `mul` function lives in a separate library:
+
+```c
+#include "lib.h"
+// Running with: esbmc --overflow-check main.c lib.c
+int main() {
+  int64_t a, b, r;
+  if (mul(a, b, &r)) {
+    __ESBMC_assert(r == a * b, "Expected result from multiplication");
+  }
+  return 0;
+}
+```
+
+Invoke ESBMC with the include path and the implementation file:
+
+```sh
+esbmc main.c --overflow-check -I lib/ lib/lib.c
+```
+
+where `--overflow-check` enables arithmetic over-/underflow checks and `-I path`
+sets the include path. If `lib/lib.c` implements `mul` with an unguarded
+`a * b`, ESBMC reports the overflow:
+
+```
+Counterexample:
+
+State 1 file lib.c line 14 function mul thread 0
+----------------------------------------------------
+Violated property:
+file lib.c line 14 function mul
+arithmetic overflow on mul
+!overflow("*", a, b)
+
+VERIFICATION FAILED
+```
+
+## Multiple Property Verification
+
+```sh
+esbmc file.c --multi-property
+```
+
+ESBMC can verify the satisfiability of all claims of a given bound. In
+multi-property mode, ESBMC does not stop at the first counterexample; it
+continues until all bugs are found. Relevant options:
+
+- `--multi-property` — verify all claims of the current bound (also activates `--no-remove-unreachable`).
+- `--multi-fail-fast N` — stop after the first `N` violations.
+- `--keep-verified-claims` — do not skip verified claims (assertions inside a loop body are then re-verified during unwinding).
+- `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
+- `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
+
+### Enumerating all violating inputs
+
+```sh
+esbmc file.c --all-witnesses
+esbmc file.c --all-witnesses --max-witnesses 4
+```
+
+By default `--multi-property` reports a single counterexample per failing
+property. `--all-witnesses` instead enumerates *distinct concrete input vectors*
+that violate the same property, until the set is exhausted (UNSAT) or the
+`--max-witnesses` cap is reached — useful for fault localisation, test-case
+mining, and characterising the failing-input sub-domain.
+
+```c
+#include <assert.h>
+int main(void) {
+  int x;                 // nondet
+  if (x > 0) x--; else x++;
+  assert(x != 0);        // violated by x == 1 AND x == -1
+  return 0;
+}
+```
+
+`esbmc file.c --all-witnesses` reports both witnesses:
+
+```
+[Counterexamples – 2 witnesses]
+
+  Witness 1 of 2
+    Inputs : [0] = -1
+  Witness 2 of 2
+    Inputs : [0] = 1
+
+Summary: 2 distinct input tuples violate this property
+         (enumeration stopped: UNSAT after 2 witnesses)
+```
+
+Internally the same SMT instance is re-solved with a blocking clause over the
+nondet input symbols, so enumerating *N* witnesses is much cheaper than running
+ESBMC *N* times. Floating-point inputs are handled specially (the NaN
+equivalence class is excluded as a whole; other values use bit-pattern equality,
+so `+0` and `-0` are distinct). The footer states why enumeration stopped; only
+*UNSAT after N* means the witness set is complete.
+
+## Supported SMT backends {#smt-backends}
+
+ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
+also drive an external solver process over a pipe:
+
+| Backend | Option |
+|---|---|
+| Bitwuzla | `--bitwuzla` (default) |
+| Boolector | `--boolector` |
+| Z3 | `--z3` |
+| MathSAT | `--mathsat` |
+| CVC4 | `--cvc` |
+| Yices | `--yices` |
+| SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
+
+An alternative default solver can be set with `--default-solver SOLVER` (the
+name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
+environment variable. The `CMD` for the SMTLIB backend is interpreted by the
+shell, so it can include options or chain commands (the tools must be on
+`PATH`), e.g. `z3 -in` or `tee formula.smt2 | z3 -in | tee output.txt`. Remember
+to quote the `CMD` string when invoking ESBMC.
+
 ## Docker Build
 
 ```
