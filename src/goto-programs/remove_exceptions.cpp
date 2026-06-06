@@ -70,8 +70,10 @@ public:
 
   void run(goto_functionst &goto_functions)
   {
-    // Turn dynamic_cast<T&> bad_cast intrinsics into ordinary THROWs first, so
-    // every later step (may-throw, registry, dispatch) treats them uniformly.
+    // Rewrite dynamic_cast<T&> bad_cast intrinsics into real THROWs first (the
+    // std::bad_cast type is synthesized if <typeinfo> was not included), so every
+    // later step (may-throw, registry, dispatch, program_supported) treats them
+    // uniformly and the pass never falls back on a bad_cast site.
     lower_bad_cast_calls(goto_functions);
 
     may_throw = compute_may_throw(goto_functions);
@@ -256,19 +258,41 @@ private:
 
   // ---- bad_cast lowering -------------------------------------------------
 
-  /// THROW code for a synthesized std::bad_cast (operand + exception_list =
-  /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
-  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
+  /// Look up the <typeinfo> model's std::bad_cast class, or synthesize a minimal
+  /// one when it is absent. A compiled program throws std::bad_cast on a failing
+  /// dynamic_cast<T&> whether or not <typeinfo> is included — the runtime
+  /// constructs the object; header visibility only governs whether the type can
+  /// be *named* (catch(std::bad_cast&) / typeid). So when no model is present we
+  /// register an empty `tag-std::bad_cast` struct: a catch(...) still catches it
+  /// and an uncaught one still terminates, matching real semantics. The tag is
   /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
-  /// older, so try both. Built once and reused across call sites (a single
-  /// exception is in flight at a time).
-  expr2tc build_bad_cast_throw()
+  /// older, so try both before synthesizing.
+  const symbolt *get_bad_cast_type()
   {
     const symbolt *sym = ns.lookup("tag-std::bad_cast");
     if (!sym)
       sym = ns.lookup("tag-class std::bad_cast");
-    if (!sym)
-      return expr2tc();
+    if (sym)
+      return sym;
+
+    symbolt s;
+    s.id = "tag-std::bad_cast";
+    s.name = "std::bad_cast";
+    s.mode = "C++";
+    struct_typet st;
+    st.set("tag", "std::bad_cast");
+    s.set_type(st);
+    s.is_type = true;
+    return context.move_symbol_to_context(s);
+  }
+
+  /// THROW code for a std::bad_cast (operand + exception_list = the type and its
+  /// bases). The type is always available via get_bad_cast_type (synthesized if
+  /// <typeinfo> was not included), so this never fails. Built once and reused
+  /// across call sites (a single exception is in flight at a time).
+  expr2tc build_bad_cast_throw()
+  {
+    const symbolt *sym = get_bad_cast_type();
 
     std::vector<irep_idt> exception_list;
     const std::string tag = id2string(sym->id);
@@ -288,16 +312,14 @@ private:
     return code_cpp_throw2tc(operand, exception_list);
   }
 
-  /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
-  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
-  /// of the pass lowers it like any other throw. If std::bad_cast is
-  /// unresolvable the calls are left in place and program_supported's bad_cast
-  /// guard makes the program fall back to the imperative path.
+  /// Rewrite each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
+  /// failing dynamic_cast<T&> lowers to — into a real THROW of a materialized
+  /// std::bad_cast, so the rest of the pass lowers it like any other throw and
+  /// never falls back for it. The throw is built lazily on the first site (so a
+  /// program with no dynamic_cast<T&> never synthesizes the type) and reused.
   void lower_bad_cast_calls(goto_functionst &goto_functions)
   {
-    expr2tc bad_cast_throw = build_bad_cast_throw();
-    if (is_nil_expr(bad_cast_throw))
-      return;
+    expr2tc bad_cast_throw;
 
     for (auto &fn : goto_functions.function_map)
     {
@@ -309,13 +331,15 @@ private:
           continue;
         const code_function_call2t &c = to_code_function_call2t(ins.code);
         if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-        {
-          // make_throw() preserves location/function (clear() leaves them).
-          ins.make_throw();
-          ins.code = bad_cast_throw;
-        }
+          !is_symbol2t(c.function) ||
+          to_symbol2t(c.function).thename != "c:@F@__ESBMC_throw_bad_cast")
+          continue;
+
+        if (is_nil_expr(bad_cast_throw))
+          bad_cast_throw = build_bad_cast_throw();
+        // make_throw() preserves location/function (clear() leaves them).
+        ins.make_throw();
+        ins.code = bad_cast_throw;
       }
     }
   }
@@ -430,20 +454,6 @@ private:
           t.exception_list.empty() ||
           !registry.is_registered(t.exception_list.front()))
           return unsupported("a throw of an unsupported type");
-      }
-      else if (it->type == FUNCTION_CALL)
-      {
-        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
-        // std::bad_cast throw using the imperative stack_catch — which is empty
-        // once the surrounding catch is lowered, so the throw would be reported
-        // uncaught. The lowering cannot see this hidden throw to wire it, so
-        // leave such a program (dynamic_cast<T&>) to the imperative path.
-        const code_function_call2t &c = to_code_function_call2t(it->code);
-        if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return unsupported(
-            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
       }
     }
     // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
