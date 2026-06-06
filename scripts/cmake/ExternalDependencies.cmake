@@ -11,12 +11,15 @@ if(DOWNLOAD_DEPENDENCIES)
   fetchcontent_makeavailable(fmt)
 
   #nlohmann json
-  fetchcontent_declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+  fetchcontent_declare(json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d)
   fetchcontent_makeavailable(json)
 
-  # yaml-cpp
+  # yaml-cpp (pinned for reproducible builds; was tracking the default branch)
   fetchcontent_declare(yaml-cpp
-    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git)
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG yaml-cpp-0.9.0)
   fetchcontent_makeavailable(yaml-cpp)
 else()
   # Use system-installed libraries (required for distro packaging).
