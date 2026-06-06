@@ -413,7 +413,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
+  python3 -m pip install --user meson mypy pyparsing toml tomli
   meson --version
 }
 
@@ -435,9 +435,9 @@ install_python_deps_macos() {
   export PATH="$py312_bin:$HOME/Library/Python/3.12/bin:$PATH"
 
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-    pip install meson ast2json mypy pyparsing toml tomli
+    pip install meson mypy pyparsing toml tomli
   else
-    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli
+    "$py312" -m pip install --user --break-system-packages meson mypy pyparsing toml tomli
   fi
 
   meson --version
