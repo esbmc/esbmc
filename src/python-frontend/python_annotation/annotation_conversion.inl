@@ -2820,16 +2820,35 @@ std::string python_annotation<Json>::infer_from_return_statements(
   std::set<std::string> types;
   collect_return_types(body, func_name, types);
 
+  // Drop non-informative markers when concrete return types are also present.
+  //   - NoneType: a `return None` alongside value returns marks the function as
+  //     Optional; that optionality is handled separately by the caller's
+  //     has_return_none() check (mixed value+None -> Optional wrapping), so it
+  //     must not suppress the value-type inference (e.g. `return 0` /
+  //     `return None` must still infer `int`, GitHub #3563).
+  //   - Any: an under-specified branch (e.g. `return arr` for a not-yet-typed
+  //     parameter) carries no type information and must not veto a sibling
+  //     branch that does (GitHub quixbugs mergesort).
+  // Both are kept only when sole, so a function returning just None/Any is
+  // still annotated.
+  if (types.size() > 1)
+  {
+    types.erase("NoneType");
+    types.erase("Any");
+  }
+
   // Exactly one inferred return type: narrow the function to it.
   if (types.size() == 1)
     return *types.begin();
+
+  if (types.empty())
+    return "";
 
   // Branches return different numeric-tower types (e.g. `int` on one path and
   // `float` on another). Python promotes within bool < int < float < complex,
   // so widen to the broadest present rather than leaving it unannotated. This
   // matches the int->float promotion the ternary (IfExp) inference already
   // applies and keeps numeric functions concretely typed.
-  if (!types.empty())
   {
     static const std::map<std::string, int> numeric_rank = {
       {"bool", 0}, {"int", 1}, {"float", 2}, {"complex", 3}};
@@ -2851,6 +2870,42 @@ std::string python_annotation<Json>::infer_from_return_statements(
     }
     if (!widest.empty())
       return widest;
+  }
+
+  // All remaining types share one collection base (e.g. `list` / `list[int]` /
+  // `list[list]`, or `dict` / `dict[...]`): they are the same kind of container
+  // and differ only in how precisely the element is known. Returning "" here
+  // would strip the collection-ness and break callers that iterate the result
+  // (quixbugs mergesort/subsequences). When exactly one element-typed
+  // ("bracketed") form is present — e.g. {list, list[int]} from a bare list
+  // literal alongside a typed one — return it so comprehensions and element
+  // access still see the element type. When the branches disagree on the
+  // element type itself (e.g. {list[int], list[str]}), fall back to the bare
+  // base: still iterable, without asserting a false element type.
+  {
+    auto base_of = [](const std::string &t) {
+      auto p = t.find('[');
+      return p == std::string::npos ? t : t.substr(0, p);
+    };
+    const std::string base = base_of(*types.begin());
+    std::string bracketed;
+    bool same_base = true, conflicting_elements = false;
+    for (const std::string &t : types)
+    {
+      if (base_of(t) != base)
+      {
+        same_base = false;
+        break;
+      }
+      if (t != base) // an element-typed form, e.g. list[int]
+      {
+        if (!bracketed.empty() && bracketed != t)
+          conflicting_elements = true;
+        bracketed = t;
+      }
+    }
+    if (same_base)
+      return (bracketed.empty() || conflicting_elements) ? base : bracketed;
   }
 
   // Either no return value could be typed, or distinct branches return
