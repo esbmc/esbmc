@@ -383,7 +383,66 @@ private:
           return false;
       }
     }
-    return depth == 0;
+    // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
+    // (its body cannot complete normally). Such unclosed pushes are accepted:
+    // lower_ip's rebalance_removed_pops re-inserts the synthetic pop before
+    // lowering. depth < 0 (an unmatched pop) is already rejected above.
+    return depth >= 0;
+  }
+
+  /// `remove_unreachable` runs before this pass and prunes the empty CATCH pop
+  /// and skip-GOTO of a try whose body cannot complete normally — the common
+  /// Python idiom `try: <raises>; assert False; except E: ...`, where the model-
+  /// or user-raised throw makes the fall-through dead. That leaves the CATCH
+  /// push unbalanced, which the region recovery cannot pair. Re-insert a
+  /// synthetic pop + skip-GOTO immediately before each unclosed push's first
+  /// handler, restoring the balanced shape collect()/build_dispatch expect. The
+  /// skip-GOTO sits on the (now infeasible, hence pruned) normal-completion
+  /// path, so its target is immaterial; the function's END_FUNCTION is a valid
+  /// choice. Called only when the whole program is supported, so it never
+  /// perturbs a body that falls back to the imperative path.
+  void rebalance_removed_pops(goto_programt &body)
+  {
+    const auto end = body.instructions.end();
+    std::vector<goto_programt::targett> open;
+    for (auto it = body.instructions.begin(); it != end; ++it)
+    {
+      if (it->type != CATCH)
+        continue;
+      if (!it->targets.empty())
+        open.push_back(it);
+      else if (!open.empty())
+        open.pop_back();
+    }
+    if (open.empty())
+      return;
+
+    auto end_fn = std::prev(end); // END_FUNCTION
+    for (auto push : open)
+    {
+      // The try body ends at the first handler in program order; that is where
+      // the removed pop belonged.
+      goto_programt::targett first = end;
+      for (auto it = std::next(push); it != end; ++it)
+        if (
+          std::find(push->targets.begin(), push->targets.end(), it) !=
+          push->targets.end())
+        {
+          first = it;
+          break;
+        }
+      assert(first != end && "CATCH push with no reachable handler");
+
+      auto pop = body.insert(first); // synthetic empty-CATCH pop
+      pop->type = CATCH;
+      pop->location = push->location;
+      pop->function = push->function;
+      auto skip = body.insert(first); // skip-handlers GOTO (dead path)
+      skip->make_goto(end_fn);
+      skip->location = push->location;
+      skip->function = push->function;
+    }
+    body.update();
   }
 
   /// Recover the region tree, throw sites, and may-throw call sites (each with
@@ -457,6 +516,8 @@ private:
 
   void lower_ip(goto_programt &body, const irep_idt &fn_id)
   {
+    rebalance_removed_pops(body);
+
     std::vector<regiont> regions;
     std::vector<sitet> throws, calls;
     collect(body, regions, throws, calls);
