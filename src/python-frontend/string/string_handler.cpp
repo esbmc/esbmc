@@ -323,6 +323,80 @@ static int count_name_assignments_in_node(
   return count;
 }
 
+// Returns true if `var_name` is mutated in place anywhere within `node`: an
+// in-place list method call (append/extend/insert/remove/pop/clear/sort/
+// reverse) or a subscript store (`var_name[i] = ...`). str.join uses this to
+// decide whether the static fold of a list variable's initializer is still
+// valid: once the list is mutated, the declaration initialiser no longer
+// reflects the runtime contents (e.g. `new_lst = []; new_lst.append(w)` folds
+// to "", #5163), so the join must go through the runtime model instead.
+// Conservative by design -- a false "mutated" only costs the (correct)
+// runtime dispatch, never correctness.
+static bool
+list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object() && node.contains("_type"))
+  {
+    const std::string type = node["_type"].get<std::string>();
+
+    // <var_name>.<mutator>(...): in-place list mutators
+    if (type == "Call" && node.contains("func"))
+    {
+      const auto &func = node["func"];
+      if (
+        func.contains("_type") && func["_type"] == "Attribute" &&
+        func.contains("attr") && func.contains("value") &&
+        func["value"].contains("_type") && func["value"]["_type"] == "Name" &&
+        func["value"].contains("id") && func["value"]["id"] == var_name)
+      {
+        static const std::array<const char *, 8> mutators = {
+          {"append",
+           "extend",
+           "insert",
+           "remove",
+           "pop",
+           "clear",
+           "sort",
+           "reverse"}};
+        const std::string attr = func["attr"].get<std::string>();
+        for (const char *m : mutators)
+          if (attr == m)
+            return true;
+      }
+    }
+
+    // <var_name>[i] = ...: subscript store
+    if (type == "Assign" && node.contains("targets"))
+    {
+      for (const auto &tgt : node["targets"])
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+          tgt["value"]["id"] == var_name)
+          return true;
+    }
+  }
+
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (list_var_is_mutated(elem, var_name))
+        return true;
+  }
+  else if (node.is_object())
+  {
+    for (const auto &item : node.items())
+      if (list_var_is_mutated(item.value(), var_name))
+        return true;
+  }
+
+  return false;
+}
+
 } // namespace
 
 // Narrow AST-level constant propagation for a Name receiver:
@@ -1727,9 +1801,12 @@ exprt string_handler::handle_string_to_int(
     throw std::runtime_error("__python_int function not found in symbol table");
   }
 
-  // Call __python_int(str, base)
+  // Call __python_int(str, base). The result is a 64-bit Python int (matching
+  // the model's `long long` return); a 32-bit result type here would make the
+  // assigned-to variable 32-bit and truncate a string pointer rebound through
+  // it, e.g. `a, b = s.split('-'); a = int(a)` (#5159).
   exprt int_call =
-    build_call_expr(*int_symbol, int_type(), {str_addr, base_expr});
+    build_call_expr(*int_symbol, long_long_int_type(), {str_addr, base_expr});
   int_call.location() = location;
 
   return int_call;
@@ -2467,6 +2544,29 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
+    // If the list is mutated in place after initialisation (e.g.
+    // new_lst = []; new_lst.append(w)), its declaration initialiser no longer
+    // reflects the runtime contents, so the static fold below would join the
+    // stale value -- an appended-to empty list folds to "" (#5163). Dispatch
+    // to the runtime model, which reads the actual list object. Scope the scan
+    // to the variable's own function (module body when at top level), matching
+    // how find_var_decl resolved it above.
+    {
+      const std::string &scope_func = converter_.get_current_func_name();
+      const nlohmann::json &ast = converter_.get_ast_json();
+      const nlohmann::json func_node =
+        scope_func.empty() ? nlohmann::json()
+                           : json_utils::find_function(ast["body"], scope_func);
+      const nlohmann::json &scan_body =
+        func_node.contains("body") ? func_node["body"] : ast["body"];
+      if (list_var_is_mutated(scan_body, var_name))
+      {
+        exprt list_expr = converter_.get_expr(list_arg);
+        return string_builder_->build_runtime_str_join_call(
+          separator, list_expr);
+      }
+    }
+
     list_node = &var_decl["value"];
   }
   else if (list_arg.contains("_type") && list_arg["_type"] == "List")
@@ -2572,9 +2672,24 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
-  // Edge case: empty list returns empty string
+  // Edge case: empty list literal
   if (elements.empty())
   {
+    // A Name variable whose declared initialiser is an empty list may still be
+    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+    // the empty initialiser here would wrongly yield "". Dispatch to the
+    // runtime __python_str_join model, which reads the list's runtime contents
+    // (and still returns "" for a genuinely empty list).
+    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
+    {
+      log_debug(
+        "python-string",
+        "join() iterable is a runtime-built list: runtime dispatch");
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+    }
+
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());

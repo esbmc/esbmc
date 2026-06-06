@@ -8,6 +8,9 @@
 #include <util/symbol.h>
 #include <util/migrate.h>
 #include <util/expr_util.h>
+#include <util/std_types.h>
+#include <util/std_expr.h>
+#include <util/message.h>
 #include <irep2/irep2_utils.h>
 
 namespace
@@ -18,18 +21,6 @@ const irep_idt noexcept_id = "noexcept";
 bool is_pointer_catch(const irep_idt &type)
 {
   return type.as_string().find("_ptr") != std::string::npos;
-}
-
-/// A THROW_DECL marking a *no-throw* specification (`noexcept` or `throw()`):
-/// its list is empty or names only the "noexcept" marker. A list naming real
-/// types is a dynamic exception specification (throw(T...), C++14-only) which
-/// the lowering does not model.
-bool is_no_throw_decl(const expr2tc &code)
-{
-  for (const irep_idt &t : to_code_cpp_throw_decl2t(code).exception_list)
-    if (t != noexcept_id)
-      return false;
-  return true;
 }
 
 /// One catch clause: its static type (or "ellipsis"), the instruction that
@@ -80,6 +71,10 @@ public:
 
   void run(goto_functionst &goto_functions)
   {
+    // Turn dynamic_cast<T&> bad_cast intrinsics into ordinary THROWs first, so
+    // every later step (may-throw, registry, dispatch) treats them uniformly.
+    lower_bad_cast_calls(goto_functions);
+
     may_throw = compute_may_throw(goto_functions);
 
     // Single scan: teach the registry any exception hierarchy that lives only in
@@ -101,6 +96,15 @@ public:
           if (!is_nil_expr(t.operand))
             registry.register_chain(t.exception_list);
         }
+        else if (ins.type == THROW_DECL)
+        {
+          // A dynamic exception specification's allowed types must each have an
+          // id so the epilogue can test the in-flight exception's membership.
+          for (const irep_idt &ty :
+               to_code_cpp_throw_decl2t(ins.code).exception_list)
+            if (ty != noexcept_id)
+              registry.register_chain({ty});
+        }
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
@@ -108,7 +112,9 @@ public:
             is_symbol2t(c.function) &&
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
-            return; // concurrent program — not yet modelled
+            // concurrent program — not yet modelled
+            return report_fallback(
+              goto_functions, "a concurrent program (pthread_create)");
         }
       }
     }
@@ -118,7 +124,7 @@ public:
     // the supported subset we leave the entire program to symex.
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return;
+        return report_fallback(goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
@@ -130,7 +136,8 @@ public:
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return;
+      return report_fallback(
+        goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available)
@@ -144,6 +151,43 @@ public:
       entry != goto_functions.function_map.end() &&
       entry->second.body_available)
       init_globals(entry->second.body);
+  }
+
+  /// True if any function still has an exception construct to lower.
+  static bool program_uses_exceptions(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH || ins.type == THROW_DECL)
+            return true;
+    return false;
+  }
+
+  /// Report that the pass declined to lower a program that uses exceptions, so
+  /// the residual dependence on the imperative path is visible rather than
+  /// silent. Today the imperative path takes over; once it is removed (P4) this
+  /// diagnostic is what keeps that deletion non-breaking — an unsupported
+  /// program is reported, not miscompiled. Programs with no exception construct
+  /// are silent (the pass is a no-op for them).
+  void report_fallback(
+    const goto_functionst &gf,
+    const std::string &why,
+    const irep_idt &fn = irep_idt())
+  {
+    if (!program_uses_exceptions(gf))
+      return;
+    if (fn.empty())
+      log_warning(
+        "--lower-exceptions: cannot lower {}; falling back to the imperative "
+        "exception path",
+        why);
+    else
+      log_warning(
+        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
+        "imperative exception path",
+        why,
+        id2string(fn));
   }
 
   void init_globals(goto_programt &body)
@@ -204,6 +248,72 @@ private:
     return symbol2tc(obj_type, irep_idt(id));
   }
 
+  // ---- bad_cast lowering -------------------------------------------------
+
+  /// THROW code for a synthesized std::bad_cast (operand + exception_list =
+  /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
+  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
+  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
+  /// older, so try both. Built once and reused across call sites (a single
+  /// exception is in flight at a time).
+  expr2tc build_bad_cast_throw()
+  {
+    const symbolt *sym = ns.lookup("tag-std::bad_cast");
+    if (!sym)
+      sym = ns.lookup("tag-class std::bad_cast");
+    if (!sym)
+      return expr2tc();
+
+    std::vector<irep_idt> exception_list;
+    const std::string tag = id2string(sym->id);
+    exception_list.emplace_back(tag.substr(4)); // strip "tag-"
+    if (sym->get_type().id() == "struct")
+    {
+      const struct_typet &st = to_struct_type(sym->get_type());
+      const exprt &bases = static_cast<const exprt &>(st.find("bases"));
+      if (bases.is_not_nil())
+        for (const auto &base : bases.get_sub())
+          exception_list.emplace_back(id2string(base.id()).substr(4));
+    }
+
+    // A static slot holds the thrown bad_cast object (its state is irrelevant —
+    // only its type identity and address matter to the handler).
+    expr2tc operand = make_exception_storage(migrate_symbol_type(*sym));
+    return code_cpp_throw2tc(operand, exception_list);
+  }
+
+  /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
+  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
+  /// of the pass lowers it like any other throw. If std::bad_cast is
+  /// unresolvable the calls are left in place and program_supported's bad_cast
+  /// guard makes the program fall back to the imperative path.
+  void lower_bad_cast_calls(goto_functionst &goto_functions)
+  {
+    expr2tc bad_cast_throw = build_bad_cast_throw();
+    if (is_nil_expr(bad_cast_throw))
+      return;
+
+    for (auto &fn : goto_functions.function_map)
+    {
+      if (!fn.second.body_available)
+        continue;
+      for (auto &ins : fn.second.body.instructions)
+      {
+        if (ins.type != FUNCTION_CALL)
+          continue;
+        const code_function_call2t &c = to_code_function_call2t(ins.code);
+        if (
+          is_symbol2t(c.function) &&
+          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+        {
+          // make_throw() preserves location/function (clear() leaves them).
+          ins.make_throw();
+          ins.code = bad_cast_throw;
+        }
+      }
+    }
+  }
+
   // ---- may-throw analysis ------------------------------------------------
 
   static std::set<irep_idt> compute_may_throw(const goto_functionst &gf)
@@ -250,23 +360,30 @@ private:
   /// the supported subset (reference catches of registered class types, throws
   /// of registered objects or rethrows, regions whose pop is followed by the
   /// skip-handlers GOTO)? Read-only.
+  /// Set when program_supported declines, naming the construct for the
+  /// fallback diagnostic (report_fallback).
+  std::string unsupported_reason_;
+
+  bool unsupported(const char *why)
+  {
+    unsupported_reason_ = why;
+    return false;
+  }
+
   bool program_supported(goto_programt &body)
   {
     const auto end = body.instructions.end();
     int depth = 0;
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      // A dynamic exception specification with real types (throw(T...)) routes
-      // a non-listed throw to unexpected/terminate, which is not modelled —
-      // leave such a program to the imperative path. A no-throw spec
-      // (noexcept / throw()) is fine: it is enforced at the function epilogue.
-      if (it->type == THROW_DECL && !is_no_throw_decl(it->code))
-        return false;
+      // Both no-throw specs (noexcept / throw()) and dynamic exception
+      // specifications (throw(T...)) are enforced at the function epilogue
+      // (see lower_ip), so a THROW_DECL never forces fallback.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
         if (c.exception_list.size() != it->targets.size())
-          return false;
+          return unsupported("a malformed catch clause");
         auto type_it = c.exception_list.begin();
         for (auto tgt : it->targets)
         {
@@ -278,10 +395,12 @@ private:
           // catch type need not be registered: an unregistered type is one no
           // throw can match, so its guard is simply false (a dead handler).
           if (!is_code_decl2t(tgt->code))
-            return false;
+            return unsupported("an unsupported handler shape");
           auto bind = std::next(tgt);
           if (bind == end || !is_code_assign2t(bind->code))
-            return false;
+            return unsupported(
+              "a value catch without a copy binding (e.g. catching "
+              "std::bad_exception by value)");
         }
         ++depth;
       }
@@ -290,7 +409,9 @@ private:
         // pop: needs the skip-handlers GOTO after it for dispatch placement.
         auto nx = std::next(it);
         if (depth == 0 || nx == end || nx->type != GOTO)
-          return false;
+          return unsupported(
+            "an unsupported try-block layout (e.g. a function-try-block or an "
+            "empty trailing handler)");
         --depth;
       }
       else if (it->type == THROW)
@@ -301,7 +422,7 @@ private:
         if (
           t.exception_list.empty() ||
           !registry.is_registered(t.exception_list.front()))
-          return false;
+          return unsupported("a throw of an unsupported type");
       }
       else if (it->type == FUNCTION_CALL)
       {
@@ -314,10 +435,70 @@ private:
         if (
           is_symbol2t(c.function) &&
           to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return false;
+          return unsupported(
+            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
       }
     }
-    return depth == 0;
+    // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
+    // (its body cannot complete normally). Such unclosed pushes are accepted:
+    // lower_ip's rebalance_removed_pops re-inserts the synthetic pop before
+    // lowering. depth < 0 (an unmatched pop) is already rejected above.
+    return depth >= 0;
+  }
+
+  /// `remove_unreachable` runs before this pass and prunes the empty CATCH pop
+  /// and skip-GOTO of a try whose body cannot complete normally — the common
+  /// Python idiom `try: <raises>; assert False; except E: ...`, where the model-
+  /// or user-raised throw makes the fall-through dead. That leaves the CATCH
+  /// push unbalanced, which the region recovery cannot pair. Re-insert a
+  /// synthetic pop + skip-GOTO immediately before each unclosed push's first
+  /// handler, restoring the balanced shape collect()/build_dispatch expect. The
+  /// skip-GOTO sits on the (now infeasible, hence pruned) normal-completion
+  /// path, so its target is immaterial; the function's END_FUNCTION is a valid
+  /// choice. Called only when the whole program is supported, so it never
+  /// perturbs a body that falls back to the imperative path.
+  void rebalance_removed_pops(goto_programt &body)
+  {
+    const auto end = body.instructions.end();
+    std::vector<goto_programt::targett> open;
+    for (auto it = body.instructions.begin(); it != end; ++it)
+    {
+      if (it->type != CATCH)
+        continue;
+      if (!it->targets.empty())
+        open.push_back(it);
+      else if (!open.empty())
+        open.pop_back();
+    }
+    if (open.empty())
+      return;
+
+    auto end_fn = std::prev(end); // END_FUNCTION
+    for (auto push : open)
+    {
+      // The try body ends at the first handler in program order; that is where
+      // the removed pop belonged.
+      goto_programt::targett first = end;
+      for (auto it = std::next(push); it != end; ++it)
+        if (
+          std::find(push->targets.begin(), push->targets.end(), it) !=
+          push->targets.end())
+        {
+          first = it;
+          break;
+        }
+      assert(first != end && "CATCH push with no reachable handler");
+
+      auto pop = body.insert(first); // synthetic empty-CATCH pop
+      pop->type = CATCH;
+      pop->location = push->location;
+      pop->function = push->function;
+      auto skip = body.insert(first); // skip-handlers GOTO (dead path)
+      skip->make_goto(end_fn);
+      skip->location = push->location;
+      skip->function = push->function;
+    }
+    body.update();
   }
 
   /// Recover the region tree, throw sites, and may-throw call sites (each with
@@ -391,20 +572,28 @@ private:
 
   void lower_ip(goto_programt &body, const irep_idt &fn_id)
   {
+    rebalance_removed_pops(body);
+
     std::vector<regiont> regions;
     std::vector<sitet> throws, calls;
     collect(body, regions, throws, calls);
 
     // Throw-spec markers are consumed here; once the throws are lowered the
-    // imperative throw-decl machinery has nothing to act on. Record whether the
-    // function is no-throw in the same pass.
-    bool noexcept_fn = false;
+    // imperative throw-decl machinery has nothing to act on. Record the
+    // function's exception specification (if any) in the same pass: `has_spec`
+    // is set by any THROW_DECL, and `spec_types` collects its allowed types
+    // (empty for a no-throw spec — noexcept / throw()).
+    bool has_spec = false;
+    std::vector<irep_idt> spec_types;
     for (auto &ins : body.instructions)
     {
       if (ins.type == THROW_DECL)
       {
-        if (is_no_throw_decl(ins.code))
-          noexcept_fn = true;
+        has_spec = true;
+        for (const irep_idt &ty :
+             to_code_cpp_throw_decl2t(ins.code).exception_list)
+          if (ty != noexcept_id)
+            spec_types.push_back(ty);
         ins.make_skip();
       }
       else if (ins.type == THROW_DECL_END)
@@ -438,20 +627,34 @@ private:
     // An exception in flight at the epilogue is a hard failure in two cases:
     //  - main / __ESBMC_main: it is uncaught (escapes the program → terminate);
     //    __ESBMC_main also covers static-init throws from global constructors.
-    //  - a noexcept function: the exception escapes the no-throw boundary →
-    //    terminate ([except.spec]). A locally-caught throw clears `thrown`, so
-    //    this fires only on a genuine escape.
+    //  - an exception specification is violated: the escaping exception's type
+    //    is not permitted by the function's `throw(...)` / noexcept declaration
+    //    ([except.spec]). A no-throw spec permits nothing, so any escape fails;
+    //    a dynamic spec permits its listed types (and their subtypes). This
+    //    mirrors the imperative path, which reports an escaping out-of-spec
+    //    throw as "not allowed by declaration" (unexpected()/handler dispatch is
+    //    not modelled on either path). A locally-caught throw clears `thrown`,
+    //    so the check fires only on a genuine escape.
     const bool is_entry =
       id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
-    if (is_entry || noexcept_fn)
+    if (is_entry || has_spec)
     {
+      // The assertion is `!thrown || in_spec`; for an uncaught (entry) or
+      // no-throw boundary `in_spec` is empty, leaving the original `!thrown`.
+      expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
+      expr2tc in_spec = is_entry ? expr2tc() : spec_guard(spec_types);
       auto a = body.insert(std::next(epilogue));
-      a->make_assertion(equality2tc(thrown, gen_false_expr()));
+      a->make_assertion(
+        is_nil_expr(in_spec) ? not_thrown : or2tc(not_thrown, in_spec));
       a->location = epilogue->location;
       a->function = epilogue->function;
       a->location.property("exception");
+      // A no-throw spec (empty allowed set) keeps the distinct "noexcept"
+      // wording; a dynamic spec reports a specification violation.
       a->location.comment(
-        is_entry ? "uncaught exception" : "noexcept specification violated");
+        is_entry             ? "uncaught exception"
+        : spec_types.empty() ? "noexcept specification violated"
+                             : "exception specification violated");
     }
 
     body.update();
@@ -558,6 +761,23 @@ private:
       disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
     }
     return is_nil_expr(disj) ? gen_false_expr() : disj;
+  }
+
+  /// `__ESBMC_exc_typeid ∈ { id(T) : T <: some allowed type }` — the in-flight
+  /// exception is permitted by a dynamic exception specification. Nil when the
+  /// specification allows nothing (a no-throw spec), so callers fall back to the
+  /// plain `!thrown` boundary check.
+  expr2tc spec_guard(const std::vector<irep_idt> &spec_types)
+  {
+    expr2tc disj;
+    for (const irep_idt &t : spec_types)
+      for (unsigned id : registry.concrete_subtype_ids(t))
+      {
+        expr2tc eq =
+          equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id)));
+        disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
+      }
+    return disj;
   }
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise

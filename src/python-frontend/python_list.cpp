@@ -898,6 +898,13 @@ exprt python_list::get()
     return build_symbol(tmp);
   };
 
+  // Convert every element once, recording whether the literal mixes integer and
+  // floating-point values. Python promotes such a list to a homogeneous float
+  // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would leave
+  // their float_buf slot unset and read back as a stale float (issue #5156).
+  std::vector<exprt> elems;
+  elems.reserve(list_value_["elts"].size());
+  bool has_int = false, has_float = false;
   for (auto &e : list_value_["elts"])
   {
     // Clear current_lhs so that constructor calls inside list elements
@@ -905,8 +912,26 @@ exprt python_list::get()
     // inheriting the outer assignment target as self.
     exprt *saved_lhs = converter_.current_lhs;
     converter_.current_lhs = nullptr;
-    exprt elem = converter_.get_expr(e);
+    elems.push_back(converter_.get_expr(e));
     converter_.current_lhs = saved_lhs;
+
+    const typet &t = elems.back().type();
+    if (t.is_floatbv())
+      has_float = true;
+    else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+      has_int = true; // bool is int-like in Python (True == 1)
+  }
+
+  const bool promote_ints = has_int && has_float;
+
+  for (exprt &elem : elems)
+  {
+    // Promote integer (and bool) elements to double in a mixed int/float
+    // literal, matching the list[float] annotation Python infers for the mix.
+    const typet &t = elem.type();
+    if (promote_ints && (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()))
+      elem = build_typecast(elem, double_type());
+
     exprt map_elem = materialize_list_elem(elem);
 
     exprt list_push_func_call =
@@ -2591,11 +2616,49 @@ exprt python_list::handle_index_access(
       }
     }
 
+    // A non-constant subscript into a heterogeneous int/float list cannot
+    // resolve a single static element type from the index, so the code above
+    // defaults to element 0's type. That misreads any element of the other
+    // numeric kind (e.g. a float stored at index 2 read as an int, #5160).
+    // Python promotes int to float in numeric expressions, so treat the read
+    // as float and dispatch on the stored type_id at runtime (see
+    // extract_pyobject_value), which yields the correct value for both kinds.
+    const bool constant_index =
+      slice_node["_type"] == "Constant" ||
+      (slice_node["_type"] == "UnaryOp" && slice_node.contains("op") &&
+       slice_node["op"]["_type"] == "USub" && slice_node.contains("operand") &&
+       slice_node["operand"]["_type"] == "Constant");
+    const bool mixed_numeric =
+      !constant_index && array.is_symbol() &&
+      has_mixed_numeric_types(array.identifier().as_string());
+    if (mixed_numeric)
+      elem_type = double_type();
+
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
+    // The mixed-numeric read dereferences the element three times (type_id,
+    // float_idx, value), so bind the __ESBMC_list_at result to a temp first and
+    // evaluate the access once instead of three times on the hot path.
+    if (mixed_numeric)
+    {
+      const locationt loc = converter_.get_location_from_decl(list_value_);
+      symbolt &elem_obj = converter_.create_tmp_symbol(
+        list_value_,
+        "$list_elem_obj$",
+        pointer_typet(converter_.get_type_handler().get_list_element_type()),
+        exprt());
+      code_declt obj_decl(build_symbol(elem_obj));
+      obj_decl.location() = loc;
+      converter_.add_instruction(obj_decl);
+      code_assignt obj_assign(build_symbol(elem_obj), list_at_call);
+      obj_assign.location() = loc;
+      converter_.add_instruction(obj_assign);
+      list_at_call = build_symbol(elem_obj);
+    }
+
     // Extract and dereference PyObject value
-    return extract_pyobject_value(list_at_call, elem_type);
+    return extract_pyobject_value(list_at_call, elem_type, mixed_numeric);
   }
 
   // Handle static string indexing with IndexError on out-of-bounds
@@ -3192,41 +3255,59 @@ exprt python_list::compare(
 
 exprt python_list::create_vla(
   const nlohmann::json &element,
-  const symbolt *list,
-  symbolt *size_var,
+  const exprt &count,
   const exprt &list_elem)
 {
-  // Add counter for while loop
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Fresh result list: a literal source (e.g. [0]) already holds its initial
+  // element, so pushing onto it would yield count + 1 elements.
+  symbolt &result = create_list();
+
+  // Materialise the count (which may be a compound expression such as m + 1)
+  // into an int symbol to use as the loop bound.
+  exprt bound_value =
+    (count.type() == int_type()) ? count : typecast_exprt(count, int_type());
+  symbolt &bound = converter_.create_tmp_symbol(
+    element, "$list_rep_count$", int_type(), exprt());
+  code_declt bound_decl(build_symbol(bound));
+  bound_decl.location() = location;
+  converter_.add_instruction(bound_decl);
+  code_assignt bound_assign(build_symbol(bound), bound_value);
+  bound_assign.location() = location;
+  converter_.add_instruction(bound_assign);
+
+  // counter = 0
   symbolt &counter = converter_.create_tmp_symbol(
     element, "counter", int_type(), gen_zero(int_type()));
-
   code_assignt counter_code(build_symbol(counter), gen_zero(int_type()));
+  counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
-  // Build conditional for while loop (counter < len(arr))
+  // while (counter < bound) { result.push(list_elem); counter += 1; }
   exprt cond("<", bool_type());
   cond.operands().push_back(build_symbol(counter));
-  cond.operands().push_back(build_symbol(*size_var));
+  cond.operands().push_back(build_symbol(bound));
 
-  // Build block with lish_push() calls and counter increment
   code_blockt then;
-  exprt list_push_call = build_push_list_call(*list, element, list_elem);
-  then.copy_to_operands(list_push_call);
+  then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
-  // increment counter
-  exprt incr("+");
+  exprt incr("+", int_type());
   incr.copy_to_operands(build_symbol(counter));
   incr.copy_to_operands(gen_one(int_type()));
   code_assignt update(build_symbol(counter), incr);
   then.copy_to_operands(update);
 
-  // add while block for list_push() calls
   codet while_cod;
   while_cod.set_statement("while");
   while_cod.copy_to_operands(cond, then);
   converter_.add_instruction(while_cod);
 
-  return build_symbol(*list);
+  // Record the element type so downstream indexing resolves it.
+  list_type_map[result.id.as_string()].push_back(
+    std::make_pair(std::string(), list_elem.type()));
+
+  return build_symbol(result);
 }
 
 exprt python_list::list_repetition(
@@ -3394,27 +3475,9 @@ exprt python_list::list_repetition(
     return build_symbol(*elem_sym);
   };
 
-  // Get list size from lhs (e.g.: 3 * [1] or 3 * lst)
+  // Count on the lhs (e.g.: 3 * [1] or n * lst). The list operand is the rhs.
   if (lhs.type() != list_type)
   {
-    if (lhs.is_symbol())
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(lhs).get_identifier().as_string());
-      assert(size_var);
-
-      list_symbol = converter_.find_symbol(rhs.identifier().as_string());
-      assert(list_symbol);
-
-      if (!parse_size_from_symbol(size_var, list_size))
-        return create_vla(list_value_, list_symbol, size_var, list_elem);
-    }
-    else if (lhs.is_constant())
-    {
-      assert(is_integer_type(lhs.type()));
-      list_size = binary2integer(lhs.value().c_str(), true);
-    }
-
     // List element comes from the rhs operand
     if (right_node.contains("elts"))
       list_elem = converter_.get_expr(right_node["elts"][0]);
@@ -3426,9 +3489,20 @@ exprt python_list::list_repetition(
         return build_symbol(create_list());
       is_variable_list = true;
     }
+
+    if (lhs.is_constant())
+    {
+      assert(is_integer_type(lhs.type()));
+      list_size = binary2integer(lhs.value().c_str(), true);
+    }
+    else
+    {
+      // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
+      return create_vla(list_value_, lhs, list_elem);
+    }
   }
 
-  // Get list size from rhs (e.g.: [1] * 3 or lst * 3)
+  // Count on the rhs (e.g.: [1] * 3 or lst * n). The list operand is the lhs.
   if (rhs.type() != list_type)
   {
     // List element comes from the lhs operand
@@ -3443,22 +3517,15 @@ exprt python_list::list_repetition(
       is_variable_list = true;
     }
 
-    if (rhs.is_symbol()) // (e.g.: [1] * n or lst * n)
-    {
-      symbolt *size_var = converter_.find_symbol(
-        to_symbol_expr(rhs).get_identifier().as_string());
-      assert(size_var);
-
-      list_symbol = converter_.find_symbol(lhs.identifier().as_string());
-      assert(list_symbol);
-
-      if (!parse_size_from_symbol(size_var, list_size))
-        return create_vla(list_value_, list_symbol, size_var, list_elem);
-    }
-    else if (rhs.is_constant())
+    if (rhs.is_constant())
     {
       assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
+    }
+    else
+    {
+      // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
+      return create_vla(list_value_, rhs, list_elem);
     }
   }
 
@@ -4251,7 +4318,8 @@ exprt python_list::build_pop_list_call(
 
 exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
-  const typet &elem_type)
+  const typet &elem_type,
+  bool mixed_numeric)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
   // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
@@ -4259,15 +4327,17 @@ exprt python_list::extract_pyobject_value(
   // (real-sorted in --ir mode), so the array read gives the correct real value.
   if (elem_type.is_floatbv())
   {
-    // Build item->float_idx: dereference the PyObject* and access the float_idx field
-    member_exprt float_idx_member(pyobject_expr, "float_idx", size_type());
-    {
-      exprt &base = float_idx_member.struct_op();
+    // Helper: build deref(pyobject_expr)->field for a given field/type.
+    auto member_of =
+      [&](const char *field, const typet &ftype) -> member_exprt {
+      member_exprt m(pyobject_expr, field, ftype);
+      exprt &base = m.struct_op();
       exprt deref("dereference");
       deref.type() = base.type().subtype();
       deref.move_to_operands(base);
       base.swap(deref);
-    }
+      return m;
+    };
 
     // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
     const symbolt *fbuf_sym =
@@ -4275,9 +4345,36 @@ exprt python_list::extract_pyobject_value(
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
 
     // Build __ESBMC_float_buf[item->float_idx]
+    member_exprt float_idx_member = member_of("float_idx", size_type());
     exprt float_val =
       build_index(build_symbol(*fbuf_sym), float_idx_member, elem_type);
-    return float_val;
+
+    if (!mixed_numeric)
+      return float_val;
+
+    // Dynamic index into a heterogeneous int/float list: the element may be an
+    // int whose value lives behind item->value (not in float_buf), so reading
+    // float_buf unconditionally would misread it (#5160). Dispatch on the
+    // stored type_id: float elements come from float_buf, int elements are
+    // promoted to double from their 8-byte payload. The float type_id is the
+    // same hash the push path stamps onto float elements (float_type_id).
+    const size_t float_type_id = std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(elem_type));
+
+    // (double)*(long long *)item->value
+    member_exprt value_member =
+      member_of("value", pointer_typet(empty_typet()));
+    typecast_exprt as_int_ptr(
+      value_member, pointer_typet(long_long_int_type()));
+    dereference_exprt int_val(long_long_int_type());
+    int_val.op0() = as_int_ptr;
+    typecast_exprt int_as_float(int_val, elem_type);
+
+    // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
+    equality_exprt is_float(
+      member_of("type_id", size_type()),
+      from_integer(float_type_id, size_type()));
+    return if_exprt(is_float, float_val, int_as_float);
   }
 
   // Extract value from PyObject: pyobject_expr->value

@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--lower-exceptions --std c++03
+
+^VERIFICATION FAILED$
+exception specification violated

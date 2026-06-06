@@ -127,6 +127,26 @@ bool python_annotation<Json>::extract_type_info(
 
     return true;
   }
+
+  // Handle generic annotations represented as Subscript nodes, e.g. the
+  // `list[int]` written `Subscript(value=Name("list"), slice=Name("int"))`.
+  // The previous Name-only path missed these, so an annotated `list[T]`
+  // without a usable initializer degraded to "Any" (Fixes #5122 review).
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    base_type = annotation["value"]["id"];
+
+    // Only a Name slice yields a concrete element type (list[int]). A
+    // Subscript slice (list[list[int]]) or Tuple slice (dict[K, V]) is left
+    // unresolved, matching the prior behaviour for those shapes.
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      element_type = annotation["slice"]["id"];
+
+    return true;
+  }
+
   return false;
 }
 
@@ -337,6 +357,15 @@ std::string python_annotation<Json>::get_string_method_return_type(
 
   if (method == "split")
     return "list";
+
+  // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
+  // which resolves to an empty type so the concrete struct type of the 3-tuple
+  // produced by handle_string_partition is copied onto the target symbol.
+  // Mapping it to the default "str" mistypes the target as a scalar char, which
+  // makes len()/subscript on the result wrong (unsound — proves false
+  // assertions, #5114).
+  if (method == "partition")
+    return "tuple";
 
   // Keep previous behavior for unmapped string methods.
   return "str";
@@ -820,22 +849,49 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
     return "list[int]"; // Fallback for numeric contexts
   }
 
-  // Check if all elements have the same type
+  // Check if all elements have the same type, tracking numeric promotion.
+  // In Python an int/float mix promotes to float (e.g. [4.0, 3] is list[float]),
+  // so a single leading int must not truncate the float elements.
+  auto is_numeric = [](const std::string &t) {
+    return t == "int" || t == "float" || t == "bool";
+  };
+  bool all_numeric = is_numeric(element_type);
+  bool saw_float = element_type == "float";
+  bool mixed = false;
+
   for (size_t i = 1; i < list_arg["elts"].size(); ++i)
   {
     std::string current_type = get_argument_type(list_arg["elts"][i]);
-    if (current_type != element_type && !current_type.empty())
+    if (current_type.empty())
+      continue;
+    if (current_type == "float")
+      saw_float = true;
+    if (!is_numeric(current_type))
+      all_numeric = false;
+
+    if (current_type != element_type)
     {
-      log_warning(
-        "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
-        "as fallback ({}:{})",
-        element_type,
-        current_type,
-        python_filename_,
-        current_line_);
-      return "list[int]"; // Fallback for mixed numeric types
+      mixed = true;
+      // Non-numeric heterogeneity (e.g. str vs int) has no common element
+      // type we can represent, so keep the historical int fallback.
+      if (!all_numeric)
+      {
+        log_warning(
+          "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+          "as fallback ({}:{})",
+          element_type,
+          current_type,
+          python_filename_,
+          current_line_);
+        return "list[int]";
+      }
     }
   }
+
+  // All elements numeric: promote an int/float mix to float (Python widens int
+  // to float). Any other numeric mix (e.g. int/bool) keeps the int fallback.
+  if (mixed && all_numeric)
+    return saw_float ? "list[float]" : "list[int]";
 
   // Return the full generic type notation
   return "list[" + element_type + "]";
@@ -964,57 +1020,11 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
     else if (lhs["_type"] == "Subscript")
     {
-      // Handle subscript operations like dp[i-1], prices[i], etc.
-      const std::string &var_name = lhs["value"]["id"];
-      Json var_node =
-        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
-
-      if (!var_node.empty() && var_node.contains("annotation"))
-      {
-        std::string var_type;
-
-        // Handle generic type annotations like list[int] (Subscript nodes)
-        if (
-          var_node["annotation"].contains("_type") &&
-          var_node["annotation"]["_type"] == "Subscript" &&
-          var_node["annotation"].contains("value") &&
-          var_node["annotation"]["value"].contains("id"))
-        {
-          var_type = var_node["annotation"]["value"]["id"];
-
-          // For list[T], return T directly from slice
-          if (
-            var_type == "list" && var_node["annotation"].contains("slice") &&
-            var_node["annotation"]["slice"].contains("id"))
-          {
-            type = var_node["annotation"]["slice"]["id"];
-          }
-        }
-        // Handle simple type annotations like int, str (Name nodes)
-        else if (
-          var_node["annotation"].contains("id") &&
-          var_node["annotation"]["id"].is_string())
-        {
-          var_type = var_node["annotation"]["id"];
-
-          // For list[T], return T. For other types, return the type itself
-          if (var_type == "list")
-          {
-            // Try to get subtype from list initialization
-            if (var_node.contains("value") && !var_node["value"].is_null())
-            {
-              std::string subtype = get_list_subtype(var_node["value"]);
-              type = subtype.empty() ? "Any" : subtype;
-            }
-            else
-              type = "Any"; // Unknown list element type
-          }
-          else
-          {
-            type = var_type;
-          }
-        }
-      }
+      // Handle subscript operations like dp[i-1], prices[i], M[0][0], etc.
+      // Delegate to the nested-aware resolver so multi-level subscripts
+      // (e.g. M[0][0], whose value is itself a Subscript rather than a Name)
+      // do not blindly dereference lhs["value"]["id"] (Fixes #5122).
+      type = resolve_subscript_type(lhs, body);
     }
     else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
     {

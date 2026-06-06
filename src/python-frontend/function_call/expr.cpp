@@ -760,8 +760,16 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "float" && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
+    // Only take the constant-string fast path when the variable is genuinely
+    // string-typed here. A numeric variable conditionally reassigned a string
+    // (e.g. `if isinstance(x, str): x = x.replace(...)`) leaves a stale string
+    // value on its symbol even on paths where it stays numeric; keying off the
+    // value alone would mis-route float(x) into string parsing and fold it to
+    // 0.0 (#5161). Gate on the declared type so such cases fall through to the
+    // numeric typecast in the else branch.
     if (
       sym && sym->get_value().is_constant() &&
+      type_utils::is_string_type(sym->get_type()) &&
       type_utils::is_string_type(sym->get_value().type()))
       return handle_str_symbol_to_float(sym);
     else

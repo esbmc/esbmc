@@ -1652,6 +1652,22 @@ void python_converter::get_var_assign(
       is_right = false;
     }
 
+    // When the annotation resolves to `Any` (void*) but the RHS is a concrete
+    // string (char*), adopt the string type for the symbol. Comprehension and
+    // `for`-loop targets over an unannotated string parameter are lowered as
+    // `char: Any = s[i]`; leaving the target void* makes list.append() miss the
+    // string-pointer storage branch in build_list_push_call, so the element
+    // pointer is byte-copied and corrupted (esbmc/esbmc#5158). This mirrors the
+    // Call-RHS handling in infer_type_from_any_annotation for a non-Call RHS.
+    // `rhs` is default-constructed (empty type) outside function scope, where
+    // is_pointer() is false, so no extra nil guard is needed.
+    if (
+      current_element_type == any_type() && rhs.type().is_pointer() &&
+      rhs.type().subtype() == char_type())
+    {
+      current_element_type = rhs.type();
+    }
+
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
     annotation_location = location_begin;

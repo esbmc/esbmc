@@ -8,26 +8,35 @@
 
 void python_converter::update_symbol(const exprt &expr) const
 {
-  // Don't update if expression has no name
-  // prevents corruption of function symbols
-  if (expr.name().empty())
+  symbolt *sym = nullptr;
+
+  // For symbol_exprt, the full symbol ID (e.g. "py:file@A") is stored in
+  // identifier(), not in name(). Try identifier-based lookup first.
+  if (!expr.identifier().empty())
   {
-    log_debug(
-      "python-frontend",
-      "[update_symbol]: skipping symbol update since expression has no name");
-    return;
+    sym = symbol_table_.find_symbol(expr.identifier());
   }
 
-  // Generate a symbol ID from the expression's name.
-  symbol_id sid = create_symbol_id();
-  sid.set_object(expr.name().c_str());
+  // Fall back to name-based lookup (name() = base name, e.g. "A").
+  // This handles expressions that carry only the base name.
+  if (sym == nullptr && !expr.name().empty())
+  {
+    symbol_id sid = create_symbol_id();
+    sid.set_object(expr.name().c_str());
 
-  // Try to locate the symbol in the symbol table.
-  symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+    // Try scoped ID first (py:file@F@func@var), then global (py:file@var)
+    sym = symbol_table_.find_symbol(sid.to_string());
+    if (sym == nullptr)
+      sym = symbol_table_.find_symbol(sid.global_to_string());
+  }
 
   if (sym == nullptr)
   {
-    // Symbol not found, nothing to update.
+    log_debug(
+      "python-frontend",
+      "[update_symbol]: symbol not found for name='{}' identifier='{}'",
+      expr.name().as_string(),
+      expr.identifier().as_string());
     return;
   }
 
@@ -77,7 +86,7 @@ void python_converter::update_symbol(const exprt &expr) const
           "update_symbol: Failed to convert binary value '{}' to integer for "
           "symbol '{}'. Error: {}",
           binary_value_str,
-          sid.to_string(),
+          sym->id.as_string(),
           e.what());
       }
     }

@@ -98,6 +98,14 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   // Restore the original flag state
   is_converting_rhs = old_is_converting_rhs;
 
+  // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
+  // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A
+  // single-operand `and`/`or` is malformed IR: the C adjuster reads op1() and
+  // runs off the end of the operands vector. Collapse to the lone operand,
+  // which is the correct result for a one-value boolean operation.
+  if (logical_expr.operands().size() == 1)
+    return logical_expr.operands().front();
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
@@ -322,28 +330,9 @@ exprt python_converter::handle_membership_operator(
 
     if (tag.starts_with("tag-tuple"))
     {
-      // Check if this is a tuple of strings: if so, delegate to string handler
-      const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
-      bool is_string_tuple = true;
-
-      for (const auto &comp : struct_type.components())
-      {
-        if (!comp.type().is_array() && !comp.type().is_pointer())
-        {
-          is_string_tuple = false;
-          break;
-        }
-      }
-
-      // If tuple contains strings and lhs is a string, use string handler
-      if (is_string_tuple && (lhs.type().is_pointer() || lhs.type().is_array()))
-      {
-        exprt membership_expr =
-          string_handler_.handle_string_membership(lhs, rhs, element);
-        return invert ? not_exprt(membership_expr) : membership_expr;
-      }
-
-      return tuple_handler_->handle_tuple_membership(lhs, rhs, invert);
+      // `x in (a, b, c)` is element-wise equality, with string elements
+      // compared by content. handle_tuple_membership builds the OR chain.
+      return tuple_handler_->handle_tuple_membership(lhs, rhs, invert, element);
     }
   }
 

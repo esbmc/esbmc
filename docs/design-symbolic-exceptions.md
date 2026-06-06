@@ -64,6 +64,16 @@ interoperate across a call, so unless every function is in the supported subset
 - `throw;` (rethrow) re-raises from the globals;
 - asserts *uncaught* at `main`'s epilogue.
 
+**Unclosed-region rebalancing.** `remove_unreachable` runs before this pass and
+prunes the empty `CATCH` pop + skip-GOTO of a try whose body cannot complete
+normally — the common `try: <op that raises>; assert False; except E:` idiom,
+where a model- or user-raised throw makes the fall-through dead. That leaves the
+`CATCH` push unbalanced, which the positional region recovery cannot pair.
+`rebalance_removed_pops` re-inserts a synthetic pop + skip-GOTO before each
+unclosed push's first handler, restoring the balanced shape. Because a push only
+goes unclosed when its normal-completion path is unreachable, the synthetic
+skip-GOTO sits on a dead path and its target is immaterial.
+
 ## Supported subset (current)
 
 Lowered: C++ class **and primitive** throws (`throw 1`); reference, value (incl.
@@ -71,22 +81,64 @@ single-inheritance base-by-value slicing), pointer (`catch (T*)`) and `void*`
 catches, and catch-all; nested try with inner→outer propagation; inter-procedural
 propagation through direct and indirect calls; rethrow; uncaught detection at both
 `main` and `__ESBMC_main` (the latter covers exceptions from global constructors
-during static initialisation); and `noexcept` / `throw()` enforcement (an exception
-escaping a no-throw function → terminate, asserted at its epilogue). Reaching
-outside the subset makes the whole program fall back to the imperative path. About
-**47 of 67** `regression/esbmc-cpp/try_catch` CORE tests currently lower, at 0
-differential divergences.
+during static initialisation); `noexcept` / `throw()` enforcement (an exception
+escaping a no-throw function → terminate, asserted at its epilogue); and
+**dynamic exception specifications** (`throw(T...)`): the epilogue check
+generalises the noexcept one — an exception in flight whose type is not in the
+specification's allowed set (`__ESBMC_exc_typeid ∈ { id(U) : U <: some listed T }`)
+is a specification violation. This mirrors the imperative path, which reports an
+out-of-spec escape as "not allowed by declaration" (`std::unexpected` / handler
+dispatch is modelled on neither path). Reaching outside the subset makes the whole
+program fall back to the imperative path.
 
 **Python** lowers too: try/except/raise share the same THROW/CATCH machinery, the
 registry ingests Python exception ancestry from THROW `exception_list`s, and the
-entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). 26 of 29
-`regression/python/exception*`/`try_finally*`/`try_else*` tests lower at 0
-divergences (the rest fall back).
+entry/uncaught anchor is `__ESBMC_main` (which wraps `python_user_main`). All
+comparable `regression/python` exception tests lower at 0 divergences (including
+model-raised exceptions — a `KeyError` from `del d[k]`, a `TypeError` from
+mutating a tuple, a `ValueError` from `math.factorial(-1)` — and the common
+`try: <raises>; assert False; except E:` idiom; see *unclosed-region rebalancing*
+below).
 
-Not yet lowered (fall back): parts of the `std` exception surface; destructor
-unwinding; `bad_cast` from `dynamic_cast<T&>`; dynamic exception specifications
-with real types (`throw(T...)`, a C++14-only form the frontend rejects under
-C++17, so it forces fallback only under `--std c++14`).
+A failing `dynamic_cast<T&>` lowers to a call to the bodyless intrinsic
+`__ESBMC_throw_bad_cast`; the pass rewrites that call into an ordinary `THROW` of
+a synthesized `std::bad_cast` (mirroring `goto_symext::symex_throw_bad_cast`) so
+the rest of the pipeline lowers it like any other throw. If `<typeinfo>`'s
+`std::bad_cast` is not in the symbol table the call is left in place and the
+program falls back to the imperative path.
+
+The **`std` exception hierarchy** lowers through the same machinery, with no
+std-specific handling: the frontend flattens a thrown std type's base chain into
+the `THROW` `exception_list` (e.g. `THROW std::runtime_error, std::exception`),
+which `register_chain` ingests, so a `catch (std::exception&)` base handler's
+guard matches. Throwing `std::bad_alloc` from `new`, calling `what()` in a
+handler, and user types deriving from `std::exception` all lower at 0
+differential divergences. (Two orthogonal caveats, both affecting the imperative
+path equally: a `std::string` exception message drives the unbounded `strlen`
+model, so such programs need an `--unwind` bound; and the frontend can omit
+intermediate bases from the flattened chain, so a catch on a mid-hierarchy base
+may not match — a frontend chain-completeness matter, not a lowering one.)
+
+Not yet lowered (fall back): a small residual set — `std::bad_exception`
+value-catches and a few unusual try-block layouts (function-try-blocks, an empty
+trailing handler whose skip-GOTO `remove_unreachable` prunes). Dynamic exception
+specifications themselves now lower (above); the `try-catch_decl_*` /
+`try-catch_unexpected_*` tests exercise them.
+
+When the pass declines to lower a program that *uses* exceptions, it emits a
+`--lower-exceptions: cannot lower <construct>; falling back to the imperative
+exception path` warning naming the construct, rather than falling back silently
+(`report_fallback`). This is the prerequisite for removing the imperative path
+(see roadmap): once that path is gone, the same site becomes an error, so an
+unsupported program is reported rather than miscompiled. Exception-free programs
+stay silent (the pass is a no-op for them).
+
+**Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
+in the lowering pass, so it applies on **both** the imperative and lowered
+paths: a throw runs the destructors of the automatic objects between the throw
+point and the nearest enclosing try block ([except.ctor]), excluding the thrown
+object itself. (Multi-level inner→outer propagation of those destructors within
+a function relies on the lowered path's nested dispatch.)
 
 `std::set_terminate` / `std::set_unexpected` are honoured: the operational model
 (`src/cpp/library/exception`) now stores the installed handler and `terminate()`
@@ -95,11 +147,31 @@ ignored on all paths).
 
 ## Roadmap to default-on
 
-The imperative path can only be removed once the lowered path reaches parity.
-Remaining work, roughly ordered: the broader `std` exception surface; destructor
-unwinding; `bad_cast` from `dynamic_cast<T&>`. Then: two green full-suite
-differential runs (`--lower-exceptions` ON vs OFF) before flipping the default and
-deleting `symex_catch.cpp`.
+The main exception constructs now lower (class/primitive/std throws, the catch
+forms, propagation, rethrow, noexcept, bad_cast); the remaining gate is an
+exhaustive full-suite `--lower-exceptions` ON-vs-OFF differential (across all C++
+and Python suites, not just `try_catch`) to surface any residual divergence,
+after which the default can be flipped and `symex_catch.cpp` deleted. That gate
+is automated by `scripts/lower_exceptions_differential.py` and the
+`lower-exceptions-differential` GitHub Actions workflow: for every
+exception-bearing regression test it runs ESBMC with and without the flag (the
+exact command `regression/testing_tool.py` would build) and fails on any verdict
+divergence. Two green full-suite runs are required before the flip.
+
+**Verdict parity is necessary but not sufficient.** Because the pass is
+all-or-nothing, a program outside the supported subset silently *falls back* to
+the imperative path, so an ON run that fell back is identical to OFF by
+construction — 0 divergences does not establish the lowered path is
+self-sufficient. The `--check-firing` mode of the harness measures this directly
+(it counts `THROW`/`CATCH` GOTO instructions ON vs OFF; lowering that fired
+rewrites them, a fall-back leaves them unchanged). A current local survey shows
+**~57/73 C++ and ~132/158 Python** exception programs actually lower; the rest
+still depend on the imperative path. The dominant fall-back categories are
+**dynamic exception specifications** (`try-catch_decl_*`) and **`unexpected`
+handlers** (`try-catch_unexpected_*`) in C++, and a set of model-raised
+exceptions in Python. Before `symex_catch.cpp` can be deleted, these must either
+be brought into the lowered subset (so nothing falls back) or be given a defined
+behaviour once the imperative fallback is gone.
 
 ## Testing
 
@@ -107,4 +179,17 @@ deleting `symex_catch.cpp`.
 (simple, value-fail, nested, uncaught, rethrow, inter-procedural, indirect-call,
 value-catch, slice, primitive-fallback). `unit/goto-programs/exception_typeid.test.cpp`
 covers the registry. The development gate is differential equivalence
-(ON vs OFF) across `regression/esbmc-cpp/try_catch`.
+(ON vs OFF), automated by `scripts/lower_exceptions_differential.py` — run it
+locally as
+
+```sh
+scripts/lower_exceptions_differential.py --esbmc build/src/esbmc/esbmc
+```
+
+to diff every CORE exception-bearing C++ and Python test that asserts a
+`VERIFICATION` verdict (tests expecting a frontend/parse error or an
+unsupported-feature message are excluded — the post-GOTO lowering pass cannot
+affect them), or narrow with `--root regression/esbmc-cpp/try_catch`. CI runs
+the same gate via the `lower-exceptions-differential` workflow on a clean Linux
+runner. The first full-suite run is green: 0 divergences across the comparable
+C++ and Python exception corpus.

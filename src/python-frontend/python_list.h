@@ -160,10 +160,17 @@ public:
    * @brief Extract and dereference value from a PyObject* expression
    * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
    * @param elem_type The expected element type
+   * @param mixed_numeric When true and elem_type is float, the element may be
+   *        either an int or a float at runtime (a dynamic index into a mixed
+   *        int/float list). The float value is then read by dispatching on the
+   *        stored type_id: float elements come from __ESBMC_float_buf, int
+   *        elements are promoted from their payload to double.
    * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
    */
-  exprt
-  extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
+  exprt extract_pyobject_value(
+    const exprt &pyobject_expr,
+    const typet &elem_type,
+    bool mixed_numeric = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
@@ -342,10 +349,13 @@ public:
 private:
   friend class python_dict_handler;
 
+  // Repeat `list_elem` a runtime number of times (`count` may be any integer
+  // expression: a constant, a symbol like `n`, or a compound like `m + 1`).
+  // Builds a fresh list, so a literal source's pre-populated element is not
+  // reused (avoids an off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
-    const symbolt *list,
-    symbolt *size_var,
+    const exprt &count,
     const exprt &list_elem);
 
   exprt build_list_at_call(
