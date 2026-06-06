@@ -415,6 +415,26 @@ enable ESBMC's internal assertions.
 
 ## Advanced
 
+{{% details title="Build in a Docker container" closed="true" %}}
+A minimal Debian-based image that builds ESBMC with Z3, letting
+`-DDOWNLOAD_DEPENDENCIES=1` fetch LLVM/Clang and the libraries:
+
+```dockerfile
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake ninja-build git bison flex \
+      python3 libboost-all-dev g++-multilib \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth=1 https://github.com/esbmc/esbmc.git /esbmc
+WORKDIR /esbmc
+RUN cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 \
+    && ninja -C build
+```
+
+Build the image with `docker build -t esbmc .`; the binary is at
+`/esbmc/build/src/esbmc/esbmc`.
+{{% /details %}}
+
 {{% details title="Shared (dynamic) builds" closed="true" %}}
 A non-static ESBMC links against system libraries/solvers. Shared linking is the
 default when CMake is invoked with `-DBUILD_STATIC=Off` (or the variable unset).

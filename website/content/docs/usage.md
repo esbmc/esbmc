@@ -95,7 +95,9 @@ Here, ESBMC is invoked as follows:
 esbmc file.c --memory-leak-check
 ```
 
-<p> where <i>file.c</i> is the C program to be checked and <i>--memory-leak-check</i> indicates that ESBMC will check for memory leaks. For this particular C program, ESBMC produces the following counterexample:</p>
+where `file.c` is the C program to be checked and `--memory-leak-check`
+indicates that ESBMC will check for memory leaks. For this particular C program,
+ESBMC produces the following counterexample:
 
 ```
 Counterexample:
@@ -152,7 +154,7 @@ int main (void) {
 
 Here, we create two threads `id1` and `id1`; both threads will run the same code as implemented in **P**. Note that these two threads communicate via the shared memory `n`, which is protected by a mutex via **pthread_mutex_lock** and **pthread_mutex_unlock**. Note further that the thread `main` contains two joining points via **pthread_join** for `id1` and `id2`.
 
-ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
+ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where `file.c` is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
 
 ```
 *** Thread interleavings 612 ***
@@ -181,66 +183,10 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
-## Verification of Python Programs
+## Verifying Python Programs
 
-As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
-
-```Python
-def divide(a: int, b: int) -> int:
-    assert b != 0
-    return a // b
-
-def main():
-    a: int = nondet_int()
-    b: int = nondet_int()
-
-    __ESBMC_assume(b != 0)
-    result: int = divide(a, b)
-    assert result == a // b
-
-main()
-```
-
-Here, ESBMC is invoked as follows:
-
-```sh
-esbmc file.py
-```
-
-where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
-
-```
-Converting
-Generating GOTO Program
-GOTO program creation time: 1.216s
-GOTO program processing time: 0.025s
-Starting Bounded Model Checking
-Symex completed in: 0.003s (63 assignments)
-Caching time: 0.000s (removed 1 assertions)
-Slicing time: 0.000s (removed 53 assignments)
-Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
-No solver specified; defaulting to z3
-Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
-Encoding to solver time: 0.000s
-Solving with solver Z3 v4.15.4
-Runtime decision procedure: 0.001s
-BMC program time: 0.016s
-
-VERIFICATION SUCCESSFUL
-```
-
-## Using the SMT Boolector Solver
-
-Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
-
-```
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
-```
-Now rerun cmake,
-
-```
-cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
-```
+ESBMC has a dedicated Python frontend. See the [Python](/docs/python) section for
+how to verify Python programs, the supported features, and worked examples.
 
 ## Witness Generation
 
@@ -266,7 +212,6 @@ esbmc main.c --witness-output main.graphml
 ```
 
 ```xml
-<xmp>
 <?xml version="1.0" encoding="utf-8"?>
 <graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node">
@@ -345,7 +290,6 @@ esbmc main.c --witness-output main.graphml
     </edge>
   </graph>
 </graphml>
-</xmp>
 ```
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
@@ -601,50 +545,3 @@ shell, so it can include options or chain commands (the tools must be on
 - `cvc5 -L smt2 -m`
 
 Remember to quote the `CMD` string when invoking ESBMC.
-
-## Docker Build
-
-```
-FROM node:18-slim
-
-## Install dependencies for ESBMC and other build tools
-RUN apt-get update && apt-get install -y \
-    clang-14 \
-    llvm-14 \
-    clang-tidy-14 \
-    python-is-python3 \
-    python3 \
-    git \
-    ccache \
-    unzip \
-    wget \
-    curl \
-    bison \
-    flex \
-    g++-multilib \
-    linux-libc-dev \
-    libboost-all-dev \
-    libz3-dev \
-    libclang-14-dev \
-    libclang-cpp-dev \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
-
-# Keep the container running with tail -f /dev/null
-CMD ["bash", "-c", "tail -f /dev/null"]
-```
-
-Docker compose file:
-```
-version: '3.8'
-services:
-  esbmc:
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
-    tty: true
-    stdin_open: true
-```
-
-The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.
