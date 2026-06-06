@@ -1148,7 +1148,10 @@ void goto_symext::run_intrinsic(
     const waypoint *matched = nullptr;
     for (const auto &wp : cur_state->witness_segs[seg_idx])
     {
-      if (wp.type == waypoint::assumption && wp.line_id == cur_line)
+      if (
+        (wp.type == waypoint::assumption ||
+         wp.type == waypoint::function_return) &&
+        wp.line_id == cur_line)
       {
         matched = &wp;
         break;
