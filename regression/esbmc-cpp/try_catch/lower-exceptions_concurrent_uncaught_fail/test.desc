@@ -2,4 +2,4 @@ CORE
 main.cpp
 --lower-exceptions --context-bound 2
 
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$

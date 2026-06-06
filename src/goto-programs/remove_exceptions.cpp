@@ -80,11 +80,9 @@ public:
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
-    // symbol), and detect concurrency. The exception state is one global tuple,
-    // not per-thread, so the lowered dispatch is unsound for concurrent programs
-    // (one thread could observe, catch, or clear another thread's in-flight
-    // exception). Until the state is modeled per thread, leave concurrent
-    // programs to the imperative path.
+    // symbol). Concurrency is sound here: the exception-state globals are
+    // thread-local (see create_exception_state_symbols), so each thread raises,
+    // catches and clears its own in-flight exception independently.
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
@@ -108,16 +106,33 @@ public:
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
-          if (
-            is_symbol2t(c.function) &&
-            id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
-              std::string::npos)
-            // concurrent program — not yet modelled
-            return report_fallback(
-              goto_functions, "a concurrent program (pthread_create)");
+          if (is_symbol2t(c.function))
+            direct_call_targets.insert(to_symbol2t(c.function).thename);
+          collect_thread_entry(c);
         }
       }
     }
+
+    // A thread start routine that is also called directly (by name), or one
+    // reached through a computed pointer, cannot get a sound per-function
+    // uncaught-escape check (see the member comments): is_entry is a per-
+    // function property, but the terminate-on-escape is only correct on the
+    // thread-entry edge. Leaving such a program to the imperative path avoids a
+    // missed std::terminate (unresolved routine) or a spurious one (direct
+    // call). Residual precision gap (sound, never a missed bug): a routine that
+    // is a clean &worker thread entry but is *also* invoked through an indirect
+    // call elsewhere keeps is_entry on that path too, so an exception the
+    // indirect caller would catch is over-reported as a terminate. That needs
+    // call-site-sensitive enforcement at the pthread trampoline, which is
+    // blocked until thread-local state propagates across its indirect call.
+    if (thread_entry_unresolved)
+      return report_fallback(
+        goto_functions, "a thread with an unresolved start routine");
+    for (const irep_idt &e : thread_entries)
+      if (direct_call_targets.count(e))
+        return report_fallback(
+          goto_functions,
+          "a thread start routine that is also called directly");
 
     // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
     // interoperate across a call, so unless every participating function is in
@@ -225,6 +240,18 @@ private:
   exception_typeidt registry;
   expr2tc thrown, type_id, value;
   std::set<irep_idt> may_throw;
+  // Functions passed as the start routine to pthread_create: each is a thread
+  // entry, so an exception escaping it is uncaught for that thread (terminate).
+  std::set<irep_idt> thread_entries;
+  // Symbols that appear as a direct (by-name) call target anywhere. A thread
+  // entry that is *also* called directly cannot be marked is_entry soundly (the
+  // terminate at its epilogue would wrongly fire on the direct-call path), so
+  // such a program falls back; this records the candidates for that check.
+  std::set<irep_idt> direct_call_targets;
+  // A pthread_create whose start routine is a computed/unresolved pointer: its
+  // thread cannot get the uncaught-escape check, so fall back rather than miss
+  // it silently.
+  bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
 
   expr2tc mk_global(const char *id)
@@ -232,6 +259,34 @@ private:
     const symbolt *s = ns.lookup(irep_idt(id));
     assert(s && "exception-state globals must be created before lowering");
     return symbol2tc(migrate_type(s->get_type()), s->id);
+  }
+
+  /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
+  /// as a thread entry, so lower_ip enforces the uncaught-escape terminate at
+  /// that function's epilogue. The argument is `&worker`, possibly under
+  /// typecasts; peel them to the underlying function symbol. A computed
+  /// (unresolvable) routine sets thread_entry_unresolved so run() falls back
+  /// rather than silently miss its uncaught-escape check.
+  void collect_thread_entry(const code_function_call2t &call)
+  {
+    if (
+      !is_symbol2t(call.function) ||
+      id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
+        std::string::npos ||
+      call.operands.size() < 3)
+      return;
+
+    expr2tc rtn = call.operands[2];
+    while (is_typecast2t(rtn))
+      rtn = to_typecast2t(rtn).from;
+    if (is_address_of2t(rtn))
+      rtn = to_address_of2t(rtn).ptr_obj;
+    // Only a direct &function resolves to a code-typed symbol; a function-
+    // pointer variable (is_symbol2t but pointer-typed) is a computed routine.
+    if (is_symbol2t(rtn) && is_code_type(rtn->type))
+      thread_entries.insert(to_symbol2t(rtn).thename);
+    else
+      thread_entry_unresolved = true;
   }
 
   /// A fresh static-lifetime slot to hold a copy of a thrown object, so it
@@ -252,6 +307,7 @@ private:
     sym.lvalue = true;
     sym.static_lifetime = true;
     sym.file_local = false;
+    sym.is_thread_local = true;
     context.move_symbol_to_context(sym);
     return symbol2tc(obj_type, irep_idt(id));
   }
@@ -663,14 +719,20 @@ private:
     // clears `thrown`, so this fires only on a genuine escape.
     //  - main / __ESBMC_main: any escape is uncaught (covers static-init throws
     //    from global constructors) → std::terminate.
+    //  - a thread start routine (passed to pthread_create): an exception
+    //    escaping it is uncaught for that thread → std::terminate
+    //    ([except.terminate]). Checked at the routine's own epilogue, where it
+    //    set `thrown`, rather than relying on cross-frame propagation out
+    //    through the pthread trampoline.
     //  - noexcept: an escape calls std::terminate ([except.spec]).
     //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
     //    re-checked (build_dynamic_spec_check), matching the imperative path
     //    (which models the unexpected-handler dispatch and its recovery).
     // A locally-caught throw clears `thrown`, so these fire only on a genuine
     // escape (terminate iff an exception is still in flight).
-    const bool is_entry =
-      id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
+    const bool is_entry = id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
+                          fn_id == "__ESBMC_main" ||
+                          thread_entries.count(fn_id);
 
     if (spec.kind == exception_specificationt::kindt::dynamic)
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);

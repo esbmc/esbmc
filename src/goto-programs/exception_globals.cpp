@@ -9,6 +9,11 @@
 namespace
 {
 /// Register one zero-initialised static global, unless @p id already exists.
+/// The exception state is per-thread: a propagating exception, its type and its
+/// object belong to the thread that raised it, so the globals are thread-local.
+/// symex routes thread-local globals to a per-thread instance (renaming.cpp), so
+/// one thread cannot observe, catch, or clear another thread's in-flight
+/// exception — which is what makes the lowered dispatch sound under concurrency.
 void add_global(contextt &context, const char *id, const typet &type)
 {
   if (context.find_symbol(id) != nullptr)
@@ -23,6 +28,7 @@ void add_global(contextt &context, const char *id, const typet &type)
   sym.lvalue = true;
   sym.static_lifetime = true;
   sym.file_local = false;
+  sym.is_thread_local = true;
 
   context.move_symbol_to_context(sym);
 }
