@@ -1,6 +1,6 @@
 ---
 title: Loop Invariants
-weight: 5
+weight: 6
 ---
 
 ```sh
@@ -8,8 +8,8 @@ esbmc file.c --loop-invariant
 ```
 
 ESBMC supports user-provided loop invariants as an alternative to expensive loop
-unwinding. This is particularly beneficial for programs with large loop bounds or
-unbounded loops, where traditional k-induction may become computationally
+unwinding. This is particularly beneficial for programs with large loop bounds
+or unbounded loops, where traditional k-induction may become computationally
 prohibitive or hit iteration limits.
 
 Like [function contracts](/docs/function-contracts), loop invariants are
@@ -30,6 +30,7 @@ mode could produce for correct-but-weak invariants.
 > flags are required.
 
 **How it works — two-branch transformation:**
+
 ```
 IF !nondet_bool() GOTO loop_head       // Non-deterministically skip to Branch 2
 
@@ -49,11 +50,11 @@ GOTO loop_head
 
 **Expected outcomes:**
 
-| Invariant Quality | Branch 1 Result | K-Induction Result |
-|---|---|---|
-| Wrong (not inductive) | ASSERT fails — clear "invariant not inductive" error | — |
-| Correct but weak | Passes | Proves property via forward condition |
-| Correct and strong | Passes | Closes at inductive step |
+| Invariant Quality     | Branch 1 Result                                      | K-Induction Result                    |
+| --------------------- | ---------------------------------------------------- | ------------------------------------- |
+| Wrong (not inductive) | ASSERT fails — clear "invariant not inductive" error | —                                     |
+| Correct but weak      | Passes                                               | Proves property via forward condition |
+| Correct and strong    | Passes                                               | Closes at inductive step              |
 
 ### `--loop-invariant-check` — Legacy Mode
 
@@ -64,11 +65,11 @@ backward compatibility. It replaces the annotated loop with:
 2. **Havoc + Assume** — abstracts the loop body nondeterministically
 3. **Inductive-step assertion** — invariant still holds after one iteration
 
-This mode avoids loop unrolling entirely, making it faster when the only goal
-is checking invariant inductivity without k-induction overhead. However, it
-**may produce spurious counterexamples** for invariants that are correct but
-weak, because the havoc step can assign values outside the expected program
-state without proper constraint propagation.
+This mode avoids loop unrolling entirely, making it faster when the only goal is
+checking invariant inductivity without k-induction overhead. However, it **may
+produce spurious counterexamples** for invariants that are correct but weak,
+because the havoc step can assign values outside the expected program state
+without proper constraint propagation.
 
 > Use `--loop-invariant-check` only when speed is the priority and you
 > understand the false-positive risk.
@@ -92,14 +93,15 @@ int main() {
 ```
 
 Verify with:
+
 ```bash
 esbmc file.c --loop-invariant
 ```
 
 ## Companion Options
 
-The following options can be combined with the k-induction proof rule to
-produce or strengthen inductive invariants:
+The following options can be combined with the k-induction proof rule to produce
+or strengthen inductive invariants:
 
 - `--interval-analysis` — Enable interval analysis for integer variables and
   inject assume statements into the program.
@@ -120,8 +122,8 @@ incorrect invariant will lead to a failed base-case assertion in
 `--loop-invariant` mode, or potentially a spurious result in
 `--loop-invariant-check` mode.
 
-> **Note:** The integer overflow false-positive issue present in the legacy
-> mode (caused by unconstrained havoc operations) has been resolved in the new
+> **Note:** The integer overflow false-positive issue present in the legacy mode
+> (caused by unconstrained havoc operations) has been resolved in the new
 > `--loop-invariant` combined mode. If you observe such false positives, ensure
 > you are not using `--loop-invariant-check`.
 
@@ -134,10 +136,10 @@ approach.
 
 ## Loop Frame Rule (`--loop-frame-rule`)
 
-A loop invariant says what stays true across iterations. The **loop frame
-rule** adds the complementary claim: which variables the loop is allowed to
-change. Variables not listed in `__ESBMC_loop_assigns` are guaranteed to be
-untouched — and ESBMC checks this.
+A loop invariant says what stays true across iterations. The **loop frame rule**
+adds the complementary claim: which variables the loop is allowed to change.
+Variables not listed in `__ESBMC_loop_assigns` are guaranteed to be untouched —
+and ESBMC checks this.
 
 ```c
 int main(void) {
@@ -168,9 +170,8 @@ touched. With the flag, ESBMC snapshots all variables not in
 afterward.
 
 Both macros must be placed **before the loop**, as statements ending with `;`.
-`__ESBMC_loop_assigns` supports up to five targets; use
-`__ESBMC_loop_assigns()` with no arguments to declare that the loop modifies
-nothing.
+`__ESBMC_loop_assigns` supports up to five targets; use `__ESBMC_loop_assigns()`
+with no arguments to declare that the loop modifies nothing.
 
 > `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
 > `--loop-invariant` (the combined k-induction mode).

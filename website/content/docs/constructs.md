@@ -1,26 +1,24 @@
 ---
 title: "Constructs"
 date: 2026-01-20T13:34:16Z
-weight: 3
+weight: 4
 draft: false
 ---
 
 This page describes the verification constructs supported by ESBMC. These can be
 used in harness files to aid with the verification of ESBMC.
 
-{{< callout type="info" >}}
-ESBMC is also compatible with the SV-COMP constructs. They can be used
-instead of these constructs. However, the ESBMC constructs are more powerful.
-It is recommended to use the ESBMC constructs if you're planning to verify your
-code with only ESBMC.
+{{< callout type="info" >}} ESBMC is also compatible with the SV-COMP
+constructs. They can be used instead of these constructs. However, the ESBMC
+constructs are more powerful. It is recommended to use the ESBMC constructs if
+you're planning to verify your code with only ESBMC.
 
-SV-COMP Document: https://sv-comp.sosy-lab.org/2025/rules.php
-{{< /callout >}}
+SV-COMP Document: https://sv-comp.sosy-lab.org/2025/rules.php {{< /callout >}}
 
 ## Non-Deterministic Functions
 
-`nondet_X()` where `X` is a primitive C data type. This will mark the
-variable as non-deterministic, meaning it can have any value.
+`nondet_X()` where `X` is a primitive C data type. This will mark the variable
+as non-deterministic, meaning it can have any value.
 
 In this example, ESBMC will find a verification failed outcome because `x` is
 marked as being able to hold any value:
@@ -36,7 +34,7 @@ int main() {
 
 ## Assert and Assume
 
-`__ESBMC_assert(cond, reason)` can be used instead of `assert()`, this brings 
+`__ESBMC_assert(cond, reason)` can be used instead of `assert()`, this brings
 the benefit of not needing to use `#include <assert.h>`.
 
 ```c
@@ -47,9 +45,9 @@ int main() {
 }
 ```
 
-`__ESBMC_assume(int)` can be used to narrow down the possible values of `x`.
-In this case, the verification will succeed because it narrows the possible
-values of `x` to be less than 5.
+`__ESBMC_assume(int)` can be used to narrow down the possible values of `x`. In
+this case, the verification will succeed because it narrows the possible values
+of `x` to be less than 5.
 
 ```c
 #include <assert.h>
@@ -60,10 +58,11 @@ int main() {
     return 0;
 }
 ```
+
 ## Ensure and Requires
 
-The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`, 
-`__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the 
+The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`,
+`__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the
 [Function Contracts](/docs/function-contracts) article.
 
 ## Loop Invariants
@@ -82,9 +81,9 @@ following constructs are made available.
 
 Unroll can be used to set the loop unwind bound for a loop. This is equivalent
 to using `--unwindset id:bound` where `id` is the loop ID and `bound` is `N`.
-This inlining, however, allows us to specify the parameter in a more stable manner
-as the `id` won't shift as the code changes. It also frees us from needing to
-specify the loop bound when invoking ESBMC.
+This inlining, however, allows us to specify the parameter in a more stable
+manner as the `id` won't shift as the code changes. It also frees us from
+needing to specify the loop bound when invoking ESBMC.
 
 `#pragma unroll [N]` sets the next loop to be unwound `N` times. In the
 following example, the loop will be unwound 80 times max.
@@ -103,14 +102,12 @@ int main() {
 }
 ```
 
-You can also use `#pragma unroll` without `N` to make the loop unroll fully in 
+You can also use `#pragma unroll` without `N` to make the loop unroll fully in
 the cases where `--unwind` is set. In this example, the loop will unroll fully
 regardless of the global unwind bound set.
 
-{{< callout type="warning" >}}
-Be careful that the loop you use this construct to terminate, otherwise ESBMC
-will never stop verifying it.
-{{< /callout >}}
+{{< callout type="warning" >}} Be careful that the loop you use this construct
+to terminate, otherwise ESBMC will never stop verifying it. {{< /callout >}}
 
 ```c
 int main() {
@@ -125,8 +122,8 @@ int main() {
 }
 ```
 
-`N` can also be specified as a `#define` macro; however, if a value isn't found, it
-will throw a parsing error.
+`N` can also be specified as a `#define` macro; however, if a value isn't found,
+it will throw a parsing error.
 
 ```c
 #define LOOP_BOUND 80
@@ -142,7 +139,8 @@ int main() {
 }
 ```
 
-Alternatively, the same behavior can be obtained through the `__ESBMC_unroll(LOOP_BOUND)` intrinsic.
+Alternatively, the same behavior can be obtained through the
+`__ESBMC_unroll(LOOP_BOUND)` intrinsic.
 
 ```c
 #define LOOP_BOUND 80
@@ -158,8 +156,8 @@ int main() {
 }
 ```
 
-The intrinsic must be placed immediately before the loop it applies to. Only
-the loop's own setup (the declarations and initialisers of a `for` loop, or the
+The intrinsic must be placed immediately before the loop it applies to. Only the
+loop's own setup (the declarations and initialisers of a `for` loop, or the
 declaration in a condition such as `while (int v = f())`) may appear between the
 intrinsic and the loop header. It binds to the nearest following loop, so for
 nested loops it annotates the inner loop:
@@ -181,8 +179,10 @@ the annotation.
 ESBMC supports universal (`forall`) and existential (`exists`) quantifiers in
 SMT-based verification. Two expressions are available:
 
-- `bool forall(symbol, predicate)` — holds if the predicate holds for all values of `symbol`.
-- `bool exists(symbol, predicate)` — holds if the predicate holds for at least one value of `symbol`.
+- `bool forall(symbol, predicate)` — holds if the predicate holds for all values
+  of `symbol`.
+- `bool exists(symbol, predicate)` — holds if the predicate holds for at least
+  one value of `symbol`.
 
 They are declared as:
 
