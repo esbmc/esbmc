@@ -606,18 +606,33 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
+  // The capitalised typing-module aliases (typing.List/Dict/Set) must resolve
+  // to the same builtin collection types as their lowercase forms. Otherwise a
+  // nested annotation like List[List[float]] types its element as a bogus
+  // "tag-List" struct that no list/dict/set machinery recognises — len(A[0])
+  // then misroutes to strlen() and aborts on a struct/pointer mismatch (#5162;
+  // Dict/Set crash identically). A user may legally shadow these names with
+  // their own class (e.g. a hand-rolled `class List`, #3728), and that class
+  // must win. is_class() is unusable as the guard because it also matches the
+  // typing OM's own class definitions, which are imported in exactly the alias
+  // case we want to rewrite — so scan only the user's own module body.
+  auto typing_alias = [&](const char *alias) {
+    return ast_type == alias &&
+           json_utils::find_class(converter_.ast()["body"], alias).is_null();
+  };
+
   // list/range — range objects are stored as lists in ESBMC's model
-  if (ast_type == "list" || ast_type == "range")
+  if (ast_type == "list" || ast_type == "range" || typing_alias("List"))
     return get_list_type();
 
   // dict — handle dict type annotations
   // For generic "dict" without key/value types, return empty type
   // so the actual type is inferred from the dictionary literal
-  if (ast_type == "dict")
+  if (ast_type == "dict" || typing_alias("Dict"))
     return get_dict_type();
 
   // Reuse list infrastructure for simplicity for now
-  if (ast_type == "set")
+  if (ast_type == "set" || typing_alias("Set"))
     return get_list_type();
 
   // Custom user-defined types / classes
