@@ -1066,9 +1066,6 @@ private:
     const locationt loc = thr->location;
     const irep_idt fn = thr->function;
 
-    thr->make_assignment();
-    thr->code = code_assign2tc(thrown, gen_true_expr());
-
     auto pos = std::next(thr);
     auto add = [&]() {
       auto n = body.insert(pos);
@@ -1077,9 +1074,30 @@ private:
       return n;
     };
 
-    // A rethrow (`throw;`) re-raises the current exception: the typeid/value
-    // globals already hold it (clear-on-catch only reset `thrown`).
-    if (!is_nil_expr(throw_ref.operand))
+    // A bare `throw;` re-raises the exception currently being handled — the
+    // typeid/value globals already hold it (clear-on-catch reset only `thrown`).
+    // With no current exception (typeid == 0, the zero-init "none" value) it
+    // instead calls std::terminate ([except.throw]/9).
+    if (is_nil_expr(throw_ref.operand))
+    {
+      thr->make_skip();
+      // re-raise: thrown = true; goto dest (built first so the guard targets it).
+      auto reraise = add();
+      reraise->make_assignment();
+      reraise->code = code_assign2tc(thrown, gen_true_expr());
+      add()->make_goto(dest);
+      // Terminate when there is no current exception; otherwise skip to re-raise.
+      expr2tc has_exc =
+        notequal2tc(type_id, constant_int2tc(type_id->type, BigInt(0)));
+      emit_terminate(
+        body, reraise, has_exc, loc, fn, "throw with no active exception");
+      return;
+    }
+
+    thr->make_assignment();
+    thr->code = code_assign2tc(thrown, gen_true_expr());
+
+    // A real throw arms the globals from the thrown object.
     {
       const unsigned tid = registry.id_of(throw_ref.exception_list.front());
       auto a_tid = add();
