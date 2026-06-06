@@ -1881,6 +1881,8 @@ exprt numpy_call_expr::create_expr_from_call()
 
         size_t m, n, n2, p;
         typet base_type;
+        bool result_is_scalar = false;
+        bool result_is_1d = false;
 
         if (!lhs_is_2d && !rhs_is_2d)
         {
@@ -1905,6 +1907,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
           // Result is a scalar, not a matrix
           converter_.current_lhs->type() = base_type;
+          result_is_scalar = true;
         }
         else if (!lhs_is_2d && rhs_is_2d)
         {
@@ -1929,6 +1932,7 @@ exprt numpy_call_expr::create_expr_from_call()
           // Result is 1D array of length p
           typet result_type = type_handler_.build_array(base_type, p);
           converter_.current_lhs->type() = result_type;
+          result_is_1d = true;
         }
         else if (lhs_is_2d && !rhs_is_2d)
         {
@@ -1953,6 +1957,7 @@ exprt numpy_call_expr::create_expr_from_call()
           // Result is 1D array of length m
           typet result_type = type_handler_.build_array(base_type, m);
           converter_.current_lhs->type() = result_type;
+          result_is_1d = true;
         }
         else
         {
@@ -1970,31 +1975,61 @@ exprt numpy_call_expr::create_expr_from_call()
           const auto &elem = lhs["elts"][0]["elts"][0]["value"];
           base_type = type_handler_.get_typet(elem);
 
-          // Build a (m × p) matrix type: array of m rows, each of p elements
+          // [[...]] access pattern (A[i][j]). The backend dot() accesses the
+          // result via a flat int64_t* pointer obtained by taking the address
+          // of the first element (A[0][0]).
           typet row_type = type_handler_.build_array(base_type, p);
-          typet matrix_type = type_handler_.build_array(row_type, m);
-          converter_.current_lhs->type() = matrix_type;
+          typet result_type = type_handler_.build_array(row_type, m);
+          if (converter_.current_lhs != nullptr)
+            converter_.current_lhs->type() = result_type;
         }
 
         // Normalize to "dot" regardless of whether "matmul" was originally used
         function_id_.set_function("dot");
         // Update the symbol associated with the result
-        converter_.update_symbol(*converter_.current_lhs);
+        if (converter_.current_lhs != nullptr)
+          converter_.update_symbol(*converter_.current_lhs);
 
         // Generate a function call expression to the backend `dot` function
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
 
-        // Arguments:
-        // 1. Output pointer
-        // 2. m = number of rows in lhs (or 1 for 1D lhs)
-        // 3. n = inner dimension (shared)
-        // 4. p = number of columns in rhs (or 1 for 1D rhs)
+        // The first two arguments are pointers to the input arrays.
+        // function_call_expr::get() produces pointer-to-array-of-array
+        // (e.g. int (*)[1][1]) but the backend dot() expects int64_t* (flat).
+        // Cast both input pointers to int64_t* so pointer arithmetic works.
+        typet flat_ptr_type = pointer_typet(long_long_int_type());
         auto &args = call.arguments();
-        args.push_back(np_address_of(*converter_.current_lhs));
-        args.push_back(from_integer(m, int_type()));
-        args.push_back(from_integer(n, int_type()));
-        args.push_back(from_integer(p, int_type()));
+        if (args.size() >= 2)
+        {
+          args[0] = np_typecast(args[0], flat_ptr_type);
+          args[1] = np_typecast(args[1], flat_ptr_type);
+        }
+
+        // Arguments:
+        // 3. Output pointer (result): scalar/vector cases can use the symbol
+        //    address directly; matrix results need the address of [0][0] so the
+        //    flat pointer arithmetic in dot() lands on the first scalar.
+        // 4-6. Dimensions (int64_t): m, n, p
+        exprt result_ptr;
+        if (result_is_scalar || result_is_1d)
+        {
+          result_ptr = np_address_of(*converter_.current_lhs);
+        }
+        else
+        {
+          exprt row0 = index_exprt(
+            *converter_.current_lhs,
+            from_integer(0, size_type()),
+            converter_.current_lhs->type().subtype());
+          exprt elem00 =
+            index_exprt(row0, from_integer(0, size_type()), base_type);
+          result_ptr = np_address_of(elem00);
+        }
+        args.push_back(np_typecast(result_ptr, flat_ptr_type));
+        args.push_back(from_integer(m, long_long_int_type()));
+        args.push_back(from_integer(n, long_long_int_type()));
+        args.push_back(from_integer(p, long_long_int_type()));
 
         return call;
       }

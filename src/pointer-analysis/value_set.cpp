@@ -851,16 +851,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if (is_symbol2t(expr))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
-      assert(sym);
-      const irept &a = sym->get_type().find("alignment");
-      if (a.is_not_nil())
+      if (sym != nullptr)
       {
-        assert(a.is_constant());
-        irep_idt v = static_cast<const exprt &>(a).value();
-        BigInt V = binary2integer(v.as_string(), false);
-        assert(V.is_positive());
-        assert(V <= UINT_MAX);
-        obj.offset_alignment = V.to_uint64();
+        const irept &a = sym->get_type().find("alignment");
+        if (a.is_not_nil())
+        {
+          assert(a.is_constant());
+          irep_idt v = static_cast<const exprt &>(a).value();
+          BigInt V = binary2integer(v.as_string(), false);
+          assert(V.is_positive());
+          assert(V <= UINT_MAX);
+          obj.offset_alignment = V.to_uint64();
+        }
       }
     }
 

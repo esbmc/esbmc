@@ -1104,8 +1104,12 @@ __ESBMC_HIDE:;
   list->size = count;
   return list;
 }
-// Python int() builtin - converts string to integer
-int __python_int(const char *s, int base)
+// Python int() builtin - converts string to integer.
+// Returns a 64-bit value: Python ints are modelled as 64-bit everywhere else
+// in the frontend (type_handler::get_typet("int")), so a 32-bit return here
+// makes the result symbol 32-bit and truncates a string pointer that is later
+// rebound through it (e.g. `a, b = s.split('-'); a = int(a)`). See issue #5159.
+long long __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -1186,7 +1190,7 @@ __ESBMC_HIDE:;
     return 0;
   }
 
-  int result = 0;
+  long long result = 0;
   _Bool found_digit = 0;
 
   while (*s)
@@ -1231,7 +1235,7 @@ __ESBMC_HIDE:;
 
     found_digit = 1;
 
-    if (result > (INT_MAX / base))
+    if (result > (LLONG_MAX / base))
     {
       __ESBMC_assert(0, "int() conversion overflow");
       return 0;
