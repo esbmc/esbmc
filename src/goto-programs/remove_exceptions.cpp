@@ -256,44 +256,42 @@ private:
     return symbol2tc(obj_type, irep_idt(id));
   }
 
-  // ---- bad_cast lowering -------------------------------------------------
+  // ---- runtime-thrown std exceptions (bad_cast, bad_exception) -----------
 
-  /// Look up the <typeinfo> model's std::bad_cast class, or synthesize a minimal
-  /// one when it is absent. A compiled program throws std::bad_cast on a failing
-  /// dynamic_cast<T&> whether or not <typeinfo> is included — the runtime
-  /// constructs the object; header visibility only governs whether the type can
-  /// be *named* (catch(std::bad_cast&) / typeid). So when no model is present we
-  /// register an empty `tag-std::bad_cast` struct: a catch(...) still catches it
-  /// and an uncaught one still terminates, matching real semantics. The tag is
-  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
-  /// older, so try both before synthesizing.
-  const symbolt *get_bad_cast_type()
+  /// Look up a std exception class by its two possible tag spellings (elaborated
+  /// "class std::X" on newer Clang/LLVM, un-elaborated "std::X" on older), or
+  /// synthesize a minimal empty struct when absent. A compiled program throws
+  /// these runtime exceptions (std::bad_cast on a failing dynamic_cast<T&>,
+  /// std::bad_exception on a violated dynamic spec) whether or not <typeinfo> /
+  /// <exception> was included — the runtime constructs the object; header
+  /// visibility only governs whether the type can be *named* (catch(std::X&) /
+  /// typeid). With a synthesized type a catch(...) still catches it and an
+  /// uncaught one still terminates, matching real semantics. @p name is the
+  /// un-elaborated class name, e.g. "std::bad_cast".
+  const symbolt *get_exception_class(const std::string &name)
   {
-    const symbolt *sym = ns.lookup("tag-std::bad_cast");
+    const symbolt *sym = ns.lookup("tag-" + name);
     if (!sym)
-      sym = ns.lookup("tag-class std::bad_cast");
+      sym = ns.lookup("tag-class " + name);
     if (sym)
       return sym;
 
     symbolt s;
-    s.id = "tag-std::bad_cast";
-    s.name = "std::bad_cast";
+    s.id = "tag-" + name;
+    s.name = name;
     s.mode = "C++";
     struct_typet st;
-    st.set("tag", "std::bad_cast");
+    st.set("tag", name);
     s.set_type(st);
     s.is_type = true;
     return context.move_symbol_to_context(s);
   }
 
-  /// THROW code for a std::bad_cast (operand + exception_list = the type and its
-  /// bases). The type is always available via get_bad_cast_type (synthesized if
-  /// <typeinfo> was not included), so this never fails. Built once and reused
-  /// across call sites (a single exception is in flight at a time).
-  expr2tc build_bad_cast_throw()
+  /// THROW code for the given exception class (operand in a stable static slot +
+  /// exception_list = the type and its bases). Built once per type and reused (a
+  /// single exception is in flight at a time).
+  expr2tc build_exception_throw(const symbolt *sym)
   {
-    const symbolt *sym = get_bad_cast_type();
-
     std::vector<irep_idt> exception_list;
     const std::string tag = id2string(sym->id);
     exception_list.emplace_back(tag.substr(4)); // strip "tag-"
@@ -306,10 +304,15 @@ private:
           exception_list.emplace_back(id2string(base.id()).substr(4));
     }
 
-    // A static slot holds the thrown bad_cast object (its state is irrelevant —
-    // only its type identity and address matter to the handler).
+    // A static slot holds the thrown object (its state is irrelevant — only its
+    // type identity and address matter to the handler).
     expr2tc operand = make_exception_storage(migrate_symbol_type(*sym));
     return code_cpp_throw2tc(operand, exception_list);
+  }
+
+  expr2tc build_bad_cast_throw()
+  {
+    return build_exception_throw(get_exception_class("std::bad_cast"));
   }
 
   /// Rewrite each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
@@ -822,10 +825,12 @@ private:
   /// Enforce a dynamic exception specification throw(allowed...) (including the
   /// empty throw()) at the epilogue. When an exception the spec does not permit
   /// is propagating out, run the std::unexpected handler and re-check: a handler
-  /// that rethrows a permitted type lets it propagate; anything else (handler
-  /// returns, rethrows a disallowed type, or no handler installed) is a
-  /// violation. Mirrors the imperative goto_symext path: one handler call, no
-  /// std::bad_exception substitution.
+  /// that rethrows a permitted type lets it propagate. If the handler rethrows a
+  /// disallowed type, the in-flight exception is replaced by a std::bad_exception
+  /// when the spec lists it (and then propagates, since the spec permits it);
+  /// otherwise — disallowed with no std::bad_exception in the spec, the handler
+  /// returning, or no handler installed — it is a violation (std::terminate).
+  /// See [except.unexpected].
   void build_dynamic_spec_check(
     goto_programt &body,
     goto_programt::targett epilogue,
@@ -848,6 +853,14 @@ private:
       expr2tc g = spec_guard(allowed);
       return is_nil_expr(g) ? gen_false_expr() : g;
     };
+    // Does the spec list std::bad_exception? If so a violated spec substitutes
+    // it rather than terminating (see below). The name carries the tag spelling
+    // convert_exception_id produced, elaborated or not, so accept both.
+    const bool allows_bad_exception =
+      std::find(allowed.begin(), allowed.end(), "std::bad_exception") !=
+        allowed.end() ||
+      std::find(allowed.begin(), allowed.end(), "class std::bad_exception") !=
+        allowed.end();
 
     // Where a permitted (or absent) exception continues. For an entry function
     // any escape is uncaught, so route there to an uncaught assertion instead
@@ -888,6 +901,28 @@ private:
       ins(fail)->make_goto(fail, not_thrown());
       // Handler rethrew a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
+
+      // Handler rethrew a disallowed type. If the spec lists std::bad_exception
+      // the in-flight exception is replaced by a std::bad_exception, which the
+      // spec permits, so it propagates ([except.unexpected]); otherwise the
+      // fall-through to `fail` models std::terminate. (Reached only with an
+      // exception in flight, so `thrown` is already true.)
+      if (allows_bad_exception)
+      {
+        const symbolt *be = get_exception_class("std::bad_exception");
+        const code_cpp_throw2t bx =
+          to_code_cpp_throw2t(build_exception_throw(be));
+        const unsigned tid = registry.id_of(bx.exception_list.front());
+        auto a_tid = ins(fail);
+        a_tid->make_assignment();
+        a_tid->code =
+          code_assign2tc(type_id, constant_int2tc(type_id->type, BigInt(tid)));
+        auto a_val = ins(fail);
+        a_val->make_assignment();
+        expr2tc addr = address_of2tc(bx.operand->type, bx.operand);
+        a_val->code = code_assign2tc(value, typecast2tc(value->type, addr));
+        ins(fail)->make_goto(ret);
+      }
     }
     // Fall through to fail.
   }
