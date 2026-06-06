@@ -662,12 +662,13 @@ private:
     // exception still in flight is about to escape. A locally-caught throw
     // clears `thrown`, so this fires only on a genuine escape.
     //  - main / __ESBMC_main: any escape is uncaught (covers static-init throws
-    //    from global constructors) → assert(thrown == false).
-    //  - noexcept: an escape calls std::terminate ([except.spec]) →
-    //    assert(thrown == false).
+    //    from global constructors) → std::terminate.
+    //  - noexcept: an escape calls std::terminate ([except.spec]).
     //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
     //    re-checked (build_dynamic_spec_check), matching the imperative path
     //    (which models the unexpected-handler dispatch and its recovery).
+    // A locally-caught throw clears `thrown`, so these fire only on a genuine
+    // escape (terminate iff an exception is still in flight).
     const bool is_entry =
       id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
 
@@ -675,15 +676,13 @@ private:
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
     else if (
       is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
-    {
-      auto a = body.insert(std::next(epilogue));
-      a->make_assertion(equality2tc(thrown, gen_false_expr()));
-      a->location = epilogue->location;
-      a->function = epilogue->function;
-      a->location.property("exception");
-      a->location.comment(
+      emit_terminate(
+        body,
+        std::next(epilogue),
+        equality2tc(thrown, gen_false_expr()),
+        epilogue->location,
+        epilogue->function,
         is_entry ? "uncaught exception" : "noexcept specification violated");
-    }
 
     body.update();
   }
@@ -822,6 +821,78 @@ private:
     return call;
   }
 
+  /// A call to the std::terminate() operational model, or nil when it is not
+  /// linked into the program. The OM loads current_terminate_handler (honouring
+  /// std::set_terminate), calls it, and asserts on return/throw; its default
+  /// handler asserts "terminate called after throwing an exception". The OM is
+  /// only present when the program references the exception library — which it
+  /// must to install a custom handler — so its absence means the default
+  /// (assert) behaviour, which emit_terminate falls back to.
+  expr2tc make_terminate_call()
+  {
+    const symbolt *h = ns.lookup("c:@N@std@F@terminate#");
+    if (!h)
+      return expr2tc();
+    code_function_callt fc;
+    fc.function() = symbol_exprt(h->id, h->get_type());
+    expr2tc call;
+    migrate_expr(fc, call);
+    return call;
+  }
+
+  /// Emit a terminate point just before @p before: route through the OM
+  /// std::terminate() when it is linked (so a custom std::set_terminate handler
+  /// runs), else fall back to an assertion (the established "terminate = property
+  /// violation" classification, §5.4). @p skip_cond is the condition under which
+  /// execution continues past the point without terminating (nil = always
+  /// terminate); the assertion fallback is assert(skip_cond), or assert(false)
+  /// when skip_cond is nil. Returns the first inserted instruction so callers can
+  /// target it with a goto. std::terminate() never returns (the OM ends every
+  /// path in __ESBMC_assume(false)).
+  goto_programt::targett emit_terminate(
+    goto_programt &body,
+    goto_programt::targett before,
+    const expr2tc &skip_cond,
+    const locationt &loc,
+    const irep_idt &fn,
+    const char *comment)
+  {
+    auto setmeta = [&](goto_programt::targett n) {
+      n->location = loc;
+      n->function = fn;
+    };
+    expr2tc call = make_terminate_call();
+    if (!is_nil_expr(call))
+    {
+      goto_programt::targett first;
+      if (!is_nil_expr(skip_cond))
+      {
+        first = body.insert(before);
+        first->make_goto(before, skip_cond); // no exception in flight -> skip
+        setmeta(first);
+      }
+      // Clear the in-flight exception before terminating: the std::terminate()
+      // OM has its own try/catch over the handler call, which keys on the same
+      // global, so a leftover `thrown` would corrupt its control flow. We have
+      // decided to terminate, so the exception is no longer propagating.
+      auto clear = body.insert(before);
+      clear->make_assignment();
+      clear->code = code_assign2tc(thrown, gen_false_expr());
+      setmeta(clear);
+      auto c = body.insert(before);
+      c->make_function_call(call);
+      setmeta(c);
+      return is_nil_expr(skip_cond) ? clear : first;
+    }
+
+    auto a = body.insert(before);
+    a->make_assertion(is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
+    setmeta(a);
+    a->location.property("exception");
+    a->location.comment(comment);
+    return a;
+  }
+
   /// Enforce a dynamic exception specification throw(allowed...) (including the
   /// empty throw()) at the epilogue. When an exception the spec does not permit
   /// is propagating out, run the std::unexpected handler and re-check: a handler
@@ -863,22 +934,17 @@ private:
         allowed.end();
 
     // Where a permitted (or absent) exception continues. For an entry function
-    // any escape is uncaught, so route there to an uncaught assertion instead
+    // any escape is uncaught, so terminate there (iff still in flight) instead
     // of returning it to a (non-existent) caller.
     goto_programt::targett ret = last;
     if (is_entry)
-    {
-      ret = ins(last);
-      ret->make_assertion(not_thrown());
-      ret->location.property("exception");
-      ret->location.comment("uncaught exception");
-    }
+      ret =
+        emit_terminate(body, last, not_thrown(), loc, fn, "uncaught exception");
 
-    // The violation point.
-    auto fail = ins(ret);
-    fail->make_assertion(gen_false_expr());
-    fail->location.property("exception");
-    fail->location.comment("exception specification violated");
+    // The violation point: always terminate (reached only on a genuine
+    // disallowed escape, including the handler returning without throwing).
+    auto fail = emit_terminate(
+      body, ret, expr2tc(), loc, fn, "exception specification violated");
 
     // No exception in flight -> done.
     ins(fail)->make_goto(ret, not_thrown());

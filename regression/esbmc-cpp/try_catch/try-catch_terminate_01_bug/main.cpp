@@ -1,3 +1,10 @@
+// Exercises both dynamic-spec recovery and terminate routing under
+// --lower-exceptions. f() throw(X,Y,bad_exception) throws A: unexpected runs
+// my_unexpected, which rethrows A (still disallowed) — bad_exception is in the
+// spec, so it is substituted and caught by catch(bad_exception&). g() throw(X,Y)
+// throws A: unexpected rethrows A, no bad_exception in the spec, so std::terminate
+// runs the installed my_terminate, which calls abort() (modelled as silent
+// termination). The program therefore verifies SUCCESSFUL.
 #include <iostream>
 #include<cstdlib>
 #include <exception>

@@ -1,5 +1,5 @@
 CORE
 main.cpp
---unwind 10 --no-unwinding-assertions --timeout 900
+--lower-exceptions --unwind 10 --no-unwinding-assertions --timeout 900
 
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
