@@ -109,6 +109,10 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  // True when a list literal mixes int and float numeric elements
+  // (esbmc/esbmc#5156); the parameter-inference pass uses this to mark
+  // parameters that must be read with runtime type dispatch.
+  bool is_mixed_numeric_list_literal(const Json &arg);
   // Recover a `list[T]` type for a name bound to an *empty* list literal by
   // inspecting the first `<var_name>.append(arg)` in the enclosing scope.
   // Comprehensions lower to `tmp = []; tmp.append(elt)`, so the element type

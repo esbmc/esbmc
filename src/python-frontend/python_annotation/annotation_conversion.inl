@@ -821,6 +821,27 @@ static Json find_first_append_arg(const Json &node, const std::string &name)
   return Json();
 }
 
+// Return true when a list literal mixes int and float numeric elements
+// (e.g. [4.0, 3, 1.7]). Such a list collapses to a single annotation but must
+// be read element-by-element with runtime type dispatch (esbmc/esbmc#5156).
+template <class Json>
+bool python_annotation<Json>::is_mixed_numeric_list_literal(const Json &arg)
+{
+  if (!arg.contains("_type") || arg["_type"] != "List" || !arg.contains("elts"))
+    return false;
+
+  bool has_int = false, has_float = false;
+  for (const auto &elt : arg["elts"])
+  {
+    const std::string t = get_argument_type(elt);
+    if (t == "int")
+      has_int = true;
+    else if (t == "float")
+      has_float = true;
+  }
+  return has_int && has_float;
+}
+
 // Method to get the full type of a list literal
 template <class Json>
 std::string
@@ -3356,6 +3377,23 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
     for (size_t i = 0; i < params.size(); ++i)
     {
       Json &param = params[i];
+
+      // Flag a parameter that receives a heterogeneous int/float list literal
+      // at any call site. The collapsed `list[int]`/`list[float]` annotation
+      // loses this, but the element read must dispatch on the runtime type_id
+      // (see python_list::has_mixed_numeric_types / esbmc/esbmc#5156). The
+      // funcdef seeding consumes this marker to record genuinely-mixed element
+      // types for the parameter symbol.
+      for (const Json &call : function_calls)
+      {
+        if (
+          call.contains("args") && i < call["args"].size() &&
+          is_mixed_numeric_list_literal(call["args"][i]))
+        {
+          param["esbmc_mixed_numeric_list"] = true;
+          break;
+        }
+      }
 
       // Check if parameter needs type inference or refinement
       bool needs_inference = false;

@@ -576,6 +576,18 @@ size_t python_converter::register_function_argument(
         typet elem_type = type_handler_.get_list_type(element).subtype();
         if (!elem_type.is_empty())
           python_list::add_type_info_entry(arg_id, "", elem_type);
+
+        // A parameter that receives a heterogeneous int/float list literal
+        // collapses to a single element annotation, which would make the
+        // element read take the plain (truncating) integer path. Record both
+        // an int and a float element so has_mixed_numeric_types() reports the
+        // parameter as mixed and get_subscript dispatches on the runtime
+        // type_id, reading each element at its true width (esbmc/esbmc#5156).
+        if (element.value("esbmc_mixed_numeric_list", false))
+        {
+          python_list::add_type_info_entry(arg_id, "", long_long_int_type());
+          python_list::add_type_info_entry(arg_id, "", double_type());
+        }
       }
     }
   }
