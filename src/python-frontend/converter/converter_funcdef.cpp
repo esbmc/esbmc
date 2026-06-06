@@ -21,6 +21,7 @@
 #include <util/symbolic_types.h>
 
 #include <functional>
+#include <set>
 
 using namespace json_utils;
 
@@ -278,6 +279,120 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   scan(function_body);
   return flags;
 }
+
+namespace
+{
+bool is_list_literal_value(const nlohmann::json &v)
+{
+  return v.is_object() && v.contains("_type") &&
+         (v["_type"] == "List" || v["_type"] == "ListComp");
+}
+
+// Collect names bound to a list value within 'body': either assigned a list
+// literal / comprehension, or annotated `list`/`List`. The comprehension
+// desugaring runs before return-type inference, so a `return [..][1:]` reaches
+// here as `return ESBMC_listcomp_0[1:]` with `ESBMC_listcomp_0: list = [...]`
+// hoisted above it — the name must be tracked to recognise the list slice.
+void collect_list_bound_names(
+  const nlohmann::json &body,
+  std::set<std::string> &names)
+{
+  if (!body.is_array())
+    return;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string st = stmt.value("_type", std::string());
+    if (
+      st == "Assign" && stmt.contains("value") &&
+      is_list_literal_value(stmt["value"]) && stmt.contains("targets"))
+    {
+      for (const auto &tgt : stmt["targets"])
+        if (tgt.is_object() && tgt.value("_type", std::string()) == "Name")
+          names.insert(tgt.value("id", std::string()));
+    }
+    else if (st == "AnnAssign" && stmt.contains("target"))
+    {
+      const bool list_ann =
+        stmt.contains("annotation") && stmt["annotation"].is_object() &&
+        (stmt["annotation"].value("id", std::string()) == "list" ||
+         stmt["annotation"].value("id", std::string()) == "List");
+      const bool list_val =
+        stmt.contains("value") && is_list_literal_value(stmt["value"]);
+      const auto &tgt = stmt["target"];
+      if (
+        (list_ann || list_val) && tgt.is_object() &&
+        tgt.value("_type", std::string()) == "Name")
+        names.insert(tgt.value("id", std::string()));
+    }
+
+    for (const char *key : {"body", "orelse"})
+      if (stmt.contains(key))
+        collect_list_bound_names(stmt[key], names);
+  }
+}
+
+// Return true if a return expression denotes a list value: a list literal /
+// comprehension, a name bound to one, or a slice of either (a slice of a list
+// is a list, whereas an index t[i] is an element). Used to keep an unannotated,
+// list-returning function from defaulting its return type to scalar double,
+// which would retype the returned list's elements and break list equality
+// (humaneval_62).
+bool return_value_is_list(
+  const nlohmann::json &val,
+  const std::set<std::string> &list_names)
+{
+  if (!val.is_object() || !val.contains("_type"))
+    return false;
+
+  const std::string t = val["_type"].get<std::string>();
+  if (t == "List" || t == "ListComp")
+    return true;
+  if (t == "Name")
+    return list_names.count(val.value("id", std::string())) > 0;
+  if (
+    t == "Subscript" && val.contains("slice") && val["slice"].is_object() &&
+    val["slice"].value("_type", std::string()) == "Slice" &&
+    val.contains("value"))
+    return return_value_is_list(val["value"], list_names);
+
+  return false;
+}
+
+// Return true if any return statement in 'body' returns a list value. Mirrors
+// the body/orelse recursion of infer_types_from_returns so the two agree on the
+// statement set being inspected.
+bool body_returns_list_value(const nlohmann::json &body)
+{
+  std::set<std::string> list_names;
+  collect_list_bound_names(body, list_names);
+
+  std::function<bool(const nlohmann::json &)> check =
+    [&](const nlohmann::json &b) -> bool {
+    if (!b.is_array())
+      return false;
+    for (const auto &stmt : b)
+    {
+      if (!stmt.is_object())
+        continue;
+      if (
+        stmt.value("_type", std::string()) == "Return" &&
+        stmt.contains("value") && !stmt["value"].is_null() &&
+        return_value_is_list(stmt["value"], list_names))
+        return true;
+      for (const char *key : {"body", "orelse"})
+        if (stmt.contains(key) && check(stmt[key]))
+          return true;
+    }
+    return false;
+  };
+
+  return check(body);
+}
+} // namespace
 
 // Return true if 'param_name' has any attribute written (x.attr = ...)
 // anywhere in 'body' (recursive scan over nested blocks).
@@ -957,10 +1072,26 @@ void python_converter::get_function_definition(
     {
       // Infer type from return statements
       TypeFlags flags = infer_types_from_returns(function_node["body"]);
-      type.return_type() = type_utils::select_widest_type(flags, double_type());
 
-      if (!flags.has_float && !flags.has_int && !flags.has_bool)
-        log_warning("Default to double since no type could be inferred");
+      if (
+        !flags.has_float && !flags.has_int && !flags.has_bool &&
+        body_returns_list_value(function_node["body"]))
+      {
+        // No scalar type could be inferred but the body returns a list whose
+        // element type is unknown. Defaulting to scalar double would retype the
+        // returned list's elements and break equality against, e.g., an int
+        // list (humaneval_62). Use a generic list type, as an explicit
+        // `-> list` annotation would.
+        type.return_type() = type_handler_.get_list_type();
+      }
+      else
+      {
+        type.return_type() =
+          type_utils::select_widest_type(flags, double_type());
+
+        if (!flags.has_float && !flags.has_int && !flags.has_bool)
+          log_warning("Default to double since no type could be inferred");
+      }
     }
     else if (return_type == "Union")
     {
