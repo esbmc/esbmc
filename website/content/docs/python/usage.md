@@ -5,11 +5,10 @@ weight: 2
 
 ## Prerequisites
 
-ESBMC-Python requires Python 3.10 or later and the `ast2json` package:
-
-```bash
-pip install ast2json
-```
+ESBMC-Python requires Python 3.10 or later. `ast2json` is bundled with ESBMC
+(vendored in the source tree since
+[#3790](https://github.com/esbmc/esbmc/pull/3790)), so no extra packages are
+needed.
 
 ## Basic Invocation
 
