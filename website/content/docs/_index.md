@@ -30,30 +30,27 @@ thread interleavings. Each reported violation is annotated with its matching
 
 ## Explore the docs
 
-{{< cards >}}
-  {{< card link="/docs/setup" title="Setup" >}}
-  {{< card link="/docs/development/building" title="Build Guide" >}}
-  {{< card link="/docs/usage" title="Usage" >}}
-  {{< card link="/docs/constructs" title="Constructs" >}}
-  {{< card link="/docs/function-contracts" title="Function Contracts" >}}
-  {{< card link="/docs/loop-invariants" title="Loop Invariants" >}}
-  {{< card link="/docs/coverage" title="Coverage" >}}
-  {{< card link="/docs/c-cpp" title="C / C++" >}}
-  {{< card link="/docs/python" title="Python" >}}
-  {{< card link="/docs/solidity" title="Solidity" >}}
-  {{< card link="/docs/cwe-mapping" title="CWE Mapping" >}}
-  {{< card link="/docs/development" title="Development" >}}
-{{< /cards >}}
+{{< cards >}} {{< card link="/docs/setup" title="Setup" >}}
+{{< card link="/docs/development/building" title="Build Guide" >}}
+{{< card link="/docs/usage" title="Usage" >}}
+{{< card link="/docs/constructs" title="Constructs" >}}
+{{< card link="/docs/function-contracts" title="Function Contracts" >}}
+{{< card link="/docs/loop-invariants" title="Loop Invariants" >}}
+{{< card link="/docs/coverage" title="Coverage" >}}
+{{< card link="/docs/c-cpp" title="C / C++" >}}
+{{< card link="/docs/python" title="Python" >}}
+{{< card link="/docs/solidity" title="Solidity" >}}
+{{< card link="/docs/cwe-mapping" title="CWE Mapping" >}}
+{{< card link="/docs/development" title="Development" >}} {{< /cards >}}
 
 ## Background theory
 
 To understand how ESBMC reasons about programs, read the background theory:
 
 {{< cards >}}
-  {{< card link="/docs/theory/non-determinism" title="Modeling with Non-determinism" >}}
-  {{< card link="/docs/theory/verification-algorithms" title="Verification Algorithms" >}}
-  {{< card link="/docs/theory" title="More Theory" >}}
-{{< /cards >}}
+{{< card link="/docs/theory/non-determinism" title="Modeling with Non-determinism" >}}
+{{< card link="/docs/theory/verification-algorithms" title="Verification Algorithms" >}}
+{{< card link="/docs/theory" title="More Theory" >}} {{< /cards >}}
 
 ## Further reading
 
@@ -61,7 +58,8 @@ To understand how ESBMC reasons about programs, read the background theory:
   [Part I](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/slides/lecture03.pdf),
   [Part II](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/slides/lecture04.pdf),
   [Part III](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/slides/lecture05.pdf)
-- The [software security](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/index.html)
+- The
+  [software security](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/index.html)
   course covers further implementation details about ESBMC.
 
 ## Support
