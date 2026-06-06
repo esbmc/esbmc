@@ -1801,9 +1801,12 @@ exprt string_handler::handle_string_to_int(
     throw std::runtime_error("__python_int function not found in symbol table");
   }
 
-  // Call __python_int(str, base)
+  // Call __python_int(str, base). The result is a 64-bit Python int (matching
+  // the model's `long long` return); a 32-bit result type here would make the
+  // assigned-to variable 32-bit and truncate a string pointer rebound through
+  // it, e.g. `a, b = s.split('-'); a = int(a)` (#5159).
   exprt int_call =
-    build_call_expr(*int_symbol, int_type(), {str_addr, base_expr});
+    build_call_expr(*int_symbol, long_long_int_type(), {str_addr, base_expr});
   int_call.location() = location;
 
   return int_call;
