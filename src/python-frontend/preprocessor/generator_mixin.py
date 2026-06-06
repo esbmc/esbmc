@@ -1822,7 +1822,15 @@ class GeneratorMixin:
                         comparators=[copy.deepcopy(value_node)],
                     ))
 
-        result = ast.BoolOp(op=ast.And(), values=checks)
+        # An empty literal (``x == []``) yields a single ``len(x) == 0`` check.
+        # A one-value ``BoolOp(And)`` is degenerate AST that lowers to a
+        # malformed single-operand ``and`` expr, so collapse it to the lone
+        # check (mirrors the guards in _lower_assert_eq_literal and
+        # _try_lower_expr_tuple_literal_eq).
+        if len(checks) == 1:
+            result = checks[0]
+        else:
+            result = ast.BoolOp(op=ast.And(), values=checks)
         self.ensure_all_locations(result, source_node)
         ast.fix_missing_locations(result)
         return result

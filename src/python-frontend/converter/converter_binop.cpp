@@ -98,6 +98,14 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   // Restore the original flag state
   is_converting_rhs = old_is_converting_rhs;
 
+  // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
+  // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A
+  // single-operand `and`/`or` is malformed IR: the C adjuster reads op1() and
+  // runs off the end of the operands vector. Collapse to the lone operand,
+  // which is the correct result for a one-value boolean operation.
+  if (logical_expr.operands().size() == 1)
+    return logical_expr.operands().front();
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
