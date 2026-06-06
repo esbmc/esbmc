@@ -24,12 +24,15 @@ conversions live in `util/migrate.{h,cpp}`.
   `<name>2tc(args...)` factories that wrap it). The factory `new`s the
   node and hands it to a freshly-constructed container that adopts and
   increments the refcount.
-- **Hash-consing friendly.** Each node caches its CRC in a
-  `std::atomic<size_t>` (`irep2t::crc_val`); `0` means "not yet
-  computed". Readers do an acquire load and skip the recompute on a hit;
-  producers compute on a local and release-store. Mutation invalidates
-  the cache via a relaxed store. `operator==` checks pointer identity
-  first, then falls back to structural comparison.
+- **Hash-consing friendly.** The IR does *not* intern nodes — there is
+  no global dedup table, so two structurally-equal trees stay distinct
+  allocations — but it is cheap to layer hash-consing on top. Each node
+  caches its CRC in a `std::atomic<size_t>` (`irep2t::crc_val`); `0`
+  means "not yet computed". Readers do an acquire load and skip the
+  recompute on a hit; producers compute on a local and release-store.
+  Mutation invalidates the cache via a relaxed store. `operator==`
+  checks pointer identity first, then falls back to structural
+  comparison.
 - **Threading contract.** Single-writer / thread-confined. The refcount
   is atomic so containers may be dropped from any thread, but the
   pointee may have at most one mutator at a time. In debug builds the
@@ -59,7 +62,8 @@ conversions live in `util/migrate.{h,cpp}`.
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
 | `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/crc/tostring/clone/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke (`do_type_cmp`, `do_type_lt`, `do_type_crc`, `type_to_string`, `do_get_sub_expr`, `call_*_delegate`). Switch dispatchers on `expr2t`/`type2t` route to these. |
 | `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
-| `CMakeLists.txt` | Builds the `irep2` static library; depends on `bigint` and `fmt`. No Boost. |
+| `irep2_guard.{h,cpp}` / `guard_seq.h` | Path-condition guard container `guard2tc` — an `expr2tc` carrying a flat conjunct list — and `guard_seq`, the `immer::vector`-backed, oldest-first immutable conjunct sequence it stores (O(1) copy for the deep guard chains symex builds). |
+| `CMakeLists.txt` | Builds the `irep2` static library; links `fmt`, `bigint`, and `immer`, and adds Boost's include path (irep2 headers reach `boost/program_options.hpp` transitively through `config.h`). |
 
 ## Anatomy of a node
 
@@ -68,10 +72,11 @@ small set of shared `*_data` intermediates on the type side) and
 declares its fields plus two static class members:
 
 ```cpp
-struct not2t : expr2t {
+struct neg2t : expr2t {                          // arithmetic negation, -v
   expr2tc value;
-  not2t(const type2tc &t, const expr2tc &v) : expr2t(t, not_id), value(v) {}
-  static constexpr auto fields = std::make_tuple(&not2t::value);
+  neg2t(const type2tc &t, const expr2tc &v) : expr2t(t, neg_id), value(v) {}
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &neg2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 ```
@@ -156,14 +161,18 @@ Notes:
 - `src/util/std_expr.h`, `src/util/std_types.h` — legacy counterparts on the
   string-irep side.
 
-## Grammar
+## Abstract grammar
+
+This section gives the **shape of the in-memory term**, not a parseable
+language — `irep2` has no surface syntax, parser, or evaluator. The node
+hierarchy is an inductive data type, and the productions below describe
+its abstract syntax: the structure walked by `get_sub_expr`, the
+comparison/crc dispatchers, and `clone`.
 
 The two manifests (`expr_kinds.inc` / `type_kinds.inc`) plus each kind's
-`fields` tuple define an abstract grammar for the IR. The productions
-below are that grammar; the *Reference* tables that follow enumerate every
-terminal in prose. This is abstract syntax — the structure walked by
-`get_sub_expr`, the comparison/crc dispatchers, and `clone` — not a
-surface syntax any parser reads.
+`fields` tuple define that grammar. The productions below are the
+structure; the *Reference* tables that follow enumerate every terminal in
+prose with its semantics.
 
 **Notation.** `::=` is a production, `|` alternation, `( … )` grouping,
 `{ x }` zero-or-more, `[ x ]` optional, `"lit"` a terminal keyword (the
@@ -541,7 +550,8 @@ conditional branch carried on the GOTO instruction itself — not a
 
 ## Reference: types
 
-Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
+Listed in `type_kinds.inc` (one `IREP2_TYPE` row per kind); declared in
+`irep2_type.h`.
 
 | Kind | Description |
 |------|-------------|
@@ -563,7 +573,8 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 
 ## Reference: expressions
 
-Defined by `ESBMC_LIST_OF_EXPRS` in `irep2.h`; declared in `irep2_expr.h`. Every
+Listed in `expr_kinds.inc` (one `IREP2_EXPR` row per kind); declared in
+`irep2_expr.h`. Every
 expression has a `type` and an `expr_id`. Statement-shaped nodes (the `code_*`
 family) carry `empty` type — they appear inside GOTO programs rather than
 inside an expression tree.
