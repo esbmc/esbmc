@@ -11,7 +11,7 @@ announcement [here](/news/new-website-announcement). {{< /callout >}}
 {{< card link="/sv-comp" title="SV-COMP" icon="book-open" >}}
 {{< card link="/test-comp" title="Test-COMP" icon="book-open" >}}
 {{< card link="https://ssvlab.github.io/" title="SSV Lab" icon="book-open" >}}
-{{< card link="https://github.com/esbmc/esbmc/releases/latest" title="GitHub" icon="github" >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest" title="Latest Release" icon="github" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/vscode-esbmc" title="VSCode Extension" icon="external-link" >}}
 {{< card link="https://esbmc.github.io/esbmc-ai" title="ESBMC-AI" icon="external-link" >}}
@@ -50,7 +50,6 @@ scratch using our [build](docs/development/building) guide. {{< /callout >}}
 {{< tab name="FreeBSD" >}} {{< callout type="warning" icon="warning" >}} FreeBSD
 does not have any downloadable builds at the moment. You can however build from
 scratch using our [build](docs/development/building) guide. {{< /callout >}}
-{{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< cards >}}
 {{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< /cards >}} {{< /tab >}}
