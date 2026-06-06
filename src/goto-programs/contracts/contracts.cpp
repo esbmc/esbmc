@@ -184,7 +184,18 @@ void code_contractst::rename_function(
   // Copy function to new name
   goto_functiont &old_func = it->second;
   goto_functions.function_map[new_id] = old_func;
-  goto_functions.function_map[new_id].update_instructions_function(new_id);
+
+  // Force-retag every instruction to the new function id. The default
+  // update_instructions_function() only sets the field when empty, so it would
+  // leave the renamed body's instructions tagged with the old id. That matters
+  // for the entry point: when main is renamed to its contracts_original copy,
+  // its END_FUNCTION must no longer be seen as main's by symex — otherwise the
+  // per-main END_FUNCTION special-casing (assume(false) to stop exploring
+  // post-main interleavings) fires inside the wrapper-called original and kills
+  // the path before the wrapper's ensures assertion is ever checked.
+  for (auto &instruction :
+       goto_functions.function_map[new_id].body.instructions)
+    instruction.function = new_id;
 
   // Update symbol table
   symbolt *old_sym = context.find_symbol(old_id);

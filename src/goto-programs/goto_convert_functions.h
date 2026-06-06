@@ -51,7 +51,10 @@ protected:
   //
   // function calls
   //
-  void add_return(goto_functiont &f, const locationt &location);
+  void add_return(
+    goto_functiont &f,
+    const irep_idt &identifier,
+    const locationt &location);
 
   void wallop_type_impl(
     irep_idt name,
