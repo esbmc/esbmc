@@ -1500,8 +1500,8 @@ class GeneratorMixin:
         ``sorted(...)`` since list() is identity on a view.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id in ("list", "sorted", "set")
-                and len(node.args) == 1 and not getattr(node, "keywords", [])):
+                and node.func.id in ("list", "sorted", "set") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         inner = node.args[0]
@@ -1510,9 +1510,8 @@ class GeneratorMixin:
                     and inner.func.id == "list" and len(inner.args) == 1
                     and not getattr(inner, "keywords", [])):
                 inner = inner.args[0]
-        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
-                and inner.func.attr == attr and not inner.args
-                and not getattr(inner, "keywords", [])):
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and
+                inner.func.attr == attr and not inner.args and not getattr(inner, "keywords", [])):
             return None, None
         base = inner.func.value
         if isinstance(base, ast.Name):
@@ -1528,7 +1527,7 @@ class GeneratorMixin:
         This avoids tuple struct comparison and uses only proven-working primitives.
         Returns the new AST node, or None if the pattern doesn't match.
         """
-        dict_expr, _ = self._get_items_dict_expr(set_side, ("set",))
+        dict_expr, _ = self._get_items_dict_expr(set_side, ("set", ))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.Set) or not literal_side.elts:
@@ -1711,8 +1710,7 @@ class GeneratorMixin:
         - list wrapper: literal must have at most one pair (ESBMC's dict
           model does not preserve insertion order).
         """
-        dict_expr, wrapper = self._get_items_dict_expr(list_side,
-                                                       ("list", "sorted"))
+        dict_expr, wrapper = self._get_items_dict_expr(list_side, ("list", "sorted"))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.List):
@@ -1724,8 +1722,7 @@ class GeneratorMixin:
             pairs.append((elt.elts[0], elt.elts[1]))
         if pairs and not self._all_constants_distinct([k for k, _ in pairs]):
             return None
-        if wrapper == "sorted" and not self._is_sorted_const_list(
-                literal_side.elts, by="first"):
+        if wrapper == "sorted" and not self._is_sorted_const_list(literal_side.elts, by="first"):
             return None
         if wrapper == "list" and len(pairs) > 1:
             return None
@@ -1756,9 +1753,7 @@ class GeneratorMixin:
             )
             if use_get:
                 value_lookup = ast.Call(
-                    func=ast.Attribute(value=copy.deepcopy(dict_expr),
-                                       attr="get",
-                                       ctx=ast.Load()),
+                    func=ast.Attribute(value=copy.deepcopy(dict_expr), attr="get", ctx=ast.Load()),
                     args=[copy.deepcopy(k)],
                     keywords=[],
                 )
@@ -1768,9 +1763,7 @@ class GeneratorMixin:
                     slice=copy.deepcopy(k),
                     ctx=ast.Load(),
                 )
-            val_eq = ast.Compare(left=value_lookup,
-                                 ops=[ast.Eq()],
-                                 comparators=[copy.deepcopy(v)])
+            val_eq = ast.Compare(left=value_lookup, ops=[ast.Eq()], comparators=[copy.deepcopy(v)])
             value_checks.append(key_in_dict)
             value_checks.append(val_eq)
 
