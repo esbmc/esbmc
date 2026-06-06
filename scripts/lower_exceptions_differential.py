@@ -68,6 +68,14 @@ FAILED = "FAILED"
 ERROR = "ERROR"  # esbmc exited without a verdict (parse error, crash, ...)
 TIMEOUT = "TIMEOUT"
 
+# Tests where the lowered path *intentionally* disagrees with the imperative
+# path because lowering fixes a bug the imperative path has. These were KNOWNBUG
+# under the imperative path and are CORE under lowering; their ON-vs-OFF
+# divergence is expected and must not fail the gate (matched by name suffix).
+EXPECTED_DIVERGENCES = (
+    "try-catch_terminate_01_bug",  # throw-spec violation: imperative misses it
+)
+
 
 def find_source_files(test_dir):
     """Source files in a test directory that could carry exception constructs."""
@@ -203,7 +211,9 @@ def count_goto_exceptions(cmd, timeout):
 
 def classify_firing(base, timeout):
     """Decide whether --lower-exceptions fired on this test (see FIRED/...)."""
-    off_n = count_goto_exceptions(base, timeout)
+    # Force both flags explicitly: lowering is on by default, so the OFF
+    # (imperative) baseline must pass --no-lower-exceptions.
+    off_n = count_goto_exceptions(base + ["--no-lower-exceptions"], timeout)
     on_n = count_goto_exceptions(base + ["--lower-exceptions"], timeout)
     if off_n is None or on_n is None:
         return FIRING_ERROR
@@ -215,7 +225,9 @@ def classify_firing(base, timeout):
 def run_one(test, esbmc, timeout, check_firing):
     """Run a test OFF and ON; return (test, off_verdict, on_verdict, firing)."""
     base = test.base_command(esbmc)
-    off = run_esbmc(base, timeout)
+    # Force both flags explicitly: lowering is on by default, so the imperative
+    # (OFF) baseline must pass --no-lower-exceptions; ON passes --lower-exceptions.
+    off = run_esbmc(base + ["--no-lower-exceptions"], timeout)
     on = run_esbmc(base + ["--lower-exceptions"], timeout)
     firing = classify_firing(base, timeout) if check_firing else None
     return test, off, on, firing
@@ -256,8 +268,12 @@ def run_suite(tests, args):
             if fired is not None:
                 firing.setdefault(fired, []).append(test.name)
             if is_divergence(off, on):
-                divergences.append((test, off, on))
-                tag = "DIVERGE"
+                if test.name.endswith(EXPECTED_DIVERGENCES):
+                    matched += 1  # lowering fixes a known imperative bug
+                    tag = "fixes-bug"
+                else:
+                    divergences.append((test, off, on))
+                    tag = "DIVERGE"
             elif off in (SUCCESSFUL, FAILED) and on in (SUCCESSFUL, FAILED):
                 matched += 1
                 tag = "ok"

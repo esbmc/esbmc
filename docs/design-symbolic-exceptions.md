@@ -1,7 +1,9 @@
 # Symbolic exception lowering (`--lower-exceptions`)
 
-Status: **experimental, default OFF.** Tracks issue
-[#5075](https://github.com/esbmc/esbmc/issues/5075).
+Status: **on by default** (`--no-lower-exceptions` selects the legacy imperative
+path). Tracks issue [#5075](https://github.com/esbmc/esbmc/issues/5075). The
+imperative path (`src/goto-symex/symex_catch.cpp`) is retained as a fallback for
+the small unsupported residual and will be removed once that residual is closed.
 
 ## Motivation
 
@@ -14,9 +16,10 @@ mishandles nested propagation (a throw is only matched against the innermost
 try, never propagated outward within a function), and has produced segfaults on
 catch-all handlers (PR #5070).
 
-`--lower-exceptions` instead **lowers throw/catch into ordinary guarded control
-flow before symbolic execution**, so dispatch becomes guards the SMT solver
-reasons about. The imperative path is untouched and remains the default.
+Lowering instead **rewrites throw/catch into ordinary guarded control flow before
+symbolic execution**, so dispatch becomes guards the SMT solver reasons about.
+This is now the default; `--no-lower-exceptions` restores the imperative path,
+which is kept only as a fallback for the unsupported residual.
 
 ## Architecture
 
@@ -147,16 +150,16 @@ ignored on all paths).
 
 ## Roadmap to default-on
 
-The main exception constructs now lower (class/primitive/std throws, the catch
-forms, propagation, rethrow, noexcept, bad_cast); the remaining gate is an
-exhaustive full-suite `--lower-exceptions` ON-vs-OFF differential (across all C++
-and Python suites, not just `try_catch`) to surface any residual divergence,
-after which the default can be flipped and `symex_catch.cpp` deleted. That gate
-is automated by `scripts/lower_exceptions_differential.py` and the
-`lower-exceptions-differential` GitHub Actions workflow: for every
-exception-bearing regression test it runs ESBMC with and without the flag (the
-exact command `regression/testing_tool.py` would build) and fails on any verdict
-divergence. Two green full-suite runs are required before the flip.
+Lowering is **on by default** (this section). The two-green-full-suite-runs gate
+that preceded the flip is automated by `scripts/lower_exceptions_differential.py`
+and the `lower-exceptions-differential` GitHub Actions workflow: for every
+exception-bearing regression test it runs ESBMC with `--lower-exceptions` and
+with `--no-lower-exceptions` and fails on any verdict divergence (bar a small
+allow-list of cases where lowering *fixes* an imperative bug, e.g.
+`try-catch_terminate_01_bug`). It remains a regression guard against the retained
+imperative path until that path is removed. Remaining: turn the
+`report_fallback` warning into an error and delete `symex_catch.cpp` (with a
+Mode-C C-Dead proof on the removed branches).
 
 **Verdict parity is necessary but not sufficient.** Because the pass is
 all-or-nothing, a program outside the supported subset silently *falls back* to
