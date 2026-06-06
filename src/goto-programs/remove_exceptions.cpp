@@ -10,6 +10,7 @@
 #include <util/expr_util.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>
+#include <util/message.h>
 #include <irep2/irep2_utils.h>
 
 namespace
@@ -111,7 +112,9 @@ public:
             is_symbol2t(c.function) &&
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
-            return; // concurrent program — not yet modelled
+            // concurrent program — not yet modelled
+            return report_fallback(
+              goto_functions, "a concurrent program (pthread_create)");
         }
       }
     }
@@ -121,7 +124,7 @@ public:
     // the supported subset we leave the entire program to symex.
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return;
+        return report_fallback(goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
@@ -133,7 +136,8 @@ public:
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return;
+      return report_fallback(
+        goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available)
@@ -147,6 +151,43 @@ public:
       entry != goto_functions.function_map.end() &&
       entry->second.body_available)
       init_globals(entry->second.body);
+  }
+
+  /// True if any function still has an exception construct to lower.
+  static bool program_uses_exceptions(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH || ins.type == THROW_DECL)
+            return true;
+    return false;
+  }
+
+  /// Report that the pass declined to lower a program that uses exceptions, so
+  /// the residual dependence on the imperative path is visible rather than
+  /// silent. Today the imperative path takes over; once it is removed (P4) this
+  /// diagnostic is what keeps that deletion non-breaking — an unsupported
+  /// program is reported, not miscompiled. Programs with no exception construct
+  /// are silent (the pass is a no-op for them).
+  void report_fallback(
+    const goto_functionst &gf,
+    const std::string &why,
+    const irep_idt &fn = irep_idt())
+  {
+    if (!program_uses_exceptions(gf))
+      return;
+    if (fn.empty())
+      log_warning(
+        "--lower-exceptions: cannot lower {}; falling back to the imperative "
+        "exception path",
+        why);
+    else
+      log_warning(
+        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
+        "imperative exception path",
+        why,
+        id2string(fn));
   }
 
   void init_globals(goto_programt &body)
@@ -319,6 +360,16 @@ private:
   /// the supported subset (reference catches of registered class types, throws
   /// of registered objects or rethrows, regions whose pop is followed by the
   /// skip-handlers GOTO)? Read-only.
+  /// Set when program_supported declines, naming the construct for the
+  /// fallback diagnostic (report_fallback).
+  std::string unsupported_reason_;
+
+  bool unsupported(const char *why)
+  {
+    unsupported_reason_ = why;
+    return false;
+  }
+
   bool program_supported(goto_programt &body)
   {
     const auto end = body.instructions.end();
@@ -332,7 +383,7 @@ private:
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
         if (c.exception_list.size() != it->targets.size())
-          return false;
+          return unsupported("a malformed catch clause");
         auto type_it = c.exception_list.begin();
         for (auto tgt : it->targets)
         {
@@ -344,10 +395,12 @@ private:
           // catch type need not be registered: an unregistered type is one no
           // throw can match, so its guard is simply false (a dead handler).
           if (!is_code_decl2t(tgt->code))
-            return false;
+            return unsupported("an unsupported handler shape");
           auto bind = std::next(tgt);
           if (bind == end || !is_code_assign2t(bind->code))
-            return false;
+            return unsupported(
+              "a value catch without a copy binding (e.g. catching "
+              "std::bad_exception by value)");
         }
         ++depth;
       }
@@ -356,7 +409,9 @@ private:
         // pop: needs the skip-handlers GOTO after it for dispatch placement.
         auto nx = std::next(it);
         if (depth == 0 || nx == end || nx->type != GOTO)
-          return false;
+          return unsupported(
+            "an unsupported try-block layout (e.g. a function-try-block or an "
+            "empty trailing handler)");
         --depth;
       }
       else if (it->type == THROW)
@@ -367,7 +422,7 @@ private:
         if (
           t.exception_list.empty() ||
           !registry.is_registered(t.exception_list.front()))
-          return false;
+          return unsupported("a throw of an unsupported type");
       }
       else if (it->type == FUNCTION_CALL)
       {
@@ -380,7 +435,8 @@ private:
         if (
           is_symbol2t(c.function) &&
           to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return false;
+          return unsupported(
+            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
       }
     }
     // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable

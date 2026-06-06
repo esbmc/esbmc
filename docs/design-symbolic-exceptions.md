@@ -119,10 +119,19 @@ model, so such programs need an `--unwind` bound; and the frontend can omit
 intermediate bases from the flattened chain, so a catch on a mid-hierarchy base
 may not match — a frontend chain-completeness matter, not a lowering one.)
 
-Not yet lowered (fall back): a residual set including `dynamic_cast<T&>`/`bad_cast`
-(see above) and `std::bad_exception` value-catches. Dynamic exception
+Not yet lowered (fall back): a small residual set — `std::bad_exception`
+value-catches and a few unusual try-block layouts (function-try-blocks, an empty
+trailing handler whose skip-GOTO `remove_unreachable` prunes). Dynamic exception
 specifications themselves now lower (above); the `try-catch_decl_*` /
 `try-catch_unexpected_*` tests exercise them.
+
+When the pass declines to lower a program that *uses* exceptions, it emits a
+`--lower-exceptions: cannot lower <construct>; falling back to the imperative
+exception path` warning naming the construct, rather than falling back silently
+(`report_fallback`). This is the prerequisite for removing the imperative path
+(see roadmap): once that path is gone, the same site becomes an error, so an
+unsupported program is reported rather than miscompiled. Exception-free programs
+stay silent (the pass is a no-op for them).
 
 **Destructor unwinding** is handled at the GOTO frontend (`convert_throw`), not
 in the lowering pass, so it applies on **both** the imperative and lowered
