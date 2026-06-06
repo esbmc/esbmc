@@ -40,8 +40,8 @@ jobs:
 
       - name: Run the differential gate
         run: |
-          # ast2json (needed by the Python frontend) is installed under the user
-          # site by build.sh's install_python_deps_linux step.
+          # build.sh's install_python_deps_linux step installs Python tools
+          # (meson, mypy) under the user site; put them on PATH.
           export PATH="$HOME/.local/bin:$PATH"
           python3 scripts/lower_exceptions_differential.py \
             --esbmc build/src/esbmc/esbmc \

@@ -1,0 +1,94 @@
+---
+title: Verification Algorithms
+weight: 20
+---
+
+ESBMC implements several incremental verification strategies on top of its
+symbolic execution engine. This page explains how each works; for the practical
+flags and when to use them, see the [Usage](/docs/usage) guide.
+
+## Falsification {#falsification}
+
+```sh
+esbmc file.c --falsification
+```
+
+The falsification approach uses an iterative technique and verifies the program
+for each unwind bound up to a maximum default value of 50 (changeable via
+`--max-k-step N`), or indefinitely (until it exhausts the time or memory limit).
+The goal is to find a counterexample with up to *k* loop unwindings; the
+symbolic execution engine increasingly unwinds the loop after each iteration.
+
+This approach replaces all unwinding assertions (e.g. assertions checking
+whether a loop was completely unrolled) with unwinding assumptions. Normally
+this would be unsound, but since falsification cannot provide a correctness
+proof, it does not affect the search for bugs — it only cares whether the
+current number of unwindings leads to a property violation.
+
+Falsification can also change the granularity of the increment (default 1) via
+`--k-step N`. A larger increment can slow verification and may not produce the
+shortest counterexample.
+
+## Incremental BMC {#incremental-bmc}
+
+```sh
+esbmc file.c --incremental-bmc
+```
+
+Incremental BMC also iterates over unwind bounds (default max 50, via
+`--max-k-step N`, or indefinitely). It either finds a counterexample within *k*
+unwindings or fully unwinds all loops to provide a correctness result.
+
+The approach has two steps. When searching for a property violation it replaces
+unwinding assertions with assumptions (reporting an unwinding-assertion failure
+is not a real bug). It then checks whether all loops were fully unrolled, by
+checking whether all unwinding assertions are unsatisfiable; the other
+assertions need not be re-checked for the current *k*, as they were already
+verified.
+
+As with falsification, the increment granularity is configurable via
+`--k-step N`.
+
+## k-Induction proof rule {#k-induction}
+
+```sh
+esbmc file.c --k-induction
+```
+
+The original *k*-induction algorithm by Sheeran et al. [1] proved safety
+properties in hardware verification; it was later refined by Donaldson et al.
+[2] for general C programs. ESBMC combines both approaches:
+
+```
+¬B(k)         → program contains a bug
+B(k) ∧ F(k)   → program is correct
+B(k) ∧ I(k)   → program is correct
+```
+
+Here *B(k)* is the base case, *F(k)* the forward condition and *I(k)* the
+inductive step; *k* is the number of loop unwindings used for each step. The
+base case uses plain BMC, so it can only find property violations; if its error
+check is satisfiable, the algorithm reports a counterexample of length *k*. For
+the forward condition and inductive step, the base case must be checked first
+(a soundness requirement).
+
+The forward condition proves that all loops were fully unrolled by adding
+unwinding assertions after each loop (and only checks those, since program
+assertions are already discharged by the base case for the current *k*). The
+inductive step proves that if the property holds for *k* iterations it holds for
+the next, by assigning non-deterministic values to all variables written in a
+loop body, assuming *k-1* invariants and checking the invariant at the *k*th
+iteration.
+
+The algorithm starts at *k = 1* and increases it, incrementally analysing the
+program until it finds a bug (base case satisfiable), proves correctness (base
+case unsatisfiable and either the forward condition or inductive step
+unsatisfiable), or exhausts the time or memory limit.
+
+## References
+
+[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
+Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
+
+[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
+*Software Verification Using k-Induction.* SAS 2011: 351–368
