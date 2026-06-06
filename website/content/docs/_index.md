@@ -65,5 +65,8 @@ To understand how ESBMC reasons about programs, read the background theory:
 ## Support
 
 ESBMC is under active development, with new features, optimizations and
-encodings added continuously. For any question, reach us via the
-[GitHub repository](https://github.com/esbmc/esbmc).
+encodings added continuously. We invite our users to submit bug reports to the
+[GitHub repository](https://github.com/esbmc/esbmc/issues). For any question,
+reach us via [GitHub Discussions](https://github.com/esbmc/esbmc/discussions) or
+our public ESBMC
+[Zulip Channel](https://systemsandsoftwaresecurity.zulipchat.com/join/6ajabxaurkcwl6tl3ify55jv/).
