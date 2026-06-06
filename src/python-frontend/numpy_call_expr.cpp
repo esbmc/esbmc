@@ -1895,9 +1895,12 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          // Get element type from first element
-          const auto &elem = lhs["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // Get element type from the first element node itself. Passing the
+          // node (not a presumed ["value"] subfield) lets get_typet resolve a
+          // symbolic Name element (e.g. a = nondet_int()) to its real type;
+          // ["value"] is absent on a Name node and yielded a void element type,
+          // which made the flat int64 buffer access overflow (#5115).
+          base_type = type_handler_.get_typet(lhs["elts"][0]);
 
           // For 1D dot product, treat as (1×n) × (n×1) = (1×1) scalar
           m = 1;
@@ -1921,8 +1924,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = rhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(rhs["elts"][0]["elts"][0]);
 
           m = 1;
           n = lhs_len;
@@ -1946,8 +1949,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(lhs["elts"][0]["elts"][0]);
 
           m = lhs_rows;
           n = lhs_cols;
@@ -1972,8 +1975,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(lhs["elts"][0]["elts"][0]);
 
           // [[...]] access pattern (A[i][j]). The backend dot() accesses the
           // result via a flat int64_t* pointer obtained by taking the address
@@ -1984,21 +1987,31 @@ exprt numpy_call_expr::create_expr_from_call()
             converter_.current_lhs->type() = result_type;
         }
 
-        // Normalize to "dot" regardless of whether "matmul" was originally used
-        function_id_.set_function("dot");
+        // Select the backend by element type: integer matrices use dot(), which
+        // accumulates into int64_t; floating-point matrices must use
+        // dot_double(), which accumulates into double. Using the integer dot()
+        // on double data reinterprets the float bit pattern as int64 and is
+        // unsound (#5115). "matmul" is normalised to the matching backend.
+        // Cover both real encodings: floatbv (default) and fixedbv (--fixedbv);
+        // under --fixedbv the model's `double` lowers to fixedbv too, so the
+        // base_type-typed pointer cast below stays consistent with dot_double.
+        const bool is_float = base_type.is_floatbv() || base_type.is_fixedbv();
+        function_id_.set_function(is_float ? "dot_double" : "dot");
         // Update the symbol associated with the result
         if (converter_.current_lhs != nullptr)
           converter_.update_symbol(*converter_.current_lhs);
 
-        // Generate a function call expression to the backend `dot` function
+        // Generate a function call expression to the selected backend function
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
 
         // The first two arguments are pointers to the input arrays.
         // function_call_expr::get() produces pointer-to-array-of-array
-        // (e.g. int (*)[1][1]) but the backend dot() expects int64_t* (flat).
-        // Cast both input pointers to int64_t* so pointer arithmetic works.
-        typet flat_ptr_type = pointer_typet(long_long_int_type());
+        // (e.g. int (*)[1][1]); the backend expects a flat element pointer
+        // (int64_t* for dot(), double* for dot_double()). Cast both inputs to
+        // the flat element pointer so the pointer arithmetic strides correctly.
+        typet flat_ptr_type =
+          pointer_typet(is_float ? base_type : long_long_int_type());
         auto &args = call.arguments();
         if (args.size() >= 2)
         {
