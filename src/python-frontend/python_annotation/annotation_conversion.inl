@@ -849,22 +849,49 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
     return "list[int]"; // Fallback for numeric contexts
   }
 
-  // Check if all elements have the same type
+  // Check if all elements have the same type, tracking numeric promotion.
+  // In Python an int/float mix promotes to float (e.g. [4.0, 3] is list[float]),
+  // so a single leading int must not truncate the float elements.
+  auto is_numeric = [](const std::string &t) {
+    return t == "int" || t == "float" || t == "bool";
+  };
+  bool all_numeric = is_numeric(element_type);
+  bool saw_float = element_type == "float";
+  bool mixed = false;
+
   for (size_t i = 1; i < list_arg["elts"].size(); ++i)
   {
     std::string current_type = get_argument_type(list_arg["elts"][i]);
-    if (current_type != element_type && !current_type.empty())
+    if (current_type.empty())
+      continue;
+    if (current_type == "float")
+      saw_float = true;
+    if (!is_numeric(current_type))
+      all_numeric = false;
+
+    if (current_type != element_type)
     {
-      log_warning(
-        "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
-        "as fallback ({}:{})",
-        element_type,
-        current_type,
-        python_filename_,
-        current_line_);
-      return "list[int]"; // Fallback for mixed numeric types
+      mixed = true;
+      // Non-numeric heterogeneity (e.g. str vs int) has no common element
+      // type we can represent, so keep the historical int fallback.
+      if (!all_numeric)
+      {
+        log_warning(
+          "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+          "as fallback ({}:{})",
+          element_type,
+          current_type,
+          python_filename_,
+          current_line_);
+        return "list[int]";
+      }
     }
   }
+
+  // All elements numeric: promote an int/float mix to float (Python widens int
+  // to float). Any other numeric mix (e.g. int/bool) keeps the int fallback.
+  if (mixed && all_numeric)
+    return saw_float ? "list[float]" : "list[int]";
 
   // Return the full generic type notation
   return "list[" + element_type + "]";
