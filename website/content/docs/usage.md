@@ -451,8 +451,27 @@ esbmc main.c --overflow-check -I lib/ lib/lib.c
 ```
 
 where `--overflow-check` enables arithmetic over-/underflow checks and `-I path`
-sets the include path. If `lib/lib.c` implements `mul` with an unguarded
-`a * b`, ESBMC reports the overflow:
+sets the include path. The library under `lib/` is:
+
+```c
+// lib.h
+#include <stdint.h>
+_Bool mul(const int64_t a, const int64_t b, int64_t *res);
+```
+
+```c
+// lib.c
+#include "lib.h"
+_Bool mul(int64_t a, int64_t b, int64_t *res) {
+  if ((a == 0) || (b == 0)) { *res = 0; return 1; }
+  else if (a == 1)          { *res = b; return 1; }
+  else if (b == 1)          { *res = a; return 1; }
+  *res = a * b;   // there exists an overflow
+  return 1;
+}
+```
+
+ESBMC reports the overflow at the unguarded multiplication:
 
 ```
 Counterexample:
@@ -527,6 +546,33 @@ equivalence class is excluded as a whole; other values use bit-pattern equality,
 so `+0` and `-0` are distinct). The footer states why enumeration stopped; only
 *UNSAT after N* means the witness set is complete.
 
+**Implementation notes.** Blocking clauses are scoped to a single SMT context
+frame (`push_ctx`/`pop_ctx`) per claim, so the feature is safe under
+`--smt-during-symex` and does not leak between claims. Machine-readable artifacts
+(`--cex-output`, `--generate-testcase`, `--generate-html-report`,
+`--generate-json-report`, `--witness-output-graphml`, `--witness-output-yaml`)
+fan out per witness using the `<ce>-<file>` prefix scheme, one file per witness,
+so it is also safe under `--parallel-solving`. Enumeration is skipped during the
+inductive step of k-induction (a SAT result there means UNKNOWN, not a real
+counterexample).
+
+**Scaling caveat.** The textual report dumps each witness's full goto trace; with
+`--no-slice` on a deeply unrolled program this grows quickly. If you only need the
+violating inputs, the per-witness `Inputs : ...` line is usually enough, and the
+machine-readable per-witness files give the full data without the noise.
+
+Formally this is *bounded projected model enumeration* for a fixed property: the
+blocking-clause loop from SAT all-solutions algorithms, lifted to SMT and
+projected onto the nondet input symbols. See McMillan, *Applying SAT Methods in
+Unbounded Symbolic Model Checking*, CAV 2002
+([doi](https://doi.org/10.1007/3-540-45657-0_19)), and Grumberg, Schuster,
+Yadgar, *Memory Efficient All-Solutions SAT Solver and Its Application for
+Reachability Analysis*, FMCAD 2004
+([doi](https://doi.org/10.1007/978-3-540-30494-4_20)). It complements
+dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the
+path condition to maximise coverage; `--all-witnesses` instead fixes the failure
+path and enumerates input vectors on it.
+
 ## Supported SMT backends {#smt-backends}
 
 ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
@@ -546,8 +592,15 @@ An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
 environment variable. The `CMD` for the SMTLIB backend is interpreted by the
 shell, so it can include options or chain commands (the tools must be on
-`PATH`), e.g. `z3 -in` or `tee formula.smt2 | z3 -in | tee output.txt`. Remember
-to quote the `CMD` string when invoking ESBMC.
+`PATH`):
+
+- `boolector --incremental`
+- `z3 -in`
+- `tee formula.smt2 | z3 -in | tee output.txt`
+- `yices-smt2 --incremental`
+- `cvc5 -L smt2 -m`
+
+Remember to quote the `CMD` string when invoking ESBMC.
 
 ## Docker Build
 
