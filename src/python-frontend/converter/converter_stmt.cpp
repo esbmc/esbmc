@@ -2966,6 +2966,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
+    // A condition that raised while being evaluated (e.g. ord() of a bad
+    // argument) arrives as a cpp-throw side effect, not a boolean value.
+    // Propagate the exception instead of building an if2t with a non-boolean
+    // condition, which migrates to a null cond and crashes goto_check. Mirrors
+    // the cpp-throw guards in get_binary_operator_expr.
+    if (cond.statement() == "cpp-throw")
+      return cond;
+
     // Normalize branches: code_function_callt must become side_effect_expr so
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
