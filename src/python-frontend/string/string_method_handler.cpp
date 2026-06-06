@@ -2546,6 +2546,32 @@ exprt string_handler::handle_string_partition(
   const exprt &sep_arg,
   const locationt &location)
 {
+  // Build a 3-tuple (before, sep, after) as a struct tagged like a regular
+  // Python tuple ("tag-tuple_..."). The tag is what lets the assignment target
+  // fixup, len(), and subscript recognise the result as a tuple rather than a
+  // string; without it the result is mistyped as a scalar char and len()/index
+  // give wrong answers (unsound, #5114). The tag/component layout mirrors
+  // tuple_handler::create_tuple_struct_type.
+  auto make_tuple3 =
+    [&](const exprt &a, const exprt &b, const exprt &c) -> exprt {
+    struct_typet tuple_type;
+    const std::array<const exprt *, 3> elems = {&a, &b, &c};
+    std::string tag = "tag-tuple";
+    for (size_t i = 0; i < elems.size(); ++i)
+    {
+      const std::string comp_name = "element_" + std::to_string(i);
+      tuple_type.components().push_back(
+        struct_typet::componentt(comp_name, comp_name, elems[i]->type()));
+      tag += "_" + elems[i]->type().to_string();
+    }
+    tuple_type.tag(tag);
+
+    struct_exprt tuple_expr(tuple_type);
+    tuple_expr.operands() = {a, b, c};
+    tuple_expr.location() = location;
+    return tuple_expr;
+  };
+
   std::string input;
   std::string sep;
   if (
@@ -2567,17 +2593,7 @@ exprt string_handler::handle_string_partition(
     exprt empty_a = string_builder_->build_string_literal("");
     exprt empty_b = string_builder_->build_string_literal("");
     exprt empty_c = string_builder_->build_string_literal("");
-    struct_typet tuple_type;
-    tuple_type.components().push_back(
-      struct_typet::componentt("element_0", empty_a.type()));
-    tuple_type.components().push_back(
-      struct_typet::componentt("element_1", empty_b.type()));
-    tuple_type.components().push_back(
-      struct_typet::componentt("element_2", empty_c.type()));
-    struct_exprt tuple_expr(tuple_type);
-    tuple_expr.operands() = {empty_a, empty_b, empty_c};
-    tuple_expr.location() = location;
-    return tuple_expr;
+    return make_tuple3(empty_a, empty_b, empty_c);
   }
   if (sep.empty())
     throw std::runtime_error("partition() separator cannot be empty");
@@ -2606,18 +2622,7 @@ exprt string_handler::handle_string_partition(
   exprt mid_expr = string_builder_->build_string_literal(mid);
   exprt after_expr = string_builder_->build_string_literal(after);
 
-  struct_typet tuple_type;
-  tuple_type.components().push_back(
-    struct_typet::componentt("element_0", before_expr.type()));
-  tuple_type.components().push_back(
-    struct_typet::componentt("element_1", mid_expr.type()));
-  tuple_type.components().push_back(
-    struct_typet::componentt("element_2", after_expr.type()));
-
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = {before_expr, mid_expr, after_expr};
-  tuple_expr.location() = location;
-  return tuple_expr;
+  return make_tuple3(before_expr, mid_expr, after_expr);
 }
 
 exprt string_handler::handle_string_isalnum(

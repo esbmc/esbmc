@@ -358,6 +358,15 @@ std::string python_annotation<Json>::get_string_method_return_type(
   if (method == "split")
     return "list";
 
+  // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
+  // which resolves to an empty type so the concrete struct type of the 3-tuple
+  // produced by handle_string_partition is copied onto the target symbol.
+  // Mapping it to the default "str" mistypes the target as a scalar char, which
+  // makes len()/subscript on the result wrong (unsound — proves false
+  // assertions, #5114).
+  if (method == "partition")
+    return "tuple";
+
   // Keep previous behavior for unmapped string methods.
   return "str";
 }
