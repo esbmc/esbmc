@@ -386,8 +386,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Skip backward stack search for C++ throw targets"},
     {"lower-exceptions",
      NULL,
-     "Lower throw/catch to symbolic guarded control flow (experimental, "
-     "#5075)"},
+     "Lower throw/catch to symbolic guarded control flow (default; #5075)"},
+    {"no-lower-exceptions",
+     NULL,
+     "Use the legacy imperative exception handling instead of symbolic "
+     "lowering (#5075)"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,

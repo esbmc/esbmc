@@ -22,11 +22,11 @@ class namespacet;
 ///     rethrow;
 ///   - uncaught detection at main and __ESBMC_main (incl. static-init throws);
 ///   - Python try/except/raise via the same machinery.
-/// Not yet lowered (forces fallback): destructor unwinding, bad_cast from
-/// dynamic_cast<T&>, and a throw inside a throw-spec / noexcept region.
+/// A small residual still forces fallback (std::bad_exception by value, some
+/// unusual try-block layouts); the pass warns when it declines (report_fallback).
 ///
-/// Run before goto_partial_inline, gated on --lower-exceptions (default off)
-/// until the lowered path reaches parity with the imperative dispatch.
+/// Run before goto_partial_inline; on by default, with --no-lower-exceptions
+/// selecting the legacy imperative dispatch as a fallback (#5075).
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,

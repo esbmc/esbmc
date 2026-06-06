@@ -849,6 +849,13 @@ void remove_exceptions(
   contextt &context,
   const namespacet &ns)
 {
+  // A program with no throw/catch needs no exception machinery. Skip entirely so
+  // the pass is a true no-op for exception-free programs — otherwise it would
+  // add the exception-state globals to __ESBMC_main, perturbing analyses that
+  // inspect program state on programs that have nothing to do with exceptions
+  // (e.g. termination's recurrent-set search, function-contract frames).
+  if (!exception_loweringt::program_uses_exceptions(goto_functions))
+    return;
   create_exception_state_symbols(context);
   exception_loweringt(context, ns).run(goto_functions);
 }
