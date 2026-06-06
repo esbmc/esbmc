@@ -66,6 +66,13 @@ The constructs `__ESBMC_ensure(...)`, `__ESBMC_requires(...)`,
 `__ESBMC_return_value` and `__ESBMC_old(...)` are detailed in the 
 [Function Contracts](/docs/function-contracts) article.
 
+## Loop Invariants
+
+The constructs `__ESBMC_loop_invariant(...)` and `__ESBMC_loop_assigns(...)`
+provide loop invariants and a frame rule (which variables a loop may change) as
+an alternative to loop unwinding. They are detailed in the
+[Loop Invariants](/docs/loop-invariants) article.
+
 ## Pragma Utils
 
 The verification paramters can be modified using `#pragma` keyword. The
