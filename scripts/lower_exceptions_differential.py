@@ -49,6 +49,19 @@ PY_KEYWORDS = ("try:", "except", "raise ", "raise\n")
 
 VERDICT_RE = re.compile(r"VERIFICATION (SUCCESSFUL|FAILED)")
 
+# A GOTO THROW/CATCH instruction in a --goto-functions-only dump. The \b stops
+# THROW from also matching THROW_DECL (a noexcept-spec declaration, not a thrown
+# exception). When the lowering pass fires it rewrites these into guarded gotos,
+# so the count drops; when the program falls back to the imperative path the
+# count is unchanged. That difference is how firing is detected.
+GOTO_EXC_RE = re.compile(r"(?m)^\s*(THROW|CATCH)\b")
+
+# Firing classifications (only computed under --check-firing).
+FIRED = "fired"  # lowering rewrote the THROW/CATCH instructions
+FELLBACK = "fellback"  # program outside the subset — imperative path still used
+NO_GOTO_EXC = "no-goto-exc"  # no THROW/CATCH even on the OFF path
+FIRING_ERROR = "firing-error"  # a --goto-functions-only dump failed
+
 # Verdict classification returned by run_one().
 SUCCESSFUL = "SUCCESSFUL"
 FAILED = "FAILED"
@@ -169,12 +182,43 @@ def run_esbmc(cmd, timeout):
     return match.group(1) if match else ERROR
 
 
-def run_one(test, esbmc, timeout):
-    """Run a test OFF and ON; return (test, off_verdict, on_verdict)."""
+def count_goto_exceptions(cmd, timeout):
+    """Count THROW/CATCH instructions in a --goto-functions-only dump, or None."""
+    try:
+        # See run_esbmc for why this argv-list subprocess is injection-safe.
+        proc = subprocess.run(
+            cmd + ["--goto-functions-only"],  # nosec B603
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # the GOTO dump is emitted on stderr
+            timeout=timeout,
+            text=True,
+            errors="replace",
+            check=False)
+    except subprocess.TimeoutExpired:
+        return None
+    if proc.returncode != 0:
+        return None  # no GOTO program produced (parse/convert failure)
+    return len(GOTO_EXC_RE.findall(proc.stdout))
+
+
+def classify_firing(base, timeout):
+    """Decide whether --lower-exceptions fired on this test (see FIRED/...)."""
+    off_n = count_goto_exceptions(base, timeout)
+    on_n = count_goto_exceptions(base + ["--lower-exceptions"], timeout)
+    if off_n is None or on_n is None:
+        return FIRING_ERROR
+    if off_n == 0:
+        return NO_GOTO_EXC
+    return FIRED if on_n < off_n else FELLBACK
+
+
+def run_one(test, esbmc, timeout, check_firing):
+    """Run a test OFF and ON; return (test, off_verdict, on_verdict, firing)."""
     base = test.base_command(esbmc)
     off = run_esbmc(base, timeout)
     on = run_esbmc(base + ["--lower-exceptions"], timeout)
-    return test, off, on
+    firing = classify_firing(base, timeout) if check_firing else None
+    return test, off, on, firing
 
 
 def is_divergence(off, on):
@@ -194,14 +238,23 @@ def is_divergence(off, on):
 
 
 def run_suite(tests, args):
-    """Run every test OFF/ON in parallel; return (matched, no_baseline, divergences)."""
+    """Run every test OFF/ON in parallel.
+
+    Returns (matched, no_baseline, divergences, firing) where firing is a
+    category -> [test names] map (empty unless --check-firing).
+    """
     divergences = []
     no_baseline = []
+    firing = {}
     matched = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = [pool.submit(run_one, t, args.esbmc, args.timeout) for t in tests]
+        futures = [
+            pool.submit(run_one, t, args.esbmc, args.timeout, args.check_firing) for t in tests
+        ]
         for done in concurrent.futures.as_completed(futures):
-            test, off, on = done.result()
+            test, off, on, fired = done.result()
+            if fired is not None:
+                firing.setdefault(fired, []).append(test.name)
             if is_divergence(off, on):
                 divergences.append((test, off, on))
                 tag = "DIVERGE"
@@ -212,8 +265,28 @@ def run_suite(tests, args):
                 no_baseline.append((test, off, on))
                 tag = "skip"  # both errored/timed out — no usable baseline
             if args.verbose or tag == "DIVERGE":
-                print(f"  [{tag}] {test.name}: OFF={off} ON={on}", flush=True)
-    return matched, no_baseline, divergences
+                extra = f" [{fired}]" if fired is not None else ""
+                print(f"  [{tag}] {test.name}: OFF={off} ON={on}{extra}", flush=True)
+    return matched, no_baseline, divergences, firing
+
+
+def print_firing_report(firing):
+    """Print the --check-firing breakdown: how much of the corpus actually lowers."""
+    fired = len(firing.get(FIRED, []))
+    fellback = sorted(firing.get(FELLBACK, []))
+    comparable = fired + len(fellback)
+    print("\nfiring (does --lower-exceptions actually rewrite throw/catch?):")
+    print(f"  fired:       {fired}")
+    print(f"  fell back:   {len(fellback)}")
+    print(f"  no goto exc: {len(firing.get(NO_GOTO_EXC, []))}")
+    print(f"  dump errors: {len(firing.get(FIRING_ERROR, []))}")
+    if comparable:
+        print(f"  => {fired}/{comparable} ({100 * fired // comparable}%) of exception "
+              f"programs lower; the rest still need the imperative path.")
+    if fellback:
+        print("  fell-back tests (still depend on the imperative path):")
+        for name in fellback:
+            print(f"    {name}")
 
 
 def main():
@@ -255,6 +328,11 @@ def main():
                         "--verbose",
                         action="store_true",
                         help="print each test's OFF/ON verdicts as it completes")
+    parser.add_argument("--check-firing",
+                        action="store_true",
+                        help="also report, per test, whether lowering fired (THROW/CATCH "
+                        "rewritten) or fell back to the imperative path. Adds two "
+                        "--goto-functions-only runs per test.")
     args = parser.parse_args()
 
     roots = args.roots or ["regression/esbmc-cpp", "regression/python"]
@@ -279,7 +357,7 @@ def main():
     if not os.path.exists(args.esbmc):
         sys.exit(f"error: esbmc binary not found: {args.esbmc}")
 
-    matched, no_baseline, divergences = run_suite(tests, args)
+    matched, no_baseline, divergences, firing = run_suite(tests, args)
 
     print()
     print(f"matched (ON==OFF, both verdicts): {matched}")
@@ -292,6 +370,9 @@ def main():
         print("\nno-baseline tests (both paths produced no verdict):")
         for test, off, on in sorted(no_baseline, key=lambda d: d[0].name):
             print(f"  {test.name}: OFF={off} ON={on}")
+
+    if args.check_firing:
+        print_firing_report(firing)
 
     if divergences:
         print("\nDIVERGENCES (lowered path disagrees with imperative path):")
