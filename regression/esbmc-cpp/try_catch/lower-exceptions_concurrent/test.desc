@@ -3,3 +3,4 @@ main.cpp
 --lower-exceptions --context-bound 2
 
 ^VERIFICATION SUCCESSFUL$
+--lower-exceptions: cannot lower a concurrent program

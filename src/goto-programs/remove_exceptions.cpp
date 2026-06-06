@@ -412,12 +412,13 @@ private:
       }
       else if (it->type == CATCH)
       {
-        // pop: needs the skip-handlers GOTO after it for dispatch placement.
-        auto nx = std::next(it);
-        if (depth == 0 || nx == end || nx->type != GOTO)
-          return unsupported(
-            "an unsupported try-block layout (e.g. a function-try-block or an "
-            "empty trailing handler)");
+        // pop. A try whose handler bodies are non-empty has a skip-handlers
+        // GOTO right after the pop; an empty trailing handler (catch(...){}
+        // whose body coincides with the after-try point) has none. Both are
+        // supported: normalize_empty_handlers synthesizes the missing skip
+        // GOTO before lowering, so build_dispatch always finds it.
+        if (depth == 0)
+          return unsupported("an unmatched catch pop");
         --depth;
       }
       else if (it->type == THROW)
@@ -507,6 +508,35 @@ private:
     body.update();
   }
 
+  /// An empty trailing handler (`catch(...){}` whose body is empty) compiles to
+  /// a try whose CATCH pop is *not* followed by the usual skip-handlers GOTO:
+  /// the empty handler's entry coincides with the after-try point, so normal
+  /// completion just falls through the pop into it and there is nothing to skip.
+  /// build_dispatch, however, places each region's dispatch block right after
+  /// that skip GOTO (so normal completion bypasses the dispatch and landing).
+  /// Synthesize the missing GOTO after each bare pop, targeting the current
+  /// fall-through (= the handler/after-try point), restoring the shape the rest
+  /// of the pass expects. Run after rebalance_removed_pops, whose synthetic pops
+  /// already carry a skip GOTO, so the only bare pops left are empty handlers.
+  void normalize_empty_handlers(goto_programt &body)
+  {
+    const auto end = body.instructions.end();
+    for (auto it = body.instructions.begin(); it != end; ++it)
+    {
+      if (it->type != CATCH || !it->targets.empty())
+        continue; // not a pop
+      auto nx = std::next(it);
+      if (nx == end || nx->type == GOTO)
+        continue; // already has a skip-handlers GOTO
+      // Insert a GOTO to the original fall-through; the iterator nx is stable,
+      // so it still names the after-try point after later make_landing inserts.
+      auto skip = body.insert(nx);
+      skip->make_goto(nx);
+      skip->location = it->location;
+      skip->function = it->function;
+    }
+  }
+
   /// Recover the region tree, throw sites, and may-throw call sites (each with
   /// its enclosing try region).
   void collect(
@@ -580,6 +610,7 @@ private:
   {
     goto_programt &body = function.body;
     rebalance_removed_pops(body);
+    normalize_empty_handlers(body);
 
     std::vector<regiont> regions;
     std::vector<sitet> throws, calls;
