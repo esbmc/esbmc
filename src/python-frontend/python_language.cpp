@@ -227,7 +227,11 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
-  // Load c models
+  // Load c models. The C++ handled-stack exception OM (push/pop_handled,
+  // rethrow_current) is deliberately NOT pulled in for Python: it drags the full
+  // C++ std::terminate closure, and Python does not use std::current_exception.
+  // The lowering's inline re-raise fallback (remove_exceptions) covers Python's
+  // bare `raise` without that OM.
   add_cprover_library(context, this);
 
   try
