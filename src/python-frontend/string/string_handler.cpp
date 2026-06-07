@@ -1677,16 +1677,18 @@ static bool fold_constant_string(
     return true;
   }
 
-  // Name reference: resolve its declaration and fold the bound value. This
-  // covers a Name bound to a literal as well as one bound to a concatenation.
-  // Note: get_var_value resolves the first binding, so a later reassignment of
-  // the name is a known limitation (the first constant value is folded).
+  // Name reference: resolve its declaration and fold the bound value.
+  // Reassigned names are not foldable:
+  // get_var_value returns the first binding, so defer to the runtime string model.
   if (type == "Name" && node.contains("id"))
   {
-    nlohmann::json decl = json_utils::get_var_value(
-      node["id"].get<std::string>(),
-      converter.get_current_func_name(),
-      converter.get_ast_json());
+    const std::string id = node["id"].get<std::string>();
+    const std::string &func = converter.get_current_func_name();
+    const nlohmann::json &ast = converter.get_ast_json();
+    if (json_utils::has_multiple_assignments_in_scope(id, func, ast))
+      return false;
+
+    nlohmann::json decl = json_utils::get_var_value(id, func, ast);
     if (!decl.empty() && decl.contains("value"))
       return fold_constant_string(decl["value"], converter, out, depth + 1);
     return false;
