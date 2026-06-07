@@ -23,23 +23,27 @@ namespace __ESBMC_exception_detail
 
 inline void __ESBMC_default_terminate_handler()
 {
+__ESBMC_HIDE:;
   __ESBMC_assert(0, "terminate called after throwing an exception");
   __ESBMC_assume(0);
 }
 
 inline void __ESBMC_default_unexpected_handler()
 {
+__ESBMC_HIDE:;
   std::terminate();
 }
 
 inline std::terminate_handler &__ESBMC_terminate_handler_ref()
 {
+__ESBMC_HIDE:;
   static std::terminate_handler handler = __ESBMC_default_terminate_handler;
   return handler;
 }
 
 inline std::unexpected_handler &__ESBMC_unexpected_handler_ref()
 {
+__ESBMC_HIDE:;
   static std::unexpected_handler handler = __ESBMC_default_unexpected_handler;
   return handler;
 }
@@ -48,6 +52,7 @@ inline std::unexpected_handler &__ESBMC_unexpected_handler_ref()
 
 extern "C" void __ESBMC_run_unexpected()
 {
+__ESBMC_HIDE:;
   std::unexpected_handler handler =
     __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref();
   (*handler)();
@@ -58,6 +63,7 @@ namespace std
 
 terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   terminate_handler old =
     __ESBMC_exception_detail::__ESBMC_terminate_handler_ref();
   __ESBMC_exception_detail::__ESBMC_terminate_handler_ref() =
@@ -67,11 +73,13 @@ terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
 
 terminate_handler get_terminate() _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   return __ESBMC_exception_detail::__ESBMC_terminate_handler_ref();
 }
 
 void terminate() _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   terminate_handler handler =
     __ESBMC_exception_detail::__ESBMC_terminate_handler_ref();
 
@@ -91,6 +99,7 @@ void terminate() _ESBMC_NOEXCEPT
 
 unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   unexpected_handler old =
     __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref();
   __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref() =
@@ -100,11 +109,13 @@ unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
 
 unexpected_handler get_unexpected() _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   return __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref();
 }
 
 void unexpected()
 {
+__ESBMC_HIDE:;
   try
   {
     __ESBMC_run_unexpected();
@@ -125,11 +136,13 @@ void unexpected()
 // cannot name the form the standard removed, so it stays dead.
 bool uncaught_exception() _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   return __ESBMC_exc_uncaught_count != 0;
 }
 
 int uncaught_exceptions() _ESBMC_NOEXCEPT
 {
+__ESBMC_HIDE:;
   return (int)__ESBMC_exc_uncaught_count;
 }
 
