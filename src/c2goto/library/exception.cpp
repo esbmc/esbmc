@@ -4,8 +4,10 @@
 #  define _ESBMC_NOEXCEPT throw()
 #endif
 
-extern bool nondet_bool();
-extern int nondet_int();
+// Per-thread count of exceptions thrown/rethrown but not yet entered into their
+// handler, maintained by the GOTO exception lowering (exception_globals,
+// remove_exceptions.cpp). Backs std::uncaught_exception(s), [except.uncaught].
+extern "C" unsigned long __ESBMC_exc_uncaught_count;
 
 namespace std
 {
@@ -115,20 +117,20 @@ void unexpected()
   terminate();
 }
 
-#if __cplusplus < 202002L
+// Both forms are defined unconditionally: the OM library is compiled at a single
+// fixed standard (no --std flag), so a __cplusplus guard could omit a body that a
+// user program built at a different standard still references — the same
+// on-demand-linking gap that the set_unexpected/unexpected models hit. Providing
+// the entry points always is harmless: conformant code at the wrong standard
+// cannot name the form the standard removed, so it stays dead.
 bool uncaught_exception() _ESBMC_NOEXCEPT
 {
-  return nondet_bool();
+  return __ESBMC_exc_uncaught_count != 0;
 }
-#endif
 
-#if __cplusplus >= 201703L
 int uncaught_exceptions() _ESBMC_NOEXCEPT
 {
-  int count = nondet_int();
-  __ESBMC_assume(count >= 0);
-  return count;
+  return (int)__ESBMC_exc_uncaught_count;
 }
-#endif
 
 } // namespace std

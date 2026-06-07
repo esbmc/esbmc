@@ -15,6 +15,10 @@ class contextt;
 ///                                   from exception_typeidt (0 == none).
 ///   $esbmc_exc_value   : void*   — pointer to the most-derived thrown
 ///                                   object, so handlers can bind/slice it.
+///   $esbmc_exc_uncaught_count : size_t — number of exceptions thrown (or
+///                                   rethrown) in this thread that have not yet
+///                                   entered their matching handler; backs
+///                                   std::uncaught_exception(s) ([except.uncaught]).
 ///
 /// The typeid is a size_t to line up with the Python frontend's existing
 /// PyObject.type_id field and with exception_typeidt's unsigned ids; the
@@ -24,9 +28,14 @@ namespace exception_globals
 constexpr const char *thrown_id = "c:@__ESBMC_exc_thrown";
 constexpr const char *typeid_id = "c:@__ESBMC_exc_typeid";
 constexpr const char *value_id = "c:@__ESBMC_exc_value";
+constexpr const char *uncaught_count_id = "c:@__ESBMC_exc_uncaught_count";
 } // namespace exception_globals
 
-/// Idempotently register the three exception-state globals in @p context,
-/// zero-initialised (thrown=false, typeid=0, value=NULL). A no-op if they are
-/// already present, so it is safe to call once per run before lowering.
+/// Idempotently register the exception-state globals in @p context,
+/// zero-initialised (thrown=false, typeid=0, value=NULL, uncaught_count=0). If a
+/// symbol already exists — e.g. the operational-model std::uncaught_exceptions()
+/// pulled in `__ESBMC_exc_uncaught_count` as an extern declaration during library
+/// linking — its storage flags are upgraded in place (static, thread-local,
+/// zero-initialised) rather than left as a bare declaration. Safe to call once
+/// per run before lowering.
 void create_exception_state_symbols(contextt &context);

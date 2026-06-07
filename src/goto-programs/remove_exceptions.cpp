@@ -64,7 +64,8 @@ public:
       registry(ns),
       thrown(mk_global(exception_globals::thrown_id)),
       type_id(mk_global(exception_globals::typeid_id)),
-      value(mk_global(exception_globals::value_id))
+      value(mk_global(exception_globals::value_id)),
+      uncaught_count(mk_global(exception_globals::uncaught_count_id))
   {
   }
 
@@ -223,7 +224,7 @@ private:
   contextt &context;
   const namespacet &ns;
   exception_typeidt registry;
-  expr2tc thrown, type_id, value;
+  expr2tc thrown, type_id, value, uncaught_count;
   std::set<irep_idt> may_throw;
   // Functions passed as the start routine to pthread_create: each is a thread
   // entry, so an exception escaping it is uncaught for that thread (terminate).
@@ -239,6 +240,19 @@ private:
     const symbolt *s = ns.lookup(irep_idt(id));
     assert(s && "exception-state globals must be created before lowering");
     return symbol2tc(migrate_type(s->get_type()), s->id);
+  }
+
+  /// Assignment code stepping the per-thread uncaught-exception count: +1 at a
+  /// throw/rethrow (the exception becomes uncaught) and -1 when a handler is
+  /// entered (it stops being uncaught). Backs std::uncaught_exception(s),
+  /// [except.uncaught].
+  expr2tc adjust_uncaught(int delta)
+  {
+    const type2tc &t = uncaught_count->type;
+    expr2tc one = constant_int2tc(t, BigInt(1));
+    expr2tc rhs = delta > 0 ? add2tc(t, uncaught_count, one)
+                            : sub2tc(t, uncaught_count, one);
+    return code_assign2tc(uncaught_count, rhs);
   }
 
   /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
@@ -800,6 +814,11 @@ private:
     landing->location = h.target->location;
     landing->function = h.target->function;
 
+    // The handler body begins after the catch marker, plus the parameter binding
+    // for a typed catch. The decrement of the uncaught count goes there, so it
+    // happens once the exception has entered its handler ([except.uncaught]) and
+    // after the catch-parameter is bound (§5.5).
+    auto before_body = h.target;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);
@@ -815,7 +834,14 @@ private:
           : dereference2tc(
               var->type, typecast2tc(pointer_type2tc(var->type), value));
       bind->code = code_assign2tc(var, src);
+      before_body = bind;
     }
+
+    auto dec = body.insert(std::next(before_body));
+    dec->make_assignment();
+    dec->code = adjust_uncaught(-1);
+    dec->location = h.target->location;
+    dec->function = h.target->function;
     return landing;
   }
 
@@ -1067,6 +1093,10 @@ private:
       auto reraise = add();
       reraise->make_assignment();
       reraise->code = code_assign2tc(thrown, gen_true_expr());
+      // The rethrown exception is uncaught again until re-caught.
+      auto a_cnt = add();
+      a_cnt->make_assignment();
+      a_cnt->code = adjust_uncaught(+1);
       add()->make_goto(dest);
       // Terminate when there is no current exception; otherwise skip to re-raise.
       expr2tc has_exc =
@@ -1100,6 +1130,11 @@ private:
       expr2tc addr = address_of2tc(storage->type, storage);
       a_val->code = code_assign2tc(value, typecast2tc(value->type, addr));
     }
+
+    // The new exception is now uncaught until it reaches its handler.
+    auto a_cnt = add();
+    a_cnt->make_assignment();
+    a_cnt->code = adjust_uncaught(+1);
 
     add()->make_goto(dest);
   }
