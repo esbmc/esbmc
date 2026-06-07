@@ -5,14 +5,13 @@
 // std::exception) so rethrow_if_nested's dynamic_cast to nested_exception is
 // well-formed.
 //
-// KNOWNBUG: rethrow_if_nested needs a dynamic_cast across the multiple-
-// inheritance combined type (Outer subobject -> sibling nested_exception base,
-// which sits at a non-zero offset). ESBMC's MI base-subobject layout is now
-// correct for casts/ctors/catch (the earlier offset-0 overlap bug is fixed),
-// but dynamic_cast with a non-zero base offset is still explicitly unsupported
-// ("dynamic_cast: multiple inheritance with non-zero base offset ... is not
-// supported"). Once MI dynamic_cast lands this verifies SUCCESSFUL and can move
-// to CORE.
+// KNOWNBUG: MI base-subobject layout, catch-by-base, and dynamic_cast across a
+// non-zero base offset are now all correct, so rethrow_if_nested's cross-cast
+// works. The remaining blocker is MI base *construction* for the synthesized
+// combined type: when a base (Outer) itself has a polymorphic base, the second
+// base subobject (nested_exception) is not initialised at its offset, giving an
+// "illegal offset" dereference. Once that base-ctor edge is fixed this verifies
+// SUCCESSFUL and can move to CORE.
 #include <exception>
 #include <cassert>
 
