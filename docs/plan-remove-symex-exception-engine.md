@@ -175,9 +175,9 @@ thread-local.
 
 Status: **implemented.** The OM `std::unexpected` runs the installed handler via
 `__ESBMC_run_unexpected`; the lowered call site (`build_dynamic_spec_check`) does
-the replacement-throw check and `bad_exception` substitution. Remaining
-imprecision: the uncaught count is not adjusted when the handler rethrows here
-(§8 done-list caveat).
+the replacement-throw check and `bad_exception` substitution, and decrements the
+uncaught count by one when a replacement throw takes over (the replacement
+replaces the original, so exactly one exception stays uncaught).
 
 ### 4.3 `current_exception()`
 - Active propagating exception present → handle to it.
@@ -201,9 +201,10 @@ yet")` (`src/cpp/library/exception`). This is §8 live work, steps 1–2.
   (++ at throw/rethrow, −− at handler entry): `uncaught_exception()` is
   `count != 0`, `uncaught_exceptions()` is `count`. The OM reads the global
   (`c2goto/library/exception.cpp`).
-- Lowered-path-only by nature — the count is bookkeeping the lowering owns.
-- Caveats: not adjusted on the dynamic-spec rethrow path; not faithful inside a
-  destructor running mid-unwind (§8 step 3).
+- Lowered-path-only by nature — the count is bookkeeping the lowering owns. The
+  dynamic-spec replacement-throw path is handled (§4.2).
+- Remaining caveat: not faithful inside a destructor running mid-unwind
+  (§8 step 3).
 
 ---
 
@@ -311,8 +312,8 @@ either a live correctness obligation or a hard reject in production.
 - **All frontends emitting THROW/CATCH** (Python) must satisfy the same lowering
   invariants; Python try/except/raise already shares the machinery.
 - **Legacy dynamic specs** (`throw(T...)`): lowered (`build_dynamic_spec_check`),
-  C++14-only and rejected under C++17. Functional but with the uncaught-count
-  rethrow caveat noted in §8.
+  C++14-only and rejected under C++17. Functional, including the uncaught count
+  across replacement-throw recovery (§4.2).
 - **`dynamic_cast<T&>`**: the failed cast now reaches lowering as a real `THROW`
   rather than a symex-only `__ESBMC_throw_bad_cast` helper — keep it that way.
 
@@ -337,12 +338,11 @@ Completed (the engine deletion ran ahead of the original 1→7 sequence):
 - **[done] engine deletion** (was step 7): `symex_catch.cpp` and the imperative
   plumbing removed; lowering is unconditional; `--lower-exceptions` flag, its
   differential gate script, and the design doc deleted.
-- **[done] `uncaught_exception(s)`** (was step 3, partial): a per-thread
+- **[done] `uncaught_exception(s)`** (was step 3): a per-thread
   `$esbmc_exc_uncaught_count` is maintained by the lowering (++ at throw/rethrow,
-  −− at handler entry) and read by the OM. **Gap:** the count is not adjusted on
-  the narrow C++14 dynamic-spec path where a custom `unexpected` handler rethrows
-  (can over-count by one); and it is not faithful inside a destructor running
-  during unwinding (see the destructor item below).
+  −− at handler entry, and a balancing −− on the dynamic-spec replacement-throw
+  path) and read by the OM. **Remaining gap:** the count is not faithful inside a
+  destructor running during unwinding (see the destructor item below).
 
 Live work (the foundational items, still open):
 

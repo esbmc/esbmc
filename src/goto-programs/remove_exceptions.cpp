@@ -1031,6 +1031,16 @@ private:
 
       // Handler returned without throwing -> the specification is violated.
       ins(fail)->make_goto(fail, not_thrown());
+
+      // Past the guard above the handler must have thrown, so wire_throw has
+      // already counted its throw as a fresh uncaught exception. That throw
+      // *replaces* the original in-flight exception ([except.unexpected]), so
+      // drop the original's contribution to the per-thread uncaught count —
+      // exactly one exception is uncaught after the replacement, not two.
+      auto a_cnt = ins(fail);
+      a_cnt->make_assignment();
+      a_cnt->code = adjust_uncaught(-1);
+
       // Handler rethrew a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
 
