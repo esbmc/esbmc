@@ -35,9 +35,10 @@ There is now **one** implementation of C++ exception handling:
   (`std::terminate`/`set_terminate`, `std::unexpected`/`set_unexpected` via
   `__ESBMC_run_unexpected`, `std::uncaught_exception(s)`). The earlier
   duplicate-thunk problem that forced a header-only model did not recur with the
-  current narrow OM; `<exception>` (`src/cpp/library/exception`) now carries only
-  the still-unimplemented `current_exception` / `rethrow_exception` /
-  `exception_ptr` placeholders.
+  current narrow OM. `<exception>` (`src/cpp/library/exception`) still holds the
+  standard surface declarations plus the `nested_exception` / `throw_with_nested`
+  / `rethrow_if_nested` helpers; of its executable bodies, `current_exception`
+  and `rethrow_exception` are still unimplemented placeholders.
 
 The deleted imperative engine was `src/goto-symex/symex_catch.cpp`
 (`stack_catch`, `symex_throw*`, `enforce_exception_specifications`,
@@ -152,6 +153,10 @@ thread-local.
   after throwing an exception" then `__ESBMC_assume(0)`. Never returns.
 - Outcome classification (§5.4) is settled: `noexcept`-escape is a property
   violation; an `abort()`/`exit()` in a handler is silent valid termination.
+- Fallback: when the OM `std::terminate` is not linked (a program that does not
+  reference the exception library), `emit_terminate` lowers the terminate point
+  to a direct assertion instead of an OM call, so the check is never silently
+  dropped.
 
 ### 4.2 `std::unexpected()` (C++14 legacy only)
 - Just run `current_unexpected_handler` if installed.
@@ -370,7 +375,12 @@ Newly-tracked gaps the deletion turned into hard rejects (no fallback remains):
    (or an explicit "unsupported in --function mode" contract).
 
 Not feature gaps (defensive IR guards; no step required): a malformed catch
-clause and an unmatched catch pop are rejected as malformed input. The old
+clause, an unmatched catch pop, and a throw of an *unsupported* type (the
+`program_supported` reject "a throw of an unsupported type" — an empty
+exception list or a thrown type the registry never ingested) are rejected as
+malformed/unmodellable input. Note the asymmetry: an unregistered *catch* type
+is **not** rejected — it is kept as a dead handler whose match guard is simply
+false (`program_supported`), since no throw can select it. The old
 "all-or-nothing leaves the rest to symex" property is moot — there is no symex
 exception path to fall back to.
 

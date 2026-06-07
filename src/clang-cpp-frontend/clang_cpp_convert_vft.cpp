@@ -1031,8 +1031,9 @@ bool clang_cpp_convertert::build_dynamic_cast(
   };
 
   // Reference form: if the vptr check fails, call __ESBMC_throw_bad_cast()
-  // which symex resolves to a std::bad_cast throw at verification time.
-  // This decouples the frontend from <typeinfo> inclusion order entirely.
+  // which the exception lowering (remove_exceptions) rewrites into a real
+  // std::bad_cast THROW. This decouples the frontend from <typeinfo> inclusion
+  // order entirely.
   if (is_reference)
   {
     // Clang strips the reference from cast.getType(), so target_type is
