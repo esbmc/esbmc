@@ -139,16 +139,13 @@ public:
       }
     }
 
-    // A thread start routine reached through a computed pointer cannot get the
-    // uncaught-escape check (it is never recorded as a thread entry), so a
-    // missed std::terminate would be unsound — such a program is unsupported.
-    // A start routine that is *also* called directly keeps is_entry on the
-    // direct-call path too; that is a sound over-approximation (at worst a
-    // spurious terminate on an escape the direct caller would catch, never a
-    // missed bug), so it is lowered rather than rejected.
+    // A thread start routine reached through a computed pointer is not recorded
+    // by collect_thread_entry, so over-approximate: treat every void*(void*)
+    // function whose address is taken as a candidate thread entry. That keeps
+    // the uncaught-escape terminate check sound (any in-program routine that can
+    // run has its address taken to be passed) rather than rejecting the program.
     if (thread_entry_unresolved)
-      return report_unsupported(
-        goto_functions, "a thread with an unresolved start routine");
+      collect_unresolved_thread_routines(goto_functions);
 
     // Whole-program, all-or-nothing: the lowering must cover every participating
     // function, since a partially-lowered program would leave residual
@@ -446,6 +443,52 @@ private:
       thread_entries.insert(to_symbol2t(rtn).thename);
     else
       thread_entry_unresolved = true;
+  }
+
+  /// A pthread start routine has the signature `void *(void *)`.
+  static bool is_thread_routine_type(const type2tc &t)
+  {
+    if (!is_code_type(t))
+      return false;
+    const code_type2t &ct = to_code_type(t);
+    return ct.arguments.size() == 1 && is_pointer_type(ct.ret_type) &&
+           is_pointer_type(ct.arguments[0]);
+  }
+
+  /// Recursively collect every void*(void*) function whose address is taken in
+  /// @p e as a candidate thread start routine.
+  void collect_routine_addresses(const expr2tc &e)
+  {
+    if (is_nil_expr(e))
+      return;
+    if (is_address_of2t(e))
+    {
+      const expr2tc &obj = to_address_of2t(e).ptr_obj;
+      if (is_symbol2t(obj) && is_thread_routine_type(obj->type))
+        thread_entries.insert(to_symbol2t(obj).thename);
+    }
+    e->foreach_operand(
+      [this](const expr2tc &sub) { collect_routine_addresses(sub); });
+  }
+
+  /// When a pthread_create start routine could not be resolved to a single
+  /// function (collect_thread_entry set thread_entry_unresolved), over-
+  /// approximate: any void*(void*) function whose address is taken anywhere
+  /// might be the routine, so treat them all as thread entries. This is sound
+  /// and complete for in-program routines — a routine must have its address
+  /// taken to be passed, and one with no body cannot throw — at the cost of a
+  /// possible spurious uncaught-escape terminate for such a function that is
+  /// also called directly (the same over-approximation already accepted for a
+  /// directly-called resolved start routine).
+  void collect_unresolved_thread_routines(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+        {
+          collect_routine_addresses(ins.code);
+          collect_routine_addresses(ins.guard);
+        }
   }
 
   /// A fresh static-lifetime slot to hold a copy of a thrown object, so it

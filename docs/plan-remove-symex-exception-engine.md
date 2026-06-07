@@ -371,15 +371,19 @@ Newly-tracked gaps the deletion turned into hard rejects (no fallback remains):
    bookkeeping is not faithful inside an unwinding destructor — e.g.
    `uncaught_exceptions()` read in a dtor mid-unwind is wrong. This is §7's
    "largest gap" promoted to an explicit step; aligns with PR #5132.
-4. **Computed pthread start routine.** A `pthread_create` whose start routine is
-   reached through a function pointer cannot be recorded as a thread entry, so
-   the uncaught→`terminate` boundary check cannot be anchored; such programs are
-   rejected (`remove_exceptions.cpp`, `thread_entry_unresolved`). Either resolve
-   the pointer set or anchor the per-thread terminate check another way.
-5. **`--function` / no `__ESBMC_main` entry.** Without the whole-program entry
-   the uncaught-exception check has nowhere to anchor, so isolated-function
-   verification of exception code is rejected. Needs a per-entry epilogue anchor
-   (or an explicit "unsupported in --function mode" contract).
+4. **[done] Computed pthread start routine.** A `pthread_create` whose start
+   routine is reached through a function pointer is no longer rejected: the
+   lowering over-approximates by treating every address-taken void*(void*)
+   function as a candidate thread entry (sound and complete for in-program
+   routines, since a routine must have its address taken to be passed), so the
+   uncaught→`terminate` boundary check still applies
+   (`collect_unresolved_thread_routines`).
+5. **[not a real gap] `--function` / no `__ESBMC_main` entry.** Verified: the C,
+   C++ and Python frontends always generate `__ESBMC_main` (it wraps the
+   `--function` target, even with no `main` in the TU), so the
+   "no whole-program entry" check never fires in practice. The check is retained
+   as a sound guard for any future entry-less mode (e.g. raw goto-binary input),
+   where lowering without an anchor would be unsound.
 
 Not feature gaps (defensive IR guards; no step required): a malformed catch
 clause, an unmatched catch pop, and a throw of an *unsupported* type (the
