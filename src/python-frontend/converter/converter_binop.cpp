@@ -612,9 +612,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!type_mismatch_result.is_nil())
     return type_mismatch_result;
 
-  // Detect any_type (void*) operands — unannotated Python parameters.
-  auto is_any_ptr = [](const exprt &e) {
-    return e.type().is_pointer() && e.type().subtype().id() == "empty";
+  // Detect any_type (void*) operands — unannotated Python parameters — and
+  // list-typed operands that reach the arithmetic/comparison coercion. A list
+  // value only gets here when it is actually an element of a list whose element
+  // type could not be statically resolved (e.g. iterating an empty/untyped
+  // list, which leaves the loop variable typed as the generic list pointer);
+  // every valid list operation was already handled by handle_list_operations
+  // above. Treating it like a void* (cast to the integer operand's type) keeps
+  // GOTO generation from building invalid pointer arithmetic on dead code.
+  auto is_any_ptr = [&](const exprt &e) {
+    return e.type().is_pointer() &&
+           (e.type().subtype().id() == "empty" || e.type() == list_type);
   };
   auto is_integer = [](const exprt &e) {
     return e.type().is_signedbv() || e.type().is_unsignedbv();

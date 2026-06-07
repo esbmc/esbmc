@@ -876,6 +876,16 @@ exprt function_call_expr::build_constant_from_arg() const
         vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
         type_utils::is_string_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
+
+      // Element of a list whose element type could not be statically resolved
+      // (e.g. iterating an empty/untyped list) is typed as the generic list
+      // pointer. Treat it as the documented list[int] default so str() lowers
+      // through the integer model instead of aborting the whole run; the loop
+      // body is dead for the empty list, mirroring the arithmetic coercion in
+      // get_binary_operator_expr.
+      if (vt == type_handler_.get_list_type())
+        return converter_.get_string_handler().convert_to_string(
+          build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
     arg_size = handle_str(arg);
   }
