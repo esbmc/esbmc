@@ -1600,6 +1600,21 @@ void python_converter::get_var_assign(
       target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
     }
+
+    // List slice assignment (a[i:j] = ...) is not modelled. Falling through to
+    // the generic store evaluates get_expr(a[i:j]) — a *copy* of the slice —
+    // and assigns into that temporary, leaving the original list unchanged. A
+    // later read then sees stale values, so ESBMC would report a buggy program
+    // as SUCCESSFUL (silent unsoundness). Reject it explicitly instead. Object
+    // slice __setitem__ is handled above; tuples raise TypeError above; dict
+    // subscripts are handled by handle_subscript_assignment_check earlier.
+    if (
+      target.contains("slice") && target["slice"].is_object() &&
+      target["slice"].value("_type", "") == "Slice")
+    {
+      throw std::runtime_error(
+        "List slice assignment (a[i:j] = ...) is not supported");
+    }
   }
 
   if (ast_node["_type"] == "AnnAssign")
