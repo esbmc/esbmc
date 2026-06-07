@@ -464,11 +464,34 @@ void tuple_handler::handle_tuple_unpacking(
   // Create assignments: x = temp.element_0, y = temp.element_1, ...
   for (size_t i = 0; i < targets.size(); i++)
   {
-    if (targets[i]["_type"] != "Name")
+    const std::string tgt_type = targets[i]["_type"].get<std::string>();
+
+    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. Resolve the
+    // element's (possibly symbol-referenced) type to a concrete struct, build
+    // the member access temp.element_i, and recurse so the sub-pattern is
+    // unpacked element-wise.
+    if (tgt_type == "Tuple" || tgt_type == "List")
+    {
+      const typet resolved =
+        converter_.name_space().follow(tuple_type.components()[i].type());
+      // Guard before recursing: unpacking a non-tuple element into a nested
+      // pattern (e.g. `(a, b), c = (5, 3)`) is a TypeError in Python. Reject it
+      // explicitly so the recursive to_struct_type() never casts a non-struct.
+      if (!is_tuple_type(resolved))
+      {
+        throw std::runtime_error(
+          "Cannot unpack non-tuple element into nested target");
+      }
+      std::string member_name = "element_" + std::to_string(i);
+      exprt nested_rhs = build_member(rhs, member_name, resolved);
+      handle_tuple_unpacking(ast_node, targets[i], nested_rhs, target_block);
+      continue;
+    }
+
+    if (tgt_type != "Name")
     {
       throw std::runtime_error(
-        "Tuple unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
+        "Tuple unpacking only supports simple names, not " + tgt_type);
     }
 
     std::string var_name = targets[i]["id"].get<std::string>();
