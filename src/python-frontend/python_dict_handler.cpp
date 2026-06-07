@@ -20,6 +20,16 @@
 
 namespace
 {
+// True when `node` is a call to the built-in range(): range(stop),
+// range(start, stop), or range(start, stop, step).
+bool is_range_call(const nlohmann::json &node)
+{
+  return node.contains("_type") && node["_type"] == "Call" &&
+         node.contains("func") && node["func"].contains("_type") &&
+         node["func"]["_type"] == "Name" && node["func"].contains("id") &&
+         node["func"]["id"] == "range" && node.contains("args");
+}
+
 // V.3: IREP2 member access (exact round-trip of member_exprt;
 // behaviour-preserving -- migrate_expr already lowers the legacy node through
 // this same path downstream). Back-migrated for the legacy adjust/goto-convert
@@ -369,6 +379,32 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   empty_dict["values"] = nlohmann::json::array();
   create_dict_from_literal(empty_dict, build_symbol(dict_sym));
 
+  // A dict comprehension over range(...) with a non-constant bound, e.g.
+  // {k: v for i in range(n)}. Materialising range(n) into a backing list only
+  // sets the list size and leaves its elements nondeterministic (see #5222 /
+  // python_list::handle_symbolic_range), so reading them back as the
+  // comprehension target produced wrong keys. Iterate via a counter whose
+  // value IS the range element instead, mirroring the for-loop-over-range
+  // counter lowering that list comprehensions already use. Constant ranges keep
+  // the existing concrete-materialisation path (which works), and ranges with
+  // an explicit step fall through too (the step direction would change the
+  // loop condition).
+  if (target["_type"] == "Name" && is_range_call(iter))
+  {
+    const auto &range_args = iter["args"];
+    auto is_const_int_arg = [](const nlohmann::json &arg) {
+      if (arg.contains("_type") && arg["_type"] == "Constant")
+        return true;
+      return arg.contains("_type") && arg["_type"] == "UnaryOp" &&
+             arg.contains("operand") && arg["operand"].contains("_type") &&
+             arg["operand"]["_type"] == "Constant";
+    };
+    const bool all_const =
+      std::all_of(range_args.begin(), range_args.end(), is_const_int_arg);
+    if ((range_args.size() == 1 || range_args.size() == 2) && !all_const)
+      return build_range_dict_comprehension(element, generator, dict_sym);
+  }
+
   exprt iterable_expr = converter_.get_expr(iter);
   // If the iterable comes from a call such as range(...), store it first so
   // the loop can reuse the same list on each iteration
@@ -567,6 +603,136 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
   exprt loop_condition("<", bool_type());
   loop_condition.copy_to_operands(build_symbol(index_var), length_expr);
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return build_symbol(dict_sym);
+}
+
+exprt python_dict_handler::build_range_dict_comprehension(
+  const nlohmann::json &element,
+  const nlohmann::json &generator,
+  symbolt &dict_sym)
+{
+  locationt location = converter_.get_location_from_decl(element);
+  const auto &target = generator["target"];
+  const auto &iter = generator["iter"];
+  const auto &range_args = iter["args"];
+  const typet idx_type = long_long_int_type();
+
+  // The comprehension target is the loop counter: its value IS the range
+  // element, so the key/value expressions read it directly.
+  std::string loop_var_name = target["id"].get<std::string>();
+  symbol_id loop_var_sid = converter_.create_symbol_id();
+  loop_var_sid.set_object(loop_var_name);
+  symbolt loop_var_symbol = converter_.create_symbol(
+    location.get_file().as_string(),
+    loop_var_name,
+    loop_var_sid.to_string(),
+    location,
+    idx_type);
+  loop_var_symbol.lvalue = true;
+  loop_var_symbol.file_local = true;
+  loop_var_symbol.is_extern = false;
+  symbolt *loop_var =
+    converter_.symbol_table().move_symbol_to_context(loop_var_symbol);
+
+  // range(stop) -> start 0; range(start, stop) -> explicit start. Step is 1
+  // here (callers route explicit-step ranges to the materialisation path).
+  exprt start_expr;
+  exprt stop_arg;
+  if (range_args.size() == 1)
+  {
+    start_expr = gen_zero(idx_type);
+    stop_arg = converter_.get_expr(range_args[0]);
+  }
+  else
+  {
+    start_expr = converter_.get_expr(range_args[0]);
+    stop_arg = converter_.get_expr(range_args[1]);
+  }
+  start_expr = build_typecast(start_expr, idx_type);
+  stop_arg = build_typecast(stop_arg, idx_type);
+
+  // Freeze the loop-invariant stop bound in a temporary.
+  symbolt &stop_var = converter_.create_tmp_symbol(
+    element, "$dictcomp_stop$", idx_type, gen_zero(idx_type));
+  code_declt stop_decl(build_symbol(stop_var));
+  stop_decl.location() = location;
+  converter_.add_instruction(stop_decl);
+  code_assignt stop_init(build_symbol(stop_var), stop_arg);
+  stop_init.location() = location;
+  converter_.add_instruction(stop_init);
+
+  // loop_var = start
+  code_declt loop_decl(build_symbol(*loop_var));
+  loop_decl.location() = location;
+  converter_.add_instruction(loop_decl);
+  code_assignt loop_init(build_symbol(*loop_var), start_expr);
+  loop_init.location() = location;
+  converter_.add_instruction(loop_init);
+
+  // Build the loop body with current_block redirected to it (see the matching
+  // comment in get_dict_comprehension): key/value temporaries and the
+  // subscript-assign side effects must land inside the loop.
+  code_blockt loop_body;
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+  exprt key_expr = converter_.get_expr(element["key"]);
+  exprt value_expr = converter_.get_expr(element["value"]);
+
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    build_symbol(dict_sym),
+    key_expr,
+    value_expr,
+    location,
+    element,
+    pair_block);
+  converter_.current_block = saved_block;
+
+  if (generator.contains("ifs") && !generator["ifs"].empty())
+  {
+    exprt combined_condition = gen_boolean(true);
+    for (const auto &if_clause : generator["ifs"])
+    {
+      exprt if_expr = converter_.get_expr(if_clause);
+      if (combined_condition.is_true())
+        combined_condition = if_expr;
+      else
+      {
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined_condition, if_expr);
+        combined_condition = and_expr;
+      }
+    }
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(combined_condition, pair_block);
+    if_stmt.location() = location;
+    loop_body.copy_to_operands(if_stmt);
+  }
+  else
+  {
+    loop_body.copy_to_operands(pair_block);
+  }
+
+  // loop_var = loop_var + 1
+  exprt increment("+", idx_type);
+  increment.copy_to_operands(build_symbol(*loop_var), gen_one(idx_type));
+  code_assignt loop_inc(build_symbol(*loop_var), increment);
+  loop_inc.location() = location;
+  loop_body.copy_to_operands(loop_inc);
+
+  // while (loop_var < stop)
+  exprt loop_condition("<", bool_type());
+  loop_condition.copy_to_operands(
+    build_symbol(*loop_var), build_symbol(stop_var));
 
   codet while_stmt;
   while_stmt.set_statement("while");

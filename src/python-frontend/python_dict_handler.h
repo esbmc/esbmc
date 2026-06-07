@@ -150,6 +150,14 @@ public:
 
   exprt get_dict_comprehension(const nlohmann::json &element);
 
+  // Build a dict comprehension whose iterable is range(...) with a
+  // non-constant bound by iterating a counter (the range element value)
+  // instead of materialising range into a backing list. See #5222.
+  exprt build_range_dict_comprehension(
+    const nlohmann::json &element,
+    const nlohmann::json &generator,
+    symbolt &dict_sym);
+
   /**
    * @brief Creates and initializes a dictionary from a literal expression.
    *
