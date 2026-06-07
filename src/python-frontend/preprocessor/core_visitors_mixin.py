@@ -66,8 +66,7 @@ class CoreVisitorsMixin:
                     invalidate(elt)
             elif isinstance(target, ast.Starred):
                 invalidate(target.value)
-            elif isinstance(target, ast.Subscript) and isinstance(
-                    target.value, ast.Name):
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
                 rebound.add(target.value.id)
                 self._assignment_call_origins.pop(target.value.id, None)
 
@@ -84,8 +83,7 @@ class CoreVisitorsMixin:
                         self._assignment_call_origins.pop(tracked, None)
                         break
 
-        if (len(targets) == 1 and isinstance(targets[0], ast.Name)
-                and isinstance(value, ast.Call)):
+        if (len(targets) == 1 and isinstance(targets[0], ast.Name) and isinstance(value, ast.Call)):
             self._assignment_call_origins[targets[0].id] = value
 
     def _scan_eq_only_items_view_targets(self, body):
@@ -116,8 +114,7 @@ class CoreVisitorsMixin:
                     comp_local_ids.add(id(n))
 
         for node in ast.walk(synthetic):
-            if not isinstance(node, (ast.ListComp, ast.SetComp,
-                                     ast.DictComp, ast.GeneratorExp)):
+            if not isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
                 continue
             if isinstance(node, ast.DictComp):
                 _add_names(node.key)
@@ -150,15 +147,15 @@ class CoreVisitorsMixin:
                 # Load is safe only on one side of an Eq compare.
                 if (isinstance(parent, ast.Compare) and len(parent.ops) == 1
                         and isinstance(parent.ops[0], ast.Eq)
-                        and (parent.left is child
-                             or (len(parent.comparators) == 1
-                                 and parent.comparators[0] is child))):
+                        and (parent.left is child or
+                             (len(parent.comparators) == 1 and parent.comparators[0] is child))):
                     continue
                 disqualified.add(child.id)
-        return {n for n, recv in candidates.items()
-                if store_count[n] == 1
-                and store_count.get(recv, 0) <= 1
-                and n not in disqualified}
+        return {
+            n
+            for n, recv in candidates.items()
+            if store_count[n] == 1 and store_count.get(recv, 0) <= 1 and n not in disqualified
+        }
 
     def _is_items_view_call(self, node):
         """True if node is W(d.<attr>()) or sorted(list(d.<attr>())) with
@@ -173,18 +170,16 @@ class CoreVisitorsMixin:
                     and arg.func.id == "list" and len(arg.args) == 1
                     and not getattr(arg, "keywords", [])):
                 arg = arg.args[0]
-        return (isinstance(arg, ast.Call)
-                and isinstance(arg.func, ast.Attribute)
-                and arg.func.attr in ("items", "keys", "values")
-                and not arg.args and not getattr(arg, "keywords", []))
+        return (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute)
+                and arg.func.attr in ("items", "keys", "values") and not arg.args
+                and not getattr(arg, "keywords", []))
 
     def _items_view_receiver_name(self, node):
         """Return the receiver Name id of an items-view-call, else None."""
         if not self._is_items_view_call(node):
             return None
         arg = node.args[0]
-        if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
-                and arg.func.id == "list"):
+        if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id == "list"):
             arg = arg.args[0]
         receiver = arg.func.value
         return receiver.id if isinstance(receiver, ast.Name) else None
@@ -785,8 +780,7 @@ class CoreVisitorsMixin:
         # element values (the del lowers to list.pop(i) in the converter).
         node = self.generic_visit(node)
         for target in node.targets:
-            if isinstance(target, ast.Subscript) and isinstance(
-                    target.value, ast.Name):
+            if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
                 self.list_literal_values.pop(target.value.id, None)
             elif isinstance(target, ast.Name):
                 self.list_literal_values.pop(target.id, None)
@@ -806,8 +800,7 @@ class CoreVisitorsMixin:
         neutralized_target = None
         if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
                 and node.targets[0].id in self._eq_only_items_view_targets
-                and self._is_items_view_call(node.value)
-                and node.value.func.id == "sorted"):
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
             recv = self._items_view_receiver_name(node.value)
             if recv is not None and self._is_known_dict_name(recv):
                 placeholder = ast.List(elts=[], ctx=ast.Load())
@@ -936,8 +929,7 @@ class CoreVisitorsMixin:
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
         saved_eq_only = set(self._eq_only_items_view_targets)
-        self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(
-            node.body)
+        self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
