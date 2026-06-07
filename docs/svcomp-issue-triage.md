@@ -422,7 +422,7 @@ from the public sv-benchmarks GitLab and treated as untrusted input.
 | 5134 | pthread-ext `25_stack_longest-1` | no-data-race | **FIXED** — same root cause (§8.2) | new |
 | 5135 | pthread-ext `25_stack` | no-data-race | **FIXED** — same root cause (§8.2) | new |
 | 5136 | pthread-complex `elimination_backoff_stack` | no-data-race | **FIXED** — same root cause (§8.2) | new |
-| 5137 | pthread-race-challenges `thread-join-binomial` | no-data-race | DISTINCT — mutex/join HB (§8.3) | no |
+| 5137 | pthread-race-challenges `thread-join-binomial` | no-data-race | DISTINCT — value-set imprecision (§8.3) | no |
 | 5138 | coreutils `comm_3args_ok` | valid-memsafety | precision — forgotten-memory at exit (§8.4) | no |
 | 5139 | busybox `sync-2` | valid-memsafety | precision — realloc/free error path (§8.4) | no |
 | 5140 | busybox `usleep-2` | valid-memsafety | precision — invalid-pointer error path (§8.4) | no |
@@ -479,14 +479,32 @@ fully instrumented — so no genuine (non-atomic) race is ever hidden. The conse
 * GOTO inspection confirms the exact counterexample assertion (`RACE_CHECK(&top)` in `isEmpty`,
   `RACE_CHECK(&PushOpen)` in `checkInvariant`) is removed.
 
-### 8.3 #5137 — thread-join-binomial: DISTINCT root cause, not covered by §8.2
+### 8.3 #5137 — thread-join-binomial: DISTINCT root cause (value-set imprecision, not mutex HB)
 
-The write `data = __VERIFIER_nondet_int()` (line 1052) is in `thread()` — a **thread entry**, not an
-atomic helper — and is synchronised by `pthread_mutex_lock(&data_mutex)` plus a `pthread_join`
-happens-before chain, not by an atomic region. GOTO inspection confirms the write **retains** its
-`RACE_CHECK(&data)` after the §8.2 fix, so #5137 is a *separate* precision gap in the data-race
-checker's mutex/`pthread_join` happens-before reasoning. Out of scope for the atomic-callee fix;
-keep open as its own issue (sibling of #4432 / umbrella #2928).
+The write `data = __VERIFIER_nondet_int()` (line 1052) is in `thread()` and is synchronised by
+`pthread_mutex_lock(&data_mutex)`; it is not an atomic helper, and the §8.2 fix correctly leaves its
+`RACE_CHECK(&data)` in place. An **earlier reading of this issue as a mutex/`pthread_join`
+happens-before gap is wrong** — deeper investigation (2026-06-07) re-classifies it:
+
+* **The mutex *is* modelled.** A minimal two-thread program that writes a shared global under a
+  `pthread_mutex` verifies `VERIFICATION SUCCESSFUL` under `--data-races-check-only` — ESBMC's
+  data-race checker honours the mutex's mutual exclusion. So this is **not** a missing-lockset bug.
+* **The counterexample is physically impossible.** With the issue's flags the W/W race on `data`
+  fires at **`k = 1` with the creation loop unwound once** — i.e. a *single* worker thread exists —
+  yet the violated `!(RACE_CHECK(&data))` requires the write flag to already be `1` with no prior
+  writer. The trace also shows the thread receiving `i = (signed int)(&tids)`: the integer argument
+  `(void*)i` (e.g. `1750`) was resolved by `--add-symex-value-sets` to a **pointer** (`&tids`)
+  rather than the integer. The spurious flag state correlates with this pointer/value-set
+  imprecision on the **integer-as-pointer thread argument**, not with the mutex.
+* **No clean reducer.** Minimal `(void*)i`-argument variants under the exact flags either time out
+  (unbounded `k`) or abort, so the trigger is entangled with the benchmark's specific shape
+  (malloc'd `tids`, binomial join, large nondet `threads_total`).
+
+**Disposition.** A sound fix lives in **pointer/value-set analysis** (handling of integer→pointer
+casts passed as thread arguments), which is broad blast-radius and cannot be validated against the
+full SV-COMP data-race set in this environment. Out of scope for a localized data-race-checker
+change; keep #5137 open as a value-set-precision issue (sibling of #4432 / umbrella #2928), **not**
+as a mutex/join happens-before gap.
 
 ### 8.4 #5138–#5141 — valid-memsafety false alarms
 
@@ -557,7 +575,9 @@ data-race regressions pass.
 * #5141's `bb_verror_msg` leak folded into the same #5012 cluster.
 
 **Skipped / deferred and why.**
-* #5137 — distinct mutex/`pthread_join` happens-before precision gap (own issue; cf. #2928/#4432).
+* #5137 — distinct value-set/pointer-imprecision gap on integer-as-pointer thread args; the mutex
+  *is* modelled (minimal case is `SUCCESSFUL`), so this is not a happens-before gap (own issue; cf.
+  #2928/#4432).
 * #5138–#5140 — memory-model / reachability precision; no localized sound fix.
 * #5142 — research-grade LDV driver.
 * #5143/#5144 (+#5141) — `(v)asprintf` return-length OM (#5012); printf-layer fix measured unsound.
@@ -565,7 +585,7 @@ data-race regressions pass.
 
 **Remaining work (priority order).**
 1. Land the #5133–#5136 data-race fix.
-2. #5137 — extend the data-race checker's `pthread_join`/mutex happens-before (new issue).
+2. #5137 — value-set precision for integer→pointer thread arguments (new issue; not a mutex/HB gap).
 3. #5012 — sound `(v)asprintf` return-length OM (closes #4976–#4979, #5143, #5144, and #5141's leak).
 4. #5138–#5140 — memory-model/reachability precision for `forgotten`/`invalid pointer` verdicts.
 5. Carry-forward from Pass 3: witness-validator integration (#1470/#1471/#1492/#4611), #4432 (x86
