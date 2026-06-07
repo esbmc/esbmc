@@ -1496,6 +1496,42 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
       if (kind == "Dict")
         return get_dict_struct_type();
     }
+
+    // Dict comprehension `d = {k: v for ...}`: the variable carries no
+    // annotation and its AST value is a DictComp, so the Dict-literal peek
+    // above does not fire. Infer the subscript value type from the
+    // comprehension's value expression. Without this the read falls through
+    // to the char* default and returns the raw PyObject value pointer rather
+    // than the stored scalar — a wrong verdict on `d[k]` reads, e.g. inside a
+    // function body where no target type flows in (#5222).
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "DictComp" &&
+      var_decl["value"].contains("value") &&
+      var_decl["value"]["value"].is_object())
+    {
+      const auto &val_node = var_decl["value"]["value"];
+      const std::string val_kind = val_node.value("_type", std::string());
+      if (val_kind == "List")
+        return type_handler_.get_list_type();
+      if (val_kind == "Dict" || val_kind == "DictComp")
+        return get_dict_struct_type();
+      // Scalar literal value: classify exactly as the value is stored by the
+      // comprehension (Python int -> int, float -> float, bool -> bool). Only
+      // numeric/boolean literal constants are inferred; string, bytes and any
+      // other value expression are left to the existing path, which already
+      // resolves them to the char* default (unchanged behaviour).
+      if (val_kind == "Constant" && val_node.contains("value"))
+      {
+        const auto &lit = val_node["value"];
+        if (lit.is_boolean())
+          return bool_type();
+        if (lit.is_number_integer() || lit.is_number_unsigned())
+          return type_handler_.get_typet("int", 0);
+        if (lit.is_number_float())
+          return type_handler_.get_typet("float", 0);
+      }
+    }
     // Empty literal `d = {}`:
     // scan the enclosing function's top-level statements and pick the most
     // recent `d[k] = Klass(...)` assignment as the subscript value type.
