@@ -457,7 +457,11 @@ run_fetch() {
       fetch_gmp_source
       ;;
     Darwin)
-      brew update
+      # 'brew update' refreshes formula definitions but is best-effort: a
+      # transient tap fetch failure ("Error: Failed to download") must not abort
+      # the build under 'set -e'. Subsequent 'brew install' resolves formulae
+      # via the Homebrew API regardless, so a stale tap is harmless here.
+      brew update || log "warning: 'brew update' failed; continuing"
       ;;
     *)
       error "unsupported OS '$OS'"
