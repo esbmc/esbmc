@@ -352,6 +352,15 @@ set(_slow_regression_tests
     # larger inner timeout lets testing_tool record the KNOWNBUG verdict
     # instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_39"
+    # humaneval_93 used to fast-fail with "Unsupported reassignment from dict to
+    # list" when encode()'s `dict([(i, chr(ord(i) + 2)) for i in vowels])` was
+    # rejected during conversion. With the dict()-over-comprehension lowering
+    # (PR #5223) the spurious error is gone and ESBMC reaches the real encode
+    # symex (swapcase + dict-populate loop + join over the message under
+    # --unwind 20), which does not converge under the default budget. It stays
+    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
+    # verdict instead of ctest hard-killing the run.
+    "regression/humaneval/humaneval_93"
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
