@@ -661,14 +661,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       }
       e = typecast_exprt(e, ptr_type);
     };
-    if (is_any_ptr(lhs) && !is_any_ptr(rhs) && !rhs.type().is_pointer())
+    // An operand with no concrete type is an unmodelled value (e.g. the result
+    // of calling a generator function, whose type stays "empty"). Coercing it —
+    // in particular wrapping it in a typecast — yields a null-typed operand that
+    // crashes expression simplification. Leave such a comparison untouched so it
+    // lowers like any other (the assertion is simply not satisfied).
+    auto has_concrete_type = [](const exprt &e) {
+      return !e.type().is_nil() && !e.type().is_empty();
+    };
+    if (
+      is_any_ptr(lhs) && !is_any_ptr(rhs) && has_concrete_type(rhs) &&
+      !rhs.type().is_pointer())
     {
       if (type_utils::is_ordered_comparison(op) && is_integer(rhs))
         lhs = typecast_exprt(lhs, rhs.type()); // cast void* to integer
       else
         cast_to_void_ptr(rhs, lhs.type()); // cast integer to void*
     }
-    else if (is_any_ptr(rhs) && !is_any_ptr(lhs) && !lhs.type().is_pointer())
+    else if (
+      is_any_ptr(rhs) && !is_any_ptr(lhs) && has_concrete_type(lhs) &&
+      !lhs.type().is_pointer())
     {
       if (type_utils::is_ordered_comparison(op) && is_integer(lhs))
         rhs = typecast_exprt(rhs, lhs.type()); // cast void* to integer
