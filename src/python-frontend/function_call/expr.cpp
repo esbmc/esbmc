@@ -888,7 +888,19 @@ exprt function_call_expr::build_constant_from_arg() const
         return converter_.get_string_handler().convert_to_string(
           build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
-    arg_size = handle_str(arg);
+
+    // A string literal argument folds to its length below.
+    if (arg.contains("value") && arg["value"].is_string())
+      arg_size = handle_str(arg);
+    else
+      // The argument has no statically stringifiable type. This happens for an
+      // unannotated parameter, modelled as Any (void*): its dynamic type is
+      // unknown, so str() cannot be folded. Fall back to a sound nondet string
+      // rather than aborting conversion of the whole program — subsequent ops
+      // see arbitrary content, which over-approximates str() of an unknown
+      // value without wrongly concluding any specific result.
+      return converter_.get_string_handler().build_nondet_string_fallback(
+        converter_.get_location_from_decl(call_));
   }
 
   typet t = type_handler_.get_typet(func_name, arg_size);

@@ -280,22 +280,6 @@ type2tc type2t::clone() const
   std::unreachable();
 }
 
-size_t type2t::crc() const
-{
-  switch (type_id)
-  {
-#define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_do_crc_type(                                        \
-      static_cast<const kind##_type2t &>(*this));
-#include <irep2/type_kinds.inc>
-#undef IREP2_TYPE
-  case end_type_id:
-    break;
-  }
-  std::unreachable();
-}
-
 list_of_memberst type2t::tostring(unsigned int indent) const
 {
   switch (type_id)
