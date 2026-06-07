@@ -272,6 +272,84 @@ class CoreVisitorsMixin:
             assigns.append(assign)
         return prefix + assigns
 
+    def _maybe_lower_dict_from_comprehension_assign(self, node):
+        """Lower ``x = dict([(k, v) for <gens>])`` into ``x = {}`` followed by
+        population loops ``for <gens>: x[k] = v``.
+
+        The ``dict(<comprehension>)`` constructor is otherwise routed through the
+        runtime dict-comprehension model, whose symbolic list iteration is far
+        more expensive than ordinary for-loop lowering and times out even on
+        tiny inputs. Emitting the plain ``{}`` + for-loop pattern reuses the
+        fast, well-tested dict-subscript-assign path. Handles ListComp and
+        GeneratorExp whose element is an explicit ``(key, value)`` 2-tuple.
+        (HumanEval/93, /126)
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "dict" and len(value.args) == 1 and not value.keywords):
+            return None
+        comp = value.args[0]
+        if not isinstance(comp, (ast.ListComp, ast.GeneratorExp)):
+            return None
+        if not (isinstance(comp.elt, ast.Tuple) and len(comp.elt.elts) == 2):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.elt.elts[0])),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.elt.elts[1])))]
+
+        # Wrap with the comprehension's generators, outermost first. Each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # lowered: NodeTransformer does not re-visit nodes we return, so run
+        # the outermost loop through visit_For explicitly (mirrors
+        # _lower_listcomp). Otherwise the converter rejects the raw For node.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Mirror the metadata a plain ``x = {}`` assignment would record so
+        # downstream rewrites and type inference treat the name as a dict. The
+        # original ``dict(<comprehension>)`` value is an ast.Call, so visit_Assign
+        # registered it as the target's call-origin; drop that stale entry so a
+        # later ``target == ...`` is not rewritten against the discarded call.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
+
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -827,6 +905,10 @@ class CoreVisitorsMixin:
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
+
+        lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
+        if lowered_dict_comp is not None:
+            return lowered_dict_comp
 
         lowered_listcomp = self._maybe_lower_listcomp_assign(node)
         if lowered_listcomp is not None:
