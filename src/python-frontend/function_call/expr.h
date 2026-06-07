@@ -261,6 +261,12 @@ private:
   exprt handle_ord(nlohmann::json &arg) const;
 
   /*
+   * Rewrites the argument AST node into an integer Constant holding the given
+   * code point and returns the resulting int expression. Helper for handle_ord.
+   */
+  exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
+
+  /*
    * Handles abs() function calls by computing the absolute value of the argument.
    * The argument can be an integer, a floating-point number, or an object implementing
    * the __abs__() method. The function returns an expression representing the absolute value.
