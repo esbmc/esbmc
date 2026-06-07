@@ -7,20 +7,25 @@
 //
 // KNOWNBUG: MI base-subobject layout, catch-by-base, and dynamic_cast across a
 // non-zero base offset are now all correct, so rethrow_if_nested's cross-cast
-// works. The remaining blocker is a symex-level bug, not the frontend: when the
-// combined type's first base (Outer) itself derives from a polymorphic base
-// (std::exception), the construction write to the *second* base subobject
-// (nested_exception, at a non-zero offset) is lost. The GOTO is correct (the
-// nested_exception ctor is called through `(nested_exception*)((char*)this+off)`
-// and writes its member), and the offsets are correct, but symex does not alias
-// that interior-pointer write with the field read. Minimal non-exception repro:
+// works. The remaining blocker is a vtable-model defect: ESBMC gives every
+// polymorphic class its own @vtable_pointer component instead of sharing the
+// primary base's slot (the Itanium primary-base rule). So when the combined
+// type's first base (Outer) itself derives from a polymorphic base
+// (std::exception), the flattened struct carries a redundant primary-chain vptr
+// that shifts the second base (nested_exception) one slot past clang's offset.
+// The cast/ctor/access adjustments use clang's offset, so the construction write
+// lands on the redundant vptr instead of the nested_exception subobject. Minimal
+// non-exception repro:
 //   struct E { virtual ~E(){} };
 //   struct Outer : E { int w; };
 //   struct Nested { virtual ~Nested(){} void* p; Nested():p(0){} };
 //   struct Combined : Outer, Nested { };
-//   Combined c; assert(c.p == 0);   // fails: the Nested-base write is lost
-// Once the symex interior-pointer dereference handles this, throw_with_nested
-// verifies SUCCESSFUL and can move to CORE.
+//   Combined c; assert(c.p == 0);   // fails
+// The fix is to model primary-base vptr sharing — a coordinated change to the
+// struct layout (add_vptr / get_base_components_methods), constructor vptr-init
+// (clang_cpp_adjust_code_gen), and name-keyed virtual dispatch
+// (get_vft_binding_expr_vtable_ptr). Once that lands this verifies SUCCESSFUL
+// and can move to CORE.
 #include <exception>
 #include <cassert>
 
