@@ -343,19 +343,26 @@ Completed (the engine deletion ran ahead of the original 1→7 sequence):
   −− at handler entry, and a balancing −− on the dynamic-spec replacement-throw
   path) and read by the OM. **Remaining gap:** the count is not faithful inside a
   destructor running during unwinding (see the destructor item below).
+- **[done] `exception_ptr`** (was step 2): a shared slot table plus a per-thread
+  handled-exception stack in the OM (`c2goto/library/exception.cpp`);
+  `current_exception` / `rethrow_exception` / `make_exception_ptr` work
+  (`current_exception` reads the handled stack, rethrow re-arms from the slot).
+  The handled-stack/uncaught instrumentation is pay-per-use (only emitted when a
+  program uses current_exception / a bare throw / uncaught_exception(s)).
+- **[done] catch-by-value / object materialization for the common case**
+  (was step 1, partial): throwing a named/by-value operand now constructs the
+  exception object correctly (the `cpp-throw` operand is adjusted so the
+  copy/move ctor's reference args are addressed). `std::throw_with_nested` /
+  `rethrow_if_nested` are implemented; they are blocked only by a frontend
+  vtable-model bug (primary-base vptr not shared — see KNOWNBUG
+  lower-exceptions_throw_with_nested_knownbug), not by the lowering.
 
-Live work (the foundational items, still open):
+Live work (still open):
 
-1. **Exception-object materialization** primitive (construct a real object +
-   stable slot) **plus** a unifying `__ESBMC_raise` transfer op — together, not
-   raise alone (§5.1). Prerequisite for #2 and for proper catch-by-value of
-   types the lowering currently rejects (see §7: "value catch without a copy
-   binding").
-2. **`exception_ptr`**: per-thread active/handled stack + **shared slot table**
-   with the never-reuse / atomic-publish invariants (§3.3, §5.2);
-   `current_exception` / `rethrow_exception` (with correct catch-entry timing,
-   §5.5). Today both are header-only placeholders — `rethrow_exception` is a hard
-   `assert(0, "not modelled yet")`.
+1. **Faithful exception-object materialization** (the deeper §5.1 goal): a real
+   `std::bad_cast` carrying `what()`/identity (today it is message-less), and
+   `throw_with_nested` once the MI primary-base-vptr-sharing bug is fixed. The
+   common-case construction is done (above); this is the remaining fidelity.
 
 Newly-tracked gaps the deletion turned into hard rejects (no fallback remains):
 
