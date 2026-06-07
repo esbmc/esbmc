@@ -3231,6 +3231,23 @@ exprt python_list::compare(
   max_depth_expr.set_value(
     integer2binary(max_depth, config.ansi_c.address_width));
 
+  // Merge the float element type_id from both operands so that mixed int/float
+  // elements compare numerically (Python's 1 == 1.0), as list_lt already does.
+  int type_flag_lhs = 0, type_flag_rhs = 0;
+  size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
+  get_list_type_flags(
+    lhs_symbol->id.as_string(),
+    converter_.get_type_handler(),
+    type_flag_lhs,
+    float_type_id_lhs);
+  get_list_type_flags(
+    rhs_symbol->id.as_string(),
+    converter_.get_type_handler(),
+    type_flag_rhs,
+    float_type_id_rhs);
+  const size_t float_type_id =
+    float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
@@ -3239,6 +3256,8 @@ exprt python_list::compare(
   list_eq_func_call.arguments().push_back(build_symbol(*rhs_symbol)); // l2
   list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
+  list_eq_func_call.arguments().push_back(
+    from_integer(float_type_id, size_type())); // float_type_id
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
