@@ -385,6 +385,13 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   if (expr.operands().size() == 0)
     return;
 
+  // Adjust the thrown expression like any other operand. In particular, when
+  // the operand is the copy/move construction of the exception object (e.g.
+  // `throw e;` for a by-value parameter `e`), this address-of's the lvalue
+  // arguments bound to the constructor's reference parameters — otherwise the
+  // ctor is called with a struct value where a pointer is expected.
+  adjust_expr(expr.op0());
+
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
