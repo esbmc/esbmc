@@ -547,60 +547,6 @@ protected:
 
   void volatile_check(expr2tc &expr);
 
-  /* Check if thrown_type in Python inherits from catch_type */
-  bool is_python_exception_subtype(
-    const irep_idt &thrown_type,
-    const irep_idt &catch_type);
-
-  /** Walk back up stack frame looking for exception handler. */
-  bool symex_throw();
-
-  /** Core throw dispatch: match throw_code against the current thread's
-   *  stack_catch and jump, enforcing exception specifications on every frame
-   *  the exception exits. Called by symex_throw() and symex_throw_bad_cast(). */
-  bool symex_throw_dispatch(const expr2tc &throw_code);
-
-  /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
-   *  namespace and dispatch the exception through the normal throw path. */
-  bool symex_throw_bad_cast();
-
-  /** Register exception handler on stack. */
-  void symex_catch();
-
-  /** Update throw target. */
-  void update_throw_target(
-    goto_symex_statet::exceptiont *except [[maybe_unused]],
-    goto_programt::const_targett target,
-    const expr2tc &code,
-    bool is_ellipsis = false);
-
-  /** Check if we can rethrow an exception:
-   *  if we can then update the target.
-   *  if we can't then gives a error.
-   */
-  bool handle_rethrow(
-    const expr2tc &operand,
-    const goto_programt::instructiont &instruction);
-
-  /** True if the innermost active catch region handles any of the thrown
-   *  exception types. When true, owner_frame_depth is set to the call_stack
-   *  index of the frame that owns that handler. */
-  bool exception_caught_in_top(
-    const std::vector<irep_idt> &exception_list,
-    std::size_t &owner_frame_depth);
-
-  /** Enforce the exception specifications of every frame the exception exits.
-   *  `caught` and `handler_owner_depth` describe where (if anywhere) the
-   *  exception is handled. Returns true (and sets `dispatch_result`) when a
-   *  restrictive specification is violated and the throw has been handled via
-   *  std::terminate / std::unexpected; returns false when no specification is
-   *  violated and normal dispatch should continue. */
-  bool enforce_exception_specifications(
-    const std::vector<irep_idt> &exception_list,
-    bool caught,
-    std::size_t handler_owner_depth,
-    bool &dispatch_result);
-
   /**
    *  Finalize the result of a realloc operation.
    *  Creates the final assignment of the realloc result pointer to the lhs,
@@ -786,16 +732,6 @@ protected:
     const type2tc &elem_type,
     const expr2tc &size_expr,
     const std::string &name_prefix);
-
-  /**
-   * Call terminate function handler when needed.
-   */
-  bool terminate_handler();
-
-  /**
-   * Call unexpected function handler when needed.
-   */
-  bool unexpected_handler();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
@@ -1204,28 +1140,6 @@ protected:
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
-
-  /* Exception handling. The stack of active try/catch regions lives on each
-   * thread's goto_symex_statet (cur_state->stack_catch), not here, so exception
-   * state is per-thread. */
-
-  /** Pointer to last thrown exception. */
-  goto_programt::instructiont *last_throw;
-
-  /** Backing storage for last_throw when the throw originates from the
-   *  __ESBMC_throw_bad_cast intrinsic rather than a real THROW instruction. */
-  goto_programt::instructiont bad_cast_throw;
-
-  /** Map of currently active exception targets, i.e. instructions where an
-   *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; values are the symbols that the
-   *  thrown piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
-
-  /** Flag to indicate if we are go into the unexpected flow. */
-  bool inside_unexpected;
-  /** Store the unexpected function end */
-  irep_idt unexpected_end;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

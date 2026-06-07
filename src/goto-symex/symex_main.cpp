@@ -253,14 +253,6 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
     // Potentially skip to run another function ptr target; if not,
     // continue
@@ -315,37 +307,6 @@ void goto_symext::symex_step(reachability_treet &art)
     if (!cur_state->guard.is_false())
     {
       code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
       symex_assign(code_assign2tc(std::move(deref_code)));
     }
 
@@ -1091,12 +1052,6 @@ void goto_symext::run_intrinsic(
 
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
-
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
-  {
-    symex_throw_bad_cast();
-    return;
-  }
 
   if (symname == "c:@F@__ESBMC_witness_assume")
   {
