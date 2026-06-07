@@ -876,6 +876,17 @@ exprt function_call_expr::build_constant_from_arg() const
         vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
         type_utils::is_string_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
+
+      // str() of an argument whose type could not be statically resolved —
+      // an unannotated parameter lowered to any_type (void*), or a value that
+      // dynamic retyping left as the generic list pointer. User objects with a
+      // real __str__ were already dispatched above, so a pointer reaching here
+      // is unresolved; treat it as an int (the common str(number) case) and
+      // route through the runtime model instead of aborting the whole run.
+      // This typically occurs on a dead path inside an uncalled helper.
+      if (vt.is_pointer())
+        return converter_.get_string_handler().convert_to_string(
+          build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
     arg_size = handle_str(arg);
   }
