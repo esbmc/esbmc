@@ -11,10 +11,8 @@ namespace std
 {
 
 typedef void (*terminate_handler)();
-
-#if __cplusplus < 201703L
 typedef void (*unexpected_handler)();
-#endif
+void terminate() _ESBMC_NOEXCEPT;
 
 } // namespace std
 
@@ -27,12 +25,10 @@ inline void __ESBMC_default_terminate_handler()
   __ESBMC_assume(0);
 }
 
-#if __cplusplus < 201703L
 inline void __ESBMC_default_unexpected_handler()
 {
   std::terminate();
 }
-#endif
 
 inline std::terminate_handler &__ESBMC_terminate_handler_ref()
 {
@@ -40,15 +36,20 @@ inline std::terminate_handler &__ESBMC_terminate_handler_ref()
   return handler;
 }
 
-#if __cplusplus < 201703L
 inline std::unexpected_handler &__ESBMC_unexpected_handler_ref()
 {
   static std::unexpected_handler handler = __ESBMC_default_unexpected_handler;
   return handler;
 }
-#endif
 
 } // namespace __ESBMC_exception_detail
+
+extern "C" void __ESBMC_run_unexpected()
+{
+  std::unexpected_handler handler =
+    __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref();
+  (*handler)();
+}
 
 namespace std
 {
@@ -86,7 +87,6 @@ void terminate() _ESBMC_NOEXCEPT
   __ESBMC_assume(0);
 }
 
-#if __cplusplus < 201703L
 unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
 {
   unexpected_handler old =
@@ -103,12 +103,9 @@ unexpected_handler get_unexpected() _ESBMC_NOEXCEPT
 
 void unexpected()
 {
-  unexpected_handler handler =
-    __ESBMC_exception_detail::__ESBMC_unexpected_handler_ref();
-
   try
   {
-    (*handler)();
+    __ESBMC_run_unexpected();
   }
   catch (...)
   {
@@ -117,7 +114,6 @@ void unexpected()
 
   terminate();
 }
-#endif
 
 #if __cplusplus < 202002L
 bool uncaught_exception() _ESBMC_NOEXCEPT

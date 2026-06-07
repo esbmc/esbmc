@@ -849,15 +849,17 @@ private:
     return disj;
   }
 
-  /// A call to the installed std::unexpected handler — the set_unexpected
-  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  /// A call to the operational-model helper that runs the currently installed
+  /// unexpected handler without the terminate-after semantics of
+  /// std::unexpected(). The helper is linked transitively through the
+  /// operational-model std::unexpected body.
   expr2tc make_unexpected_call()
   {
-    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_run_unexpected");
     if (!h)
       return expr2tc();
     code_function_callt fc;
-    fc.function() = h->get_value();
+    fc.function() = symbol_exprt(h->id, h->get_type());
     expr2tc call;
     migrate_expr(fc, call);
     return call;
