@@ -19,6 +19,11 @@ class contextt;
 ///                                   rethrown) in this thread that have not yet
 ///                                   entered their matching handler; backs
 ///                                   std::uncaught_exception(s) ([except.uncaught]).
+///   $esbmc_exc_terminate_reason : size_t — classification of the terminate
+///                                   point that routed into std::terminate(),
+///                                   so the default handler can keep the
+///                                   original diagnostic (e.g. noexcept
+///                                   violation vs uncaught exception).
 ///
 /// The typeid is a size_t to line up with the Python frontend's existing
 /// PyObject.type_id field and with exception_typeidt's unsigned ids; the
@@ -29,6 +34,20 @@ constexpr const char *thrown_id = "c:@__ESBMC_exc_thrown";
 constexpr const char *typeid_id = "c:@__ESBMC_exc_typeid";
 constexpr const char *value_id = "c:@__ESBMC_exc_value";
 constexpr const char *uncaught_count_id = "c:@__ESBMC_exc_uncaught_count";
+constexpr const char *terminate_reason_id = "c:@__ESBMC_exc_terminate_reason";
+constexpr const char *push_handled_id = "c:@F@__ESBMC_push_handled_exception";
+constexpr const char *pop_handled_id = "c:@F@__ESBMC_pop_handled_exception";
+constexpr const char *rethrow_current_id =
+  "c:@F@__ESBMC_rethrow_current_exception";
+
+enum terminate_reasont : unsigned
+{
+  terminate_reason_generic = 0,
+  terminate_reason_uncaught = 1,
+  terminate_reason_noexcept = 2,
+  terminate_reason_exception_spec = 3,
+  terminate_reason_no_active = 4,
+};
 } // namespace exception_globals
 
 /// Idempotently register the exception-state globals in @p context,

@@ -9,9 +9,13 @@
 
 #if __cplusplus >= 201103L
 #  define _ESBMC_NOEXCEPT noexcept
+#  include <type_traits> // std::enable_if, std::decay for throw_with_nested
 #else
 #  define _ESBMC_NOEXCEPT throw()
 #endif
+
+extern "C" void *__ESBMC_current_exception_raw(void);
+extern "C" void __ESBMC_rethrow_exception_raw(void *);
 
 namespace std
 {
@@ -99,11 +103,12 @@ int uncaught_exceptions() _ESBMC_NOEXCEPT;
 #endif
 
 #if __cplusplus >= 201103L
-
 class exception_ptr
 {
   void *object;
 
+  friend exception_ptr current_exception() _ESBMC_NOEXCEPT;
+  friend void rethrow_exception(exception_ptr);
   friend bool
   operator==(const exception_ptr &, const exception_ptr &) _ESBMC_NOEXCEPT;
 
@@ -187,14 +192,56 @@ public:
   }
 };
 
+// A type that publicly derives from both the user type T and nested_exception,
+// so a `catch` can bind it as T (or std::exception) and rethrow_if_nested can
+// recover the captured exception. nested_exception's default constructor
+// captures current_exception() at construction ([except.nested]).
 template <class T>
-void throw_with_nested(T &&t)
+struct __ESBMC_nested_with : public T, public nested_exception
+{
+  explicit __ESBMC_nested_with(const T &t) : T(t)
+  {
+  }
+};
+
+// throw_with_nested(t): when decay_t<T> is a class not already derived from
+// nested_exception, throw the combined type; otherwise throw t unchanged
+// ([except.nested]/1). is_class/is_base_of via clang builtins (type_traits here
+// provides only enable_if/decay).
+template <class T>
+typename enable_if<
+  __is_class(typename decay<T>::type) &&
+  !__is_base_of(nested_exception, typename decay<T>::type)>::type
+throw_with_nested(T &&t)
+{
+  throw __ESBMC_nested_with<typename decay<T>::type>(static_cast<T &&>(t));
+}
+
+template <class T>
+typename enable_if<!(
+  __is_class(typename decay<T>::type) &&
+  !__is_base_of(nested_exception, typename decay<T>::type))>::type
+throw_with_nested(T &&t)
 {
   throw static_cast<T &&>(t);
 }
 
-template <class T>
-void rethrow_if_nested(const T &)
+// rethrow_if_nested(e): if e is (dynamically) a nested_exception, rethrow its
+// captured exception; otherwise do nothing ([except.nested]/2). The dynamic_cast
+// is only well-formed for a polymorphic class, so non-polymorphic operands take
+// the no-op overload.
+template <class E>
+typename enable_if<__is_class(E) && __is_polymorphic(E)>::type
+rethrow_if_nested(const E &e)
+{
+  const nested_exception *n = dynamic_cast<const nested_exception *>(&e);
+  if (n && n->nested_ptr())
+    n->rethrow_nested();
+}
+
+template <class E>
+typename enable_if<!(__is_class(E) && __is_polymorphic(E))>::type
+rethrow_if_nested(const E &)
 {
 }
 
@@ -208,16 +255,14 @@ namespace std
 #if __cplusplus >= 201103L
 inline exception_ptr current_exception() _ESBMC_NOEXCEPT
 {
-  return exception_ptr();
+  exception_ptr ptr;
+  ptr.object = __ESBMC_current_exception_raw();
+  return ptr;
 }
 
 inline void rethrow_exception(exception_ptr ptr)
 {
-  if (!ptr)
-    terminate();
-
-  __ESBMC_assert(0, "std::rethrow_exception is not modelled yet");
-  __ESBMC_assume(0);
+  __ESBMC_rethrow_exception_raw(ptr.object);
 }
 #endif
 

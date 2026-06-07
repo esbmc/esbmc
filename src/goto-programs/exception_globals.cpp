@@ -46,6 +46,24 @@ void add_global(contextt &context, const char *id, const typet &type)
 
   context.move_symbol_to_context(sym);
 }
+
+void add_extern_function(contextt &context, const char *id, const code_typet &type)
+{
+  if (context.find_symbol(id))
+    return;
+
+  symbolt sym;
+  sym.id = id;
+  sym.name = id;
+  sym.mode = "C";
+  sym.set_type(type);
+  sym.lvalue = false;
+  sym.static_lifetime = false;
+  sym.file_local = false;
+  sym.is_extern = true;
+
+  context.move_symbol_to_context(sym);
+}
 } // namespace
 
 void create_exception_state_symbols(contextt &context)
@@ -55,4 +73,11 @@ void create_exception_state_symbols(contextt &context)
   add_global(
     context, exception_globals::value_id, pointer_typet(empty_typet()));
   add_global(context, exception_globals::uncaught_count_id, size_type());
+  add_global(context, exception_globals::terminate_reason_id, size_type());
+
+  code_typet void_fn;
+  void_fn.return_type() = empty_typet();
+  add_extern_function(context, exception_globals::push_handled_id, void_fn);
+  add_extern_function(context, exception_globals::pop_handled_id, void_fn);
+  add_extern_function(context, exception_globals::rethrow_current_id, void_fn);
 }
