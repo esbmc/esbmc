@@ -1285,8 +1285,7 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
    * accepts non-negative numerals and aborts the process with
    * Z3_INVALID_ARG otherwise -- which previously crashed ESBMC while building
    * the error trace (issue #5188). Read the value as a (possibly negative)
-   * decimal instead and reinterpret it within the bit-vector's width, which
-   * handles both representations uniformly. */
+   * decimal instead and reinterpret it within the bit-vector's width. */
   BigInt val = string2integer(Z3_get_numeral_string(z3_ctx, e));
   return binary2integer(integer2binary(val, e.get_sort().bv_size()), is_signed);
 }
