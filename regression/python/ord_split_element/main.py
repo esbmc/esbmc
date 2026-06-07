@@ -15,5 +15,5 @@ def first_char_code(txt: str) -> int:
 
 
 if __name__ == "__main__":
-    assert last_char_code("a b c") == 99   # 'c'
+    assert last_char_code("a b c") == 99  # 'c'
     assert first_char_code("a b c") == 97  # 'a'
