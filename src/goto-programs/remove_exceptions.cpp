@@ -104,35 +104,20 @@ public:
             registry.register_chain(t.exception_list);
         }
         else if (ins.type == FUNCTION_CALL)
-        {
-          const code_function_call2t &c = to_code_function_call2t(ins.code);
-          if (is_symbol2t(c.function))
-            direct_call_targets.insert(to_symbol2t(c.function).thename);
-          collect_thread_entry(c);
-        }
+          collect_thread_entry(to_code_function_call2t(ins.code));
       }
     }
 
-    // A thread start routine that is also called directly (by name), or one
-    // reached through a computed pointer, cannot get a sound per-function
-    // uncaught-escape check (see the member comments): is_entry is a per-
-    // function property, but the terminate-on-escape is only correct on the
-    // thread-entry edge. Leaving such a program to the imperative path avoids a
-    // missed std::terminate (unresolved routine) or a spurious one (direct
-    // call). Residual precision gap (sound, never a missed bug): a routine that
-    // is a clean &worker thread entry but is *also* invoked through an indirect
-    // call elsewhere keeps is_entry on that path too, so an exception the
-    // indirect caller would catch is over-reported as a terminate. That needs
-    // call-site-sensitive enforcement at the pthread trampoline, which is
-    // blocked until thread-local state propagates across its indirect call.
+    // A thread start routine reached through a computed pointer cannot get the
+    // uncaught-escape check (it is never recorded as a thread entry), so a
+    // missed std::terminate would be unsound — such a program is unsupported.
+    // A start routine that is *also* called directly keeps is_entry on the
+    // direct-call path too; that is a sound over-approximation (at worst a
+    // spurious terminate on an escape the direct caller would catch, never a
+    // missed bug), so it is lowered rather than rejected.
     if (thread_entry_unresolved)
       return report_fallback(
         goto_functions, "a thread with an unresolved start routine");
-    for (const irep_idt &e : thread_entries)
-      if (direct_call_targets.count(e))
-        return report_fallback(
-          goto_functions,
-          "a thread start routine that is also called directly");
 
     // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
     // interoperate across a call, so unless every participating function is in
@@ -243,14 +228,9 @@ private:
   // Functions passed as the start routine to pthread_create: each is a thread
   // entry, so an exception escaping it is uncaught for that thread (terminate).
   std::set<irep_idt> thread_entries;
-  // Symbols that appear as a direct (by-name) call target anywhere. A thread
-  // entry that is *also* called directly cannot be marked is_entry soundly (the
-  // terminate at its epilogue would wrongly fire on the direct-call path), so
-  // such a program falls back; this records the candidates for that check.
-  std::set<irep_idt> direct_call_targets;
   // A pthread_create whose start routine is a computed/unresolved pointer: its
-  // thread cannot get the uncaught-escape check, so fall back rather than miss
-  // it silently.
+  // thread cannot get the uncaught-escape check, so the program is unsupported
+  // rather than silently missing a std::terminate.
   bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
 

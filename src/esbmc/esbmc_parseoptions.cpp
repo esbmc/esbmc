@@ -2409,9 +2409,11 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
-    // inlining so per-call-site exception propagation is still explicit.
-    if (cmdline.isset("lower-exceptions"))
-      remove_exceptions(goto_functions, context, ns);
+    // inlining so per-call-site exception propagation is still explicit. Now
+    // unconditional: the lowering is the only exception path (the imperative
+    // symex engine has been removed). --lower-exceptions is kept as a no-op for
+    // backward compatibility with existing test command lines.
+    remove_exceptions(goto_functions, context, ns);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))

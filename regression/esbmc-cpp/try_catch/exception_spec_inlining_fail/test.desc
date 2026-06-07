@@ -2,4 +2,4 @@ CORE
 main.cpp
 --full-inlining --unwind 4 --no-unwinding-assertions --std c++11
 ^VERIFICATION FAILED$
-An exception escapes a noexcept function; std::terminate is called\.
+noexcept specification violated
