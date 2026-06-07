@@ -127,18 +127,41 @@ try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
     return false;
 
   const std::string type = node["_type"];
-  if (type != "Constant" && type != "UnaryOp")
+
+  // The boolean try_extract_* helpers must not depend on catching an exception
+  // for control flow: extract_value() raises std::runtime_error on non-numeric
+  // input, and relying on that as a flow-control signal is fragile. Pre-check
+  // that the payload is numeric and only call extract_value() when it is
+  // guaranteed to succeed, so a non-numeric literal (e.g. a str element in
+  // numpy.linalg.det's matrix) makes this helper return false cleanly instead
+  // of letting the internal "Unknown numeric type" error escape to the user
+  // (issue #5206).
+  if (type == "UnaryOp")
+  {
+    if (
+      !node.contains("operand") || !node["operand"].is_object() ||
+      !node["operand"].contains("value"))
+      return false;
+    // extract_value() only negates integer/float operands.
+    const auto &operand = node["operand"]["value"];
+    if (!operand.is_number_integer() && !operand.is_number_float())
+      return false;
+  }
+  else if (type == "Constant")
+  {
+    if (!node.contains("value"))
+      return false;
+    const auto &value = node["value"];
+    if (
+      !value.is_boolean() && !value.is_number_integer() &&
+      !value.is_number_float())
+      return false;
+  }
+  else
     return false;
 
-  try
-  {
-    out = extract_value(node);
-    return true;
-  }
-  catch (const std::exception &)
-  {
-    return false;
-  }
+  out = extract_value(node);
+  return true;
 }
 
 static scalar_value make_real_scalar(double value)
