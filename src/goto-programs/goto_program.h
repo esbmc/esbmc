@@ -660,16 +660,19 @@ public:
     const irep_idt &identifier,
     std::ostream &out) const;
 
-  /// Sets the `function` member of each instruction if not yet set
+  /// Sets the `function` member of each instruction if not yet set, or
+  /// unconditionally when \p force is true (e.g. to re-tag a body copied from
+  /// another function, as contract renaming does).
   /// Note that a goto program need not be a goto function and therefore,
   /// we cannot do this in update(), but only at the level of
   /// of goto_functionst where goto programs are guaranteed to be
   /// named functions.
-  void update_instructions_function(const irep_idt &function_id)
+  void
+  update_instructions_function(const irep_idt &function_id, bool force = false)
   {
     for (auto &instruction : instructions)
     {
-      if (instruction.function.empty())
+      if (force || instruction.function.empty())
       {
         instruction.function = function_id;
       }

@@ -1,0 +1,4 @@
+CORE
+main.c
+--function main --enforce-contract main --memory-leak-check
+^VERIFICATION SUCCESSFUL$
