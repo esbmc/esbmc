@@ -431,19 +431,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-  case THROW:
-    // The imperative exception engine has been removed: remove_exceptions
-    // lowers every throw/catch to guarded control flow before symex runs. A
-    // surviving THROW/CATCH means the lowering declined this program (it emits
-    // a "--lower-exceptions: cannot lower ..." warning explaining why). Such a
-    // program is not yet supported.
-    log_error(
-      "exception construct reached symbolic execution; the throw/catch "
-      "lowering declined this program (see the earlier fallback warning)");
-    abort();
-
   default:
+    // THROW/CATCH land here: remove_exceptions lowers every throw/catch to
+    // guarded control flow before symex runs, so a surviving one means the
+    // lowering declined the program (it logs a "cannot lower ..." reason). Like
+    // any other instruction symex does not handle, that is a hard error.
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
       fmt::underlying(instruction.type));
