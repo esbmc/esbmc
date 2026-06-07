@@ -72,6 +72,9 @@ public:
   /// right-hand side of the catch-match guard.
   std::set<unsigned> concrete_subtype_ids(const irep_idt &caught) const;
 
+  /// Inverse lookup for diagnostics and exception-object adjustments.
+  irep_idt name_of(unsigned id) const;
+
   /// Number of registered program types (excludes lazily-added unknowns).
   std::size_t size() const
   {

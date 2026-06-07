@@ -1,15 +1,18 @@
 // std::throw_with_nested(Outer) throws a type deriving from both Outer and
 // std::nested_exception, capturing the in-flight Inner via current_exception.
 // The outer handler catches it as Outer&, then std::rethrow_if_nested recovers
-// and re-raises the captured Inner.
+// and re-raises the captured Inner. Outer is polymorphic (derives from
+// std::exception) so rethrow_if_nested's dynamic_cast to nested_exception is
+// well-formed.
 //
-// KNOWNBUG: the thrown combined type is multiple-inheritance (Outer +
-// polymorphic nested_exception). When a non-polymorphic base precedes the
-// polymorphic one, the catch-by-base binding reads the base subobject at the
-// wrong offset, so `o.w` reads garbage and the assertion spuriously fails. This
-// is a pre-existing base-subobject offset bug (construction vs catch) in the
-// C++ frontend/lowering, independent of throw_with_nested itself. Once the MI
-// base-offset handling is fixed this verifies SUCCESSFUL and can move to CORE.
+// KNOWNBUG: rethrow_if_nested needs a dynamic_cast across the multiple-
+// inheritance combined type (Outer subobject -> sibling nested_exception base,
+// which sits at a non-zero offset). ESBMC's MI base-subobject layout is now
+// correct for casts/ctors/catch (the earlier offset-0 overlap bug is fixed),
+// but dynamic_cast with a non-zero base offset is still explicitly unsupported
+// ("dynamic_cast: multiple inheritance with non-zero base offset ... is not
+// supported"). Once MI dynamic_cast lands this verifies SUCCESSFUL and can move
+// to CORE.
 #include <exception>
 #include <cassert>
 
@@ -20,7 +23,7 @@ struct Inner
   {
   }
 };
-struct Outer
+struct Outer : std::exception
 {
   int w;
   Outer(int x) : w(x)

@@ -230,7 +230,10 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.set("is_vtptr", true);
   component.set("access", "public");
   // add to the class' type
-  type.components().push_back(component);
+  if (type.find("bases").is_nil())
+    type.components().insert(type.components().begin(), component);
+  else
+    type.components().push_back(component);
 
   has_vptr_component = true;
 }

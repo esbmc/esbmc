@@ -13,6 +13,8 @@
 #include <util/message.h>
 #include <irep2/irep2_utils.h>
 
+#include <optional>
+
 namespace
 {
 const irep_idt ellipsis_id = "ellipsis";
@@ -360,6 +362,62 @@ private:
     expr2tc call;
     migrate_expr(fc, call);
     return call;
+  }
+
+  std::optional<uint64_t> exception_base_offset(
+    const irep_idt &dynamic_type,
+    const irep_idt &catch_type) const
+  {
+    if (dynamic_type == catch_type)
+      return 0;
+
+    const symbolt *sym = ns.lookup("tag-" + id2string(dynamic_type));
+    if (!sym)
+      return std::nullopt;
+
+    const irept &base_offsets = sym->get_type().find("base_offsets");
+    const irep_idt catch_tag = "tag-" + id2string(catch_type);
+    for (const irept &entry : base_offsets.get_sub())
+    {
+      if (entry.id() != catch_tag)
+        continue;
+      return static_cast<uint64_t>(std::stoull(entry.get_string("offset")));
+    }
+
+    return std::nullopt;
+  }
+
+  expr2tc adjusted_catch_value(
+    const irep_idt &catch_type,
+    const type2tc &target_ptr_type) const
+  {
+    expr2tc result = typecast2tc(target_ptr_type, value);
+    type2tc byte_ptr_type = pointer_type2tc(get_uint8_type());
+
+    for (unsigned id : registry.concrete_subtype_ids(catch_type))
+    {
+      const irep_idt dynamic_type = registry.name_of(id);
+      if (dynamic_type.empty())
+        continue;
+
+      expr2tc candidate = typecast2tc(target_ptr_type, value);
+      if (auto offset = exception_base_offset(dynamic_type, catch_type))
+      {
+        if (*offset > 0)
+        {
+          expr2tc byte_value = typecast2tc(byte_ptr_type, value);
+          expr2tc off = constant_int2tc(index_type2(), BigInt(*offset));
+          byte_value = add2tc(byte_ptr_type, byte_value, off);
+          candidate = typecast2tc(target_ptr_type, byte_value);
+        }
+      }
+
+      expr2tc cond =
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id)));
+      result = if2tc(target_ptr_type, cond, candidate, result);
+    }
+
+    return result;
   }
 
   /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
@@ -949,11 +1007,10 @@ private:
       // the stored object/pointer out: var = *(decltype(var)*)value. The two
       // pointer-typed forms are told apart by the catch type's `_ptr` suffix.
       bool ref_catch = is_pointer_type(var->type) && !is_pointer_catch(h.type);
+      expr2tc bound_value = adjusted_catch_value(
+        h.type, ref_catch ? var->type : pointer_type2tc(var->type));
       expr2tc src =
-        ref_catch
-          ? typecast2tc(var->type, value)
-          : dereference2tc(
-              var->type, typecast2tc(pointer_type2tc(var->type), value));
+        ref_catch ? bound_value : dereference2tc(var->type, bound_value);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
     }
