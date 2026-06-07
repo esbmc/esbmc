@@ -1973,6 +1973,21 @@ exprt string_handler::handle_chr_conversion(
   return chr_call;
 }
 
+exprt string_handler::handle_ord_conversion(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Take the base address of the (null-terminated) string.
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Code point of the single character: (int) *str_addr.
+  exprt first_char = dereference_exprt(str_addr, char_type());
+  first_char.location() = location;
+  return build_typecast(first_char, int_type());
+}
+
 exprt string_handler::try_handle_len_string_fast_path(
   const nlohmann::json &call_json,
   const exprt &arg_expr)

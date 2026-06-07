@@ -114,6 +114,25 @@ private:
    */
   std::string build_tuple_tag(const std::vector<typet> &element_types) const;
 
+  /**
+   * @brief Obtain an addressable expression for tuple element @p idx
+   *
+   * For an inline tuple literal (a struct_exprt whose operands are
+   * already-materialised temp symbols) a member access into the constant
+   * struct rvalue is not addressable, so any downstream address_of (e.g. a
+   * strcmp on a string element) aborts SMT encoding (#5185). In that case the
+   * operand symbol is returned directly; for a named tuple variable a member
+   * access is a proper lvalue.
+   * @param array The tuple expression (literal or named variable)
+   * @param tuple_type The tuple struct type
+   * @param idx The element index
+   * @return exprt An addressable expression denoting element @p idx
+   */
+  exprt get_tuple_element(
+    const exprt &array,
+    const struct_typet &tuple_type,
+    size_t idx) const;
+
   python_converter &converter_;
   type_handler &type_handler_;
 };

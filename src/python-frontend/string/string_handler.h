@@ -742,6 +742,19 @@ public:
   exprt
   handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
 
+  /**
+   * Handle ord() of a runtime string whose value is not known at compile time.
+   * Returns the integer code point of the string's first character,
+   * (int) *base. A length-1 precondition is not enforced because a runtime
+   * guard cannot be short-circuited inside an and/or operand; constant strings
+   * (including multi-byte) are folded by the caller instead.
+   * @param string_obj The runtime string argument
+   * @param location Source location for error reporting
+   * @return Expression representing the integer code point
+   */
+  exprt
+  handle_ord_conversion(const exprt &string_obj, const locationt &location);
+
 private:
   python_converter &converter_;
   contextt &symbol_table_;

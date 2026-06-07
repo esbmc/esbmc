@@ -158,6 +158,28 @@ bool tuple_handler::is_tuple_type(const typet &type) const
   return struct_type.tag().as_string().find("tag-tuple") == 0;
 }
 
+exprt tuple_handler::get_tuple_element(
+  const exprt &array,
+  const struct_typet &tuple_type,
+  size_t idx) const
+{
+  const auto &components = tuple_type.components();
+
+  // An inline tuple literal `(a, b, c)` is a struct_exprt whose operands are
+  // already-materialised, addressable temp symbols (see get_tuple_expr). A
+  // member access into such a constant struct rvalue is not addressable, so a
+  // downstream address_of — e.g. the strcmp set up for a string element —
+  // reaches the unhandled constant_struct branch in smt_memspace.cpp and
+  // aborts (#5185). Return the operand directly; a named tuple variable is a
+  // symbol, for which a member access is a proper lvalue. This mirrors the
+  // identical handling in handle_tuple_membership.
+  if (array.id() == "struct" && array.operands().size() == components.size())
+    return array.operands()[idx];
+
+  return build_member(
+    array, components[idx].get_name(), components[idx].type());
+}
+
 exprt tuple_handler::handle_tuple_subscript(
   const exprt &array,
   const nlohmann::json &slice,
@@ -247,8 +269,7 @@ exprt tuple_handler::handle_tuple_subscript(
 
     struct_exprt result(new_type);
     for (size_t k : kept)
-      result.copy_to_operands(
-        build_member(array, components[k].get_name(), components[k].type()));
+      result.copy_to_operands(get_tuple_element(array, tuple_type, k));
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
@@ -319,11 +340,10 @@ exprt tuple_handler::handle_tuple_subscript(
     converter_.add_instruction(bounds_assert);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
-    exprt chain = build_member(array, components[0].get_name(), first_type);
+    exprt chain = get_tuple_element(array, tuple_type, 0);
     for (size_t k = 1; k < n; ++k)
     {
-      exprt member =
-        build_member(array, components[k].get_name(), components[k].type());
+      exprt member = get_tuple_element(array, tuple_type, k);
       exprt cond =
         binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
       if_exprt sel(cond, member, chain);
@@ -353,11 +373,9 @@ exprt tuple_handler::handle_tuple_subscript(
       "Tuple index out of range (size: " + std::to_string(tuple_size) + ")");
   }
 
-  // Create member access expression: t[0] -> t.element_0
-  std::string member_name = "element_" + integer2string(index_val);
-  const struct_typet::componentt &comp = tuple_type.components()[idx];
-
-  exprt result = build_member(array, member_name, comp.type());
+  // Create member access expression: t[0] -> t.element_0 (or, for an inline
+  // tuple literal, the addressable operand symbol — see get_tuple_element).
+  exprt result = get_tuple_element(array, tuple_type, idx);
 
   if (element.contains("lineno"))
   {

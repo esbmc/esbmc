@@ -281,150 +281,67 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   return converter_.get_string_handler().handle_chr_conversion(var_expr, loc);
 }
 
-exprt function_call_expr::handle_ord(nlohmann::json &arg) const
+// Fold a known code point into an integer expression, rewriting the AST node
+// in place so converter_.get_expr() builds an int constant.
+exprt function_call_expr::build_ord_constant(
+  nlohmann::json &arg,
+  int code_point) const
 {
-  int code_point = 0;
-
-  // Runtime fallback for a non-constant string/char expression (e.g. an
-  // element of a str.split() result, which is a char* with no compile-time
-  // value). Reads the first byte of the string and widens it to int. Handles
-  // char (already a single character), char[N], char*, and char(*)[N]
-  // (string-literal pointer); returns nil when the expression is neither a
-  // string nor a character. Unlike the constant-folded path above, this reads
-  // a single byte: it does not decode multibyte UTF-8 (so it is exact only for
-  // ASCII) and does not enforce ord()'s length-1 precondition. Non-ASCII or
-  // length != 1 runtime strings are out of scope here.
-  auto runtime_ord = [&](const exprt &value) -> exprt {
-    const typet &t = value.type();
-    // An already-extracted single character (char). Restricted to char types
-    // so a wider integer expression still raises a TypeError below.
-    if (
-      t == char_type() || t == signed_char_type() || t == unsigned_char_type())
-      return typecast_exprt(value, int_type());
-
-    if (type_utils::is_string_type(t))
-    {
-      exprt first_char;
-      if (t.is_array())
-        first_char =
-          index_exprt(value, from_integer(0, index_type()), char_type());
-      else if (t.subtype().is_array()) // char(*)[N]
-        first_char = index_exprt(
-          dereference_exprt(value, t.subtype()),
-          from_integer(0, index_type()),
-          char_type());
-      else // char*
-        first_char = dereference_exprt(value, char_type());
-
-      // Read the byte as unsigned so code points 128..255 widen positively.
-      return typecast_exprt(
-        typecast_exprt(first_char, unsigned_char_type()), int_type());
-    }
-
-    return nil_exprt();
-  };
-
-  // Ensure the argument is a string
-  if (is_string_arg(arg))
-  {
-    const std::string &s = arg["value"].get<std::string>();
-    code_point = decode_utf8_codepoint(s);
-  }
-  // Handle ord with symbol
-  else if (arg["_type"] == "Name" && arg.contains("id"))
-  {
-    const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (!sym)
-    {
-      std::string var_name = arg["id"].get<std::string>();
-      return converter_.get_exception_handler().gen_exception_raise(
-        "NameError", "variable '" + var_name + "' is not defined");
-    }
-
-    typet operand_type = sym->get_value().type();
-    std::string py_type = type_handler_.type_to_string(operand_type);
-
-    if (
-      operand_type != char_type() && py_type != "str" &&
-      !type_utils::is_string_type(operand_type))
-    {
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError",
-        "ord() expected string of length 1, but " + py_type + " found");
-    }
-
-    // For runtime variables (mutable), try to extract constant value if available
-    if (sym->lvalue && !sym->get_value().is_nil())
-    {
-      auto value_opt = extract_string_from_symbol(sym);
-      if (value_opt)
-      {
-        // Successfully extracted constant value from lvalue string
-        code_point = decode_utf8_codepoint(*value_opt);
-
-        // Remove Name data
-        arg["_type"] = "Constant";
-        arg.erase("id");
-        arg.erase("ctx");
-
-        // Replace the arg with the integer value
-        arg["value"] = code_point;
-        arg["type"] = "int";
-
-        // Build and return the integer expression
-        exprt expr = converter_.get_expr(arg);
-        expr.type() = type_handler_.get_typet("int", 0);
-        return expr;
-      }
-      // If extraction failed for lvalue, fall through to runtime conversion
-    }
-
-    // Use runtime conversion for variables without constant value or failed extraction
-    if (sym->get_value().is_nil() || sym->lvalue)
-    {
-      exprt r = runtime_ord(converter_.get_expr(arg));
-      if (!r.is_nil())
-        return r;
-
-      return converter_.get_exception_handler().gen_exception_raise(
-        "ValueError", "ord() requires a character");
-    }
-
-    // Compile-time extraction for constant symbols
-    auto value_opt = extract_string_from_symbol(sym);
-    if (!value_opt)
-    {
-      return converter_.get_exception_handler().gen_exception_raise(
-        "ValueError", "failed to extract string from symbol");
-    }
-
-    code_point = decode_utf8_codepoint(*value_opt);
-
-    // Remove Name data
-    arg["_type"] = "Constant";
-    arg.erase("id");
-    arg.erase("ctx");
-  }
-  else
-  {
-    // Non-Name argument (e.g. a subscript into a str.split() result or the
-    // result of a string method): evaluate it and read the first byte.
-    exprt r = runtime_ord(converter_.get_expr(arg));
-    if (!r.is_nil())
-      return r;
-
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "ord() argument must be a string");
-  }
-
-  // Replace the arg with the integer value
+  arg["_type"] = "Constant";
+  arg.erase("id");
+  arg.erase("ctx");
   arg["value"] = code_point;
   arg["type"] = "int";
 
-  // Build and return the integer expression
   exprt expr = converter_.get_expr(arg);
   expr.type() = type_handler_.get_typet("int", 0);
   return expr;
+}
+
+exprt function_call_expr::handle_ord(nlohmann::json &arg) const
+{
+  // Fast path: constant string literal. Folding also handles multi-byte UTF-8
+  // code points that the byte-level runtime string model cannot reconstruct.
+  if (is_string_arg(arg))
+    return build_ord_constant(
+      arg, decode_utf8_codepoint(arg["value"].get<std::string>()));
+
+  // A Name bound to a constant string: fold from the stored value. Gate on the
+  // value being a string so a non-string variable (e.g. `a: str = 1`) skips
+  // folding and falls through to the runtime tail, which raises TypeError.
+  if (arg["_type"] == "Name" && arg.contains("id"))
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (!sym)
+      return converter_.get_exception_handler().gen_exception_raise(
+        "NameError",
+        "variable '" + arg["id"].get<std::string>() + "' is not defined");
+
+    if (type_utils::is_string_type(sym->get_value().type()))
+      if (auto value_opt = extract_string_from_symbol(sym))
+        return build_ord_constant(arg, decode_utf8_codepoint(*value_opt));
+    // Non-constant string variable: fall through to runtime evaluation.
+  }
+
+  // Runtime evaluation for slices, method results, and string variables without
+  // a constant value: ord(s), ord(s[i]), ord(s.lower()).
+  exprt expr = converter_.get_expr(arg);
+
+  // Propagate an exception raised while evaluating the argument.
+  if (expr.statement() == "cpp-throw")
+    return expr;
+
+  // A character from string indexing is an 8-bit int tagged #cpp_type==char.
+  if (type_utils::is_char_type(expr.type()))
+    return typecast_exprt(expr, int_type());
+
+  // A runtime string: return the code point of its first character.
+  if (type_utils::is_string_type(expr.type()))
+    return converter_.get_string_handler().handle_ord_conversion(
+      expr, converter_.get_location_from_decl(call_));
+
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "ord() expected string of length 1");
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
