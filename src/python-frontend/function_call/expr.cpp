@@ -877,7 +877,17 @@ exprt function_call_expr::build_constant_from_arg() const
         type_utils::is_string_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
     }
-    arg_size = handle_str(arg);
+
+    // A string literal argument folds to its length below.
+    if (arg.contains("value") && arg["value"].is_string())
+      arg_size = handle_str(arg);
+    else
+      // The argument has no statically stringifiable type. This happens for an
+      // unannotated parameter, modelled as Any (void*): its dynamic type is
+      // unknown, so str() cannot be lowered. Raise a localized TypeError rather
+      // than aborting conversion of the whole program with a hard exception.
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "str() argument of unsupported (unannotated) type");
   }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
