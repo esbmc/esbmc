@@ -1,5 +1,5 @@
 CORE
 main.cpp
---lower-exceptions --unwind 4 --no-unwinding-assertions --std c++17
+--unwind 4 --no-unwinding-assertions --std c++17
 
 ^VERIFICATION FAILED$

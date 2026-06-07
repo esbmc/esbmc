@@ -117,27 +117,29 @@ public:
     // spurious terminate on an escape the direct caller would catch, never a
     // missed bug), so it is lowered rather than rejected.
     if (thread_entry_unresolved)
-      return report_fallback(
+      return report_unsupported(
         goto_functions, "a thread with an unresolved start routine");
 
-    // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
-    // interoperate across a call, so unless every participating function is in
-    // the supported subset we leave the entire program to symex.
+    // Whole-program, all-or-nothing: the lowering must cover every participating
+    // function, since a partially-lowered program would leave residual
+    // THROW/CATCH that symex can no longer execute. Unless the whole program is
+    // in the supported subset, decline and report it as unsupported.
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return report_fallback(goto_functions, unsupported_reason_, fn.first);
+        return report_unsupported(
+          goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
     // then calls main / python_user_main), so an escaping exception always
     // reaches it. Without it (e.g. --function isolated verification) an uncaught
-    // exception could be silently accepted, so fall back to the imperative path.
+    // exception could be silently accepted, so decline rather than under-check.
     bool has_entry = false;
     for (const auto &fn : goto_functions.function_map)
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return report_fallback(
+      return report_unsupported(
         goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
@@ -173,13 +175,13 @@ public:
     return false;
   }
 
-  /// Report that the pass declined to lower a program that uses exceptions, so
-  /// the residual dependence on the imperative path is visible rather than
-  /// silent. Today the imperative path takes over; once it is removed (P4) this
-  /// diagnostic is what keeps that deletion non-breaking — an unsupported
-  /// program is reported, not miscompiled. Programs with no exception construct
-  /// are silent (the pass is a no-op for them).
-  void report_fallback(
+  /// Report that the pass declined to lower a program that uses exceptions. The
+  /// imperative symex path that used to take over has been removed, so an
+  /// unlowered exception construct is an unsupported program — the residual
+  /// THROW/CATCH reach symex and are rejected rather than silently miscompiled.
+  /// This diagnostic names the construct so the rejection is explicable.
+  /// Programs with no exception construct are silent (the pass is a no-op).
+  void report_unsupported(
     const goto_functionst &gf,
     const std::string &why,
     const irep_idt &fn = irep_idt())
@@ -187,16 +189,10 @@ public:
     if (!program_uses_exceptions(gf))
       return;
     if (fn.empty())
-      log_warning(
-        "--lower-exceptions: cannot lower {}; falling back to the imperative "
-        "exception path",
-        why);
+      log_warning("exception lowering does not support {}", why);
     else
       log_warning(
-        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
-        "imperative exception path",
-        why,
-        id2string(fn));
+        "exception lowering does not support {} in '{}'", why, id2string(fn));
   }
 
   void init_globals(goto_programt &body)
@@ -284,9 +280,8 @@ private:
   }
 
   /// A fresh static-lifetime slot to hold a copy of a thrown object, so it
-  /// outlives the throwing frame (the imperative path's symex_throw::thrown_obj
-  /// analogue). One slot per throw site; a single exception is in flight at a
-  /// time, so reuse across non-recursive throws is safe.
+  /// outlives the throwing frame. One slot per throw site; a single exception is
+  /// in flight at a time, so reuse across non-recursive throws is safe.
   expr2tc make_exception_storage(const type2tc &obj_type)
   {
     const std::string id =
@@ -444,7 +439,7 @@ private:
   /// of registered objects or rethrows, regions whose pop is followed by the
   /// skip-handlers GOTO)? Read-only.
   /// Set when program_supported declines, naming the construct for the
-  /// fallback diagnostic (report_fallback).
+  /// unsupported-program diagnostic (report_unsupported).
   std::string unsupported_reason_;
 
   bool unsupported(const char *why)
@@ -460,8 +455,9 @@ private:
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
       // Exception specifications (noexcept / throw(T...) / throw()) are function
-      // metadata enforced at the epilogue (see lower_ip), so they never force
-      // fallback here; this scan only rejects unsupported catch/throw shapes.
+      // metadata enforced at the epilogue (see lower_ip), so they never make a
+      // program unsupported here; this scan only rejects unsupported
+      // catch/throw shapes.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -526,7 +522,7 @@ private:
   /// skip-GOTO sits on the (now infeasible, hence pruned) normal-completion
   /// path, so its target is immaterial; the function's END_FUNCTION is a valid
   /// choice. Called only when the whole program is supported, so it never
-  /// perturbs a body that falls back to the imperative path.
+  /// perturbs an unsupported (unlowered) body.
   void rebalance_removed_pops(goto_programt &body)
   {
     const auto end = body.instructions.end();
@@ -720,8 +716,8 @@ private:
     //    through the pthread trampoline.
     //  - noexcept: an escape calls std::terminate ([except.spec]).
     //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
-    //    re-checked (build_dynamic_spec_check), matching the imperative path
-    //    (which models the unexpected-handler dispatch and its recovery).
+    //    re-checked (build_dynamic_spec_check), modelling the unexpected-handler
+    //    dispatch and its recovery.
     // A locally-caught throw clears `thrown`, so these fire only on a genuine
     // escape (terminate iff an exception is still in flight).
     const bool is_entry = id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||

@@ -1,5 +1,5 @@
 CORE
 main.cpp
---lower-exceptions --context-bound 2
+--context-bound 2
 
 ^VERIFICATION FAILED$

@@ -1,5 +1,5 @@
 CORE
 main.cpp
---lower-exceptions --unwind 4
+--unwind 4
 
 ^VERIFICATION FAILED$
