@@ -2327,18 +2327,8 @@ exprt python_list::handle_index_access(
                           keys[i]["value"].get<std::string>() == key)
                         {
                           // Found the value: now get its element type
-                          const auto &list_value = values[i];
-
-                          // Get the first element from the list using json_utils
-                          nlohmann::json first_elem =
-                            json_utils::get_list_element(list_value, 0);
-
-                          if (!first_elem.is_null() && !first_elem.empty())
-                          {
-                            // Use type_handler to infer the element type
-                            elem_type = converter_.get_type_handler().get_typet(
-                              first_elem);
-                          }
+                          // (promotion-aware, see infer_literal_element_type).
+                          elem_type = infer_literal_element_type(values[i]);
                           break;
                         }
                       }
@@ -2353,12 +2343,9 @@ exprt python_list::handle_index_access(
             list_node["value"]["elts"].is_array() &&
             !list_node["value"]["elts"].empty())
           {
-            // Get element type from first list element using json_utils
-            nlohmann::json first_elem =
-              json_utils::get_list_element(list_node["value"], 0);
-
-            if (!first_elem.is_null() && !first_elem.empty())
-              elem_type = converter_.get_type_handler().get_typet(first_elem);
+            // Infer element type from the literal, accounting for the int->float
+            // promotion applied to mixed numeric literals at construction.
+            elem_type = infer_literal_element_type(list_node["value"]);
           }
         }
       }
@@ -4497,6 +4484,39 @@ bool python_list::has_mixed_numeric_types(const std::string &list_id)
       has_int = true;
   }
   return has_int && has_float;
+}
+
+typet python_list::infer_literal_element_type(
+  const nlohmann::json &list_literal)
+{
+  nlohmann::json first_elem = json_utils::get_list_element(list_literal, 0);
+  if (first_elem.is_null() || first_elem.empty())
+    return typet();
+
+  const type_handler &th = converter_.get_type_handler();
+
+  // A heterogeneous int/float literal is promoted to a homogeneous double list
+  // at construction (python_list::get, promote_ints), so every element is a
+  // double in __ESBMC_float_buf. Read it as a double regardless of which
+  // element the index selects; the first element's int type misreads the bits.
+  if (
+    list_literal["_type"] == "List" && list_literal.contains("elts") &&
+    list_literal["elts"].is_array())
+  {
+    bool has_int = false, has_float = false;
+    for (const auto &e : list_literal["elts"])
+    {
+      const typet t = th.get_typet(e);
+      if (t.is_floatbv())
+        has_float = true;
+      else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+        has_int = true;
+    }
+    if (has_int && has_float)
+      return double_type();
+  }
+
+  return th.get_typet(first_elem);
 }
 
 exprt python_list::build_min_max_for_mixed_numeric(
