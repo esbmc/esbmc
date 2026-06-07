@@ -2219,6 +2219,32 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
+    // np.fmod(x, y) on scalars has the same semantics as math.fmod / C fmod, so
+    // delegate to the shared math handler, which constant-folds when both
+    // operands are concrete and otherwise emits the libm fmod call. This covers
+    // symbolic scalar operands (e.g. a function parameter), which the
+    // broadcasting machinery below does not handle. Array operands (fmod is a
+    // broadcasting ufunc) are not supported here — they are rejected with a
+    // clear diagnostic rather than mis-folded to a scalar.
+    if (function == "fmod" && call_["args"].size() == 2)
+    {
+      exprt lhs = converter_.get_expr(call_["args"][0]);
+      exprt rhs = converter_.get_expr(call_["args"][1]);
+      // Reject container operands: static numpy arrays (array typet) and
+      // dynamic Python lists (the __ESBMC_PyListObj model, by value or by
+      // pointer). handle_fmod is scalar-only and would otherwise mis-fold
+      // them or crash the FP backend.
+      const typet list_type = type_handler_.get_list_type();
+      auto is_container = [&list_type](const exprt &e) {
+        return e.type().is_array() || e.type() == list_type ||
+               (e.type().is_pointer() && e.type().subtype() == list_type);
+      };
+      if (is_container(lhs) || is_container(rhs))
+        throw std::runtime_error(
+          "Unsupported operation: numpy.fmod on array operands");
+      return converter_.get_math_handler().handle_fmod(lhs, rhs, call_);
+    }
+
     auto is_scalar_node = [](const nlohmann::json &node) {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
