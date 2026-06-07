@@ -2,15 +2,12 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
 #include <cassert>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
-#include <stack>
-#include <string>
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>

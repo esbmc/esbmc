@@ -8,7 +8,6 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <stack>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/options.h>
