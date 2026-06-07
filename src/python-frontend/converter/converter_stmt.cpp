@@ -3584,6 +3584,24 @@ void python_converter::get_delete_statement(
       if (dict_type.id() == "symbol")
         dict_type = ns.follow(dict_type);
 
+      // del a[i] on a list removes (and shifts out) the element at index i.
+      // This is exactly list.pop(i) with the result discarded, and pop is
+      // already modelled (bounds-checked, shifting), so desugar to it instead
+      // of requiring a dict.
+      if (dict_type == type_handler_.get_list_type())
+      {
+        nlohmann::json pop_call;
+        pop_call["_type"] = "Call";
+        pop_call["func"] = {
+          {"_type", "Attribute"}, {"value", target["value"]}, {"attr", "pop"}};
+        pop_call["args"] = nlohmann::json::array({slice});
+        pop_call["keywords"] = nlohmann::json::array();
+        copy_location_fields_from_decl(ast_node, pop_call);
+        exprt pop_expr = get_function_call(pop_call);
+        target_block.copy_to_operands(convert_expression_to_code(pop_expr));
+        continue;
+      }
+
       if (!dict_type.is_struct())
       {
         throw std::runtime_error(

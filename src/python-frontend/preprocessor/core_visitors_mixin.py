@@ -779,6 +779,19 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default
         return return_nodes
 
+    def visit_Delete(self, node):
+        # `del a[i]` / `del a` mutates or unbinds `a`; drop any tracked list
+        # literal so later subscript reads are not constant-folded to stale
+        # element values (the del lowers to list.pop(i) in the converter).
+        node = self.generic_visit(node)
+        for target in node.targets:
+            if isinstance(target, ast.Subscript) and isinstance(
+                    target.value, ast.Name):
+                self.list_literal_values.pop(target.value.id, None)
+            elif isinstance(target, ast.Name):
+                self.list_literal_values.pop(target.id, None)
+        return node
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
