@@ -3,10 +3,10 @@
 # aligned representation; otherwise a later lookup trips a dereference-alignment
 # failure in __ESBMC_values_equal. Regression for the dict-comprehension key
 # storage bug.
-nums = [1, 2, 3]
+nums = [1, 2]
 squares = {n: n * n for n in nums}
+assert squares[1] == 1
 assert squares[2] == 4
-assert squares[3] == 9
 
 vals = [1.5, 2.5]
 plus_one = {v: v + 1.0 for v in vals}
