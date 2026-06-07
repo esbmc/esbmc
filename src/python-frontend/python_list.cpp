@@ -4538,6 +4538,34 @@ typet python_list::infer_literal_element_type(
   return th.get_typet(first_elem);
 }
 
+typet python_list::numeric_element_type(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.empty())
+    return typet();
+
+  bool has_float = false;
+  const typet first = it->second[0].second;
+  for (const auto &elem : it->second)
+  {
+    const typet &t = elem.second;
+    if (t.is_floatbv())
+      has_float = true;
+    else if (!(t.is_signedbv() || t.is_unsignedbv()))
+      return typet(); // non-numeric element: not a numeric list
+  }
+
+  // int/float mix (or all-float): Python promotes to float, read as double.
+  if (has_float)
+    return double_type();
+
+  // All integers: require one shared integer type for a sound single-type read.
+  for (const auto &elem : it->second)
+    if (elem.second != first)
+      return typet();
+  return first;
+}
+
 exprt python_list::build_min_max_for_mixed_numeric(
   const exprt &list_arg,
   const std::string &list_id,
