@@ -3,4 +3,3 @@ main.cpp
 --lower-exceptions
 
 ^VERIFICATION FAILED$
---lower-exceptions: cannot lower a concurrent program

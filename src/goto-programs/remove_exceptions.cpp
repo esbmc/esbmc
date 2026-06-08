@@ -358,8 +358,8 @@ private:
 
   /// Whole-program gate: is every exception construct in this function within
   /// the supported subset (reference catches of registered class types, throws
-  /// of registered objects or rethrows, regions whose pop is followed by the
-  /// skip-handlers GOTO)? Read-only.
+  /// of registered objects or rethrows, balanced CATCH push/pop nesting)?
+  /// Read-only.
   /// Set when program_supported declines, naming the construct for the
   /// fallback diagnostic (report_fallback).
   std::string unsupported_reason_;
@@ -406,12 +406,14 @@ private:
       }
       else if (it->type == CATCH)
       {
-        // pop: needs the skip-handlers GOTO after it for dispatch placement.
-        auto nx = std::next(it);
-        if (depth == 0 || nx == end || nx->type != GOTO)
-          return unsupported(
-            "an unsupported try-block layout (e.g. a function-try-block or an "
-            "empty trailing handler)");
+        // pop: build_dispatch anchors the region's dispatch block on the
+        // skip-handlers GOTO that normally follows. When every handler is empty
+        // (e.g. `catch (...) {}`) the frontend elides that GOTO since it would
+        // jump to the pop's own fall-through; insert_elided_skip_gotos restores
+        // it before lowering, so a pop not followed by a GOTO is supported. An
+        // unmatched pop (depth == 0) or trailing pop (nx == end) is malformed.
+        if (depth == 0 || std::next(it) == end)
+          return unsupported("an unmatched or trailing CATCH pop");
         --depth;
       }
       else if (it->type == THROW)
@@ -501,6 +503,31 @@ private:
     body.update();
   }
 
+  /// A try whose handlers are all empty (e.g. `catch (...) {}`) has its
+  /// skip-handlers GOTO elided by the frontend: the jump would target the
+  /// instruction immediately after the pop, so it is a no-op and is dropped,
+  /// leaving the pop directly followed by the first handler. build_dispatch
+  /// anchors each region's dispatch block on that GOTO (placed just after it so
+  /// normal completion bypasses dispatch), so restore the canonical shape by
+  /// re-inserting `GOTO <next>` after any pop that lacks it. The jump targets
+  /// the pop's own fall-through, so it is behaviour-neutral on every path.
+  void insert_elided_skip_gotos(goto_programt &body)
+  {
+    const auto end = body.instructions.end();
+    for (auto it = body.instructions.begin(); it != end; ++it)
+    {
+      if (it->type != CATCH || !it->targets.empty())
+        continue; // not a pop
+      auto nx = std::next(it);
+      if (nx == end || nx->type == GOTO)
+        continue; // skip-handlers GOTO already present
+      auto skip = body.insert(nx);
+      skip->make_goto(nx);
+      skip->location = it->location;
+      skip->function = it->function;
+    }
+  }
+
   /// Recover the region tree, throw sites, and may-throw call sites (each with
   /// its enclosing try region).
   void collect(
@@ -573,6 +600,7 @@ private:
   void lower_ip(goto_programt &body, const irep_idt &fn_id)
   {
     rebalance_removed_pops(body);
+    insert_elided_skip_gotos(body);
 
     std::vector<regiont> regions;
     std::vector<sitet> throws, calls;
