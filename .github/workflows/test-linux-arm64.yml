@@ -10,15 +10,17 @@ on:
 
 jobs:
   build-linux-arm64:
-    name: Linux ARM64 build
+    name: Linux ARM64 build (LLVM 22)
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install LLVM
+      - name: Install LLVM 22
         run: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y llvm-16 clang-16 libclang-16-dev libclang-cpp16-dev
+          sudo apt-get install -y llvm-22 clang-22 libclang-22-dev libclang-cpp22-dev
 
       - name: Build ESBMC
-        run: ./scripts/build.sh -b DebugOpt -S OFF -e OFF
+        run: ./scripts/build.sh -b DebugOpt -S OFF -c 22 -e OFF
