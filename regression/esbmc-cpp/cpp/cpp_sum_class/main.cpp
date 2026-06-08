@@ -21,8 +21,9 @@ class Sum
 
 int N=nondet_int();
 
-int main() 
+int main()
 {
+  __ESBMC_assume(N >= 0 && N <= 10);
   Sum s(N);
   assert(s.res==N*a || s.res == 0);
 

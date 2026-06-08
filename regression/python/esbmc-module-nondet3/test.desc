@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---unwind 9 --bitwuzla --no-standard-checks
+--unwind 9 --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

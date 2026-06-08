@@ -23,7 +23,7 @@ int reachability_treet::get_ileave_direction_from_user() const
 
   log_status("Context switch point encountered; please select a thread to run");
   log_status("Current thread states:");
-  execution_states.back()->print_stack_traces(4);
+  get_cur_state().print_stack_traces(4);
 
   while (log_status("Input: "), std::getline(std::cin, input))
   {
@@ -35,7 +35,7 @@ int reachability_treet::get_ileave_direction_from_user() const
     {
       exit(1);
     }
-    else if (input.size() <= 0)
+    else if (input.empty())
     {
       ;
     }

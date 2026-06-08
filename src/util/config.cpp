@@ -7,6 +7,14 @@
 
 configt config;
 
+assert_db &get_ssa_caching_db()
+{
+  // thread_local so each worker in --k-induction-parallel keeps its own
+  // cache. The main thread also gets one for sequential runs.
+  thread_local assert_db db;
+  return db;
+}
+
 void configt::ansi_ct::set_data_model(enum data_model dm)
 {
   auto next = [m = static_cast<uint64_t>(dm)]() mutable {
@@ -35,7 +43,7 @@ namespace
 {
 struct eregex : std::regex
 {
-  eregex(std::string pat)
+  explicit eregex(std::string pat)
     : std::regex(std::move(pat), std::regex_constants::extended)
   {
   }

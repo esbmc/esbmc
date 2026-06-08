@@ -2,13 +2,14 @@
 #define _GOTO_SYMEX_RENAMING_H_
 
 #include <set>
-#include <boost/functional/hash.hpp>
-#include <util/crypto_hash.h>
+#include <goto-symex/level1_map.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2_expr.h>
 #include <util/std_expr.h>
+
+class namespacet;
 
 namespace renaming
 {
@@ -93,10 +94,13 @@ public:
     }
   };
 
-  typedef std::unordered_map<name_record, unsigned, name_rec_hash>
-    current_namest;
+  typedef persistent_map<name_record, unsigned, name_rec_hash> current_namest;
   current_namest current_names;
   unsigned int thread_id;
+  // Set externally (alongside thread_id) so rename() / get_ident_name()
+  // can check is_thread_local on globals and route them per-thread
+  // instead of to the shared level1_global bucket (issue #4434, #4433).
+  const namespacet *ns = nullptr;
 
   void rename(expr2tc &expr) override;
   void get_ident_name(expr2tc &symbol) const override;
@@ -108,14 +112,15 @@ public:
   void rename(const expr2tc &symbol, unsigned frame)
   {
     // Given that this is level1, use base symbol.
-    unsigned &frameno = current_names[name_record(to_symbol2t(symbol))];
-    assert(frameno <= frame);
-    frameno = frame;
+    name_record rec(to_symbol2t(symbol));
+    [[maybe_unused]] const unsigned *cur = current_names.find(rec);
+    assert(!cur || *cur <= frame);
+    current_names.set(rec, frame);
   }
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level0);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -147,10 +152,10 @@ public:
         t_num(sym.thread_num)
     {
       size_t seed = 0;
-      boost::hash_combine(seed, base_name.get_no());
-      boost::hash_combine(seed, (uint8_t)lev);
-      boost::hash_combine(seed, l1_num);
-      boost::hash_combine(seed, t_num);
+      esbmct::hash_combine(seed, base_name.get_no());
+      esbmct::hash_combine(seed, (uint8_t)lev);
+      esbmct::hash_combine(seed, l1_num);
+      esbmct::hash_combine(seed, t_num);
       hash = seed;
     }
 
@@ -243,7 +248,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
 
   struct valuet
@@ -279,8 +284,6 @@ public:
   typedef std::unordered_map<name_record, valuet, name_rec_hash> current_namest;
 
   current_namest current_names;
-  typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
-  current_state_hashest current_hashes;
 };
 
 } // namespace renaming

@@ -1,0 +1,31 @@
+# Valgrind suppressions for ESBMC.
+#
+# immer's free-list heap (used by guard_seq, see src/irep2/guard_seq.h) recycles
+# raw node blocks. Blocks are allocated via cpp_heap's ::operator new but the
+# free-list reclaim path releases them through free(), which Valgrind's
+# new[]/delete[]/free tracker reports as "Mismatched free() / delete / delete[]".
+# This is benign on glibc (operator new, operator new[] and malloc share one
+# arena) and is an artefact of the free-list allocator, not a real defect.
+#
+# Usage:
+#   valgrind --suppressions=scripts/valgrind-esbmc.supp ./esbmc ...
+
+{
+   immer-free-list-mismatched-free-dealloc
+   Memcheck:Free
+   fun:free
+   ...
+   fun:*immer*rbts*rbtree*traverse*dec_visitor*
+   ...
+   fun:*guard_seq*
+}
+
+{
+   immer-free-list-mismatched-free-dtor
+   Memcheck:Free
+   fun:free
+   ...
+   fun:*immer*detail*rbts*node*
+   ...
+   fun:*guard_seq*
+}

@@ -3,89 +3,263 @@ title: Build Guide
 weight: 1
 ---
 
-## TLDR
+ESBMC builds on Linux, macOS, FreeBSD and Windows. Pick your platform below and
+follow the steps. Each tab produces a working `esbmc` with the Z3 solver; the
+heavier dependencies (LLVM/Clang, fmt, nlohmann-json, yaml-cpp and immer) are
+downloaded and built automatically with `-DDOWNLOAD_DEPENDENCIES=1` where the
+platform supports it.
 
-### Ubuntu 24.04
+> [!NOTE]
+> At least 6 GB of RAM is recommended. ESBMC is distributed mainly under the
+> [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
-To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
+For a build with several solvers, or CHERI/fuzzing support, see
+[Building with all solvers](#building-with-all-solvers) and [Advanced](#advanced).
 
-````
-sudo apt update
-sudo apt-get install -y clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
-cmake .. -DENABLE_Z3=1
-make -j4
-````
+## Build ESBMC
 
-To enable Python frontend support, add the `-DENABLE_PYTHON_FRONTEND=1` flag to the cmake command and ensure you have Python 3 with the `ast2json` module installed:
+{{< tabs >}}
 
-````
-pip install ast2json
-cmake .. -DENABLE_Z3=1 -DENABLE_PYTHON_FRONTEND=1
-make -j4
-````
+{{< tab name="Ubuntu / Debian" >}}
+{{% steps %}}
 
-
-#### Fedora 40
-
-To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver Z3:
+### Install prerequisites
 
 ```sh
-# Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
-sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
-CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
-make -j4
+sudo apt-get update
+sudo apt-get install -y build-essential cmake ninja-build git bison flex \
+  python3 libboost-all-dev g++-multilib
 ```
 
-To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file.
+LLVM/Clang, Z3 and the libraries fmt, nlohmann-json, yaml-cpp and immer are
+fetched by `-DDOWNLOAD_DEPENDENCIES=1`, so they are not installed here.
 
-#### FreeBSD
-
-ESBMC should compile just fine in FreeBSD as long as the 32-bit libraries are enabled
+### Get the source
 
 ```sh
-pkg install git cmake python3 z3 bison flex boost-all
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
-mkdir build && cd build
-cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
-make -j4
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
 ```
 
-#### Mac OS X
+### Configure and build
 
-M1/M2/M3/M4 Macs are now supported.
-
-Given the elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
-It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
-
-```
- ./build-esbmc-mac.sh
+```sh
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1
+ninja -C build
 ```
 
-The raw command is provided here for your reference.
+The binary is written to `build/src/esbmc/esbmc`.
+
+{{% details title="Optional: run the regression tests" closed="true" %}}
+Add the testing flags when configuring, then run ctest:
+
+```sh
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 \
+  -DBUILD_TESTING=On -DENABLE_REGRESSION=On
+ninja -C build
+ctest --test-dir build -j"$(nproc)" -L esbmc --timeout 120
+```
+{{% /details %}}
+
+{{% details title="Optional: enable a frontend or extra solvers" closed="true" %}}
+For Python, Solidity or IBEX support see [Optional frontends](#optional-frontends).
+For a multi-solver build see [Building with all solvers](#building-with-all-solvers).
+{{% /details %}}
+
+{{% /steps %}}
+{{< /tab >}}
+
+{{< tab name="Fedora" >}}
+{{% steps %}}
+
+### Install prerequisites
+
+```sh
+sudo dnf install gcc-c++ cmake ninja-build git bison flex python3 boost-devel \
+  z3-devel glibc-devel.i686 libstdc++-devel.i686
+```
+
+LLVM/Clang, fmt, nlohmann-json, yaml-cpp and immer are fetched by
+`-DDOWNLOAD_DEPENDENCIES=1`; Z3 comes from the system `z3-devel` package. The
+flag is required on Fedora because `immer` has no Fedora package.
+`glibc-devel.i686` and `libstdc++-devel.i686` are the 32-bit C runtime headers
+used to build ESBMC's 32-bit operational models.
+
+### Get the source
+
+```sh
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
+```
+
+### Configure and build
+
+```sh
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
+ninja -C build
+```
+
+The binary is written to `build/src/esbmc/esbmc`.
+
+{{% details title="Optional: skip 32-bit support" closed="true" %}}
+If you do not need 32-bit verification, drop the two `.i686` packages and add
+`-DENABLE_BUNDLE_LIBC_32BIT=Off`.
+{{% /details %}}
+
+{{% details title="Optional: enable a frontend or extra solvers" closed="true" %}}
+For Python, Solidity or IBEX support see [Optional frontends](#optional-frontends).
+For a multi-solver build see [Building with all solvers](#building-with-all-solvers).
+{{% /details %}}
+
+{{% /steps %}}
+{{< /tab >}}
+
+{{< tab name="macOS" >}}
+{{% steps %}}
+
+### Install prerequisites
+
+```sh
+brew install llvm@21 z3 boost cmake ninja python
+```
+
+> [!NOTE]
+> On macOS, `-DDOWNLOAD_DEPENDENCIES` must be combined with `-DLLVM_DIR` so only
+> the portable libraries are downloaded — the prebuilt LLVM/Z3 it would
+> otherwise fetch are Linux binaries.
+
+### Get the source
+
+```sh
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
+```
+
+### Configure and build
+
+```sh
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 \
+  -DLLVM_DIR=$(brew --prefix llvm@21)/lib/cmake/llvm \
+  -DClang_DIR=$(brew --prefix llvm@21)/lib/cmake/clang \
+  -DZ3_DIR=$(brew --prefix z3) \
+  -DC2GOTO_SYSROOT=$(xcrun --show-sdk-path)
+ninja -C build
+```
+
+{{% details title="Easiest: use the helper script" closed="true" %}}
+The repository ships `scripts/build-esbmc-mac.sh`, which creates the build
+folder, optionally installs Boolector/Bitwuzla, and installs `esbmc` globally:
+
+```sh
+./scripts/build-esbmc-mac.sh
+```
+{{% /details %}}
+
+{{% details title="Xcode SDK" closed="true" %}}
+A full Xcode or the Command Line Tools SDK is required. If
+`xcrun --show-sdk-path` fails, install the tools with `xcode-select --install`.
+{{% /details %}}
+
+{{% /steps %}}
+{{< /tab >}}
+
+{{< tab name="FreeBSD" >}}
+{{% steps %}}
+
+### Install prerequisites
+
+```sh
+pkg install git cmake ninja python3 z3 bison flex boost-all
+```
+
+ESBMC needs 32-bit libraries on FreeBSD — make sure the `lib32` set is installed.
+
+### Provide an LLVM/Clang toolchain
+
+ESBMC's prebuilt LLVM download targets Linux, so fetch a FreeBSD LLVM release and
+point the build at it:
+
+```sh
+fetch https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz
+tar xf clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz
+mv clang+llvm-16.0.0-amd64-unknown-freebsd13 clang16
+```
+
+### Get the source, configure and build
+
+```sh
+git clone https://github.com/esbmc/esbmc.git && cd esbmc
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 -DZ3_DIR=/usr/local \
+  -DLLVM_DIR=$PWD/../clang16 -DClang_DIR=$PWD/../clang16
+ninja -C build
+```
+
+{{% /steps %}}
+{{< /tab >}}
+
+{{< tab name="Windows" >}}
+{{% steps %}}
+
+### Install the toolchain
+
+- [Visual Studio](https://visualstudio.microsoft.com/) with the **Desktop
+  development with C++** workload (install the English language pack even on
+  non-English systems).
+- [Chocolatey](https://chocolatey.org/) and
+  [vcpkg](https://github.com/microsoft/vcpkg) (integrate vcpkg with your system).
+- Check the repository out with **LF** line endings — CRLF will not work.
+
+### Install dependencies
+
+```bat
+vcpkg.exe install boost-filesystem:x64-windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows
+choco install winflexbison gnuwin32-coreutils.portable
+```
+
+Also obtain [Z3](https://github.com/Z3Prover/z3/releases) and a prebuilt
+LLVM/Clang. The official LLVM releases do not ship the CMake modules ESBMC
+needs, so build LLVM from source (see below).
+
+### Configure and build
+
+Open the CMake project in Visual Studio, set the configuration to **Release**,
+the toolchain to **msvc_x64_x64**, the triplet to **x64-windows**, and add the
+dependency paths to the CMake flags:
 
 ```
-cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
-make -j8
-make install
+-DLLVM_DIR=C:\Deps\llvm -DClang_DIR=C:\Deps\llvm -DZ3_DIR=C:\Deps\z3
 ```
 
-## Details
+{{% details title="Build LLVM/Clang from source on Windows" closed="true" %}}
+Download the `llvm-14.X.X.src` and `clang-14.X.X.src` archives from the
+[LLVM releases](https://releases.llvm.org/) and unpack each into its own
+space-free directory. Then, from the **x64 Native Tools Command Prompt for
+VS 2019**:
 
-This guide provides instructions on building ESBMC and its supported solvers.
+```bat
+mkdir llvm-14.0.6.src\build-release && cd llvm-14.0.6.src\build-release
+cmake .. -Thost=x64 -G "Visual Studio 16 2019" -A x64 ^
+  -DCMAKE_INSTALL_PREFIX=C:\Deps\llvm -DCMAKE_PREFIX_PATH=C:\Deps\llvm ^
+  -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_LIBXML2=OFF ^
+  -DCMAKE_BUILD_TYPE=Release -DLLVM_USE_CRT_RELEASE=MT
+msbuild /m -p:Configuration=Release INSTALL.vcxproj
+```
 
-It has been tested with Ubuntu 20.04.1, Ubuntu 22.04 and macOS Catalina as well as [Windows 10 WSL](https://docs.microsoft.com/en-us/windows/wsl/about) v1 or v2 [Ubuntu WSL](https://ubuntu.com/wsl), but the steps are mostly the same for other Linux and macOS distributions.
+Repeat for the `clang-14.X.X.src` tree (same flags) to install Clang into the
+same prefix.
+{{% /details %}}
 
-It is recommended that the RAM should be at least 6 GB.
+{{% details title="Build inside WSL" closed="true" %}}
+With [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) you can
+build ESBMC exactly as on Linux — follow the **Ubuntu / Debian** tab.
+{{% /details %}}
 
-Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please read it carefully.
+{{% /steps %}}
+{{< /tab >}}
 
-## Dependency overview
+{{< /tabs >}}
+
+## Dependency reference
 
 | package   | required | minimum version |
 |-----------|----------|-----------------|
@@ -100,410 +274,217 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | Z3        | no       | 4.13.3          |
 | Bitwuzla  | no       | 0.9.0           |
 
-The version requirements are stable but can change between releases.
+The version requirements are stable but can change between releases. For all
+available CMake options, see
+[Options.cmake](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
-## Installing build tools and basic dependencies
+## Optional frontends
 
-We need to install some dependencies before moving into the next steps.
+These are extra CMake flags added to the configure step in any platform tab above.
 
-All of them are listed in the following installation command:
+{{% details title="Python" closed="true" %}}
+Add `-DENABLE_PYTHON_FRONTEND=On` to the configure step:
 
-```
-Linux:
-sudo apt-get update && sudo apt-get install build-essential git gperf libgmp-dev cmake bison curl flex g++-multilib linux-libc-dev libboost-all-dev libtinfo-dev ninja-build python3-setuptools unzip wget python3-pip openjdk-8-jre
-
-macOS:
-brew install gmp cmake boost ninja python3 wget automake flex bison && pip3 install PySMT
-```
-
-Note that the packages are listed with their name in Debian/Ubuntu, but they can be found in other distributions as well.
-
-## Cloning ESBMC Source Code
-
-ESBMC source code is publicly available in [Github](https://github.com/esbmc/esbmc).
-
-Before cloning the ESBMC Source Code, it is better to make a directory to contain the whole project in “ESBMC_Project”.
-
-You can get the latest version using the following __git__ command:
-
-```
-mkdir ESBMC_Project && cd ESBMC_Project && git clone https://github.com/esbmc/esbmc
+```sh
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 -DENABLE_PYTHON_FRONTEND=On
 ```
 
-## Preparing Clang
+`ast2json` is vendored in the source tree, so no `pip install` is needed.
+Optionally install [mypy](https://mypy-lang.org/) (e.g. `pipx install mypy`) for
+Python type checks.
+{{% /details %}}
 
-Here, you have a choice: either build against the standard LLVM/Clang as
-distributed by the developers or the distribution, or to use a CHERI-enabled
-LLVM/Clang toolchain for ESBMC's frontend in case you want to verify CHERI-C
-programs as well. Note that the CHERI-support in ESBMC is experimental and
-incomplete at this point.
+{{% details title="Solidity" closed="true" %}}
+Add `-DENABLE_SOLIDITY_FRONTEND=On` to the configure step. The Solidity frontend
+verifies smart contracts against predefined safety properties (bounds, overflow,
+underflow) and user-defined assertions.
+{{% /details %}}
 
-If you are building ESBMC-CHERI, skip the following sections and go straight to Section `Preparing CHERI Clang 13 (experimental)`.
+{{% details title="IBEX (interval constraint solving)" closed="true" %}}
+Enables `--goto-contractor`. Install IBEX following its
+[instructions](http://ibex-team.github.io/ibex-lib/install.html), then:
 
-### Preparing external standard Clang 21 (recommended for a static build)
-
-You can either download and unpack a release manually:
-
+```sh
+cmake -GNinja -Bbuild -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex
 ```
-wget https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz && tar xfJ clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz &&
-ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04) &&
+{{% /details %}}
+
+## Building with all solvers
+
+ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,
+**Yices 2** and **Z3**. All are optional, but without at least one solver ESBMC
+cannot verify most programs. For a single-solver build, the platform tabs above
+are enough.
+
+The recipe below mirrors the multi-solver build used in ESBMC's CI: build each
+solver into the project directory, then point the configure step at them. Build
+only the solvers you need.
+
+{{% steps %}}
+
+### Prepare a Clang/LLVM toolchain
+
+For a static build, let ESBMC download Clang/LLVM:
+
+```sh
+ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=On
 ESBMC_STATIC=ON
 ```
 
-or use ESBMC's default for downloading dependencies during the build process:
-```
-ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=ON
-ESBMC_STATIC=ON
-```
+For a shared build, use the system LLVM/Clang instead (Ubuntu example):
 
-We'll use these variables later in the build process. Note that downloading
-dependencies work for most of the dependencies covered below as well.
-In this case, you can directly jump to the section "Building ESBMC".
-Remember that it is optional to keep all the features enabled.
-They are optional.
-
-### Preparing distributed Clang 16 (recommended for a shared build)
-
-For shared builds, it is recommended to use the system's LLVM/Clang, which on
-Ubuntu 24.04 can be obtained by:
-```
-apt-get install libclang-cpp16-dev &&
-ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16" &&
+```sh
+sudo apt-get install libclang-cpp16-dev
+ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16"
 ESBMC_STATIC=OFF
 ```
 
-### Preparing CHERI Clang 13 (experimental)
+### Build the solvers
 
-CHERI-enabled ESBMC uses [__CHERI clang__](https://github.com/CTSRD-CHERI/llvm-project) in its front-end. It currently supports the release 20210817 based on clang version 13.0.0.
-
-First, we need to download the package. It can be performed using the following __wget__ command:
-
+{{% details title="Boolector" closed="true" %}}
+```sh
+git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd ../..
 ```
-wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz
-```
+{{% /details %}}
 
-Before build the package, check that lld is installed:
-```
-sudo apt-get install lld
-```
-
-Then, we need to extract and build the package. You can use the following commands:
-
-```
-tar xf cheri-rel-20210817.tar.gz &&
-mkdir clang13 &&
-cd llvm-project-cheri-rel-20210817 &&
-mkdir build &&
-cd build &&
-cmake -GNinja -S ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_PARALLEL_LINK_JOBS=4 -DLLVM_CCACHE_BUILD=FALSE -DLLVM_INSTALL_BINUTILS_SYMLINKS=TRUE -DLLVM_ENABLE_LIBXML2=FALSE -DLLVM_ENABLE_ZLIB=FALSE -DLLVM_ENABLE_OCAMLDOC=FALSE -DLLVM_ENABLE_BINDINGS=FALSE -DLLVM_INCLUDE_EXAMPLES=FALSE -DLLVM_INCLUDE_DOCS=FALSE -DLLVM_INCLUDE_BENCHMARKS=FALSE -DCLANG_ENABLE_STATIC_ANALYZER=FALSE -DCLANG_ENABLE_ARCMT=FALSE -DLLVM_ENABLE_Z3_SOLVER=FALSE -DLLVM_TOOL_LLVM_MCA_BUILD=FALSE -DLLVM_TOOL_LLVM_EXEGESIS_BUILD=FALSE -DLLVM_TOOL_LLVM_RC_BUILD=FALSE -DLLVM_OPTIMIZED_TABLEGEN=FALSE -DLLVM_USE_SPLIT_DWARF=TRUE -DLLVM_ENABLE_ASSERTIONS=TRUE '-DLLVM_LIT_ARGS=--max-time 3600 --timeout 300 -s -vv' '-DLLVM_TARGETS_TO_BUILD=AArch64;ARM;Mips;RISCV;X86;host' -DENABLE_EXPERIMENTAL_NEW_PASS_MANAGER=FALSE -DCLANG_ROUND_TRIP_CC1_ARGS=FALSE '-DLLVM_ENABLE_PROJECTS=llvm;clang' -DCMAKE_INSTALL_PREFIX=../../clang13 -DCMAKE_C_COMPILER=/usr/bin/cc -DCMAKE_CXX_COMPILER=/usr/bin/c++ -DCMAKE_ASM_COMPILER=/usr/bin/cc -DCMAKE_BUILD_RPATH_USE_ORIGIN=TRUE
-ninja &&
-ninja install &&
-cd ../.. &&
-ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang13) &&
-ESBMC_STATIC=Off
-```
-
-## Preparing the Solidity frontend (optional)
-
-We developed a Solidity frontend for the efficient SMT-based context-bounded model checker (ESBMC). ESBMC-solidity is a permissively licensed open-source context-bounded model checker to verify Solidity smart contracts. It can automatically check both predefined safety properties (e.g., bounds checks, overflow, underflow) and user-defined program assertions.
-
-To verify the Solidity smart contract, ESBMC should be built with the option:
-
-```
--DENABLE_SOLIDITY_FRONTEND=On
-```
-
-## Preparing the Python frontend (optional)
-
-The Python frontend enables the analysis of Python code, leveraging the AST (Abstract Syntax Tree) generated by `ast2json` Python package.
-
-To use the Python frontend, follow these steps:
-
-First __install ast2json:__
-```bash
-pip3 install ast2json
-```
-
-then __enable the Python frontend__ during the ESBMC build:
-```
--DENABLE_PYTHON_FRONTEND=On
-```
-
-## Preparing IBEX as the constraint programming solver for interval contraction (optional)
-
-ESBMC can use the forward and backward operations from constraint programming to contract the search space exploration from the program's entry point to the property being verified and vice versa. This (interval) contraction is enabled via the option --goto-contractor. First, the IBEX library must be installed using the instructions available at http://ibex-team.github.io/ibex-lib/install.html. Once IBEX is installed on your computer, ESBMC should be built with the option:
-
-```
--DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex
-```
-
-## Setting Up Solvers
-
-ESBMC relies on SMT solvers to reason about formulae in its back-end.
-
-Currently we support the following solvers: __Bitwuzla__, __Boolector__, __CVC4__, __MathSAT__, __Yices 2__, and __Z3__.
-
-Since this guide focuses primarily on the ESBMC build, we will only cover the steps needed for it.
-
-Note that all solvers are optional, and you don't need to enable them. However,
-without any solver, ESBMC will not be able to verify many programs. It is
-recommended to include at least the SMT solver Boolector.
-
-### Setting Up Boolector
-
-We have wrapped the entire build and setup of Boolector in the following command:
-
-```
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
-```
-
-For more details on Boolector, please refer to [its Github](https://github.com/Boolector/boolector).
-
-### Setting Up CVC4 (Linux Only)
-
-We have wrapped the entire build and setup of CVC4 in the following command:
-
-```
-pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
-```
-
-If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).
-
-### Setting Up CVC5
-
-We have wrapped the entire build and setup of CVC5 in the following command:
-
-```
-pip3 install toml &&
-git clone https://github.com/CVC5/CVC5.git &&
-cd CVC5 &&
-git switch --detach cvc5-1.1.2 &&
-./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary &&
-cd build && make -j4 && make install && cd .. &&
-cd ..
-```
-
-If you need more details on CVC5, please refer to [its Github](https://github.com/CVC5/CVC5).
-
-### Setting Up MathSAT
-
-We have wrapped the entire build and setup of MathSAT in the following command:
-
-```
-Linux:
-wget http://mathsat.fbk.eu/release/mathsat-5.5.4-linux-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-linux-x86_64 mathsat
-
-macOS:
-wget http://mathsat.fbk.eu/release/mathsat-5.5.4-darwin-libcxx-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-darwin-libcxx-x86_64 mathsat
-```
-
-In macOS, the following command is required:
-
-```
-ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
-```
-
-For more details on MathSAT, please refer to [its webpage](https://mathsat.fbk.eu).
-
-### Setting Up Yices
-
-First, we need to setup and build [GMP library](https://gmplib.org), by entering the following command (Linux only):
-
-```
-wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && rm gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install && cd ..
-```
-
-Then, we can build and set up Yices 2 using the following command:
-
-```
-Linux:
-git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.4 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib && cd ..
-
-macOS:
-git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.4 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib && cd ..
-```
-
-If you need more details on Yices 2, please refer to [its Github](https://github.com/SRI-CSL/yices2).
-
-### Setting Up Z3
-
-We have wrapped the entire build and setup of Z3 in the following command:
-
-```
-Linux:
+{{% details title="Z3" closed="true" %}}
+```sh
+# Linux
 wget https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip && unzip z3-4.13.3-x64-glibc-2.35.zip && mv z3-4.13.3-x64-glibc-2.35 z3
+# macOS
+brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
+```
+{{% /details %}}
 
-macOS:
-brew install z3
+{{% details title="Bitwuzla" closed="true" %}}
+Requires MPFR >= 4.2.1 (`apt-get install libmpfr-dev` / `brew install mpfr`).
+```sh
+git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
+```
+{{% /details %}}
+
+{{% details title="CVC4 (Linux only)" closed="true" %}}
+```sh
+pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && git reset --hard b826fc8ae95fc && ./contrib/get-antlr-3.4 && ./configure.sh --optimized --prefix=../cvc4 --static --no-static-binary && cd build && make -j4 && make install && cd ../..
+```
+{{% /details %}}
+
+{{% details title="CVC5" closed="true" %}}
+```sh
+pip3 install toml && git clone https://github.com/CVC5/CVC5.git && cd CVC5 && git switch --detach cvc5-1.1.2 && ./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary && cd build && make -j4 && make install && cd ../..
+```
+{{% /details %}}
+
+{{% details title="MathSAT" closed="true" %}}
+```sh
+# Linux
+wget http://mathsat.fbk.eu/release/mathsat-5.5.4-linux-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-linux-x86_64 mathsat
+# macOS
+wget http://mathsat.fbk.eu/release/mathsat-5.5.4-darwin-libcxx-x86_64.tar.gz -O mathsat.tar.gz && tar xf mathsat.tar.gz && mv mathsat-5.5.4-darwin-libcxx-x86_64 mathsat && ln -s /usr/local/include/gmp.h mathsat/include/gmp.h
+```
+{{% /details %}}
+
+{{% details title="Yices (Linux)" closed="true" %}}
+Yices needs a static GMP first:
+```sh
+wget https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz && tar xf gmp-6.1.2.tar.xz && cd gmp-6.1.2 && ./configure --prefix $PWD/../gmp --disable-shared ABI=64 CFLAGS=-fPIC CPPFLAGS=-DPIC && make -j4 && make install && cd ..
+git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.4 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib && cd ..
+```
+{{% /details %}}
+
+### Configure and build ESBMC
+
+Pass the directories of the solvers you built. Drop the flags for any solver you
+skipped.
+
+```sh
+cd esbmc && cmake -GNinja -Bbuild -DBUILD_TESTING=On -DENABLE_REGRESSION=On \
+  $ESBMC_CLANG -DBUILD_STATIC=${ESBMC_STATIC:-ON} \
+  -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 \
+  -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../mathsat \
+  -DENABLE_YICES=On -DYices_DIR=$PWD/../yices -DCVC4_DIR=$PWD/../cvc4 \
+  -DGMP_DIR=$PWD/../gmp -DBitwuzla_DIR=$PWD/../bitwuzla-release \
+  -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release
+ninja -C build && ninja -C build install
 ```
 
-If you need more details on Z3, please refer to [its Github](https://github.com/Z3Prover/z3).
+ESBMC is installed into the `release` folder. Add `-DCMAKE_BUILD_TYPE=Debug` to
+enable ESBMC's internal assertions.
 
-If you are using macOS and have installed z3 using brew, you'll need to copy the entire z3 directory from the place where Homebrew keeps packages to your workspace:
+{{% /steps %}}
 
-```
-cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
-```
+## Advanced
 
-### Setting Up Bitwuzla
+{{% details title="Build in a Docker container" closed="true" %}}
+A minimal Debian-based image that builds ESBMC with Z3, letting
+`-DDOWNLOAD_DEPENDENCIES=1` fetch LLVM/Clang and the libraries:
 
-Bitwuzla 0.9.0 requires MPFR >= 4.2.1. Install it before building:
-
-```
-Linux:
-sudo apt-get install libmpfr-dev
-
-macOS:
-brew install mpfr
-```
-
-We have wrapped the entire build and setup of Bitwuzla in the following command:
-
-```
-Linux/macOS:
-git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
+```dockerfile
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential cmake ninja-build git bison flex \
+      python3 libboost-all-dev g++-multilib \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth=1 https://github.com/esbmc/esbmc.git /esbmc
+WORKDIR /esbmc
+RUN cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=1 -DENABLE_Z3=1 \
+    && ninja -C build
 ```
 
-For more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).
+Build the image with `docker build -t esbmc .`; the binary is at
+`/esbmc/build/src/esbmc/esbmc`.
+{{% /details %}}
 
-Before proceeding to the next section, make sure you have clang, LLVM, and all the solvers ready in your workspace:
+{{% details title="Shared (dynamic) builds" closed="true" %}}
+A non-static ESBMC links against system libraries/solvers. Shared linking is the
+default when CMake is invoked with `-DBUILD_STATIC=Off` (or the variable unset).
 
-```
-clang and LLVM:
-<path_to_your_project>/ESBMC_Project/clang13
+When Clang is built with `CLANG_LINK_CLANG_DYLIB=On`, ESBMC links the dynamic
+`libclang-cpp` and does not bundle Clang's headers. Header bundling is controlled
+by `CLANG_HEADERS_BUNDLED` (`On`/`Off`/`detect`); the default `detect` bundles
+headers only for static Clang links. Not bundling speeds up source translation by
+avoiding a temporary header-extraction directory, but ESBMC must be recompiled
+when the system Clang is updated.
+{{% /details %}}
 
-Boolector:
-<path_to_your_project>/ESBMC_Project/boolector
+{{% details title="CHERI-C support (experimental)" closed="true" %}}
+CHERI-enabled ESBMC uses [CHERI Clang](https://github.com/CTSRD-CHERI/llvm-project)
+(release 20210817, clang 13). Build it, then configure ESBMC against it:
 
-CVC4: (Linux only)
-<path_to_your_project>/ESBMC_Project/CVC4
-
-MathSAT:
-<path_to_your_project>/ESBMC_Project/mathsat
-
-Yices:
-<path_to_your_project>/ESBMC_Project/yices
-
-Z3:
-<path_to_your_project>/ESBMC_Project/z3
-
-Bitwuzla:
-<path_to_your_project>/ESBMC_Project/bitwuzla
-```
-
-The above paths will be used in ESBMC's build command in the next section.
-
-If you are using macOS, make sure you have Xcode.app in your Applications directory by checking:
-
-```
-ls /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/
+```sh
+wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz
+sudo apt-get install lld
+tar xf cheri-rel-20210817.tar.gz && mkdir clang13 && cd llvm-project-cheri-rel-20210817 && mkdir build && cd build
+cmake -GNinja -S ../llvm -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS='llvm;clang' -DLLVM_INSTALL_BINUTILS_SYMLINKS=TRUE -DLLVM_ENABLE_LIBXML2=FALSE -DLLVM_ENABLE_ZLIB=FALSE '-DLLVM_TARGETS_TO_BUILD=AArch64;ARM;Mips;RISCV;X86;host' -DCMAKE_INSTALL_PREFIX=../../clang13
+ninja && ninja install && cd ../..
+ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang13)
 ```
 
-If no such directory, please go to App Store and install Xcode. If you do not have the full version of Xcode, you will need to replace the flag `C2GOTO` with:
+A CHERI sysroot is needed for programs that use the C standard library. The
+[cheribuild](https://github.com/CTSRD-CHERI/cheribuild) tool is the recommended
+way to obtain one:
 
-```
--DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-```
-
-## Building ESBMC
-
-Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
-
-If you are building ESBMC-CHERI, please complete the following sections BEFORE configuring ESBMC-CHERI:
-- Preparing CHERI Clang 13 (experimental)
-  - This section helps you to build CHERI-LLVM and set up `ESBMC_CLANG`.
-- Setting up the sysroot for CHERI clang
-  - This section will get you the CHERI header files to set up `ESBMC_CHERI_HYBRID_SYSROOT` and `ESBMC_CHERI_PURECAP_SYSROOT`.
-
-First, we need to setup __cmake__, by using the following command in ESBMC_Project directory you just created:
-
-```
-Linux:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On $ESBMC_CLANG -DBUILD_STATIC=${ESBMC_STATIC:-ON} -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
-
-macOS:
-cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/clang -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
-```
-
-**macOS-specific notes**:
-- **LLVM version**: Install LLVM 21 via Homebrew: `brew install llvm@21`. Do not use `DOWNLOAD_DEPENDENCIES=ON` as it downloads Linux versions incompatible with macOS.
-
-Note, this command uses the ESBMC_CLANG and ESBMC_STATIC variables set in the section on preparing Clang. Note also that if you want to enable the debug mode, i.e., the internal assertions in ESBMC, you must add the option `-DCMAKE_BUILD_TYPE=Debug`.
-
-Finally, we can trigger the build process by using the following command:
-
-```
-cmake --build . && ninja install
-```
-
-Once it is finished, ESBMC should be available in the _release_ folder.
-
-## ESBMC Shared Builds
-
-It is also possible to build a non-static version of ESBMC that links to
-system libraries and/or solvers installed system-wide.
-
-Shared linking is the default when __cmake__ is invoked with
-`-DBUILD_STATIC=Off` or the variable is not set.
-
-## Notes on shared Clang
-
-When __clang__ has been built with the __cmake__ setting
-`CLANG_LINK_CLANG_DYLIB=On`, the default is to link against the dynamic library
-`libclang-cpp` and also to not bundle __clang__'s header files.
-This bundling can be controlled by setting the __cmake__ variable
-`CLANG_HEADERS_BUNDLED` to `On` or `Off` instead of its default `detect`.
-
-`On` means that the headers are always bundled in ESBMC's executables, and
-`Off` never bundles the headers, but hard-codes their path. Not bundling headers
-when linking shared against a system installation of __clang__ speeds up ESBMC's
-translation of source files by avoiding the creation of a temporary directory
-and extracting the bundled headers to it. As is common with runtime dependencies
-on shared libraries, when __clang__ is updated to a new version, ESBMC will need
-to be recompiled.
-
-It is advised to keep the default setting `detect` for `CLANG_HEADERS_BUNDLED`,
-which decides to bundle headers only when linking statically against __clang__.
-
-## Setting up the sysroot for CHERI clang
-
-CHERI clang is used as frontend by CHERI-enabled ESBMC.
-Since CHERI support is available only for a few platforms, verifying CHERI-C
-programs that use header files from the C standard library will require a setup
-of a C standard library for one of these platforms.
-
-To obtain and install a CHERI sysroot, the
-[cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
-tool is the recommended way:
-
-The following command will install the packages required for the most commonly used cheribuild targets:
-```
-sudo apt install autoconf automake libtool pkg-config clang bison cmake mercurial ninja-build samba flex texinfo time libglib2.0-dev libpixman-1-dev libarchive-dev libarchive-tools libbz2-dev libattr1-dev libcap-ng-dev libexpat1-dev libgmp-dev bc
-```
-
-Download and build Cheri riscv64 purecap sdk:
-```
+```sh
 git clone https://github.com/CTSRD-CHERI/cheribuild.git && cd cheribuild && python3 cheribuild.py cheribsd-sdk-riscv64-purecap -d
 ```
 
-Once the build is completed, you'll find the `cheri` directory in your HOME directory.
+Then configure ESBMC with:
 
-CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and
-expects the corresponding sysroot, the default of which can be configured by
-passing the CMake flags
-```
+```sh
 -DESBMC_CHERI=On -DESBMC_CHERI_HYBRID_SYSROOT=<path> -DESBMC_CHERI_PURECAP_SYSROOT=<path>
 ```
-e.g. the 'path' should point to `$HOME/cheri/output/sdk/sysroot-riscv64-purecap`. As for the `sysroot-riscv64-purecap` part, you may want to use a diffrent directory if you used a different variant in the `cheribuild.py` command above.
 
-## ESBMC Fuzzing Tests
+e.g. `<path>` pointing at `$HOME/cheri/output/sdk/sysroot-riscv64-purecap`.
+{{% /details %}}
 
-ESBMC has a number of fuzzing test targets that are used with libFuzzer to test parts of ESBMC. Building these targets requires additional CMake configuration.
+{{% details title="Fuzzing targets" closed="true" %}}
+ESBMC ships libFuzzer targets. They must be built with Clang, so configure ESBMC
+to use it and enable fuzzing:
 
-Using Clang to build the fuzzing targets is required due to the included libFuzzer support. Clang must therefore be installed and CMake configured to use Clang to build ESBMC. One way to do this is to pass the following options to CMake:
+```sh
+cmake -GNinja -Bbuild -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_FUZZER=1
 ```
--DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-```
-Note that passing these options to CMake for the first time will result in the CMake cache being deleted, possibly requiring some variables to be reset.
 
-Fuzzing tests must also be enabled with `-DENABLE_FUZZER=1` before building.
+Passing the compiler options for the first time clears the CMake cache, so some
+variables may need to be re-set.
+{{% /details %}}

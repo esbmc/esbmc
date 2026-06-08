@@ -1,0 +1,4 @@
+CORE
+test.c
+--unwind 1
+^VERIFICATION SUCCESSFUL$

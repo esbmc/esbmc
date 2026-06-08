@@ -80,6 +80,7 @@
 #include <util/expr.h>
 #include <nlohmann/json.hpp>
 
+#include <optional>
 #include <string>
 
 class python_converter;
@@ -299,7 +300,7 @@ public:
    *
    * Handles three cases:
    * 1. LHS is dict subscript, RHS is primitive
-   * 2. RHS is dict subscript, LHS is primitive  
+   * 2. RHS is dict subscript, LHS is primitive
    * 3. Both are dict subscripts
    *
    * @param left Left JSON AST node
@@ -356,7 +357,7 @@ public:
 
   /**
    * @brief Check and handle dictionary subscript assignment
-   * 
+   *
    * Checks if the target is a dictionary subscript and handles the assignment
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
@@ -372,7 +373,7 @@ public:
 
   /**
    * @brief Check and handle dictionary literal assignment
-   * 
+   *
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
    * @param lhs Left-hand side expression
@@ -385,7 +386,7 @@ public:
 
   /**
    * @brief Check and handle unannotated dictionary literal
-   * 
+   *
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
    * @param target Target node
@@ -472,6 +473,50 @@ public:
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict.copy() method calls.
+   * Returns a shallow copy of the dictionary: a new dict whose keys and
+   * values lists are independent copies of the source's, so mutating the
+   * copy does not affect the original.
+   * @param dict_expr The source dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the copied dict.
+   */
+  exprt
+  handle_dict_copy(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.fromkeys() class method calls.
+   *
+   * Implements dict.fromkeys(iterable, value=None):
+   * - Creates a new dict whose keys come from iterable and whose values
+   *   all share the same given value (None by default).
+   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1, 2, 3])).
+   *
+   * @param call_node The function call AST node.
+   * @return Expression for the resulting dict symbol.
+   */
+  exprt handle_dict_fromkeys(const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict(iterable) constructor calls.
+   *
+   * Synthesises a Dict literal from the iterable and routes through
+   * get_dict_literal. Supported iterable forms:
+   * - list/tuple/set of 2-tuples: dict([(k1,v1), (k2,v2), ...])
+   * - list of 2-char strings: dict(["ab", "cd"])
+   * - set wrapping any of the above: dict(set([(k,v),...]))
+   *
+   * Returns nil_exprt for unsupported forms. The caller falls back to
+   * generic call dispatch, which may produce broken GOTO for iterables
+   * this handler does not recognise — extend the matcher in the .cpp
+   * implementation rather than relying on the fallback for new forms.
+   *
+   * @param call_node The function call AST node (Call(Name("dict"), [arg])).
+   * @return Expression for the resulting dict symbol, or nil_exprt.
+   */
+  exprt handle_dict_constructor(const nlohmann::json &call_node);
+
+  /**
    * @brief Compares two dictionaries for equality or inequality
    *
    * Implements Python's dictionary comparison semantics by performing
@@ -491,6 +536,29 @@ public:
    * @return Boolean expression representing the comparison result
    */
   exprt compare(const exprt &lhs, const exprt &rhs, const std::string &op);
+
+  /**
+   * @brief Constant-fold a dict-vs-dict equality when both AST operands are
+   * literal int-keyed, int-valued dicts (or their ``dict.fromkeys([...], v)``
+   * equivalent).
+   *
+   * Replaces the otherwise-quadratic ``__ESBMC_dict_eq`` runtime model call
+   * for the common literal-vs-literal pattern, which is the dominant cost
+   * under ``--incremental-bmc`` when each k iteration re-symbolises the
+   * comparison from scratch.
+   *
+   * Returns ``nullopt`` when either operand falls outside the recognised
+   * literal shape; callers must then fall back to the runtime model.
+   * Only int keys and int values are recognised today: string / nested /
+   * mixed-type dict literals fall through unchanged.
+   *
+   * @param lhs Left-hand AST node (Compare.left or BinOp.left).
+   * @param rhs Right-hand AST node (Compare.comparators[0] or BinOp.right).
+   * @return ``true`` / ``false`` if both sides fold; ``nullopt`` otherwise.
+   */
+  std::optional<bool> try_constant_fold_eq(
+    const nlohmann::json &lhs,
+    const nlohmann::json &rhs) const;
 
 private:
   /// Reference to the main Python converter
@@ -576,10 +644,10 @@ private:
 
   /**
    * @brief Generate a unique dictionary name based on source location
-   * 
+   *
    * Creates deterministic names using file, line, and column information.
    * Falls back to JSON node hash if location is unavailable.
-   * 
+   *
    * @param element The JSON AST node for the dictionary
    * @param location The source location
    * @return A unique dictionary identifier

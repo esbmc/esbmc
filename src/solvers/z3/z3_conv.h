@@ -11,9 +11,11 @@ public:
   using solver_smt_ast<z3::expr>::solver_smt_ast;
   ~z3_smt_ast() override = default;
 
-  smt_astt
-  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr)
-    const override;
+  smt_astt update(
+    smt_convt *ctx,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr) const override;
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
@@ -68,9 +70,6 @@ public:
   smt_astt mk_neg(smt_astt a) override;
   smt_astt mk_bvneg(smt_astt a) override;
   smt_astt mk_bvnot(smt_astt a) override;
-  smt_astt mk_bvnxor(smt_astt a, smt_astt b) override;
-  smt_astt mk_bvnor(smt_astt a, smt_astt b) override;
-  smt_astt mk_bvnand(smt_astt a, smt_astt b) override;
   smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvand(smt_astt a, smt_astt b) override;

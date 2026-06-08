@@ -10,7 +10,6 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
 
@@ -20,29 +19,33 @@
  *  and when notified of context-switch generating operations, attempts to
  *  interleave threads in all possible ways.
  *
- *  To do this, the primary piece of information stored is a stack of
- *  execution_statets, with each ex_state representing a context switch point
- *  reached. A vector<bool> in each ex_state represents which context switches
- *  from this path have been explored already.
+ *  The primary piece of state is an ordered sequence of
+ *  exploration_framet (a std::list, intentionally — we hand out
+ *  iterators that must stay stable across pushes/erases elsewhere in
+ *  the sequence), each pairing one execution_statet (the program state
+ *  at a context-switch point) with a scheduler_framet that tracks
+ *  which switches from that point have already been explored.
  *
- *  The algorithm is to run until the program completes, then feed the trace
+ *  The algorithm is to run until the program completes and feed the trace
  *  to the caller. From then on, when asked to generate a new trace we:
  *
- *    -# Remove the final ex_state from the stack
- *    -# Move to the new final ex_state on the stack
+ *    -# Pop the final exploration frame.
+ *    -# Move to the new final frame on the stack.
  *    -# Inspect whether we've explored all switches from this state.
- *      If yes, goto 1
- *    -# Pick a context switch to take from the current state, mark as explored
- *    -# Duplicate the final ex_state onto the end of the stack
- *    -# Move to the new end of stack; make the ex_state take the context
- *      switch we picked.
- *    -# Continue symbolic execution from here. Fin.
+ *       If yes, goto 1.
+ *    -# Pick a context switch to take from the current state and mark it
+ *       explored on the frame's scheduler.
+ *    -# Push a fresh exploration frame: a clone of the execution state
+ *       paired with a default scheduler_framet sized to the new thread
+ *       count.
+ *    -# In the new top frame, switch to the chosen thread and continue
+ *       symbolic execution from there. Fin.
  *
- *  There are various scheduling possiblities. The default is depth-first
- *  search, where we just follow the algorithm above and return all the traces
- *  to the caller. The "schedule" way combines all paths into one trace, which
- *  is then solved once. Round-robin switches to the next thread in the set of
- *  threads when a context switch point occurs.
+ *  There are various scheduling possibilities. The default is depth-first
+ *  search, where we just follow the algorithm above and return all the
+ *  traces to the caller. The "schedule" way combines all paths into one
+ *  trace, which is then solved once. Round-robin switches to the next
+ *  thread in the set of threads when a context-switch point occurs.
  *
  *  Some kind of scheduling interface/api would be good for the future.
  */
@@ -90,7 +93,7 @@ public:
   /**
    *  Walks back to an unexplored context switch.
    *  Follows the algorithm described in reachability_treet, and walk back up
-   *  the stack of current execution_states to find a context-switch that
+   *  the stack of current exploration_frames to find a context-switch that
    *  hasn't yet been explored.
    *  @return True if there are more states to be explored
    */
@@ -129,6 +132,9 @@ public:
    *  @return True if thread is viable; false otherwise.
    */
   bool check_thread_viable(unsigned int tid, bool quiet) const;
+
+  /** Mark the active thread as already explored in the current scheduler frame. */
+  void mark_active_thread_explored();
 
   /**
    *  Check whether current ex_state is a state hash collision.
@@ -194,9 +200,12 @@ public:
   bool is_has_complete_formula();
 
   /**
-   *  Duplicate of step_next_state.
-   *  Essentially does the same thing as step_next_state, but is specific to
-   *  the --schedule option. This can probably be removed in the future.
+   *  Advance to the next exploration frame, draining if we're at the top.
+   *  If there's already an exploration frame after the current one (we're
+   *  in the middle of an existing interleaving), step onto it. Otherwise
+   *  we're at the top of the stack: drain fully-explored frames via
+   *  drain_to_unexplored, adding memory-leak checks on the very last
+   *  frame before erasing it. Used by --schedule exploration.
    */
   void go_next_state();
 
@@ -232,75 +241,6 @@ public:
    */
   bool setup_next_formula();
 
-  /**
-   *  Class recording a reachability checkpoint.
-   *  Currently likely broken; but this originally redorced a particular trace
-   *  of the reachability that could written to file, then restored, then
-   *  re-reached through symbolic execution. Not going to document it until I
-   *  know that it works.
-   */
-  class dfs_position
-  {
-  public:
-    dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string &&filename);
-    bool write_to_file(const std::string &&filename) const;
-
-  protected:
-    bool read_from_file(const std::string &&filename);
-
-  public:
-    struct dfs_state
-    {
-      unsigned int location_number;
-      unsigned int num_threads;
-      unsigned int cur_thread;
-      std::vector<bool> explored;
-    };
-
-    static const uint32_t file_magic;
-
-    struct file_hdr
-    {
-      uint32_t magic;
-      uint32_t checksum;
-      uint32_t num_states;
-      uint32_t num_ileaves;
-    };
-
-    struct file_entry
-    {
-      uint32_t location_number;
-      uint16_t num_threads;
-      uint16_t cur_thread;
-      // Followed by bitfield for threads explored state.
-    };
-
-    std::vector<struct dfs_state> states;
-
-    // Number of interleavings explored to date.
-    unsigned int ileaves;
-
-    // We need to be able to detect when the source files have changed somehow,
-    // leading to the checkpoint being invalid. So add a checksum field. Exactly
-    // how it's going to be calculated, I don't know yet.
-    uint64_t checksum;
-  };
-
-  /**
-   *  Restore RT state to a reachability point.
-   *  Currently likely broken.
-   *  @param dfs State to restore
-   *  @return Dummy
-   */
-  bool restore_from_dfs_state(void *dfs);
-
-  /**
-   *  Save RT reachability state to file.
-   *  @param fname Name of file to save to.
-   */
-  void save_checkpoint(const std::string &&fname) const;
-
   /** GOTO functions we're operating over. */
   goto_functionst &goto_functions;
   /** Context we're operating upon */
@@ -322,16 +262,47 @@ public:
   bool main_thread_ended;
 
 protected:
-  /** Stack of execution states representing current interleaving.
-   *  See reachability_treet algorithm for how this is used. Is initialized
-   *  with a single execution_statet in it, with a function call to "main" set
-   *  up to be explored. During exploration has various numbers of ex_states
-   *  contained in the list. At end of exploration, contains zero.
+  struct scheduler_framet
+  {
+    std::vector<bool> explored_threads;
+
+    void ensure_thread_count(unsigned int count);
+    void reset(unsigned int count);
+    void mark_all_explored(unsigned int count);
+    bool is_explored(unsigned int tid) const;
+    void mark_explored(unsigned int tid);
+  };
+
+  struct exploration_framet
+  {
+    std::shared_ptr<execution_statet> state;
+    scheduler_framet scheduler;
+  };
+
+  scheduler_framet &get_cur_scheduler_frame();
+  const scheduler_framet &get_cur_scheduler_frame() const;
+  bool dfs_explore_thread(unsigned int tid);
+  void erase_current_frame();
+
+  /** Drain fully-explored frames from the top of exploration_frames
+   *  until step_next_state finds an unexplored switch (or the stack
+   *  empties). If add_leak_checks is true, add memory-leak checks on
+   *  the very last remaining frame before erasing it. On return,
+   *  cur_frame_it points at the parent of the unexplored switch when
+   *  exploration_frames is non-empty; the caller is expected to
+   *  advance cur_frame_it onto the new top. */
+  void drain_to_unexplored(bool add_leak_checks);
+
+  /** Stack of exploration frames representing the current interleaving.
+   *  Each frame owns one execution state plus the scheduler bookkeeping for
+   *  the context-switch point that led to it. The stack is initialized with a
+   *  single frame containing the "main" state. During exploration it contains
+   *  various numbers of frames; at the end it is empty.
    *  @see print_ileave_trace
    */
-  std::list<std::shared_ptr<execution_statet>> execution_states;
-  /** Iterator recording the execution_statet in stack we're operating on */
-  std::list<std::shared_ptr<execution_statet>>::iterator cur_state_it;
+  std::list<exploration_framet> exploration_frames;
+  /** Iterator recording the exploration frame we're operating on. */
+  std::list<exploration_framet>::iterator cur_frame_it;
   /** "Global" symex target for output from --schedule exploration */
   std::shared_ptr<symex_targett> schedule_target;
   /** Target template; from which all targets are cloned.
@@ -353,7 +324,7 @@ protected:
   /** Whether partial-order-reduction is enabled */
   bool por;
   /** Set of state hashes we've discovered */
-  std::set<crypto_hash> hit_hashes;
+  std::set<std::size_t> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

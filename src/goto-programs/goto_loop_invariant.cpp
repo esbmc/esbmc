@@ -295,7 +295,8 @@ static bool is_trivial_rhs(const expr2tc &expr)
   if (is_constant_bool2t(expr))
     return true;
   if (
-    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
     return true;
   return false;
 }
@@ -531,6 +532,7 @@ void goto_loop_invariantt::insert_assert_before_loop(
     t->guard = invariant;
     t->location = loop_head->location;
     t->location.comment("loop invariant base case");
+    t->location.property("invariant-base-case");
   }
 
   // Insert before the loop head
@@ -682,6 +684,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->guard = invariant;
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
+    t->location.property("invariant-inductive-step");
   }
 
   // 4. Insert ASSUME(FALSE) to terminate the loop

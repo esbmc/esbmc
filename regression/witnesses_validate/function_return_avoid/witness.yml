@@ -1,0 +1,33 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: "00000001-0000-0000-0000-000000000006"
+    creation_time: "2026-06-03T00:00:00+00:00"
+    producer:
+      name: "manual"
+      version: "1.0"
+    task:
+      input_files:
+      - "main.c"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "avoid"
+        constraint:
+          value: "\\result < 0"
+          format: "ext_c_expression"
+        location:
+          file_name: "main.c"
+          line: 12
+          function: "main"
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "main.c"
+          line: 14
+          function: "main"

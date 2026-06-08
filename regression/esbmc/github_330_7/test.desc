@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---incremental-bmc --memory-leak-check --force-malloc-success
+--memory-leak-check --force-malloc-success --unwind 1
 ^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,107 @@
+---
+# Codacy project configuration. Documents and silences static-analyser
+# warnings that are intentional given ESBMC's design (operational models
+# for libc and Python stdlib, class methods named read(), regression test
+# fixtures that deliberately contain bugs, etc.).
+#
+# Issues in scope here are confirmed false positives or by-design
+# behaviour the project deliberately keeps. Real issues are still
+# surfaced by these tools elsewhere in the tree.
+
+# Global exclusions, applied to every engine.
+exclude_paths:
+  # Regression test fixtures. NOTHING under regression/ is host code: it is
+  # not compiled into the ESBMC binary and never executed as a Python/shell
+  # program on the host. Every file there is an *input* that ESBMC parses
+  # and symbolically executes, written to exercise a specific frontend or
+  # operational-model path. The bugs are the point — e.g. github_3015_fail
+  # exists to check ESBMC flags "argument passed by position and keyword",
+  # the *_fail Python fixtures encode properties ESBMC must refute, and the
+  # `assert` statements are lowered straight to GOTO ASSERT directives (see
+  # src/python-frontend/python_converter.cpp), so rewriting them to satisfy
+  # a linter would silently weaken the suite. Helper/experiment shell
+  # scripts under regression/ are likewise throwaway drivers. Linting any
+  # of this against host-side style is pure noise.
+  - 'regression/**'
+
+engines:
+
+  flawfinder:
+    enabled: true
+    exclude_paths:
+      # Operational models of the C standard library. Every signature
+      # here must match libc verbatim (strncpy, strncat, strlen, strcpy,
+      # getc, fgetc, getchar, read, etc.) — that is the whole point of
+      # the model. Flawfinder's CWE-120/CWE-126 warnings on these files
+      # are intentional and cannot be addressed by changing the signature
+      # without breaking what ESBMC verifies. See src/c2goto/CLAUDE.md.
+      - 'src/c2goto/headers/**'
+      - 'src/c2goto/library/**'
+
+      # SystemC communication model. sc_signal<T>::read() and
+      # sc_signal_port<T>::read() are class methods, not the POSIX read()
+      # syscall flawfinder pattern-matches against.
+      - 'src/cpp/library/systemc/communication/**'
+
+      # Core IR / parser / qualifier infrastructure. irept::read(),
+      # parsert::read(char&), and c_qualifierst::read(const typet&) are
+      # all class member functions — none of them touch a buffer.
+      # Flawfinder's name-based check produces only false positives on
+      # these files; renaming the API would churn thousands of call sites
+      # across every downstream fork. The wider files surrounding the
+      # call sites in src/util/c_expr2string.cpp,
+      # src/util/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
+      # intentionally NOT excluded — those files contain code unrelated
+      # to the read() call and remain in scope for flawfinder.
+      - 'src/util/irep.h'
+      - 'src/util/irep.cpp'
+      - 'src/util/parser.h'
+      - 'src/util/c_qualifiers.h'
+      - 'src/util/c_qualifiers.cpp'
+
+  bandit:
+    enabled: true
+    exclude_paths:
+      # ESBMC operational models for the Python standard library. The
+      # `assert` statements in these files encode preconditions that
+      # ESBMC's Python frontend must verify; they are not user-facing
+      # Python code that runs under `python -O`, so Bandit B101 ("assert
+      # removed in optimised bytecode") does not apply.
+      - 'src/python-frontend/models/**'
+
+      # Pytest property-based tests for the Python frontend. Pytest's
+      # assertion-rewriting machinery requires plain `assert` (Bandit
+      # B101 is incompatible with the pytest idiom), and these suites
+      # are never executed under `python -O`. They validate ESBMC's
+      # Decimal / dataclass / preprocessor models against CPython using
+      # hypothesis — see unit/python-frontend/test_decimal_model.py and
+      # siblings.
+      - 'unit/python-frontend/**'
+
+  cppcheck:
+    enabled: true
+    exclude_paths:
+      # Operational models of the C standard library / libm. These files
+      # mirror libc and musl verbatim (pow, exp, and the long-double
+      # dispatch in musl/libm.h, etc.). cppcheck's style/portability
+      # findings here — "log(1+x) can be replaced by log1p", dead stores
+      # in the deliberately-unrolled exponentiation, the upstream musl
+      # `#error Unsupported long double representation` guard — are about
+      # libc/libm idioms that must not be "modernised" without changing
+      # what ESBMC verifies. Same rationale as the flawfinder block above.
+      - 'src/c2goto/headers/**'
+      - 'src/c2goto/library/**'
+
+      # Assertion-heavy / fixture-style unit tests. Catch2 REQUIRE()s here
+      # compare known compile-time constants on purpose (that IS the
+      # assertion), so cppcheck's knownConditionTrueFalse fires on every
+      # one; filesystem.fuzz.cpp bounds-checks a fuzzer-fixed length, and
+      # config_file_test.cpp's fixture intentionally owns a raw pointer.
+      # These are test scaffolding, not shipped code. Real cppcheck
+      # findings in other unit/ files remain in scope.
+      - 'unit/big-int/bigint.test.cpp'
+      - 'unit/util/string_pool.test.cpp'
+      - 'unit/util/filesystem.fuzz.cpp'
+      - 'unit/util/config_file_test.cpp'
+      - 'unit/goto-programs/interval_template.test.cpp'
+      - 'unit/goto-programs/loop_unroll.test.cpp'

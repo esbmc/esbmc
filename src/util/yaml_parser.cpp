@@ -1,57 +1,53 @@
 #include <yaml_parser.h>
-#include <util/c_string2expr.h>
-#include <util/expr_util.h>
+#include <fstream>
+#include <regex>
+#include <unordered_map>
+#include <sstream>
+#include <util/message.h>
 
-yaml_parser::yaml_parser(
-  const std::string &path,
-  contextt &ns,
-  optionst &options)
-  : file_path_(path), context_(ns), options_(options)
+std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
 {
-}
-
-bool yaml_parser::load_file()
-{
+  std::vector<invariant> result;
   try
   {
-    root_ = YAML::LoadFile(file_path_);
-    if (get_invariants())
-      return true;
+    YAML::Node root = YAML::LoadFile(path);
+    if (!root || !root.IsSequence())
+      return result;
+
+    for (const auto &entry : root)
+    {
+      if (
+        entry["entry_type"] &&
+        entry["entry_type"].as<std::string>() == "violation_sequence")
+      {
+        log_error(
+          "Witness is a violation witness; use --validate-violation-witness "
+          "instead.");
+        abort();
+      }
+      const auto &content = entry["content"];
+      if (!content || !content.IsSequence())
+        continue;
+
+      for (const auto &c : content)
+      {
+        const auto &inv_node = c["invariant"];
+        if (!inv_node)
+          continue;
+        invariant inv = parse_invariant(inv_node);
+        if (inv.type != invariant::unknown)
+          result.push_back(std::move(inv));
+      }
+    }
   }
   catch (const YAML::Exception &e)
   {
-    log_error("Failed to parse YAML file '{}': {}", file_path_, e.what());
-    return true;
+    log_error("Failed to parse witness YAML '{}': {}", path, e.what());
   }
-
-  return false;
+  return result;
 }
 
-bool yaml_parser::get_invariants()
-{
-  if (!root_ || !root_.IsSequence())
-    return true;
-
-  for (const auto &entry : root_)
-  {
-    const auto &content = entry["content"];
-    if (!content || !content.IsSequence())
-      continue;
-
-    for (const auto &c : content)
-    {
-      const auto &inv_node = c["invariant"];
-      if (!inv_node)
-        continue;
-      invariant info = parse_invariant(inv_node);
-      parsed_invariants_.push_back(std::move(info));
-    }
-  }
-
-  return false;
-}
-
-invariant yaml_parser::parse_invariant(const YAML::Node &node) const
+invariant yaml_parser::parse_invariant(const YAML::Node &node)
 {
   invariant info;
   if (node["type"])
@@ -77,7 +73,7 @@ invariant yaml_parser::parse_invariant(const YAML::Node &node) const
   return info;
 }
 
-invariant::Type yaml_parser::type_from_string(const std::string &s) const
+invariant::Type yaml_parser::type_from_string(const std::string &s)
 {
   if (s == "loop_invariant")
     return invariant::loop_invariant;
@@ -88,118 +84,342 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
   if (s == "location_transition_invariant")
     return invariant::location_transition_invariant;
 
-  log_error("Unknown invariant type: {}", s);
-  abort();
+  log_warning("Unknown invariant type '{}', skipping invariant", s);
+  return invariant::unknown;
 }
 
-bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
+namespace
 {
-  expression_parser parser;
-  for (const auto &inv : parsed_invariants_)
+void intern_location(waypoint &wp)
+{
+  if (wp.line != c_nonset)
+    wp.line_id = irep_idt(integer2string(wp.line));
+  wp.function_id = irep_idt(wp.function);
+}
+
+// Shared parse cache: get_waypoints and get_target_waypoint are both called
+// on the same file per run, so parse once and reuse.
+struct
+{
+  std::string path;
+  std::vector<waypoint> waypoints;
+  waypoint target;
+  bool has_target = false;
+} wp_cache;
+} // namespace
+
+std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
+{
+  if (path == wp_cache.path)
+    return wp_cache.waypoints;
+
+  wp_cache.path = path;
+  wp_cache.waypoints.clear();
+  wp_cache.has_target = false;
+  try
   {
-    std::string func_id = "c:@F@" + inv.function;
-    goto_functionst::function_mapt::iterator m_it =
-      goto_functions.function_map.find(func_id);
-    if (m_it != goto_functions.function_map.end())
+    YAML::Node root = YAML::LoadFile(path);
+    if (!root || !root.IsSequence())
+      return wp_cache.waypoints;
+
+    size_t seg_idx = 0;
+    for (const auto &entry : root)
     {
-      goto_programt &func = m_it->second.body;
-      Forall_goto_program_instructions (it, func)
+      if (
+        entry["entry_type"] &&
+        entry["entry_type"].as<std::string>() == "invariant_set")
       {
-        int line = std::stoi(it->location.line().as_string());
-        if (line == inv.line)
+        log_error(
+          "Witness is a correctness witness; use "
+          "--validate-correctness-witness instead.");
+        abort();
+      }
+      const auto &content = entry["content"];
+      if (!content || !content.IsSequence())
+        continue;
+
+      for (const auto &item : content)
+      {
+        const auto &seg = item["segment"];
+        if (!seg || !seg.IsSequence())
+          continue;
+
+        for (const auto &wp_node : seg)
         {
-          const expression_node *root = nullptr;
-          if (parser.parse(inv.value, root))
+          const auto &node = wp_node["waypoint"];
+          if (!node)
+            continue;
+          waypoint wp = parse_waypoint(node);
+          if (wp.type == waypoint::unknown)
+            continue;
+          intern_location(wp);
+          if (wp.type == waypoint::target)
           {
-            log_warning(
-              "failed to build the AST of witness expression: {}, skip it",
-              inv.value);
+            wp_cache.target = wp;
+            wp_cache.has_target = true;
             continue;
           }
-
-          if (options_.get_bool_option("witness-parse-tree"))
-          {
-            root->dump();
-            continue;
-          }
-
-          expression_converter converter(context_, it->location);
-          exprt expr;
-          if (converter.convert(root, expr))
-          {
-            log_warning(
-              "failed to convert the witness AST: {}, skip it", inv.value);
-            continue;
-          }
-
-          expr2tc guard;
-          migrate_expr(expr, guard);
-
-          switch (inv.type)
-          {
-          case invariant::loop_invariant:
-            if (it->is_goto() && !it->is_backwards_goto())
-            {
-              goto_programt::targett t = func.insert(it);
-              t->type = LOOP_INVARIANT;
-              t->add_loop_invariant(guard);
-              t->location = it->location;
-              log_progress(
-                "Applied loop invariant: {} in line {}",
-                inv.value,
-                t->location.line());
-            }
-            break;
-
-          case invariant::location_invariant:
-          {
-            goto_programt tmp;
-            goto_programt::targett t1 = tmp.add_instruction();
-            t1->make_assertion(guard);
-            t1->location = it->location;
-            goto_programt::targett t2 = tmp.add_instruction();
-            t2->make_assumption(guard);
-            t2->location = it->location;
-            // Redirect only the forward gotos that come
-            // before t1 in the instruction list, preserving the original loop head.
-            func.destructive_insert(it, tmp);
-            for (auto jt = func.instructions.begin(); jt != t1; ++jt)
-            {
-              if (!jt->is_goto())
-                continue;
-              for (auto &tgt : jt->targets)
-              {
-                if (tgt == it)
-                  tgt = t1;
-              }
-            }
-
-            log_progress(
-              "Applied location invariant: {} in line {}",
-              inv.value,
-              t1->location.line());
-            break;
-          }
-
-          default:
-            log_error("unsupported invariant type: {}", inv.value);
-            break;
-          }
-
-          break;
+          wp.segment_idx = seg_idx;
+          wp_cache.waypoints.push_back(std::move(wp));
         }
+        ++seg_idx;
       }
     }
-    else
-    {
-      log_warning("can not find wintness function '{}'", inv.value);
+  }
+  catch (const YAML::Exception &e)
+  {
+    log_error(
+      "Failed to parse violation witness YAML '{}': {}", path, e.what());
+    wp_cache.path.clear();
+  }
+  return wp_cache.waypoints;
+}
+
+bool yaml_parser::get_target_waypoint(const std::string &path, waypoint &out)
+{
+  get_waypoints(path);
+  if (!wp_cache.has_target)
+    return false;
+  out = wp_cache.target;
+  return true;
+}
+
+waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
+{
+  waypoint wp;
+
+  if (node["type"])
+    wp.type = waypoint_type_from_string(node["type"].as<std::string>());
+  if (node["action"])
+    wp.action = action_from_string(node["action"].as<std::string>());
+
+  const auto &constraint = node["constraint"];
+  if (constraint)
+  {
+    if (constraint["value"])
+      wp.value = constraint["value"].as<std::string>();
+    if (constraint["format"])
+      wp.format = constraint["format"].as<std::string>();
+  }
+
+  const auto &loc = node["location"];
+  if (loc)
+  {
+    if (loc["file_name"])
+      wp.file = loc["file_name"].as<std::string>();
+    if (loc["line"])
+      wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["function"])
+      wp.function = loc["function"].as<std::string>();
+  }
+
+  return wp;
+}
+
+waypoint::Type yaml_parser::waypoint_type_from_string(const std::string &s)
+{
+  if (s == "assumption")
+    return waypoint::assumption;
+  if (s == "target")
+    return waypoint::target;
+  if (s == "function_enter")
+    return waypoint::function_enter;
+  if (s == "function_return")
+    return waypoint::function_return;
+  if (s == "branching")
+    return waypoint::branching;
+
+  log_warning("Unknown waypoint type '{}', skipping waypoint", s);
+  return waypoint::unknown;
+}
+
+waypoint::Action yaml_parser::action_from_string(const std::string &s)
+{
+  if (s == "follow")
+    return waypoint::follow;
+  if (s == "avoid")
+    return waypoint::avoid;
+  if (s == "cycle")
+    return waypoint::cycle;
+
+  log_warning("Unknown waypoint action '{}', treating as follow", s);
+  return waypoint::follow;
+}
+
+// Extract the lhs identifier from a C assignment statement, e.g.:
+//   "  int x = foo(a);"  → "x"
+//   "  x = foo(a);"      → "x"
+// Returns an empty string if no assignment lhs is found.
+static std::string extract_lhs(const std::string &line)
+{
+  // Match: optional leading whitespace, optional type tokens, then IDENT =
+  // We look for the last word before '=' that precedes a '('.
+  static const std::regex lhs_pat(R"((\w+)\s*=\s*[\w*&]+\s*\()");
+  std::smatch m;
+  if (std::regex_search(line, m, lhs_pat))
+    return m[1];
+  return {};
+}
+
+static void
+replace_all(std::string &s, const std::string &from, const std::string &to)
+{
+  std::string::size_type pos = 0;
+  while ((pos = s.find(from, pos)) != std::string::npos)
+  {
+    s.replace(pos, from.size(), to);
+    pos += to.size();
+  }
+}
+
+std::string yaml_parser::build_violation_witness_source(
+  const std::string &source_path,
+  const std::string &original_path,
+  const std::vector<waypoint> &waypoints)
+{
+  // Inject after the source line so declarations are in scope.
+  std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
+  by_line.reserve(waypoints.size());
+  for (const auto &wp : waypoints)
+  {
+    if (
+      (wp.type != waypoint::assumption &&
+       wp.type != waypoint::function_return) ||
+      wp.line == c_nonset)
       continue;
+    by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
+  }
+
+  if (by_line.empty())
+    return {};
+
+  std::ifstream in(source_path);
+  if (!in)
+    return {};
+
+  std::ostringstream out;
+  std::string line_text;
+  size_t line_num = 0;
+
+  while (std::getline(in, line_text))
+  {
+    ++line_num;
+    out << line_text << "\n";
+
+    auto it = by_line.find(line_num);
+    if (it != by_line.end())
+    {
+      for (const waypoint *wp : it->second)
+      {
+        std::string expr = wp->value;
+
+        if (wp->type == waypoint::function_return)
+        {
+          if (wp->format == "ext_c_expression")
+          {
+            if (expr.find("\\at") != std::string::npos)
+            {
+              log_warning(
+                "function_return at line {}: \\at() not yet supported, "
+                "skipping",
+                line_num);
+              continue;
+            }
+            if (expr.find("\\result") != std::string::npos)
+            {
+              std::string lhs = extract_lhs(line_text);
+              if (lhs.empty())
+              {
+                log_warning(
+                  "function_return at line {}: cannot determine lhs for "
+                  "\\result substitution, skipping",
+                  line_num);
+                continue;
+              }
+              replace_all(expr, "\\result", lhs);
+            }
+          }
+          log_progress(
+            "Injecting {} function_return at line {}: {}",
+            wp->action == waypoint::avoid ? "avoid" : "follow",
+            line_num,
+            expr);
+        }
+        else
+        {
+          log_progress(
+            "Injecting {} assumption at line {}: {}",
+            wp->action == waypoint::avoid ? "avoid" : "follow",
+            line_num,
+            expr);
+        }
+
+        // Re-emit #line before each call so that every injected intrinsic
+        // is attributed to line_num regardless of how many are in the loop.
+        // Without this, the compiler auto-increments and std::prev would
+        // return the wrong line for the 3rd and beyond injected calls.
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
+        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
+            << expr << "));\n";
+      }
     }
   }
 
-  if (options_.get_bool_option("witness-parse-tree"))
-    // stop verify for debugging
-    return true;
+  return out.str();
+}
 
-  return false;
+std::string yaml_parser::build_injected_source(
+  const std::string &source_path,
+  const std::string &original_path,
+  const std::vector<invariant> &invariants)
+{
+  std::unordered_map<size_t, std::vector<const invariant *>> by_line;
+  by_line.reserve(invariants.size());
+  for (const auto &inv : invariants)
+    by_line[static_cast<size_t>(inv.line.to_int64())].push_back(&inv);
+
+  std::ifstream in(source_path);
+  if (!in)
+    return {};
+
+  std::ostringstream out;
+  std::string line_text;
+  size_t line_num = 0;
+
+  while (std::getline(in, line_text))
+  {
+    ++line_num;
+    auto it = by_line.find(line_num);
+    if (it != by_line.end())
+    {
+      for (const invariant *inv : it->second)
+      {
+        switch (inv->type)
+        {
+        case invariant::loop_invariant:
+          out << "__ESBMC_loop_invariant((_Bool)(" << inv->value << "));\n";
+          log_progress(
+            "Injecting loop invariant at line {}: {}", line_num, inv->value);
+          break;
+        case invariant::location_invariant:
+          out << "__ESBMC_assert((_Bool)(" << inv->value
+              << "), \"witness invariant\");\n";
+          out << "__ESBMC_assume((_Bool)(" << inv->value << "));\n";
+          log_progress(
+            "Injecting location invariant at line {}: {}",
+            line_num,
+            inv->value);
+          break;
+        default:
+          log_warning(
+            "Unsupported invariant type for '{}', skipping", inv->value);
+          break;
+        }
+      }
+      out << "#line " << line_num << " \"" << original_path << "\"\n";
+    }
+    out << line_text << "\n";
+  }
+
+  return out.str();
 }

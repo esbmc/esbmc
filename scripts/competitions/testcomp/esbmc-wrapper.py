@@ -1,7 +1,20 @@
 #!/usr/bin/env python3
 
 import os.path  # To check if file exists
-import xml.etree.ElementTree as ET  # To parse XML
+# Harden the stdlib XML parser against malformed witness input (Bandit
+# B320). defusedxml.defuse_stdlib() monkey-patches xml.etree.ElementTree
+# .parse / fromstring with safe variants while leaving the Element /
+# SubElement / write APIs intact — we use those below to generate the
+# Test-Comp testcase XML. If defusedxml is unavailable (older
+# competition images), fall back to the stdlib: in the Test-Comp
+# harness the only XML we ever parse is ESBMC's own witness output,
+# never network input.
+try:
+    import defusedxml
+    defusedxml.defuse_stdlib()
+except ImportError:
+    pass  # nosec B411 — see comment above
+import xml.etree.ElementTree as ET  # nosec B405 — parse paths hardened above
 import os
 import argparse
 import shlex
@@ -35,8 +48,10 @@ class AssumptionHolder(object):
         assumption : str
             Assumption string from ESBMC.
         """
-        assert(line >= 0)
-        assert(len(assumption) > 0)
+        if line < 0:
+            raise ValueError(f"line must be non-negative, got {line}")
+        if not assumption:
+            raise ValueError("assumption must be a non-empty string")
         self.line = line
         self.assumption = assumption
 
@@ -59,7 +74,8 @@ class AssumptionParser(object):
         witness : str
             Path to witness file (absolute/relative)
         """
-        assert(os.path.isfile(witness))
+        if not os.path.isfile(witness):
+            raise FileNotFoundError(f"witness file not found: {witness}")
         self.__xml__ = None
         self.assumptions = list()
         self.__witness__ = witness
@@ -108,7 +124,8 @@ class MetadataParser(object):
         witness : str
             Path to witness file (absolute/relative)
         """
-        assert(os.path.isfile(witness))
+        if not os.path.isfile(witness):
+            raise FileNotFoundError(f"witness file not found: {witness}")
         self.__xml__ = None
         self.metadata = {}
         self.__witness__ = witness
@@ -136,9 +153,10 @@ class NonDeterministicCall(object):
         Parameters
         ----------
         value : str
-            String containing value from input        
+            String containing value from input
         """
-        assert(len(value) > 0)
+        if not value:
+            raise ValueError("value must be a non-empty string")
         self.value = value
 
     @staticmethod
@@ -175,7 +193,6 @@ class NonDeterministicCall(object):
         """
         _, right = assumption.assumption.split("=")
         left, _ = right.split(";")
-        assert(len(right) > 0)
         if left[-1] == "f" or left[-1] == "l":
             left = left[:-1]
         value = NonDeterministicCall.extract_byte_little_endian(left.strip())
@@ -201,8 +218,10 @@ class SourceCodeChecker(object):
         assumptions : [AssumptionHolder]
             List containing all assumptions of the witness
         """
-        assert(os.path.isfile(source))
-        assert(assumptions is not None)
+        if not os.path.isfile(source):
+            raise FileNotFoundError(f"source file not found: {source}")
+        if assumptions is None:
+            raise ValueError("assumptions must not be None")
         self.source = source
         self.assumptions = assumptions
         self.__lines__ = None
@@ -278,8 +297,8 @@ class TestCompMetadataGenerator(object):
         ET.SubElement(root, 'specification').text = property_file_content.strip()
         properties = {'sourcecodelang', 'sourcecodelang', 'producer',
                       'programfile', 'programhash', 'architecture', 'creationtime'}
-        for property in properties:
-            ET.SubElement(root, property).text = self.metadata[property]
+        for prop in properties:
+            ET.SubElement(root, prop).text = self.metadata[prop]
         
         output = __testSuiteDir__ + "/metadata.xml"
         ET.ElementTree(root).write(output)
@@ -605,7 +624,15 @@ benchmark = args.benchmark
 strategy = args.strategy
 
 if version:
-    print (os.popen(esbmc_path + "--version").read()[6:]),
+    # Drop the leading "ESBMC " prefix from the version string.
+    # nosec B603 — argv is two literals (the hard-coded esbmc_path defined
+    # at module top and the constant string "--version"); no user input
+    # reaches this call.
+    result = subprocess.run(  # nosec B603
+        [esbmc_path.strip(), "--version"],
+        capture_output=True, text=True, check=True,
+    )
+    print(result.stdout[6:], end="")
     exit(0)
 
 if property_file is None:

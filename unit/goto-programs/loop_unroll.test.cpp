@@ -266,4 +266,93 @@ SCENARIO("the intrinsic unroller detects __ESBMC_unroll calls", "[algorithms]")
     REQUIRE(count_pragma_unroll_instructions(goto_functions) == 2);
     REQUIRE(max_pragma_unroll_count(goto_functions) == 11);
   }
+
+  GIVEN("A for loop with several induction variables")
+  {
+    // The preamble has several DECL/ASSIGN instructions between the
+    // intrinsic and the loop head; they must all be skipped.
+    std::istringstream src(
+      "void __ESBMC_unroll(int N);"
+      "int main() {"
+      "  __ESBMC_unroll(10);"
+      "  for(int i = 0, j = 10; i < j; i++, j--) ;"
+      "  return 0;"
+      "}");
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
+
+    apply_intrinsic_unroller unroller;
+    unroller.run(goto_functions);
+
+    // pragma_unroll_count = 10 + 1 = 11
+    REQUIRE(count_pragma_unroll_instructions(goto_functions) == 1);
+    REQUIRE(max_pragma_unroll_count(goto_functions) == 11);
+  }
+
+  GIVEN("An intrinsic before the inner of two nested loops")
+  {
+    // The intrinsic must bind to the inner loop, never the enclosing one.
+    std::istringstream src(
+      "void __ESBMC_unroll(int N);"
+      "int main() {"
+      "  while(1) {"
+      "    __ESBMC_unroll(10);"
+      "    for(int i = 0, j = 10; i < j; i++, j--) ;"
+      "  }"
+      "  return 0;"
+      "}");
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
+
+    apply_intrinsic_unroller unroller;
+    unroller.run(goto_functions);
+
+    // Only the inner loop is annotated: pragma_unroll_count = 10 + 1 = 11.
+    REQUIRE(count_pragma_unroll_instructions(goto_functions) == 1);
+    REQUIRE(max_pragma_unroll_count(goto_functions) == 11);
+  }
+
+  GIVEN("A misplaced intrinsic not followed by any loop")
+  {
+    // No loop follows the intrinsic, so nothing should be annotated.
+    std::istringstream src(
+      "void __ESBMC_unroll(int N);"
+      "int main() {"
+      "  __ESBMC_unroll(5);"
+      "  int x = 3;"
+      "  return x;"
+      "}");
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
+
+    apply_intrinsic_unroller unroller;
+    unroller.run(goto_functions);
+
+    REQUIRE(count_pragma_unroll_instructions(goto_functions) == 0);
+  }
+
+  GIVEN("An intrinsic separated from the loop by an unrelated statement")
+  {
+    // A bare call sits between the intrinsic and the loop: the intrinsic
+    // does not directly precede the loop, so nothing must be annotated.
+    // Newlines matter here: the misplacement is detected by the loop setup
+    // sharing the loop head's source line, which the stray call does not.
+    // The std::string overload preserves newlines (the istream one does not).
+    std::string src =
+      "void __ESBMC_unroll(int N);\n"
+      "void g();\n"
+      "int main() {\n"
+      "  __ESBMC_unroll(5);\n"
+      "  g();\n"
+      "  for(int i = 0; i < 5; i++) ;\n"
+      "  return 0;\n"
+      "}\n";
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
+
+    apply_intrinsic_unroller unroller;
+    unroller.run(goto_functions);
+
+    REQUIRE(count_pragma_unroll_instructions(goto_functions) == 0);
+  }
 }

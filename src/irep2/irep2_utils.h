@@ -9,27 +9,6 @@
 
 std::string indent_str_irep2(unsigned int indent);
 
-// Map a base type to it's list of names
-template <typename T>
-class base_to_names;
-
-template <class T>
-std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
-{
-  list_of_memberst memb = obj.tostring(indent + 2);
-
-  std::string indentstr = indent_str_irep2(indent);
-  std::string exprstr = std::move(ident);
-
-  for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
-       it++)
-  {
-    exprstr += "\n" + indentstr + "* " + it->first + " : " + it->second;
-  }
-
-  return exprstr;
-}
-
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
 {
@@ -48,9 +27,12 @@ inline bool is_fractional_type(const type2tc &t)
   return t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id;
 }
 
-inline bool is_fractional_type(const expr2tc &e)
+/** Test whether @p e is a relational comparison: ==, !=, <, >, <=, >=. */
+inline bool is_comparison_expr(const expr2tc &e)
 {
-  return is_bv_type(e->type);
+  return is_equality2t(e) || is_notequal2t(e) || is_lessthan2t(e) ||
+         is_greaterthan2t(e) || is_lessthanequal2t(e) ||
+         is_greaterthanequal2t(e);
 }
 
 /** Test whether type is a number type - bv, fixedbv or floatbv. */
@@ -91,25 +73,35 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
-inline bool contains_symbol_expr(const expr2tc &e)
+// array_type2t and vector_type2t carry the same set of element-shape
+// fields (subtype, array_size, size_is_infinite). Callers that have a
+// type which they know is one of those two but don't care which use
+// these helpers to skip the per-kind switch.
+inline const type2tc &array_or_vector_subtype(const type2tc &t)
 {
-  if (is_symbol2t(e))
-    return true;
-
-  bool r = false;
-  e->foreach_operand(
-    [&r](const expr2tc &f) { r = r || contains_symbol_expr(f); });
-  return r;
+  if (is_array_type(t))
+    return to_array_type(t).subtype;
+  if (is_vector_type(t))
+    return to_vector_type(t).subtype;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_subtype");
 }
 
-inline bool is_sym_sized_array_type(const type2tc &t)
+inline const expr2tc &array_or_vector_size(const type2tc &t)
 {
-  if (!is_array_type(t))
-    return false;
-  const array_type2t &a = to_array_type(t);
-  if (!a.array_size)
-    return false;
-  return contains_symbol_expr(a.array_size);
+  if (is_array_type(t))
+    return to_array_type(t).array_size;
+  if (is_vector_type(t))
+    return to_vector_type(t).array_size;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size");
+}
+
+inline bool array_or_vector_size_is_infinite(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).size_is_infinite;
+  if (is_vector_type(t))
+    return to_vector_type(t).size_is_infinite;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size_is_infinite");
 }
 
 inline bool is_byte_type(const type2tc &t)
@@ -120,16 +112,6 @@ inline bool is_byte_type(const type2tc &t)
 inline bool is_byte_type(const expr2tc &e)
 {
   return is_byte_type(e->type);
-}
-
-inline bool is_byte_array(const type2tc &t)
-{
-  return is_array_type(t) && is_byte_type(to_array_type(t).subtype);
-}
-
-inline bool is_byte_array(const expr2tc &e)
-{
-  return is_byte_array(e->type);
 }
 
 inline bool is_constant_number(const expr2tc &t)
@@ -239,15 +221,20 @@ inline bool is_false(const expr2tc &expr)
   return false;
 }
 
-inline expr2tc gen_true_expr()
+// Returning by const reference is sound here: `c` has static storage
+// duration and outlives every possible caller. Callers that bind to an
+// `expr2tc` value get the usual refcount-bump copy; callers that pass
+// the result through to a function taking `const expr2tc &` save one
+// pair of atomic refcount ops per call.
+inline const expr2tc &gen_true_expr()
 {
-  static expr2tc c = constant_bool2tc(true);
+  static const expr2tc c = constant_bool2tc(true);
   return c;
 }
 
-inline expr2tc gen_false_expr()
+inline const expr2tc &gen_false_expr()
 {
-  static expr2tc c = constant_bool2tc(false);
+  static const expr2tc c = constant_bool2tc(false);
   return c;
 }
 
@@ -264,21 +251,6 @@ inline expr2tc gen_ulong(BigInt v)
 inline expr2tc gen_ulong(unsigned long val)
 {
   return gen_ulong(BigInt(val));
-}
-
-inline expr2tc gen_slong(signed long val)
-{
-  return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
-}
-
-inline const type2tc &get_array_subtype(const type2tc &type)
-{
-  return to_array_type(type).subtype;
-}
-
-inline const type2tc &get_vector_subtype(const type2tc &type)
-{
-  return to_vector_type(type).subtype;
 }
 
 inline const type2tc &get_base_array_subtype(const type2tc &type)
@@ -302,178 +274,43 @@ inline bool simplify(expr2tc &expr)
   return false;
 }
 
-inline void make_not(expr2tc &expr)
-{
-  if (is_true(expr))
-  {
-    expr = gen_false_expr();
-    return;
-  }
+/** Negate @p expr in place. Folds constant true/false directly to
+ *  gen_false_expr() / gen_true_expr() singletons, peels a redundant
+ *  `not(not(x))` to `x`, otherwise wraps in `not2tc`. The result is
+ *  swapped into @p expr. */
+void make_not(expr2tc &expr);
 
-  if (is_false(expr))
-  {
-    expr = gen_true_expr();
-    return;
-  }
+/** Build the left-associative AND-chain of @p cs:
+ *  `and(and(and(c0, c1), c2), ...)`. Returns `gen_true_expr()` when
+ *  the input is empty (identity for conjunction). */
+expr2tc conjunction(std::vector<expr2tc> cs);
 
-  expr2tc new_expr;
-  if (is_not2t(expr))
-    new_expr = to_not2t(expr).value;
-  else
-    new_expr = not2tc(expr);
+/** Build the left-associative OR-chain of @p cs. Returns
+ *  `gen_true_expr()` when the input is empty — note this is the
+ *  convention used by the existing callers, not the strict identity
+ *  for disjunction (which would be `false`). Preserves callers that
+ *  short-circuit on "no constraints means trivially satisfied". */
+expr2tc disjunction(std::vector<expr2tc> cs);
 
-  expr.swap(new_expr);
-}
+/** Build a `sideeffect2t` of kind `nondet` of @p type, i.e. an
+ *  expression whose value is left to the SMT solver. Used at frontend
+ *  / migration boundaries to seed unspecified inputs. */
+expr2tc gen_nondet(const type2tc &type);
 
-inline expr2tc conjunction(std::vector<expr2tc> cs)
-{
-  if (cs.empty())
-    return gen_true_expr();
+/** Build the canonical zero value of @p type. Handles bool, BV
+ *  (signed/unsigned, any width), fixedbv, floatbv, vector, array,
+ *  pointer (NULL), struct (zero-of-each-member) and union (zero-of-
+ *  first-member). Recursive for aggregates.
+ *
+ *  @param array_as_array_of When true, an array_type collapses to a
+ *  single `constant_array_of2t` rather than expanding to N elements.
+ *  Useful when downstream consumers prefer the run-length form. */
+expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false);
 
-  expr2tc res = cs[0];
-  for (std::size_t i = 1; i < cs.size(); ++i)
-    res = and2tc(res, cs[i]);
-
-  return res;
-}
-
-inline expr2tc disjunction(std::vector<expr2tc> cs)
-{
-  if (cs.empty())
-    return gen_true_expr();
-
-  expr2tc res = cs[0];
-  for (std::size_t i = 1; i < cs.size(); ++i)
-    res = or2tc(res, cs[i]);
-
-  return res;
-}
-
-inline expr2tc gen_nondet(const type2tc &type)
-{
-  return sideeffect2tc(
-    type,
-    expr2tc(),
-    expr2tc(),
-    std::vector<expr2tc>(),
-    type2tc(),
-    sideeffect2t::nondet);
-}
-
-inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
-{
-  switch (type->type_id)
-  {
-  case type2t::bool_id:
-    return gen_false_expr();
-
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return constant_int2tc(type, BigInt(0));
-
-  case type2t::fixedbv_id:
-    return constant_fixedbv2tc(fixedbvt(fixedbv_spect(to_fixedbv_type(type))));
-
-  case type2t::floatbv_id:
-    return constant_floatbv2tc(
-      ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
-
-  case type2t::vector_id:
-  {
-    auto vec_type = to_vector_type(type);
-    assert(is_constant_int2t(vec_type.array_size));
-    auto s = to_constant_int2t(vec_type.array_size);
-
-    std::vector<expr2tc> members;
-    for (long int i = 0; i < s.as_long(); i++)
-      members.push_back(
-        gen_zero(to_vector_type(type).subtype, array_as_array_of));
-
-    return constant_vector2tc(type, members);
-  }
-  case type2t::array_id:
-  {
-    if (array_as_array_of)
-      return constant_array_of2tc(type, gen_zero(to_array_type(type).subtype));
-
-    auto arr_type = to_array_type(type);
-
-    assert(is_constant_int2t(arr_type.array_size));
-    auto s = to_constant_int2t(arr_type.array_size);
-
-    std::vector<expr2tc> members;
-    for (long int i = 0; i < s.as_long(); i++)
-      members.push_back(
-        gen_zero(to_array_type(type).subtype, array_as_array_of));
-
-    return constant_array2tc(type, members);
-  }
-
-  case type2t::pointer_id:
-    return symbol2tc(type, "NULL");
-
-  case type2t::struct_id:
-  {
-    auto struct_type = to_struct_type(type);
-
-    std::vector<expr2tc> members;
-    for (auto const &member_type : struct_type.members)
-      members.push_back(gen_zero(member_type, array_as_array_of));
-
-    return constant_struct2tc(type, members);
-  }
-
-  case type2t::union_id:
-  {
-    auto union_type = to_union_type(type);
-
-    assert(!union_type.members.empty());
-    std::vector<expr2tc> members = {
-      gen_zero(union_type.members.front(), array_as_array_of)};
-
-    return constant_union2tc(type, union_type.member_names.front(), members);
-  }
-
-  default:
-    break;
-  }
-
-  log_error("Can't generate zero for type {}", get_type_id(type));
-  abort();
-}
-
-inline expr2tc gen_one(const type2tc &type)
-{
-  switch (type->type_id)
-  {
-  case type2t::bool_id:
-    return gen_true_expr();
-
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return constant_int2tc(type, BigInt(1));
-
-  case type2t::fixedbv_id:
-  {
-    fixedbvt f(fixedbv_spect(to_fixedbv_type(type)));
-    f.from_integer(BigInt(1));
-    return constant_fixedbv2tc(f);
-  }
-
-  case type2t::floatbv_id:
-  {
-    ieee_floatt f(ieee_float_spect(to_floatbv_type(type)));
-    f.from_integer(BigInt(1));
-    return constant_floatbv2tc(f);
-  }
-
-  default:
-    break;
-  }
-
-  log_error("Can't generate one for type {}", get_type_id(type));
-  abort();
-}
+/** Build the canonical one value of @p type. Defined for bool, BV
+ *  (any width), fixedbv, floatbv. Aborts on aggregate types — "one"
+ *  isn't meaningful for structs/arrays/unions. */
+expr2tc gen_one(const type2tc &type);
 
 /**
    * @brief Distribute the functor `func` over op1 and op2
@@ -488,7 +325,8 @@ inline expr2tc gen_one(const type2tc &type)
    * @return expr2tc with the resulting vector
    */
 template <typename Func>
-inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
+inline expr2tc
+distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
 {
   assert(is_constant_vector2t(op1) || is_constant_vector2t(op2));
   /*
@@ -547,169 +385,46 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
       auto e1 = is_op1_vec ? op : c;
       auto e2 = is_op1_vec ? c : op;
       auto new_op = func(op->type, e1, e2);
-      datatype_member = new_op->do_simplify();
+      // do_simplify() returns nil when no per-op peephole fires. Don't
+      // store nil into the member slot — keep new_op so the lane
+      // expression survives unsimplified for the SMT layer.
+      auto folded = new_op->do_simplify();
+      datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
   }
 }
 
-/**
-   * @brief Distribute a function between one or two operands,
-   * at least one of those must be a vector
-   *
-   * @param id the id for the operation
-   * @param op1 the first operand
-   * @param op2 the second operand
-   * @param rm rounding mode (for ieee)
-   * @return expr2tc with the resulting vector
-   */
-inline expr2tc distribute_vector_operation(
+/** Element-wise vector operation by `expr_id` dispatch.
+ *  At least one of @p op1 / @p op2 must be a vector. For each lane,
+ *  builds the corresponding scalar IR node (neg / add / sub / mul /
+ *  div / mod / shl / bit{and,or,xor,not} / ieee_{add,sub,mul,div}).
+ *  IEEE variants honour the rounding-mode operand @p rm; the others
+ *  ignore it. Returns a fresh constant_vector2t holding the lanes.
+ *  Unlike the templated overload, this form doesn't take a functor —
+ *  it switches on @p id internally, which is convenient at frontend
+ *  / migration sites that already have the expr_id at hand. */
+expr2tc distribute_vector_operation(
   expr2t::expr_ids id,
-  expr2tc op1,
-  expr2tc op2 = expr2tc(),
-  expr2tc rm = expr2tc())
-{
-#ifndef NDEBUG
-  assert(is_vector_type(op1) || (op2 && is_vector_type(op2)));
-#endif
-  auto is_op1_vector = is_vector_type(op1);
-  auto vector_length = is_op1_vector ? to_vector_type(op1->type).array_size
-                                     : to_vector_type(op2->type).array_size;
-  assert(is_constant_int2t(vector_length));
+  const expr2tc &op1,
+  const expr2tc &op2 = expr2tc(),
+  const expr2tc &rm = expr2tc());
 
-  auto vector_subtype = is_op1_vector ? to_vector_type(op1->type).subtype
-                                      : to_vector_type(op2->type).subtype;
-  auto result = is_op1_vector ? gen_zero(op1->type) : gen_zero(op2->type);
+// Build a comparison-category struct value with the discriminant set to v.
+// Used for the C++20 spaceship operator: strong_ordering / weak_ordering /
+// partial_ordering all layout the discriminant as the first field, so
+// writing operand[0] is enough; remaining fields (if any) are zero-filled
+// for layout safety against custom comparison-category types.
+//
+// Returns nil if @p t is not a struct or has no fields.
+expr2tc make_cmp_value(const type2tc &t, int v);
 
-  /*
-   * If both op1 and op2 are vectors the resulting value
-   * would be the operation over each member
-   *
-   * Example:
-   *
-   * op1 = {1,2,3,4}
-   * op2 = {1,1,1,1}
-   * func = add
-   *
-   * This would result in:
-   *
-   * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
-   * {2,3,4,5}
-   */
-
-  /*
-   * If only one of the operator is a vector, then the result
-   * would extract each value of the vector and apply the value to
-   * the other operator
-   *
-   * Example:
-   *
-   * op1 = {1,2,3,4}
-   * op2 = 1
-   * func = add
-   *
-   * This would result in:
-   *
-   * { add(op1[0], 1), add(op1[1], 1), ...}
-   * {2,3,4,5}
-   */
-  for (size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
-  {
-    BigInt position(i);
-    type2tc vector_type =
-      to_vector_type(is_vector_type(op1->type) ? op1->type : op2->type).subtype;
-    expr2tc local_op1 = op1;
-    if (is_vector_type(op1->type))
-    {
-      local_op1 = index2tc(
-        to_vector_type(op1->type).subtype,
-        op1,
-        constant_int2tc(get_uint32_type(), position));
-    }
-
-    expr2tc local_op2 = op2;
-    if (op2 && is_vector_type(op2->type))
-    {
-      local_op2 = index2tc(
-        to_vector_type(op2->type).subtype,
-        op2,
-        constant_int2tc(get_uint32_type(), position));
-    }
-
-    expr2tc to_add;
-    switch (id)
-    {
-    case expr2t::neg_id:
-      to_add = neg2tc(vector_type, local_op1);
-      break;
-    case expr2t::bitnot_id:
-      to_add = bitnot2tc(vector_type, local_op1);
-      break;
-    case expr2t::sub_id:
-      to_add = sub2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::mul_id:
-      to_add = mul2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::div_id:
-      to_add = div2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::modulus_id:
-      to_add = modulus2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::add_id:
-      to_add = add2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::shl_id:
-      to_add = shl2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::bitxor_id:
-      to_add = bitxor2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::bitor_id:
-      to_add = bitor2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::bitand_id:
-      to_add = bitand2tc(vector_type, local_op1, local_op2);
-      break;
-    case expr2t::ieee_add_id:
-      to_add = ieee_add2tc(vector_type, local_op1, local_op2, rm);
-      break;
-    case expr2t::ieee_div_id:
-      to_add = ieee_div2tc(vector_type, local_op1, local_op2, rm);
-      break;
-    case expr2t::ieee_sub_id:
-      to_add = ieee_sub2tc(vector_type, local_op1, local_op2, rm);
-      break;
-    case expr2t::ieee_mul_id:
-      to_add = ieee_mul2tc(vector_type, local_op1, local_op2, rm);
-      break;
-    default:
-      assert(0 && "Unsupported operation for Vector");
-      abort();
-    }
-    to_constant_vector2t(result).datatype_members[i] = to_add;
-  }
-  return result;
-}
-
-inline void get_symbols(
+/** Collect every user-level `symbol2t` referenced by @p expr into
+ *  @p symbols. Symbols whose name begins with "__ESBMC_" are treated
+ *  as compiler internals and skipped (their subtree is not descended).
+ *  Recursive — visits the expression tree via foreach_operand. */
+void get_symbols(
   const expr2tc &expr,
-  std::unordered_set<expr2tc, irep2_hash> &symbols)
-{
-  if (is_nil_expr(expr))
-    return;
-
-  if (is_symbol2t(expr))
-  {
-    symbol2t s = to_symbol2t(expr);
-    if (s.thename.as_string().find("__ESBMC_") != std::string::npos)
-      return;
-    symbols.insert(expr);
-  }
-
-  expr->foreach_operand(
-    [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
-}
+  std::unordered_set<expr2tc, irep2_hash> &symbols);
 
 #endif /* UTIL_IREP2_UTILS_H_ */

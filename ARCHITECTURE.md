@@ -1,6 +1,6 @@
 ### ESBMC Architecture and Verification Process
 
-(The Efficient SMT-based Context-Bounded Model Checker (ESBMC) is a software model checker designed to automatically detect bugs or prove their absence in programs written across multiple programming languages. The figure below illustrates ESBMC's verification architecture.
+The Efficient SMT-based Context-Bounded Model Checker (ESBMC) is a software model checker designed to automatically detect bugs or prove their absence in programs written across multiple programming languages. The figure below illustrates ESBMC's verification architecture.
 
 <img width="2029" height="1146" alt="image" src="https://github.com/user-attachments/assets/5e9be314-709d-4988-add7-0d8847e12c41" />
 

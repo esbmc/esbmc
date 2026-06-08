@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 4
+
+^VERIFICATION FAILED$
+uncaught exception

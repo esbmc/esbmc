@@ -33,8 +33,9 @@ typedef struct __ESBMC_PyType
 typedef struct __ESBMC_PyObj
 {
   const void *value; /**< Pointer to object data */
-  size_t type_id;    /**< Hashed or unique type identifier */
-  size_t size;       /**< Number of bytes in value */
+  size_t float_idx;  // cppcheck-suppress unusedStructMember
+  size_t type_id;    // cppcheck-suppress unusedStructMember
+  size_t size;       // cppcheck-suppress unusedStructMember
 } PyObject;
 
 /**
@@ -55,5 +56,22 @@ typedef struct __ESBMC_PyListObj
   PyObject *items; /**< Array of PyObject items (SMT infinite array concept) */
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
+
+/**
+ * @brief Minimal representation of a Python slice object.
+ *
+ * Mirrors CPython's slice(start, stop, step). Any of the three may be omitted
+ * by the user (e.g. slice(5) or a[i:]), in which case the corresponding
+ * has_* flag is zero and the integer field is unspecified.
+ */
+typedef struct __ESBMC_PySliceObj
+{
+  long long start; // cppcheck-suppress unusedStructMember
+  long long stop;  // cppcheck-suppress unusedStructMember
+  long long step;  // cppcheck-suppress unusedStructMember
+  int has_start;   // cppcheck-suppress unusedStructMember
+  int has_stop;    // cppcheck-suppress unusedStructMember
+  int has_step;    // cppcheck-suppress unusedStructMember
+} PySliceObject;
 
 #endif /* PYTHON_TYPES_H */

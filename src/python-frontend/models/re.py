@@ -1,3 +1,24 @@
+# pylint: disable=undefined-variable
+# `__VERIFIER_nondet_bool`, `nondet_str`, `nondet_int` are ESBMC intrinsics
+# matched by name by the Python converter; they have no Python binding.
+#
+# pylint: disable=too-many-locals,too-many-branches,too-many-boolean-expressions,line-too-long
+# This module hosts a hand-rolled regex matcher whose control-flow shape
+# is matched to the converter's audited support for Compare/BoolOp nodes.
+# Pylint's complexity thresholds (max-locals=15, max-branches=15,
+# max-bool-expr=5) are tripped by the literal-set tests below; mechanical
+# refactors (extract helper, split function) would require re-validating
+# every regression in regression/python/ that exercises re.match. The
+# matcher is rewritten only when changed for a real reason. McCabe's
+# MC0001 fires on the same shape and is silenced project-wide in
+# .prospector.yaml (pylint's mccabe extension is not loaded in Codacy's
+# Prospector run, so a `too-complex` pragma would itself trip
+# unknown-option-value).
+#
+# pylint: disable=consider-using-in,chained-comparison
+# Equality and range checks are kept as explicit Compare-And-Compare AST
+# nodes; the converter has direct, audited support for those forms.
+
 # Regular Expression Operational Model
 # TODO: Currently, the regex model uses manual pattern recognizers with
 # nondeterministic fallbacks. A proper string solver would handle
@@ -7,8 +28,18 @@
 # 3) String constraint solving can be expensive; we may need further strategies for handling large string programs.
 
 
-def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
-    """Match [x-y]+ or [x-y]* patterns"""
+def try_match_char_class_range(pattern: str,
+                               pattern_len: int,
+                               string: str,
+                               prefix_only: bool = False) -> int:
+    """Match [x-y]+ or [x-y]* patterns.
+
+    When ``prefix_only`` is False (default, used by ``fullmatch``), every
+    character of ``string`` must lie in [x-y]. When True (used by ``match``),
+    only the leading run of in-range characters is required: ``+`` needs at
+    least one such character, ``*`` always matches at the start of the
+    string. This mirrors CPython's at-the-start semantics for ``re.match``.
+    """
     if pattern_len != 6:
         return -1
 
@@ -30,6 +61,15 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     if string_len == 0:
         return 1 if quantifier == '*' else 0
 
+    if prefix_only:
+        # `*` matches the empty prefix always; `+` requires one leading char.
+        if quantifier == '*':
+            return 1
+        c0: str = string[0]
+        if c0 < start_char or c0 > end_char:
+            return 0
+        return 1
+
     i: int = 0
     while i < string_len:
         c: str = string[i]
@@ -41,8 +81,15 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     return 1
 
 
-def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int:
-    r"""Match \d+ or \d* patterns"""
+def try_match_digit_sequence(pattern: str,
+                             pattern_len: int,
+                             string: str,
+                             prefix_only: bool = False) -> int:
+    r"""Match \d+ or \d* patterns.
+
+    See ``try_match_char_class_range`` for the ``prefix_only`` semantics:
+    full-string when False, at-the-start when True.
+    """
     if pattern_len != 3:
         return -1
 
@@ -60,6 +107,14 @@ def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int
 
     if string_len == 0:
         return 1 if quantifier == '*' else 0
+
+    if prefix_only:
+        if quantifier == '*':
+            return 1
+        c0: str = string[0]
+        if c0 < '0' or c0 > '9':
+            return 0
+        return 1
 
     i: int = 0
     while i < string_len:
@@ -187,12 +242,15 @@ def match(pattern: str, string: str) -> bool:
         if ch0 == '.' and ch1 == '*':
             return True
 
-    # Try each pattern recognizer
-    result: int = try_match_char_class_range(pattern, pattern_len, string)
+    # Try each pattern recognizer. ``re.match`` matches at the START of the
+    # string, so the quantified recognizers run in prefix mode -- a non-
+    # matching suffix is fine, as long as the leading run satisfies the
+    # quantifier (one-or-more for ``+``, zero-or-more for ``*``).
+    result: int = try_match_char_class_range(pattern, pattern_len, string, True)
     if result >= 0:
         return result == 1
 
-    result = try_match_digit_sequence(pattern, pattern_len, string)
+    result = try_match_digit_sequence(pattern, pattern_len, string, True)
     if result >= 0:
         return result == 1
 
@@ -219,7 +277,8 @@ def match(pattern: str, string: str) -> bool:
             i: int = 0
             while i < prefix_len:
                 c: str = pattern[i]
-                if c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '(' or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\':
+                if (c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '('
+                        or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\'):
                     has_meta_in_prefix = True
                     break
                 i = i + 1
@@ -239,7 +298,8 @@ def match(pattern: str, string: str) -> bool:
     k: int = 0
     while k < pattern_len - 1:
         ch: str = pattern[k]
-        if ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '(' or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\':
+        if (ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '('
+                or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\'):
             has_meta = True
             break
         k = k + 1
@@ -311,6 +371,85 @@ def search(pattern: str, string: str) -> bool:
     # For patterns with metacharacters, use nondeterministic behavior
     has_match: bool = __VERIFIER_nondet_bool()
     return has_match
+
+
+# Match-object accessors
+# ----------------------
+# CPython exposes captured groups, the tuple of groups, and span via methods
+# on a Match object returned from re.match/search/fullmatch. ESBMC's Python
+# frontend cannot soundly model an Optional[Match] return without breaking
+# truthiness assertions on every existing re* regression test, so the
+# parser rewrites ``m.group(N)`` / ``m.groups()`` / ``m.span(N)`` into
+# direct calls to the helpers below when ``m`` was bound by
+# re.match/search/fullmatch. The helpers recompute the matched substring
+# from the original (pattern, string) pair the parser captured at the
+# binding site; for patterns the recognisers below do not understand they
+# return a nondeterministic value (sound for verification).
+
+
+def _digit_prefix_len(string: str, string_len: int) -> int:
+    """Return the length of the leading digit run in ``string``."""
+    i: int = 0
+    while i < string_len:
+        c: str = string[i]
+        if c < '0' or c > '9':
+            return i
+        i = i + 1
+    return string_len
+
+
+def _is_paren_digit_plus(pattern: str, pattern_len: int) -> bool:
+    r"""Return True iff ``pattern`` is exactly ``(\d+)``."""
+    if pattern_len != 5:
+        return False
+    return (pattern[0] == '(' and pattern[1] == '\\' and pattern[2] == 'd' and pattern[3] == '+'
+            and pattern[4] == ')')
+
+
+def _group(pattern: str, string: str, n: int) -> str:
+    """Return the n-th captured group when re.match(pattern, string) succeeded.
+
+    Group 0 is the full match. For supported patterns the recognised
+    substring is returned exactly; for everything else a symbolic string
+    is returned so downstream assertions remain sound.
+    """
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        if n == 0 or n == 1:
+            return string[0:_digit_prefix_len(string, string_len)]
+
+    return nondet_str()
+
+
+def _groups(pattern: str, string: str) -> tuple:
+    """Return the tuple of capturing groups (group 1, group 2, ...)."""
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        return (string[0:_digit_prefix_len(string, string_len)], )
+
+    return (nondet_str(), )
+
+
+def _span(pattern: str, string: str, n: int) -> tuple:
+    """Return the ``(start, end)`` tuple for the n-th group.
+
+    For group 0 this is the span of the full match. For supported patterns
+    the exact bounds are returned; for everything else a symbolic pair is
+    returned so downstream assertions remain sound.
+    """
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+    end: int = _digit_prefix_len(string, string_len)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        if n == 0 or n == 1:
+            return (0, end)
+
+    return (nondet_int(), nondet_int())
 
 
 def fullmatch(pattern: str, string: str) -> bool:

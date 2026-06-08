@@ -18,6 +18,7 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
+  cur_seg = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -43,6 +44,8 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  witness_segs = state.witness_segs;
+  cur_seg = state.cur_seg;
   return *this;
 }
 
@@ -130,15 +133,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
   }
 
-  // Keeping additional with data achieves nothing; no code in ESBMC inspects
-  // with chains to extract data from them.
-  // FIXME: actually benchmark this and look at timing results, it may be
-  // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
     if (
-      config.options.get_bool_option("incremental-bmc") ||
-      config.options.get_bool_option("k-induction"))
+      config.language.lid != language_idt::PYTHON &&
+      (config.options.get_bool_option("incremental-bmc") ||
+       config.options.get_bool_option("k-induction")))
       // When this option is enabled, the constant propagation
       // with feature will significantly impact performance.
       // More importantly, the use of incremental-BMC / k-induction does not heavily
@@ -292,10 +292,10 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   // identifier should be l0 or l1, make sure it's l1
 
   assert(
-    lhs_sym.rlevel != symbol2t::level2 &&
-    lhs_sym.rlevel != symbol2t::level2_global);
+    lhs_sym.rlevel != symbol_renaming_level::level2 &&
+    lhs_sym.rlevel != symbol_renaming_level::level2_global);
 
-  if (lhs_sym.rlevel == symbol2t::level0)
+  if (lhs_sym.rlevel == symbol_renaming_level::level0)
     top().level1.get_ident_name(lhs);
 
   expr2tc l1_lhs = lhs;
@@ -318,14 +318,24 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  type2tc &type = expr->type;
-  if (is_array_type(type))
+  /* Rename the types of sub-expressions FIRST. Kinds like with2t carry an
+   * invariant that their own `type` equals `source_value->type`; if we
+   * rebuilt the parent's type before recursing, the new parent would
+   * point at a still-un-renamed source_value and the consistency check
+   * would (rightly) fire. Recurse first so source_value's type is
+   * already in its renamed form by the time we rebuild the parent. */
+  expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
+
+  // expr->type is const; rename symbolic array sizes on a CoW-detached copy
+  // and, if it changed, rebuild the expression with the renamed type.
+  if (is_array_type(expr->type))
   {
-    expr2tc &arr_size = to_array_type(type).array_size;
+    type2tc renamed = expr->type;
+    expr2tc &arr_size = to_array_type(renamed).array_size;
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    type->Foreach_subtype([this](type2tc &t) {
+    renamed->Foreach_subtype([this](type2tc &t) {
       if (!is_array_type(t))
         return;
 
@@ -333,11 +343,10 @@ void goto_symex_statet::rename_type(expr2tc &expr)
       if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
         rename(arr_size);
     });
-  }
 
-  /* All subexpressions' types should also be renamed, this is in line with
-   * how goto_convert_functionst::rename_types() is defined */
-  expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
+    if (renamed != expr->type)
+      expr = expr->with_type(renamed);
+  }
 }
 
 void goto_symex_statet::rename(expr2tc &expr)
@@ -410,7 +419,14 @@ void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
 {
-  if (is_code_type(orig_type))
+  if (is_code_type(orig_type) || is_code_type(expr->type))
+  {
+    return;
+  }
+  // Empty (void) types have no width; the scalar-vs-scalar width comparison
+  // below would otherwise throw symbolic_type_excp from get_width(). No
+  // fix-up is meaningful for void values, so bail out.
+  if (is_empty_type(orig_type) || is_empty_type(expr->type))
   {
     return;
   }
@@ -425,21 +441,6 @@ void goto_symex_statet::fixup_renamed_type(
     type2tc origsubtype = orig.subtype;
     type2tc newsubtype = newtype.subtype;
 
-    // Handle symbol subtypes -- we can't rename these, because there are (some)
-    // pointers to incomplete types, that here we end up trying to get a
-    // concrete type for. Which is incorrect.
-    // So instead, if one of the subtypes is a symbol type, and it isn't
-    // identical to the other type, insert a typecast. This might lead to some
-    // needless casts.
-    if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype))
-    {
-      if (origsubtype != newsubtype)
-      {
-        expr = typecast2tc(orig_type, expr);
-      }
-      return;
-    }
-
     // Cease caring about anything that points at code types: pointer arithmetic
     // applied to this is already broken.
     if (is_code_type(origsubtype) || is_code_type(newsubtype))
@@ -449,17 +450,23 @@ void goto_symex_statet::fixup_renamed_type(
       return;
 
     // Fetch the (bit) size of the pointer subtype.
+    // We can't rename pointers to incomplete types (symbol subtypes, or arrays
+    // thereof), because here we'd end up trying to get a concrete type for
+    // them, which is incorrect. If get_width() throws symbolic_type_excp,
+    // treat the subtype as unresolvable: insert a typecast when the types
+    // differ (which might lead to some needless casts) and bail out.
     unsigned int origsize, newsize;
 
-    if (is_empty_type(origsubtype))
-      origsize = 8;
-    else
-      origsize = origsubtype->get_width();
-
-    if (is_empty_type(newsubtype))
-      newsize = 8;
-    else
-      newsize = newsubtype->get_width();
+    try
+    {
+      origsize = is_empty_type(origsubtype) ? 8 : origsubtype->get_width();
+      newsize = is_empty_type(newsubtype) ? 8 : newsubtype->get_width();
+    }
+    catch (const type2t::symbolic_type_excp &)
+    {
+      expr = typecast2tc(orig_type, expr);
+      return;
+    }
 
     // If the renaming process has changed the size of the pointer subtype, this
     // will break all kinds of pointer arith; insert a cast.
@@ -510,7 +517,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
 
   // Iterate through each call frame printing func name and location.
   src = source;
-  for (it = call_stack.rbegin(); it != call_stack.rend(); it++)
+  for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {
     if (it->function_identifier == "")
     { // Top level call
@@ -545,7 +552,7 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   // Format is a vector of strings, each recording a particular function
   // invocation.
 
-  for (it = call_stack.rbegin(); it != call_stack.rend(); it++)
+  for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {
     src = it->calling_location;
 
@@ -564,4 +571,10 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   }
 
   return trace;
+}
+
+void goto_symex_statet::advance_witness_position()
+{
+  if (cur_seg < witness_segs.size())
+    ++cur_seg;
 }

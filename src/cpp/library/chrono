@@ -1,0 +1,144 @@
+#pragma once
+
+#include "cstdint"
+#include "limits"
+
+namespace std
+{
+
+template <intmax_t Num, intmax_t Den = 1>
+struct ratio
+{
+  static constexpr intmax_t num = Num;
+  static constexpr intmax_t den = Den;
+  using type = ratio<Num, Den>;
+};
+
+using nano = ratio<1, 1000000000>;
+using micro = ratio<1, 1000000>;
+using milli = ratio<1, 1000>;
+
+namespace chrono
+{
+
+template <class Rep>
+struct duration_values
+{
+  static constexpr Rep zero() noexcept { return Rep(0); }
+  // lowest(), not min(), per [time.traits.duration_values]: for floating-point
+  // Rep, std::numeric_limits<Rep>::min() is the smallest positive value.
+  static constexpr Rep min() noexcept
+  {
+    return std::numeric_limits<Rep>::lowest();
+  }
+  static constexpr Rep max() noexcept
+  {
+    return std::numeric_limits<Rep>::max();
+  }
+};
+
+template <class Rep, class Period = std::ratio<1>>
+class duration
+{
+  Rep rep_;
+
+public:
+  using rep = Rep;
+  using period = Period;
+
+  constexpr duration() noexcept : rep_(0) {}
+  constexpr explicit duration(const Rep &r) noexcept : rep_(r) {}
+  constexpr duration(const duration &) noexcept = default;
+  duration &operator=(const duration &) noexcept = default;
+
+  constexpr Rep count() const noexcept
+  {
+    return rep_;
+  }
+
+  static constexpr duration zero() noexcept
+  {
+    return duration(duration_values<Rep>::zero());
+  }
+  static constexpr duration min() noexcept
+  {
+    return duration(duration_values<Rep>::min());
+  }
+  static constexpr duration max() noexcept
+  {
+    return duration(duration_values<Rep>::max());
+  }
+};
+
+template <class Rep, class Period>
+constexpr duration<Rep, Period>
+operator+(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return duration<Rep, Period>(a.count() + b.count());
+}
+template <class Rep, class Period>
+constexpr duration<Rep, Period>
+operator-(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return duration<Rep, Period>(a.count() - b.count());
+}
+
+template <class Rep, class Period>
+constexpr bool
+operator==(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return a.count() == b.count();
+}
+template <class Rep, class Period>
+constexpr bool
+operator!=(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return !(a == b);
+}
+template <class Rep, class Period>
+constexpr bool
+operator<(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return a.count() < b.count();
+}
+template <class Rep, class Period>
+constexpr bool
+operator<=(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return !(b < a);
+}
+template <class Rep, class Period>
+constexpr bool
+operator>(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return b < a;
+}
+template <class Rep, class Period>
+constexpr bool
+operator>=(const duration<Rep, Period> &a, const duration<Rep, Period> &b)
+{
+  return !(a < b);
+}
+
+template <class ToDur, class Rep, class Period>
+constexpr ToDur duration_cast(const duration<Rep, Period> &d)
+{
+  using ToRep = typename ToDur::rep;
+  using ToPeriod = typename ToDur::period;
+  // d.count() * (Period::num / Period::den) / (ToPeriod::num / ToPeriod::den)
+  // == d.count() * Period::num * ToPeriod::den
+  //               / (Period::den * ToPeriod::num)
+  return ToDur(static_cast<ToRep>(
+    (static_cast<intmax_t>(d.count()) * Period::num * ToPeriod::den) /
+    (Period::den * ToPeriod::num)));
+}
+
+using nanoseconds = duration<long long, nano>;
+using microseconds = duration<long long, micro>;
+using milliseconds = duration<long long, milli>;
+using seconds = duration<long long>;
+using minutes = duration<long long, ratio<60>>;
+using hours = duration<long long, ratio<3600>>;
+
+} // namespace chrono
+} // namespace std

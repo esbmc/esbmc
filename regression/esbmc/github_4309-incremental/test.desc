@@ -1,0 +1,9 @@
+CORE
+main.c
+--all-witnesses --smt-during-symex
+^VERIFICATION FAILED$
+\[Counterexamples - 2 witnesses\]
+Inputs : \[0\] = -1
+Inputs : \[0\] = 1
+Inputs : \[0\] = 10
+Inputs : \[0\] = 12

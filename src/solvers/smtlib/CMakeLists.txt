@@ -6,9 +6,9 @@ endif()
 find_package(BISON 2.6.1 REQUIRED)
 find_package(FLEX 2.6.1 REQUIRED)
 
-BISON_TARGET(smtliby smtlib.ypp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp COMPILE_FLAGS "-d -psmtlib")
-FLEX_TARGET(smtlibl smtlib_tok.lpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp COMPILE_FLAGS "--header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp ${OS_FLEX_SMTLIB_FLAGS}")
-ADD_FLEX_BISON_DEPENDENCY(smtlibl smtliby)
+bison_target(smtliby smtlib.ypp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp COMPILE_FLAGS "-d -psmtlib")
+flex_target(smtlibl smtlib_tok.lpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp COMPILE_FLAGS "--header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp ${OS_FLEX_SMTLIB_FLAGS}")
+add_flex_bison_dependency(smtlibl smtliby)
 
 # For Coverage
 configure_file(smtlib.ypp  ${CMAKE_BINARY_DIR}/smtlib.ypp COPYONLY)
@@ -33,26 +33,26 @@ set(stacksize_hex 0x1400000)
 
 include(CheckLinkerFlag)
 
-set(variants
+set(stacksize_variants
     "/STACK:${stacksize_dec}"             # MSVC
     "-Wl,-stack_size,${stacksize_hex}"    # ld.lld, ld64 on macOS, see issue #1212
     "-Wl,-z,stack-size=${stacksize_dec}"  # ld.bfd, ld.gold
-   )
+)
 
-if(NOT DEFINED has_stacksize_linker_flag)
-  foreach(flag IN LISTS variants)
-    unset(has_stacksize_linker_flag CACHE)
-    check_linker_flag(CXX "${flag}" has_stacksize_linker_flag)
-    if(has_stacksize_linker_flag)
-      message(STATUS "Setting stack-size for executables to 20 MiB via '${flag}'")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${flag}"
-          CACHE STRING "Linker flags" FORCE)
-      break()
-    endif()
-  endforeach()
-endif()
+set(stacksize_flag "")
+foreach(flag IN LISTS stacksize_variants)
+  string(MAKE_C_IDENTIFIER "${flag}" _flag_id)
+  check_linker_flag(CXX "${flag}" ${_flag_id})
+  if(${_flag_id})
+    set(stacksize_flag "${flag}")
+    break()
+  endif()
+endforeach()
 
-if(NOT has_stacksize_linker_flag)
+if(stacksize_flag)
+  message(STATUS "Setting stack-size for executables to 20 MiB via '${stacksize_flag}'")
+  add_link_options("${stacksize_flag}")
+else()
   message(WARNING
           "Unable to find flag to set stack-size for executables; "
           "option --smtlib might produce stack overflows for deeply nested "

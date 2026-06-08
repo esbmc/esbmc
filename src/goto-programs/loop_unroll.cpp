@@ -1,4 +1,5 @@
 #include <goto-programs/loop_unroll.h>
+#include <util/prefix.h>
 
 bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
 {
@@ -159,73 +160,165 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
     }
 
   int bound = k - k0;
-  if (bound <= 0 || (size_t)bound > unroll_limit)
+  assert(bound > 0);
+  if ((size_t)bound > unroll_limit)
     return 0;
 
   number_of_bounded_loops++;
   return bound;
 }
 
+// Recognises a call to the __ESBMC_unroll intrinsic. The symbol name is
+// matched by prefix so that mangled C++ names (e.g. with a signature suffix)
+// are handled the same way symex does.
+static bool is_unroll_intrinsic(const goto_programt::instructiont &instruction)
+{
+  if (!instruction.is_function_call())
+    return false;
+
+  const expr2tc &function = to_code_function_call2t(instruction.code).function;
+  return is_symbol2t(function) &&
+         has_prefix(
+           to_symbol2t(function).get_symbol_name(), "c:@F@__ESBMC_unroll");
+}
+
+// Instructions that may legitimately sit between an __ESBMC_unroll call and
+// the head of the loop it annotates, i.e. the loop preamble. This covers
+// declarations and initialisers of for-loops with several induction
+// variables as well as condition side-effects of while-loops with a
+// declaration in their condition (e.g. `while (int v = f())`).
+//
+// A loop's own setup normally shares the source line of the loop head (the
+// line of the `for`/`while` keyword), so we use line equality as a heuristic
+// to tell setup apart from an unrelated statement (such as a bare `f();` or
+// assignment) placed between the intrinsic and the loop, which is instead
+// reported as misplaced. This is line-granular: it cannot distinguish setup
+// from a stray statement collapsed onto the same line, and a loop header split
+// across lines is conservatively treated as misplaced. A scope-based signal
+// (instructiont::scope_id) would be more robust but is only populated on the
+// goto2c path, not in this preprocessing pass. Instructions without a source
+// location are compiler-generated no-ops and are always skippable.
+static bool is_loop_preamble(
+  const goto_programt::instructiont &instruction,
+  const goto_programt::instructiont &head)
+{
+  switch (instruction.type)
+  {
+  case DECL:
+  case ASSIGN:
+  case FUNCTION_CALL:
+  case SKIP:
+  case LOCATION:
+  case OTHER:
+    break;
+  default:
+    return false;
+  }
+
+  const irep_idt &line = instruction.location.get_line();
+  if (line.empty())
+    return true;
+
+  return line == head.location.get_line() &&
+         instruction.location.get_file() == head.location.get_file();
+}
+
+bool apply_intrinsic_unroller::apply_unroll(
+  goto_programt::targett call,
+  loopst &loop)
+{
+  const code_function_call2t &func_call = to_code_function_call2t(call->code);
+
+  if (func_call.operands.size() != 1)
+  {
+    log_error("Invoking __ESBMC_unroll with wrong signature");
+    call->dump();
+    abort();
+  }
+
+  expr2tc n_unwind = func_call.operands[0];
+  simplify(n_unwind);
+
+  if (!is_constant_int2t(n_unwind))
+  {
+    log_error("Invoking __ESBMC_unroll with invalid (non-constant) argument");
+    call->dump();
+    n_unwind->dump();
+    abort();
+  }
+
+  const long unwinds = to_constant_int2t(n_unwind).as_long();
+  if (unwinds < 0)
+  {
+    log_error("Invoking __ESBMC_unroll with a negative argument");
+    call->dump();
+    abort();
+  }
+
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+  loop_exit->pragma_unroll_count =
+    unwinds + 1; // add extra one to match pragma unroll behavior
+  matched_calls.insert(&*call);
+  return true;
+}
+
 bool apply_intrinsic_unroller::runOnLoop(
   loopst &loop,
   goto_programt &goto_program)
 {
-  auto instrument_function = [&loop](goto_programt::targett &it) -> bool {
-    if (!(is_symbol2t(to_code_function_call2t(it->code).function) &&
-          to_symbol2t(to_code_function_call2t(it->code).function)
-              .get_symbol_name() == "c:@F@__ESBMC_unroll"))
-      return false;
+  // Walk backwards from the loop head across the loop preamble. The intrinsic
+  // must directly precede the loop (modulo declarations/initialisers), so we
+  // stop as soon as we reach an instruction that is not part of the preamble.
+  // This binds the call to the nearest following loop head, which also avoids
+  // accidentally annotating an enclosing loop for nested constructs such as:
+  //
+  //   while (1) {
+  //     __ESBMC_unroll(10);
+  //     for (int i = 0, j = 10; i < j; i++, j--) ;
+  //   }
+  goto_programt::targett head = loop.get_original_loop_head();
+  for (goto_programt::targett it = head;
+       it != goto_program.instructions.begin();)
+  {
+    --it;
 
-    if (to_code_function_call2t(it->code).operands.size() != 1)
-    {
-      log_error("Invoking __ESBMC_unroll with wrong signature");
-      it->dump();
-      abort();
-    }
-    expr2tc n_unwind = to_code_function_call2t(it->code).operands[0];
-    simplify(n_unwind);
+    if (is_unroll_intrinsic(*it))
+      return apply_unroll(it, loop);
 
-    if (!is_constant_int2t(n_unwind))
-    {
-      log_error("Invoking __ESBMC_unroll with invalid argument");
-      it->dump();
-      n_unwind->dump();
-      abort();
-    }
-    const long unwinds = to_constant_int2t(n_unwind).as_long();
-
-    goto_programt::targett loop_exit = loop.get_original_loop_exit();
-    loop_exit->pragma_unroll_count =
-      unwinds + 1; // add extra one to match pragma unroll behavior
-    return true;
-  };
-  goto_programt::targett program_counter = loop.get_original_loop_head();
-
-  // Two cases that we are trying to solve at the same time. Wheter we
-  // are dealing with an initialization (e.g. for(int i = 0;;)) or a
-  // while loop.
-
-  if (program_counter-- == goto_program.instructions.begin())
-    return false; // loop is in the begginning of the function
-
-  if (program_counter->is_function_call())
-    return instrument_function(program_counter);
-
-  if (
-    !program_counter->is_assign() ||
-    program_counter-- == goto_program.instructions.begin())
-    return false;
-
-  if (program_counter->is_function_call())
-    return instrument_function(program_counter);
-
-  if (
-    !program_counter->is_decl() ||
-    program_counter-- == goto_program.instructions.begin())
-    return false;
-
-  if (program_counter->is_function_call())
-    return instrument_function(program_counter);
+    if (!is_loop_preamble(*it, *head))
+      break;
+  }
 
   return false;
+}
+
+// We override run() rather than a runOnFunction/runOnProgram hook because the
+// misplacement warning can only be emitted once every loop has been visited
+// (a misplaced call may live in a loop-free function that runOnLoop never
+// reaches), and the framework offers no "after all loops" hook.
+bool apply_intrinsic_unroller::run(goto_functionst &goto_functions)
+{
+  matched_calls.clear();
+
+  // The base implementation visits every loop and calls runOnLoop, which
+  // binds each __ESBMC_unroll call to its loop.
+  goto_functions_algorithm::run(goto_functions);
+
+  // Any __ESBMC_unroll call that was not bound to a loop is misplaced: warn
+  // the user instead of silently ignoring it.
+  forall_goto_functions (fit, goto_functions)
+  {
+    if (!fit->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (iit, fit->second.body)
+      if (is_unroll_intrinsic(*iit) && !matched_calls.count(&*iit))
+        log_warning(
+          "__ESBMC_unroll at {} is not directly followed by a loop; the "
+          "annotation will be ignored. Place it immediately before the loop "
+          "it should apply to.",
+          iit->location.as_string());
+  }
+
+  return true;
 }

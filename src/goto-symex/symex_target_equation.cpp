@@ -1,4 +1,5 @@
 #include <cassert>
+#include <functional>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target_equation.h>
@@ -41,7 +42,8 @@ void symex_target_equationt::assignment(
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -60,8 +62,9 @@ void symex_target_equationt::output(
   SSA_step.guard = guard;
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
-  SSA_step.output_args = args;
-  SSA_step.format_string = fmt;
+  auto &od = SSA_step.output_payload();
+  od.output_args = args;
+  od.format_string = fmt;
 
   if (debug_print)
     debug_print_step(SSA_step);
@@ -123,7 +126,8 @@ void symex_target_equationt::assertion(
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -151,13 +155,62 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
-void symex_target_equationt::convert(smt_convt &smt_conv)
+void symex_target_equationt::pre_register_addresses(
+  smt_convt &smt_conv,
+  std::list<SSA_stept>::iterator begin,
+  std::list<SSA_stept>::iterator end)
 {
+  // Only pre-register address_of of compile-time constants (string and
+  // array literals).  These have static lifetime and exist throughout the
+  // program, so including them early in the address space cannot produce
+  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
+  // cast could legitimately reach them regardless of where the literal's
+  // use happens to appear in the source.  Dynamic/automatic objects keep
+  // their original lazy registration to avoid exposing later-allocated
+  // memory to earlier casts.
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e)
+      return;
+    if (is_address_of2t(e))
+    {
+      // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
+      expr2tc obj = to_address_of2t(e).ptr_obj;
+      while (is_index2t(obj) || is_member2t(obj))
+        obj = is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_member2t(obj).source_value;
+      if (is_constant_string2t(obj) || is_constant_array2t(obj))
+        smt_conv.convert_ast(e);
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+
+  for (auto it = begin; it != end; ++it)
+  {
+    const SSA_stept &step = *it;
+    if (step.ignore)
+      continue;
+    walk(step.guard);
+    walk(step.cond);
+    walk(step.lhs);
+    walk(step.rhs);
+    if (step.output_data)
+      for (const expr2tc &arg : step.output_data->output_args)
+        walk(arg);
+  }
+}
+
+void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
+{
+  // Register address-taken objects first so int-to-ptr casts see the full
+  // set of candidate objects regardless of source-level declaration order.
+  pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+
   smt_convt::ast_vec assertions;
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
   for (auto &SSA_step : SSA_steps)
-    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
+    convert_internal_step(
+      smt_conv, assumpt_ast, assertions, SSA_step, vacuity_mode);
 
   if (!assertions.empty())
     smt_conv.assert_ast(smt_conv.make_n_ary_or(assertions));
@@ -167,7 +220,8 @@ void symex_target_equationt::convert_internal_step(
   smt_convt &smt_conv,
   smt_astt &assumpt_ast,
   smt_convt::ast_vec &assertions,
-  SSA_stept &step)
+  SSA_stept &step,
+  bool vacuity_mode)
 {
   smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
   smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
@@ -208,13 +262,11 @@ void symex_target_equationt::convert_internal_step(
   }
   else if (step.is_output())
   {
-    for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
-         o_it != step.output_args.end();
-         ++o_it)
+    SSA_stept::output_datat &od = step.output_payload();
+    for (const expr2tc &tmp : od.output_args)
     {
-      const expr2tc &tmp = *o_it;
       if (is_constant_expr(tmp) || is_constant_string2t(tmp))
-        step.converted_output_args.push_back(tmp);
+        od.converted_output_args.push_back(tmp);
       else
       {
         expr2tc sym =
@@ -223,7 +275,7 @@ void symex_target_equationt::convert_internal_step(
         smt_astt assign = smt_conv.convert_assign(eq);
         if (ssa_smt_trace)
           assign->dump();
-        step.converted_output_args.push_back(sym);
+        od.converted_output_args.push_back(sym);
       }
     }
   }
@@ -238,8 +290,19 @@ void symex_target_equationt::convert_internal_step(
 
   if (step.is_assert())
   {
-    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
-    assertions.push_back(smt_conv.invert_ast(step.cond_ast));
+    if (vacuity_mode)
+    {
+      // Vacuity probe: ask whether the path to this claim is reachable at
+      // all, ignoring the claim itself. If the OR of all kept claims'
+      // assumpt_ast is UNSAT, every discharge was vacuous.
+      step.cond_ast = assumpt_ast;
+      assertions.push_back(assumpt_ast);
+    }
+    else
+    {
+      step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
+      assertions.push_back(smt_conv.invert_ast(step.cond_ast));
+    }
   }
   else if (step.is_assume())
   {
@@ -374,7 +437,7 @@ void symex_target_equationt::check_for_duplicate_assigns() const
   for (std::map<std::string, unsigned int>::const_iterator it =
          countmap.begin();
        it != countmap.end();
-       it++)
+       ++it)
   {
     if (it->second != 1)
     {
@@ -389,7 +452,7 @@ unsigned int symex_target_equationt::clear_assertions()
 {
   unsigned int num_asserts = 0;
 
-  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
+  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); ++it)
   {
     if (it->type == goto_trace_stept::ASSERT)
     {
@@ -464,7 +527,7 @@ void runtime_encoded_equationt::flush_latest_instructions()
   }
   else
   {
-    run_it++;
+    ++run_it;
     if (run_it == SSA_steps.end())
     {
       // There is in fact, nothing to do
@@ -474,12 +537,20 @@ void runtime_encoded_equationt::flush_latest_instructions()
     // Just roll on
   }
 
+  // Register address-taken objects first so int-to-ptr casts see the full
+  // set of candidate objects regardless of source-level declaration order.
+  pre_register_addresses(conv, run_it, SSA_steps.end());
+
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)
     convert_internal_step(
-      conv, assumpt_chain.back(), assert_vec_list.back(), *run_it);
+      conv,
+      assumpt_chain.back(),
+      assert_vec_list.back(),
+      *run_it,
+      /*vacuity_mode=*/false);
 
-  run_it--;
+  --run_it;
   cvt_progress = run_it;
 }
 
@@ -510,8 +581,17 @@ void runtime_encoded_equationt::pop_ctx()
   assumpt_chain.pop_back();
 }
 
-void runtime_encoded_equationt::convert(smt_convt &smt_conv)
+void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
+  // The incremental path doesn't re-walk SSA_steps, so the per-assertion
+  // path-assumption rewrite that vacuity mode needs cannot be applied here.
+  // Fail loudly rather than producing normal-mode results under a vacuity
+  // probe.
+  (void)vacuity_mode;
+  assert(
+    !vacuity_mode &&
+    "runtime_encoded_equationt::convert does not support vacuity mode");
+
   // Don't actually convert. We've already done most of the conversion by now
   // (probably), instead flush all unconverted instructions. We don't push
   // a context, because a) where do we unpop it, but b) we're never going to

@@ -458,8 +458,12 @@ public:
   /** Delete the value set for the given variable name and suffix. */
   void del_var(const std::string &id, const std::string &suffix)
   {
-    std::string index = id2string(id) + suffix;
-    values.erase(index);
+    if (suffix.empty())
+    {
+      values.erase(id);
+      return;
+    }
+    values.erase(concat_key(id, suffix));
   }
 
   /** Look up the value set for the given variable name and suffix. */
@@ -472,12 +476,35 @@ public:
    *  given entryt. */
   entryt &get_entry(const entryt &e)
   {
-    std::string index = id2string(e.identifier) + e.suffix;
+    // The map key is `identifier + suffix`. The suffix is empty on the
+    // overwhelming majority of calls (every plain l1 variable; suffixes
+    // only appear for array/struct-member pointer tracking), so avoid
+    // building the concatenated temporary string in that case and key
+    // directly off the identifier.
+    if (e.suffix.empty())
+    {
+      std::pair<valuest::iterator, bool> r =
+        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
+      return r.first->second;
+    }
 
-    std::pair<valuest::iterator, bool> r =
-      values.insert(std::pair<irep_idt, entryt>(index, e));
+    std::pair<valuest::iterator, bool> r = values.insert(
+      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
 
     return r.first->second;
+  }
+
+  /** Compose the `identifier + suffix` map key into a single pre-sized
+   *  buffer, avoiding the temporary that `id2string(id) + suffix` allocates
+   *  for the (less common) array/struct-member pointer case. */
+  static std::string
+  concat_key(const std::string &id, const std::string &suffix)
+  {
+    std::string key;
+    key.reserve(id.size() + suffix.size());
+    key = id;
+    key += suffix;
+    return key;
   }
 
   /** Add a value set for each variable in the given list. */
@@ -654,9 +681,14 @@ public:
   /** Some crazy static analysis tool. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
-   *  a @ref object_mapt. Static and bad. */
-  static object_numberingt object_numbering;
-  static object_number_numberingt obj_numbering_refset;
+   *  a @ref object_mapt.
+   *
+   *  thread_local so concurrent symex threads (--k-induction-parallel)
+   *  don't race on the same hash_numbering. Numbers only need to be
+   *  consistent within a single goto_symex state's lifetime, and each
+   *  symex thread owns its own state. */
+  static thread_local object_numberingt object_numbering;
+  static thread_local object_number_numberingt obj_numbering_refset;
 
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */

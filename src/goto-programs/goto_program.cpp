@@ -60,7 +60,7 @@ void goto_programt::instructiont::output_instruction(
 
     for (instructiont::targetst::const_iterator gt_it = targets.begin();
          gt_it != targets.end();
-         gt_it++)
+         ++gt_it)
     {
       if (gt_it != targets.begin())
         out << ", ";
@@ -210,21 +210,25 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case LOOP_INVARIANT:
+  {
     out << "LOOP_INVARIANT";
-    for (const auto &invariant : loop_invariants)
+    const std::list<expr2tc> invariants = get_loop_invariants();
+    for (const auto &invariant : invariants)
     {
       out << " " << from_expr(ns, identifier, invariant);
     }
-    if (!loop_assigns_targets.empty())
+    const std::list<expr2tc> assigns = get_loop_assigns_targets();
+    if (!assigns.empty())
     {
       out << " ASSIGNS:";
-      for (const auto &target : loop_assigns_targets)
+      for (const auto &target : assigns)
       {
         out << " " << from_expr(ns, identifier, target);
       }
     }
     out << "\n";
     break;
+  }
 
   default:
     throw "unknown statement";
@@ -363,7 +367,7 @@ void goto_programt::compute_target_numbers()
 
   for (instructionst::iterator it = instructions.begin();
        it != instructions.end();
-       it++)
+       ++it)
   {
     if (it->is_target())
     {
@@ -377,7 +381,7 @@ void goto_programt::compute_target_numbers()
 
   for (instructionst::const_iterator it = instructions.begin();
        it != instructions.end();
-       it++)
+       ++it)
   {
     for (auto t : it->targets)
     {
@@ -405,7 +409,7 @@ void goto_programt::copy_from(const goto_programt &src)
 
   for (instructionst::const_iterator it = src.instructions.begin();
        it != src.instructions.end();
-       it++)
+       ++it)
   {
     targett new_instruction = add_instruction();
     targets_mapping[it] = new_instruction;

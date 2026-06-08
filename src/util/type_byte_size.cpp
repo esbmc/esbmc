@@ -109,6 +109,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
+  case type2t::complex_id:
   case type2t::pointer_id:
     return type->get_width();
 
@@ -117,16 +118,15 @@ BigInt type_sizet::size_bits(const type2tc &type) const
   {
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
-    const array_data &t2 = static_cast<const array_data &>(*type);
-    if (t2.size_is_infinite)
+    if (array_or_vector_size_is_infinite(type))
       throw array_type2t::inf_sized_array_excp();
 
-    expr2tc arrsize = t2.array_size;
+    expr2tc arrsize = array_or_vector_size(type);
     simplify(arrsize);
     if (!is_constant_int2t(arrsize))
       throw array_type2t::dyn_sized_array_excp(arrsize);
 
-    BigInt subsize = size_bits(t2.subtype);
+    BigInt subsize = size_bits(array_or_vector_subtype(type));
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
     return subsize * arrsize_int.value;
   }
@@ -213,21 +213,20 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
+  case type2t::complex_id:
   case type2t::pointer_id:
     return bitsize(type->get_width());
 
   case type2t::array_id:
   case type2t::vector_id:
   {
-    const array_data &t2 = static_cast<const array_data &>(*type);
-
-    if (t2.size_is_infinite)
+    if (array_or_vector_size_is_infinite(type))
       throw array_type2t::inf_sized_array_excp();
 
-    expr2tc arrsize = t2.array_size;
+    expr2tc arrsize = array_or_vector_size(type);
     simplify(arrsize);
 
-    expr2tc subsize = size_bits_expr(t2.subtype);
+    expr2tc subsize = size_bits_expr(array_or_vector_subtype(type));
     simplify(subsize);
 
     if (is_constant_int2t(arrsize) && is_constant_int2t(subsize))

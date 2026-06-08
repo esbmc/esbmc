@@ -30,6 +30,11 @@ public:
     _top = 0;
   }
 
+  ~stack()
+  {
+    _top = 0;
+  }
+
   void inc_top()
   {
     _top++;
@@ -94,6 +99,11 @@ public:
     size_t container_size = ctnr.size();
     __ESBMC_assert(
       container_size <= STACK_CAPACITY, "container too large for stack");
+    _top = 0;
+  }
+
+  ~stack()
+  {
     _top = 0;
   }
 
@@ -169,6 +179,11 @@ public:
     _top = container_size;
   }
 
+  ~stack()
+  {
+    _top = 0;
+  }
+
   void inc_top()
   {
     _top++;
@@ -239,6 +254,11 @@ public:
       buf[i] = ctnr[i];
     }
     _top = container_size;
+  }
+
+  ~stack()
+  {
+    _top = 0;
   }
 
   void inc_top()

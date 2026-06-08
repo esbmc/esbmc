@@ -108,6 +108,7 @@ void goto_convertt::optimize_guarded_gotos(goto_programt &dest)
     {
       it->set_target(it_goto_y->get_target());
       make_not(it->guard);
+      it->flipped_guard = true;
       it_goto_y->make_skip();
     }
   }
@@ -330,8 +331,63 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   migrate_expr(c, throw_decl_instruction->code);
 }
 
+/// The automatic object a destructor-stack entry cleans up: the symbol of a
+/// `dead` entry, or the `this` argument of a destructor call. Empty if neither.
+static irep_idt destructor_entry_symbol(const codet &entry)
+{
+  if (entry.get_statement() == "dead" && entry.operands().size() == 1)
+  {
+    if (entry.op0().id() == "symbol")
+      return entry.op0().identifier();
+  }
+  else if (entry.get_statement() == "function_call")
+  {
+    const code_function_callt &call = to_code_function_call(entry);
+    if (!call.arguments().empty() && call.arguments()[0].id() == "address_of")
+    {
+      const exprt &obj = call.arguments()[0].op0();
+      if (obj.id() == "symbol")
+        return obj.identifier();
+    }
+  }
+  return irep_idt();
+}
+
 void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
+  // C++ stack unwinding: before the throw, run the destructors of the automatic
+  // objects constructed since the nearest enclosing try block, in reverse
+  // construction order ([except.ctor]). throw_stack_size is the destructor-stack
+  // level at that try's entry — or 0 when the throw is not in any try, so an
+  // exception propagating out of the function destroys all of its locals.
+  //
+  // The thrown object itself must NOT be unwound: its lifetime is owned by the
+  // exception machinery and it has to survive the throw. It is the most-recently
+  // constructed full-expression temporary, so its destructor entries sit on top
+  // of the stack (above the enclosing try's locals). Detach them, run the
+  // (non-destructive) unwind of the try-block locals, then restore them so the
+  // normal fall-through cleanup after the throw is unchanged.
+  destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt thrown_id =
+    expr.operands().empty() || expr.op0().id() != "symbol"
+      ? irep_idt()
+      : expr.op0().identifier();
+
+  // One object contributes up to two adjacent top entries (a `dead` and a
+  // destructor call), both naming the thrown symbol; the loop drains them all.
+  destructor_stackt detached;
+  while (!thrown_id.empty() && stack.size() > targets.throw_stack_size &&
+         destructor_entry_symbol(stack.back()) == thrown_id)
+  {
+    detached.push_back(stack.back());
+    stack.pop_back();
+  }
+
+  unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
+
+  for (auto it = detached.rbegin(); it != detached.rend(); ++it)
+    stack.push_back(*it);
+
   // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
 
@@ -358,10 +414,19 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   goto_programt::targett end_target = end.add_instruction();
   end_target->make_skip();
 
+  // Record the destructor-stack level at try-block entry so a throw inside the
+  // body unwinds exactly the body's locals (not the enclosing scope's objects,
+  // which outlive the handler). Restore afterwards so the catch handlers — and
+  // any enclosing try — use the outer level. Save/restore handles nesting.
+  const std::size_t old_throw_stack_size = targets.throw_stack_size;
+  targets.throw_stack_size = targets.destructor_stack.size();
+
   // the first operand is the 'try' block
   goto_programt tmp;
   convert(to_code(code.op0()), tmp);
   dest.destructive_append(tmp);
+
+  targets.throw_stack_size = old_throw_stack_size;
 
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction = dest.add_instruction();
@@ -479,6 +544,10 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
 
   // Constant size is not a VLA
   if (size.is_constant())
+    return false;
+
+  // Infinite size (e.g. Solidity mappings) is not a VLA
+  if (size.id() == "infinity")
     return false;
 
   // We have to replace the symbol by a temporary, because it might
@@ -659,7 +728,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
-  if (s->static_lifetime || s->type.is_code())
+  if (s->static_lifetime || s->get_type().is_code())
     return; // this is a SKIP!
 
   // Check if is an VLA declaration and rewrite the declaration
@@ -668,7 +737,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    s->type = var.type();
+    s->set_type(var.type());
   }
 
   exprt initializer = nil_exprt();
@@ -704,7 +773,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
   // top of the destructor stack
-  const symbol_exprt symbol_expr(s->id, s->type);
+  const symbol_exprt symbol_expr(s->id, s->get_type());
 
   {
     code_deadt code_dead(symbol_expr);
@@ -713,7 +782,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // do destructor
   code_function_callt destructor;
-  if (get_destructor(ns, s->type, destructor))
+  if (get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -736,7 +805,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
   if (expr.id() != "symbol")
     return false;
   const symbolt *sym = ns.lookup(expr.identifier());
-  return sym && sym->type.get_bool("#atomic");
+  return sym && sym->get_type().get_bool("#atomic");
 }
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable
@@ -1470,7 +1539,11 @@ void goto_convertt::convert_atomic_begin(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_BEGIN, dest);
+  // ATOMIC_BEGIN/END are pure type markers; the instruction's code field
+  // is irrelevant. Emit directly to avoid the migrate_expr round-trip that
+  // copy() would do for the empty codet.
+  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
+  t->location = code.location();
 }
 
 void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
@@ -1481,7 +1554,8 @@ void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_END, dest);
+  goto_programt::targett t = dest.add_instruction(ATOMIC_END);
+  t->location = code.location();
 }
 
 /// if(guard) true_case; else false_case;

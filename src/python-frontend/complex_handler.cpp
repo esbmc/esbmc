@@ -4,13 +4,31 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/type_handler.h>
 
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
 #include <limits>
+
+namespace
+{
+// V.3: build a complex `.real`/`.imag` member access in IREP2 (exact
+// round-trip of member_exprt; behaviour-preserving). The source is
+// complex-typed -- either the `complex` struct or the transient `tag-complex`
+// symbol type, both permitted member2t sources -- so the member2t precondition
+// holds; the one pointer-source path (handle_attribute_access) dereferences
+// before reaching here.
+exprt complex_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
+} // namespace
 
 // -----------------------------------------------------------------------
 // Construction
@@ -62,10 +80,10 @@ exprt complex_handler::ieee_binop(
 exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
 {
   const typet &dt = cached_double_type();
-  exprt xr = member_exprt(x, "real", dt);
-  exprt xi = member_exprt(x, "imag", dt);
-  exprt yr = member_exprt(y, "real", dt);
-  exprt yi = member_exprt(y, "imag", dt);
+  exprt xr = complex_member(x, "real", dt);
+  exprt xi = complex_member(x, "imag", dt);
+  exprt yr = complex_member(y, "real", dt);
+  exprt yi = complex_member(y, "imag", dt);
 
   exprt ac = ieee_binop("ieee_mul", xr, yr);
   exprt bd = ieee_binop("ieee_mul", xi, yi);
@@ -82,10 +100,10 @@ exprt complex_handler::complex_div(
   const nlohmann::json &loc_source) const
 {
   const typet &dt = cached_double_type();
-  exprt xr = member_exprt(x, "real", dt);
-  exprt xi = member_exprt(x, "imag", dt);
-  exprt yr = member_exprt(y, "real", dt);
-  exprt yi = member_exprt(y, "imag", dt);
+  exprt xr = complex_member(x, "real", dt);
+  exprt xi = complex_member(x, "imag", dt);
+  exprt yr = complex_member(y, "real", dt);
+  exprt yi = complex_member(y, "imag", dt);
   exprt zero = from_double(0.0, dt);
 
   exprt ac = ieee_binop("ieee_mul", xr, yr);
@@ -132,8 +150,8 @@ exprt complex_handler::complex_log(
   const nlohmann::json &loc_source) const
 {
   const typet &dt = cached_double_type();
-  exprt zr = member_exprt(z, "real", dt);
-  exprt zi = member_exprt(z, "imag", dt);
+  exprt zr = complex_member(z, "real", dt);
+  exprt zi = complex_member(z, "imag", dt);
 
   exprt zr2 = ieee_binop("ieee_mul", zr, zr);
   exprt zi2 = ieee_binop("ieee_mul", zi, zi);
@@ -159,8 +177,8 @@ exprt complex_handler::complex_exp(
   const nlohmann::json &loc_source) const
 {
   const typet &dt = cached_double_type();
-  exprt zr = member_exprt(z, "real", dt);
-  exprt zi = member_exprt(z, "imag", dt);
+  exprt zr = complex_member(z, "real", dt);
+  exprt zi = complex_member(z, "imag", dt);
 
   exprt exp_real = converter_.get_math_handler().handle_exp(zr, loc_source);
   if (exp_real.statement() == "cpp-throw")
@@ -335,8 +353,8 @@ exprt complex_handler::handle_binary_op(
     if (rhs.is_symbol())
     {
       const symbolt *s = find_cached_symbol(rhs.identifier().as_string());
-      if (s && !s->value.is_nil())
-        resolved_rhs = s->value;
+      if (s && !s->get_value().is_nil())
+        resolved_rhs = s->get_value();
     }
     else if (
       rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/")
@@ -488,10 +506,10 @@ exprt complex_handler::handle_binary_op(
       return rhs_complex;
 
     const typet &dt = cached_double_type();
-    const exprt a = member_exprt(lhs_complex, "real", dt);
-    const exprt b = member_exprt(lhs_complex, "imag", dt);
-    const exprt c = member_exprt(rhs_complex, "real", dt);
-    const exprt d = member_exprt(rhs_complex, "imag", dt);
+    const exprt a = complex_member(lhs_complex, "real", dt);
+    const exprt b = complex_member(lhs_complex, "imag", dt);
+    const exprt c = complex_member(rhs_complex, "real", dt);
+    const exprt d = complex_member(rhs_complex, "imag", dt);
 
     if (op == "Eq")
       return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
@@ -537,8 +555,8 @@ exprt complex_handler::handle_unary_op(
 
   // USub: negate both components.
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(operand, "real", dt);
-  exprt imag = member_exprt(operand, "imag", dt);
+  exprt real = complex_member(operand, "real", dt);
+  exprt imag = complex_member(operand, "imag", dt);
   exprt zero = from_double(0.0, dt);
 
   exprt neg_real("ieee_sub", dt);
@@ -577,8 +595,8 @@ exprt complex_handler::handle_attribute(const nlohmann::json &element) const
     return nil_exprt();
 
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(obj_expr, "real", dt);
-  exprt imag = member_exprt(obj_expr, "imag", dt);
+  exprt real = complex_member(obj_expr, "real", dt);
+  exprt imag = complex_member(obj_expr, "imag", dt);
   exprt zero = from_double(0.0, dt);
 
   exprt neg_imag("ieee_sub", dt);
@@ -606,7 +624,7 @@ exprt complex_handler::handle_attribute_access(
     base = std::move(deref);
   }
 
-  return member_exprt(base, attr, cached_double_type());
+  return complex_member(base, attr, cached_double_type());
 }
 
 // -----------------------------------------------------------------------
@@ -614,8 +632,8 @@ exprt complex_handler::handle_attribute_access(
 exprt complex_handler::handle_abs(const exprt &z) const
 {
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(z, "real", dt);
-  exprt imag = member_exprt(z, "imag", dt);
+  exprt real = complex_member(z, "real", dt);
+  exprt imag = complex_member(z, "imag", dt);
 
   exprt real_sq("ieee_mul", dt);
   real_sq.copy_to_operands(real, real);

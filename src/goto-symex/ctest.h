@@ -26,6 +26,11 @@ private:
   std::string source_file;
   mutable std::mutex data_mutex;
 
+  /// Build a per-type value fingerprint for deduplication in generate().
+  /// Groups values by verifier_type. Two cases with identical per-type
+  /// sequences are duplicates regardless of cross-type interleaving.
+  static std::string fingerprint(const std::vector<test_variable> &tc);
+
   /// Clean up ESBMC internal variable names
   std::string clean_variable_name(const std::string &name) const;
 

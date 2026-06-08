@@ -1,0 +1,18 @@
+#pragma once
+#include <cstddef>
+namespace std
+{
+template <typename T, std::size_t N>
+struct array
+{
+  T _data[N];
+  constexpr T &operator[](std::size_t i)
+  {
+    return _data[i];
+  }
+  constexpr const T &operator[](std::size_t i) const
+  {
+    return _data[i];
+  }
+};
+} // namespace std

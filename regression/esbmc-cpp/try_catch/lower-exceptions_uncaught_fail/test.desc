@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--lower-exceptions
+
+^VERIFICATION FAILED$
+uncaught exception

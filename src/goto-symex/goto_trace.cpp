@@ -8,6 +8,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
+#include <util/cwe_mapping.h>
 #include <util/std_types.h>
 #include <ostream>
 
@@ -91,7 +92,12 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
         out << "  " << pc->location << "\n";
 
       if (!comment.empty())
+      {
         out << "  " << comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
+      }
       out << "  " << from_expr(ns, "", pc->guard) << "\n";
       out << "\n";
     }
@@ -281,7 +287,8 @@ void show_state_header(
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
@@ -304,6 +311,7 @@ void violation_graphml_goto_trace(
 
         nodet *violation_node = new nodet();
         violation_node->violation = true;
+        violation_node->cwe = format_cwe_list(cwe_for(step.comment));
 
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
@@ -316,7 +324,7 @@ void violation_graphml_goto_trace(
 
         /* having printed a property violation, don't print more steps. */
 
-        graph.generate_graphml(options);
+        graph.generate_graphml(options, output_path_override);
         return;
       }
       break;
@@ -357,7 +365,8 @@ void violation_graphml_goto_trace(
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
@@ -383,7 +392,7 @@ void violation_yaml_goto_trace(
 
         /* having printed a property violation, don't print more steps. */
 
-        yml.generate_yaml(options);
+        yml.generate_yaml(options, output_path_override);
         return;
       }
       break;
@@ -534,7 +543,12 @@ void appendInfo(
   {
     if (!dest.empty())
       dest += " ";
-    dest += label + " " + id2string(value);
+    // Append in place rather than `label + " " + id2string(value)`, which
+    // builds two throwaway temporaries per trace label (this scales with
+    // counterexample size).
+    dest += label;
+    dest += ' ';
+    dest += value;
   }
 }
 
@@ -608,6 +622,9 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(step.comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
 
         if (step.pc->is_assert())
           out << "  " << from_expr(ns, "", step.pc->guard) << "\n";

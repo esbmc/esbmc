@@ -3,13 +3,13 @@
 smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  const expr2tc &side1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &side2 = *overflow.operand->get_sub_expr(1);
 
-  expr2tc zero = gen_zero(opers.side_1->type);
+  expr2tc zero = gen_zero(side1->type);
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed =
-    (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
+  bool is_signed = (is_signedbv_type(side1) || is_signedbv_type(side2));
 
   switch (overflow.operand->expr_id)
   {
@@ -19,8 +19,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Two cases: pos/pos, and neg/neg, which can over- and under-flow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
-      expr2tc op1pos = lessthan2tc(zero, opers.side_1);
-      expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+      expr2tc op1pos = lessthan2tc(zero, side1);
+      expr2tc op2pos = lessthan2tc(zero, side2);
       expr2tc both_pos = and2tc(op1pos, op2pos);
 
       expr2tc negop1 = not2tc(op1pos);
@@ -36,7 +36,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     else if (int_encoding)
     {
       // Get the width of the integer type
-      auto const width = opers.side_1->type->get_width();
+      auto const width = side1->type->get_width();
 
       // Extract the operand of the overflow expression
       const overflow2t &overflow_expr = to_overflow2t(expr);
@@ -47,16 +47,16 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
         BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
 
-        expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
-        expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+        expr2tc max_int = constant_int2tc(side1->type, max_val);
+        expr2tc min_int = constant_int2tc(side1->type, min_val);
 
         // Two cases: positive overflow and negative underflow
-        expr2tc op1pos = lessthan2tc(zero, opers.side_1);
-        expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+        expr2tc op1pos = lessthan2tc(zero, side1);
+        expr2tc op2pos = lessthan2tc(zero, side2);
         expr2tc both_pos = and2tc(op1pos, op2pos);
 
-        expr2tc negop1 = lessthan2tc(opers.side_1, zero);
-        expr2tc negop2 = lessthan2tc(opers.side_2, zero);
+        expr2tc negop1 = lessthan2tc(side1, zero);
+        expr2tc negop2 = lessthan2tc(side2, zero);
         expr2tc both_neg = and2tc(negop1, negop2);
 
         // Overflow: if both are positive and result > MAX_INT
@@ -76,7 +76,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         // Unsigned integer overflow detection
         BigInt max_val = BigInt::power2(width) - 1; // UINT_MAX
 
-        expr2tc max_uint = constant_int2tc(opers.side_1->type, max_val);
+        expr2tc max_uint = constant_int2tc(side1->type, max_val);
 
         // Overflow occurs if result > UINT_MAX
         expr2tc overflow = greaterthan2tc(result_expr, max_uint);
@@ -86,8 +86,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     }
 
     // Just ensure the result is >= both operands.
-    expr2tc ge1 = greaterthanequal2tc(overflow.operand, opers.side_1);
-    expr2tc ge2 = greaterthanequal2tc(overflow.operand, opers.side_2);
+    expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
+    expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
     expr2tc res = and2tc(ge1, ge2);
     expr2tc inv = not2tc(res);
     return convert_ast(inv);
@@ -98,20 +98,19 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     if (is_signed)
     {
       // Define zero constant for comparisons
-      expr2tc zero = constant_int2tc(opers.side_1->type, 0);
+      expr2tc zero = constant_int2tc(side1->type, 0);
 
       // Compute the subtraction result
-      expr2tc sub_result =
-        sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+      expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
       // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0 && result > 0)
-      expr2tc a_pos = greaterthan2tc(opers.side_1, zero); // a > 0
-      expr2tc b_neg = lessthan2tc(opers.side_2, zero);    // b < 0
+      expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
+      expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
       expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
       expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
 
-      expr2tc a_neg = lessthan2tc(opers.side_1, zero);       // a < 0
-      expr2tc b_pos = greaterthan2tc(opers.side_2, zero);    // b > 0
+      expr2tc a_neg = lessthan2tc(side1, zero);              // a < 0
+      expr2tc b_pos = greaterthan2tc(side2, zero);           // b > 0
       expr2tc result_pos = greaterthan2tc(sub_result, zero); // result > 0
       expr2tc neg_minus_pos_overflow = and2tc(a_neg, and2tc(b_pos, result_pos));
 
@@ -119,14 +118,14 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       if (int_encoding)
       {
         // Get the width of the integer type
-        auto const width = opers.side_1->type->get_width();
+        auto const width = side1->type->get_width();
 
         // Define minimum and maximum values for signed integers
         BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
         BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
 
-        expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
-        expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+        expr2tc max_int = constant_int2tc(side1->type, max_val);
+        expr2tc min_int = constant_int2tc(side1->type, min_val);
 
         // Overflow occurs if result > MAX_INT or result < MIN_INT
         expr2tc overflow = greaterthan2tc(sub_result, max_int);
@@ -149,8 +148,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     }
 
     // Just ensure the result is <= the first operand.
-    expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
-    expr2tc le = lessthanequal2tc(sub, opers.side_1);
+    expr2tc sub = sub2tc(side1->type, side1, side2);
+    expr2tc le = lessthanequal2tc(sub, side1);
     expr2tc inv = not2tc(le);
     return convert_ast(inv);
   }
@@ -162,13 +161,13 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Handle signed division/modulus overflow cases
       // Dividing the most negative integer (MIN_INT) by -1 causes overflow
-      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
-      expr2tc is_min_int = equality2tc(min_int, opers.side_1);
+      BigInt topbit = -BigInt::power2(side1->type->get_width() - 1);
+      expr2tc min_int = constant_int2tc(side1->type, topbit);
+      expr2tc is_min_int = equality2tc(min_int, side1);
 
       // If MIN_INT is divided by -1, overflow occurs
-      expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
-      expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
+      expr2tc minus_one = constant_int2tc(side1->type, -BigInt(1));
+      expr2tc is_minus_one = equality2tc(minus_one, side2);
 
       // Return overflow condition for signed division
       return convert_ast(and2tc(is_minus_one, is_min_int));
@@ -176,12 +175,12 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
     // Detect unsigned integer overflow for division and modulus
     // Overflow occurs when dividing by zero
-    expr2tc is_div_by_zero = equality2tc(opers.side_2, zero);
+    expr2tc is_div_by_zero = equality2tc(side2, zero);
 
     // Overflow occurs if the dividend is greater than the maximum representable value
     expr2tc max_unsigned = constant_int2tc(
-      opers.side_1->type, BigInt::power2(opers.side_1->type->get_width()) - 1);
-    expr2tc is_overflow = greaterthan2tc(opers.side_1, max_unsigned);
+      side1->type, BigInt::power2(side1->type->get_width()) - 1);
+    expr2tc is_overflow = greaterthan2tc(side1, max_unsigned);
 
     // Return overflow condition for unsigned division/modulus
     return convert_ast(or2tc(is_div_by_zero, is_overflow));
@@ -193,17 +192,17 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
 
-    smt_astt arg1_ext = convert_ast(opers.side_1);
+    smt_astt arg1_ext = convert_ast(side1);
     smt_astt arg2_ext;
 
     if (!int_encoding)
-      arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
-                                                : mk_zero_ext(arg1_ext, sz);
+      arg1_ext = is_signedbv_type(side1) ? mk_sign_ext(arg1_ext, sz)
+                                         : mk_zero_ext(arg1_ext, sz);
 
-    expr2tc op2 = opers.side_2;
+    expr2tc op2 = side2;
     if (is_shl2t(overflow.operand))
-      if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
-        op2 = typecast2tc(opers.side_1->type, opers.side_2);
+      if (side1->type->get_width() != side2->type->get_width())
+        op2 = typecast2tc(side1->type, side2);
 
     arg2_ext = convert_ast(op2);
 

@@ -12,11 +12,12 @@
 #include <stack>
 #include <string>
 #include <unordered_set>
-#include <util/crypto_hash.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <memory>
 #include <vector>
+#include <goto-symex/witnesses.h>
 
 class execution_statet; // forward decl
 
@@ -32,8 +33,8 @@ class execution_statet; // forward decl
 class goto_symex_statet
 {
 public:
-  class goto_statet; // forward dec
-  class framet;      // forward dec
+  class merge_statet; // forward dec
+  class framet;       // forward dec
 
   /**
    *  Default constructor.
@@ -69,9 +70,9 @@ public:
 
   // Types
 
-  typedef std::list<goto_statet> goto_state_listt;
-  typedef std::map<goto_programt::const_targett, goto_state_listt>
-    goto_state_mapt;
+  typedef std::list<merge_statet> merge_state_listt;
+  typedef std::map<goto_programt::const_targett, merge_state_listt>
+    merge_state_mapt;
   typedef std::vector<framet> call_stackt;
   typedef std::unordered_set<
     renaming::level2t::name_record,
@@ -79,26 +80,30 @@ public:
     variable_name_sett;
 
   /**
-   *  Class recording the result of a portion of symex.
-   *  A goto_statet records the state of a program having run up to some form
-   *  of jump instruction, that needs to be merged with the main state in the
-   *  future at some time. To that extent, it has its own level2 copy of gloal
-   *  state, its own value set copy, its own depth, and guard. It's primarily
-   *  just a container for these values.
+   *  Snapshot of the symbolic data needed to merge a deferred path.
+   *
+   *  merge_statet is intentionally smaller than goto_symex_statet. It is used
+   *  for GOTO/function-return/function-pointer paths that will be joined at a
+   *  later instruction, so it only keeps the data the merge operation reads:
+   *  the SSA renaming state, value set, guard, instruction depth, thread id,
+   *  and current frame's local-variable set.
+   *
+   *  It deliberately does not carry the full thread execution state, such as
+   *  the program counter, source location, call stack, loop counters, exception
+   *  state, or global guard.
    */
-
-  class goto_statet
+  class merge_statet
   {
   public:
     unsigned num_instructions;
     std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
-    guardt guard;
+    guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
 
-    explicit goto_statet(const goto_symex_statet &s)
+    explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),
         level2_ptr(s.level2.clone()),
         level2(*level2_ptr),
@@ -109,7 +114,7 @@ public:
     {
     }
 
-    explicit goto_statet(const goto_statet &s)
+    explicit merge_statet(const merge_statet &s)
       : num_instructions(s.num_instructions),
         level2_ptr(s.level2_ptr->clone()),
         level2(*level2_ptr),
@@ -120,13 +125,13 @@ public:
     {
     }
 
-    goto_statet &operator=(const goto_statet &)
+    merge_statet &operator=(const merge_statet &)
     {
       abort();
     }
 
   public:
-    ~goto_statet() = default;
+    ~merge_statet() = default;
 
   protected:
   };
@@ -144,10 +149,10 @@ public:
   public:
     /** Name of function called to make this stack frame. */
     irep_idt function_identifier;
-    /** Map of states to merge in the future. Each state in this map represents
-     *  a particular goto_statet that jumps to a particular location in the
-     *  function, and that has to have its state joined in a phi function. */
-    goto_state_mapt goto_state_map;
+    /** Map of symbolic snapshots to merge in the future. Each entry records
+     *  the merge-relevant state for a path that reaches a particular
+     *  instruction and must be joined by phi_function. */
+    merge_state_mapt merge_state_map;
     /** Renaming context for L1 names */
     renaming::level1t level1;
     /** Record of source of function call. Used when returning from the function
@@ -207,7 +212,7 @@ public:
     unsigned int va_index;
 
     /** Record the entry guard of the function */
-    guardt entry_guard;
+    guard2tc entry_guard;
 
     /** Record if the function body is hidden */
     bool hidden;
@@ -215,10 +220,11 @@ public:
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
-    framet(unsigned int thread_id)
+    framet(unsigned int thread_id, const namespacet *ns = nullptr)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)
     {
       level1.thread_id = thread_id;
+      level1.ns = ns;
     }
   };
 
@@ -269,12 +275,13 @@ public:
 
   /**
    *  Perform both levels of renaming.
-   *  @param goto_state Detatched state containing L2 state to rename with.
+   *  @param merge_state Deferred-path snapshot containing L2 state to rename
+   *  with.
    *  @param symirep Symbol irep to rename
    */
-  void current_name(const goto_statet &goto_state, expr2tc &symirep) const
+  void current_name(const merge_statet &merge_state, expr2tc &symirep) const
   {
-    current_name(goto_state.level2, symirep);
+    current_name(merge_state.level2, symirep);
   }
 
   /**
@@ -302,7 +309,7 @@ public:
    */
   inline framet &new_frame(unsigned int thread_id)
   {
-    call_stack.emplace_back(thread_id);
+    call_stack.emplace_back(thread_id, &ns);
     return call_stack.back();
   }
 
@@ -311,7 +318,7 @@ public:
    */
   inline void pop_frame()
   {
-    assert(call_stack.back().goto_state_map.size() == 0);
+    assert(call_stack.back().merge_state_map.size() == 0);
     call_stack.pop_back();
   }
 
@@ -433,9 +440,9 @@ public:
   bool thread_ended;
 
   /** Current state guard of this thread. */
-  guardt guard;
+  guard2tc guard;
   /** Guard of global context. */
-  guardt global_guard;
+  guard2tc global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
   /** Counter for how many times a particular variable has been declared:
@@ -468,6 +475,15 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
+
+  // --- Violation-witness replay state ---
+
+  /// witness_segs[seg]: all actionable waypoints per segment
+  std::vector<std::vector<waypoint>> witness_segs;
+  size_t cur_seg;
+
+  /// Advance to the next segment (called when a follow waypoint is matched).
+  void advance_witness_position();
 };
 
 #endif

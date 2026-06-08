@@ -155,11 +155,14 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     parameters.push_back(code_typet::argumentt(ptr_arg.type()));
     parameters.push_back(code_typet::argumentt(ptr_arg.type()));
 
-    if (has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange"))
-      parameters.push_back(code_typet::argumentt(ptr_arg.type()));
-    else
+    // __atomic_compare_exchange_n takes `desired` by value; the non-_n variant
+    // takes a pointer. has_prefix("__atomic_compare_exchange") also matches
+    // the _n suffix, so check the more specific name first.
+    if (has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
       parameters.push_back(
         code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()));
+    else
+      parameters.push_back(code_typet::argumentt(ptr_arg.type()));
 
     parameters.push_back(code_typet::argumentt(bool_type()));
     parameters.push_back(code_typet::argumentt(int_type()));
@@ -218,7 +221,7 @@ result_symbol(const irep_idt &identifier, const typet &type, contextt &context)
   symbolt symbol;
   symbol.id = id2string(identifier) + "::1::result";
   symbol.name = "result";
-  symbol.type = type;
+  symbol.set_type(type);
 
   context.add(symbol);
 
@@ -277,7 +280,13 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand"))
+    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_xor") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand"))
   {
     const typet &type = code_type.return_type();
 
@@ -318,13 +327,13 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
       has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or"))
     {
-      new_expr = exprt("or", type);
+      new_expr = exprt("bitor", type);
     }
     else if (
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
       has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and"))
     {
-      new_expr = exprt("and", type);
+      new_expr = exprt("bitand", type);
     }
     else if (
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
@@ -506,15 +515,80 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   {
     // TODO
   }
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
+  else if (
+    has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange"))
   {
-    // TODO
-  }
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__atomic_compare_exchange_n"))
-  {
-    // TODO
+    // GCC __atomic_compare_exchange{,_n} - strong CAS modelled atomically.
+    // See https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html.
+    //
+    //   bool __atomic_compare_exchange_n(T *ptr, T *expected, T desired,
+    //                                    bool weak, int success_mo,
+    //                                    int failure_mo);
+    //   bool __atomic_compare_exchange  (T *ptr, T *expected, T *desired,
+    //                                    bool weak, int success_mo,
+    //                                    int failure_mo);
+    //
+    // Modelled (under __ESBMC_atomic_begin/_end) as:
+    //   result = (*ptr == *expected);
+    //   if (result) *ptr = desired_value; else *expected = *ptr;
+    //   return result;
+    //
+    // We treat the CAS as strong regardless of `weak` (a weak CAS that can
+    // spuriously fail is a sound under-approximation of strong, but libvsync
+    // - the motivating consumer - issues only strong CASes).
+    const bool is_n =
+      has_prefix(identifier.as_string(), "c:@F@__atomic_compare_exchange_n");
+
+    const typet &ret_type = code_type.return_type();
+    const exprt &result =
+      symbol_expr(result_symbol(identifier_with_type, ret_type, context));
+
+    code_declt decl(result);
+    block.operands().push_back(decl);
+
+    code_typet::argumentt arg0 = code_type.arguments()[0];
+    code_typet::argumentt arg1 = code_type.arguments()[1];
+    code_typet::argumentt arg2 = code_type.arguments()[2];
+
+    dereference_exprt ptr_deref(
+      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+    dereference_exprt exp_deref(
+      symbol_exprt(arg1.cmt_identifier(), arg1.type()), arg1.type());
+
+    exprt desired = symbol_exprt(arg2.cmt_identifier(), arg2.type());
+    if (!is_n)
+      desired = dereference_exprt(desired, arg2.type());
+
+    exprt eq("=", ret_type);
+    eq.copy_to_operands(ptr_deref, exp_deref);
+    code_assignt assign_result(result, eq);
+    assign_result.location() = new_loc;
+    block.operands().push_back(assign_result);
+
+    code_ifthenelset cond;
+    cond.cond() = result;
+
+    code_assignt assign_ptr(ptr_deref, desired);
+    assign_ptr.location() = new_loc;
+    cond.then_case() = assign_ptr;
+
+    code_assignt assign_exp(exp_deref, ptr_deref);
+    assign_exp.location() = new_loc;
+    cond.else_case() = assign_exp;
+
+    block.operands().push_back(cond);
+
+    // atomic scope end
+    side_effect_expr_function_callt atomic_end;
+    atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+    convert_expression_to_code(atomic_end);
+    block.operands().push_back(atomic_end);
+
+    code_returnt ret;
+    ret.return_value() = result;
+    ret.location() = new_loc;
+    block.operands().push_back(ret);
   }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_add_fetch") ||

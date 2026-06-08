@@ -7,6 +7,32 @@
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
 #include <util/cache_defs.h>
+
+/// C standard version, ordered so that comparisons work naturally.
+enum class c_stdt
+{
+  unknown,
+  c89,
+  c99,
+  c11,
+  c17,
+  c23,
+  c26,
+};
+
+/// C++ standard version, ordered so that comparisons work naturally.
+enum class cxx_stdt
+{
+  unknown,
+  cpp98,
+  cpp11,
+  cpp14,
+  cpp17,
+  cpp20,
+  cpp23,
+  cpp26,
+};
+
 class configt
 {
 public:
@@ -51,6 +77,9 @@ public:
   {
     language_idt lid;
     std::string std;
+    // Set by the Clang frontend after typecheck().
+    c_stdt c_std = c_stdt::unknown;
+    cxx_stdt cpp_std = cxx_stdt::unknown;
   } language = {language_idt::NONE, ""};
 
   struct ansi_ct
@@ -154,12 +183,20 @@ public:
 
   static triple host();
 
-  // For caching ssa assertions
-  assert_db ssa_caching_db;
-
   std::vector<std::string> args;
 };
 
 extern configt config;
+
+/// Per-thread SSA assertion cache.
+///
+/// Was a member of configt and therefore process-global; the
+/// thread-based parallel k-induction (BC, FC, IS running concurrently)
+/// hit it as a soundness bug — BC marking an assertion as discharged
+/// would let IS reach a vacuous UNSAT, declaring safety on programs
+/// with real bugs (issue surfaced on regression/k-induction-parallel/
+/// linear_search_bug). The fork-based parallel previously side-stepped
+/// this via process isolation.
+assert_db &get_ssa_caching_db();
 
 #endif

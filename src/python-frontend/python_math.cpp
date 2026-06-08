@@ -1,10 +1,16 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
+#include <python-frontend/type_handler.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
+#include <util/bitvector.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/ieee_float.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/message.h>
@@ -15,6 +21,38 @@
 namespace
 {
 const BigInt kMaxConstantFoldExponent = 1024;
+
+// V.3: build an IREP2 expression-context call `func(args...)` returning
+// `return_type` (side_effect_function_call2tc + symbol_expr2tc), back-migrated
+// for the legacy adjust/goto-convert seam. Behaviour-preserving exact
+// round-trip of the side_effect_expr_function_callt the call sites hand-built.
+// Caller sets `.location()` on the result where the legacy code did.
+exprt build_c_math_call_expr(
+  const symbolt &func_sym,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(side_effect_function_call2tc(
+    migrate_type(return_type), symbol_expr2tc(func_sym), args2));
+}
+
+// V.3: IREP2 struct-component access (exact round-trip of member_exprt). The
+// source is struct-typed (the caller reads its .components()), so the member2t
+// precondition holds.
+exprt math_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
 
 std::string make_math_dispatch_cache_key(
   const std::string &caller,
@@ -199,7 +237,7 @@ exprt python_math::resolve_symbol(const exprt &operand) const
   {
     symbolt *s = symbol_table.find_symbol(operand.identifier());
     assert(s && "Symbol not found in symbol table");
-    return s->value;
+    return s->get_value();
   }
   return operand;
 }
@@ -255,6 +293,25 @@ exprt python_math::promote_to_double_if_needed(exprt operand) const
     return from_double(*val, double_type());
   }
 
+  // A pointer-typed ("any") operand -- e.g. an unannotated parameter bound to
+  // a dynamic-list element, which the frontend types as void* (issue #2848) --
+  // has no statically known numeric value. Casting it to double builds an FP
+  // operation over a pointer sort, which aborts the SMT backend in
+  // get_significand_width() once an FP intrinsic such as ieee_sqrt consumes it
+  // (reproduced under --smt-during-symex --bitwuzla; see humaneval/39).
+  // Over-approximate soundly with a nondet double rather than emitting the
+  // malformed cast; the concrete value is recoverable by annotating the
+  // parameter's type.
+  if (operand.type().is_pointer())
+  {
+    log_warning(
+      "math on an unannotated (any-typed) value is over-approximated as "
+      "nondet; annotate the argument's type for a precise result (#2848)");
+    side_effect_expr_nondett nondet(double_type());
+    nondet.location() = operand.location();
+    return nondet;
+  }
+
   exprt double_operand = exprt("typecast", double_type());
   double_operand.copy_to_operands(operand);
   return double_operand;
@@ -266,11 +323,10 @@ exprt python_math::build_unary_c_math_call(
   exprt operand,
   const nlohmann::json &element)
 {
-  side_effect_expr_function_callt call;
-  call.function() =
-    symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
-  call.arguments() = {promote_to_double_if_needed(std::move(operand))};
-  call.type() = double_type();
+  exprt call = build_c_math_call_expr(
+    get_c_math_symbol_cached(symbol_id, display_name),
+    double_type(),
+    {promote_to_double_if_needed(std::move(operand))});
   call.location() = converter.get_location_from_decl(element);
   return call;
 }
@@ -330,15 +386,12 @@ exprt python_math::handle_power_symbolic(exprt base, exprt exp)
   exprt double_base = promote_to_double_if_needed(std::move(base));
   exprt double_exp = promote_to_double_if_needed(std::move(exp));
 
-  // Create the function call
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {double_base, double_exp};
-  pow_call.type() = double_type();
-
+  // Create the function call.
   // Always return double result: Python power with float operands returns float
-  return pow_call;
+  return build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"),
+    double_type(),
+    {double_base, double_exp});
 }
 
 exprt python_math::build_power_expression(const exprt &base, const BigInt &exp)
@@ -435,20 +488,62 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     {
       resolved_base_value = binary2integer(
         resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
-      // Constant folding very large integer powers can be more expensive than
-      // keeping a logarithmic symbolic tree; cap it to keep conversion fast.
-      if (exponent <= kMaxConstantFoldExponent)
-      {
-        const BigInt power_value =
-          pow_bigint_non_negative(*resolved_base_value, exponent);
-        return from_integer(power_value, lhs.type());
-      }
     }
     catch (...)
     {
-      // Fall back to symbolic encoding if constant conversion overflows/ fails.
+      // Fall back to symbolic encoding if constant conversion fails.
     }
   }
+
+  // Cap constant folding to keep conversion fast; large symbolic trees are
+  // cheaper than huge BigInt powers.
+  if (resolved_base_value.has_value() && exponent <= kMaxConstantFoldExponent)
+  {
+    const BigInt power_value =
+      pow_bigint_non_negative(*resolved_base_value, exponent);
+    // ESBMC approximates Python int as int64 (see type_handler::get_typet
+    // FIXME); reject overflow at fold time rather than letting from_integer
+    // silently truncate. Bignum support tracked in #4642.
+    const unsigned width = bv_width(lhs.type());
+    const bool is_signed = lhs.type().is_signedbv();
+    const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
+    const BigInt max_val =
+      is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
+    if (power_value < min_val || power_value > max_val)
+    {
+      // Under --ir the SMT layer drops widths and reasons over unbounded
+      // Int. Widen the *result* of ** to the helper type (signedbv(512))
+      // so the BigInt survives IR construction. Issue #1964 (Part 2) /
+      // #4642. This widening is scoped to the ** result and does not flow
+      // back into the lhs operand's type — that's the surgical bound that
+      // avoids the OM byte-width coupling discussed in #4653.
+      if (
+        config.options.get_bool_option("int-encoding") &&
+        type_handler::python_int_width() > width)
+      {
+        const typet wide = type_handler::python_int_typet();
+        const unsigned wide_width = type_handler::python_int_width();
+        const BigInt wide_min = -BigInt::power2(wide_width - 1);
+        const BigInt wide_max = BigInt::power2(wide_width - 1) - 1;
+        if (power_value >= wide_min && power_value <= wide_max)
+          return from_integer(power_value, wide);
+      }
+      throw python_int_overflow_excp(
+        "Python int overflow: " + integer2string(*resolved_base_value) +
+        " ** " + integer2string(exponent) + " = " +
+        integer2string(power_value) + " does not fit in " +
+        std::to_string(width) +
+        "-bit int. ESBMC approximates Python int as a fixed-width "
+        "bitvector; arbitrary-precision int support is tracked in "
+        "issue #4642.");
+    }
+    return from_integer(power_value, lhs.type());
+  }
+
+  // TODO(#4642): exponents above kMaxConstantFoldExponent fall through to
+  // build_power_expression below, which builds a symbolic multiplication tree
+  // at the same int64 type — the result still wraps silently on overflow.
+  // Full bignum support will close this residual gap.
 
   // Check resolved base for special cases
   if (resolved_base_value.has_value())
@@ -491,11 +586,8 @@ exprt python_math::handle_modulo(
   div_expr.copy_to_operands(double_lhs, double_rhs);
 
   // Create floor(x / y)
-  side_effect_expr_function_callt floor_call;
-  floor_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-  floor_call.arguments() = {div_expr};
-  floor_call.type() = double_type();
+  exprt floor_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@floor", "floor"), double_type(), {div_expr});
   floor_call.location() = converter.get_location_from_decl(element);
 
   // Create floor(x/y) * y
@@ -528,11 +620,10 @@ exprt python_math::handle_floor_division(
     div_expr.copy_to_operands(
       promote_to_double_if_needed(lhs), promote_to_double_if_needed(rhs));
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = double_type();
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"),
+      double_type(),
+      {div_expr});
     floor_call.location() = bin_expr.location();
     return floor_call;
   }
@@ -581,7 +672,9 @@ exprt python_math::handle_floor_division(
   pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
 
   // diff_signals = is_num_neg ^ is_den_neg;
-  exprt diff_signals("bitxor", bool_type());
+  // Boolean XOR — `bitxor` over bool-typed operands is malformed and
+  // crashes Bitwuzla's BV encoder ("term with unexpected sort"); GitHub #4548.
+  exprt diff_signals("xor", bool_type());
   diff_signals.copy_to_operands(is_num_neg, is_den_neg);
 
   exprt cond("and", bool_type());
@@ -595,6 +688,62 @@ exprt python_math::handle_floor_division(
   floor_div.copy_to_operands(bin_expr, if_expr); // bin_expr contains lhs/rhs
 
   return floor_div;
+}
+
+exprt python_math::handle_int_modulo(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &bin_expr)
+{
+  const typet mod_type = bin_expr.type();
+
+  // Fold direct constants (matching handle_floor_division's caution: only
+  // literals, never symbols, whose symbol-table value may be stale).
+  if (
+    lhs.is_constant() && rhs.is_constant() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  {
+    const BigInt lhs_val =
+      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+    const BigInt rhs_val =
+      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+    if (rhs_val != 0)
+    {
+      BigInt rem = lhs_val % rhs_val; // C remainder, sign of dividend
+      const bool sign_diff = (lhs_val < 0) != (rhs_val < 0);
+      if (rem != 0 && sign_diff)
+        rem += rhs_val; // shift to the sign of the divisor (Python)
+      return from_integer(rem, mod_type);
+    }
+  }
+
+  // Symbolic: corrected = rem + (rhs if (rem != 0 and signs_differ) else 0),
+  // where rem is the C remainder already in bin_expr.
+  exprt is_num_neg("<", bool_type());
+  is_num_neg.copy_to_operands(lhs, gen_zero(mod_type));
+
+  exprt is_den_neg("<", bool_type());
+  is_den_neg.copy_to_operands(rhs, gen_zero(mod_type));
+
+  exprt rem_nonzero("notequal", bool_type());
+  rem_nonzero.copy_to_operands(bin_expr, gen_zero(mod_type));
+
+  // Boolean XOR (not bitxor — see handle_floor_division / GitHub #4548).
+  exprt diff_signals("xor", bool_type());
+  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+
+  exprt cond("and", bool_type());
+  cond.copy_to_operands(rem_nonzero, diff_signals);
+
+  exprt correction("if", mod_type);
+  correction.copy_to_operands(cond, rhs, gen_zero(mod_type));
+
+  exprt result("+", mod_type);
+  result.copy_to_operands(bin_expr, correction);
+  result.location() = bin_expr.location();
+
+  return result;
 }
 
 void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
@@ -810,11 +959,8 @@ exprt python_math::handle_divmod(
     exprt div_expr("ieee_div", result_type);
     div_expr.copy_to_operands(dividend, divisor);
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = result_type;
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"), result_type, {div_expr});
     floor_call.location() = converter.get_location_from_decl(element);
     quotient = floor_call;
   }
@@ -942,11 +1088,10 @@ exprt python_math::handle_atan2(
   x_operand = promote_to_double_if_needed(std::move(x_operand));
 
   // Create the function call expression
-  side_effect_expr_function_callt atan2_call;
-  atan2_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@atan2", "atan2"));
-  atan2_call.arguments() = {y_operand, x_operand};
-  atan2_call.type() = double_type();
+  exprt atan2_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@atan2", "atan2"),
+    double_type(),
+    {y_operand, x_operand});
   atan2_call.location() = converter.get_location_from_decl(element);
 
   return atan2_call;
@@ -986,11 +1131,8 @@ exprt python_math::handle_pow(
   exp = promote_to_double_if_needed(std::move(exp));
 
   // Create the function call expression
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {base, exp};
-  pow_call.type() = double_type();
+  exprt pow_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"), double_type(), {base, exp});
   pow_call.location() = converter.get_location_from_decl(element);
 
   return pow_call;
@@ -1043,11 +1185,8 @@ exprt python_math::handle_fmod(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt fmod_call;
-  fmod_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@fmod", "fmod"));
-  fmod_call.arguments() = {lhs, rhs};
-  fmod_call.type() = double_type();
+  exprt fmod_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@fmod", "fmod"), double_type(), {lhs, rhs});
   fmod_call.location() = converter.get_location_from_decl(element);
 
   return fmod_call;
@@ -1069,11 +1208,10 @@ exprt python_math::handle_copysign(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt copysign_call;
-  copysign_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@copysign", "copysign"));
-  copysign_call.arguments() = {lhs, rhs};
-  copysign_call.type() = double_type();
+  exprt copysign_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@copysign", "copysign"),
+    double_type(),
+    {lhs, rhs});
   copysign_call.location() = converter.get_location_from_decl(element);
 
   return copysign_call;
@@ -1215,11 +1353,8 @@ exprt python_math::handle_hypot(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt hypot_call;
-  hypot_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@hypot", "hypot"));
-  hypot_call.arguments() = {lhs, rhs};
-  hypot_call.type() = double_type();
+  exprt hypot_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@hypot", "hypot"), double_type(), {lhs, rhs});
   hypot_call.location() = converter.get_location_from_decl(element);
 
   return hypot_call;
@@ -1289,8 +1424,8 @@ exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
     std::string member_name = "element_" + std::to_string(i);
     const typet &comp_type = p_type.components()[i].type();
 
-    exprt pi = member_exprt(p, member_name, comp_type);
-    exprt qi = member_exprt(q, member_name, q_type.components()[i].type());
+    exprt pi = math_member(p, member_name, comp_type);
+    exprt qi = math_member(q, member_name, q_type.components()[i].type());
 
     // Cast to double if needed
     if (!pi.type().is_floatbv())

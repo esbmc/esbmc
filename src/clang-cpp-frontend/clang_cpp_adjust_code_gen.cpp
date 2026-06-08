@@ -23,7 +23,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  copied to the `components` list in its type, which should have been
    *  done in the converter.
    */
-  if (!symbol.value.need_vptr_init() || symbol.value.is_nil())
+  if (!symbol.get_value().need_vptr_init() || symbol.get_value().is_nil())
     return;
 
   /*
@@ -31,8 +31,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  - a ctor symbol shall contain a function body modelled by code_blockt
    *  - symbol should be of code type
    */
-  code_typet &ctor_type = to_code_type(symbol.type);
-  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   /*
    *  vptr initializations shall be done in ctor
@@ -48,7 +47,11 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   assert(ctor_class_symb);
   // get the `components` vector from this class' type
   const struct_typet::componentst &components =
-    to_struct_type(ctor_class_symb->type).components();
+    to_struct_type(ctor_class_symb->get_type()).components();
+
+  // Read-modify-set the value to mutate the body and clear need_vptr_init.
+  exprt value = symbol.get_value();
+  code_blockt &ctor_body = to_code_block(to_code(value));
 
   // iterate over the `components` and initialize each virtual pointers
   for (const auto &comp : components)
@@ -63,7 +66,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     ctor_body.operands().push_back(code_expr);
   }
 
-  symbol.value.need_vptr_init(false);
+  value.need_vptr_init(false);
+  symbol.set_value(std::move(value));
 }
 
 void clang_cpp_adjust::gen_vptr_init_code(
@@ -111,18 +115,16 @@ exprt clang_cpp_adjust::gen_vptr_init_lhs(
 
   // prepare dereference operand
   exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->type);
+    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
 
   // get the reference symbol
   dereference_exprt this_deref(deref_operand.type());
   this_deref.operands().resize(0);
   this_deref.operands().push_back(deref_operand);
-  this_deref.set("#lvalue", true);
 
   // now we can get the member expr for "this->vptr"
   lhs_code = member_exprt(comp.name(), comp.type());
   lhs_code.operands().push_back(this_deref);
-  lhs_code.set("#lvalue", true);
 
   return lhs_code;
 }
@@ -146,7 +148,8 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
   assert(vtable_var_symb);
 
   // get the operand for address_of expr as in `&<vtable_struct_variable>`
-  exprt vtable_var = symbol_exprt(vtable_var_symb->id, vtable_var_symb->type);
+  exprt vtable_var =
+    symbol_exprt(vtable_var_symb->id, vtable_var_symb->get_type());
   vtable_var.name(vtable_var_symb->name);
 
   // now we can get the address_of expr for "&<vtable_struct_variable>"

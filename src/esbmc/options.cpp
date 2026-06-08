@@ -1,6 +1,7 @@
 #include <boost/program_options/value_semantic.hpp>
 #include <esbmc/esbmc_parseoptions.h>
 #include <fstream>
+#include <limits>
 #include <solvers/solver_config.h>
 #include <util/cmdline.h>
 
@@ -125,10 +126,19 @@ const struct group_opt_templ all_cmd_options[] = {
   {"Solidity frontend",
    {{"sol",
      boost::program_options::value<std::string>()->value_name("path"),
-     ".sol and .solast file names"},
+     "Solidity source file (.sol) — also accepted as a positional argument"},
+    {"solc-bin",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "path to solc binary (default: $SOLC or solc in $PATH)"},
     {"contract",
      boost::program_options::value<std::string>()->value_name("cname"),
      "Set contract name"},
+    {"focus-function",
+     boost::program_options::value<std::string>()->value_name("name"),
+     "Restrict the contract harness to verify only the named public/external "
+     "function. The constructor and state initialization still run (unlike "
+     "--function), but the nondet dispatch loop calls only this function. "
+     "Requires --contract when the source declares more than one contract."},
     {"no-visibility",
      NULL,
      "Force to verify every function, even if it's an unreachable "
@@ -189,7 +199,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-loops", NULL, "Show the loops in the program"},
     {"show-claims", NULL, "Only show claims"},
     {"show-vcc", NULL, "Show the verification conditions"},
-    {"document-subgoals", NULL, "Generate subgoals documentation"},
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
@@ -201,7 +210,18 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Parse source files using the old frontend (deprecated)"},
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
-    {"fms-extensions", NULL, "Enable microsoft C extensions"}}},
+    {"fms-extensions", NULL, "Enable microsoft C extensions"},
+    {"argv-max-args",
+     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
+     "Maximum number of argv entries backed with nondet strings (default 2). "
+     "Higher values widen coverage at the cost of a larger SMT formula."},
+    {"argv-max-strlen",
+     boost::program_options::value<int>()->default_value(256)->value_name("nr"),
+     "Maximum length (in bytes, including the null terminator) of each backed "
+     "argv string (default 256)."},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -238,6 +258,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("path"),
      "Generate the verification result witness in both Yaml and GraphML "
      "format"},
+    {"sarif-output",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "Generate a SARIF 2.1.0 report of the violation; use '-' for stdout. "
+     "Each result is annotated with the matching CWE ids (CWE 4.20)."},
     {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "Generate the verification result witness in GraphML format; use '-' for "
@@ -255,12 +279,21 @@ const struct group_opt_templ all_cmd_options[] = {
     {"validate-correctness-witness",
      NULL,
      "Validate the YAML correctness witness (2.0)"},
-    {"witness-parse-tree",
+    {"validate-violation-witness",
      NULL,
-     "Show YAML correctness witness c_expression parse tree"},
+     "Validate the YAML violation witness (2.0)"},
     {"witness",
      boost::program_options::value<std::string>()->value_name("<path>"),
-     "Set the witness path"}}},
+     "Set the witness path"},
+    {"all-witnesses",
+     NULL,
+     "After a property fails, enumerate further input vectors that also "
+     "violate it (until UNSAT or --max-witnesses is reached). "
+     "Implies --multi-property."},
+    {"max-witnesses",
+     boost::program_options::value<int>()->default_value(16)->value_name("n"),
+     "Cap the number of witnesses reported per property "
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
@@ -351,6 +384,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"extended-try-analysis",
      NULL,
      "Skip backward stack search for C++ throw targets"},
+    {"lower-exceptions",
+     NULL,
+     "Lower throw/catch to symbolic guarded control flow (default; #5075)"},
+    {"no-lower-exceptions",
+     NULL,
+     "Use the legacy imperative exception handling instead of symbolic "
+     "lowering (#5075)"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
@@ -405,7 +445,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
-     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"},
+    {"check-vacuity",
+     NULL,
+     "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
+     "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
+     "Default on when --loop-invariant or --loop-invariant-check is set."},
+    {"no-vacuity-check",
+     NULL,
+     "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",
@@ -425,7 +473,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "Check all interleavings, even if a bug was already found"}}},
   {"Solver",
    {{"list-solvers", NULL, "List available solvers and exit"},
-    {"boolector", NULL, "Use Boolector (default)"},
+    {"boolector", NULL, "Use Boolector"},
     {"z3", NULL, "Use Z3"},
     {"z3-debug", NULL, "Extracts Z3 dump and SMT2 formula"},
     {"z3-debug-dump-file",
@@ -439,7 +487,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc4", NULL, "Use CVC4"},
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
-    {"bitwuzla", NULL, "Use Bitwuzla"},
+    {"bitwuzla", NULL, "Use Bitwuzla (default)"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -456,11 +504,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smtlib", NULL, "Use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
-     "Override default solver used if no concrete one is specified"
-#ifdef BOOLECTOR
-     " (Boolector)"
-#endif
-    },
+     "Override default solver used if no concrete one is specified"},
     {"non-supported-models-as-zero",
      NULL,
      "If ESBMC can't extract a type/expression from the solver, then the value "
@@ -542,6 +586,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ub-shift-check",
      NULL,
      "Enable undefined behavior check on shift operations"},
+    {"clz-zero-check",
+     NULL,
+     "Enable undefined behavior check on __builtin_clz of a zero argument"},
     {"struct-fields-check",
      NULL,
      "Enable over-sized read checks for struct fields"},
@@ -555,6 +602,12 @@ const struct group_opt_templ all_cmd_options[] = {
      "thread interleaving"},
     {"lock-order-check", NULL, "Enable for lock acquisition ordering check"},
     {"atomicity-check", NULL, "Enable atomicity check at visible assignments"},
+    {"uninitialised-vars-check",
+     NULL,
+     "Enable check for reads of uninitialised local variables (CWE-457)"},
+    {"unchecked-return-value-check",
+     NULL,
+     "Enable check for unchecked return values of fallible calls (CWE-252)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -572,8 +625,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "Enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"},
+     "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
+     "treats reach_error()/__VERIFIER_error() as error sentinels"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
@@ -679,6 +732,29 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-function-coverage-claims",
       NULL,
       "Enable branch-coverage-ext and shows all reached claims"},
+     {"k-path-coverage",
+      // INT_MIN is the implicit_value sentinel for "no =N supplied".
+      // -1 / 0 are explicit user inputs and rejected at parse time;
+      // INT_MIN is unambiguous since no user would ever type it.
+      boost::program_options::value<int>()
+        ->implicit_value(std::numeric_limits<int>::min())
+        ->value_name("N"),
+      "Show the coverage of k-path witnesses (PathCrawler-style; "
+      "Williams et al., EDCC 2005). N is the prefix depth (1..30); if "
+      "omitted, tied to --unwind, falling back to 4 when --unwind is unset"},
+     {"k-path-coverage-claims",
+      NULL,
+      "Enable --k-path-coverage with default N (use --k-path-coverage=N "
+      "directly to override) and show all reached claims"},
+     {"k-path-witness-depth",
+      boost::program_options::value<int>()->default_value(8)->value_name("D"),
+      "Cap on post-simplification witness expression depth in --k-path-"
+      "coverage; deeper witnesses are dropped (default 8)"},
+     {"k-path-max-goals",
+      boost::program_options::value<int>()->default_value(10000)->value_name(
+        "M"),
+      "Per-function goal cap for --k-path-coverage; on overflow the "
+      "instrumentation aborts rather than truncating (default 10000)"},
      {"assign-param-nondet",
       NULL,
       "Explicitly assign every function parameters to NONDET in function "

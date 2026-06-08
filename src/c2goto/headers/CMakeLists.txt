@@ -5,6 +5,7 @@ set(inputs
            stdarg.h
            stdbool.h
            stddef.h
+           stdio.h
            stdlib.h
            string.h
            time.h

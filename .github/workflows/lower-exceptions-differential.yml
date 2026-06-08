@@ -1,0 +1,52 @@
+name: Lower-exceptions differential gate
+
+# The P4 gate for issue #5075: prove the symbolic exception-lowering path
+# (--lower-exceptions) reaches the same verdict as the imperative path on every
+# exception-bearing regression test, before the imperative path is deleted and
+# the flag flipped on by default. Runs on a clean Linux runner (the macOS
+# Homebrew toolchain shadows ESBMC's own std headers, which makes the std/
+# bad_cast tests flaky locally — see docs/design-symbolic-exceptions.md).
+#
+# Triggered manually (workflow_dispatch) for full P4 runs, and automatically on
+# PRs that touch the exception-lowering surface so a regression in parity is
+# caught at review time rather than at the flip.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/goto-programs/remove_exceptions.*'
+      - 'src/goto-programs/exception_typeid.*'
+      - 'src/goto-programs/exception_globals.*'
+      - 'src/goto-symex/symex_catch.cpp'
+      - 'src/goto-programs/goto_convert.cpp'
+      - 'src/cpp/library/exception'
+      - 'scripts/lower_exceptions_differential.py'
+      - '.github/workflows/lower-exceptions-differential.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  differential:
+    name: --lower-exceptions ON-vs-OFF parity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b DebugOpt -e ON
+
+      - name: Run the differential gate
+        run: |
+          # build.sh's install_python_deps_linux step installs Python tools
+          # (meson, mypy) under the user site; put them on PATH.
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/lower_exceptions_differential.py \
+            --esbmc build/src/esbmc/esbmc \
+            --jobs 4 --timeout 120
+
+      - name: Clean up header temp dirs
+        if: always()
+        run: rm -rf /tmp/esbmc-headers-*

@@ -4,7 +4,6 @@
 
 #include <util/algorithms.h>
 #include <util/time_stopping.h>
-#include <util/crypto_hash.h>
 #include <util/cache_defs.h>
 
 /**

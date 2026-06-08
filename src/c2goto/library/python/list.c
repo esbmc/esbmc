@@ -8,6 +8,13 @@
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;
 
+// In --ir (integer/real arithmetic) mode, __ESBMC_alloca returns byte-sorted
+// storage; storing a float there truncates the real value. To avoid this, we
+// copy float values into this global double array (real-sorted, never expires).
+#define __ESBMC_FLOAT_BUF_SIZE 4096
+static double __ESBMC_float_buf[__ESBMC_FLOAT_BUF_SIZE];
+static size_t __ESBMC_float_buf_idx = 0;
+
 // Optimized value comparison - avoids memcmp loop unrolling for common sizes
 static inline bool
 __ESBMC_values_equal(const void *a, const void *b, size_t size)
@@ -20,6 +27,9 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
     return *(const uint64_t *)a == *(const uint64_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
+  if (size == 16)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
@@ -51,22 +61,62 @@ size_t __ESBMC_list_size(const PyListObject *l)
   return l ? l->size : 0;
 }
 
-static inline void *__ESBMC_copy_value(const void *value, size_t size)
+// ptr_free=1: payload has no pointer field, so we can reinterpret it as
+// uint64_t and use the 16/24/32-byte fast paths below. Pass 0 for opaque or
+// pointer-bearing structs — writing through a uint64_t lvalue would lose the
+// pointer object under ESBMC's byte-encoding.
+static inline void *__ESBMC_copy_value(
+  const void *value,
+  size_t size,
+  size_t type_id,
+  size_t float_type_id,
+  size_t *out_float_idx,
+  int ptr_free)
 {
+  if (out_float_idx)
+    *out_float_idx = 0;
+
   // None type (NULL pointer with size 0)
   // Don't allocate: return NULL to preserve None semantics
   if (value == NULL && size == 0)
     return NULL;
 
+  // In --ir mode, __ESBMC_alloca returns byte-sorted storage; writing a float
+  // (real sort) through any integer cast truncates it. Copy into the global
+  // double buffer instead: it is real-sorted and never expires, so the stored
+  // pointer stays valid regardless of the caller's scope.
+  if (size == 8 && float_type_id != 0 && type_id == float_type_id)
+  {
+    size_t idx = __ESBMC_float_buf_idx++;
+    __ESBMC_float_buf[idx] = *(const double *)value;
+    if (out_float_idx)
+      *out_float_idx = idx;
+    return (void *)&__ESBMC_float_buf[idx];
+  }
+
   void *copied = __ESBMC_alloca(size);
 
+  // 8-byte-aligned fast paths for scalars and small tuple keys.
+  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
   {
-    // Handle 16-byte structs (such as dictionaries) explicitly
-    *(uint64_t *)copied = *(const uint64_t *)value;
-    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+  }
+  else if (ptr_free && size == 24)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+  }
+  else if (ptr_free && size == 32)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+    ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
   }
   else
     memcpy(copied, value, size);
@@ -78,14 +128,19 @@ bool __ESBMC_list_push(
   PyListObject *l,
   const void *value,
   size_t type_id,
-  size_t type_size)
+  size_t type_size,
+  size_t float_type_id,
+  int ptr_free)
 {
   // TODO: __ESBMC_obj_cpy
-  void *copied_value = __ESBMC_copy_value(value, type_size);
+  size_t float_idx = 0;
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // Use a pointer to avoid repeated indexing
   PyObject *item = &l->items[l->size];
   item->value = copied_value;
+  item->float_idx = float_idx;
   item->type_id = type_id;
   item->size = type_size;
   l->size++;
@@ -94,11 +149,61 @@ bool __ESBMC_list_push(
   return true;
 }
 
-bool __ESBMC_list_push_object(PyListObject *l, PyObject *o)
+bool __ESBMC_list_push_object(
+  PyListObject *l,
+  PyObject *o,
+  size_t float_type_id,
+  int ptr_free)
 {
   assert(l != NULL);
   assert(o != NULL);
-  return __ESBMC_list_push(l, o->value, o->type_id, o->size);
+  // For float elements, read from the global float_buf array via a local temp.
+  // This avoids the expired-pointer issue of loop-scoped $list_elem symbols,
+  // and the local temp ensures the pointer is "fresh" (not stored void*) in --ir.
+  if (o->size == 8 && float_type_id != 0 && o->type_id == float_type_id)
+  {
+    double temp = __ESBMC_float_buf[o->float_idx];
+    return __ESBMC_list_push(
+      l, (const void *)&temp, o->type_id, o->size, float_type_id, ptr_free);
+  }
+  return __ESBMC_list_push(
+    l, o->value, o->type_id, o->size, float_type_id, ptr_free);
+}
+
+// Per-element append for list copy / assignment / slice / concat that handles
+// elements stored by reference correctly (esbmc/esbmc#5102).
+//
+// An element whose payload is a pointer to a shared object must keep that
+// pointer, not have its pointee byte-copied. Two such elements exist:
+//   * nested lists — the inner PyListObject* is stored in `value`
+//     (type_id == list_type_id);
+//   * pointer-only payloads stored with size == 0 — e.g. nested dicts inserted
+//     via __ESBMC_list_push_dict_ptr (value holds the dict*), and None
+//     (value == NULL).
+// For these we copy the PyObject record verbatim, preserving the pointer. The
+// generic byte-copy would run __ESBMC_copy_value with size == 0 (alloca(0) +
+// memcpy of 0 bytes) and drop the stored pointer, so the copied list would read
+// garbage. Sharing the reference also matches Python's shallow-copy semantics:
+// nested containers are shared, not deep-copied.
+//
+// Scalar elements (size > 0) must NOT share their buffer: Python subscript
+// assignment (l[i] = x) writes through the element's value pointer in place, so
+// two lists sharing a scalar buffer would alias. Scalars therefore keep the
+// independent byte-copy via __ESBMC_list_push_object.
+bool __ESBMC_list_push_shallow(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_object(l, o, 0, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -107,6 +212,7 @@ bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
 {
   PyObject *item = &l->items[l->size];
   item->value = dict_ptr;
+  item->float_idx = 0;
   item->type_id = type_id;
   item->size = 0;
   l->size++;
@@ -117,7 +223,8 @@ bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
   size_t list_type_id,
-  size_t max_depth)
+  size_t max_depth,
+  size_t float_type_id)
 {
   // Quick checks
   if (!l1 || !l2)
@@ -183,7 +290,32 @@ bool __ESBMC_list_eq(
     {
       // size == 0 means a dict pointer or None element — stored by pointer
       // identity, not byte content, so cross-type-id comparison is unsound.
-      if (a->size == 0 || !__ESBMC_values_equal(a->value, b->value, a->size))
+      if (a->size == 0)
+        return false;
+
+      // int-vs-float: Python compares numerically (1 == 1.0), but the two
+      // store different bit patterns, so a byte compare would wrongly differ.
+      // Triggered when exactly one side is a float (sizes already match here,
+      // and float/int elements are both 8 bytes). float_type_id is derived by
+      // the frontend from top-level element types only, so this numeric path
+      // does not reach nested mixed int/float lists; like list_lt, the int side
+      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      if (
+        float_type_id != 0 && a->size == 8 &&
+        (a->type_id == float_type_id) != (b->type_id == float_type_id))
+      {
+        double av = (a->type_id == float_type_id)
+                      ? *(const double *)a->value
+                      : (double)*(const int64_t *)a->value;
+        double bv = (b->type_id == float_type_id)
+                      ? *(const double *)b->value
+                      : (double)*(const int64_t *)b->value;
+        if (av != bv)
+          return false;
+        continue;
+      }
+
+      if (!__ESBMC_values_equal(a->value, b->value, a->size))
         return false;
       continue;
     }
@@ -304,17 +436,20 @@ bool __ESBMC_list_set_at(
   size_t index,
   const void *value,
   size_t type_id,
-  size_t type_size)
+  size_t type_size,
+  size_t float_type_id,
+  int ptr_free)
 {
   __ESBMC_assert(l != NULL, "list_set_at: list is null");
   __ESBMC_assert(index < l->size, "list_set_at: index out of bounds");
 
-  // Make a copy of the new value
-  void *copied_value = __ESBMC_alloca(type_size);
-  memcpy(copied_value, value, type_size);
+  size_t float_idx = 0;
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // Update the element at the given index
   l->items[index].value = copied_value;
+  l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
 
@@ -326,15 +461,18 @@ bool __ESBMC_list_insert(
   size_t index,
   const void *value,
   size_t type_id,
-  size_t type_size)
+  size_t type_size,
+  size_t float_type_id,
+  int ptr_free)
 {
   // If index is beyond the end, just append
   if (index >= l->size)
-    return __ESBMC_list_push(l, value, type_id, type_size);
+    return __ESBMC_list_push(
+      l, value, type_id, type_size, float_type_id, ptr_free);
 
-  // Make a copy of the value
-  void *copied_value = __ESBMC_alloca(type_size);
-  memcpy(copied_value, value, type_size);
+  size_t float_idx = 0;
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // TODO: there oughta be a better way to do this
   size_t i = l->size;
@@ -346,6 +484,7 @@ bool __ESBMC_list_insert(
 
   // Insert the new element
   l->items[index].value = copied_value;
+  l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
   l->size++;
@@ -380,6 +519,52 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+size_t __ESBMC_list_count(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return 0;
+
+  size_t cnt = 0;
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      ++cnt;
+    ++i;
+  }
+  return cnt;
+}
+
+size_t __ESBMC_list_index(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return 0;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
 /* ---------- extend list ---------- */
 
 void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
@@ -392,10 +577,12 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
   {
     const PyObject *elem = &other->items[i];
 
-    void *copied_value = __ESBMC_alloca(elem->size);
-    memcpy(copied_value, elem->value, elem->size);
+    // Reuse the float-aware copier so the SMT model tracks size.
+    void *copied_value =
+      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
+    l->items[l->size].float_idx = elem->float_idx;
     l->items[l->size].type_id = elem->type_id;
     l->items[l->size].size = elem->size;
     l->size++;
@@ -439,6 +626,33 @@ size_t __ESBMC_list_find_index(
   return 0;
 }
 
+// Fast-equal for dict-key lookup. Adds 8-byte-aligned fast paths for tuple
+// keys (sizes 16/24/32) on top of __ESBMC_values_equal's scalar paths.
+// Kept local to list_try_find_index so that generic values_equal callers
+// (list_eq, list_contains, etc.) are not penalised by extra branches.
+static inline bool __ESBMC_key_equal(const void *a, const void *b, size_t size)
+{
+  if (a == b)
+    return true;
+  if (size == 8)
+    return *(const uint64_t *)a == *(const uint64_t *)b;
+  if (size == 1)
+    return *(const uint8_t *)a == *(const uint8_t *)b;
+  if (size == 16)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
+  if (size == 24)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2];
+  if (size == 32)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2] &&
+           ((const uint64_t *)a)[3] == ((const uint64_t *)b)[3];
+  return memcmp(a, b, size) == 0;
+}
+
 size_t __ESBMC_list_try_find_index(
   PyListObject *l,
   const void *item,
@@ -455,7 +669,7 @@ size_t __ESBMC_list_try_find_index(
 
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
+      if (__ESBMC_key_equal(elem->value, item, item_size))
         return i;
     }
 
@@ -557,16 +771,43 @@ bool __ESBMC_dict_eq(
     // Key found: compare the corresponding values
     const PyObject *rhs_value = &rhs_values->items[rhs_idx];
 
-    // Values must have same type and size
-    if (
-      lhs_value->type_id != rhs_value->type_id ||
-      lhs_value->size != rhs_value->size)
-      return false;
-
-    // Compare actual value contents
-    if (!__ESBMC_values_equal(
-          lhs_value->value, rhs_value->value, lhs_value->size))
-      return false;
+    // None values are stored as (value=NULL, size=0).
+    // Treat them separately from the size==0 list-pointer path below,
+    // which would otherwise dereference NULL.
+    const bool lhs_is_none = (lhs_value->value == NULL && lhs_value->size == 0);
+    const bool rhs_is_none = (rhs_value->value == NULL && rhs_value->size == 0);
+    if (lhs_is_none || rhs_is_none)
+    {
+      if (lhs_is_none != rhs_is_none)
+        return false;
+    }
+    // setdefault list (size==0, raw PyListObject*) vs literal list (size>0,
+    // pointer-to-PyListObject*): normalise both sides and use list_eq.
+    // Restricted to asymmetric size to leave symmetric size==0 payloads
+    // (e.g. nested dict pointers) on the byte-compare path.
+    else if ((lhs_value->size == 0) != (rhs_value->size == 0))
+    {
+      const PyListObject *lhs_list =
+        (lhs_value->size == 0) ? (const PyListObject *)lhs_value->value
+                               : *(const PyListObject **)lhs_value->value;
+      const PyListObject *rhs_list =
+        (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
+                               : *(const PyListObject **)rhs_value->value;
+      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0))
+        return false;
+    }
+    else
+    {
+      // type_id alone does not pin size for variable-sized payloads
+      // (e.g. strings: same type_id, size == strlen+1).
+      if (
+        lhs_value->type_id != rhs_value->type_id ||
+        lhs_value->size != rhs_value->size)
+        return false;
+      if (!__ESBMC_values_equal(
+            lhs_value->value, rhs_value->value, lhs_value->size))
+        return false;
+    }
 
     i++;
   }
@@ -588,11 +829,14 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
   {
     const PyObject *elem = &l->items[i];
 
-    // Copy the value
-    void *copied_value = __ESBMC_copy_value(elem->value, elem->size);
+    // Generic per-element copy: float_type_id=0 disables float-aware copy,
+    // ptr_free=0 routes through memcpy (we don't track per-element types).
+    void *copied_value =
+      __ESBMC_copy_value(elem->value, elem->size, 0, 0, NULL, 0);
 
     // Add to new list
     copied->items[copied->size].value = copied_value;
+    copied->items[copied->size].float_idx = elem->float_idx;
     copied->items[copied->size].type_id = elem->type_id;
     copied->items[copied->size].size = elem->size;
     copied->size++;
@@ -635,7 +879,57 @@ bool __ESBMC_list_remove(
   }
 
   /* Item not found */
-  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
+  return false;
+}
+
+/* set.add(elem) — append elem to the underlying list iff it is not
+ * already present. Returns true when the set was modified. */
+bool __ESBMC_set_add(
+  PyListObject *s,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(s != NULL, "ValueError: set is null");
+
+  if (__ESBMC_list_contains(s, item, item_type_id, item_size))
+    return false;
+
+  return __ESBMC_list_push(s, item, item_type_id, item_size, 0, 0);
+}
+
+/* set.discard(elem) — like list.remove but silent when the element is
+ * absent. Returns true when an element was removed. */
+bool __ESBMC_set_discard(
+  PyListObject *s,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(s != NULL, "ValueError: set is null");
+
+  size_t i = 0;
+  while (i < s->size)
+  {
+    const PyObject *elem = &s->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+      {
+        size_t j = i;
+        while (j < s->size - 1)
+        {
+          s->items[j] = s->items[j + 1];
+          j++;
+        }
+        s->size--;
+        return true;
+      }
+    }
+    i++;
+  }
+
   return false;
 }
 

@@ -1,10 +1,23 @@
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/k_path_spanning.h>
+#include <irep2/irep2_utils.h>
+
+#include <algorithm>
+#include <cassert>
+#include <deque>
+#include <map>
+#include <set>
+#include <vector>
 
 size_t goto_coveraget::total_assert = 0;
 size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 size_t goto_coveraget::total_branch = 0;
 size_t goto_coveraget::total_func_branch = 0;
+size_t goto_coveraget::total_kpath = 0;
+size_t goto_coveraget::total_kpath_spanning = 0;
+std::set<std::pair<std::string, std::string>>
+  goto_coveraget::k_path_spanning_redundant;
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
@@ -35,10 +48,10 @@ void goto_coveraget::replace_all_asserts_to_guard(
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -97,10 +110,10 @@ void goto_coveraget::replace_all_asserts_to_assume()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -157,28 +170,28 @@ void goto_coveraget::branch_function_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
-      bool flg = true;
+      auto in_verifying_files = [&](const goto_programt::instructiont &ins) {
+        return location_pool.count(
+                 get_filename_from_path(ins.location.file().as_string())) != 0;
+      };
+
+      // Add a false assert at the first instruction belonging to one of the
+      // files under verification, to check if the function is entered.
+      auto entry = std::find_if(
+        goto_program.instructions.begin(),
+        goto_program.instructions.end(),
+        in_verifying_files);
+      if (entry != goto_program.instructions.end())
+        insert_assert(
+          goto_program,
+          entry,
+          gen_false_expr(),
+          "function entry: " + id2string(f_it->first));
 
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
-        // skip if it's not the verifying files
-        // probably a library
-        if (location_pool.count(cur_filename) == 0)
+        if (!in_verifying_files(*it))
           continue;
-
-        if (flg)
-        {
-          // add a false assert in the beginning
-          // to check if the function is entered.
-          insert_assert(
-            goto_program,
-            it,
-            gen_false_expr(),
-            "function entry: " + id2string(f_it->first));
-          flg = false;
-        }
 
         if (it->location.property().as_string() == "skipped")
           // this stands for the auxiliary condition/branch we added.
@@ -199,8 +212,6 @@ void goto_coveraget::branch_function_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
-          exprt guard = migrate_expr_back(it->guard);
-
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -209,8 +220,6 @@ void goto_coveraget::branch_function_coverage()
           insert_assert(goto_program, it, gen_not_expr(it->guard));
         }
       }
-
-      flg = true;
     }
 
   // fix for branch coverage with kind/incr
@@ -241,11 +250,10 @@ void goto_coveraget::branch_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
-
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
@@ -287,6 +295,523 @@ void goto_coveraget::branch_coverage()
   goto_functions.update();
 }
 
+// Post-simplification depth of an expression tree, capped early once the
+// caller's threshold is exceeded. Used to gate emission of the structural
+// witness (issue #4325).
+static size_t expr_depth(const expr2tc &e, size_t cap)
+{
+  if (is_nil_expr(e))
+    return 0;
+  size_t n = e->get_num_sub_exprs();
+  if (n == 0)
+    return 1;
+  size_t d = 0;
+  for (size_t i = 0; i < n; ++i)
+  {
+    const expr2tc *sub = e->get_sub_expr(i);
+    if (sub == nullptr)
+      continue;
+    d = std::max(d, expr_depth(*sub, cap));
+    if (d > cap)
+      return d + 1;
+  }
+  return 1 + d;
+}
+
+// True when the conjunction of `atoms` ((guard, polarity) pairs) is
+// unsatisfiable because some scalar variable is pinned to an empty integer
+// range — e.g. `x==1 && x==2` or `x<0 && x>10`. This catches mutually
+// exclusive comparisons on one variable, which the same-atom check (a guard
+// and its negation) and simplify() both miss.
+//
+// Sound by construction: an atom only counts when it is exactly
+// `var <rel> int-const` (after peeling negations and normalising operand
+// order), and bounds are tracked over unbounded integers, so the admissible
+// set is over-approximated and a satisfiable conjunction is never reported
+// unsat. Like the same-atom check it treats a guard as a stable value across
+// the prefix window, so a variable reassigned between two branches is not
+// specially handled here.
+static bool
+kpath_atoms_comparison_unsat(const std::vector<std::pair<expr2tc, bool>> &atoms)
+{
+  enum relt
+  {
+    R_EQ,
+    R_NE,
+    R_LT,
+    R_GT,
+    R_LE,
+    R_GE
+  };
+
+  // Normalise `g` to (symbol-name, rel, constant), folding Boolean
+  // negations into `pol`. Returns false unless `g` is a comparison between
+  // a scalar symbol and an integer constant (either operand order).
+  auto normalise =
+    [](expr2tc g, bool pol, irep_idt &var, relt &rel, BigInt &c) -> bool {
+    while (is_not2t(g))
+    {
+      pol = !pol;
+      g = to_not2t(g).value;
+    }
+
+    relt base;
+    expr2tc s1, s2;
+    if (is_equality2t(g))
+    {
+      base = R_EQ;
+      s1 = to_equality2t(g).side_1;
+      s2 = to_equality2t(g).side_2;
+    }
+    else if (is_notequal2t(g))
+    {
+      base = R_NE;
+      s1 = to_notequal2t(g).side_1;
+      s2 = to_notequal2t(g).side_2;
+    }
+    else if (is_lessthan2t(g))
+    {
+      base = R_LT;
+      s1 = to_lessthan2t(g).side_1;
+      s2 = to_lessthan2t(g).side_2;
+    }
+    else if (is_greaterthan2t(g))
+    {
+      base = R_GT;
+      s1 = to_greaterthan2t(g).side_1;
+      s2 = to_greaterthan2t(g).side_2;
+    }
+    else if (is_lessthanequal2t(g))
+    {
+      base = R_LE;
+      s1 = to_lessthanequal2t(g).side_1;
+      s2 = to_lessthanequal2t(g).side_2;
+    }
+    else if (is_greaterthanequal2t(g))
+    {
+      base = R_GE;
+      s1 = to_greaterthanequal2t(g).side_1;
+      s2 = to_greaterthanequal2t(g).side_2;
+    }
+    else
+      return false;
+
+    // Require one symbol and one integer-constant operand; put the symbol
+    // on the left, mirroring the relation if the operands were swapped.
+    bool swapped = false;
+    if (is_constant_int2t(s1) && is_symbol2t(s2))
+    {
+      std::swap(s1, s2);
+      swapped = true;
+    }
+    else if (!(is_symbol2t(s1) && is_constant_int2t(s2)))
+      return false;
+
+    var = to_symbol2t(s1).get_symbol_name();
+    c = to_constant_int2t(s2).value;
+
+    // Swapping operands mirrors the relation (c < x  <=>  x > c).
+    if (swapped)
+    {
+      switch (base)
+      {
+      case R_LT:
+        base = R_GT;
+        break;
+      case R_GT:
+        base = R_LT;
+        break;
+      case R_LE:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LE;
+        break;
+      default:
+        // EQ / NE are symmetric
+        break;
+      }
+    }
+
+    // Negative polarity takes the complement relation.
+    if (!pol)
+    {
+      switch (base)
+      {
+      case R_EQ:
+        base = R_NE;
+        break;
+      case R_NE:
+        base = R_EQ;
+        break;
+      case R_LT:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LT;
+        break;
+      case R_GT:
+        base = R_LE;
+        break;
+      case R_LE:
+        base = R_GT;
+        break;
+      }
+    }
+
+    rel = base;
+    return true;
+  };
+
+  struct boundst
+  {
+    bool has_lo = false, has_hi = false;
+    BigInt lo, hi;
+    std::set<BigInt> excluded;
+  };
+  std::map<irep_idt, boundst> vars;
+
+  auto raise_lo = [](boundst &b, const BigInt &v) {
+    if (!b.has_lo || v > b.lo)
+    {
+      b.lo = v;
+      b.has_lo = true;
+    }
+  };
+  auto lower_hi = [](boundst &b, const BigInt &v) {
+    if (!b.has_hi || v < b.hi)
+    {
+      b.hi = v;
+      b.has_hi = true;
+    }
+  };
+
+  for (const auto &[g, pol] : atoms)
+  {
+    irep_idt var;
+    relt rel;
+    BigInt c;
+    if (!normalise(g, pol, var, rel, c))
+      continue;
+
+    boundst &b = vars[var];
+    switch (rel)
+    {
+    case R_EQ:
+      raise_lo(b, c);
+      lower_hi(b, c);
+      break;
+    case R_NE:
+      b.excluded.insert(c);
+      break;
+    case R_LT:
+      lower_hi(b, c - 1);
+      break;
+    case R_LE:
+      lower_hi(b, c);
+      break;
+    case R_GT:
+      raise_lo(b, c + 1);
+      break;
+    case R_GE:
+      raise_lo(b, c);
+      break;
+    }
+  }
+
+  for (const auto &[name, b] : vars)
+  {
+    (void)name;
+    if (b.has_lo && b.has_hi)
+    {
+      if (b.lo > b.hi)
+        // empty integer range, e.g. x<0 && x>10
+        return true;
+      // Single admissible point that is also excluded, e.g. x==1 && x!=1.
+      if (b.lo == b.hi && b.excluded.count(b.lo))
+        return true;
+    }
+  }
+  return false;
+}
+
+/*
+k-path coverage (Phase 1 — see GitHub issue #4325).
+
+For each branching `IF g GOTO L`, emit one coverage goal per combination of
+the last (n-1) prior branch directions × the two outcomes of the current
+branch. Each goal is `assert(!witness)` where `witness = d_1 ∧ … ∧ d_k`
+with each d_i either a prior branch guard or its negation; multi_property
+marks a goal as reached when the assertion is falsifiable, i.e. when the
+corresponding path is feasible. This mirrors the existing branch_coverage
+inversion convention.
+
+Bounded by the textual order of branches within a function (cheap and
+deterministic). Joins make this an *over-approximation* of true path
+coverage — some witnesses may be infeasible and stay uncovered, which is
+correct under the spanning-set scoring proposed in #4325.
+
+Goal count per branch: 2^min(prefix_size+1, n). Capped per function by
+`k_path_max_goals`; on overflow the instrumentation aborts with an
+actionable error rather than silently truncating (decision locked in #4325).
+*/
+void goto_coveraget::k_path_coverage()
+{
+  log_progress("Adding k-path coverage assertions (n={})...", k_path_n);
+  total_kpath = 0;
+  total_kpath_spanning = 0;
+  k_path_spanning_redundant.clear();
+  k_path_spanning_sett spanning;
+
+  // Defense-in-depth: parseoptions rejects N==0 and N>30 at the CLI, but
+  // re-check here in case the method is invoked via another code path.
+  // 30 keeps `1 << pdepth` well below the size_t shift limit and below
+  // any reasonable goal cap.
+  static constexpr size_t K_PATH_N_MAX = 30;
+  if (k_path_n == 0 || k_path_n > K_PATH_N_MAX)
+  {
+    log_error(
+      "--k-path-coverage requires 1 <= N <= {} (got {})",
+      K_PATH_N_MAX,
+      k_path_n);
+    abort();
+  }
+
+  std::unordered_set<std::string> location_pool = {};
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    if (!f_it->second.body_available || f_it->first == "__ESBMC_main")
+      continue;
+
+    goto_programt &goto_program = f_it->second.body;
+    if (filter(f_it->first, goto_program))
+      continue;
+
+    // Sliding window of the last (n-1) prior branch guards in textual order.
+    // Reset per function: each function is its own k-path scope (#4325).
+    std::deque<expr2tc> prefix;
+    size_t function_goals = 0;
+
+    Forall_goto_program_instructions (it, goto_program)
+    {
+      std::string cur_filename =
+        get_filename_from_path(it->location.file().as_string());
+      if (location_pool.count(cur_filename) == 0)
+        continue;
+
+      if (it->location.property().as_string() == "skipped")
+        continue;
+
+      // Mirror branch_coverage: neutralise existing assertions so they don't
+      // confuse multi_property_check.
+      if (
+        it->is_assert() &&
+        it->location.property().as_string() != "replaced assertion" &&
+        it->location.property().as_string() != "instrumented assertion")
+      {
+        if (cov_assume_asserts)
+          replace_assert_to_assume(it);
+        else
+          replace_assert_to_guard(gen_true_expr(), it, false);
+        continue;
+      }
+
+      // Conditional forward branch. Backward unconditional gotos (loop
+      // back-edges) carry guard=true and are skipped here; iteration
+      // semantics are picked up later by ESBMC's --unwind unrolling.
+      if (it->is_goto() && !is_true(it->guard))
+      {
+        if (it->is_target())
+          target_num = it->target_number;
+
+        const expr2tc current_guard = it->guard;
+        // pdepth is bounded by k_path_n - 1 <= K_PATH_N_MAX - 1 = 29
+        // (enforced above), so the shift below cannot overflow. Assert as
+        // a tripwire — silent overflow would be unsound.
+        const size_t pdepth = std::min(prefix.size(), k_path_n - 1);
+        assert(pdepth < 30 && "pdepth bounded by parseoptions cap");
+        const size_t pcombos = size_t(1) << pdepth;
+        const size_t branch_goals = 2 * pcombos;
+
+        if (
+          branch_goals > k_path_max_goals ||
+          function_goals > k_path_max_goals - branch_goals)
+        {
+          log_error(
+            "k-path coverage: per-function goal count would exceed "
+            "--k-path-max-goals={} in '{}'. Lower --k-path-coverage=N "
+            "(currently {}) or raise --k-path-max-goals.",
+            k_path_max_goals,
+            id2string(f_it->first),
+            k_path_n);
+          abort();
+        }
+
+        // The deque is trimmed to ≤ (n-1) entries at the bottom of every
+        // branch iteration, so its current contents are exactly the active
+        // prefix.
+        std::vector<expr2tc> active(prefix.begin(), prefix.end());
+
+        for (size_t mask = 0; mask < pcombos; ++mask)
+        {
+          // Build the prefix witness for this direction mask, while
+          // tracking (stored-guard, polarity) pairs so we can drop mask
+          // combinations that are unsat by construction.
+          //
+          // ESBMC's `simplify` recognises 2-term `p ∧ ¬p` but does not
+          // fold chained forms like `p ∧ q ∧ ¬p` to FALSE — it would
+          // instrument a tautological `assert(¬(p ∧ q ∧ ¬p))` that can
+          // never be falsified, permanently inflating the denominator.
+          // Catching this at construction time is sound (we only drop
+          // witnesses we can prove unsat by syntactic structure) and
+          // preserves the single-term behaviour of the simplifier.
+          //
+          // Phase-1 limitation: this only catches *syntactic* same-atom
+          // contradictions (same stored guard with opposing polarities).
+          // Semantically contradictory pairs across different stored
+          // expressions — e.g. `(x == 1) ∧ (x == 2)` from successive
+          // switch-case branches — require comparison-domain reasoning,
+          // handled per-goal below by kpath_atoms_comparison_unsat.
+          expr2tc pwit;
+          std::vector<std::pair<expr2tc, bool>> atoms;
+          atoms.reserve(pdepth);
+          bool contradictory = false;
+          for (size_t i = 0; i < pdepth; ++i)
+          {
+            const bool pol = (mask & (size_t(1) << i)) != 0;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == active[i] && p != pol)
+              {
+                contradictory = true;
+                break;
+              }
+            }
+            if (contradictory)
+              break;
+            atoms.emplace_back(active[i], pol);
+            expr2tc d = pol ? active[i] : gen_not_expr(active[i]);
+            pwit = is_nil_expr(pwit) ? d : gen_and_expr(pwit, d);
+          }
+          if (contradictory)
+            continue;
+
+          // Emit one goal per current direction. Skip the direction if
+          // it would contradict an atom already in the prefix.
+          const expr2tc current_neg = gen_not_expr(current_guard);
+          for (size_t cd = 0; cd < 2; ++cd)
+          {
+            const bool cdir_pol = (cd == 0);
+            bool cdir_conflict = false;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == current_guard && p != cdir_pol)
+              {
+                cdir_conflict = true;
+                break;
+              }
+            }
+            if (cdir_conflict)
+              continue;
+
+            const expr2tc &cdir = cdir_pol ? current_guard : current_neg;
+            expr2tc full = is_nil_expr(pwit) ? cdir : gen_and_expr(pwit, cdir);
+            simplify(full);
+
+            if (is_false(full))
+              continue;
+            if (is_true(full))
+              continue;
+
+            if (expr_depth(full, k_path_witness_depth) > k_path_witness_depth)
+            {
+              // Phase 1: drop witnesses past the depth cap. The hashed
+              // ghost-flag fallback for deep prefixes is Phase 2 (#4325).
+              continue;
+            }
+
+            // Drop goals whose conjunction pins a variable to an empty
+            // integer range (e.g. x==1 && x==2). simplify() does not do this
+            // cross-term reasoning, so otherwise the tautological
+            // assert(!witness) can never be falsified and permanently
+            // inflates the spanning denominator. Built after the cheaper
+            // checks above so goals they skip don't pay for the vector.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            if (kpath_atoms_comparison_unsat(goal_atoms))
+              continue;
+
+            expr2tc neg_full = gen_not_expr(full);
+            simplify(neg_full);
+
+            std::string idf = from_expr(ns, "", full);
+            insert_assert(goto_program, it, neg_full, idf);
+
+            // Record the goal's full atom multiset (prefix + current
+            // direction) so the spanning-set analysis can drop subsumed
+            // emissions from the coverage denominator.
+            spanning.add_goal(
+              std::move(goal_atoms), idf, it->location.as_string());
+
+            ++function_goals;
+          }
+        }
+
+        prefix.push_back(current_guard);
+        if (prefix.size() > k_path_n - 1)
+          prefix.pop_front();
+      }
+    }
+  }
+
+  total_kpath = get_total_instrument();
+  all_claims = get_total_cond_assert();
+
+  // Soundness invariant: each insert_assert call above paired with
+  // exactly one spanning.add_goal call, so the number of goals tracked
+  // in the spanning analysis must equal the number of instrumented
+  // assertions counted in the goto programs. A divergence means the
+  // emission path diverged from the spanning bookkeeping (e.g. a future
+  // edit added an insert_assert without the matching add_goal, or vice
+  // versa) and the spanning-set denominator would be silently wrong.
+  // ESBMC is a verifier — we abort rather than report an unsound
+  // coverage percentage.
+  if (spanning.total() != static_cast<size_t>(total_kpath))
+  {
+    log_error(
+      "k-path coverage: internal invariant violated — spanning.total()={} "
+      "but get_total_instrument()={}. Each instrumented assertion must "
+      "have a matching spanning.add_goal entry. Aborting rather than "
+      "report an unsound coverage percentage.",
+      spanning.total(),
+      total_kpath);
+    abort();
+  }
+
+  // Compute the spanning-set after every goal has been collected. The
+  // resulting size is the Phase-2 denominator; redundant_claims feeds the
+  // JSON `feasibility` field.
+  //
+  // Secondary invariant: the simplifier never collapses two semantically
+  // distinct witnesses to the same idf string, so spanning_size_ is
+  // bounded above by all_claims.size() + |redundant|, which is what
+  // allows the bmc.cpp coverage cap to make sense. Any future change
+  // that reuses an idf across distinct witnesses or alters from_expr()
+  // formatting must preserve this 1:1 mapping or the percentage will
+  // silently deflate.
+  spanning.finalize();
+  total_kpath_spanning = spanning.spanning_size();
+  for (const auto &claim : all_claims)
+    if (spanning.is_redundant(claim.first, claim.second))
+      k_path_spanning_redundant.insert(claim);
+
+  goto_functions.update();
+}
+
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
   goto_programt::targett &it,
@@ -302,7 +827,7 @@ void goto_coveraget::insert_assert(
   to
     1: ASSERT(guard);
     DECL x      <--- it
-    ASSIGN X 1  
+    ASSIGN X 1
 */
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
@@ -417,10 +942,10 @@ void goto_coveraget::condition_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -428,7 +953,7 @@ void goto_coveraget::condition_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        /* 
+        /*
           Places that could contains condition
           1. GOTO:          if (x == 1);
           2. ASSIGN:        int x = y && z;
@@ -437,7 +962,7 @@ void goto_coveraget::condition_coverage()
           5. FUNCTION_CALL  test((signed int)(x != y));
           6. RETURN         return x && y;
           7. Other          1?2?3:4
-          The issue is that, the side-effects have been removed 
+          The issue is that, the side-effects have been removed
           thus the condition might have been split or modified.
 
           For assert, assume and goto, we know it contains GUARD
@@ -445,29 +970,26 @@ void goto_coveraget::condition_coverage()
           check there operands.
         */
 
+        // Skip ASSUME instructions: __VERIFIER_assume / __ESBMC_assume
+        // express path constraints, not program logic, so their guards
+        // must not contribute to condition-coverage claims (issue #4291).
+        if (it->is_assume())
+          continue;
+
         // e.g. assert(a == 1);
         if (
-          it->is_assume() ||
-          (it->is_assert() &&
-           it->location.property().as_string() != "replaced assertion"))
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion")
         {
-          auto &_guard = it->guard;
-          if (!is_nil_expr(_guard))
+          if (!is_nil_expr(it->guard))
           {
-            exprt guard = migrate_expr_back(_guard);
-            guard = handle_single_guard(guard, true);
-            exprt pre_cond = nil_exprt();
-            pre_cond.location() = it->location;
-            gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+            expr2tc guard = handle_single_guard(it->guard, true);
+            gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
             // after adding the instrumentation, we neutralize the original assert
-            if (!it->is_assume())
-            {
-              // do not change assume, as it will modify program's logic
-              if (cov_assume_asserts)
-                replace_assert_to_assume(it);
-              else
-                replace_assert_to_guard(gen_true_expr(), it, false);
-            }
+            if (cov_assume_asserts)
+              replace_assert_to_assume(it);
+            else
+              replace_assert_to_guard(gen_true_expr(), it, false);
           }
         }
 
@@ -481,25 +1003,16 @@ void goto_coveraget::condition_coverage()
             target_num = it->target_number;
 
           // preprocessing: if(true) ==> if(true == true)
-
-          exprt guard = migrate_expr_back(it->guard);
-          guard = handle_single_guard(guard, true);
-
-          exprt pre_cond = nil_exprt();
-          pre_cond.location() = it->location;
-          gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+          expr2tc guard = handle_single_guard(it->guard, true);
+          gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
         }
 
         // e.g. bool x = (a>b);
         else if (it->is_assign())
         {
-          const code_assign2t &expr = to_code_assign2t(it->code);
-          const expr2tc &_rhs = expr.source;
-          if (!is_nil_expr(_rhs))
-          {
-            exprt rhs = migrate_expr_back(_rhs);
+          const expr2tc &rhs = to_code_assign2t(it->code).source;
+          if (!is_nil_expr(rhs))
             handle_operands_guard(rhs, goto_program, it);
-          }
         }
 
         // a>b;
@@ -507,41 +1020,26 @@ void goto_coveraget::condition_coverage()
         {
           if (is_code_expression2t(it->code))
           {
-            const auto &code_expression = to_code_expression2t(it->code);
-            const auto &_other = code_expression.operand;
-            if (!is_nil_expr(_other))
-            {
-              exprt other = migrate_expr_back(_other);
+            const expr2tc &other = to_code_expression2t(it->code).operand;
+            if (!is_nil_expr(other))
               handle_operands_guard(other, goto_program, it);
-            }
           }
         }
 
         // e.g. RETURN a>b;
         else if (it->is_return())
         {
-          const code_return2t &code_ret = to_code_return2t(it->code);
-          const auto &_ret = code_ret.operand;
-          if (!is_nil_expr(_ret))
-          {
-            exprt ret = migrate_expr_back(_ret);
+          const expr2tc &ret = to_code_return2t(it->code).operand;
+          if (!is_nil_expr(ret))
             handle_operands_guard(ret, goto_program, it);
-          }
         }
 
         // e.g. func(a>b);
         else if (it->is_function_call())
         {
-          const code_function_call2t &code_func =
-            to_code_function_call2t(it->code);
-          for (const expr2tc &op : code_func.operands)
-          {
+          for (const expr2tc &op : to_code_function_call2t(it->code).operands)
             if (!is_nil_expr(op))
-            {
-              exprt func = migrate_expr_back(op);
-              handle_operands_guard(func, goto_program, it);
-            }
-          }
+              handle_operands_guard(op, goto_program, it);
         }
 
         // reset target number
@@ -570,88 +1068,85 @@ void goto_coveraget::condition_coverage()
   => assert(!(!b==0 && c>90))
   => assert(!(!(b==0) && !(c>90)))
 */
+/// Recurse into all sub-expressions of @p ptr, calling
+/// gen_cond_cov_assert on each.
 void goto_coveraget::gen_cond_cov_assert(
-  exprt ptr,
-  exprt pre_cond,
+  const expr2tc &ptr,
+  const expr2tc &pre_cond,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  // return if we meet an atom
-  if (ptr.operands().size() == 0)
+  if (is_nil_expr(ptr))
     return;
+  const std::size_t n = ptr->get_num_sub_exprs();
+  if (n == 0)
+    return; // atom
 
-  const auto &id = ptr.id();
-  if (ptr.operands().size() == 1)
+  auto recurse_all = [&]() {
+    for (std::size_t i = 0; i < n; ++i)
+      gen_cond_cov_assert(*ptr->get_sub_expr(i), pre_cond, goto_program, it);
+  };
+
+  if (n == 1)
   {
     // (a!=0)++, !a, -a, (_Bool)(int)a
-    forall_operands (op, ptr)
-      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+    recurse_all();
   }
-  else if (ptr.operands().size() == 2)
+  else if (n == 2)
   {
-    if (
-      id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
-      id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
+    if (is_comparison_expr(ptr))
     {
-      forall_operands (op, ptr)
-        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+      recurse_all();
       add_cond_cov_assert(ptr, pre_cond, goto_program, it);
     }
-    else if (id == irept::id_and)
+    else if (is_and2t(ptr))
     {
-      // got lhs
-      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+      const expr2tc &lhs = *ptr->get_sub_expr(0);
+      const expr2tc &rhs = *ptr->get_sub_expr(1);
+      gen_cond_cov_assert(lhs, pre_cond, goto_program, it);
 
-      // update pre-condition: pre_cond && op0
-      pre_cond = pre_cond.is_nil()
-                   ? ptr.op0()
-                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
-
-      // go rhs
-      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+      // update pre-condition: pre_cond && lhs
+      expr2tc new_pre =
+        is_nil_expr(pre_cond) ? lhs : gen_and_expr(pre_cond, lhs);
+      gen_cond_cov_assert(rhs, new_pre, goto_program, it);
     }
-    else if (id == irept::id_or)
+    else if (is_or2t(ptr))
     {
-      // got lhs
-      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+      const expr2tc &lhs = *ptr->get_sub_expr(0);
+      const expr2tc &rhs = *ptr->get_sub_expr(1);
+      gen_cond_cov_assert(lhs, pre_cond, goto_program, it);
 
-      // update pre-condition: !(pre_cond && op0)
-      pre_cond = pre_cond.is_nil()
-                   ? ptr.op0()
-                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
-      pre_cond = gen_not_expr(pre_cond, it->location);
-
-      // go rhs
-      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+      // update pre-condition: !(pre_cond && lhs)
+      expr2tc new_pre =
+        is_nil_expr(pre_cond) ? lhs : gen_and_expr(pre_cond, lhs);
+      new_pre = gen_not_expr(new_pre);
+      gen_cond_cov_assert(rhs, new_pre, goto_program, it);
     }
-
     else
+    {
       // a+=b; a>>(b!=0);
-      forall_operands (op, ptr)
-        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+      recurse_all();
+    }
   }
-  else if (ptr.operands().size() == 3)
+  else if (n == 3)
   {
-    // id == "if"
-    // go left
-    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+    // ternary if
+    const expr2tc &cond = *ptr->get_sub_expr(0);
+    const expr2tc &t_val = *ptr->get_sub_expr(1);
+    const expr2tc &f_val = *ptr->get_sub_expr(2);
 
-    // update pre-condition: pre_cond && op0
-    exprt pre_cond_1 = pre_cond.is_nil()
-                         ? ptr.op0()
-                         : gen_and_expr(pre_cond, ptr.op0(), it->location);
+    gen_cond_cov_assert(cond, pre_cond, goto_program, it);
 
-    // go mid
-    gen_cond_cov_assert(ptr.op1(), pre_cond_1, goto_program, it);
+    // update pre-condition: pre_cond && cond
+    expr2tc pre_cond_1 =
+      is_nil_expr(pre_cond) ? cond : gen_and_expr(pre_cond, cond);
+    gen_cond_cov_assert(t_val, pre_cond_1, goto_program, it);
 
-    // update pre-condition: pre_cond && !op0
-    exprt not_expr = gen_not_expr(ptr.op0(), it->location);
-    exprt pre_cond_2 = pre_cond.is_nil()
-                         ? not_expr
-                         : gen_and_expr(pre_cond, not_expr, it->location);
-
-    // go right
-    gen_cond_cov_assert(ptr.op2(), pre_cond_2, goto_program, it);
+    // update pre-condition: pre_cond && !cond
+    expr2tc not_cond = gen_not_expr(cond);
+    expr2tc pre_cond_2 =
+      is_nil_expr(pre_cond) ? not_cond : gen_and_expr(pre_cond, not_cond);
+    gen_cond_cov_assert(f_val, pre_cond_2, goto_program, it);
   }
   else
   {
@@ -661,88 +1156,47 @@ void goto_coveraget::gen_cond_cov_assert(
 }
 
 void goto_coveraget::add_cond_cov_assert(
-  const exprt &expr,
-  const exprt &pre_cond,
+  const expr2tc &expr,
+  const expr2tc &pre_cond,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  expr2tc guard;
-  exprt cond =
-    pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr, it->location);
-  migrate_expr(cond, guard);
+  expr2tc cond = is_nil_expr(pre_cond) ? expr : gen_and_expr(pre_cond, expr);
 
   // e.g. assert(!(a==1));  // a==1
   // the idf is used as the claim_msg
-  // note that it's difference from the actual guard.
+  // note that it's different from the actual guard.
   std::string idf = from_expr(ns, "", expr);
-  make_not(guard);
-
-  // insert assert
+  expr2tc guard = gen_not_expr(cond);
   insert_assert(goto_program, it, guard, idf);
 
   // reversal
-  exprt not_expr = gen_not_expr(expr, it->location);
-  cond = pre_cond.is_nil() ? not_expr
-                           : gen_and_expr(pre_cond, not_expr, it->location);
-  migrate_expr(cond, guard);
-
-  idf = from_expr(ns, "", gen_not_expr(expr, it->location));
-  make_not(guard);
+  expr2tc not_expr = gen_not_expr(expr);
+  cond = is_nil_expr(pre_cond) ? not_expr : gen_and_expr(pre_cond, not_expr);
+  idf = from_expr(ns, "", not_expr);
+  guard = gen_not_expr(cond);
   insert_assert(goto_program, it, guard, idf);
 }
 
-exprt goto_coveraget::gen_not_eq_expr(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &loc)
+expr2tc goto_coveraget::gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs)
 {
-  assert(loc.is_not_nil());
-  exprt not_eq_expr = exprt("notequal", bool_type());
-  exprt _lhs = lhs;
-  if (lhs.type() != rhs.type())
-  {
-    _lhs = typecast_exprt(lhs, rhs.type());
-    _lhs.location() = lhs.location();
-  }
-  not_eq_expr.operands().emplace_back(_lhs);
-  not_eq_expr.operands().emplace_back(rhs);
-  not_eq_expr.location() = loc;
-  return not_eq_expr;
+  expr2tc _lhs = (lhs->type == rhs->type) ? lhs : typecast2tc(rhs->type, lhs);
+  return notequal2tc(_lhs, rhs);
 }
 
-exprt goto_coveraget::gen_and_expr(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &loc)
+expr2tc goto_coveraget::gen_and_expr(const expr2tc &lhs, const expr2tc &rhs)
 {
-  assert(loc.is_not_nil());
-  exprt join_expr = exprt(exprt::id_and, bool_type());
-  exprt _lhs = lhs.type().is_bool() ? lhs : typecast_exprt(lhs, bool_type());
-  _lhs.location() = lhs.location();
-  exprt _rhs = rhs.type().is_bool() ? rhs : typecast_exprt(rhs, bool_type());
-  _rhs.location() = rhs.location();
-  join_expr.operands().emplace_back(_lhs);
-  join_expr.operands().emplace_back(_rhs);
-  join_expr.location() = loc;
-  return join_expr;
-}
-
-exprt goto_coveraget::gen_not_expr(const exprt &expr, const locationt &loc)
-{
-  assert(loc.is_not_nil());
-  exprt not_expr = exprt(exprt::id_not, bool_type());
-  not_expr.operands().emplace_back(expr);
-  not_expr.location() = loc;
-  return not_expr;
+  type2tc bt = get_bool_type();
+  expr2tc _lhs = is_bool_type(lhs->type) ? lhs : typecast2tc(bt, lhs);
+  expr2tc _rhs = is_bool_type(rhs->type) ? rhs : typecast2tc(bt, rhs);
+  return and2tc(_lhs, _rhs);
 }
 
 expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
 {
-  exprt _guard = migrate_expr_back(guard);
-  exprt not_guard = gen_not_expr(_guard, _guard.location());
-  expr2tc _guard2;
-  migrate_expr(not_guard, _guard2);
-  return _guard2;
+  if (is_not2t(guard))
+    return to_not2t(guard).value;
+  return not2tc(guard);
 }
 
 /*
@@ -751,168 +1205,150 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
   rule:
   1. No-op: Do nothing. This means it's a symbol or constant
   2. Binary OP: for boolean expreession, e.g. a>b, a==b, do nothing
-  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2. 
+  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2.
     e.g. if(x==1 && a++) => if(x==1 && a++ !=0)
   4. Others: for any other expresison, including unary, binary and teranry, traverse its op with handle_single_guard recursivly. convert it to not equal in the top level only.
     e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0)
     typecast <--- add not equal here
     - +
       - a
-      - + 
+      - +
         - b
         - c
   e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) => if((a?b:c:d)!=0)
   if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
 */
-exprt goto_coveraget::handle_single_guard(
-  exprt &expr,
+/// Recursively maps each operand of @p expr through handle_single_guard
+/// (with the supplied @p sub_top_level), in place. Foreach_operand detaches
+/// the irep_container before mutating, so this is safe even when @p expr
+/// shares storage with its caller.
+static void replace_operands(
+  expr2tc &expr,
+  bool sub_top_level,
+  const std::function<expr2tc(const expr2tc &, bool)> &recurse)
+{
+  expr->Foreach_operand([&](expr2tc &op) { op = recurse(op, sub_top_level); });
+}
+
+expr2tc goto_coveraget::handle_single_guard(
+  const expr2tc &expr,
   bool top_level /* = true */)
 {
+  if (is_nil_expr(expr))
+    return expr;
+  const std::size_t n = expr->get_num_sub_exprs();
+  auto recurse = [this](const expr2tc &e, bool tl) {
+    return handle_single_guard(e, tl);
+  };
+
   // --- Rule 1: Atomic expressions ---
   // If the expression has no operands (a symbol or constant),
-  // then if it's Boolean and we're at the outer guard, wrap it with "!= false".
-  if (expr.operands().empty())
+  // then if it's Boolean and we're at the outer guard, wrap it with
+  // "!= false".
+  if (n == 0)
   {
-    if (top_level && expr.type().is_bool())
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(expr, false_expr, expr.location());
-    }
+    if (top_level && is_bool_type(expr->type))
+      return gen_not_eq_expr(expr, gen_false_expr());
     return expr;
   }
 
   // --- Special-case for "not" nodes ---
   // For a "not" operator, process its operand with top_level = true so that
   // even nested atomic expressions (like x in !(!(x))) get wrapped.
-  if (expr.id() == "not")
+  if (is_not2t(expr))
   {
-    expr.op0() = handle_single_guard(expr.op0(), true);
-    return expr;
+    expr2tc result = expr;
+    replace_operands(result, /*sub_top_level=*/true, recurse);
+    return result;
   }
 
-  // --- Helper: Recognized binary comparisons ---
-  auto is_comparison = [](const exprt &e) -> bool {
-    return (
-      e.id() == exprt::equality || e.id() == exprt::notequal ||
-      e.id() == exprt::i_lt || e.id() == exprt::i_gt || e.id() == exprt::i_le ||
-      e.id() == exprt::i_ge);
-  };
-
   // --- Special-case for typecasts to bool ---
-  // If we have (bool)(X) and X is not already a recognized guard (comparison or logical AND/OR),
-  // then unwrap the typecast and wrap X.
-  if (expr.id() == exprt::typecast && expr.type().id() == typet::t_bool)
+  // If we have (bool)(X) and X is not already a recognized guard
+  // (comparison or logical AND/OR), unwrap the typecast and wrap X.
+  if (is_typecast2t(expr) && is_bool_type(expr->type))
   {
-    exprt inner = handle_single_guard(expr.op0(), top_level);
-    if (!(is_comparison(inner) || inner.id() == exprt::id_and ||
-          inner.id() == exprt::id_or))
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(inner, false_expr, expr.location());
-    }
+    expr2tc inner = handle_single_guard(to_typecast2t(expr).from, top_level);
+    if (!(is_comparison_expr(inner) || is_and2t(inner) || is_or2t(inner)))
+      return gen_not_eq_expr(inner, gen_false_expr());
     return inner;
   }
 
   // --- Process Binary Operators (exactly 2 operands) ---
-  if (expr.operands().size() == 2)
+  if (n == 2)
   {
-    // Case: Logical AND/OR operators.
-    if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
+    expr2tc result = expr;
+    if (is_and2t(expr) || is_or2t(expr))
     {
       // Process each operand as an independent guard (top_level = true).
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, true);
-      // For AND/OR, we do not add extra wrapping.
-      return expr;
+      replace_operands(result, /*sub_top_level=*/true, recurse);
+      return result;
     }
-    // Case: Recognized binary comparisons.
-    else if (is_comparison(expr))
+    if (is_comparison_expr(expr))
     {
-      // Process operands with top_level = false.
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, false);
-      return expr;
+      replace_operands(result, /*sub_top_level=*/false, recurse);
+      return result;
     }
-    // Case: Other binary operators (e.g. arithmetic '+').
-    else
-    {
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, false);
-      if (top_level)
-      {
-        exprt false_expr = false_exprt();
-        false_expr.location() = expr.location();
-        return gen_not_eq_expr(expr, false_expr, expr.location());
-      }
-      return expr;
-    }
+    // Other binary operators (e.g. arithmetic '+').
+    replace_operands(result, /*sub_top_level=*/false, recurse);
+    if (top_level)
+      return gen_not_eq_expr(result, gen_false_expr());
+    return result;
   }
-  else
-  {
-    // --- Process Non-Binary Operators (Unary, Ternary, etc.) ---
-    Forall_operands (it, expr)
-      *it = handle_single_guard(*it, false);
 
-    // Special-case: if the expression is a typecast to bool, leave it unchanged.
-    if (expr.id() == exprt::typecast && expr.type().id() == typet::t_bool)
-      return expr;
+  // --- Process Non-Binary Operators (Unary, Ternary, etc.) ---
+  expr2tc result = expr;
+  replace_operands(result, /*sub_top_level=*/false, recurse);
 
-    // For any other expression producing a Boolean value,
-    // if at the outer guard (top_level true) and its id is not among our no-wrap set,
-    // then wrap it with "!= false". This catches cases like member accesses.
-    if (
-      top_level && expr.type().is_bool() &&
-      (expr.id() != exprt::id_and && expr.id() != exprt::id_or &&
-       expr.id() != "not" && !is_comparison(expr)))
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(expr, false_expr, expr.location());
-    }
-    return expr;
-  }
+  // For any other expression producing a Boolean value, if at the outer
+  // guard (top_level true) and its kind is not among our no-wrap set, then
+  // wrap it with "!= false". This catches cases like member accesses.
+  if (
+    top_level && is_bool_type(result->type) && !is_and2t(result) &&
+    !is_or2t(result) && !is_not2t(result) && !is_comparison_expr(result))
+    return gen_not_eq_expr(result, gen_false_expr());
+  return result;
 }
 
 /*
   add condition instrumentation for OTHER, ASSIGN, FUNCTION_CALL..
   whose operands might contain conditions
-  we handle guards for each boolean sub-operands.
+  we handle guards for each boolean sub-operand.
 */
 void goto_coveraget::handle_operands_guard(
-  exprt &expr,
+  const expr2tc &expr,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  if (expr.has_operands())
-  {
-    auto &ops = expr.operands();
-    exprt pre_cond = nil_exprt();
-    pre_cond.location() = it->location;
+  if (is_nil_expr(expr))
+    return;
+  const std::size_t n = expr->get_num_sub_exprs();
+  if (n == 0)
+    return;
 
-    if (ops.size() == 1)
+  expr2tc pre_cond; // nil
+
+  if (n == 1)
+  {
+    // e.g. RETURN ++(x&&y);
+    handle_operands_guard(*expr->get_sub_expr(0), goto_program, it);
+  }
+  else if (n == 2)
+  {
+    expr2tc target = expr;
+    if (is_and2t(expr) || is_or2t(expr))
     {
-      // e.g. RETURN ++(x&&y);
-      handle_operands_guard(expr.op0(), goto_program, it);
+      // we do not need to add a !=false at top level
+      // e.g. return x?1:0 != return (x?1:0)!=false
+      target->Foreach_operand(
+        [this](expr2tc &op) { op = handle_single_guard(op, false); });
     }
-    else if (ops.size() == 2)
-    {
-      if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
-      {
-        Forall_operands (it, expr)
-          // we do not need to add a !=false at top level
-          // e.g. return x?1:0!= return (x?1:0)!=false
-          *it = handle_single_guard(*it, false);
-      }
-      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
-    }
-    else
-    {
-      // this could only be ternary boolean
-      expr = handle_single_guard(expr, false);
-      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
-    }
+    gen_cond_cov_assert(target, pre_cond, goto_program, it);
+  }
+  else
+  {
+    // this could only be ternary boolean
+    expr2tc rewrapped = handle_single_guard(expr, false);
+    gen_cond_cov_assert(rewrapped, pre_cond, goto_program, it);
   }
 }
 
@@ -927,17 +1363,29 @@ bool goto_coveraget::is_target_func(
   const irep_idt &f,
   const std::string &tgt_name) const
 {
-  if (ns.lookup(f) == nullptr)
+  const symbolt *sym = ns.lookup(f);
+  if (sym == nullptr)
   {
     log_error("Cannot find target function");
     abort();
   }
 
   exprt symbol = symbol_expr(*ns.lookup(f));
-  if (symbol.name().as_string() != tgt_name)
-    return false;
+  std::string sym_name = symbol.name().as_string();
+  if (sym_name == tgt_name)
+    return true;
 
-  return true;
+  // For Solidity: modifier expansion renames functions from "func" to
+  // "func_modifierName". Support prefix matching so that --function func
+  // matches func_modifierName.
+  if (
+    config.language.lid == language_idt::SOLIDITY &&
+    sym_name.size() > tgt_name.size() &&
+    sym_name.substr(0, tgt_name.size()) == tgt_name &&
+    sym_name[tgt_name.size()] == '_')
+    return true;
+
+  return false;
 }
 
 // negate the condition inside the assertion
@@ -959,10 +1407,10 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 

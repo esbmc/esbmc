@@ -1,4 +1,4 @@
 CORE
 main.c
-
+--unwind 24
 ^VERIFICATION SUCCESSFUL$

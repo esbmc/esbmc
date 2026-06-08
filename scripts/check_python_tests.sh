@@ -10,6 +10,9 @@ fi
 
 all_passed=true
 failed_tests=()
+test_query="$1"
+matched_tests=0
+selected_tests=0
 
 # List of directories to ignore
 ignored_dirs=(
@@ -23,6 +26,7 @@ ignored_dirs=(
   "cover4"
   "cover5"
   "concurrency_fail"
+  "threading_thread_skip_join_fail"
   "convert-byte-update2"
   "constants"
   "decimal"
@@ -33,9 +37,21 @@ ignored_dirs=(
   "dict_del13_fail"
   "dict_del14"
   "dict_del14_fail"
+  "dict_eq_runtime"
   "div6_fail"
   "div7_fail"
+  "esbmc-assert-no-msg"
+  "esbmc-assert"
   "esbmc-assume"
+  "github_4629"
+  "github_4629_unwind"
+  "esbmc-assert"
+  "esbmc-assert-no-msg"
+  "esbmc-unreachable-args-fail"
+  "esbmc-unreachable-dead"
+  "esbmc-unreachable-flag-off"
+  "esbmc-unreachable-reachable"
+  "esbmc-unreachable-truncated-loop"
   "enumerate15"
   "enumerate15_fail"
   "func-no-params-types-fail"
@@ -62,6 +78,18 @@ ignored_dirs=(
   "github_3563_2"
   "github_3563_3"
   "github_3769"
+  "github_4149"
+  "github_4548_floordiv_call_arg"
+  "github_4548_floordiv_negative"
+  "github_4581"
+  "github_4756"
+  "github_4756_fail"
+  "github_4831"
+  "github_4668"
+  "github_4666_2d"
+  "github_4666_shape"
+  "github_5102_nested_list_copy"
+  "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
@@ -104,6 +132,10 @@ ignored_dirs=(
   "random6_fail"
   "range19-fail"
   "ternary_symbolic"
+  "threading_thread_increment_race_fail"
+  "threading_thread_race_fail"
+  "threading_thread_subclass_race_fail"
+  "threading_thread_subclass_run_assert_fail"
   "try-fail"
   "verifier-assume"
   "while-random-fail"
@@ -123,6 +155,14 @@ ignored_dirs=(
   "string-symbolic-7"
   "string-symbolic-8"
   "complex_str_nonconstant"
+  "dataclass_factory_kwarg_ignored"
+)
+
+# Prefixes for ESBMC-specific regression directories that are not suitable for
+# direct CPython execution in this smoke check (they are validated via ESBMC).
+ignored_prefixes=(
+  "github_4666_"
+  "github_4668_"
 )
 
 for dir in */; do
@@ -134,19 +174,46 @@ for dir in */; do
     continue
   fi
 
-  # Skip if directory name contains "nondet"
+  # Query mode: run only tests whose directory name contains the query
+  # (case-insensitive).
+  if [ -n "$test_query" ]; then
+    if ! echo "$dir" | grep -qiF -- "$test_query"; then
+      continue
+    fi
+    matched_tests=$((matched_tests + 1))
+  fi
+
+  # Skip tests that use ESBMC verification intrinsics. Names like __ESBMC_*,
+  # __VERIFIER_* and nondet_* are not defined in CPython, so the test raises
+  # NameError under direct execution and can only be validated via ESBMC.
+  # Detecting them by content means an intrinsic-using test no longer needs a
+  # manual ignore-list entry (e.g. github_5104, github_5105).
+  if grep -qE '__ESBMC|__VERIFIER_|nondet_' "$dir/main.py"; then
+    echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
+    continue
+  fi
+
+  # Always keep legacy ignore behavior, with or without query mode.
   if echo "$dir" | grep -iq 'nondet'; then
     echo "🚫 IGNORED: $dir (contains 'nondet')"
     continue
   fi
 
-  # Skip if in the ignore list
+  for prefix in "${ignored_prefixes[@]}"; do
+    if [[ "$dir" == "$prefix"* ]]; then
+      echo "🚫 IGNORED: $dir (ESBMC-only regression prefix)"
+      continue 2
+    fi
+  done
+
   for ignored in "${ignored_dirs[@]}"; do
     if [[ "$dir" == "$ignored" ]]; then
       echo "🚫 IGNORED: $dir (in ignore list)"
       continue 2  # Skip this iteration of the outer loop
     fi
   done
+
+  selected_tests=$((selected_tests + 1))
 
   echo ">>> Testing $dir"
 
@@ -166,7 +233,6 @@ for dir in */; do
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
-      all_passed=false
       failed_tests+=("$dir")
     else
       echo "✅ $dir: failed as expected (exit $result)"
@@ -176,11 +242,20 @@ for dir in */; do
       echo "✅ $dir: executed successfully (exit 0)"
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
-      all_passed=false
       failed_tests+=("$dir")
     fi
   fi
 done
+
+if [ -n "$test_query" ] && [ $matched_tests -eq 0 ]; then
+  echo "❌ No tests matched query: $test_query"
+  exit 1
+fi
+
+if [ -n "$test_query" ] && [ $matched_tests -gt 0 ] && [ $selected_tests -eq 0 ]; then
+  echo "⚠️ Query matched tests, but all matches were ignored."
+  exit 0
+fi
 
 if [ ${#failed_tests[@]} -eq 0 ]; then
   echo -e "\n✅ All tests behaved as expected."

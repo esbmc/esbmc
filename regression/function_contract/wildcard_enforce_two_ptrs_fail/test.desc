@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract "*" --function add_ptrs
+^VERIFICATION FAILED$

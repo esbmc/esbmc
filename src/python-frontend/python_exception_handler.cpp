@@ -2,7 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
@@ -13,6 +13,57 @@
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
+// guards the dyn-sized-array round-trip hazard (fall back to legacy), and
+// build_typecast restores the exact target type (#cpp_type that migrate_type
+// drops).
+bool contains_dyn_array(const typet &t)
+{
+  if (t.is_array())
+  {
+    const array_typet &at = to_array_type(t);
+    if (at.size().is_nil() || !at.size().is_constant())
+      return true;
+    return contains_dyn_array(at.subtype());
+  }
+  if (t.is_pointer())
+    return contains_dyn_array(t.subtype());
+  return false;
+}
+
+exprt build_symbol(const symbolt &sym)
+{
+  if (contains_dyn_array(sym.get_type()))
+    return symbol_expr(sym);
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
+    return typecast_exprt(from, t);
+  expr2tc from2;
+  migrate_expr(from, from2);
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  result.type() = t;
+  return result;
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  if (contains_dyn_array(obj.type()))
+    return address_of_exprt(obj);
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -65,21 +116,162 @@ void python_exception_handler::get_try_statement(
     return;
   }
 
-  exprt new_expr = codet("cpp-catch");
+  const bool has_finally =
+    element.contains("finalbody") && !element["finalbody"].empty();
+
+  // The `else` clause runs only when the try body completes without an
+  // exception. ESBMC's try lowering does not model it (it is silently dropped) —
+  // a pre-existing limitation independent of this change. Combined with the
+  // finally lowering below, which duplicates the finally body on the normal and
+  // exception paths, a dropped `else` would also be skipped on the path where
+  // finally runs, compounding the unsoundness. So refuse a non-empty `else`
+  // only when a finally is present; plain try/except/else keeps its existing
+  // behaviour.
+  if (has_finally && element.contains("orelse") && !element["orelse"].empty())
+    throw std::runtime_error(
+      "try/finally with a non-empty else clause is not supported");
+
+  // Python's `finally` runs on every exit path: normal completion, a caught
+  // exception, an *uncaught* exception (run finally, then re-raise), and a
+  // return/break/continue that leaves the try. We model the first three by
+  // duplicating the finally body on the normal path (after the try/catch) and
+  // inside a catch-all handler that re-raises. A return/break/continue inside
+  // the try body, an except handler, or the finally body would bypass that
+  // appended finally and silently change the result, so refuse those with a
+  // clean diagnostic rather than return an unsound verdict.
+  if (has_finally)
+  {
+    bool escapes = body_has_escaping_control_flow(element["body"], false) ||
+                   body_has_escaping_control_flow(element["finalbody"], false);
+    for (const auto &h : element["handlers"])
+      if (h.contains("body"))
+        escapes = escapes || body_has_escaping_control_flow(h["body"], false);
+    if (escapes)
+      throw std::runtime_error(
+        "try/finally with return/break/continue in the try, except, or finally "
+        "body is not supported");
+  }
+
   exprt try_block = converter_.get_block(element["body"]);
   exprt handler = converter_.get_block(element["handlers"]);
+
+  // A bare `except:` already catches every exception, so the fall-through
+  // finally below runs after it on the exception path too. Appending a second
+  // catch-all here would collide with the user's one in symex's catch_map
+  // (both lower to the "ellipsis" exception id, and the later entry wins),
+  // dropping the user's handler. So synthesise the finally-rethrow catch-all
+  // only when no bare `except:` is present.
+  bool has_catch_all = false;
+  for (const auto &h : element["handlers"])
+    if (h["type"].is_null())
+      has_catch_all = true;
+
+  // Build a catch-all handler `{ finally; re-raise; }` so the finally runs on
+  // the exception-propagation path. Appended after any specific handlers, it
+  // only fires for exceptions none of them caught.
+  std::vector<exprt> handler_ops(
+    handler.operands().begin(), handler.operands().end());
+  if (has_finally && !has_catch_all)
+  {
+    exprt finally_handler = converter_.get_block(element["finalbody"]);
+    finally_handler.type().set("ellipsis", true); // catch-all
+    side_effect_exprt rethrow("cpp-throw", empty_typet());
+    rethrow.location() = converter_.get_location_from_decl(element);
+    codet rethrow_code("expression");
+    rethrow_code.operands().push_back(rethrow);
+    finally_handler.copy_to_operands(rethrow_code);
+    handler_ops.push_back(finally_handler);
+  }
+
+  // A valid Python `try` always has at least one handler or a finally, so
+  // handler_ops is non-empty and the cpp-catch has the >= 2 operands it needs
+  // (the try block plus at least one handler).
+  exprt new_expr = codet("cpp-catch");
   new_expr.move_to_operands(try_block);
-
-  for (const auto &op : handler.operands())
+  for (const auto &op : handler_ops)
     new_expr.copy_to_operands(op);
-
   block.move_to_operands(new_expr);
+
+  // finally on the normal-completion path (and after a caught exception).
+  if (has_finally)
+  {
+    exprt final_block = converter_.get_block(element["finalbody"]);
+    for (const auto &op : final_block.operands())
+      block.copy_to_operands(op);
+  }
+}
+
+// True if `node` contains a return/break/continue that transfers control out of
+// the enclosing try. `return` always escapes (we never descend into a nested
+// function/lambda, which would capture it); `break`/`continue` escape only when
+// not inside a nested loop (`in_loop`). Used to refuse try/finally shapes whose
+// appended finally this lowering would skip.
+bool python_exception_handler::body_has_escaping_control_flow(
+  const nlohmann::json &node,
+  bool in_loop)
+{
+  if (node.is_array())
+  {
+    for (const auto &stmt : node)
+      if (body_has_escaping_control_flow(stmt, in_loop))
+        return true;
+    return false;
+  }
+  if (!node.is_object())
+    return false;
+
+  const std::string t = node.value("_type", "");
+  if (t == "Return")
+    return true;
+  if (t == "Break" || t == "Continue")
+    return !in_loop;
+  // Nested functions/lambdas capture every return/break/continue within them.
+  if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "Lambda")
+    return false;
+
+  // A loop captures break/continue in its own body/orelse.
+  const bool child_in_loop =
+    in_loop || t == "For" || t == "AsyncFor" || t == "While";
+
+  for (const char *key : {"body", "orelse", "finalbody"})
+    if (
+      node.contains(key) &&
+      body_has_escaping_control_flow(node[key], child_in_loop))
+      return true;
+  if (node.contains("handlers") && node["handlers"].is_array())
+    for (const auto &h : node["handlers"])
+      if (
+        h.is_object() && h.contains("body") &&
+        body_has_escaping_control_flow(h["body"], child_in_loop))
+        return true;
+  // NOTE: `match` arms (cases[*].body) are not traversed because `match` is not
+  // yet supported by the frontend (a try containing one already errors during
+  // conversion). When match support lands, this predicate must recurse into the
+  // case bodies, or a return inside a match arm under a try/finally would
+  // silently escape the appended finally.
+  return false;
 }
 
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
 {
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Bare 'raise' (Raise.exc is null) re-raises the active exception.
+  // Lower it to a cpp-throw with no operand and an empty exception_list;
+  // goto_symext::handle_rethrow replays last_throw at symex time.
+  if (element["exc"].is_null())
+  {
+    side_effect_exprt side("cpp-throw", empty_typet());
+    side.location() = location;
+
+    codet code_expr("expression");
+    code_expr.operands().push_back(side);
+    block.move_to_operands(code_expr);
+    return;
+  }
+
   std::string exc_name;
 
   // Try to extract the exception name from different AST shapes
@@ -92,7 +284,6 @@ void python_exception_handler::get_raise_statement(
   else
     exc_name = ""; // fallback
 
-  locationt location = converter_.get_location_from_decl(element);
   typet type = type_handler_.get_typet(exc_name);
 
   // AssertionError is special-cased to a clean assert(false)
@@ -140,7 +331,7 @@ void python_exception_handler::get_raise_statement(
 
     raise.id("struct");
     raise.type() = type;
-    raise.copy_to_operands(address_of_exprt(arg));
+    raise.copy_to_operands(build_address_of(arg));
   }
   else
   {
@@ -149,7 +340,31 @@ void python_exception_handler::get_raise_statement(
     // FUNCTION_CALL:  MyException(&return_value, &"message");
     // Throw MyException return_value;
     raise = converter_.get_expr(element["exc"]);
-    if (raise.is_code() && raise.get("statement") == "function_call")
+
+    // get_function_call() returns the `_init_undefined` sentinel when the
+    // raised class (and its bases) define no __init__. Constructors emit
+    // this so var-assign can lower `x = MyClass()` to a bare declaration;
+    // the raise path has no such shortcut, so synthesize a zero-initialised
+    // instance of the class instead. Without this, the sentinel propagates
+    // into the cpp-throw operand and migrate aborts with "_init_undefined
+    // ... migrate expr failed". Covers user exception hierarchies whose
+    // subclasses inherit __init__ from `Exception`.
+    if (raise.id() == "_init_undefined")
+    {
+      if (type.is_empty())
+        type = any_type();
+      // type_handler_.get_typet returns a symbol_typet referring to the
+      // class's tag; gen_zero has no symbol-id branch and would yield a nil
+      // expression, which propagates into the cpp-throw operand and makes
+      // symex treat the throw as a bare re-throw. Resolve the symbol to the
+      // underlying struct before zero-initialising.
+      typet resolved = type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.name_space().follow(type);
+      raise = gen_zero(resolved);
+      raise.type() = type;
+    }
+    else if (raise.is_code() && raise.get("statement") == "function_call")
     {
       code_function_callt call =
         to_code_function_call(converter_.convert_expression_to_code(raise));
@@ -165,7 +380,7 @@ void python_exception_handler::get_raise_statement(
       if (type.is_empty())
         type = any_type();
       if (raise.type() != type)
-        raise = typecast_exprt(raise, type);
+        raise = build_typecast(raise, type);
     }
   }
 
@@ -213,7 +428,11 @@ void python_exception_handler::get_except_handler_statement(
     symbol.name = name;
     symbol.lvalue = true;
     symbol.is_extern = false;
-    symbol.file_local = false;
+    // Exception-bind variables (`except E as v:`) are function-local in
+    // Python semantics; keeping file_local=true matches the convention
+    // used by other Python frontend temp symbols and prevents rw_set's
+    // race-eligible-Python-symbol filter from picking them up.
+    symbol.file_local = true;
     exception_symbol = converter_.symbol_table().move_symbol_to_context(symbol);
   }
 
@@ -224,7 +443,7 @@ void python_exception_handler::get_except_handler_statement(
   if (exception_symbol != nullptr)
   {
     catch_block.type() = exception_type;
-    exprt sym = symbol_expr(*exception_symbol);
+    exprt sym = build_symbol(*exception_symbol);
     code_declt decl(sym);
     exprt decl_code = converter_.convert_expression_to_code(decl);
     decl_code.location() = exception_symbol->location;
@@ -262,16 +481,16 @@ void python_exception_handler::handle_list_assertion(
   {
     symbolt &list_temp = converter_.create_tmp_symbol(
       element, "$list_assert_temp$", test.type(), exprt());
-    code_declt list_decl(symbol_expr(list_temp));
+    code_declt list_decl(build_symbol(list_temp));
     list_decl.location() = location;
     block.move_to_operands(list_decl);
 
     code_function_callt &func_call =
       static_cast<code_function_callt &>(const_cast<exprt &>(test));
-    func_call.lhs() = symbol_expr(list_temp);
+    func_call.lhs() = build_symbol(list_temp);
     block.move_to_operands(func_call);
 
-    list_expr = symbol_expr(list_temp);
+    list_expr = build_symbol(list_temp);
   }
 
   // Get list size via __ESBMC_list_size
@@ -282,24 +501,24 @@ void python_exception_handler::handle_list_assertion(
 
   symbolt &size_result = converter_.create_tmp_symbol(
     element, "$list_size_result$", size_type(), gen_zero(size_type()));
-  code_declt size_decl(symbol_expr(size_result));
+  code_declt size_decl(build_symbol(size_result));
   size_decl.location() = location;
   block.move_to_operands(size_decl);
 
   code_function_callt size_func_call;
-  size_func_call.function() = symbol_expr(*size_sym);
+  size_func_call.function() = build_symbol(*size_sym);
   if (list_expr.type().is_pointer())
     size_func_call.arguments().push_back(list_expr);
   else
-    size_func_call.arguments().push_back(address_of_exprt(list_expr));
-  size_func_call.lhs() = symbol_expr(size_result);
+    size_func_call.arguments().push_back(build_address_of(list_expr));
+  size_func_call.lhs() = build_symbol(size_result);
   size_func_call.type() = size_type();
   size_func_call.location() = location;
   block.move_to_operands(size_func_call);
 
   // Assert size > 0
   exprt assertion(">", bool_type());
-  assertion.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+  assertion.copy_to_operands(build_symbol(size_result), gen_zero(size_type()));
 
   code_assertt assert_code;
   assert_code.assertion() = assertion;
@@ -336,7 +555,7 @@ void python_exception_handler::handle_function_call_assertion(
 
   symbolt temp_symbol = create_assert_temp_variable(location);
   converter_.symbol_table().add(temp_symbol);
-  exprt temp_var_expr = symbol_expr(temp_symbol);
+  exprt temp_var_expr = build_symbol(temp_symbol);
 
   code_function_callt function_call =
     create_function_call_statement(func_call_expr, temp_var_expr, location);
@@ -349,7 +568,7 @@ void python_exception_handler::handle_function_call_assertion(
   }
   else
   {
-    exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
+    exprt cast_expr = build_typecast(temp_var_expr, signedbv_typet(32));
     exprt one_expr = constant_exprt("1", signedbv_typet(32));
     assertion_expr = equality_exprt(cast_expr, one_expr);
   }
@@ -387,7 +606,7 @@ symbolt python_exception_handler::create_assert_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid_str;
   temp_symbol.name = temp_sid_str;
-  temp_symbol.type = bool_type();
+  temp_symbol.set_type(bool_type());
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
