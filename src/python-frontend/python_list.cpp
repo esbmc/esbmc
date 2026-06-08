@@ -2327,18 +2327,8 @@ exprt python_list::handle_index_access(
                           keys[i]["value"].get<std::string>() == key)
                         {
                           // Found the value: now get its element type
-                          const auto &list_value = values[i];
-
-                          // Get the first element from the list using json_utils
-                          nlohmann::json first_elem =
-                            json_utils::get_list_element(list_value, 0);
-
-                          if (!first_elem.is_null() && !first_elem.empty())
-                          {
-                            // Use type_handler to infer the element type
-                            elem_type = converter_.get_type_handler().get_typet(
-                              first_elem);
-                          }
+                          // (promotion-aware, see infer_literal_element_type).
+                          elem_type = infer_literal_element_type(values[i]);
                           break;
                         }
                       }
@@ -2353,12 +2343,9 @@ exprt python_list::handle_index_access(
             list_node["value"]["elts"].is_array() &&
             !list_node["value"]["elts"].empty())
           {
-            // Get element type from first list element using json_utils
-            nlohmann::json first_elem =
-              json_utils::get_list_element(list_node["value"], 0);
-
-            if (!first_elem.is_null() && !first_elem.empty())
-              elem_type = converter_.get_type_handler().get_typet(first_elem);
+            // Infer element type from the literal, accounting for the int->float
+            // promotion applied to mixed numeric literals at construction.
+            elem_type = infer_literal_element_type(list_node["value"]);
           }
         }
       }
@@ -3231,6 +3218,23 @@ exprt python_list::compare(
   max_depth_expr.set_value(
     integer2binary(max_depth, config.ansi_c.address_width));
 
+  // Merge the float element type_id from both operands so that mixed int/float
+  // elements compare numerically (Python's 1 == 1.0), as list_lt already does.
+  int type_flag_lhs = 0, type_flag_rhs = 0;
+  size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
+  get_list_type_flags(
+    lhs_symbol->id.as_string(),
+    converter_.get_type_handler(),
+    type_flag_lhs,
+    float_type_id_lhs);
+  get_list_type_flags(
+    rhs_symbol->id.as_string(),
+    converter_.get_type_handler(),
+    type_flag_rhs,
+    float_type_id_rhs);
+  const size_t float_type_id =
+    float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
@@ -3239,6 +3243,8 @@ exprt python_list::compare(
   list_eq_func_call.arguments().push_back(build_symbol(*rhs_symbol)); // l2
   list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
+  list_eq_func_call.arguments().push_back(
+    from_integer(float_type_id, size_type())); // float_type_id
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
@@ -4497,6 +4503,67 @@ bool python_list::has_mixed_numeric_types(const std::string &list_id)
       has_int = true;
   }
   return has_int && has_float;
+}
+
+typet python_list::infer_literal_element_type(
+  const nlohmann::json &list_literal)
+{
+  nlohmann::json first_elem = json_utils::get_list_element(list_literal, 0);
+  if (first_elem.is_null() || first_elem.empty())
+    return typet();
+
+  const type_handler &th = converter_.get_type_handler();
+
+  // A heterogeneous int/float literal is promoted to a homogeneous double list
+  // at construction (python_list::get, promote_ints), so every element is a
+  // double in __ESBMC_float_buf. Read it as a double regardless of which
+  // element the index selects; the first element's int type misreads the bits.
+  if (
+    list_literal["_type"] == "List" && list_literal.contains("elts") &&
+    list_literal["elts"].is_array())
+  {
+    bool has_int = false, has_float = false;
+    for (const auto &e : list_literal["elts"])
+    {
+      const typet t = th.get_typet(e);
+      if (t.is_floatbv())
+        has_float = true;
+      else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+        has_int = true;
+    }
+    if (has_int && has_float)
+      return double_type();
+  }
+
+  return th.get_typet(first_elem);
+}
+
+typet python_list::numeric_element_type(const std::string &list_id)
+{
+  auto it = list_type_map.find(list_id);
+  if (it == list_type_map.end() || it->second.empty())
+    return typet();
+
+  bool has_float = false;
+  const typet first = it->second[0].second;
+  for (const auto &elem : it->second)
+  {
+    const typet &t = elem.second;
+    if (t.is_floatbv())
+      has_float = true;
+    else if (!(t.is_signedbv() || t.is_unsignedbv()))
+      return typet(); // non-numeric element: not a numeric list
+  }
+
+  // int/float mix (or all-float): Python promotes to float, read as double.
+  if (has_float)
+    return double_type();
+
+  // All integers: require one shared integer type for a sound single-type read.
+  for (const auto &elem : it->second)
+    if (elem.second != first)
+      return typet();
+  return first;
 }
 
 exprt python_list::build_min_max_for_mixed_numeric(

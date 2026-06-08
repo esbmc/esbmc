@@ -52,6 +52,7 @@ bool goto_convert_functionst::hide(const goto_programt &goto_program)
 
 void goto_convert_functionst::add_return(
   goto_functiont &f,
+  const irep_idt &identifier,
   const locationt &location)
 {
   if (!f.body.instructions.empty() && f.body.instructions.back().is_return())
@@ -67,10 +68,22 @@ void goto_convert_functionst::add_return(
   t->make_return();
   t->location = location;
 
+  type2tc ret_type = ns.follow(to_code_type(f.type).ret_type);
+
+  // C11 §5.1.2.2.3p1: reaching the } that terminates main returns 0. Synthesize
+  // the standard-mandated implicit `return 0` instead of a nondet value so that
+  // main's return value is modelled correctly (e.g. when a contract's ensures
+  // clause refers to __ESBMC_return_value).
+  const std::string &id = id2string(identifier);
+  if (id == "c:@F@main" || has_prefix(id, "c:@F@main#"))
+  {
+    t->code = code_return2tc(gen_zero(ret_type));
+    return;
+  }
+
   // Build a nondet side-effect of the function's return type directly on
   // the irep2 side. Followed through symbol-typed aliases as the legacy
   // path did.
-  type2tc ret_type = ns.follow(to_code_type(f.type).ret_type);
   expr2tc nondet = sideeffect2tc(
     ret_type,
     expr2tc(),
@@ -141,7 +154,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   // add non-det return value, if needed
   if (targets.has_return_value)
-    add_return(f, end_location);
+    add_return(f, identifier, end_location);
 
   // Wrap the body of functions name __VERIFIER_atomic_* with atomic_begin
   // and atomic_end

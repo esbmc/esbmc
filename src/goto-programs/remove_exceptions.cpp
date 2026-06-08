@@ -656,8 +656,8 @@ private:
 
   /// Whole-program gate: is every exception construct in this function within
   /// the supported subset (reference catches of registered class types, throws
-  /// of registered objects or rethrows, regions whose pop is followed by the
-  /// skip-handlers GOTO)? Read-only.
+  /// of registered objects or rethrows, balanced CATCH push/pop nesting)?
+  /// Read-only.
   /// Set when program_supported declines, naming the construct for the
   /// unsupported-program diagnostic (report_unsupported).
   std::string unsupported_reason_;
@@ -1472,6 +1472,13 @@ void remove_exceptions(
   contextt &context,
   const namespacet &ns)
 {
+  // A program with no throw/catch needs no exception machinery. Skip entirely so
+  // the pass is a true no-op for exception-free programs — otherwise it would
+  // add the exception-state globals to __ESBMC_main, perturbing analyses that
+  // inspect program state on programs that have nothing to do with exceptions
+  // (e.g. termination's recurrent-set search, function-contract frames).
+  if (!exception_loweringt::program_uses_exceptions(goto_functions))
+    return;
   create_exception_state_symbols(context);
   exception_loweringt(context, ns).run(goto_functions);
 }

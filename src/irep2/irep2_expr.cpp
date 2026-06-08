@@ -557,21 +557,6 @@ expr2tc expr2t::with_type(const type2tc &new_type) const
   std::unreachable();
 }
 
-size_t expr2t::crc() const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  case end_expr_id:
-    break;
-  }
-  std::unreachable();
-}
-
 list_of_memberst expr2t::tostring(unsigned int indent) const
 {
   switch (expr_id)

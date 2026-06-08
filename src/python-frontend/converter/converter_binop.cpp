@@ -50,18 +50,20 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
         throw std::runtime_error(
           "__ESBMC_list_size not found for list condition check");
 
-      side_effect_expr_function_callt size_call;
-      size_call.function() = symbol_expr(*size_func);
-      size_call.type() = size_type();
-      size_call.location() = get_location_from_decl(element);
+      // Build len(x) != 0 in IREP2, back-migrating once (V.3).
+      expr2tc arg2, zero2;
       if (value_expr.type().is_pointer())
-        size_call.arguments().push_back(value_expr);
+        migrate_expr(value_expr, arg2);
       else
-        size_call.arguments().push_back(address_of_exprt(value_expr));
+        migrate_expr(address_of_exprt(value_expr), arg2);
+      migrate_expr(gen_zero(size_type()), zero2);
 
-      exprt cond("notequal", bool_type());
-      cond.copy_to_operands(size_call, gen_zero(size_type()));
-      cond.location() = get_location_from_decl(element);
+      expr2tc size_call2 = side_effect_function_call2tc(
+        migrate_type(size_type()), symbol_expr2tc(*size_func), {arg2});
+      exprt cond = migrate_expr_back(notequal2tc(size_call2, zero2));
+      const locationt loc = get_location_from_decl(element);
+      cond.location() = loc;
+      cond.op0().location() = loc; // re-attach the size_call location
       return cond;
     }
 
@@ -612,9 +614,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!type_mismatch_result.is_nil())
     return type_mismatch_result;
 
-  // Detect any_type (void*) operands — unannotated Python parameters.
-  auto is_any_ptr = [](const exprt &e) {
-    return e.type().is_pointer() && e.type().subtype().id() == "empty";
+  // Detect any_type (void*) operands — unannotated Python parameters — and
+  // list-typed operands that reach the arithmetic/comparison coercion. A list
+  // value only gets here when it is actually an element of a list whose element
+  // type could not be statically resolved (e.g. iterating an empty/untyped
+  // list, which leaves the loop variable typed as the generic list pointer);
+  // every valid list operation was already handled by handle_list_operations
+  // above. Treating it like a void* (cast to the integer operand's type) keeps
+  // GOTO generation from building invalid pointer arithmetic on dead code.
+  auto is_any_ptr = [&](const exprt &e) {
+    return e.type().is_pointer() &&
+           (e.type().subtype().id() == "empty" || e.type() == list_type);
   };
   auto is_integer = [](const exprt &e) {
     return e.type().is_signedbv() || e.type().is_unsignedbv();
@@ -653,14 +663,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       }
       e = typecast_exprt(e, ptr_type);
     };
-    if (is_any_ptr(lhs) && !is_any_ptr(rhs) && !rhs.type().is_pointer())
+    // An operand with no concrete type is an unmodelled value (e.g. the result
+    // of calling a generator function, whose type stays "empty"). Coercing it —
+    // in particular wrapping it in a typecast — yields a null-typed operand that
+    // crashes expression simplification. Leave such a comparison untouched so it
+    // lowers like any other (the assertion is simply not satisfied).
+    auto has_concrete_type = [](const exprt &e) {
+      return !e.type().is_nil() && !e.type().is_empty();
+    };
+    if (
+      is_any_ptr(lhs) && !is_any_ptr(rhs) && has_concrete_type(rhs) &&
+      !rhs.type().is_pointer())
     {
       if (type_utils::is_ordered_comparison(op) && is_integer(rhs))
         lhs = typecast_exprt(lhs, rhs.type()); // cast void* to integer
       else
         cast_to_void_ptr(rhs, lhs.type()); // cast integer to void*
     }
-    else if (is_any_ptr(rhs) && !is_any_ptr(lhs) && !lhs.type().is_pointer())
+    else if (
+      is_any_ptr(rhs) && !is_any_ptr(lhs) && has_concrete_type(lhs) &&
+      !lhs.type().is_pointer())
     {
       if (type_utils::is_ordered_comparison(op) && is_integer(lhs))
         rhs = typecast_exprt(rhs, lhs.type()); // cast void* to integer

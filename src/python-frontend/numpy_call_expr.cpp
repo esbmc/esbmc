@@ -127,18 +127,41 @@ try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
     return false;
 
   const std::string type = node["_type"];
-  if (type != "Constant" && type != "UnaryOp")
+
+  // The boolean try_extract_* helpers must not depend on catching an exception
+  // for control flow: extract_value() raises std::runtime_error on non-numeric
+  // input, and relying on that as a flow-control signal is fragile. Pre-check
+  // that the payload is numeric and only call extract_value() when it is
+  // guaranteed to succeed, so a non-numeric literal (e.g. a str element in
+  // numpy.linalg.det's matrix) makes this helper return false cleanly instead
+  // of letting the internal "Unknown numeric type" error escape to the user
+  // (issue #5206).
+  if (type == "UnaryOp")
+  {
+    if (
+      !node.contains("operand") || !node["operand"].is_object() ||
+      !node["operand"].contains("value"))
+      return false;
+    // extract_value() only negates integer/float operands.
+    const auto &operand = node["operand"]["value"];
+    if (!operand.is_number_integer() && !operand.is_number_float())
+      return false;
+  }
+  else if (type == "Constant")
+  {
+    if (!node.contains("value"))
+      return false;
+    const auto &value = node["value"];
+    if (
+      !value.is_boolean() && !value.is_number_integer() &&
+      !value.is_number_float())
+      return false;
+  }
+  else
     return false;
 
-  try
-  {
-    out = extract_value(node);
-    return true;
-  }
-  catch (const std::exception &)
-  {
-    return false;
-  }
+  out = extract_value(node);
+  return true;
 }
 
 static scalar_value make_real_scalar(double value)
@@ -1895,9 +1918,12 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          // Get element type from first element
-          const auto &elem = lhs["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // Get element type from the first element node itself. Passing the
+          // node (not a presumed ["value"] subfield) lets get_typet resolve a
+          // symbolic Name element (e.g. a = nondet_int()) to its real type;
+          // ["value"] is absent on a Name node and yielded a void element type,
+          // which made the flat int64 buffer access overflow (#5115).
+          base_type = type_handler_.get_typet(lhs["elts"][0]);
 
           // For 1D dot product, treat as (1×n) × (n×1) = (1×1) scalar
           m = 1;
@@ -1921,8 +1947,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = rhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(rhs["elts"][0]["elts"][0]);
 
           m = 1;
           n = lhs_len;
@@ -1946,8 +1972,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(lhs["elts"][0]["elts"][0]);
 
           m = lhs_rows;
           n = lhs_cols;
@@ -1972,8 +1998,8 @@ exprt numpy_call_expr::create_expr_from_call()
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
-          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-          base_type = type_handler_.get_typet(elem);
+          // See #5115: pass the element node so symbolic elements resolve.
+          base_type = type_handler_.get_typet(lhs["elts"][0]["elts"][0]);
 
           // [[...]] access pattern (A[i][j]). The backend dot() accesses the
           // result via a flat int64_t* pointer obtained by taking the address
@@ -1984,21 +2010,30 @@ exprt numpy_call_expr::create_expr_from_call()
             converter_.current_lhs->type() = result_type;
         }
 
-        // Normalize to "dot" regardless of whether "matmul" was originally used
-        function_id_.set_function("dot");
+        // Select the backend by element type: integer matrices use dot(), which
+        // accumulates into int64_t; floating-point matrices must use
+        // dot_double(), which accumulates into double. Using the integer dot()
+        // on double data reinterprets the float bit pattern as int64 and is
+        // unsound (#5115). "matmul" is normalised to the matching backend.
+        // Scoped to the default floatbv encoding; the non-default --fixedbv
+        // float path is left as-is (a separate, pre-existing concern).
+        const bool is_float = base_type.is_floatbv();
+        function_id_.set_function(is_float ? "dot_double" : "dot");
         // Update the symbol associated with the result
         if (converter_.current_lhs != nullptr)
           converter_.update_symbol(*converter_.current_lhs);
 
-        // Generate a function call expression to the backend `dot` function
+        // Generate a function call expression to the selected backend function
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
 
         // The first two arguments are pointers to the input arrays.
         // function_call_expr::get() produces pointer-to-array-of-array
-        // (e.g. int (*)[1][1]) but the backend dot() expects int64_t* (flat).
-        // Cast both input pointers to int64_t* so pointer arithmetic works.
-        typet flat_ptr_type = pointer_typet(long_long_int_type());
+        // (e.g. int (*)[1][1]); the backend expects a flat element pointer
+        // (int64_t* for dot(), double* for dot_double()). Cast both inputs to
+        // the flat element pointer so the pointer arithmetic strides correctly.
+        typet flat_ptr_type =
+          pointer_typet(is_float ? base_type : long_long_int_type());
         auto &args = call.arguments();
         if (args.size() >= 2)
         {
@@ -2207,6 +2242,32 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
+    // np.fmod(x, y) on scalars has the same semantics as math.fmod / C fmod, so
+    // delegate to the shared math handler, which constant-folds when both
+    // operands are concrete and otherwise emits the libm fmod call. This covers
+    // symbolic scalar operands (e.g. a function parameter), which the
+    // broadcasting machinery below does not handle. Array operands (fmod is a
+    // broadcasting ufunc) are not supported here — they are rejected with a
+    // clear diagnostic rather than mis-folded to a scalar.
+    if (function == "fmod" && call_["args"].size() == 2)
+    {
+      exprt lhs = converter_.get_expr(call_["args"][0]);
+      exprt rhs = converter_.get_expr(call_["args"][1]);
+      // Reject container operands: static numpy arrays (array typet) and
+      // dynamic Python lists (the __ESBMC_PyListObj model, by value or by
+      // pointer). handle_fmod is scalar-only and would otherwise mis-fold
+      // them or crash the FP backend.
+      const typet list_type = type_handler_.get_list_type();
+      auto is_container = [&list_type](const exprt &e) {
+        return e.type().is_array() || e.type() == list_type ||
+               (e.type().is_pointer() && e.type().subtype() == list_type);
+      };
+      if (is_container(lhs) || is_container(rhs))
+        throw std::runtime_error(
+          "Unsupported operation: numpy.fmod on array operands");
+      return converter_.get_math_handler().handle_fmod(lhs, rhs, call_);
+    }
+
     auto is_scalar_node = [](const nlohmann::json &node) {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";

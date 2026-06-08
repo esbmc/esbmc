@@ -193,6 +193,34 @@ public:
   static bool has_mixed_numeric_types(const std::string &list_id);
 
   /**
+   * @brief Infer the element type of a list literal AST node, accounting for
+   * the int->float promotion applied at construction.
+   *
+   * A heterogeneous int/float literal is promoted to a homogeneous double list
+   * in python_list::get (promote_ints, #5156), so its values all live in
+   * __ESBMC_float_buf as doubles. A read of such a literal must therefore use a
+   * float element type whatever element the index selects; using the first
+   * element's (int) type misreads the stored double's bits (#5160 regression).
+   *
+   * @return double_type() for a mixed int/float literal, the first element's
+   *         type otherwise, or an empty typet() when no element is available.
+   */
+  typet infer_literal_element_type(const nlohmann::json &list_literal);
+
+  /**
+   * @brief Non-throwing query for an all-numeric list's element type.
+   *
+   * Unlike check_homogeneous_list_types(), this never throws: it returns
+   * double_type() when the list mixes int and float (Python promotes int to
+   * float), the single shared integer type when every element is that same
+   * integer type, and an empty typet() when the list is unknown, empty, or
+   * holds any non-numeric element (or integers of differing widths). Used to
+   * type a dict-comprehension loop variable without relying on exceptions for
+   * control flow.
+   */
+  static typet numeric_element_type(const std::string &list_id);
+
+  /**
    * @brief Build an inline min/max computation for a mixed int/float list.
    * Accesses each element with its original type, promotes int elements to
    * double for comparison, and returns the winning value as double.

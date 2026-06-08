@@ -43,9 +43,11 @@ public:
   /// update the function member in each instruction
   /// \param function_id: the `function_id` used for assigning empty function
   ///   members
-  void update_instructions_function(const irep_idt &function_id)
+  /// \param force: when true, overwrite already-set function members too
+  void
+  update_instructions_function(const irep_idt &function_id, bool force = false)
   {
-    body.update_instructions_function(function_id);
+    body.update_instructions_function(function_id, force);
   }
 };
 

@@ -223,7 +223,8 @@ bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
   size_t list_type_id,
-  size_t max_depth)
+  size_t max_depth,
+  size_t float_type_id)
 {
   // Quick checks
   if (!l1 || !l2)
@@ -289,7 +290,32 @@ bool __ESBMC_list_eq(
     {
       // size == 0 means a dict pointer or None element — stored by pointer
       // identity, not byte content, so cross-type-id comparison is unsound.
-      if (a->size == 0 || !__ESBMC_values_equal(a->value, b->value, a->size))
+      if (a->size == 0)
+        return false;
+
+      // int-vs-float: Python compares numerically (1 == 1.0), but the two
+      // store different bit patterns, so a byte compare would wrongly differ.
+      // Triggered when exactly one side is a float (sizes already match here,
+      // and float/int elements are both 8 bytes). float_type_id is derived by
+      // the frontend from top-level element types only, so this numeric path
+      // does not reach nested mixed int/float lists; like list_lt, the int side
+      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      if (
+        float_type_id != 0 && a->size == 8 &&
+        (a->type_id == float_type_id) != (b->type_id == float_type_id))
+      {
+        double av = (a->type_id == float_type_id)
+                      ? *(const double *)a->value
+                      : (double)*(const int64_t *)a->value;
+        double bv = (b->type_id == float_type_id)
+                      ? *(const double *)b->value
+                      : (double)*(const int64_t *)b->value;
+        if (av != bv)
+          return false;
+        continue;
+      }
+
+      if (!__ESBMC_values_equal(a->value, b->value, a->size))
         return false;
       continue;
     }
@@ -767,7 +793,7 @@ bool __ESBMC_dict_eq(
       const PyListObject *rhs_list =
         (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
                                : *(const PyListObject **)rhs_value->value;
-      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0))
+      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0))
         return false;
     }
     else

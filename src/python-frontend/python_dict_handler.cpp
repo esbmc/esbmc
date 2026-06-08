@@ -404,16 +404,39 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   symbol_id loop_var_sid = converter_.create_symbol_id();
   loop_var_sid.set_object(loop_var_name);
 
+  // Infer the comprehension target's element type. Defaulting to any_type()
+  // boxes the loop variable's value through the raw dynamic backing store,
+  // whose alignment ESBMC cannot prove when a later dict lookup reads the key
+  // as a 64-bit word in __ESBMC_values_equal (dereference-alignment failure).
+  // Mirror the subscript read used by the desugared for-loop: take the element
+  // type from the static list_type_map and only fall back to any_type() when it
+  // cannot be determined, so no currently-working case regresses.
   typet loop_var_type = any_type();
-  // range(...) produces integers, so keep the loop variable in the
-  // same type used later by dict lookups
+  bool mixed_numeric = false;
   if (
     iter.contains("_type") && iter["_type"] == "Call" &&
     iter.contains("func") && iter["func"].contains("_type") &&
     iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
     iter["func"]["id"] == "range")
   {
+    // range(...) produces integers, so keep the loop variable in the
+    // same type used later by dict lookups
     loop_var_type = long_long_int_type();
+  }
+  else if (iterable_expr.is_symbol())
+  {
+    // numeric_element_type() is non-throwing: it returns the common numeric
+    // element type (double for an int/float mix), or an empty typet() when the
+    // list is unknown, empty, or contains any non-numeric / mixed-width element.
+    // Restricting specialisation to all-numeric lists keeps the read sound and
+    // leaves every other case on the previous any_type() path (no regression).
+    const std::string list_id = iterable_expr.identifier().as_string();
+    typet num = python_list::numeric_element_type(list_id);
+    if (num != typet())
+    {
+      loop_var_type = num;
+      mixed_numeric = python_list::has_mixed_numeric_types(list_id);
+    }
   }
 
   symbolt loop_var_symbol = converter_.create_symbol(
@@ -478,8 +501,8 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // comprehension target before evaluating key and value
   exprt current_element = list_handler.build_list_at_call(
     iterable_expr, build_symbol(index_var), element);
-  current_element =
-    list_handler.extract_pyobject_value(current_element, loop_var_type);
+  current_element = list_handler.extract_pyobject_value(
+    current_element, loop_var_type, mixed_numeric);
 
   code_assignt loop_var_assign(build_symbol(*loop_var), current_element);
   loop_var_assign.location() = location;
