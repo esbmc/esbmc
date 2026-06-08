@@ -135,6 +135,20 @@ exprt build_call_expr(
   return migrate_expr_back(side_effect_function_call2tc(
     migrate_type(return_type), symbol_expr2tc(fn), args2));
 }
+
+// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
+// a pointer to a PyObject struct, so the dereferenced struct is the resolved
+// member source and member2t's source precondition holds.
+exprt build_deref_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
 } // namespace
 
 // Default depth for list comparison if option not set
@@ -4333,16 +4347,9 @@ exprt python_list::extract_pyobject_value(
   // (real-sorted in --ir mode), so the array read gives the correct real value.
   if (elem_type.is_floatbv())
   {
-    // Helper: build deref(pyobject_expr)->field for a given field/type.
-    auto member_of =
-      [&](const char *field, const typet &ftype) -> member_exprt {
-      member_exprt m(pyobject_expr, field, ftype);
-      exprt &base = m.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-      return m;
+    // Helper: build (*pyobject_expr).field for a given field/type.
+    auto member_of = [&](const char *field, const typet &ftype) -> exprt {
+      return build_deref_member(pyobject_expr, field, ftype);
     };
 
     // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
@@ -4351,7 +4358,7 @@ exprt python_list::extract_pyobject_value(
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
 
     // Build __ESBMC_float_buf[item->float_idx]
-    member_exprt float_idx_member = member_of("float_idx", size_type());
+    exprt float_idx_member = member_of("float_idx", size_type());
     exprt float_val =
       build_index(build_symbol(*fbuf_sym), float_idx_member, elem_type);
 
@@ -4368,8 +4375,7 @@ exprt python_list::extract_pyobject_value(
       converter_.get_type_handler().type_to_string(elem_type));
 
     // (double)*(long long *)item->value
-    member_exprt value_member =
-      member_of("value", pointer_typet(empty_typet()));
+    exprt value_member = member_of("value", pointer_typet(empty_typet()));
     typecast_exprt as_int_ptr(
       value_member, pointer_typet(long_long_int_type()));
     dereference_exprt int_val(long_long_int_type());
@@ -4383,17 +4389,9 @@ exprt python_list::extract_pyobject_value(
     return if_exprt(is_float, float_val, int_as_float);
   }
 
-  // Extract value from PyObject: pyobject_expr->value
-  member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
-
-  // Dereference the PyObject* to access its members
-  {
-    exprt &base = obj_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
+  // Extract value from PyObject: (*pyobject_expr).value
+  exprt obj_value =
+    build_deref_member(pyobject_expr, "value", pointer_typet(empty_typet()));
 
   // For array types, return pointer to element type instead of pointer to array
   // The dereference system doesn't support array types as target types
