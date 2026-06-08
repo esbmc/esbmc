@@ -10,6 +10,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
@@ -27,7 +28,10 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include <util/exception_specification.h>
 #include <util/string_constant.h>
+
+#include <set>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -432,7 +436,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   {
     if (cxxrd->bases_begin() != cxxrd->bases_end())
     {
-      base_map bases;
+      base_list bases;
       if (get_base_map(*cxxrd, bases))
         return true;
       get_base_components_methods(bases, type);
@@ -989,7 +993,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.function() = callee_decl;
     call.type() = type;
 
-    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+    gen_typecast_base_ctor_call(*ice.getConstructor()->getParent(), callee_decl, call, new_expr);
 
     // Forward the enclosing inheriting constructor's parameters.
     assert(current_functionDecl);
@@ -1240,7 +1244,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*init_stmt, init))
         return true;
 
-      decls.move_to_operands(init.op0());
+      exprt init_decl;
+      init_decl.swap(init.op0());
+      decls.move_to_operands(init_decl);
     }
 
     exprt cond;
@@ -1268,7 +1274,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // The corresponding decls are taken from
     // decl-blocks and integrated in the one decl-block
-    decls.move_to_operands(range.op0(), begin.op0(), end.op0());
+    exprt range_decl, begin_decl, end_decl;
+    range_decl.swap(range.op0());
+    begin_decl.swap(begin.op0());
+    end_decl.swap(end.op0());
+    decls.move_to_operands(range_decl, begin_decl, end_decl);
     convert_expression_to_code(decls);
 
     codet body = code_skipt();
@@ -1444,7 +1454,8 @@ bool clang_cpp_convertert::get_constructor_call(
   bool need_new_obj = false;
 
   if (new_expr.base_ctor_derived())
-    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+    gen_typecast_base_ctor_call(
+      *constructor_call.getConstructor()->getParent(), callee_decl, call, new_expr);
   else if (new_expr.get_bool("#member_init"))
   {
     /*
@@ -1557,11 +1568,22 @@ bool clang_cpp_convertert::build_destructor_chain(
   };
 
   // Cast `this` to the base's expected pointer type and emit the call.
-  auto emit_base_dtor = [&](const symbolt &sym) {
+  auto emit_base_dtor =
+    [&](const symbolt &sym, const clang::CXXRecordDecl &base_record) {
     exprt this_expr = symbol_exprt(this_id, this_ptr_type);
-    gen_typecast(
-      ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
+    const typet base_this_type =
+      to_code_type(sym.get_type()).arguments().front().type();
+
+    uint64_t base_offset = 0;
+    if (!get_non_virtual_base_offset(*parent, base_record, base_offset))
+      gen_typecast(ns, this_expr, base_this_type);
+    else if (
+      adjust_base_subobject_pointer(
+        this_expr, base_this_type, base_offset, false))
+      return true;
+
     emit_dtor_call(sym, std::move(this_expr));
+    return false;
   };
 
   // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
@@ -1597,7 +1619,8 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym);
+    if (emit_base_dtor(*sym, *rec))
+      return true;
   }
 
   // 3. Virtual base subobjects, reverse declaration order.
@@ -1613,7 +1636,8 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym);
+    if (emit_base_dtor(*sym, *rec))
+      return true;
   }
 
   return false;
@@ -1857,47 +1881,49 @@ bool clang_cpp_convertert::get_function_body(
       return true;
   }
 
-  auto *type = fd.getType().getTypePtr();
-  if (const auto *fpt = llvm::dyn_cast<const clang::FunctionProtoType>(type))
-  {
-    if (fpt->hasExceptionSpec())
-    {
-      codet decl = codet("throw_decl");
-      bool emit = true;
-      if (fpt->hasDynamicExceptionSpec())
-      {
-        // e.g: void func() throw(int) { throw 1;}
-        // body is converted to
-        // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
-        for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
-        {
-          codet tmp;
-          if (get_type(fpt->getExceptionType(i), tmp.type()))
-            return true;
+  return false;
+}
 
-          decl.move_to_operands(tmp);
-        }
-      }
-      else if (fpt->hasNoexceptExceptionSpec())
-      {
-        // hasNoexceptExceptionSpec() is also true for noexcept(false), which
-        // permits exceptions to escape — record the no-throw marker only when
-        // the function genuinely cannot throw.
-        if (fpt->canThrow() == clang::CT_Cannot)
-        {
-          codet tmp;
-          tmp.type() = typet("noexcept");
-          decl.move_to_operands(tmp);
-        }
-        else
-          emit = false;
-      }
-      if (emit)
-        body.operands().insert(body.operands().begin(), decl);
+void clang_cpp_convertert::annotate_exception_specification(
+  const clang::FunctionDecl &fd,
+  typet &type)
+{
+  const auto *fpt =
+    llvm::dyn_cast<const clang::FunctionProtoType>(fd.getType().getTypePtr());
+  if (!fpt || !fpt->hasExceptionSpec())
+    return;
+
+  // A C++ exception specification constrains the function boundary, not any
+  // region of its body. Record it as metadata on the function type so it
+  // survives serialization and stays attached to the function frame. The
+  // allowed-type ids for a dynamic specification are derived later, in
+  // clang_cpp_adjust, where the namespace is available for base-class lookup;
+  // here we only stash the raw exception types.
+  if (fpt->hasNoexceptExceptionSpec())
+  {
+    // noexcept / noexcept(true) / noexcept(expr): only restrictive when the
+    // function actually cannot throw. noexcept(false) (and any noexcept(expr)
+    // evaluating to false) leaves the function potentially throwing, so it
+    // gets no metadata. canThrow() resolves the expression for us; a still
+    // value-dependent result is treated conservatively as throwing.
+    if (fpt->canThrow() == clang::CT_Cannot)
+      type.set(exception_specificationt::kind_attribute(), "non_throwing");
+  }
+  else if (fpt->hasDynamicExceptionSpec())
+  {
+    // Legacy dynamic spec throw(T...) (incl. empty throw()): violation calls
+    // std::unexpected.
+    type.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept &decl = type.add("exception_spec_decl");
+    decl.get_sub().clear();
+    for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+    {
+      typet exc_type;
+      if (get_type(fpt->getExceptionType(i), exc_type))
+        continue;
+      decl.get_sub().push_back(exc_type);
     }
   }
-
-  return false;
 }
 
 bool clang_cpp_convertert::get_function_this_pointer_param(
@@ -2406,6 +2432,7 @@ bool clang_cpp_convertert::get_member_expr(
 }
 
 void clang_cpp_convertert::gen_typecast_base_ctor_call(
+  const clang::CXXRecordDecl &base_record,
   const exprt &callee_decl,
   side_effect_expr_function_callt &call,
   exprt &initializer)
@@ -2429,8 +2456,24 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
-  // generate the type casting expr and push it to callee's arguments
-  gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
+  const auto *derived_ctor =
+    llvm::dyn_cast_or_null<clang::CXXConstructorDecl>(current_functionDecl);
+  assert(derived_ctor);
+
+  uint64_t base_offset = 0;
+  if (
+    !get_non_virtual_base_offset(
+      *derived_ctor->getParent(), base_record, base_offset))
+  {
+    gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
+  }
+  else if (
+    adjust_base_subobject_pointer(
+      implicit_this_symb, base_ctor_this_type, base_offset, false))
+  {
+    abort();
+  }
+
   call.arguments().push_back(implicit_this_symb);
 }
 
@@ -2475,54 +2518,68 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 
 bool clang_cpp_convertert::get_base_map(
   const clang::CXXRecordDecl &cxxrd,
-  base_map &map)
+  base_list &bases)
 {
-  /*
-   * This function gets all the base classes from which we need to get the components/methods
-   */
-  for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
-  {
-    // The base class is always a CXXRecordDecl
-    const clang::CXXRecordDecl &base_cxxrd =
-      *(base.getType().getTypePtr()->getAsCXXRecordDecl());
+  std::set<std::string> seen;
 
-    if (get_struct_union_class(base_cxxrd))
-      return true;
-
-    // recursively get more bases for this `base`
-    if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      if (get_base_map(base_cxxrd, map))
+  std::function<bool(const clang::CXXRecordDecl &, uint64_t)> walk =
+    [&](const clang::CXXRecordDecl &record, uint64_t record_offset) {
+      ordered_bases_t ordered_bases;
+      if (get_ordered_direct_bases(record, ordered_bases))
         return true;
 
-    // get base class id
-    std::string class_id, class_name;
-    get_decl_name(base_cxxrd, class_name, class_id);
+      const auto &layout = ASTContext->getASTRecordLayout(&record);
+      for (const clang::CXXBaseSpecifier *base : ordered_bases)
+      {
+        const clang::CXXRecordDecl *base_cxxrd =
+          base->getType()->getAsCXXRecordDecl();
+        if (!base_cxxrd)
+          continue;
 
-    // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
-      continue;
+        const uint64_t base_offset =
+          record_offset + (base->isVirtual()
+                             ? 0
+                             : layout.getBaseClassOffset(base_cxxrd).getQuantity());
 
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
-  }
+        if (get_struct_union_class(*base_cxxrd))
+          return true;
 
-  return false;
+        if (walk(*base_cxxrd, base_offset))
+          return true;
+
+        std::string class_id, class_name;
+        get_decl_name(*base_cxxrd, class_name, class_id);
+
+        if (!seen.insert(class_id).second)
+          continue;
+
+        bases.push_back({class_id, base_cxxrd, base_offset});
+      }
+
+      return false;
+    };
+
+  return walk(cxxrd, 0);
 }
 
 void clang_cpp_convertert::get_base_components_methods(
-  base_map &map,
+  const base_list &bases,
   struct_union_typet &type)
 {
   irept::subt &base_ids = type.add("bases").get_sub();
-  for (const auto &base : map)
+  irept::subt &base_offsets = type.add("base_offsets").get_sub();
+  for (const base_entryt &base : bases)
   {
-    std::string class_id = base.first;
+    std::string class_id = base.id;
 
     // get base class symbol
     symbolt *s = context.find_symbol(class_id);
     assert(s);
     base_ids.emplace_back(s->id);
+    irept offset_entry;
+    offset_entry.id(s->id);
+    offset_entry.set("offset", std::to_string(base.offset));
+    base_offsets.push_back(offset_entry);
 
     const struct_typet &base_type = to_struct_type(s->get_type());
 
@@ -2530,6 +2587,9 @@ void clang_cpp_convertert::get_base_components_methods(
     const struct_typet::componentst &components = base_type.components();
     for (auto component : components)
     {
+      if (component.get_is_padding())
+        continue;
+
       // TODO: tweak access specifier
       component.set("from_base", true);
       if (!is_duplicate_component(component, type))

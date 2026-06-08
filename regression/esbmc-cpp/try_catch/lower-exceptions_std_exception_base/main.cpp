@@ -1,7 +1,7 @@
 // An exception type deriving from std::exception is caught by a std::exception&
-// base handler under --lower-exceptions: the throw carries the flattened base
-// chain (derived + std::exception), which the registry ingests, so the base
-// catch's guard matches.
+// base handler: the throw carries the flattened base chain (derived +
+// std::exception), which the registry ingests, so the base catch's guard
+// matches.
 #include <exception>
 
 struct MyError : std::exception

@@ -41,6 +41,10 @@ protected:
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
+  void annotate_exception_specification(
+    const clang::FunctionDecl &fd,
+    typet &type) override;
+
   /**
    *  Get reference for constructor callsite
    */
@@ -254,6 +258,7 @@ protected:
    *  initializer: this is an intermediate data structure containing the information of derived `this`
    */
   void gen_typecast_base_ctor_call(
+    const clang::CXXRecordDecl &base_record,
     const exprt &callee_decl,
     side_effect_expr_function_callt &call,
     exprt &initializer);
@@ -269,7 +274,13 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  struct base_entryt
+  {
+    std::string id;
+    const clang::CXXRecordDecl *decl;
+    uint64_t offset;
+  };
+  using base_list = std::vector<base_entryt>;
   /*
    * Recursively get the bases for this derived class.
    *
@@ -277,7 +288,7 @@ protected:
    *  - cxxrd: clang AST representing the class/struct we are currently dealing with
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    */
-  bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
+  bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_list &bases);
   /*
    * Check whether we've already got this component in a class type
    * Avoid copying duplicate component from a base class type to the derived class type.
@@ -308,7 +319,8 @@ protected:
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  void
+  get_base_components_methods(const base_list &bases, struct_union_typet &type);
 
   /*
    * Methods for virtual tables and virtual pointers

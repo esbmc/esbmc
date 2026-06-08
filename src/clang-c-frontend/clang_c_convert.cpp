@@ -3,6 +3,7 @@
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Attr.h>
+#include <clang/AST/CXXInheritance.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
@@ -32,6 +33,9 @@ CC_DIAGNOSTIC_POP()
 
 #include <boost/algorithm/string/replace.hpp>
 
+#include <algorithm>
+#include <limits>
+
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::unique_ptr<clang::ASTUnit> &_AST,
@@ -47,6 +51,130 @@ clang_c_convertert::clang_c_convertert(
     sm(nullptr),
     current_functionDecl(nullptr)
 {
+}
+
+bool clang_c_convertert::get_ordered_direct_bases(
+  const clang::CXXRecordDecl &cxxrd,
+  ordered_bases_t &bases) const
+{
+  struct ordered_baset
+  {
+    const clang::CXXBaseSpecifier *spec;
+    uint64_t offset;
+  };
+
+  std::vector<ordered_baset> ordered;
+  ordered.reserve(cxxrd.getNumBases());
+
+  const auto &layout = ASTContext->getASTRecordLayout(&cxxrd);
+  for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
+  {
+    const auto *base_rd = base.getType()->getAsCXXRecordDecl();
+    if (!base_rd)
+      continue;
+
+    ordered.push_back(
+      {&base,
+       base.isVirtual() ? std::numeric_limits<uint64_t>::max()
+                        : layout.getBaseClassOffset(base_rd).getQuantity()});
+  }
+
+  std::stable_sort(
+    ordered.begin(),
+    ordered.end(),
+    [](const ordered_baset &lhs, const ordered_baset &rhs) {
+      return lhs.offset < rhs.offset;
+    });
+
+  bases.clear();
+  bases.reserve(ordered.size());
+  for (const ordered_baset &base : ordered)
+    bases.push_back(base.spec);
+
+  return false;
+}
+
+bool clang_c_convertert::get_non_virtual_base_offset(
+  const clang::CXXRecordDecl &derived,
+  const clang::CXXRecordDecl &base,
+  uint64_t &offset) const
+{
+  if (&derived == &base)
+  {
+    offset = 0;
+    return true;
+  }
+
+  clang::CXXBasePaths paths(
+    /*FindAmbiguities=*/false,
+    /*RecordPaths=*/true,
+    /*DetectVirtual=*/true);
+  if (!derived.isDerivedFrom(&base, paths))
+    return false;
+  if (paths.getDetectedVirtual() != nullptr)
+    return false;
+
+  offset = 0;
+  const clang::CXXRecordDecl *cur = &derived;
+  for (const clang::CXXBasePathElement &elem : paths.front())
+  {
+    const clang::CXXRecordDecl *subbase =
+      elem.Base->getType()->getAsCXXRecordDecl();
+    if (!subbase)
+      return false;
+
+    offset +=
+      ASTContext->getASTRecordLayout(cur).getBaseClassOffset(subbase)
+        .getQuantity();
+    cur = subbase;
+  }
+
+  return true;
+}
+
+bool clang_c_convertert::adjust_base_subobject_pointer(
+  exprt &expr,
+  const typet &target_type,
+  uint64_t offset,
+  bool subtract_offset) const
+{
+  if (offset > 0)
+  {
+    typet char_ptr = pointer_typet(char_type());
+    exprt adjusted_ptr = expr;
+    if (adjusted_ptr.type().is_pointer())
+      gen_typecast(ns, adjusted_ptr, char_ptr);
+    else
+      adjusted_ptr = address_of_exprt(adjusted_ptr);
+
+    if (!adjusted_ptr.type().is_pointer())
+    {
+      log_error("Base-subobject adjustment did not produce a pointer");
+      return true;
+    }
+
+    gen_typecast(ns, adjusted_ptr, char_ptr);
+
+    BigInt signed_offset = offset;
+    if (subtract_offset)
+      signed_offset = -signed_offset;
+
+    plus_exprt adjusted(adjusted_ptr, from_integer(signed_offset, index_type()));
+    adjusted.type() = char_ptr;
+
+    if (expr.type().is_pointer())
+      expr = adjusted;
+    else
+    {
+      typet target_ptr = pointer_typet(target_type);
+      gen_typecast(ns, adjusted, target_ptr);
+      expr = dereference_exprt(adjusted, target_type);
+      return false;
+    }
+  }
+
+  gen_typecast(ns, expr, target_type);
+  return false;
 }
 
 bool clang_c_convertert::convert()
@@ -752,6 +880,10 @@ bool clang_c_convertert::get_function(
       }
     }
   }
+
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
 
   added_symbol.set_type(type);
   new_expr.type() = type;
@@ -1668,9 +1800,6 @@ bool clang_c_convertert::get_bitfield_type(
 // converted once and each of its non-bitfield fields is pushed as a
 // member_exprt, keeping types aligned without duplication.
 //
-// Note: get_base_components_methods uses an alphabetically-ordered base_map,
-// so for multiple-inheritance the component order may not match declaration
-// order.  Single-inheritance (the common case) is unaffected.
 bool clang_c_convertert::get_base_flattened_inits(
   const clang::InitListExpr &init,
   std::vector<exprt> &flat)
@@ -1688,38 +1817,67 @@ bool clang_c_convertert::get_base_flattened_inits(
     return false;
   }
 
+  auto append_base_init = [&](const clang::Expr &base_init) -> bool {
+    if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(&base_init))
+      return get_base_flattened_inits(*nested, flat);
+
+    // CXXConstructExpr base initializer (e.g. from `Derived d{}`): convert
+    // once and expand each field as a member_exprt so types stay aligned.
+    exprt base_expr;
+    if (get_expr(base_init, base_expr))
+      return true;
+
+    for (const auto &field : to_struct_type(ns.follow(base_expr.type())).components())
+    {
+      if (!field.get_is_unnamed_bitfield())
+        flat.push_back(member_exprt(base_expr, field.name(), field.type()));
+    }
+
+    return false;
+  };
+
+  ordered_bases_t ordered_bases;
+  if (get_ordered_direct_bases(*cxxrd, ordered_bases))
+    return true;
+
+  std::vector<const clang::Expr *> field_inits;
+  field_inits.reserve(init.getNumInits());
+
+  for (const clang::CXXBaseSpecifier *base : ordered_bases)
+  {
+    const clang::Type *base_type =
+      base->getType().getCanonicalType().getTypePtr();
+    for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
+    {
+      const clang::Expr *e = init.getInit(j);
+      if (e->getType().getCanonicalType().getTypePtr() != base_type)
+        continue;
+      if (append_base_init(*e))
+        return true;
+      goto next_base_init;
+    }
+  next_base_init:;
+  }
+
   for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
   {
     const clang::Expr *e = init.getInit(j);
     const clang::Type *etype = e->getType().getCanonicalType().getTypePtr();
-    bool is_base =
-      llvm::any_of(cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
-        return base.getType().getCanonicalType().getTypePtr() == etype;
-      });
-    if (is_base)
-    {
-      if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(e))
-      {
-        if (get_base_flattened_inits(*nested, flat))
-          return true;
-        continue;
-      }
-      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): convert
-      // once and expand each field as a member_exprt so types stay aligned.
-      exprt base_expr;
-      if (get_expr(*e, base_expr))
-        return true;
-      for (const auto &field :
-           to_struct_type(ns.follow(base_expr.type())).components())
-        if (!field.get_is_unnamed_bitfield())
-          flat.push_back(member_exprt(base_expr, field.name(), field.type()));
-      continue;
-    }
+    bool is_base = llvm::any_of(ordered_bases, [&](const clang::CXXBaseSpecifier *base) {
+      return base->getType().getCanonicalType().getTypePtr() == etype;
+    });
+    if (!is_base)
+      field_inits.push_back(e);
+  }
+
+  for (const clang::Expr *field_init : field_inits)
+  {
     exprt val;
-    if (get_expr(*e, val))
+    if (get_expr(*field_init, val))
       return true;
     flat.push_back(std::move(val));
   }
+
   return false;
 }
 
@@ -2513,6 +2671,37 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       std::vector<exprt> flat_inits;
       const auto *cxxrd = init_stmt.getType()->getAsCXXRecordDecl();
       const bool has_bases = cxxrd && cxxrd->getNumBases() > 0;
+      ordered_bases_t ordered_bases;
+      if (has_bases && get_ordered_direct_bases(*cxxrd, ordered_bases))
+        return true;
+
+      auto append_base_expr = [&](const clang::Expr &expr) -> bool {
+        exprt base_expr;
+        if (get_expr(expr, base_expr))
+          return true;
+        for (const auto &field :
+             to_struct_type(ns.follow(base_expr.type())).components())
+        {
+          if (!field.get_is_unnamed_bitfield())
+            flat_inits.push_back(member_exprt(base_expr, field.name(), field.type()));
+        }
+        return false;
+      };
+
+      for (const clang::CXXBaseSpecifier *base : ordered_bases)
+      {
+        const clang::Type *base_type =
+          base->getType().getCanonicalType().getTypePtr();
+        for (const clang::Expr *e : args)
+        {
+          if (e->getType().getCanonicalType().getTypePtr() != base_type)
+            continue;
+          if (append_base_expr(*e))
+            return true;
+          break;
+        }
+      }
+
       for (const clang::Expr *e : args)
       {
         if (has_bases)
@@ -2520,21 +2709,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           const clang::Type *etype =
             e->getType().getCanonicalType().getTypePtr();
           bool is_base = llvm::any_of(
-            cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
-              return base.getType().getCanonicalType().getTypePtr() == etype;
+            ordered_bases, [&](const clang::CXXBaseSpecifier *base) {
+              return base->getType().getCanonicalType().getTypePtr() == etype;
             });
           if (is_base)
-          {
-            exprt base_expr;
-            if (get_expr(*e, base_expr))
-              return true;
-            for (const auto &field :
-                 to_struct_type(ns.follow(base_expr.type())).components())
-              if (!field.get_is_unnamed_bitfield())
-                flat_inits.push_back(
-                  member_exprt(base_expr, field.name(), field.type()));
             continue;
-          }
         }
         exprt val;
         if (get_expr(*e, val))
@@ -3445,105 +3624,57 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
   {
-    // For multiple inheritance, the base class sub-object may reside at a
-    // non-zero byte offset within the derived object. Compute the total
-    // offset by following the cast path through the class hierarchy, then
-    // adjust the pointer by that many bytes so that virtual dispatch via
-    // the base vtable uses the correct vtable pointer.
-    clang::QualType cur_qt = cast.getSubExpr()->getType();
-    if (cur_qt->isPointerType() || cur_qt->isReferenceType())
-      cur_qt = cur_qt->getPointeeType();
+    clang::QualType source_qt = cast.getSubExpr()->getType();
+    if (source_qt->isPointerType() || source_qt->isReferenceType())
+      source_qt = source_qt->getPointeeType();
 
-    uint64_t total_offset = 0;
-    bool adjust = true;
-    for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
-    {
-      const clang::CXXBaseSpecifier *spec = *it;
-      if (spec->isVirtual())
-      {
-        // Virtual base offsets are dynamic; skip static adjustment.
-        adjust = false;
-        break;
-      }
-      const clang::CXXRecordDecl *cur_decl = cur_qt->getAsCXXRecordDecl();
-      const clang::CXXRecordDecl *base_decl =
-        spec->getType()->getAsCXXRecordDecl();
-      if (!cur_decl || !base_decl)
-      {
-        adjust = false;
-        break;
-      }
-      total_offset += ASTContext->getASTRecordLayout(cur_decl)
-                        .getBaseClassOffset(base_decl)
-                        .getQuantity();
-      cur_qt = spec->getType();
-    }
+    clang::QualType target_qt = cast.getType();
+    if (target_qt->isPointerType() || target_qt->isReferenceType())
+      target_qt = target_qt->getPointeeType();
 
-    // Apply the byte-offset adjustment only when this cast is the implicit
-    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
-    // grandparent is CXXMemberCallExpr). This covers:
-    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
-    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
-    // and excludes:
-    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
-    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
-    //     ESBMC uses named field access for inherited members, so adding a
-    //     byte offset here would corrupt the symbolic model.
-    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
-    //     Must remain unadjusted for ESBMC's delete model.
-    //
-    // The check walks through transparent wrapper expressions (casts, parens)
-    // to handle cases like 'static_cast<B8*>(ptr)->eval()'.
-    bool is_method_receiver = false;
-    for (const clang::Stmt *node = &cast;;)
-    {
-      auto parents = ASTContext->getParents(*node);
-      if (parents.empty())
-        break;
-      const auto &parent = *parents.begin();
-      if (const auto *me = parent.get<clang::MemberExpr>())
-      {
-        auto grandparents = ASTContext->getParents(*me);
-        if (
-          !grandparents.empty() &&
-          grandparents.begin()->get<clang::CXXMemberCallExpr>())
-          is_method_receiver = true;
-        break;
-      }
-      const clang::Stmt *ps = parent.get<clang::Stmt>();
-      if (
-        !ps ||
-        !(llvm::isa<clang::CastExpr>(ps) || llvm::isa<clang::ParenExpr>(ps)))
-        break;
-      node = ps;
-    }
+    const clang::CXXRecordDecl *derived_decl = source_qt->getAsCXXRecordDecl();
+    const clang::CXXRecordDecl *base_decl = target_qt->getAsCXXRecordDecl();
 
-    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
-    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
-    // when we actually applied a byte-offset adjustment below.
-    bool do_typecast = (cast.getCastKind() == clang::CK_DerivedToBase);
+    uint64_t offset = 0;
     if (
-      adjust && total_offset > 0 && is_method_receiver &&
-      expr.type().is_pointer())
+      derived_decl && base_decl &&
+      get_non_virtual_base_offset(*derived_decl, *base_decl, offset))
     {
-      // Cast to char*, add byte offset, then cast to the target pointer type.
-      // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
-      // pointer arithmetic IR convention.
-      typet char_ptr = pointer_typet(char_type());
-      gen_typecast(ns, expr, char_ptr);
-      plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
-      adjusted.type() = char_ptr;
-      expr = adjusted;
-      do_typecast = true;
+      if (adjust_base_subobject_pointer(expr, type, offset, false))
+        return true;
     }
-
-    if (do_typecast)
+    else if (cast.getCastKind() == clang::CK_DerivedToBase)
       gen_typecast(ns, expr, type);
 
     break;
   }
 
   case clang::CK_BaseToDerived:
+  {
+    clang::QualType source_qt = cast.getSubExpr()->getType();
+    if (source_qt->isPointerType() || source_qt->isReferenceType())
+      source_qt = source_qt->getPointeeType();
+
+    clang::QualType target_qt = cast.getType();
+    if (target_qt->isPointerType() || target_qt->isReferenceType())
+      target_qt = target_qt->getPointeeType();
+
+    const clang::CXXRecordDecl *base_decl = source_qt->getAsCXXRecordDecl();
+    const clang::CXXRecordDecl *derived_decl = target_qt->getAsCXXRecordDecl();
+
+    uint64_t offset = 0;
+    if (
+      derived_decl && base_decl &&
+      get_non_virtual_base_offset(*derived_decl, *base_decl, offset))
+    {
+      if (adjust_base_subobject_pointer(expr, type, offset, true))
+        return true;
+    }
+    else
+      gen_typecast(ns, expr, type);
+
+    break;
+  }
 
   case clang::CK_UserDefinedConversion:
   case clang::CK_ConstructorConversion:

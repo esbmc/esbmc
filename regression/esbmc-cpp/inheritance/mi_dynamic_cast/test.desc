@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 2 --no-unwinding-assertions --std c++17
+
+^VERIFICATION SUCCESSFUL$

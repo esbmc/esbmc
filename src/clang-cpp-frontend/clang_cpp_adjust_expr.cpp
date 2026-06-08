@@ -29,10 +29,10 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   {
     value = symbol.get_value();
     const code_blockt &existing_body = to_code_block(to_code(value));
-    assert(
-      existing_body.operands().size() == 1 &&
-      existing_body.op0().statement() ==
-        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+    // Sanity check that we don't accidentally clobber a clang-generated body:
+    // the implicit union copy/move constructor has no statements of its own.
+    assert(existing_body.operands().empty());
+    (void)existing_body;
   }
   else
   {
@@ -67,6 +67,15 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
+
+  // Resolve a dynamic exception specification's declared types to exception
+  // ids now that the namespace is fully populated.
+  if (symbol.get_type().is_code())
+  {
+    typet t = symbol.get_type();
+    finalize_exception_specification(t);
+    symbol.set_type(std::move(t));
+  }
 
   /*
    * implicit code generation for vptr initializations:
@@ -375,6 +384,13 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   // no ajustment for rethrow
   if (expr.operands().size() == 0)
     return;
+
+  // Adjust the thrown expression like any other operand. In particular, when
+  // the operand is the copy/move construction of the exception object (e.g.
+  // `throw e;` for a by-value parameter `e`), this address-of's the lvalue
+  // arguments bound to the constructor's reference parameters — otherwise the
+  // ctor is called with a struct value where a pointer is expected.
+  adjust_expr(expr.op0());
 
   const typet &exception_type = expr.op0().type();
 

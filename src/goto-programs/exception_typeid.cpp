@@ -120,3 +120,14 @@ exception_typeidt::concrete_subtype_ids(const irep_idt &caught) const
       ids.insert(id);
   return ids;
 }
+
+irep_idt exception_typeidt::name_of(unsigned id) const
+{
+  for (const auto &[name, candidate] : name_to_id)
+  {
+    if (candidate == id)
+      return name;
+  }
+
+  return irep_idt();
+}

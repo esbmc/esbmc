@@ -143,9 +143,11 @@ void clang_c_adjust::adjust_for(codet &code)
   if (to_code(code.op3()).get_statement() == "block")
     code_block.end_location(to_code(code.op3()).end_location());
 
+  codet init = code_skipt();
+  init.swap(to_code(code.op0()));
+
   code_block.reserve_operands(2);
-  code_block.move_to_operands(code.op0());
-  code.op0().make_nil();
+  code_block.move_to_operands(init);
   code_block.move_to_operands(code);
   code.swap(code_block);
 }

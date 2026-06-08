@@ -230,7 +230,10 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.set("is_vtptr", true);
   component.set("access", "public");
   // add to the class' type
-  type.components().push_back(component);
+  if (type.find("bases").is_nil())
+    type.components().insert(type.components().begin(), component);
+  else
+    type.components().push_back(component);
 
   has_vptr_component = true;
 }
@@ -995,15 +998,21 @@ bool clang_cpp_convertert::build_dynamic_cast(
             D->getNameAsString());
           abort();
         }
-        if (*off_S != 0 || *off_T != 0)
-        {
-          log_error(
-            "dynamic_cast: multiple inheritance with non-zero base "
-            "offset in `{}` is not supported",
-            D->getNameAsString());
-          abort();
-        }
+        // The result must point to the T sub-object inside the runtime type D.
+        // src points at the S sub-object (offset off_S in D), so recover D's
+        // address and re-offset to T: result = (char*)src - off_S + off_T.
+        // This covers MI down-casts and sibling cross-casts; single inheritance
+        // with S and T at D's start (both offsets 0) reduces to a plain cast.
+        typet char_ptr = pointer_typet(char_type());
         exprt adj = src_pointer;
+        gen_typecast(ns, adj, char_ptr);
+        const int64_t delta =
+          static_cast<int64_t>(*off_T) - static_cast<int64_t>(*off_S);
+        if (delta != 0)
+        {
+          adj = plus_exprt(adj, from_integer(delta, index_type()));
+          adj.type() = char_ptr;
+        }
         gen_typecast(ns, adj, target_type);
         result = adj;
       }
@@ -1031,8 +1040,9 @@ bool clang_cpp_convertert::build_dynamic_cast(
   };
 
   // Reference form: if the vptr check fails, call __ESBMC_throw_bad_cast()
-  // which symex resolves to a std::bad_cast throw at verification time.
-  // This decouples the frontend from <typeinfo> inclusion order entirely.
+  // which the exception lowering (remove_exceptions) rewrites into a real
+  // std::bad_cast THROW. This decouples the frontend from <typeinfo> inclusion
+  // order entirely.
   if (is_reference)
   {
     // Clang strips the reference from cast.getType(), so target_type is

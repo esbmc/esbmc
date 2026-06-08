@@ -406,6 +406,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
   frame.hidden = goto_function.body.hide;
+  // Carry the callee's C++ exception specification onto its frame so it can be
+  // enforced at this function's boundary during exception dispatch.
+  frame.exception_spec = goto_function.exception_spec;
 
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
@@ -640,7 +643,7 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false() && stack_catch.empty())
+  if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming

@@ -2,15 +2,12 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
 #include <cassert>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
-#include <stack>
-#include <string>
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>
@@ -217,6 +214,12 @@ public:
     /** Record if the function body is hidden */
     bool hidden;
 
+    /** This function's C++ exception specification, copied from the callee's
+     *  goto_functiont when the frame is created. Enforced at the function
+     *  boundary: a restrictive specification is violated when exception
+     *  handler search exits this frame with a disallowed exception. */
+    exception_specificationt exception_spec;
+
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
@@ -226,30 +229,6 @@ public:
       level1.thread_id = thread_id;
       level1.ns = ns;
     }
-  };
-
-  // Exception Handling
-
-  class exceptiont
-  {
-  public:
-    exceptiont() : has_throw_decl(false)
-    {
-    }
-
-    // types -> locations
-    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
-    catch_mapt catch_map;
-
-    // types -> what order they were declared in, important for polymorphism etc
-    typedef std::map<irep_idt, unsigned> catch_ordert;
-    catch_ordert catch_order;
-
-    // list of exception types than can be thrown
-    typedef std::set<irep_idt> throw_list_sett;
-    throw_list_sett throw_list_set;
-
-    bool has_throw_decl;
   };
 
   // Macros

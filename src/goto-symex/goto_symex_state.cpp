@@ -4,7 +4,6 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <map>
-#include <sstream>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>

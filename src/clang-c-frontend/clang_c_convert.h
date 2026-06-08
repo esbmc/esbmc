@@ -15,6 +15,8 @@ namespace clang
 {
 class ASTUnit;
 class ASTContext;
+class CXXBaseSpecifier;
+class CXXRecordDecl;
 class SourceManager;
 class FunctionDecl;
 class Decl;
@@ -131,6 +133,17 @@ protected:
     const code_typet &ftype);
 
   /**
+   *  Annotate a function's type with its C++ exception specification.
+   *  No-op in C (which has no exception specifications); overridden in the
+   *  C++ frontend to record noexcept / dynamic-throw specifications as
+   *  function-boundary metadata on the function type.
+   */
+  virtual void
+  annotate_exception_specification(const clang::FunctionDecl &, typet &)
+  {
+  }
+
+  /**
    *  Parse function parameters
    *  This function simply contains a loop to populate the code argument list
    *  and calls get_function_body to parse each individual parameter.
@@ -210,6 +223,23 @@ protected:
   bool get_base_flattened_inits(
     const clang::InitListExpr &init,
     std::vector<exprt> &flat);
+
+  using ordered_bases_t = std::vector<const clang::CXXBaseSpecifier *>;
+
+  bool get_ordered_direct_bases(
+    const clang::CXXRecordDecl &cxxrd,
+    ordered_bases_t &bases) const;
+
+  bool get_non_virtual_base_offset(
+    const clang::CXXRecordDecl &derived,
+    const clang::CXXRecordDecl &base,
+    uint64_t &offset) const;
+
+  bool adjust_base_subobject_pointer(
+    exprt &expr,
+    const typet &target_type,
+    uint64_t offset,
+    bool subtract_offset) const;
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 

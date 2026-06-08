@@ -1,8 +1,8 @@
-// An empty trailing catch-all has its skip-handlers GOTO elided by the frontend
-// (the jump would target the instruction right after the pop, so it is a no-op),
-// leaving the pop directly followed by the handler. insert_elided_skip_gotos
-// restores the canonical shape so this lowers instead of falling back to the
-// imperative path (#5075). The throw is caught, so verification is SUCCESSFUL.
+// An empty trailing catch-all leaves the try with no skip-GOTO after the pop:
+// the empty handler's entry coincides with the after-try point, so normal
+// completion just falls through it. normalize_empty_handlers synthesizes the
+// missing skip-GOTO so the lowering handles this in-line rather than falling
+// back to the imperative path. The catch-all swallows the throw -> SUCCESSFUL.
 int main()
 {
   try

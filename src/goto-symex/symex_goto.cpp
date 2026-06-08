@@ -456,9 +456,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (
-      has_prefix(variable.base_name.as_string(), "symex::invalid_object") ||
-      has_prefix(variable.base_name.as_string(), "symex_throw::thrown_obj"))
+    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment

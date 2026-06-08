@@ -779,8 +779,6 @@ ordinary expression tree. Their type is `empty` unless noted.
 | `code_cpp_del_array` | C++ `delete[] expr;`. |
 | `code_cpp_throw` | `throw expr;` with a list of types being thrown. |
 | `code_cpp_catch` | `catch (...)` clause with a list of catchable types. |
-| `code_cpp_throw_decl` | Function-level `throw(...)` declaration (start marker). |
-| `code_cpp_throw_decl_end` | Matching end marker for `code_cpp_throw_decl`. |
 
 ## Gotchas
 

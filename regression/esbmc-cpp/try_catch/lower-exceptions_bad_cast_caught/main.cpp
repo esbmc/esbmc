@@ -1,6 +1,6 @@
-// A failing dynamic_cast<T&> throws std::bad_cast; under --lower-exceptions the
-// __ESBMC_throw_bad_cast intrinsic is turned into a real THROW and lowered like
-// any other, so the catch is reached.
+// A failing dynamic_cast<T&> throws std::bad_cast; the exception lowering turns
+// the __ESBMC_throw_bad_cast intrinsic into a real THROW and lowers it like any
+// other, so the catch is reached.
 #include <typeinfo>
 
 struct B

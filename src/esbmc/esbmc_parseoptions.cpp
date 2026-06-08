@@ -2408,12 +2408,11 @@ bool esbmc_parseoptionst::process_goto_program(
       algorithm->run(goto_functions);
     }
 
-    // Lower throw/catch to symbolic guarded control flow (#5075), on by default.
-    // Run before inlining so per-call-site exception propagation is still
-    // explicit. --no-lower-exceptions selects the legacy imperative path; a
-    // program the pass cannot lower still falls back to it with a warning.
-    if (!cmdline.isset("no-lower-exceptions"))
-      remove_exceptions(goto_functions, context, ns);
+    // Lower throw/catch to symbolic guarded control flow (#5075). Run before
+    // inlining so per-call-site exception propagation is still explicit. The
+    // lowering is the only exception path (the imperative symex engine has been
+    // removed), so it always runs.
+    remove_exceptions(goto_functions, context, ns);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -3400,8 +3399,6 @@ void esbmc_parseoptionst::print_ileave_points(
       case DEAD:
       case THROW:
       case CATCH:
-      case THROW_DECL:
-      case THROW_DECL_END:
       case LOOP_INVARIANT:
         break;
       }

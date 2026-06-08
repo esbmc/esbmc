@@ -253,23 +253,7 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -323,37 +307,6 @@ void goto_symext::symex_step(reachability_treet &art)
     if (!cur_state->guard.is_false())
     {
       code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
       symex_assign(code_assign2tc(std::move(deref_code)));
     }
 
@@ -478,42 +431,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-    symex_catch();
-    break;
-
-  case THROW:
-    if (!cur_state->guard.is_false())
-    {
-      if (symex_throw())
-        cur_state->source.pc++;
-    }
-    else
-    {
-      cur_state->source.pc++;
-    }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
-    break;
-
   default:
+    // THROW/CATCH land here: remove_exceptions lowers every throw/catch to
+    // guarded control flow before symex runs, so a surviving one means the
+    // lowering declined the program (it logs a "cannot lower ..." reason). Like
+    // any other instruction symex does not handle, that is a hard error.
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
       fmt::underlying(instruction.type));
@@ -1123,12 +1045,6 @@ void goto_symext::run_intrinsic(
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
 
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
-  {
-    symex_throw_bad_cast();
-    return;
-  }
-
   if (symname == "c:@F@__ESBMC_witness_assume")
   {
     if (!validate_witness)
@@ -1170,6 +1086,18 @@ void goto_symext::run_intrinsic(
 
     if (matched->action != waypoint::avoid)
       cur_state->advance_witness_position();
+    return;
+  }
+
+  // Not a recognised intrinsic. If the operational-model library provides a
+  // real body for this __ESBMC-prefixed symbol (e.g. __ESBMC_run_unexpected),
+  // execute it as an ordinary call rather than treating it as an intrinsic.
+  auto func_it = goto_functions.function_map.find(symname);
+  if (
+    func_it != goto_functions.function_map.end() &&
+    func_it->second.body_available)
+  {
+    bump_call(func_call, symname);
     return;
   }
 
