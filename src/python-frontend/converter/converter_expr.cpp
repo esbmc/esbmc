@@ -908,8 +908,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
           expr2tc size_call = side_effect_function_call2tc(
             migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
-          exprt list_len = migrate_expr_back(
-            typecast2tc(migrate_type(int_type()), size_call));
+          exprt list_len =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
