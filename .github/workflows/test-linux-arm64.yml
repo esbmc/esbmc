@@ -1,0 +1,27 @@
+name: Test Linux ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux-arm64:
+    name: Linux ARM64 build + test (LLVM 22)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install LLVM 22
+        run: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y llvm-22 clang-22 libclang-22-dev libclang-cpp22-dev
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b DebugOpt -S OFF -c 22 -e OFF
+
+      - name: Run tests
+        run: |
+          cd build/
+          cmake -DESBMC_REGRESS_TIMEOUT=120 .
+          ctest -j4 --output-on-failure --progress -LE python-intensive -E "32bit" .
