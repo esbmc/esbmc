@@ -24,3 +24,9 @@ jobs:
 
       - name: Build ESBMC
         run: ./scripts/build.sh -b DebugOpt -S OFF -c 22 -e OFF
+
+      - name: Run tests
+        run: |
+          cd build/
+          cmake -DESBMC_REGRESS_TIMEOUT=120 .
+          ctest -j4 --output-on-failure --progress -LE python-intensive .
