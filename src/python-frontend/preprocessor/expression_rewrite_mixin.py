@@ -238,6 +238,13 @@ class ExpressionRewriteMixin:
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
 
+        # Only constant-fold subscript *reads* (Load context). A subscript in a
+        # Store/Del context (e.g. `del a[1]`, `a[1] = x`) is an lvalue target;
+        # replacing it with the element's literal value corrupts the statement
+        # (a `del a[1]` would become `del 2`).
+        if not isinstance(getattr(node, "ctx", None), ast.Load):
+            return node
+
         if (isinstance(node.value, ast.Name) and node.value.id in self.list_literal_values):
             list_node = self.list_literal_values[node.value.id]
 
