@@ -1,0 +1,19 @@
+name: Test Linux ARM64
+
+on:
+  push:
+    branches:
+      - fix/arm-sve-builtin-types
+  pull_request:
+    branches:
+      - fix/arm-sve-builtin-types
+
+jobs:
+  build-linux-arm64:
+    name: Linux ARM64 build
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b DebugOpt -e ON
