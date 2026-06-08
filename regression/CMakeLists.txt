@@ -352,6 +352,15 @@ set(_slow_regression_tests
     # larger inner timeout lets testing_tool record the KNOWNBUG verdict
     # instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_39"
+    # humaneval_145 used to fast-fail with "TypeError: str() expects a string
+    # argument" when order_by_points()'s nested digits_sum(n) ran `str(n)` on an
+    # unresolved (any_type) parameter. With the str()-of-unresolved-arg fix
+    # (PR #5225) the spurious error is gone and ESBMC reaches the real
+    # order_by_points symex (sorted(key=digits_sum) with a str(int)+int(digit)
+    # comprehension under --unwind 20), which does not converge under the
+    # default budget. It stays KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
+    "regression/humaneval/humaneval_145"
     # humaneval_93 used to fast-fail with "Unsupported reassignment from dict to
     # list" when encode()'s `dict([(i, chr(ord(i) + 2)) for i in vowels])` was
     # rejected during conversion. With the dict()-over-comprehension lowering
