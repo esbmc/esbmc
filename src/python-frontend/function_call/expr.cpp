@@ -83,6 +83,22 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// Struct member access base.field : t (V.3). `base` must be a struct/union/
+// complex value (member2t's source precondition); the callers here pass a
+// tuple or complex struct whose component is named `name`.
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(base.type()))
+    return member_exprt(base, name, t);
+  expr2tc base2;
+  migrate_expr(base, base2);
+  exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+  // migrate_type does not round-trip #cpp_type; restore the exact member type
+  // so legacy member_exprt(base, name, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
+}
 } // namespace
 
 namespace
@@ -1457,7 +1473,7 @@ exprt function_call_expr::handle_tuple_method() const
     exprt total = gen_zero(result_type);
     for (const auto &comp : components)
     {
-      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+      exprt member = build_member(receiver, comp.get_name(), comp.type());
       exprt eq = equality_exprt(member, elem);
       if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
       sel.type() = result_type;
@@ -1477,7 +1493,7 @@ exprt function_call_expr::handle_tuple_method() const
   exprt any_match = gen_boolean(false);
   for (const auto &comp : components)
   {
-    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+    exprt member = build_member(receiver, comp.get_name(), comp.type());
     exprt eq = equality_exprt(member, elem);
     any_match = or_exprt(any_match, eq);
   }
@@ -1493,7 +1509,7 @@ exprt function_call_expr::handle_tuple_method() const
   for (size_t k = n - 1; k-- > 0;)
   {
     exprt member =
-      member_exprt(receiver, components[k].get_name(), components[k].type());
+      build_member(receiver, components[k].get_name(), components[k].type());
     exprt eq = equality_exprt(member, elem);
     if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
     sel.type() = result_type;
@@ -2458,8 +2474,8 @@ function_call_expr::get_dispatch_table()
        model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
-       exprt zr = member_exprt(z, "real", double_type());
-       exprt zi = member_exprt(z, "imag", double_type());
+       exprt zr = build_member(z, "real", double_type());
+       exprt zi = build_member(z, "imag", double_type());
 
        exprt imag_result;
        if (func_name == "asin")
