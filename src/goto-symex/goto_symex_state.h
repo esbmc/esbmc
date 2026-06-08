@@ -228,30 +228,6 @@ public:
     }
   };
 
-  // Exception Handling
-
-  class exceptiont
-  {
-  public:
-    exceptiont() : has_throw_decl(false)
-    {
-    }
-
-    // types -> locations
-    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
-    catch_mapt catch_map;
-
-    // types -> what order they were declared in, important for polymorphism etc
-    typedef std::map<irep_idt, unsigned> catch_ordert;
-    catch_ordert catch_order;
-
-    // list of exception types than can be thrown
-    typedef std::set<irep_idt> throw_list_sett;
-    throw_list_sett throw_list_set;
-
-    bool has_throw_decl;
-  };
-
   // Macros
   /**
    *  Perform both levels of renaming.

@@ -253,23 +253,7 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -321,41 +305,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false())
-    {
-      code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
-      symex_assign(code_assign2tc(std::move(deref_code)));
-    }
+      symex_assign(instruction.code);
 
     cur_state->source.pc++;
     break;
@@ -478,41 +428,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-    symex_catch();
-    break;
-
-  case THROW:
-    if (!cur_state->guard.is_false())
-    {
-      if (symex_throw())
-        cur_state->source.pc++;
-    }
-    else
-    {
-      cur_state->source.pc++;
-    }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
-    break;
-
+  // THROW / CATCH / THROW_DECL / THROW_DECL_END are rewritten into ordinary
+  // guarded control flow by remove_exceptions before symex (issue #5075), so
+  // they never reach here; an exception-using program the pass cannot lower is
+  // reported as unsupported. Any such instruction surviving to symex is a bug,
+  // caught by the default abort below.
   default:
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
@@ -1122,12 +1042,6 @@ void goto_symext::run_intrinsic(
 
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
-
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
-  {
-    symex_throw_bad_cast();
-    return;
-  }
 
   if (symname == "c:@F@__ESBMC_witness_assume")
   {

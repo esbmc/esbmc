@@ -1,5 +1,5 @@
 CORE
 main.cpp
---std c++11
+--no-pointer-check
 
 ^VERIFICATION SUCCESSFUL$

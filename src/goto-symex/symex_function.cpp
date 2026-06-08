@@ -640,7 +640,7 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false() && stack_catch.empty())
+  if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming

@@ -52,10 +52,10 @@ struct sitet
 };
 
 /// Lowers throw/catch to guarded control flow over the exception-state
-/// globals (issue #5075). P1 scope: per-function, all-or-nothing, intra-
-/// procedural, reference catches, dtor-free, with correct nested-try
-/// propagation (a throw is matched against its enclosing try chain from the
-/// innermost outward). Functions outside the subset are left for symex.
+/// globals (issue #5075). Whole-program, all-or-nothing, with correct
+/// nested-try propagation (a throw is matched against its enclosing try chain
+/// from the innermost outward). This is the only exception path; a program
+/// outside the supported subset is reported as unsupported.
 class exception_loweringt
 {
 public:
@@ -79,11 +79,8 @@ public:
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
-    // symbol), and detect concurrency. The exception state is one global tuple,
-    // not per-thread, so the lowered dispatch is unsound for concurrent programs
-    // (one thread could observe, catch, or clear another thread's in-flight
-    // exception). Until the state is modeled per thread, leave concurrent
-    // programs to the imperative path.
+    // symbol), and detect concurrency.
+    bool concurrent = false;
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
@@ -112,31 +109,43 @@ public:
             is_symbol2t(c.function) &&
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
-            // concurrent program — not yet modelled
-            return report_fallback(
-              goto_functions, "a concurrent program (pthread_create)");
+            concurrent = true;
         }
       }
     }
 
-    // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
-    // interoperate across a call, so unless every participating function is in
-    // the supported subset we leave the entire program to symex.
+    // The exception state is one global tuple, not per-thread, so the lowered
+    // dispatch is unsound for a concurrent program that throws or catches across
+    // threads (one thread could observe, catch, or clear another thread's
+    // in-flight exception); such a program is reported as unsupported. A program
+    // that only *declares* exception specifications (a THROW_DECL such as the
+    // library `what() const throw()`, with no reachable throw or catch) puts no
+    // exception in flight, so the lowering — which simply strips the inert
+    // THROW_DECL — stays sound and must still run (symex no longer handles a
+    // surviving THROW_DECL). Only bail when there is a real throw or catch.
+    if (concurrent && program_throws_or_catches(goto_functions))
+      return report_unsupported(
+        goto_functions, "a concurrent program (pthread_create)");
+
+    // Whole-program, all-or-nothing: every participating function must be in
+    // the supported subset, otherwise the program is reported as unsupported
+    // (there is no longer a partial-lowering or imperative-dispatch fallback).
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return report_fallback(goto_functions, unsupported_reason_, fn.first);
+        return report_unsupported(
+          goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
     // then calls main / python_user_main), so an escaping exception always
     // reaches it. Without it (e.g. --function isolated verification) an uncaught
-    // exception could be silently accepted, so fall back to the imperative path.
+    // exception could be silently accepted, so report it as unsupported.
     bool has_entry = false;
     for (const auto &fn : goto_functions.function_map)
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return report_fallback(
+      return report_unsupported(
         goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
@@ -153,7 +162,9 @@ public:
       init_globals(entry->second.body);
   }
 
-  /// True if any function still has an exception construct to lower.
+  /// True if any function still has an exception construct to lower (a throw, a
+  /// catch, or a dynamic exception specification). Drives the whole-pass no-op
+  /// gate: a surviving THROW_DECL must still be lowered, so it counts here.
   static bool program_uses_exceptions(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
@@ -164,30 +175,41 @@ public:
     return false;
   }
 
-  /// Report that the pass declined to lower a program that uses exceptions, so
-  /// the residual dependence on the imperative path is visible rather than
-  /// silent. Today the imperative path takes over; once it is removed (P4) this
-  /// diagnostic is what keeps that deletion non-breaking — an unsupported
-  /// program is reported, not miscompiled. Programs with no exception construct
-  /// are silent (the pass is a no-op for them).
-  void report_fallback(
+  /// True if the program actually throws or catches — real exception flow that
+  /// uses the global exception state — as opposed to merely declaring an
+  /// exception specification (a THROW_DECL). Used to decide whether a concurrent
+  /// program is genuinely unsound to lower.
+  static bool program_throws_or_catches(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH)
+            return true;
+    return false;
+  }
+
+  /// The pass cannot lower this program. Lowering is the only exception path
+  /// (the legacy imperative path was removed once the lowered subset covered
+  /// the corpus, #5075), so an exception-using program the pass declines is
+  /// reported as a hard error rather than silently miscompiled. A program with
+  /// no exception construct is silent: the pass is a no-op for it, so a
+  /// decline that does not touch exceptions (e.g. a concurrent but
+  /// exception-free program) returns without complaint.
+  void report_unsupported(
     const goto_functionst &gf,
     const std::string &why,
     const irep_idt &fn = irep_idt())
   {
     if (!program_uses_exceptions(gf))
       return;
-    if (fn.empty())
-      log_warning(
-        "--lower-exceptions: cannot lower {}; falling back to the imperative "
-        "exception path",
-        why);
-    else
-      log_warning(
-        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
-        "imperative exception path",
-        why,
-        id2string(fn));
+    // Throw the ESBMC fatal-error idiom (a std::string caught by
+    // process_goto_program), which logs the message and stops verification
+    // cleanly — rather than abort()/SIGABRT, which reads as an internal crash.
+    std::string msg = "exception lowering: cannot lower " + why;
+    if (!fn.empty())
+      msg += " in '" + id2string(fn) + "'";
+    throw msg;
   }
 
   void init_globals(goto_programt &body)
@@ -252,10 +274,11 @@ private:
 
   /// THROW code for a synthesized std::bad_cast (operand + exception_list =
   /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
-  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
-  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
-  /// older, so try both. Built once and reused across call sites (a single
-  /// exception is in flight at a time).
+  /// in the symbol table. (This is the lowered replacement for the former
+  /// goto_symext::symex_throw_bad_cast synthesis.) The tag is elaborated
+  /// ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on older, so
+  /// try both. Built once and reused across call sites (a single exception is
+  /// in flight at a time).
   expr2tc build_bad_cast_throw()
   {
     const symbolt *sym = ns.lookup("tag-std::bad_cast");
@@ -283,15 +306,18 @@ private:
   }
 
   /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
-  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
-  /// of the pass lowers it like any other throw. If std::bad_cast is
-  /// unresolvable the calls are left in place and program_supported's bad_cast
-  /// guard makes the program fall back to the imperative path.
+  /// failing dynamic_cast<T&> lowers to — so the rest of the pass never sees the
+  /// call. The frontend guards it with the cast-failed condition
+  /// (`if (!vptr_matches) __ESBMC_throw_bad_cast();`), so the replacement
+  /// inherits that guard. When std::bad_cast is resolvable it becomes the
+  /// equivalent THROW (lowered like any other throw, so a surrounding handler
+  /// can catch it). When it is not (no <typeinfo>), there is no exception object
+  /// to throw, so it becomes an ASSERT(false): a failing reference cast with no
+  /// RTTI model is std::terminate, hence a verification error at that point — a
+  /// cast that always succeeds leaves the assertion unreachable.
   void lower_bad_cast_calls(goto_functionst &goto_functions)
   {
     expr2tc bad_cast_throw = build_bad_cast_throw();
-    if (is_nil_expr(bad_cast_throw))
-      return;
 
     for (auto &fn : goto_functions.function_map)
     {
@@ -303,12 +329,21 @@ private:
           continue;
         const code_function_call2t &c = to_code_function_call2t(ins.code);
         if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+          !is_symbol2t(c.function) ||
+          to_symbol2t(c.function).thename != "c:@F@__ESBMC_throw_bad_cast")
+          continue;
+
+        if (!is_nil_expr(bad_cast_throw))
         {
           // make_throw() preserves location/function (clear() leaves them).
           ins.make_throw();
           ins.code = bad_cast_throw;
+        }
+        else
+        {
+          ins.make_assertion(gen_false_expr());
+          ins.location.property("assertion");
+          ins.location.comment("dynamic_cast<T&> failed: std::bad_cast");
         }
       }
     }
@@ -361,7 +396,7 @@ private:
   /// of registered objects or rethrows, balanced CATCH push/pop nesting)?
   /// Read-only.
   /// Set when program_supported declines, naming the construct for the
-  /// fallback diagnostic (report_fallback).
+  /// unsupported-program diagnostic (report_unsupported).
   std::string unsupported_reason_;
 
   bool unsupported(const char *why)
@@ -426,20 +461,9 @@ private:
           !registry.is_registered(t.exception_list.front()))
           return unsupported("a throw of an unsupported type");
       }
-      else if (it->type == FUNCTION_CALL)
-      {
-        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
-        // std::bad_cast throw using the imperative stack_catch — which is empty
-        // once the surrounding catch is lowered, so the throw would be reported
-        // uncaught. The lowering cannot see this hidden throw to wire it, so
-        // leave such a program (dynamic_cast<T&>) to the imperative path.
-        const code_function_call2t &c = to_code_function_call2t(it->code);
-        if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return unsupported(
-            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
-      }
+      // A __ESBMC_throw_bad_cast() call cannot reach here: lower_bad_cast_calls
+      // (run before this check) rewrites every such call to a THROW or an
+      // ASSERT(false), so a failing dynamic_cast<T&> is always lowered.
     }
     // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
     // (its body cannot complete normally). Such unclosed pushes are accepted:
