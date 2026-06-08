@@ -5,7 +5,7 @@ on:
     workflow_dispatch:
       inputs:
         operating-system:
-            description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+            description: "Targeted OS (e.g. ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest)"
             required: true
             type: string
         build-flags:
@@ -19,7 +19,7 @@ on:
     workflow_call:
       inputs:
         operating-system:
-            description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+            description: "Targeted OS (e.g. ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest)"
             required: true
             type: string
         build-flags:
