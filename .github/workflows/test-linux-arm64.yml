@@ -22,6 +22,9 @@ jobs:
 
       - name: Run tests
         run: |
+          # ARM64 has no 32-bit libc support; skip any test that passes --32
+          EXCLUDE_32=$(find regression -name test.desc -exec grep -l -- '--32' {} \; \
+            | sed 's|regression/||; s|/test.desc||' | paste -sd'|')
           cd build/
           cmake -DESBMC_REGRESS_TIMEOUT=120 .
-          ctest -j4 --output-on-failure --progress -LE python-intensive -E "32bit" .
+          ctest -j4 --output-on-failure --progress -LE python-intensive -E "$EXCLUDE_32" .
