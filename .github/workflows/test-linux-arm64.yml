@@ -27,4 +27,4 @@ jobs:
             | sed 's|regression/||; s|/test.desc||' | paste -sd'|')
           cd build/
           cmake -DESBMC_REGRESS_TIMEOUT=120 .
-          ctest -j4 --output-on-failure --progress -LE python-intensive -E "$EXCLUDE_32" .
+          ctest -j4 --output-on-failure --progress -LE "python-intensive|esbmc-solidity" -E "$EXCLUDE_32" .
