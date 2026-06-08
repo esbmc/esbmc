@@ -1460,7 +1460,13 @@ static exprt make_slice_struct_expr(
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
-      value = typecast_exprt(value, field_type);
+    {
+      // (field_type)value, built in IREP2 (V.3).
+      expr2tc v2;
+      migrate_expr(value, v2);
+      value = migrate_expr_back(typecast2tc(migrate_type(field_type), v2));
+      value.type() = field_type; // restore #cpp_type that migrate_type drops
+    }
     return value;
   };
 
