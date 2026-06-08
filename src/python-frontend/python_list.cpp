@@ -149,6 +149,16 @@ exprt build_deref_member(
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
 }
+
+// Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
+// dereference_exprt(t) + op0=ptr form, which sets the result type to `t`
+// directly). Back-migrated once (V.3).
+exprt build_dereference(const exprt &ptr, const typet &t)
+{
+  expr2tc ptr2;
+  migrate_expr(ptr, ptr2);
+  return migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
+}
 } // namespace
 
 // Default depth for list comparison if option not set
@@ -635,7 +645,7 @@ exprt python_list::build_push_list_call(
         signedbv_typet(config.ansi_c.long_int_width),
         exprt());
 
-      typecast_exprt bool_cast(
+      exprt bool_cast = build_typecast(
         build_symbol(*elem_info.elem_symbol),
         signedbv_typet(config.ansi_c.long_int_width));
 
@@ -3287,7 +3297,7 @@ exprt python_list::create_vla(
   // Materialise the count (which may be a compound expression such as m + 1)
   // into an int symbol to use as the loop bound.
   exprt bound_value =
-    (count.type() == int_type()) ? count : typecast_exprt(count, int_type());
+    (count.type() == int_type()) ? count : build_typecast(count, int_type());
   symbolt &bound = converter_.create_tmp_symbol(
     element, "$list_rep_count$", int_type(), exprt());
   code_declt bound_decl(build_symbol(bound));
@@ -4376,11 +4386,10 @@ exprt python_list::extract_pyobject_value(
 
     // (double)*(long long *)item->value
     exprt value_member = member_of("value", pointer_typet(empty_typet()));
-    typecast_exprt as_int_ptr(
-      value_member, pointer_typet(long_long_int_type()));
-    dereference_exprt int_val(long_long_int_type());
-    int_val.op0() = as_int_ptr;
-    typecast_exprt int_as_float(int_val, elem_type);
+    exprt as_int_ptr =
+      build_typecast(value_member, pointer_typet(long_long_int_type()));
+    exprt int_val = build_dereference(as_int_ptr, long_long_int_type());
+    exprt int_as_float = build_typecast(int_val, elem_type);
 
     // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
     equality_exprt is_float(
