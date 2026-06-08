@@ -260,7 +260,7 @@ void python_exception_handler::get_raise_statement(
 
   // Bare 'raise' (Raise.exc is null) re-raises the active exception.
   // Lower it to a cpp-throw with no operand and an empty exception_list;
-  // goto_symext::handle_rethrow replays last_throw at symex time.
+  // remove_exceptions re-raises from the global exception state (#5075).
   if (element["exc"].is_null())
   {
     side_effect_exprt side("cpp-throw", empty_typet());
@@ -455,7 +455,7 @@ void python_exception_handler::get_except_handler_statement(
   {
     // Bare 'except:' (no exception type) catches everything.
     // Mark the catch block type as ellipsis so that adjust_catch
-    // produces the "ellipsis" exception_id, which symex_catch treats
+    // produces the "ellipsis" exception_id, which remove_exceptions lowers
     // as a catch-all handler.
     catch_block.type().set("ellipsis", true);
   }

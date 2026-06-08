@@ -6,9 +6,10 @@ class contextt;
 
 /// Global symbols that carry the in-flight exception across the GOTO program
 /// once throw/catch dispatch is lowered to ordinary control flow (issue
-/// #5075). Together they replace the imperative `stack_catch`/`thrown_obj_map`
-/// state held in goto_symext: the lowering pass arms them at a `throw`, and
-/// handler landing pads read them in guarded gotos.
+/// #5075). They hold the entire exception state: the lowering pass arms them at
+/// a `throw`, and handler landing pads read them in guarded gotos. (They
+/// replaced the imperative `stack_catch`/`thrown_obj_map` state once the legacy
+/// symex exception path was removed.)
 ///
 ///   $esbmc_exc_thrown  : _Bool   — is an exception currently propagating?
 ///   $esbmc_exc_typeid  : size_t  — dynamic type id of the thrown object,

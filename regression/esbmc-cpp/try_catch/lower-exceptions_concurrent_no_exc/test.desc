@@ -1,5 +1,5 @@
 CORE
 main.cpp
---lower-exceptions
+--no-pointer-check
 
 ^VERIFICATION SUCCESSFUL$

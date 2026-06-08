@@ -52,10 +52,10 @@ struct sitet
 };
 
 /// Lowers throw/catch to guarded control flow over the exception-state
-/// globals (issue #5075). P1 scope: per-function, all-or-nothing, intra-
-/// procedural, reference catches, dtor-free, with correct nested-try
-/// propagation (a throw is matched against its enclosing try chain from the
-/// innermost outward). Functions outside the subset are left for symex.
+/// globals (issue #5075). Whole-program, all-or-nothing, with correct
+/// nested-try propagation (a throw is matched against its enclosing try chain
+/// from the innermost outward). This is the only exception path; a program
+/// outside the supported subset is reported as unsupported.
 class exception_loweringt
 {
 public:
@@ -82,8 +82,8 @@ public:
     // symbol), and detect concurrency. The exception state is one global tuple,
     // not per-thread, so the lowered dispatch is unsound for concurrent programs
     // (one thread could observe, catch, or clear another thread's in-flight
-    // exception). Until the state is modeled per thread, leave concurrent
-    // programs to the imperative path.
+    // exception). Until the state is modeled per thread, a concurrent program
+    // that uses exceptions is reported as unsupported.
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
@@ -113,30 +113,31 @@ public:
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
             // concurrent program — not yet modelled
-            return report_fallback(
+            return report_unsupported(
               goto_functions, "a concurrent program (pthread_create)");
         }
       }
     }
 
-    // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
-    // interoperate across a call, so unless every participating function is in
-    // the supported subset we leave the entire program to symex.
+    // Whole-program, all-or-nothing: every participating function must be in
+    // the supported subset, otherwise the program is reported as unsupported
+    // (there is no longer a partial-lowering or imperative-dispatch fallback).
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return report_fallback(goto_functions, unsupported_reason_, fn.first);
+        return report_unsupported(
+          goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
     // then calls main / python_user_main), so an escaping exception always
     // reaches it. Without it (e.g. --function isolated verification) an uncaught
-    // exception could be silently accepted, so fall back to the imperative path.
+    // exception could be silently accepted, so report it as unsupported.
     bool has_entry = false;
     for (const auto &fn : goto_functions.function_map)
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return report_fallback(
+      return report_unsupported(
         goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
@@ -164,30 +165,27 @@ public:
     return false;
   }
 
-  /// Report that the pass declined to lower a program that uses exceptions, so
-  /// the residual dependence on the imperative path is visible rather than
-  /// silent. Today the imperative path takes over; once it is removed (P4) this
-  /// diagnostic is what keeps that deletion non-breaking — an unsupported
-  /// program is reported, not miscompiled. Programs with no exception construct
-  /// are silent (the pass is a no-op for them).
-  void report_fallback(
+  /// The pass cannot lower this program. Lowering is the only exception path
+  /// (the legacy imperative path was removed once the lowered subset covered
+  /// the corpus, #5075), so an exception-using program the pass declines is
+  /// reported as a hard error rather than silently miscompiled. A program with
+  /// no exception construct is silent: the pass is a no-op for it, so a
+  /// decline that does not touch exceptions (e.g. a concurrent but
+  /// exception-free program) returns without complaint.
+  void report_unsupported(
     const goto_functionst &gf,
     const std::string &why,
     const irep_idt &fn = irep_idt())
   {
     if (!program_uses_exceptions(gf))
       return;
-    if (fn.empty())
-      log_warning(
-        "--lower-exceptions: cannot lower {}; falling back to the imperative "
-        "exception path",
-        why);
-    else
-      log_warning(
-        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
-        "imperative exception path",
-        why,
-        id2string(fn));
+    // Throw the ESBMC fatal-error idiom (a std::string caught by
+    // process_goto_program), which logs the message and stops verification
+    // cleanly — rather than abort()/SIGABRT, which reads as an internal crash.
+    std::string msg = "exception lowering: cannot lower " + why;
+    if (!fn.empty())
+      msg += " in '" + id2string(fn) + "'";
+    throw msg;
   }
 
   void init_globals(goto_programt &body)
@@ -252,10 +250,11 @@ private:
 
   /// THROW code for a synthesized std::bad_cast (operand + exception_list =
   /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
-  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
-  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
-  /// older, so try both. Built once and reused across call sites (a single
-  /// exception is in flight at a time).
+  /// in the symbol table. (This is the lowered replacement for the former
+  /// goto_symext::symex_throw_bad_cast synthesis.) The tag is elaborated
+  /// ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on older, so
+  /// try both. Built once and reused across call sites (a single exception is
+  /// in flight at a time).
   expr2tc build_bad_cast_throw()
   {
     const symbolt *sym = ns.lookup("tag-std::bad_cast");
@@ -361,7 +360,7 @@ private:
   /// of registered objects or rethrows, balanced CATCH push/pop nesting)?
   /// Read-only.
   /// Set when program_supported declines, naming the construct for the
-  /// fallback diagnostic (report_fallback).
+  /// unsupported-program diagnostic (report_unsupported).
   std::string unsupported_reason_;
 
   bool unsupported(const char *why)

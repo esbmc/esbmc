@@ -1,8 +1,9 @@
 #include <pthread.h>
 
 // Exception state is a single global tuple, so the lowered dispatch is unsound
-// across threads; the pass must leave concurrent programs to the imperative
-// path. Each thread catches its own exception locally.
+// across threads. Lowering is the only exception path (the legacy imperative
+// path was removed, #5075), so a concurrent program that uses exceptions is
+// reported as a hard error rather than miscompiled.
 struct E
 {
 };
