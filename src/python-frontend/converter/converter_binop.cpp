@@ -50,18 +50,20 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
         throw std::runtime_error(
           "__ESBMC_list_size not found for list condition check");
 
-      side_effect_expr_function_callt size_call;
-      size_call.function() = symbol_expr(*size_func);
-      size_call.type() = size_type();
-      size_call.location() = get_location_from_decl(element);
+      // Build len(x) != 0 in IREP2, back-migrating once (V.3).
+      expr2tc arg2, zero2;
       if (value_expr.type().is_pointer())
-        size_call.arguments().push_back(value_expr);
+        migrate_expr(value_expr, arg2);
       else
-        size_call.arguments().push_back(address_of_exprt(value_expr));
+        migrate_expr(address_of_exprt(value_expr), arg2);
+      migrate_expr(gen_zero(size_type()), zero2);
 
-      exprt cond("notequal", bool_type());
-      cond.copy_to_operands(size_call, gen_zero(size_type()));
-      cond.location() = get_location_from_decl(element);
+      expr2tc size_call2 = side_effect_function_call2tc(
+        migrate_type(size_type()), symbol_expr2tc(*size_func), {arg2});
+      exprt cond = migrate_expr_back(notequal2tc(size_call2, zero2));
+      const locationt loc = get_location_from_decl(element);
+      cond.location() = loc;
+      cond.op0().location() = loc; // re-attach the size_call location
       return cond;
     }
 
