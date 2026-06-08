@@ -1624,10 +1624,12 @@ bool clang_c_convertert::get_builtin_type(
   case clang::BuiltinType::SveUint8x2:
   case clang::BuiltinType::SveUint8x3:
   case clang::BuiltinType::SveUint8x4:
+#if LLVM_VERSION_MAJOR >= 19
   case clang::BuiltinType::SveMFloat8:
   case clang::BuiltinType::SveMFloat8x2:
   case clang::BuiltinType::SveMFloat8x3:
   case clang::BuiltinType::SveMFloat8x4:
+#endif
     new_type = unsignedbv_typet(8);
     c_type = "unsigned_char";
     break;
@@ -1652,7 +1654,9 @@ bool clang_c_convertert::get_builtin_type(
   case clang::BuiltinType::SveUint64x2:
   case clang::BuiltinType::SveUint64x3:
   case clang::BuiltinType::SveUint64x4:
+#if LLVM_VERSION_MAJOR >= 17
   case clang::BuiltinType::SveCount:
+#endif
     new_type = unsignedbv_typet(64);
     c_type = "unsigned_long_long_int";
     break;
@@ -1686,8 +1690,10 @@ bool clang_c_convertert::get_builtin_type(
     break;
 
   case clang::BuiltinType::SveBool:
+#if LLVM_VERSION_MAJOR >= 17
   case clang::BuiltinType::SveBoolx2:
   case clang::BuiltinType::SveBoolx4:
+#endif
     new_type = bool_type();
     c_type = "_Bool";
     break;
