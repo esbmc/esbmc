@@ -536,15 +536,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               throw std::runtime_error(
                 "__ESBMC_list_size not found for list shape access");
 
-            side_effect_expr_function_callt size_call;
-            size_call.function() = symbol_expr(*size_func);
-            size_call.type() = size_type();
-            if (base_expr.type().is_pointer())
-              size_call.arguments().push_back(base_expr);
-            else
-              size_call.arguments().push_back(address_of_exprt(base_expr));
-
-            exprt list_len = typecast_exprt(size_call, int_type());
+            // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
+            expr2tc base2;
+            migrate_expr(
+              base_expr.type().is_pointer() ? base_expr
+                                            : address_of_exprt(base_expr),
+              base2);
+            expr2tc size_call = side_effect_function_call2tc(
+              migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+            exprt list_len = migrate_expr_back(
+              typecast2tc(migrate_type(int_type()), size_call));
             return build_shape_tuple_expr(*this, {list_len});
           }
         }
@@ -895,13 +896,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             throw std::runtime_error(
               "__ESBMC_list_size not found for list shape access");
 
-          side_effect_expr_function_callt size_call;
-          size_call.function() = symbol_expr(*size_func);
-          size_call.type() = size_type();
-          size_call.arguments().push_back(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr));
-
-          exprt list_len = typecast_exprt(size_call, int_type());
+          // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
+          expr2tc base2;
+          migrate_expr(
+            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          expr2tc size_call = side_effect_function_call2tc(
+            migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+          exprt list_len = migrate_expr_back(
+            typecast2tc(migrate_type(int_type()), size_call));
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
