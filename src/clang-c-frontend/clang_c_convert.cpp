@@ -1586,117 +1586,146 @@ bool clang_c_convertert::get_builtin_type(
     // fallthrough
 
   // ARM SVE (Scalable Vector Extension) types.
-  // These appear in AArch64 system headers but are not verifiable by ESBMC;
-  // map to the nearest scalar base type so c2goto can build the libc model.
+  // Mapped to fixed-size ESBMC vector types using the minimum SVE vector
+  // length (128-bit). xN variants multiply the element count by N.
+#define SVE_VEC(elem, n_elems)                                               \
+  vector_typet(                                                               \
+    elem,                                                                     \
+    constant_exprt(                                                           \
+      integer2binary(n_elems, bv_width(int_type())),                         \
+      integer2string(n_elems),                                                \
+      int_type()))
+
   case clang::BuiltinType::SveInt8:
+    new_type = SVE_VEC(signedbv_typet(8), 16); c_type = "__SVInt8_t"; break;
   case clang::BuiltinType::SveInt8x2:
+    new_type = SVE_VEC(signedbv_typet(8), 32); c_type = "__clang_svint8x2_t"; break;
   case clang::BuiltinType::SveInt8x3:
+    new_type = SVE_VEC(signedbv_typet(8), 48); c_type = "__clang_svint8x3_t"; break;
   case clang::BuiltinType::SveInt8x4:
-    new_type = signedbv_typet(8);
-    c_type = "signed_char";
-    break;
+    new_type = SVE_VEC(signedbv_typet(8), 64); c_type = "__clang_svint8x4_t"; break;
 
   case clang::BuiltinType::SveInt16:
+    new_type = SVE_VEC(signedbv_typet(16), 8); c_type = "__SVInt16_t"; break;
   case clang::BuiltinType::SveInt16x2:
+    new_type = SVE_VEC(signedbv_typet(16), 16); c_type = "__clang_svint16x2_t"; break;
   case clang::BuiltinType::SveInt16x3:
+    new_type = SVE_VEC(signedbv_typet(16), 24); c_type = "__clang_svint16x3_t"; break;
   case clang::BuiltinType::SveInt16x4:
-    new_type = signedbv_typet(16);
-    c_type = "signed_short_int";
-    break;
+    new_type = SVE_VEC(signedbv_typet(16), 32); c_type = "__clang_svint16x4_t"; break;
 
   case clang::BuiltinType::SveInt32:
+    new_type = SVE_VEC(signedbv_typet(32), 4); c_type = "__SVInt32_t"; break;
   case clang::BuiltinType::SveInt32x2:
+    new_type = SVE_VEC(signedbv_typet(32), 8); c_type = "__clang_svint32x2_t"; break;
   case clang::BuiltinType::SveInt32x3:
+    new_type = SVE_VEC(signedbv_typet(32), 12); c_type = "__clang_svint32x3_t"; break;
   case clang::BuiltinType::SveInt32x4:
-    new_type = signedbv_typet(32);
-    c_type = "signed_int";
-    break;
+    new_type = SVE_VEC(signedbv_typet(32), 16); c_type = "__clang_svint32x4_t"; break;
 
   case clang::BuiltinType::SveInt64:
+    new_type = SVE_VEC(signedbv_typet(64), 2); c_type = "__SVInt64_t"; break;
   case clang::BuiltinType::SveInt64x2:
+    new_type = SVE_VEC(signedbv_typet(64), 4); c_type = "__clang_svint64x2_t"; break;
   case clang::BuiltinType::SveInt64x3:
+    new_type = SVE_VEC(signedbv_typet(64), 6); c_type = "__clang_svint64x3_t"; break;
   case clang::BuiltinType::SveInt64x4:
-    new_type = signedbv_typet(64);
-    c_type = "signed_long_long_int";
-    break;
+    new_type = SVE_VEC(signedbv_typet(64), 8); c_type = "__clang_svint64x4_t"; break;
 
   case clang::BuiltinType::SveUint8:
+    new_type = SVE_VEC(unsignedbv_typet(8), 16); c_type = "__SVUint8_t"; break;
   case clang::BuiltinType::SveUint8x2:
+    new_type = SVE_VEC(unsignedbv_typet(8), 32); c_type = "__clang_svuint8x2_t"; break;
   case clang::BuiltinType::SveUint8x3:
+    new_type = SVE_VEC(unsignedbv_typet(8), 48); c_type = "__clang_svuint8x3_t"; break;
   case clang::BuiltinType::SveUint8x4:
+    new_type = SVE_VEC(unsignedbv_typet(8), 64); c_type = "__clang_svuint8x4_t"; break;
 #if LLVM_VERSION_MAJOR >= 19
   case clang::BuiltinType::SveMFloat8:
+    new_type = SVE_VEC(unsignedbv_typet(8), 16); c_type = "__SVMfloat8_t"; break;
   case clang::BuiltinType::SveMFloat8x2:
+    new_type = SVE_VEC(unsignedbv_typet(8), 32); c_type = "__clang_svmfloat8x2_t"; break;
   case clang::BuiltinType::SveMFloat8x3:
+    new_type = SVE_VEC(unsignedbv_typet(8), 48); c_type = "__clang_svmfloat8x3_t"; break;
   case clang::BuiltinType::SveMFloat8x4:
+    new_type = SVE_VEC(unsignedbv_typet(8), 64); c_type = "__clang_svmfloat8x4_t"; break;
 #endif
-    new_type = unsignedbv_typet(8);
-    c_type = "unsigned_char";
-    break;
 
   case clang::BuiltinType::SveUint16:
+    new_type = SVE_VEC(unsignedbv_typet(16), 8); c_type = "__SVUint16_t"; break;
   case clang::BuiltinType::SveUint16x2:
+    new_type = SVE_VEC(unsignedbv_typet(16), 16); c_type = "__clang_svuint16x2_t"; break;
   case clang::BuiltinType::SveUint16x3:
+    new_type = SVE_VEC(unsignedbv_typet(16), 24); c_type = "__clang_svuint16x3_t"; break;
   case clang::BuiltinType::SveUint16x4:
-    new_type = unsignedbv_typet(16);
-    c_type = "unsigned_short_int";
-    break;
+    new_type = SVE_VEC(unsignedbv_typet(16), 32); c_type = "__clang_svuint16x4_t"; break;
 
   case clang::BuiltinType::SveUint32:
+    new_type = SVE_VEC(unsignedbv_typet(32), 4); c_type = "__SVUint32_t"; break;
   case clang::BuiltinType::SveUint32x2:
+    new_type = SVE_VEC(unsignedbv_typet(32), 8); c_type = "__clang_svuint32x2_t"; break;
   case clang::BuiltinType::SveUint32x3:
+    new_type = SVE_VEC(unsignedbv_typet(32), 12); c_type = "__clang_svuint32x3_t"; break;
   case clang::BuiltinType::SveUint32x4:
-    new_type = unsignedbv_typet(32);
-    c_type = "unsigned_int";
-    break;
+    new_type = SVE_VEC(unsignedbv_typet(32), 16); c_type = "__clang_svuint32x4_t"; break;
 
   case clang::BuiltinType::SveUint64:
+    new_type = SVE_VEC(unsignedbv_typet(64), 2); c_type = "__SVUint64_t"; break;
   case clang::BuiltinType::SveUint64x2:
+    new_type = SVE_VEC(unsignedbv_typet(64), 4); c_type = "__clang_svuint64x2_t"; break;
   case clang::BuiltinType::SveUint64x3:
+    new_type = SVE_VEC(unsignedbv_typet(64), 6); c_type = "__clang_svuint64x3_t"; break;
   case clang::BuiltinType::SveUint64x4:
-#if LLVM_VERSION_MAJOR >= 17
-  case clang::BuiltinType::SveCount:
-#endif
-    new_type = unsignedbv_typet(64);
-    c_type = "unsigned_long_long_int";
-    break;
+    new_type = SVE_VEC(unsignedbv_typet(64), 8); c_type = "__clang_svuint64x4_t"; break;
 
   case clang::BuiltinType::SveFloat16:
+    new_type = SVE_VEC(half_float_type(), 8); c_type = "__SVFloat16_t"; break;
   case clang::BuiltinType::SveFloat16x2:
+    new_type = SVE_VEC(half_float_type(), 16); c_type = "__clang_svfloat16x2_t"; break;
   case clang::BuiltinType::SveFloat16x3:
+    new_type = SVE_VEC(half_float_type(), 24); c_type = "__clang_svfloat16x3_t"; break;
   case clang::BuiltinType::SveFloat16x4:
+    new_type = SVE_VEC(half_float_type(), 32); c_type = "__clang_svfloat16x4_t"; break;
+
   case clang::BuiltinType::SveBFloat16:
+    new_type = SVE_VEC(half_float_type(), 8); c_type = "__SVBfloat16_t"; break;
   case clang::BuiltinType::SveBFloat16x2:
+    new_type = SVE_VEC(half_float_type(), 16); c_type = "__clang_svbfloat16x2_t"; break;
   case clang::BuiltinType::SveBFloat16x3:
+    new_type = SVE_VEC(half_float_type(), 24); c_type = "__clang_svbfloat16x3_t"; break;
   case clang::BuiltinType::SveBFloat16x4:
-    new_type = half_float_type();
-    c_type = "_Float16";
-    break;
+    new_type = SVE_VEC(half_float_type(), 32); c_type = "__clang_svbfloat16x4_t"; break;
 
   case clang::BuiltinType::SveFloat32:
+    new_type = SVE_VEC(float_type(), 4); c_type = "__SVFloat32_t"; break;
   case clang::BuiltinType::SveFloat32x2:
+    new_type = SVE_VEC(float_type(), 8); c_type = "__clang_svfloat32x2_t"; break;
   case clang::BuiltinType::SveFloat32x3:
+    new_type = SVE_VEC(float_type(), 12); c_type = "__clang_svfloat32x3_t"; break;
   case clang::BuiltinType::SveFloat32x4:
-    new_type = float_type();
-    c_type = "float";
-    break;
+    new_type = SVE_VEC(float_type(), 16); c_type = "__clang_svfloat32x4_t"; break;
 
   case clang::BuiltinType::SveFloat64:
+    new_type = SVE_VEC(double_type(), 2); c_type = "__SVFloat64_t"; break;
   case clang::BuiltinType::SveFloat64x2:
+    new_type = SVE_VEC(double_type(), 4); c_type = "__clang_svfloat64x2_t"; break;
   case clang::BuiltinType::SveFloat64x3:
+    new_type = SVE_VEC(double_type(), 6); c_type = "__clang_svfloat64x3_t"; break;
   case clang::BuiltinType::SveFloat64x4:
-    new_type = double_type();
-    c_type = "double";
-    break;
+    new_type = SVE_VEC(double_type(), 8); c_type = "__clang_svfloat64x4_t"; break;
 
   case clang::BuiltinType::SveBool:
+    new_type = SVE_VEC(bool_type(), 16); c_type = "__SVBool_t"; break;
 #if LLVM_VERSION_MAJOR >= 17
   case clang::BuiltinType::SveBoolx2:
+    new_type = SVE_VEC(bool_type(), 32); c_type = "__clang_svboolx2_t"; break;
   case clang::BuiltinType::SveBoolx4:
+    new_type = SVE_VEC(bool_type(), 64); c_type = "__clang_svboolx4_t"; break;
+  case clang::BuiltinType::SveCount:
+    new_type = unsignedbv_typet(64); c_type = "__SVCount_t"; break;
 #endif
-    new_type = bool_type();
-    c_type = "_Bool";
-    break;
+
+#undef SVE_VEC
 
   default:
   {
