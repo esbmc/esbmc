@@ -28,6 +28,17 @@ exprt complex_member(const exprt &base, const irep_idt &name, const typet &t)
   migrate_expr(base, base2);
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
+
+// V.3: IREP2 typecast (exact round-trip of typecast_exprt). The source is a
+// concrete numeric value (floatbv/signedbv/unsignedbv/bool) and the target is
+// the plain double type, which carries no #cpp_type, so no type-restore is
+// needed -- mirrors python_math's math_typecast.
+exprt complex_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
 } // namespace
 
 // -----------------------------------------------------------------------
@@ -248,7 +259,7 @@ exprt complex_handler::promote_int_arith_to_double(
   if (!numeric_like)
     return input_expr;
 
-  return typecast_exprt(input_expr, dt);
+  return complex_typecast(input_expr, dt);
 }
 
 exprt complex_handler::normalize_numeric_expr(const exprt &value) const
