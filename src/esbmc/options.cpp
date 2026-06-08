@@ -381,9 +381,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
     {"slice-assumes", NULL, "Remove unused assume statements"},
-    {"lower-exceptions",
-     NULL,
-     "Accepted for compatibility; throw/catch lowering is always on (#5075)"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
