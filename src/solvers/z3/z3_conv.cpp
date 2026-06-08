@@ -1279,15 +1279,15 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
   if (int_encoding)
     return string2integer(Z3_get_numeral_string(z3_ctx, e));
 
-  // Not a numeral? Let's not try to convert it
-  std::string bin;
-  bool is_numeral [[maybe_unused]] = e.as_binary(bin);
-  assert(is_numeral);
-  /* 'bin' contains the ascii representation of the bit-vector, msb-first,
-   * no leading zeroes; zero-extend if possible */
-  if (bin.size() < e.get_sort().bv_size())
-    bin.insert(bin.begin(), '0');
-  return binary2integer(bin, is_signed);
+  /* Z3's model evaluation can return a bit-vector numeral that it stores with
+   * a negative internal value (printed as e.g. "(bvneg #x...)"). The binary
+   * string API (z3::expr::as_binary / Z3_get_numeral_binary_string) only
+   * accepts non-negative numerals and aborts the process with
+   * Z3_INVALID_ARG otherwise -- which previously crashed ESBMC while building
+   * the error trace (issue #5188). Read the value as a (possibly negative)
+   * decimal instead and reinterpret it within the bit-vector's width. */
+  BigInt val = string2integer(Z3_get_numeral_string(z3_ctx, e));
+  return binary2integer(integer2binary(val, e.get_sort().bv_size()), is_signed);
 }
 
 bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)

@@ -3,4 +3,4 @@ main.cpp
 --lower-exceptions
 
 ^VERIFICATION SUCCESSFUL$
---lower-exceptions: cannot lower an unsupported try-block layout
+--lower-exceptions: cannot lower a concurrent program

@@ -1,10 +1,10 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-02 (Pass 3 re-validation — see §7)
+**Last updated:** 2026-06-07 (Pass 4 — new batch #5133–#5145 + #5224; see §8)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
-**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `4f12db8419` (Pass 3);
-prior passes on `95be952e8a`.
+**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `66304a6178` (Pass 4);
+Pass 3 on `4f12db8419`; prior passes on `95be952e8a`.
 **Verification policy:** ESBMC is a formal-verification tool. No unsound fix, heuristic
 workaround, silent behaviour change, or unverified assumption is shipped. Where an issue cannot
 be fixed *soundly* with a localized change, the blocker and the required design change are
@@ -398,3 +398,195 @@ here (#4432), already fixed on master (#1470), blocked on an unavailable witness
 (#1471/#1492/#4611), or a research-grade LDV driver / latent / umbrella item (#4427, #4439, #1440,
 #1447). This is the correctness-first outcome mandated by the task: no unsound or unvalidated patch is
 shipped to manufacture a PR count.
+
+---
+
+## 8. Pass 4 — new batch #5133–#5145 + #5224 (2026-06-07)
+
+Passes 1–3 covered the issues open up to 2026-06-02. Two new tranches were filed since:
+
+* **#5133–#5145** (2026-06-05) — a fresh triage of the SV-COMP 26 benchexec run (no-data-race,
+  valid-memsafety, no-overflow and unreach-call false alarms).
+* **#5224** (2026-06-07) — an `incorrect true` (unsound proof) regression from the k-induction
+  inductive step on the Intel-TDX-Module set.
+
+All Pass-4 verdicts are reproduced on an **x86_64 Linux** host against master `66304a6178` with
+`build/src/esbmc/esbmc` 8.3.0, using each issue's exact flags. Benchmarks were fetched read-only
+from the public sv-benchmarks GitLab and treated as untrusted input.
+
+### 8.1 New-batch landscape
+
+| # | Benchmark | Property | Disposition | PR |
+|---|---|---|---|---|
+| 5133 | pthread-ext `25_stack_longer-2` | no-data-race | **FIXED** — atomic-only callee (§8.2) | new |
+| 5134 | pthread-ext `25_stack_longest-1` | no-data-race | **FIXED** — same root cause (§8.2) | new |
+| 5135 | pthread-ext `25_stack` | no-data-race | **FIXED** — same root cause (§8.2) | new |
+| 5136 | pthread-complex `elimination_backoff_stack` | no-data-race | **FIXED** — same root cause (§8.2) | new |
+| 5137 | pthread-race-challenges `thread-join-binomial` | no-data-race | DISTINCT — value-set imprecision (§8.3) | no |
+| 5138 | coreutils `comm_3args_ok` | valid-memsafety | precision — forgotten-memory at exit (§8.4) | no |
+| 5139 | busybox `sync-2` | valid-memsafety | precision — realloc/free error path (§8.4) | no |
+| 5140 | busybox `usleep-2` | valid-memsafety | precision — invalid-pointer error path (§8.4) | no |
+| 5141 | busybox `whoami-incomplete-2` | valid-memsafety | `bb_verror_msg` family → #5012 (§8.4) | no |
+| 5142 | ldv-commit-tester `imon` | no-overflow | research-grade LDV driver (§8.5) | no |
+| 5143 | busybox `usleep-1` | no-overflow | `bb_verror_msg` → #5012, dup of #4976-#4979 (§8.6) | no |
+| 5144 | busybox `usleep-2` | no-overflow | `bb_verror_msg` → #5012, dup of #4976-#4979 (§8.6) | no |
+| 5145 | aws-c-common `aws_hash_table_create_harness` | unreach-call | research-grade CBMC harness (§8.7) | no |
+| 5224 | intel-tdx-module (54 tasks) | unreach-call | ALREADY-ADDRESSED — open PR #5228 (§8.8) | no |
+
+### 8.2 #5133 / #5134 / #5135 / #5136 — no-data-race false alarm on atomic-only callees: FIXED
+
+**Status: tightly coupled (one root cause). One PR closes all four. SOUND fix, validated.**
+
+**Root cause (source + repro + GOTO).** ESBMC's data-race instrumenter
+(`src/goto-programs/add_race_assertions.cpp`) processes each function body in isolation, tracking
+only the *lexical* `atomic_begin`/`atomic_end` markers in that body. In `25_stack` the shared `top`
+is read by `isEmpty()`, which is reached **only** from `__VERIFIER_atomic_assert` — a
+`__VERIFIER_atomic_*` function whose whole body `goto_convert_functions.cpp` wraps in an atomic
+region. Because `isEmpty`'s own body has no atomic markers, it was instrumented as a **non-atomic**
+access and emitted `ASSERT !(RACE_CHECK(&top))`. That read could observe the writer's in-region
+atomic-write flag (kept observable for one interleaving point by the #4975 mechanism) and report a
+spurious `R/W data race on c:@top` — exactly the counterexample in each issue (`isEmpty` line 709;
+for #5136, `checkInvariant` line 1543 reading `PushOpen`, also reached only from atomic regions).
+This is a **precision/false-positive** bug, not a soundness one: the model over-reports.
+
+The pre-existing `github_4975_atomic_write_norace` test encodes the *correct* sibling pattern — a
+shared read placed **directly** inside a `__VERIFIER_atomic_*` body — and already passes. The gap
+was purely the **interprocedural** case (the read sits in a regular callee of the atomic function).
+
+**Fix.** Add `compute_always_atomic_functions()`: an interprocedural fixpoint that classifies a
+function as *always-atomic* when **every** direct call site is in an atomic context (lexically
+inside `atomic_begin`/`end`, or inside a `__VERIFIER_atomic_*` body, or inside another always-atomic
+function) **and** its address is never taken (so it cannot be reached via a function pointer from an
+unknown, possibly non-atomic, context). Such bodies are then instrumented with `is_atomic = true`
+from entry — exactly as the lexically-wrapped `__VERIFIER_atomic_*` bodies already are. With the
+fix, `isEmpty`/`checkInvariant`'s GOTO no longer carry any `RACE_CHECK` (verified via
+`--goto-functions-only`), while a regular library function (`localtime`) keeps full instrumentation.
+
+**Why it is sound.** A function is suppressed only when *every* path to it is atomic, in which case
+its accesses hold the global atomic lock at every invocation and cannot race. A function with a
+single non-atomic call site, no call site (e.g. a thread entry), or an escaping address is left
+fully instrumented — so no genuine (non-atomic) race is ever hidden. The conservative direction is
+"leave instrumented", never "suppress".
+
+**Validation.**
+* New regressions: `github_5133_atomic_callee_norace` (atomic-only callee ⇒ `SUCCESSFUL`) and
+  `github_5133_mixed_context_race` (a helper with mixed atomic/non-atomic call sites whose
+  non-atomic read must still race ⇒ `FAILED` on `c:@data`) — the latter pins the false-negative
+  boundary.
+* Full data-race regression suite (**89 tests**, all `--data-races-check[-only]` cases incl. the
+  #4423/#4424/#4425/#4431/#4975 paired race/norace guards) passes 100%.
+* Dual-solver **z3 + bitwuzla** agree on both new tests.
+* GOTO inspection confirms the exact counterexample assertion (`RACE_CHECK(&top)` in `isEmpty`,
+  `RACE_CHECK(&PushOpen)` in `checkInvariant`) is removed.
+
+### 8.3 #5137 — thread-join-binomial: DISTINCT root cause (value-set imprecision, not mutex HB)
+
+The write `data = __VERIFIER_nondet_int()` (line 1052) is in `thread()` and is synchronised by
+`pthread_mutex_lock(&data_mutex)`; it is not an atomic helper, and the §8.2 fix correctly leaves its
+`RACE_CHECK(&data)` in place. An **earlier reading of this issue as a mutex/`pthread_join`
+happens-before gap is wrong** — deeper investigation (2026-06-07) re-classifies it:
+
+* **The mutex *is* modelled.** A minimal two-thread program that writes a shared global under a
+  `pthread_mutex` verifies `VERIFICATION SUCCESSFUL` under `--data-races-check-only` — ESBMC's
+  data-race checker honours the mutex's mutual exclusion. So this is **not** a missing-lockset bug.
+* **The counterexample is physically impossible.** With the issue's flags the W/W race on `data`
+  fires at **`k = 1` with the creation loop unwound once** — i.e. a *single* worker thread exists —
+  yet the violated `!(RACE_CHECK(&data))` requires the write flag to already be `1` with no prior
+  writer. The trace also shows the thread receiving `i = (signed int)(&tids)`: the integer argument
+  `(void*)i` (e.g. `1750`) was resolved by `--add-symex-value-sets` to a **pointer** (`&tids`)
+  rather than the integer. The spurious flag state correlates with this pointer/value-set
+  imprecision on the **integer-as-pointer thread argument**, not with the mutex.
+* **No clean reducer.** Minimal `(void*)i`-argument variants under the exact flags either time out
+  (unbounded `k`) or abort, so the trigger is entangled with the benchmark's specific shape
+  (malloc'd `tids`, binomial join, large nondet `threads_total`).
+
+**Disposition.** A sound fix lives in **pointer/value-set analysis** (handling of integer→pointer
+casts passed as thread arguments), which is broad blast-radius and cannot be validated against the
+full SV-COMP data-race set in this environment. Out of scope for a localized data-race-checker
+change; keep #5137 open as a value-set-precision issue (sibling of #4432 / umbrella #2928), **not**
+as a mutex/join happens-before gap.
+
+### 8.4 #5138–#5141 — valid-memsafety false alarms
+
+Distinct memory-model precision issues, each a *false alarm* (ground truth `true`); none admits a
+localized sound fix in this environment:
+
+* **#5138** `comm_3args_ok` — `dereference failure: forgotten memory: dynamic_21_array` at `exit`
+  (`stdlib.c:64`). The coreutils amalgamation registers `close_stdout` via `atexit`; ESBMC's
+  leak check at `exit` flags an allocation as *unreachable* (forgotten) although it is still
+  reachable, i.e. the value-set/reachability analysis drops a live pointer. Reachability-precision
+  work, not a single fix.
+* **#5139** `sync-2` — `invalidated dynamic object freed`; **#5140** `usleep-2` — `invalid pointer`
+  in `xstrtou_range_sfx`. Spurious pointer-validity verdicts on busybox error-handling paths
+  (`realloc`/`free`), the same memory-model precision class.
+* **#5141** `whoami-incomplete-2` — `invalid pointer freed` in **`bb_verror_msg`**: the same busybox
+  function and `(v)asprintf`/`realloc` modelling gap tracked by **#5012** (see §3.1 / §7.1). Defer
+  to that design effort.
+
+### 8.5 #5142 — ldv imon no-overflow: research-grade LDV driver
+
+`m0_drivers-media-rc-imon` overflow in `__create_pipe` (`Bug found (k = 3)`). A large
+LDV/Linux-kernel driver task — the same research-grade class as #4439/#4427/#4980 (deep
+driver/kernel-model interactions, not a localized fix).
+
+### 8.6 #5143 / #5144 — busybox bb_verror_msg no-overflow: defer to #5012 (dup of #4976–#4979)
+
+`usleep-1`/`usleep-2` report `arithmetic overflow on add` at `bb_verror_msg` line 2302 — the
+**identical** root cause as #4976–#4979 (the unmodelled `(v)asprintf` return feeds the signed-`int`
+realloc-size sum; the unconstrained-nondet bound is a *sound* over-approximation). No new PR: the
+sound fix is the gated `(v)asprintf` return-length OM tracked by **#5012** (design PR #5011); a
+printf-layer patch was already measured unsound (§3.1). Mark as duplicates of the #4976–#4979
+cluster under umbrella #2513.
+
+### 8.7 #5145 — aws_hash_table_create_harness unreach-call: research-grade CBMC harness
+
+Reproduced: `reach_error` at `k = 1` (base case). The failing assertion is
+`__VERIFIER_assert(uninterpreted_equals(p_elem->key, key))` (line 10170) — a **functional-correctness**
+property of the real `aws_hash_table_create` implementation included in the `.i`. The harness is a
+CBMC proof harness (defines `__CPROVER_uninterpreted_equals`/`_hasher`, `bounded_malloc`,
+`ensure_allocated_hash_table`, and `hash_table_state_is_valid` invariants) designed for CBMC's
+memory model and `__CPROVER_assume` discipline. ESBMC reaching `reach_error` here is a deep
+memory-model / harness-modelling interaction, not a localized fix — the same research-grade class as
+the LDV drivers. Defer.
+
+### 8.8 #5224 — unsound TDX k-induction (incorrect true): ALREADY-ADDRESSED by open PR #5228
+
+**Status: do not open a duplicate PR.** #5224 is the most serious category (54 `incorrect true`
+wrong proofs on Intel-TDX-Module via the k-induction inductive step). It is already addressed by the
+**open, mergeable** PR **#5228** (`[k-induction] Disable inductive step on pointer-array writes`,
+"Fixes #5224"): the inductive step havocs only named symbols, so a loop writing an array element
+through a pointer (`(*dest)[i]`) is under-generalised and can prove an unsafe program safe; the PR
+detects such writes and disables the inductive step (base case + forward condition still run),
+shipping three regression tests. A Phase-2 follow-up is tracked by enhancement **#5230** (soundly
+havoc pointee objects). Skipped to avoid duplicating in-flight work.
+
+### 8.9 Pass-4 running report
+
+**Analysed.** #5133–#5145 (reproduced locally with each issue's flags), #5224 (cross-referenced to
+PR #5228), plus re-confirmation that #4438→#4480 and #4976–#4979→#5012 are unchanged.
+
+**PRs opened.** One: `[goto-race] instrument atomic-only callees as atomic` — closes **#5133,
+#5134, #5135, #5136** (one root cause, four benchmarks). Sound, dual-solver-validated, 89/89
+data-race regressions pass.
+
+**Duplicated work avoided.**
+* #5224 not re-fixed — open PR #5228 already targets it (+ #5230 Phase-2).
+* #5143/#5144 not re-fixed — duplicates of the #4976–#4979 `bb_verror_msg` cluster (→ #5012).
+* #5141's `bb_verror_msg` leak folded into the same #5012 cluster.
+
+**Skipped / deferred and why.**
+* #5137 — distinct value-set/pointer-imprecision gap on integer-as-pointer thread args; the mutex
+  *is* modelled (minimal case is `SUCCESSFUL`), so this is not a happens-before gap (own issue; cf.
+  #2928/#4432).
+* #5138–#5140 — memory-model / reachability precision; no localized sound fix.
+* #5142 — research-grade LDV driver.
+* #5143/#5144 (+#5141) — `(v)asprintf` return-length OM (#5012); printf-layer fix measured unsound.
+* #5145 — research-grade CBMC functional-correctness harness.
+
+**Remaining work (priority order).**
+1. Land the #5133–#5136 data-race fix.
+2. #5137 — value-set precision for integer→pointer thread arguments (new issue; not a mutex/HB gap).
+3. #5012 — sound `(v)asprintf` return-length OM (closes #4976–#4979, #5143, #5144, and #5141's leak).
+4. #5138–#5140 — memory-model/reachability precision for `forgotten`/`invalid pointer` verdicts.
+5. Carry-forward from Pass 3: witness-validator integration (#1470/#1471/#1492/#4611), #4432 (x86
+   data-race-checker performance on atomics), #4980 (termination ranking recogniser).

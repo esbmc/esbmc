@@ -1600,6 +1600,21 @@ void python_converter::get_var_assign(
       target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
     }
+
+    // List slice assignment (a[i:j] = ...) is not modelled. Falling through to
+    // the generic store evaluates get_expr(a[i:j]) — a *copy* of the slice —
+    // and assigns into that temporary, leaving the original list unchanged. A
+    // later read then sees stale values, so ESBMC would report a buggy program
+    // as SUCCESSFUL (silent unsoundness). Reject it explicitly instead. Object
+    // slice __setitem__ is handled above; tuples raise TypeError above; dict
+    // subscripts are handled by handle_subscript_assignment_check earlier.
+    if (
+      target.contains("slice") && target["slice"].is_object() &&
+      target["slice"].value("_type", "") == "Slice")
+    {
+      throw std::runtime_error(
+        "List slice assignment (a[i:j] = ...) is not supported");
+    }
   }
 
   if (ast_node["_type"] == "AnnAssign")
@@ -3583,6 +3598,24 @@ void python_converter::get_delete_statement(
 
       if (dict_type.id() == "symbol")
         dict_type = ns.follow(dict_type);
+
+      // del a[i] on a list removes (and shifts out) the element at index i.
+      // This is exactly list.pop(i) with the result discarded, and pop is
+      // already modelled (bounds-checked, shifting), so desugar to it instead
+      // of requiring a dict.
+      if (dict_type == type_handler_.get_list_type())
+      {
+        nlohmann::json pop_call;
+        pop_call["_type"] = "Call";
+        pop_call["func"] = {
+          {"_type", "Attribute"}, {"value", target["value"]}, {"attr", "pop"}};
+        pop_call["args"] = nlohmann::json::array({slice});
+        pop_call["keywords"] = nlohmann::json::array();
+        copy_location_fields_from_decl(ast_node, pop_call);
+        exprt pop_expr = get_function_call(pop_call);
+        target_block.copy_to_operands(convert_expression_to_code(pop_expr));
+        continue;
+      }
 
       if (!dict_type.is_struct())
       {
