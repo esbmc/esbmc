@@ -415,6 +415,15 @@ math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
 set(_very_slow_regression_tests
     "regression/quixbugs/shortest_path_lengths"
     "regression/quixbugs/shortest_path_lengths_fail"
+    # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a
+    # list comprehension over enumerate(xs) followed by a slice
+    # ([(i * x) for i, x in enumerate(xs)][1:]) under --unwind 20, which unwinds
+    # the list-OM loops 20x and feeds a large bit-vector query (encode ~16s +
+    # Bitwuzla ~54s locally). It times out at the 120s per-test cap on the
+    # DebugOpt static Linux runner; an assertions-on build measures ~248s, the
+    # same band as shortest_path_lengths above. Give it the 3x budget so it
+    # doesn't flap.
+    "regression/humaneval/humaneval_62"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
