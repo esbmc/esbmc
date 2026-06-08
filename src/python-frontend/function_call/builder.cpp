@@ -483,6 +483,16 @@ symbol_id function_call_builder::build_function_id() const
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
 
+      // A dict-typed symbol may carry no "dict" frontend annotation: a dict
+      // comprehension ({k: v for ...}) or a dict-returning call assigns the
+      // __python_dict__ struct directly without recording the type in the
+      // annotation map. Detect the struct type on the symbol so len() routes
+      // to the dict-size handler rather than falling through to strlen, which
+      // would read the struct's bytes as a C string and yield a wrong size.
+      const bool var_symbol_is_dict =
+        var_symbol && converter_.get_dict_handler()->is_dict_type(
+                        converter_.ns.follow(var_symbol->get_type()));
+
       auto is_list_slice_assignment = [&]() -> bool {
         nlohmann::json var_value = json_utils::get_var_value(
           var_name,
@@ -546,7 +556,7 @@ symbol_id function_call_builder::build_function_id() const
           }
         }
       }
-      if (var_type == "dict")
+      if (var_type == "dict" || var_symbol_is_dict)
       {
         // Mark this as a dict len() call
         func_name = "__ESBMC_len_dict";
