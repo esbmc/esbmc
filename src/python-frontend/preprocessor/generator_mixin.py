@@ -144,18 +144,34 @@ class GeneratorMixin:
                 self.ensure_all_locations(if_stmt, generator.ifs[0])
                 ast.fix_missing_locations(if_stmt)
                 loop_body = [if_stmt]
+            # A comprehension used directly as the iterable — e.g.
+            # [x for x in [y for y in xs]], which is how list(filter(p, [..]))
+            # desugars — must be materialised into its own temp list first.
+            # Otherwise the inner comprehension is left in the For's iter and
+            # reaches the C++ converter unlowered ("Unsupported expression
+            # ListComp"). The lowered prefix runs just before this loop.
+            gen_iter = generator.iter
+            if isinstance(gen_iter, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+                iter_prefix, gen_iter, _ = self._lower_listcomp_in_expr(gen_iter)
+            else:
+                iter_prefix = []
+                gen_iter = self.visit(gen_iter)
             for_stmt = ast.For(
                 target=generator.target,
-                iter=self.visit(generator.iter),
+                iter=gen_iter,
                 body=loop_body,
                 orelse=[],
             )
             self.ensure_all_locations(for_stmt, node)
-            loop_body = [for_stmt]
+            loop_body = iter_prefix + [for_stmt]
 
-        transformed_for = self.visit_For(loop_body[0])
+        # loop_body is [<already-lowered iter prefix...>, outermost_for]; only
+        # the For node built above still needs lowering to a while loop.
+        *pre_stmts, outer_for = loop_body
+        transformed_for = self.visit_For(outer_for)
         if not isinstance(transformed_for, list):
             transformed_for = [transformed_for]
+        transformed_for = pre_stmts + transformed_for
 
         for stmt in transformed_for:
             self.ensure_all_locations(stmt, node)

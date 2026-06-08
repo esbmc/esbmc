@@ -352,6 +352,15 @@ set(_slow_regression_tests
     # larger inner timeout lets testing_tool record the KNOWNBUG verdict
     # instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_39"
+    # humaneval_145 used to fast-fail with "TypeError: str() expects a string
+    # argument" when order_by_points()'s nested digits_sum(n) ran `str(n)` on an
+    # unresolved (any_type) parameter. With the str()-of-unresolved-arg fix
+    # (PR #5225) the spurious error is gone and ESBMC reaches the real
+    # order_by_points symex (sorted(key=digits_sum) with a str(int)+int(digit)
+    # comprehension under --unwind 20), which does not converge under the
+    # default budget. It stays KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
+    "regression/humaneval/humaneval_145"
     # humaneval_93 used to fast-fail with "Unsupported reassignment from dict to
     # list" when encode()'s `dict([(i, chr(ord(i) + 2)) for i in vowels])` was
     # rejected during conversion. With the dict()-over-comprehension lowering
@@ -365,6 +374,14 @@ set(_slow_regression_tests
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
+    # lis_fail runs the real longest-increasing-subsequence body (dict +
+    # list-comprehension over range + max()) under its
+    # --incremental-bmc/--smt-during-symex/--bitwuzla config, landing at ~107s
+    # on the DebugOpt Linux runner (~125s locally) -- right at the 120s cap with
+    # no headroom -- so transient CI scheduling jitter tips it over (it timed
+    # out at 120.02s in #5236, a run that does not touch its code path). Give it
+    # the 2x budget like the other borderline quixbugs tests.
+    "regression/quixbugs/lis_fail"
     # knapsack(_fail) used to fast-fail with "max() arguments must be of
     # comparable types" because the nested-list element of a defaultdict was
     # mistyped. With the call-site nested-generic inference in #4830 the
@@ -414,16 +431,30 @@ math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
 # shortest_path_lengths(_fail) used to fast-fail because defaultdict with
 # a lambda factory was unsupported; with #4765 the lambda factory is now
 # honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
-# loop. Observed CI timings: shortest_path_lengths 244.8s (passed by
-# 0.2s under the 245s wall), shortest_path_lengths_fail 245.3s (flapped
-# over). Codecov config takes ~302s. Give 3x headroom so transient
-# scheduling jitter doesn't tip them over.
+# loop. shortest_path_lengths has long been KNOWNBUG (non-converging);
+# shortest_path_lengths_fail is now KNOWNBUG too because #5236 made the
+# `{(i, i): 0 for i in range(n)}` seed populate concrete keys instead of
+# nondet ones, so ESBMC reaches the real defaultdict + triple-nested-loop
+# symex, which no longer converges under --incremental-bmc (>900s locally,
+# was ~245s when the keys were nondet). The 3x inner timeout fires well
+# before the program completes and, being shorter than the outer ctest
+# TIMEOUT, lets testing_tool record the KNOWNBUG verdict instead of ctest
+# hard-killing the run.
 math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
     "regression/quixbugs/shortest_path_lengths"
     "regression/quixbugs/shortest_path_lengths_fail"
+    # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a
+    # list comprehension over enumerate(xs) followed by a slice
+    # ([(i * x) for i, x in enumerate(xs)][1:]) under --unwind 20, which unwinds
+    # the list-OM loops 20x and feeds a large bit-vector query (encode ~16s +
+    # Bitwuzla ~54s locally). It times out at the 120s per-test cap on the
+    # DebugOpt static Linux runner; an assertions-on build measures ~248s, the
+    # same band as shortest_path_lengths above. Give it the 3x budget so it
+    # doesn't flap.
+    "regression/humaneval/humaneval_62"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

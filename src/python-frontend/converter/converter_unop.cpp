@@ -181,7 +181,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (is_complex_type(unary_sub.type()) && (op == "USub" || op == "UAdd"))
     return complex_handler_.handle_unary_op(op, unary_sub);
 
-  exprt unary_expr(python_frontend::map_operator(op, type), type);
+  // Python's `not` always yields a bool, regardless of its operand's type.
+  // Type the node accordingly (matching every other `not` site in the
+  // frontend) so it is well-formed IR: migrate_expr asserts that `not`/`and`/
+  // `or` nodes are bool-typed, and consumers that migrate eagerly (e.g.
+  // build_typecast) would otherwise abort before the C adjuster normalises it.
+  const typet result_type = (op == "Not") ? bool_type() : type;
+  exprt unary_expr(python_frontend::map_operator(op, result_type), result_type);
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
