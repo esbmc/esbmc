@@ -54,6 +54,15 @@ exprt math_member(const exprt &base, const irep_idt &name, const typet &t)
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
 
+// V.3: IREP2 typecast (exact round-trip of typecast_exprt). The single caller
+// targets float_type, which carries no #cpp_type, so no type-restore is needed.
+exprt math_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+
 std::string make_math_dispatch_cache_key(
   const std::string &caller,
   const std::string &func_name)
@@ -790,7 +799,7 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
     else
     {
       // For non-constant operands (like function parameters), create explicit typecast expression
-      e = typecast_exprt(e, float_type);
+      e = math_typecast(e, float_type);
     }
   };
 
