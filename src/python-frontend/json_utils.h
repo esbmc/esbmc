@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <vector>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -506,7 +508,11 @@ bool has_multiple_assignments_in_block(
                              element["targets"][0]["_type"] == "Name" &&
                              element["targets"][0].contains("id") &&
                              element["targets"][0]["id"] == var_name;
-      if ((is_ann || is_assign) && ++count > 1)
+      // Check for augmented assignment (AugAssign)
+      const bool is_aug = t == "AugAssign" && element.contains("target") &&
+                          element["target"].contains("id") &&
+                          element["target"]["id"] == var_name;
+      if ((is_ann || is_assign || is_aug) && ++count > 1)
         return true;
 
       // Avoid descending into new scopes
