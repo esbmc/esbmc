@@ -1,4 +1,0 @@
-CORE
-main.cpp
-
-exception lowering: cannot lower a failing dynamic_cast

@@ -79,11 +79,8 @@ public:
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
-    // symbol), and detect concurrency. The exception state is one global tuple,
-    // not per-thread, so the lowered dispatch is unsound for concurrent programs
-    // (one thread could observe, catch, or clear another thread's in-flight
-    // exception). Until the state is modeled per thread, a concurrent program
-    // that uses exceptions is reported as unsupported.
+    // symbol), and detect concurrency.
+    bool concurrent = false;
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
@@ -112,12 +109,23 @@ public:
             is_symbol2t(c.function) &&
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
-            // concurrent program — not yet modelled
-            return report_unsupported(
-              goto_functions, "a concurrent program (pthread_create)");
+            concurrent = true;
         }
       }
     }
+
+    // The exception state is one global tuple, not per-thread, so the lowered
+    // dispatch is unsound for a concurrent program that throws or catches across
+    // threads (one thread could observe, catch, or clear another thread's
+    // in-flight exception); such a program is reported as unsupported. A program
+    // that only *declares* exception specifications (a THROW_DECL such as the
+    // library `what() const throw()`, with no reachable throw or catch) puts no
+    // exception in flight, so the lowering — which simply strips the inert
+    // THROW_DECL — stays sound and must still run (symex no longer handles a
+    // surviving THROW_DECL). Only bail when there is a real throw or catch.
+    if (concurrent && program_throws_or_catches(goto_functions))
+      return report_unsupported(
+        goto_functions, "a concurrent program (pthread_create)");
 
     // Whole-program, all-or-nothing: every participating function must be in
     // the supported subset, otherwise the program is reported as unsupported
@@ -154,13 +162,29 @@ public:
       init_globals(entry->second.body);
   }
 
-  /// True if any function still has an exception construct to lower.
+  /// True if any function still has an exception construct to lower (a throw, a
+  /// catch, or a dynamic exception specification). Drives the whole-pass no-op
+  /// gate: a surviving THROW_DECL must still be lowered, so it counts here.
   static bool program_uses_exceptions(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
       if (fn.second.body_available)
         for (const auto &ins : fn.second.body.instructions)
           if (ins.type == THROW || ins.type == CATCH || ins.type == THROW_DECL)
+            return true;
+    return false;
+  }
+
+  /// True if the program actually throws or catches — real exception flow that
+  /// uses the global exception state — as opposed to merely declaring an
+  /// exception specification (a THROW_DECL). Used to decide whether a concurrent
+  /// program is genuinely unsound to lower.
+  static bool program_throws_or_catches(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH)
             return true;
     return false;
   }
@@ -282,15 +306,18 @@ private:
   }
 
   /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
-  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
-  /// of the pass lowers it like any other throw. If std::bad_cast is
-  /// unresolvable the calls are left in place and program_supported's bad_cast
-  /// guard makes the program fall back to the imperative path.
+  /// failing dynamic_cast<T&> lowers to — so the rest of the pass never sees the
+  /// call. The frontend guards it with the cast-failed condition
+  /// (`if (!vptr_matches) __ESBMC_throw_bad_cast();`), so the replacement
+  /// inherits that guard. When std::bad_cast is resolvable it becomes the
+  /// equivalent THROW (lowered like any other throw, so a surrounding handler
+  /// can catch it). When it is not (no <typeinfo>), there is no exception object
+  /// to throw, so it becomes an ASSERT(false): a failing reference cast with no
+  /// RTTI model is std::terminate, hence a verification error at that point — a
+  /// cast that always succeeds leaves the assertion unreachable.
   void lower_bad_cast_calls(goto_functionst &goto_functions)
   {
     expr2tc bad_cast_throw = build_bad_cast_throw();
-    if (is_nil_expr(bad_cast_throw))
-      return;
 
     for (auto &fn : goto_functions.function_map)
     {
@@ -302,12 +329,21 @@ private:
           continue;
         const code_function_call2t &c = to_code_function_call2t(ins.code);
         if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+          !is_symbol2t(c.function) ||
+          to_symbol2t(c.function).thename != "c:@F@__ESBMC_throw_bad_cast")
+          continue;
+
+        if (!is_nil_expr(bad_cast_throw))
         {
           // make_throw() preserves location/function (clear() leaves them).
           ins.make_throw();
           ins.code = bad_cast_throw;
+        }
+        else
+        {
+          ins.make_assertion(gen_false_expr());
+          ins.location.property("assertion");
+          ins.location.comment("dynamic_cast<T&> failed: std::bad_cast");
         }
       }
     }
@@ -425,20 +461,9 @@ private:
           !registry.is_registered(t.exception_list.front()))
           return unsupported("a throw of an unsupported type");
       }
-      else if (it->type == FUNCTION_CALL)
-      {
-        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
-        // std::bad_cast throw using the imperative stack_catch — which is empty
-        // once the surrounding catch is lowered, so the throw would be reported
-        // uncaught. The lowering cannot see this hidden throw to wire it, so
-        // leave such a program (dynamic_cast<T&>) to the imperative path.
-        const code_function_call2t &c = to_code_function_call2t(it->code);
-        if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return unsupported(
-            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
-      }
+      // A __ESBMC_throw_bad_cast() call cannot reach here: lower_bad_cast_calls
+      // (run before this check) rewrites every such call to a THROW or an
+      // ASSERT(false), so a failing dynamic_cast<T&> is always lowered.
     }
     // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
     // (its body cannot complete normally). Such unclosed pushes are accepted:
