@@ -244,10 +244,10 @@ function(mangle_clib output)
     # This is loaded at runtime instead of the full clib64.goto for performance.
     set(sol64_goto "${CMAKE_CURRENT_BINARY_DIR}/sol64.goto")
     set(sol64_c "${CMAKE_CURRENT_BINARY_DIR}/sol64.c")
-    if(APPLE)
-      # Apple Clang does not support _BitInt > 128, so c2goto cannot compile
-      # solidity_types.h on macOS. Emit an empty stub so the link succeeds;
-      # runtime verification of Solidity contracts is unavailable on macOS.
+    if(APPLE OR (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64"))
+      # Clang's ARM backend does not support _BitInt > 128, so c2goto cannot
+      # compile solidity_types.h on ARM64 (macOS or Linux). Emit an empty stub
+      # so the link succeeds; runtime Solidity verification is unavailable on ARM64.
       file(WRITE ${sol64_c}
         "/* Auto-generated stub: sol64 unavailable on macOS (_BitInt>128). */\n"
         "#include <stdint.h>\n"
