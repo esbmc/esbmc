@@ -55,6 +55,20 @@ exprt build_call_expr(
   return migrate_expr_back(side_effect_function_call2tc(
     migrate_type(return_type), symbol_expr2tc(fn), args2));
 }
+
+// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
+// a pointer to a PyObject struct, so the dereferenced struct is the resolved
+// member source and member2t's source precondition holds.
+exprt build_deref_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
 } // namespace
 
 symbolt &python_set::create_set_list()
@@ -406,37 +420,13 @@ exprt python_set::get_from_iterable(
           ? build_symbol(set_symbol)
           : build_address_of(build_symbol(set_symbol)));
 
-      member_exprt elem_value(
-        build_symbol(*elem_obj_sym), "value", pointer_typet(empty_typet()));
-      {
-        exprt &base = elem_value.struct_op();
-        exprt deref("dereference");
-        deref.type() = base.type().subtype();
-        deref.move_to_operands(base);
-        base.swap(deref);
-      }
-      contains_call.arguments().push_back(elem_value);
-
-      member_exprt elem_type_id(
-        build_symbol(*elem_obj_sym), "type_id", size_type());
-      {
-        exprt &base = elem_type_id.struct_op();
-        exprt deref("dereference");
-        deref.type() = base.type().subtype();
-        deref.move_to_operands(base);
-        base.swap(deref);
-      }
-      contains_call.arguments().push_back(elem_type_id);
-
-      member_exprt elem_size(build_symbol(*elem_obj_sym), "size", size_type());
-      {
-        exprt &base = elem_size.struct_op();
-        exprt deref("dereference");
-        deref.type() = base.type().subtype();
-        deref.move_to_operands(base);
-        base.swap(deref);
-      }
-      contains_call.arguments().push_back(elem_size);
+      const exprt elem_obj = build_symbol(*elem_obj_sym);
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "value", pointer_typet(empty_typet())));
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "type_id", size_type()));
+      contains_call.arguments().push_back(
+        build_deref_member(elem_obj, "size", size_type()));
 
       contains_call.type() = bool_type();
       contains_call.location() = loc;
@@ -573,39 +563,14 @@ exprt python_set::build_set_difference_call(
   contains_call.arguments().push_back(
     rhs.type().is_pointer() ? rhs : build_address_of(rhs));
 
-  // Extract element value
-  member_exprt elem_value(
-    build_symbol(elem_sym), "value", pointer_typet(empty_typet()));
-  {
-    exprt &base = elem_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_value);
-
-  // Extract element type_id
-  member_exprt elem_type_id(build_symbol(elem_sym), "type_id", size_type());
-  {
-    exprt &base = elem_type_id.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_type_id);
-
-  // Extract element size
-  member_exprt elem_size(build_symbol(elem_sym), "size", size_type());
-  {
-    exprt &base = elem_size.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_size);
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
 
   contains_call.type() = bool_type();
   contains_call.location() = loc;
@@ -724,39 +689,14 @@ exprt python_set::build_set_intersection_call(
   contains_call.arguments().push_back(
     rhs.type().is_pointer() ? rhs : build_address_of(rhs));
 
-  // Extract element value
-  member_exprt elem_value(
-    build_symbol(elem_sym), "value", pointer_typet(empty_typet()));
-  {
-    exprt &base = elem_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_value);
-
-  // Extract element type_id
-  member_exprt elem_type_id(build_symbol(elem_sym), "type_id", size_type());
-  {
-    exprt &base = elem_type_id.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_type_id);
-
-  // Extract element size
-  member_exprt elem_size(build_symbol(elem_sym), "size", size_type());
-  {
-    exprt &base = elem_size.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_size);
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
 
   contains_call.type() = bool_type();
   contains_call.location() = loc;
@@ -886,39 +826,14 @@ exprt python_set::build_set_union_call(
   contains_call.lhs() = build_symbol(contains_result);
   contains_call.arguments().push_back(build_symbol(result_set));
 
-  // Extract element value
-  member_exprt elem_value(
-    build_symbol(elem_sym), "value", pointer_typet(empty_typet()));
-  {
-    exprt &base = elem_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_value);
-
-  // Extract element type_id
-  member_exprt elem_type_id(build_symbol(elem_sym), "type_id", size_type());
-  {
-    exprt &base = elem_type_id.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_type_id);
-
-  // Extract element size
-  member_exprt elem_size(build_symbol(elem_sym), "size", size_type());
-  {
-    exprt &base = elem_size.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  contains_call.arguments().push_back(elem_size);
+  // Extract element value/type_id/size from (*elem) (V.3).
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
 
   contains_call.type() = bool_type();
   contains_call.location() = loc;
@@ -1028,23 +943,17 @@ void python_set::emit_filtered_extend(
     element, "$set_meth_in$", bool_type(), gen_boolean(false));
   body.copy_to_operands(code_declt(build_symbol(contains_result)));
 
-  auto deref = [](exprt e) {
-    exprt d("dereference");
-    d.type() = e.type().subtype();
-    d.move_to_operands(e);
-    return d;
-  };
-
   code_function_callt contains_call;
   contains_call.function() = build_symbol(*contains_func);
   contains_call.lhs() = build_symbol(contains_result);
   contains_call.arguments().push_back(as_ptr(ref_expr));
-  contains_call.arguments().push_back(member_exprt(
-    deref(build_symbol(elem_sym)), "value", pointer_typet(empty_typet())));
+  const exprt elem = build_symbol(elem_sym);
   contains_call.arguments().push_back(
-    member_exprt(deref(build_symbol(elem_sym)), "type_id", size_type()));
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
   contains_call.arguments().push_back(
-    member_exprt(deref(build_symbol(elem_sym)), "size", size_type()));
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
   contains_call.type() = bool_type();
   contains_call.location() = loc;
   body.copy_to_operands(contains_call);
@@ -1153,23 +1062,17 @@ exprt python_set::build_set_method_call(
       element, "$issubset_in$", bool_type(), gen_boolean(false));
     body.copy_to_operands(code_declt(build_symbol(in)));
 
-    auto deref = [](exprt e) {
-      exprt d("dereference");
-      d.type() = e.type().subtype();
-      d.move_to_operands(e);
-      return d;
-    };
-
     code_function_callt contains_call;
     contains_call.function() = build_symbol(*contains_func);
     contains_call.lhs() = build_symbol(in);
     contains_call.arguments().push_back(as_ptr(other));
-    contains_call.arguments().push_back(member_exprt(
-      deref(build_symbol(elem_sym)), "value", pointer_typet(empty_typet())));
+    const exprt elem = build_symbol(elem_sym);
     contains_call.arguments().push_back(
-      member_exprt(deref(build_symbol(elem_sym)), "type_id", size_type()));
+      build_deref_member(elem, "value", pointer_typet(empty_typet())));
     contains_call.arguments().push_back(
-      member_exprt(deref(build_symbol(elem_sym)), "size", size_type()));
+      build_deref_member(elem, "type_id", size_type()));
+    contains_call.arguments().push_back(
+      build_deref_member(elem, "size", size_type()));
     contains_call.type() = bool_type();
     contains_call.location() = loc;
     body.copy_to_operands(contains_call);
