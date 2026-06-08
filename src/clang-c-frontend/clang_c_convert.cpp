@@ -1575,16 +1575,6 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "_ptrmem";
     break;
 
-  // Unsupported extensions (optional don't care)
-  case clang::BuiltinType::BFloat16:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-    {
-      new_type = half_float_type();
-      c_type = "_Float16";
-      break;
-    }
-    // fallthrough
-
   // ARM SVE (Scalable Vector Extension) types.
   // Mapped to fixed-size ESBMC vector types using the minimum SVE vector
   // length (128-bit). xN variants multiply the element count by N.
@@ -1726,6 +1716,16 @@ bool clang_c_convertert::get_builtin_type(
 #endif
 
 #undef SVE_VEC
+
+  // Unsupported extensions (optional don't care)
+  case clang::BuiltinType::BFloat16:
+    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
+    {
+      new_type = half_float_type();
+      c_type = "_Float16";
+      break;
+    }
+    [[fallthrough]];
 
   default:
   {
