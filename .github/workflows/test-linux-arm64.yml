@@ -15,5 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-16 clang-16 libclang-16-dev libclang-cpp16-dev
+
       - name: Build ESBMC
-        run: ./scripts/build.sh -b DebugOpt -e ON
+        run: ./scripts/build.sh -b DebugOpt -S OFF -e OFF
