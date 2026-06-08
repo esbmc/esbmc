@@ -3725,7 +3725,12 @@ void code_contractst::add_pointer_validity_assumptions(
       // Phase 2B: array params need ARRAY_ALLOC_ELEMS elements for nondet-witness
       // addressing. Use malloc so we can allocate a variable-length range.
       emit_pointer_param_malloc(
-        wrapper, p, param_type, pointed_to_type, location, allocated_ptrs,
+        wrapper,
+        p,
+        param_type,
+        pointed_to_type,
+        location,
+        allocated_ptrs,
         "array");
     }
     else
@@ -3807,7 +3812,12 @@ void code_contractst::add_pointer_validity_assumptions(
         // allocation causes out-of-bounds reads to produce fresh nondets on
         // each access, making "return_value == arr[idx]" unprovable.)
         emit_pointer_param_malloc(
-          wrapper, p, param_type, pointed_to_type, location, allocated_ptrs,
+          wrapper,
+          p,
+          param_type,
+          pointed_to_type,
+          location,
+          allocated_ptrs,
           "primitive array");
       }
     }
@@ -3823,8 +3833,7 @@ void code_contractst::emit_pointer_param_malloc(
   std::vector<expr2tc> &allocated_ptrs,
   const char *kind_label)
 {
-  expr2tc alloc_size =
-    constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
+  expr2tc alloc_size = constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
   expr2tc malloc_expr = sideeffect2tc(
     pointer_type2tc(pointed_to_type),
     expr2tc(),
