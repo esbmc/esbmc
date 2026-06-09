@@ -38,9 +38,11 @@ YAML props   ──────────────────────�
 ```
 
 The verification pipeline is exposed as `ld-verify`, a thin wrapper that orchestrates
-the above steps and formats results for end users. ESBMC itself requires **no core
-modifications**: SAFE-LD integrates as a new `languaget` subclass registered under the
-`.xml` / `.ld` extension.
+the above steps and formats results for end users. SAFE-LD integrates as a new
+`languaget` subclass and requires **no changes to the verification pipeline, solvers, or
+symex**. Registering a new front-end does require small additions to ESBMC's language
+dispatch layer (`src/langapi/mode.h`, `mode.cpp`, and `src/esbmc/globals.cpp`), exactly
+as all other front-ends (Python, Jimple, Solidity) do — see §4.2.
 
 ---
 
@@ -118,7 +120,7 @@ regression/
 
 Key design points:
 
-- Use a DOM parser (libxml2, already an optional ESBMC dependency) to walk the XML tree.
+- Use a DOM parser (libxml2 — a **new** dependency, added via `find_package(LibXml2)`) to walk the XML tree.
 - Normalize vendor-specific schema deviations (TIA Portal, Codesys, Rockwell) in a
   **schema normalisation layer** before constructing the AST. This directly mitigates the
   PLCopen XML schema-variation risk identified in the proposal.
@@ -177,7 +179,7 @@ The translation follows the SOS state-transition functions mechanically:
 | Output coil `--( )--` | `var = pf;` |
 | Set coil `--( S )--` | `if (pf) var = true;` |
 | Reset coil `--( R )--` | `if (pf) var = false;` |
-| TON timer | `if (pf) { if (!ton.IN) { ton.PT = preset; ton.ET = 0; } ton.IN = true; } else { ton.IN = false; ton.Q = false; }` |
+| TON timer | *(pseudocode sketch)* `if (pf) { if (!ton.IN) { ton.ET = 0; } ton.IN = true; ton.ET += SCAN_TIME; ton.Q = (ton.ET >= ton.PT); } else { ton.IN = false; ton.Q = false; ton.ET = 0; }` — full per-scan `ET` accumulation and `Q` logic are defined precisely in the SOS spec (T1.2) |
 | CTU counter | `if (pf && !ctu_prev) ctu.CV++; if (ctu.CV >= ctu.PV) ctu.Q = true;` |
 
 The scan loop is translated to a C `while(1)` loop. ESBMC's k-induction engine naturally
@@ -282,11 +284,28 @@ public:
 };
 ```
 
-### 4.2 File Extension Registration
+### 4.2 Language Dispatch Registration
 
-In ESBMC's language registration (wherever `.py` is registered for the Python frontend),
-add `.xml` when the input file contains a `<project>` root with `xmlns` matching the
-PLCopen XML namespace, and `.ld` as an explicit extension alias.
+ESBMC's dispatch (`language_id_by_path` in `src/langapi/mode.cpp`) is **extension-only**
+— it matches on the file-name suffix and never inspects file contents. Registering on
+`.xml` would therefore mis-route any XML file (SVCOMP witnesses, Jimple exports, etc.) to
+the LD front-end. Instead:
+
+- Register a dedicated **`.ld`** extension as the canonical input suffix.
+- The `ld-verify` CLI can accept `.xml` files directly (bypassing `language_id_by_path`)
+  and write a temporary `.ld`-suffixed copy before invoking ESBMC, or invoke
+  `ld_languaget` directly without going through the extension-dispatch path.
+- Users pass PLCopen XML files to `ld-verify`; only `ld-verify` (not bare `esbmc`)
+  needs to handle `.xml` input.
+
+The core changes required (mirroring the Python front-end addition):
+
+1. `src/langapi/mode.h` — add `language_idt::LD` to the enum and declare
+   `new_ld_language()`, `LANGAPI_MODE_LD`.
+2. `src/langapi/mode.cpp` — add `extensions_ld[] = {"ld", nullptr}` and
+   `language_desc_ld`.
+3. `src/esbmc/globals.cpp` — add `LANGAPI_MODE_LD` inside
+   `#ifdef ENABLE_LD_FRONTEND`.
 
 ### 4.3 CMake Integration
 
@@ -318,9 +337,9 @@ target_link_libraries(ldfrontend PUBLIC ${LIBXML2_LIBRARIES} util)
 
 | Dependency | Role | Already in ESBMC? |
 |---|---|---|
-| libxml2 | PLCopen XML DOM parsing | Optional; make required for LD build |
-| yaml-cpp | YAML property file parsing | No; add as optional dep |
-| nlohmann/json | JSON report output | Yes (used by Python frontend) |
+| libxml2 | PLCopen XML DOM parsing | **No** — new dependency; add via `find_package(LibXml2 REQUIRED)` gated on `ENABLE_LD_FRONTEND` |
+| yaml-cpp | YAML property file parsing | **Yes** — already required (`src/util/CMakeLists.txt` links `yaml-cpp::yaml-cpp`; `util/yaml_parser.h` exposes the interface) |
+| nlohmann/json | JSON report output | **Yes** — already used by the Python frontend |
 
 ---
 
@@ -431,10 +450,14 @@ both the translation and the verifier on real semantic errors, not just syntacti
 
 ## 8. Key Design Decisions
 
-1. **No ESBMC core modifications.** SAFE-LD is a pure front-end: it produces standard
-   ANSI-C with `__ESBMC_assert()` and hands off to the existing pipeline. This eliminates
-   integration risk and immediately delivers k-induction, multi-solver portfolio, and
-   witness generation without any front-end work.
+1. **Minimal ESBMC core changes; no pipeline modifications.** SAFE-LD produces standard
+   ANSI-C with `__ESBMC_assert()` and hands off to the existing verification pipeline
+   unchanged. Registering the new front-end requires the same small additions to
+   `mode.h`, `mode.cpp`, and `globals.cpp` that every other ESBMC front-end requires
+   (Python, Jimple, Solidity — see §4.2). The verification pipeline, solvers, symex,
+   and GOTO-program IR are not touched. This eliminates integration risk and immediately
+   delivers k-induction, multi-solver portfolio, and witness generation without any
+   front-end work.
 
 2. **Semantics-driven translation.** The SOS specification is the primary design artefact.
    The parser, IR, and code generator are all derived from it. This provides a mathematical
