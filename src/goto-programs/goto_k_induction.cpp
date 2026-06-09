@@ -490,8 +490,9 @@ bool has_direct_pointer_array_write(const goto_functionst &goto_functions)
       // member writes through a pointer are fine — the struct symbol can be
       // havoc'd as a whole. Mirror the is_index2t guard in
       // collect_lhs_symbols/modifies_pointer_array. See #5230.
-      if (is_index2t(target) &&
-          indexes_through_pointer(to_index2t(target).source_value))
+      if (
+        is_index2t(target) &&
+        indexes_through_pointer(to_index2t(target).source_value))
         return true;
     }
   }
