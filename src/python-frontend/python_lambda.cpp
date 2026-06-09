@@ -1,9 +1,24 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
+
+namespace
+{
+// V.3: build `&obj` in IREP2 (exact round-trip of address_of_exprt). The two
+// callers take the address of a lambda function symbol, so the pointer subtype
+// is the symbol's code type, which migrate_type round-trips faithfully.
+exprt build_address_of(const exprt &obj)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+} // namespace
 
 // Initialize static counter
 int python_lambda::lambda_counter_ = 0;
@@ -48,7 +63,7 @@ void python_lambda::handle_lambda_assignment(
   lhs.type() = func_ptr_type;
 
   // Convert lambda symbol to address
-  rhs = address_of_exprt(rhs);
+  rhs = build_address_of(rhs);
 }
 
 static bool is_param_used_as_string(
@@ -292,7 +307,7 @@ exprt python_lambda::process_lambda_body(
   // If the body is a nested lambda (inner function), take its address so
   // the outer lambda returns a function pointer, not a bare code symbol.
   if (body_expr.type().is_code() && body_expr.is_symbol())
-    body_expr = address_of_exprt(body_expr);
+    body_expr = build_address_of(body_expr);
 
   // Create return statement
   code_returnt return_stmt;
