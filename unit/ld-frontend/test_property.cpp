@@ -22,7 +22,8 @@ TEST_CASE(
 {
   YamlPropertyParser parser;
   REQUIRE_THROWS_AS(
-    parser.parse(fixture("mutual_exclusion_one_var.yaml")), LdPropertyParseError);
+    parser.parse(fixture("mutual_exclusion_one_var.yaml")),
+    LdPropertyParseError);
 }
 
 TEST_CASE("all valid property kinds parse without error", "[property_parser]")
@@ -55,7 +56,9 @@ static void add_bool_sym(contextt &ctx, const std::string &name)
   ctx.move_symbol_to_context(sym);
 }
 
-TEST_CASE("parenthesised boolean expression encodes without error", "[property_encoder]")
+TEST_CASE(
+  "parenthesised boolean expression encodes without error",
+  "[property_encoder]")
 {
   contextt ctx;
   add_bool_sym(ctx, "A");

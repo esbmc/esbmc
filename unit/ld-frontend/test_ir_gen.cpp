@@ -30,7 +30,9 @@ static void add_int_var(LdIR &ir, const std::string &name)
   ir.variables.push_back(v);
 }
 
-TEST_CASE("__ESBMC_main is loop-free; ld::scan_loop holds the while loop", "[ir_gen]")
+TEST_CASE(
+  "__ESBMC_main is loop-free; ld::scan_loop holds the while loop",
+  "[ir_gen]")
 {
   LdIR ir = make_empty_ir();
   add_bool_var(ir, "A");
@@ -137,7 +139,9 @@ TEST_CASE("CTD counter declares per-instance shadow variable", "[ir_gen]")
   REQUIRE(prev->name == "__ctr_prev_CTD1");
 }
 
-TEST_CASE("two CTU instances sharing a CU signal get independent shadow variables", "[ir_gen]")
+TEST_CASE(
+  "two CTU instances sharing a CU signal get independent shadow variables",
+  "[ir_gen]")
 {
   LdIR ir = make_empty_ir();
   add_bool_var(ir, "CU_shared");
@@ -146,17 +150,17 @@ TEST_CASE("two CTU instances sharing a CU signal get independent shadow variable
   add_int_var(ir, "CV1");
   add_int_var(ir, "CV2");
 
-  auto make_ctu = [](const std::string &inst, const std::string &cv,
-                     const std::string &q) {
-    LdIRNode n;
-    n.kind = LdIRNodeKind::CounterStep;
-    n.ctr_kind = FBKind::CTU;
-    n.ctr_instance = inst;
-    n.ctr_CU = "CU_shared";
-    n.ctr_CV = cv;
-    n.ctr_Q = q;
-    return n;
-  };
+  auto make_ctu =
+    [](const std::string &inst, const std::string &cv, const std::string &q) {
+      LdIRNode n;
+      n.kind = LdIRNodeKind::CounterStep;
+      n.ctr_kind = FBKind::CTU;
+      n.ctr_instance = inst;
+      n.ctr_CU = "CU_shared";
+      n.ctr_CV = cv;
+      n.ctr_Q = q;
+      return n;
+    };
   LdIRRung rung;
   rung.id = "1";
   rung.nodes.push_back(make_ctu("CTU_A", "CV1", "Q1"));

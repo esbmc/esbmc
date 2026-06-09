@@ -48,7 +48,8 @@ TEST_CASE("derived type name resolved from attribute", "[parser]")
   REQUIRE(ast.variables[0].name == "Count");
   REQUIRE(ast.variables[0].kind == VarKind::INT);
   REQUIRE(ast.variables[1].name == "Flag");
-  REQUIRE(ast.variables[1].kind == VarKind::BOOL); // unknown derived → BOOL default
+  REQUIRE(
+    ast.variables[1].kind == VarKind::BOOL); // unknown derived → BOOL default
 }
 
 TEST_CASE("XML comment children inside a rung are skipped", "[parser]")
