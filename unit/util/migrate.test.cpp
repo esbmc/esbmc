@@ -215,6 +215,74 @@ TEST_CASE(
   require_expr_roundtrip(pointer_capability2tc(cap_t, base));
 }
 
+// V.4 of the migration (esbmc/esbmc#4715): structured control-flow code kinds.
+// These are dead-but-tested infrastructure -- nothing in the pipeline builds
+// them yet (the converter emits legacy structured codet, which goto_convert
+// lowers). The round-trip property pinned here is the precondition for the
+// goto_convert wiring phase that lets a frontend emit IREP2 bodies. The
+// nil-operand variants (else-less if, head-less for) exercise the null<->nil
+// mapping that an emitted body would hit.
+
+// A small legacy-shaped IREP2 body used as a sub-statement of the CF kinds.
+static expr2tc cf_block()
+{
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(1));
+  return code_block2tc(std::vector<expr2tc>{code_assign2tc(lhs, rhs)});
+}
+
+TEST_CASE("migrate expr round-trips for code_ifthenelse", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), cf_block()));
+  // No else branch: the else_case is a null expr2tc <-> nil exprt.
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), expr2tc()));
+}
+
+TEST_CASE("migrate expr round-trips for code_while", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_while2tc(gen_true_expr(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_for", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc i = symbol2tc(get_int_type(32), "i");
+  expr2tc init =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(0)));
+  expr2tc iter =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(1)));
+  require_expr_roundtrip(code_for2tc(init, gen_true_expr(), iter, cf_block()));
+  // Absent init/cond/iter -- the null<->nil corner for every head slot.
+  require_expr_roundtrip(
+    code_for2tc(expr2tc(), expr2tc(), expr2tc(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_switch", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+  require_expr_roundtrip(code_switch2tc(value, cf_block()));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_break and code_continue",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_break2tc());
+  require_expr_roundtrip(code_continue2tc());
+}
+
+TEST_CASE("migrate expr round-trips for code_label", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_label2tc("L1", cf_block()));
+}
+
 // Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and
 // side_effect_function_call2tc. The contract is that each is a faithful
 // drop-in for the legacy constructor it replaces -- it produces the same IREP2

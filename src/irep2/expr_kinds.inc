@@ -126,3 +126,12 @@ IREP2_EXPR(exists,                "exists")
 IREP2_EXPR(isinstance,            "isinstance")
 IREP2_EXPR(hasattr,               "hasattr")
 IREP2_EXPR(isnone,                "isnone")
+// V.4 structured control-flow code kinds (esbmc/esbmc#4715). Appended at the
+// end so existing expr_id enum values are not renumbered.
+IREP2_EXPR(code_ifthenelse,       "code_ifthenelse")
+IREP2_EXPR(code_while,            "code_while")
+IREP2_EXPR(code_for,              "code_for")
+IREP2_EXPR(code_switch,           "code_switch")
+IREP2_EXPR(code_break,            "code_break")
+IREP2_EXPR(code_continue,         "code_continue")
+IREP2_EXPR(code_label,            "code_label")
