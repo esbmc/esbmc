@@ -1,0 +1,155 @@
+#include <ld-frontend/ld_language.h>
+#include <ld-frontend/parser/plcopen_xml_parser.h>
+#include <ld-frontend/semantics/type_checker.h>
+#include <ld-frontend/ir/ld_ir_builder.h>
+#include <ld-frontend/ir_gen/ld_converter.h>
+#include <ld-frontend/property/yaml_property_parser.h>
+#include <ld-frontend/property/property_encoder.h>
+#include <util/c_expr2string.h>
+#include <util/message.h>
+#include <iostream>
+
+languaget *new_ld_language()
+{
+  return new ld_languaget;
+}
+
+bool ld_languaget::parse(const std::string &path)
+{
+  log_debug("ld", "Parsing: {}", path);
+
+  try
+  {
+    PlcopenXmlParser parser;
+    ast_ = parser.parse(path);
+  }
+  catch (const UnsupportedConstructError &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
+  catch (const LdParseError &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
+
+  try
+  {
+    TypeChecker checker;
+    checker.check(ast_);
+  }
+  catch (const TypeCheckError &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
+
+  if (!props_path_.empty())
+  {
+    try
+    {
+      YamlPropertyParser prop_parser;
+      props_ = prop_parser.parse(props_path_);
+    }
+    catch (const LdPropertyParseError &e)
+    {
+      log_error("{}", e.what());
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
+{
+  try
+  {
+    LdIRBuilder builder;
+    LdIR ir = builder.build(ast_);
+
+    ld_converter converter(context, ir);
+    converter.convert();
+
+    // Append property assertions into the scan-loop body of __ESBMC_main.
+    if (!props_.empty())
+    {
+      property_encoder encoder(context, ast_.source_file);
+      code_blockt prop_code = encoder.encode(props_);
+
+      symbolt *main_sym = context.find_symbol("__ESBMC_main");
+      if (main_sym && !prop_code.operands().empty())
+      {
+        // main body is a code_blockt; last operand is the while loop.
+        // get_value() is const-only; take a copy, mutate, and set back.
+        exprt main_val = main_sym->get_value();
+        if (
+          !main_val.operands().empty() &&
+          to_code(main_val.operands().back()).get_statement() == "while")
+        {
+          codet &loop = static_cast<codet &>(main_val.operands().back());
+          code_whilet &whl = static_cast<code_whilet &>(loop);
+          codet &loop_body = whl.body();
+          for (const auto &op : prop_code.operands())
+            loop_body.copy_to_operands(op);
+        }
+        main_sym->set_value(main_val);
+      }
+    }
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_error("{}", e.what());
+    return true;
+  }
+
+  return false;
+}
+
+bool ld_languaget::from_expr(
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns,
+  unsigned flags)
+{
+  code = c_expr2string(expr, ns, flags);
+  return false;
+}
+
+bool ld_languaget::from_type(
+  const typet &type,
+  std::string &code,
+  const namespacet &ns,
+  unsigned flags)
+{
+  code = c_type2string(type, ns, flags);
+  return false;
+}
+
+unsigned ld_languaget::default_flags(presentationt target) const
+{
+  unsigned f = 0;
+  switch (target)
+  {
+  case presentationt::HUMAN:
+    f |= c_expr2stringt::SHORT_ZERO_COMPOUNDS;
+    break;
+  case presentationt::WITNESS:
+    f |= c_expr2stringt::UNIQUE_FLOAT_REPR;
+    break;
+  }
+  return f;
+}
+
+void ld_languaget::show_parse(std::ostream &out)
+{
+  out << "LD program: " << ast_.source_file << "\n";
+  out << "Variables: " << ast_.variables.size() << "\n";
+  for (const auto &net : ast_.networks)
+  {
+    out << "Network '" << net.name << "': " << net.rungs.size() << " rungs\n";
+    for (const auto &rung : net.rungs)
+      out << "  Rung " << rung.id << ": " << rung.elements.size() << " elements\n";
+  }
+}

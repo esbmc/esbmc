@@ -130,11 +130,20 @@ if(ENABLE_PYTHON_FRONTEND)
     add_definitions(-DENABLE_PYTHON_FRONTEND)
 endif()
 
+option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end" OFF)
+if(ENABLE_LD_FRONTEND)
+    add_definitions(-DENABLE_LD_FRONTEND)
+endif()
+
 if(ENABLE_GOTO_CONTRACTOR)
   add_compile_options(-DENABLE_GOTO_CONTRACTOR)
 endif()
 
 add_subdirectory(src)
+
+if(ENABLE_LD_FRONTEND)
+  add_subdirectory(tools/ld-verify)
+endif()
 
 include(Irep2Optimization)
 
