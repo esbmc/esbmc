@@ -2295,6 +2295,55 @@ bool esbmc_parseoptionst::parse_goto_program(
   return false;
 }
 
+/// CBMC-compatible modelling of __CPROVER_uninterpreted_* functions.
+///
+/// SV-COMP harnesses use these names to declare hash or comparator functions
+/// whose semantics should be truly uninterpreted (any-output, excluding the
+/// zero/NULL sentinel).  CBMC's SMT backend treats them as UF axioms and
+/// never maps NULL → 0.  ESBMC inlines the concrete C body
+/// (e.g. `(uint64_t)a`), which maps NULL → 0 and produces false alarms
+/// whenever a hash table rejects the zero sentinel (issue #5145).
+///
+/// For each call whose bitvector return value is stored, insert
+/// ASSUME(result != 0) immediately after the call.  This is a sound
+/// over-approximation: on real 64-bit targets, non-NULL pointers cast to
+/// uint64_t are always non-zero, and NULL as a hash key is disallowed by
+/// every hash table that reserves 0 as an empty-slot marker.
+static void constrain_cprover_uninterpreted_calls(
+  goto_functionst &goto_functions)
+{
+  Forall_goto_functions(func_it, goto_functions)
+  {
+    if (!func_it->second.body_available)
+      continue;
+    goto_programt::instructionst &insns =
+      func_it->second.body.instructions;
+
+    for (auto it = insns.begin(); it != insns.end(); ++it)
+    {
+      if (!it->is_function_call())
+        continue;
+      const code_function_call2t &call =
+        to_code_function_call2t(it->code);
+      if (!is_symbol2t(call.function))
+        continue;
+      const std::string &fname =
+        id2string(to_symbol2t(call.function).thename);
+      if (fname.find("__CPROVER_uninterpreted_") == std::string::npos)
+        continue;
+      if (is_nil_expr(call.ret) || !is_bv_type(call.ret->type))
+        continue;
+
+      goto_programt::instructiont assume_instr;
+      assume_instr.type = ASSUME;
+      assume_instr.guard =
+        notequal2tc(call.ret, gen_zero(call.ret->type));
+      assume_instr.location = it->location;
+      insns.insert(std::next(it), std::move(assume_instr));
+    }
+  }
+}
+
 // This method performs various analyses and transformations
 // on the given GOTO program. They involve all the techniques that we class
 // as "static analyses" - performed on the given GOTO program before it is
@@ -2467,6 +2516,17 @@ bool esbmc_parseoptionst::process_goto_program(
         cse.run(goto_functions);
       }
     }
+
+    // Model __CPROVER_uninterpreted_* functions as nondet non-zero (issue
+    // #5145).  SV-COMP harnesses built for CBMC use these functions as hash
+    // functions with the convention that 0 is the empty-slot sentinel and
+    // is never a valid hash.  CBMC handles this via SMT UF axioms; ESBMC
+    // inlines the concrete C body, which maps NULL → 0.  Runs after partial
+    // inlining so FUNCTION_CALL sites are still present (partial inlining
+    // with smallfunc_limit = 0 does not inline non-trivial functions).
+    // NOTE: --full-inlining erases all CALL instructions before this point;
+    // use without --full-inlining for the fix to take effect.
+    constrain_cprover_uninterpreted_calls(goto_functions);
 
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
