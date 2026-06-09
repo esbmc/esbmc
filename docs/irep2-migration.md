@@ -3485,13 +3485,16 @@ verdict parity, dual-solver, asserts build (§V.5).
    the existing `==` round-trip cannot catch a drop). Prerequisite for
    V.4.2: `goto_convert` reads `code.location()` at ~15 sites; without
    this, IREP2 bodies would lose source locations in the goto output.
-3. **V.4.2 — flag + IREP2-side `goto_convert` entry.** Add a feature flag
-   `--irep2-bodies` (default off) that routes `convert_function` through
+3. **V.4.2 — flag + IREP2-side `goto_convert` entry.** **LANDED (#5277)**
+   `--irep2-bodies` (default off) routes `convert_function` through
    an IREP2 body round-trip: `migrate_expr` the legacy body to
    `code_*2t`, then `migrate_expr_back` to `codet`, then process through
    the existing `goto_convert_rec` handlers. Flag off ⇒ byte-identical to
-   today. Add regression tests gated on `--irep2-bodies` that verify
-   verdict parity on programs exercising all 7 structured-CF kinds.
+   today. New migrate arms: `sideeffect_assign2t` (covers all 13 assign/
+   compound-assign variants), `code_switch_case2t`, 2-op `code_decl`,
+   `decl-block`. Fixed a latent UB in `ifthenelse` migration (2-operand
+   form from Clang C frontend). Regression tests
+   `github_4715_irep2_bodies_01{,_fail}` gate on `--irep2-bodies`.
 4. **V.4.3 — one frontend at a time.** Flip the Python converter (only)
    to emit IREP2 bodies under the flag; gate on byte-identical GOTO +
    verdict parity. Then C/C++/CUDA/Solidity/Jimple, each its own commit.
