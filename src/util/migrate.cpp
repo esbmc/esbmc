@@ -2155,6 +2155,69 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Forward arms
+  // for the legacy structured codet statements; nil sub-operands (an absent
+  // else / for-init / for-cond / for-iter) migrate to a null expr2tc and back,
+  // so the round-trip is exact.
+  if (expr.id() == "code" && expr.statement() == "ifthenelse")
+  {
+    expr2tc cond, then_case, else_case;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), then_case);
+    migrate_expr(expr.op2(), else_case);
+    new_expr_ref = code_ifthenelse2tc(cond, then_case, else_case);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "while")
+  {
+    expr2tc cond, body;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref = code_while2tc(cond, body);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "for")
+  {
+    expr2tc init, cond, iter, body;
+    migrate_expr(expr.op0(), init);
+    migrate_expr(expr.op1(), cond);
+    migrate_expr(expr.op2(), iter);
+    migrate_expr(expr.op3(), body);
+    new_expr_ref = code_for2tc(init, cond, iter, body);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "switch")
+  {
+    expr2tc value, body;
+    migrate_expr(expr.op0(), value);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref = code_switch2tc(value, body);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "break")
+  {
+    new_expr_ref = code_break2tc();
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "continue")
+  {
+    new_expr_ref = code_continue2tc();
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "label")
+  {
+    expr2tc code;
+    migrate_expr(expr.op0(), code);
+    new_expr_ref = code_label2tc(expr.get("label"), code);
+    return;
+  }
+
   if (expr.id() == "code" && expr.statement() == "cpp-catch")
   {
     std::vector<irep_idt> expr_list;
@@ -3610,6 +3673,73 @@ exprt migrate_expr_back(const expr2tc &ref)
     for (auto const &op : ref2.operands)
       block.copy_to_operands(migrate_expr_back(op));
     return block;
+  }
+  // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Reproduce the
+  // legacy structured codet operand layout (std_code.h) so the forward arm
+  // above reads each sub-part back from the same slot.
+  case expr2t::code_ifthenelse_id:
+  {
+    const code_ifthenelse2t &ref2 = to_code_ifthenelse2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("ifthenelse");
+    codeexpr.operands().resize(3);
+    codeexpr.op0() = migrate_expr_back(ref2.cond);
+    codeexpr.op1() = migrate_expr_back(ref2.then_case);
+    codeexpr.op2() = migrate_expr_back(ref2.else_case);
+    return codeexpr;
+  }
+  case expr2t::code_while_id:
+  {
+    const code_while2t &ref2 = to_code_while2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("while");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.cond);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    return codeexpr;
+  }
+  case expr2t::code_for_id:
+  {
+    const code_for2t &ref2 = to_code_for2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("for");
+    codeexpr.operands().resize(4);
+    codeexpr.op0() = migrate_expr_back(ref2.init);
+    codeexpr.op1() = migrate_expr_back(ref2.cond);
+    codeexpr.op2() = migrate_expr_back(ref2.iter);
+    codeexpr.op3() = migrate_expr_back(ref2.body);
+    return codeexpr;
+  }
+  case expr2t::code_switch_id:
+  {
+    const code_switch2t &ref2 = to_code_switch2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("switch");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.value);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    return codeexpr;
+  }
+  case expr2t::code_break_id:
+  {
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("break");
+    return codeexpr;
+  }
+  case expr2t::code_continue_id:
+  {
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("continue");
+    return codeexpr;
+  }
+  case expr2t::code_label_id:
+  {
+    const code_label2t &ref2 = to_code_label2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("label");
+    codeexpr.set("label", ref2.label);
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.code));
+    return codeexpr;
   }
   case expr2t::code_cpp_catch_id:
   {
