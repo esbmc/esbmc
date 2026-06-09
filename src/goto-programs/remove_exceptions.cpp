@@ -676,8 +676,9 @@ private:
     //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
     //    re-checked (build_dynamic_spec_check), matching the imperative path
     //    (which models the unexpected-handler dispatch and its recovery).
-    const bool is_entry =
-      id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
+    const bool is_entry = fn_id == "c:@F@main" ||
+                          id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
+                          fn_id == "__ESBMC_main";
 
     if (spec.kind == exception_specificationt::kindt::dynamic)
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
