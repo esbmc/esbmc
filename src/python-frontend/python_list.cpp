@@ -63,7 +63,11 @@ exprt build_typecast(const exprt &from, const typet &t)
     return typecast_exprt(from, t);
   expr2tc from2;
   migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // so legacy typecast_exprt(from, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
 }
 
 // address_of2t's sources here are lvalues (symbols/members/indices), never a
@@ -157,7 +161,11 @@ exprt build_dereference(const exprt &ptr, const typet &t)
 {
   expr2tc ptr2;
   migrate_expr(ptr, ptr2);
-  return migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
+  exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
+  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // so legacy dereference_exprt(t)+op0=ptr is reproduced faithfully.
+  result.type() = t;
+  return result;
 }
 } // namespace
 
@@ -4408,8 +4416,7 @@ exprt python_list::extract_pyobject_value(
   {
     const array_typet &arr_type = to_array_type(elem_type);
     // Cast to pointer to element type (e.g., char* instead of char[2]*)
-    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-    return tc;
+    return build_typecast(obj_value, pointer_typet(arr_type.subtype()));
   }
 
   // For char* strings and None (_Bool*), the void* already contains the pointer value
@@ -4419,16 +4426,13 @@ exprt python_list::extract_pyobject_value(
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
     // String and None case: cast void* directly to the pointer type (no dereference needed)
-    typecast_exprt tc(obj_value, elem_type);
-    return tc;
+    return build_typecast(obj_value, elem_type);
   }
   else
   {
     // All other types: cast void* to pointer-to-type, then dereference
-    typecast_exprt tc(obj_value, pointer_typet(elem_type));
-    dereference_exprt deref(elem_type);
-    deref.op0() = tc;
-    return deref;
+    exprt tc = build_typecast(obj_value, pointer_typet(elem_type));
+    return build_dereference(tc, elem_type);
   }
 }
 
