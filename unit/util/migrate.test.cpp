@@ -283,6 +283,56 @@ TEST_CASE("migrate expr round-trips for code_label", "[migrate][v4-cf]")
   require_expr_roundtrip(code_label2tc("L1", cf_block()));
 }
 
+// V.4.1: each CF kind carries a source location through migrate in both
+// directions. The location field is intentionally NOT in the fields tuple, so
+// it does not enter operator== -- require_expr_roundtrip would pass even if it
+// were dropped. Assert it survives explicitly via the typed accessor.
+static locationt cf_loc()
+{
+  locationt l;
+  l.set_file("cf.c");
+  l.set_line(42u);
+  return l;
+}
+
+static expr2tc cf_roundtrip(const expr2tc &e2)
+{
+  expr2tc back;
+  migrate_expr(migrate_expr_back(e2), back);
+  return back;
+}
+
+TEST_CASE(
+  "migrate carries source location on CF code kinds",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const locationt loc = cf_loc();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+
+  REQUIRE(
+    to_code_ifthenelse2t(cf_roundtrip(code_ifthenelse2tc(
+                           gen_true_expr(), cf_block(), expr2tc(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_while2t(
+      cf_roundtrip(code_while2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_for2t(cf_roundtrip(code_for2tc(
+                    expr2tc(), expr2tc(), expr2tc(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_switch2t(cf_roundtrip(code_switch2tc(value, cf_block(), loc)))
+      .location == loc);
+  REQUIRE(to_code_break2t(cf_roundtrip(code_break2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_continue2t(cf_roundtrip(code_continue2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_label2t(cf_roundtrip(code_label2tc("L1", cf_block(), loc)))
+      .location == loc);
+}
+
 // Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and
 // side_effect_function_call2tc. The contract is that each is a faithful
 // drop-in for the legacy constructor it replaces -- it produces the same IREP2
