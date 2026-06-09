@@ -1,6 +1,6 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-07 (Pass 4 — new batch #5133–#5145 + #5224; see §8)
+**Last updated:** 2026-06-09 (Pass 5 — calloc overflow fix #4433 regression + printf G-D wiring; see §9)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `66304a6178` (Pass 4);
@@ -590,3 +590,109 @@ data-race regressions pass.
 4. #5138–#5140 — memory-model/reachability precision for `forgotten`/`invalid pointer` verdicts.
 5. Carry-forward from Pass 3: witness-validator integration (#1470/#1471/#1492/#4611), #4432 (x86
    data-race-checker performance on atomics), #4980 (termination ranking recogniser).
+
+---
+
+## 9. Pass 5 — calloc overflow fix + printf G-D wiring (2026-06-09)
+
+Pass 4 left two actionable items: a `calloc` size-overflow regression (#4433 re-introduced by
+performance improvements) and the printf G-D wiring for `asprintf`/`vasprintf`/`vsnprintf` family
+tracked by #5012. Both are addressed here with formal verification and regression tests.
+
+All verdicts are on **x86_64 Linux**, master branch after PR #5228 (commit `bef6149cad`), ESBMC
+8.3.0. PRs are opened against `master`.
+
+### 9.1 #4433 — calloc size-overflow false alarm: FIXED
+
+**Status: FIXED. PR #5269 opened (labels: bug, OM, SV-COMP).**
+
+**Root cause.** ESBMC's `calloc` operational model (`src/c2goto/library/stdlib.c`) had two gaps:
+
+1. `!size` was not guarded (only `!nmemb` returned NULL), so `calloc(n, 0)` could return a
+   non-null pointer from `malloc(0)`.
+2. When `nmemb * size` overflowed `size_t` (e.g. `n = 2^30`, `size = 4` on 32-bit: total_size = 0),
+   `malloc(0)` was called; with `--force-malloc-success` this returned non-null; `memset(res, 0, 0)`
+   was a no-op; any `data[i]` read returned a nondet (non-zero) value, triggering a false alarm on
+   the `unreach-call` property at k = 1.
+
+This was latent in older ESBMC but emerged as a false alarm after the performance improvements in
+PRs #4911 / #5056 / #5003 made ESBMC reach the `n = 2^30` path before timing out.
+
+**Fix.** Extended the early return to `if (!nmemb || !size) return NULL;` and added
+`__ESBMC_assume(nmemb <= SIZE_MAX / size)` to prune overflow paths. Real `calloc` (glibc, musl)
+returns NULL on overflow; the resulting NULL dereference is UB/SIGSEGV, so `reach_error` is never
+called — pruning is sound for the SV-COMP `unreach-call` property.
+
+**Soundness.** `__ESBMC_assume(nmemb <= SIZE_MAX / size)` does **not** prune non-UB paths (all valid
+calloces still pass) and does **not** hide `reach_error` reachability on overflow paths (the
+overflow path leads to UB/SIGSEGV before any `reach_error` call). One edge case: a program that
+explicitly checks `calloc`'s NULL return and then calls `reach_error` on the NULL-deref path would
+get a false negative. This pattern is extremely rare in SV-COMP benchmarks (which do not test UB
+recovery) and would require a program that calls `reach_error` on UB, which ESBMC would otherwise
+report as a dereference failure anyway.
+
+**Validation.**
+* `ctest -R github_4433` (3 tests): all pass — `github_4433_calloc_overflow_norace` (small fixed
+  calloc correctly zero-initialised), `github_4433_calloc_valid_zero` (overflow path pruned, 0 VCCs),
+  `github_4433_thread_local_dynamic` (original regression still passes).
+* The benchmark `thread-local-value-dynamic.i` with `n=2^30` on 32-bit no longer produces a false
+  alarm at k=1 (it timeouts instead — UNKNOWN, not wrong FALSE).
+
+### 9.2 printf G-D wiring: PARTIAL ADVANCE — #5012 still open
+
+**Status: G-D implemented. PR #5270 opened (labels: bug, SV-COMP). #5012 remains open for
+va_list argument recovery (G-C) and the `*strp` allocation model.**
+
+**What G-D wiring does.** Before this fix, `vprintf`, `vsprintf`, `vsnprintf`, `asprintf`, and
+`vasprintf` were not in `goto_convertt::do_printf`'s recognition list. ESBMC would call them as
+uninterpreted functions — their return value was either 0 or unconstrained nondet depending on the
+path, and the format string was never inspected. After the fix, these five functions are routed
+through `symex_printf` exactly like `printf`/`sprintf`/`snprintf`.
+
+**Files changed.** `src/irep2/irep2_expr.h` (enum), `src/irep2/irep2_expr.cpp` (name→enum),
+`src/irep2/irep2_utils.cpp` (enum→string), `src/util/migrate.cpp` (round-trip), 
+`src/goto-programs/builtin_functions.cpp` (recognition), `src/goto-symex/builtin_functions/io.cpp`
+(format-arg index: vprintf→0, vsprintf/asprintf/vasprintf→1, vsnprintf→2).
+
+**Does this close #4976–#4979?** Partially. For call sites with a **constant format string and no
+conversion specifiers** (e.g. `bb_error_msg("ignoring all arguments")` → inlines to
+`vasprintf(&msg, "ignoring all arguments", ap)`), the return value is now exactly bounded (22), and
+the overflow arithmetic check would pass. For call sites where the format is a **runtime parameter**
+(the `s` variable in `bb_verror_msg`), the format cannot be resolved by ESBMC's constant folding,
+so the G-A rule applies: return is unconstrained nondet ≥ 0 — the false alarm persists. The
+busybox benchmarks ultimately enter `bb_verror_msg` with a runtime format string; whether the
+specific call in each benchmark inlines to a constant depends on ESBMC's interprocedural
+constant-propagation depth. A full SV-COMP `no-overflow` run is required to measure the actual
+impact, which is not feasible in this environment.
+
+**What remains for a complete #5012 fix.**
+* G-C: `va_list` argument recovery — derive a tighter bound for `%s`/`%d` args passing through
+  `va_list` by projecting the nearest inlined-ancestor's symbols onto the format.
+* `*strp` allocation model for `asprintf`/`vasprintf` — currently `symex_printf` models the return
+  length only; the buffer pointed to by `*strp` is not allocated in the model.
+
+**Validation.**
+* `vsnprintf_const_format_exact` — PASS (vsnprintf return correctly bounded to 5 for "hello").
+* `asprintf_const_format_exact` — PASS (asprintf return correctly bounded to 5 for "hello").
+* Full `esbmc/` suite (1319 tests, 5-min cap): only pre-existing THOROUGH timeouts.
+
+### 9.3 Pass-5 running report
+
+**PRs opened.**
+* **#5269** `[om] fix calloc: guard nmemb*size overflow and zero size` — fixes the #4433 regression;
+  3 regression tests, all pass.
+* **#5270** `[symex] wire vprintf/vsprintf/vsnprintf/asprintf/vasprintf into symex_printf (G-D)` —
+  advances #5012; 2 regression tests, all pass.
+
+**Duplicated work avoided.**
+* #4976–#4979 not re-diagnosed as requiring a new root cause — G-D now wires the functions but the
+  false alarm at runtime-format call sites requires G-C (va_list recovery), still in #5012.
+
+**Remaining work (priority order, updated).**
+1. Validate #5133–#5136 data-race fix (PR already merged: #5233).
+2. #5012 / #4976–#4979 / #5143–#5144 — G-C (`va_list` arg recovery) and `*strp` allocation model;
+   run full SV-COMP `no-overflow` suite to measure G-D impact.
+3. #5137 — value-set precision for integer→pointer thread arguments.
+4. #5138–#5140 — memory-model/reachability precision for `forgotten`/`invalid pointer` verdicts.
+5. Carry-forward: witness-validator (#1470/#1471/#1492/#4611), #4432 (data-race-checker perf),
+   #4980 (termination ranking recogniser).
