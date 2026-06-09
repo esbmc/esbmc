@@ -1,19 +1,22 @@
 name: Doxygen API docs
 
-# Builds the doxygen API reference from src/. On master this validates that the
-# docs the website deploys (esbmc/esbmc.github.io -> /docs/api) still generate
-# cleanly; on pull requests it catches broken doc comments before they merge.
-# The public deploy itself is performed by the esbmc.github.io pages workflow,
-# which runs `doxygen .doxygen` against this repository.
+# Validates that the doxygen API reference still builds. On master this checks
+# the docs the website deploys (esbmc/esbmc.github.io -> /docs/api); on pull
+# requests it only runs when the docs config or build script changes, since a
+# full build on every src/ PR is costly and cannot fail on doc-comment issues
+# (warnings are not treated as errors). The public deploy is performed by the
+# esbmc.github.io pages workflow, which runs scripts/gen-docs.sh against this
+# repository.
 
 on:
   push:
     branches: [master]
   pull_request:
     paths:
-      - 'src/**'
       - '.doxygen'
+      - 'scripts/gen-docs.sh'
       - '.github/workflows/doxygen.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,11 +34,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends doxygen graphviz
 
       - name: Generate API documentation
-        run: |
-          maj=$(sed -nE 's/^set\(ESBMC_VERSION_MAJOR ([0-9]+)\).*/\1/p' CMakeLists.txt)
-          min=$(sed -nE 's/^set\(ESBMC_VERSION_MINOR ([0-9]+)\).*/\1/p' CMakeLists.txt)
-          pat=$(sed -nE 's/^set\(ESBMC_VERSION_PATCH ([0-9]+)\).*/\1/p' CMakeLists.txt)
-          ( cat .doxygen; echo "PROJECT_NUMBER = ${maj}.${min}.${pat}" ) | doxygen -
+        run: scripts/gen-docs.sh
 
       - name: Upload HTML artifact
         uses: actions/upload-artifact@v7

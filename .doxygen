@@ -2,9 +2,10 @@
 #
 # Build locally with `doxygen .doxygen` from the repository root (requires the
 # `doxygen` and `graphviz` packages); the HTML is written to `docs/html`.
-# CI overrides OUTPUT_DIRECTORY / HTML_OUTPUT / PROJECT_NUMBER on the command
-# line, so only project-wide defaults live here. Unset tags keep their Doxygen
-# defaults, which keeps this file robust across Doxygen versions.
+# scripts/gen-docs.sh wraps this: it stamps PROJECT_NUMBER from CMakeLists.txt
+# and can override the output location for the website deploy. Only project-wide
+# defaults live here; unset tags keep their Doxygen defaults, which keeps this
+# file robust across Doxygen versions.
 
 PROJECT_NAME           = "ESBMC"
 PROJECT_BRIEF          = "Efficient SMT-based Context-Bounded Model Checker"
@@ -15,10 +16,9 @@ INPUT                  = src
 RECURSIVE              = YES
 EXCLUDE_PATTERNS       = */libs/* */build/*
 
-# Output: docs/html/index.html
+# Output: docs/html (HTML on by default; LaTeX off; treeview adds the nav
+# sidebar, which is not the default on older Doxygen).
 OUTPUT_DIRECTORY       = docs
-HTML_OUTPUT            = html
-GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 GENERATE_TREEVIEW      = YES
 
@@ -28,10 +28,12 @@ EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
 JAVADOC_AUTOBRIEF      = YES
 
-# Class/inheritance diagrams via Graphviz. Call graphs are left off to keep the
-# build time bounded on the full source tree.
+# Inheritance diagrams via Graphviz (CLASS_GRAPH, on by default). The expensive
+# graphs — collaboration and call/caller — are disabled to bound build time on
+# the full source tree.
 HAVE_DOT               = YES
 DOT_IMAGE_FORMAT       = svg
+COLLABORATION_GRAPH    = NO
 CALL_GRAPH             = NO
 CALLER_GRAPH           = NO
 

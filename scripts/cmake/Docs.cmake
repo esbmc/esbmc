@@ -9,8 +9,7 @@ if(BUILD_DOC)
     find_package(Doxygen REQUIRED dot)
 
     add_custom_target(docs ALL
-        COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_SOURCE_DIR}
-                ${DOXYGEN_EXECUTABLE} .doxygen
+        COMMAND ${PROJECT_SOURCE_DIR}/scripts/gen-docs.sh
         COMMENT "Generating API documentation from .doxygen")
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/docs/html DESTINATION share/doc/esbmc)
