@@ -196,6 +196,17 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     }
   }
 
+  // For asprintf/vasprintf, save the char **strp argument (operand[0])
+  // before erasing the leading arguments so we can later model the side-effect
+  // on *strp. Without this, *strp keeps its uninitialized nondet value, causing
+  // value-set aliasing and spurious memsafety false alarms (GitHub #5139,
+  // #5140, #5141).
+  const bool is_allocating = new_rhs.kind == printf_kindt::ASPRINTF ||
+                             new_rhs.kind == printf_kindt::VASPRINTF;
+  expr2tc strp;
+  if (is_allocating && !new_rhs.operands.empty())
+    strp = new_rhs.operands[0];
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -293,6 +304,28 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         assume(greaterthanequal2tc(nondet, lo));
       symex_assign(code_assign2tc(lhs, nondet));
     }
+  }
+
+  // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
+  // The buffer size is modelled as 1 byte; exact sizing requires va_list
+  // recovery (G-C, not yet implemented). With --no-bounds-check this is
+  // sufficient to eliminate the false alarms while exact size analysis is
+  // deferred. Users running with --bounds-check should be aware of this
+  // limitation.
+  if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
+  {
+    // Derive char * from strp's declared type (char **) so the dereference
+    // width matches what the value-set analysis and SMT encoding expect.
+    type2tc char_ptr_type = to_pointer_type(strp->type).subtype;
+    expr2tc deref_strp = dereference2tc(char_ptr_type, strp);
+    expr2tc malloc_se = sideeffect2tc(
+      char_ptr_type,
+      expr2tc(),
+      constant_int2tc(size_type2(), BigInt(1)),
+      std::vector<expr2tc>(),
+      char_type2(),
+      sideeffect2t::allockind::malloc);
+    symex_assign(code_assign2tc(deref_strp, malloc_se));
   }
 
   target->output(
