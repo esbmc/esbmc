@@ -418,9 +418,26 @@ static void test_move_fb_no_in2_passes()
   std::cout << "PASS: test_move_fb_no_in2_passes\n";
 }
 
+// derived name="INT" must map to VarKind::INT; unknown derived name falls back to BOOL.
+static void test_derived_type_parsing()
+{
+  PlcopenXmlParser parser;
+  LdAst ast = parser.parse(fixture("derived_type.ld"));
+
+  assert(ast.variables.size() == 2);
+  // First variable: <derived name="INT"/> → INT
+  assert(ast.variables[0].name == "Count");
+  assert(ast.variables[0].kind == VarKind::INT);
+  // Second variable: <derived name="UserFBType"/> → BOOL (unknown, default)
+  assert(ast.variables[1].name == "Flag");
+  assert(ast.variables[1].kind == VarKind::BOOL);
+  std::cout << "PASS: test_derived_type_parsing\n";
+}
+
 int main()
 {
   test_coil_kind_from_attribute();
+  test_derived_type_parsing();
   test_non_element_children_skipped();
   test_unknown_element_throws();
   test_empty_contact_variable_rejected();

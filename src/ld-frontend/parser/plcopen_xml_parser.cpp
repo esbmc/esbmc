@@ -96,11 +96,14 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
   const auto &n = *static_cast<const pugi::xml_node *>(node_ptr);
   VarDecl v;
   v.name = n.attribute("name").as_string();
-  // <type><derived name="..."/> or <type><BOOL/> etc.
+  // <type><BOOL/>, <INT/>, etc. or <type><derived name="MyType"/>.
   auto type_node = n.child("type");
   std::string type_str;
-  if (!type_node.first_child().empty())
-    type_str = type_node.first_child().name();
+  if (auto first = type_node.first_child(); !first.empty())
+  {
+    std::string tag = first.name();
+    type_str = (tag == "derived") ? first.attribute("name").as_string() : tag;
+  }
   if (type_str.empty())
     type_str = "BOOL";
   v.kind = var_kind_from_string(type_str);

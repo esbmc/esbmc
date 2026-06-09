@@ -45,7 +45,17 @@ int main(int argc, char *argv[])
     else if (arg == "--strategy" && i + 1 < argc)
       opts.strategy = argv[++i];
     else if (arg == "--unwind" && i + 1 < argc)
-      opts.bmc_unwind = static_cast<unsigned>(std::stoul(argv[++i]));
+    {
+      try
+      {
+        opts.bmc_unwind = static_cast<unsigned>(std::stoul(argv[++i]));
+      }
+      catch (const std::exception &)
+      {
+        std::cerr << "error: --unwind requires a non-negative integer\n";
+        return 1;
+      }
+    }
     else if (arg == "--fault-injection")
       opts.fault_injection = true;
     else if (arg == "--show-parse")
