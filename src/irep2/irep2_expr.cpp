@@ -386,6 +386,16 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
     return printf_kindt::VFPRINTF;
   if (name == "snprintf")
     return printf_kindt::SNPRINTF;
+  if (name == "vprintf")
+    return printf_kindt::VPRINTF;
+  if (name == "vsprintf")
+    return printf_kindt::VSPRINTF;
+  if (name == "vsnprintf")
+    return printf_kindt::VSNPRINTF;
+  if (name == "asprintf")
+    return printf_kindt::ASPRINTF;
+  if (name == "vasprintf")
+    return printf_kindt::VASPRINTF;
   assert(0 && "Unrecognized printf-family base_name");
   abort();
 }

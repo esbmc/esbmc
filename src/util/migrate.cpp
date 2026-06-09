@@ -3541,6 +3541,21 @@ exprt migrate_expr_back(const expr2tc &ref)
     case printf_kindt::SNPRINTF:
       bs_name = "snprintf";
       break;
+    case printf_kindt::VPRINTF:
+      bs_name = "vprintf";
+      break;
+    case printf_kindt::VSPRINTF:
+      bs_name = "vsprintf";
+      break;
+    case printf_kindt::VSNPRINTF:
+      bs_name = "vsnprintf";
+      break;
+    case printf_kindt::ASPRINTF:
+      bs_name = "asprintf";
+      break;
+    case printf_kindt::VASPRINTF:
+      bs_name = "vasprintf";
+      break;
     }
     codeexpr.base_name(bs_name);
     return codeexpr;

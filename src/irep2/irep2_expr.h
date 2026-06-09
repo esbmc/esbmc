@@ -96,6 +96,11 @@ enum class printf_kindt
   SPRINTF,
   VFPRINTF,
   SNPRINTF,
+  VPRINTF,
+  VSPRINTF,
+  VSNPRINTF,
+  ASPRINTF,
+  VASPRINTF,
 };
 
 /** Maps the textual base_name of a printf-family symbol (e.g. "printf",

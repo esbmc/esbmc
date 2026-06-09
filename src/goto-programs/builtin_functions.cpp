@@ -1093,7 +1093,9 @@ void goto_convertt::do_function_call_symbol(
   else if (
     base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
     base_name == "sprintf" || base_name == "snprintf" ||
-    base_name == "vfprintf")
+    base_name == "vfprintf" || base_name == "vprintf" ||
+    base_name == "vsprintf" || base_name == "vsnprintf" ||
+    base_name == "asprintf" || base_name == "vasprintf")
   {
     do_printf(lhs, function, arguments, dest, base_name);
   }
