@@ -837,6 +837,20 @@ std::string object_descriptor2t::field_names[esbmct::num_type_fields] =
   {"object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names[esbmct::num_type_fields] =
   {"return_sym", "function", "operands", "", ""};
+std::string code_ifthenelse2t::field_names[esbmct::num_type_fields] =
+  {"cond", "then_case", "else_case", "", ""};
+std::string code_while2t::field_names[esbmct::num_type_fields] =
+  {"cond", "body", "", "", ""};
+std::string code_for2t::field_names[esbmct::num_type_fields] =
+  {"init", "cond", "iter", "body", ""};
+std::string code_switch2t::field_names[esbmct::num_type_fields] =
+  {"value", "body", "", "", ""};
+std::string code_break2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_continue2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_label2t::field_names[esbmct::num_type_fields] =
+  {"label", "code", "", "", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =
