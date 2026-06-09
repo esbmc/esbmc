@@ -1098,8 +1098,9 @@ void value_sett::assign(
     return;
   }
 
-  // Must have concrete type.
-  assert(!is_symbol_type(lhs));
+  // Symbol (template) types have no concrete memory layout; skip silently.
+  if(is_symbol_type(lhs))
+    return;
   const type2tc &lhs_type = lhs->type;
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
