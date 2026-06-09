@@ -19,8 +19,8 @@ intermediate C file is produced.
 The approach is semantics-driven: every LD construct is first given a formal meaning as a
 **Structural Operational Semantics (SOS)** state-transition function over the PLC variable
 store, and the GOTO IR is derived systematically from that semantics. This grounds
-translation correctness mathematically, eliminates the C front-end from the trusted base,
-and distinguishes SAFE-LD from prior syntax-driven approaches.
+translation correctness mathematically, reduces reliance on unverified translation
+components, and distinguishes SAFE-LD from prior syntax-driven approaches.
 
 ```
 PLCopen XML  ──►  Parser  ──►  Semantic Analyser  ──►  LdIR
@@ -252,6 +252,21 @@ Each `code_assertt` node carries:
 The encoder appends all `code_assertt` nodes at the end of every scan-loop iteration
 body so ESBMC checks them across all reachable scan sequences.
 
+**Soundness and completeness.** Property kinds differ in their verification guarantees:
+
+| Kind | Sound? | Complete? | Condition |
+|---|---|---|---|
+| `mutual_exclusion` | Yes | Yes | Checked at every scan; k-induction or BMC both give exact results |
+| `invariant` | Yes | Yes | Same as above |
+| `absence` | Yes | Yes | Same as above |
+| `response` | Yes | **Bounded** | Sound only if `max_scans` is a valid upper bound on required response time. If the system can legitimately respond in > `max_scans` cycles the encoding is a false alarm. The YAML value must be justified by timing analysis or IEC 61508 §7 requirements. |
+| `reachability` | Yes (k-ind) / Bounded (BMC) | No | Under k-induction, proving a state unreachable is sound and complete for the cyclic-scan model. Under BMC, only unreachability up to the unwind bound is established. |
+
+Properties with "Yes / Yes" guarantees should be preferred for safety-critical properties.
+`response` and `reachability` properties must be annotated in the YAML file with a
+`justification` field recording the bound rationale; `ld-verify` will reject them without
+one.
+
 ### 3.6 `ld-verify` Pipeline (`verify/` + `tools/ld-verify/`)
 
 `ld-verify` is the end-to-end CLI tool:
@@ -285,6 +300,69 @@ Because every `symbolt` and `code_assertt` node was created with LD source locat
 and LD variable names, the counterexample trace produced by ESBMC already references
 the original rung numbers and PLCopen XML identifiers. No back-translation table is
 needed.
+
+### 3.7 Translation Correctness
+
+This section defines the formal guarantee that `ld_converter` is expected to satisfy
+and outlines the proof strategy. The guarantee is stated as a semantic preservation
+theorem; it is the obligation that makes SAFE-LD a formal tool rather than a
+best-effort translator.
+
+#### Semantic Preservation Theorem
+
+Let P be a valid PLCopen XML program and σ₀ ∈ Σ an initial PLC variable store.
+Let ⟨P, σ⟩ →_SOS σ' denote one full scan-cycle step under the SOS state-transition
+rules (T1.2). Let G(P) be the GOTO program produced by `ld_converter(P)`, and let
+s₀ ∈ S be the corresponding initial GOTO state.
+
+**Theorem.** For every n ≥ 0, the variable-store snapshot at the start of scan cycle n
+in the SOS trace equals the projection of the GOTO state at the start of the n-th
+scan-loop iteration onto the LD variables.
+
+More precisely, define the relation R ⊆ Σ × S by:
+
+> (σ, s) ∈ R iff for every LD variable v, σ(v) = s(`ld::v`)
+
+Then:
+
+1. **(Initialisation)** (σ₀, s₀) ∈ R.
+2. **(Step preservation)** If (σ, s) ∈ R and ⟨P, σ⟩ →_SOS σ', and s' is the GOTO
+   state after one complete execution of the scan-loop body from s, then (σ', s') ∈ R.
+
+#### Proof Strategy
+
+Step preservation is proved by **structural induction on rung order**, with each rung
+proved by **case analysis on the LdIR node type**. For each case the proof obligation
+is: given (σ, s) ∈ R and the rung's SOS rule, show the GOTO IR instructions generated
+by `ld_converter` for that node produce s' such that (σ', s') ∈ R.
+
+For contacts and coils the obligation is discharged by direct inspection of the
+`and_exprt` / `not_exprt` / `code_assignt` node generated (§3.4 table).
+
+For FB constructs (TON, CTU) the obligation is non-trivial: it requires showing the
+multi-instruction GOTO encoding — `code_ifthenelset` chains over `IN`, `ET`, `Q` — matches
+the SOS state-machine step function defined in T1.2. This is the primary proof
+obligation of WP2. Validation by fault injection (§3.4 and §6) provides executable
+evidence prior to a formal proof.
+
+#### What is Formally Guaranteed
+
+- Any `VIOLATION` result from ESBMC corresponds to a genuine violation of the
+  SOS-level assertion: a scan sequence exists in which the SOS semantics violate the
+  specified safety property.
+- A `VERIFICATION SUCCESSFUL` result from k-induction is a proof that no such sequence
+  exists (up to the correctness of `ld_converter` and ESBMC's symex).
+
+#### What is Not Guaranteed
+
+- **Completeness of BMC mode.** Bounded model checking checks up to a finite unwind
+  depth. A violation requiring more scan cycles than the bound will be missed; the
+  result should be reported as `INCOMPLETE`, not `SAFE`.
+- **Soundness of bounded `response` properties.** See §3.5 for the bound-justification
+  requirement.
+- **Correctness of the SOS specification.** The SOS spec (T1.2) is validated by review
+  and fault injection but is not itself formally proven against the IEC 61131-3 normative
+  text. It is the assumed semantic ground truth for the theorem above.
 
 ---
 
@@ -412,7 +490,13 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
   equivalence verified by property checks and fault injection.
-- **Performance:** average translation time <5 s for programs up to 1000 rungs.
+- **Performance:** average end-to-end `ld-verify` time <5 s for programs up to
+  1000 rungs. Justified by the structural properties of PLC programs: the scan body
+  is finite-state per iteration (no heap allocation, no recursion); industrial programs
+  typically have <500 boolean variables; and the cyclic-scan loop structure means
+  k-induction convergence is governed by the depth of control-flow nesting within a
+  single rung, not by the number of rungs. The main exception is timer-heavy programs
+  (see §7 risk mitigations).
 - **Coverage:** >90% line coverage across `src/ld-frontend/`.
 
 ### WP3 — Industrial Validation (Months 10–24)
@@ -479,13 +563,16 @@ both the translation and the verifier on real semantic errors, not just syntacti
 
 ## 7. Risk Mitigations
 
-| Risk | Mitigation (from proposal) | Implementation note |
+| Risk | Mitigation | Implementation note |
 |---|---|---|
-| PLCopen XML schema variation | Schema normalisation layer in `parser/` | Tested against TIA Portal and Codesys exports in WP1 |
-| k-induction non-termination on timer-heavy programs | Configurable `--unwind` bound; portfolio solver fallback | Exposed as `ld-verify --strategy bmc\|k-induction\|portfolio` |
+| PLCopen XML schema variation between vendors | Schema normalisation layer in `parser/` | Tested against TIA Portal, Codesys, and Rockwell exports in WP1; vendor-specific test programs kept in `regression/ld/` |
+| k-induction non-termination on timer-heavy programs | TON/TOF/TP timer state abstraction: `Q` modelled as nondet bool constrained by `__ESBMC_assume` to SOS timer invariants, reducing required induction depth to O(1); full concrete encoding retained as an option | Fallback exposed as `ld-verify --strategy bmc\|k-induction\|portfolio\|abstract-timers`; portfolio mode applies per-program timeout (default 60 s) and reports `INCOMPLETE` rather than hanging |
+| Solver timeout cascade in benchmark runs | Per-program timeout in `ld-verify` (default: 60 s); aggregate benchmark runner collects partial results and reports coverage fraction | `TIMEOUT` verdict treated as `UNKNOWN` in benchmark statistics; not counted as false positive or false negative |
+| Unsupported LD constructs accumulation | Tiered support plan: **Tier 1** (WP2 scope) — contacts, coils, TON/TOF/TP, CTU/CTD, arithmetic FBs; **Tier 2** (post-project) — advanced FBs, structured text inline, arrays; **Tier 3** — vendor-specific extensions. Each unsupported construct emits a structured `UnsupportedConstruct(name, tier)` error, not a silent failure. | WP1 property taxonomy explicitly fixes the Tier 1 boundary; any Tier 2+ construct encountered in WP3 case studies is recorded as a known limitation in the paper |
+| Incomplete PLCopen XML exports (missing FB declarations, partial networks) | Strict schema validation at parse time with diagnostic messages naming the missing element and the expected schema location | A library of known-valid exports from each vendor is maintained in `regression/ld/`; WP3 programs validated against the library before industrial use |
+| Semantic drift across vendors (differing interpretations of IEC 61131-3 edge cases) | Vendor-specific SOS annotations in T1.2 document known divergences; regression tests cover each documented divergence | Divergences that affect verification results are flagged in `ld-verify` output with a `vendor-note` field |
 | PDRA recruitment delay | Co-I bridges short-term | No implementation impact; timeline padded by 1 month per WP |
-| Industrial programs not in PLCopen XML | Synthetic programs from published CSs; team has Codesys + TIA Portal access | WP3 CS programs collected in Month 10 |
-| Scope underestimation for full LD coverage | WP1 property taxonomy explicitly bounds scope; graceful unsupported-construct errors | Parser emits a structured `UnsupportedConstruct` error rather than silently mishandling |
+| Industrial programs not in PLCopen XML | Synthetic programs from published CSs; team has Codesys and TIA Portal access | WP3 CS programs collected in Month 10 |
 
 ---
 
@@ -494,11 +581,13 @@ both the translation and the verifier on real semantic errors, not just syntacti
 1. **Direct GOTO IR generation; no C intermediary.** SAFE-LD's `ld_converter` populates
    ESBMC's `contextt` directly with `symbolt` entries and `codet` trees, following the
    same pattern as `python_converter`. ESBMC's clang front-end is never invoked. This
-   keeps the trusted base minimal: the only path from LD semantics to the verifier is the
-   SOS specification → `ld_converter` → symex, with no C compilation step in between.
-   Registering the front-end requires the same small additions to `mode.h`, `mode.cpp`,
-   and `globals.cpp` that every other ESBMC front-end requires (Python, Jimple, Solidity
-   — see §4.2). The verification pipeline, solvers, and symex are not touched.
+   significantly reduces reliance on unverified translation components: the path from LD
+   semantics to the verifier is SOS specification → `ld_converter` → symex, with no C
+   compilation step in between (the trusted base still includes `ld_converter` itself,
+   ESBMC's symex, and the SMT solvers). Registering the front-end requires the same small
+   additions to `mode.h`, `mode.cpp`, and `globals.cpp` that every other ESBMC front-end
+   requires (Python, Jimple, Solidity — see §4.2). The verification pipeline, solvers,
+   and symex are not touched.
 
 2. **Semantics-driven translation.** The SOS specification is the primary design artefact.
    The parser, IR, and code generator are all derived from it. This provides a mathematical
