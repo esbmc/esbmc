@@ -481,10 +481,19 @@ bool has_direct_pointer_array_write(const goto_functionst &goto_functions)
     if (!it->second.body_available || it->second.body.hide)
       continue;
     for (const auto &instr : it->second.body.instructions)
-      if (
-        instr.is_assign() &&
-        indexes_through_pointer(to_code_assign2t(instr.code).target))
+    {
+      if (!instr.is_assign())
+        continue;
+      const expr2tc &target = to_code_assign2t(instr.code).target;
+      // Only array-element writes through a pointer are unsound for the
+      // inductive step (the pointee array has no nameable symbol). Struct
+      // member writes through a pointer are fine — the struct symbol can be
+      // havoc'd as a whole. Mirror the is_index2t guard in
+      // collect_lhs_symbols/modifies_pointer_array. See #5230.
+      if (is_index2t(target) &&
+          indexes_through_pointer(to_index2t(target).source_value))
         return true;
+    }
   }
   return false;
 }
