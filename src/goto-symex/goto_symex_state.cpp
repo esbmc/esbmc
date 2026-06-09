@@ -149,14 +149,34 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     // Handle WITH chains for structs where all updates are constants
     if (is_struct_type(expr->type))
     {
-      // Check if this is a chain of WITHs with all constant updates
+      // Check if this is a chain of WITHs with all constant updates.
+      // Use constant_propagation (not is_constant_expr) for the update values
+      // so a propagatable pointer-typed field update (NULL, &object, a typecast
+      // thereof) does not poison the whole struct: otherwise a struct with any
+      // pointer field is never propagated, its scalar fields never constant-
+      // fold, and data-dependent recursion guards / loop bounds over those
+      // fields stay symbolic, exploding the path space
+      // (try_catch/nec_ex5-recursive).
+      //
+      // Restrict to scalar- and pointer-typed field updates, though. Inlining
+      // an aggregate update value (array / struct / union / nested with) would
+      // store a value whose concrete size can differ from the field's declared
+      // (often symbolic) size, producing a size-mismatched array-to-array
+      // typecast the SMT backend cannot soundly lower without reinterpreting
+      // the array at a different length -- a char-array member of a std::map
+      // node triggered "Typecast for unexpected type". nec_ex5-recursive only
+      // needs int/pointer fields to fold.
       bool all_constant_updates = true;
       expr2tc current = expr;
 
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
-        if (!is_constant_expr(w.update_value))
+        const expr2tc &uv = w.update_value;
+        if (
+          !(is_number_type(uv->type) || is_bool_type(uv->type) ||
+            is_pointer_type(uv->type)) ||
+          !constant_propagation(uv))
         {
           all_constant_updates = false;
           break;
