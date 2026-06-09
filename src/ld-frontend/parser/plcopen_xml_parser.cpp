@@ -7,7 +7,8 @@
 // Internal helpers
 // -----------------------------------------------------------------------
 
-static LdLocation loc_from_node(const pugi::xml_node &n, const std::string &file)
+static LdLocation
+loc_from_node(const pugi::xml_node &n, const std::string &file)
 {
   LdLocation loc;
   loc.file = file;
@@ -69,10 +70,15 @@ CoilKind PlcopenXmlParser::coil_kind_from_string(const std::string &s)
 FBKind PlcopenXmlParser::fb_kind_from_string(const std::string &s)
 {
   static const std::unordered_map<std::string, FBKind> table = {
-    {"TON", FBKind::TON}, {"TOF", FBKind::TOF}, {"TP", FBKind::TP},
-    {"CTU", FBKind::CTU}, {"CTD", FBKind::CTD},
-    {"ADD", FBKind::ADD}, {"SUB", FBKind::SUB},
-    {"MUL", FBKind::MUL}, {"DIV", FBKind::DIV},
+    {"TON", FBKind::TON},
+    {"TOF", FBKind::TOF},
+    {"TP", FBKind::TP},
+    {"CTU", FBKind::CTU},
+    {"CTD", FBKind::CTD},
+    {"ADD", FBKind::ADD},
+    {"SUB", FBKind::SUB},
+    {"MUL", FBKind::MUL},
+    {"DIV", FBKind::DIV},
     {"MOVE", FBKind::MOVE},
   };
   auto it = table.find(s);
@@ -113,8 +119,9 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
   RungElement elem;
   elem.loc = loc_from_node(n, source_file_);
 
-  if (tag == "contact" || tag == "Contact" || tag == "NormallyOpenContact" ||
-      tag == "NormallyClosedContact")
+  if (
+    tag == "contact" || tag == "Contact" || tag == "NormallyOpenContact" ||
+    tag == "NormallyClosedContact")
   {
     elem.kind = RungElementKind::Contact;
     elem.contact.kind = contact_kind_from_string(
@@ -249,7 +256,10 @@ static void rename_vendor_tags(pugi::xml_node node)
   }
 }
 
-struct pugi_doc_wrapper { pugi::xml_document doc; };
+struct pugi_doc_wrapper
+{
+  pugi::xml_document doc;
+};
 
 void PlcopenXmlParser::normalise(pugi_doc_wrapper &w)
 {
@@ -279,7 +289,8 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
   // Detect interrupt tasks (Tier-2 rejection).
   // PLCopen XML interrupt tasks carry type="INTERRUPT" or taskType="INTERRUPT".
   // Periodic tasks have a priority attribute but type="CYCLIC" or no type.
-  for (auto xpath : root.select_nodes("//task[@type='INTERRUPT' or @taskType='INTERRUPT']"))
+  for (auto xpath :
+       root.select_nodes("//task[@type='INTERRUPT' or @taskType='INTERRUPT']"))
   {
     (void)xpath;
     ast.has_interrupt_tasks = true;
@@ -290,9 +301,9 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     throw UnsupportedConstructError("InterruptTask", 2);
 
   // Parse variable declarations (global + local)
-  for (auto xpath_var :
-       root.select_nodes("//pou/interface//*[self::inputVars or self::outputVars or "
-                         "self::inOutVars or self::localVars or self::globalVars]"))
+  for (auto xpath_var : root.select_nodes(
+         "//pou/interface//*[self::inputVars or self::outputVars or "
+         "self::inOutVars or self::localVars or self::globalVars]"))
   {
     pugi::xml_node vars_node = xpath_var.node();
     std::string vars_tag = vars_node.name();

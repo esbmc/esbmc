@@ -67,13 +67,13 @@ enum class FBKind
 
 struct FBInputPort
 {
-  std::string port_name;  // e.g. "IN", "PT", "CU"
-  std::string variable;   // connected variable or literal
+  std::string port_name; // e.g. "IN", "PT", "CU"
+  std::string variable;  // connected variable or literal
 };
 
 struct FBOutputPort
 {
-  std::string port_name;  // e.g. "Q", "ET", "CV"
+  std::string port_name; // e.g. "Q", "ET", "CV"
   std::string variable;
 };
 
@@ -81,10 +81,10 @@ struct TimerFBNode
 {
   FBKind kind = FBKind::TON;
   std::string instance_name;
-  std::string IN_var;  // enable input variable
-  std::string PT_var;  // preset time variable (tick count)
-  std::string Q_var;   // output variable
-  std::string ET_var;  // elapsed time variable
+  std::string IN_var; // enable input variable
+  std::string PT_var; // preset time variable (tick count)
+  std::string Q_var;  // output variable
+  std::string ET_var; // elapsed time variable
   LdLocation loc;
 };
 
@@ -92,12 +92,12 @@ struct CounterFBNode
 {
   FBKind kind = FBKind::CTU;
   std::string instance_name;
-  std::string CU_var;  // count-up input variable
-  std::string CD_var;  // count-down input variable (CTD only)
-  std::string R_var;   // reset variable
-  std::string PV_var;  // preset value variable
-  std::string Q_var;   // output variable
-  std::string CV_var;  // counter value variable
+  std::string CU_var; // count-up input variable
+  std::string CD_var; // count-down input variable (CTD only)
+  std::string R_var;  // reset variable
+  std::string PV_var; // preset value variable
+  std::string Q_var;  // output variable
+  std::string CV_var; // counter value variable
   LdLocation loc;
 };
 
@@ -139,7 +139,7 @@ struct RungElement
 // A rung is a list of elements evaluated left-to-right within a scan cycle.
 struct RungNode
 {
-  std::string id;  // rung number / label from XML
+  std::string id; // rung number / label from XML
   std::vector<RungElement> elements;
   LdLocation loc;
 };

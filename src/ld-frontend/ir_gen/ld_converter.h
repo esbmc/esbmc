@@ -22,7 +22,10 @@ public:
 
   // Fault-injection mode: negate selected contact polarities / skip coil
   // assignments.  Used by WP1 validation to plant known semantic errors.
-  void enable_fault_injection(bool enabled) { fault_injection_ = enabled; }
+  void enable_fault_injection(bool enabled)
+  {
+    fault_injection_ = enabled;
+  }
 
 private:
   contextt &context_;

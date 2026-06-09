@@ -16,13 +16,22 @@ public:
   // scan-loop GOTO function body.  Mirrors python_languaget::typecheck().
   bool typecheck(contextt &context, const std::string &module) override;
 
-  bool final(contextt &) override { return false; }
+  bool final(contextt &) override
+  {
+    return false;
+  }
 
-  std::string id() const override { return "ld"; }
+  std::string id() const override
+  {
+    return "ld";
+  }
 
   void show_parse(std::ostream &out) override;
 
-  languaget *new_language() const override { return new ld_languaget; }
+  languaget *new_language() const override
+  {
+    return new ld_languaget;
+  }
 
   bool from_expr(
     const exprt &expr,
@@ -39,7 +48,10 @@ public:
   unsigned default_flags(presentationt target) const override;
 
   // Set the path to the YAML property file (used by ld-verify CLI).
-  void set_props_path(const std::string &path) { props_path_ = path; }
+  void set_props_path(const std::string &path)
+  {
+    props_path_ = path;
+  }
 
 private:
   LdAst ast_;

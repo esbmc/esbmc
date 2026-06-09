@@ -6,7 +6,10 @@
 
 struct LdPropertyParseError : std::runtime_error
 {
-  explicit LdPropertyParseError(const std::string &msg) : std::runtime_error(msg) {}
+  explicit LdPropertyParseError(const std::string &msg)
+    : std::runtime_error(msg)
+  {
+  }
 };
 
 enum class PropertyKind

@@ -12,7 +12,8 @@ std::string TypeChecker::loc_str(const LdLocation &loc)
   return s.str();
 }
 
-VarKind TypeChecker::lookup_type(const std::string &var, const LdLocation &loc) const
+VarKind
+TypeChecker::lookup_type(const std::string &var, const LdLocation &loc) const
 {
   if (var.empty())
     return VarKind::BOOL;
@@ -40,21 +41,24 @@ void TypeChecker::check_timer_fb(const TimerFBNode &fb)
     auto kind = lookup_type(fb.IN_var, fb.loc);
     if (kind != VarKind::BOOL)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": timer '" + fb.instance_name + "' IN port requires BOOL variable, got " + fb.IN_var);
+        loc_str(fb.loc) + ": timer '" + fb.instance_name +
+        "' IN port requires BOOL variable, got " + fb.IN_var);
   }
   if (!fb.PT_var.empty())
   {
     auto kind = lookup_type(fb.PT_var, fb.loc);
     if (kind != VarKind::TIME && kind != VarKind::INT && kind != VarKind::DINT)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": timer '" + fb.instance_name + "' PT port requires TIME/INT variable");
+        loc_str(fb.loc) + ": timer '" + fb.instance_name +
+        "' PT port requires TIME/INT variable");
   }
   if (!fb.Q_var.empty())
   {
     auto kind = lookup_type(fb.Q_var, fb.loc);
     if (kind != VarKind::BOOL)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": timer '" + fb.instance_name + "' Q port requires BOOL variable");
+        loc_str(fb.loc) + ": timer '" + fb.instance_name +
+        "' Q port requires BOOL variable");
   }
 }
 
@@ -64,7 +68,8 @@ void TypeChecker::check_counter_fb(const CounterFBNode &fb)
   auto check_bool = [&](const std::string &var, const char *port) {
     if (!var.empty() && lookup_type(var, fb.loc) != VarKind::BOOL)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": counter '" + fb.instance_name + "' " + port + " port requires BOOL");
+        loc_str(fb.loc) + ": counter '" + fb.instance_name + "' " + port +
+        " port requires BOOL");
   };
   auto check_int = [&](const std::string &var, const char *port) {
     if (var.empty())
@@ -72,7 +77,8 @@ void TypeChecker::check_counter_fb(const CounterFBNode &fb)
     auto k = lookup_type(var, fb.loc);
     if (k != VarKind::INT && k != VarKind::DINT)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": counter '" + fb.instance_name + "' " + port + " port requires INT/DINT");
+        loc_str(fb.loc) + ": counter '" + fb.instance_name + "' " + port +
+        " port requires INT/DINT");
   };
   check_bool(fb.CU_var, "CU");
   check_bool(fb.CD_var, "CD");
@@ -91,7 +97,8 @@ void TypeChecker::check_arith_fb(const ArithFBNode &fb)
     auto k = lookup_type(var, fb.loc);
     if (k != VarKind::INT && k != VarKind::DINT)
       throw TypeCheckError(
-        loc_str(fb.loc) + ": arith FB '" + fb.instance_name + "' " + port + " port requires INT/DINT");
+        loc_str(fb.loc) + ": arith FB '" + fb.instance_name + "' " + port +
+        " port requires INT/DINT");
   };
   check_numeric(fb.IN1_var, "IN1");
   check_numeric(fb.IN2_var, "IN2");
@@ -106,14 +113,16 @@ void TypeChecker::check_rung_element(const RungElement &elem)
     if (!elem.contact.variable.empty())
       if (lookup_type(elem.contact.variable, elem.loc) != VarKind::BOOL)
         throw TypeCheckError(
-          loc_str(elem.loc) + ": contact variable '" + elem.contact.variable + "' must be BOOL");
+          loc_str(elem.loc) + ": contact variable '" + elem.contact.variable +
+          "' must be BOOL");
     break;
 
   case RungElementKind::Coil:
     if (!elem.coil.variable.empty())
       if (lookup_type(elem.coil.variable, elem.loc) != VarKind::BOOL)
         throw TypeCheckError(
-          loc_str(elem.loc) + ": coil variable '" + elem.coil.variable + "' must be BOOL");
+          loc_str(elem.loc) + ": coil variable '" + elem.coil.variable +
+          "' must be BOOL");
     break;
 
   case RungElementKind::TimerFB:

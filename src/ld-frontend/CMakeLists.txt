@@ -1,11 +1,11 @@
 include(FetchContent)
 
-FetchContent_Declare(
+fetchcontent_declare(
   pugixml
   GIT_REPOSITORY https://github.com/zeux/pugixml.git
   GIT_TAG        v1.14
 )
-FetchContent_MakeAvailable(pugixml)
+fetchcontent_makeavailable(pugixml)
 
 add_library(ldfrontend STATIC
   ld_language.cpp

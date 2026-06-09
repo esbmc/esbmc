@@ -9,11 +9,16 @@ std::string LdVerifyResult::to_json() const
   auto verdict_str = [&]() -> std::string {
     switch (verdict)
     {
-    case Verdict::Safe:       return "SAFE";
-    case Verdict::Violation:  return "VIOLATION";
-    case Verdict::Unknown:    return "UNKNOWN";
-    case Verdict::Incomplete: return "INCOMPLETE";
-    case Verdict::Error:      return "ERROR";
+    case Verdict::Safe:
+      return "SAFE";
+    case Verdict::Violation:
+      return "VIOLATION";
+    case Verdict::Unknown:
+      return "UNKNOWN";
+    case Verdict::Incomplete:
+      return "INCOMPLETE";
+    case Verdict::Error:
+      return "ERROR";
     }
     return "UNKNOWN";
   };

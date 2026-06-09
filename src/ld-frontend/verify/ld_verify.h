@@ -9,9 +9,9 @@
 // This class is used by the ld-verify CLI and by ld_languaget.
 struct LdVerifyOptions
 {
-  std::string program_path;   // PLCopen XML or .ld input
-  std::string props_path;     // YAML property file (optional)
-  std::string strategy;       // "k-induction" | "bmc" | "portfolio"
+  std::string program_path; // PLCopen XML or .ld input
+  std::string props_path;   // YAML property file (optional)
+  std::string strategy;     // "k-induction" | "bmc" | "portfolio"
   unsigned bmc_unwind = 100;
   bool fault_injection = false;
 };
@@ -30,7 +30,7 @@ struct LdVerifyResult
   Verdict verdict = Verdict::Unknown;
   std::string property_id;
   std::string description;
-  std::string raw_output;  // captured ESBMC output
+  std::string raw_output; // captured ESBMC output
 
   // Serialise to JSON string
   std::string to_json() const;

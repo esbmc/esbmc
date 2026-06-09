@@ -7,7 +7,9 @@
 // Thrown when the PLCopen XML file cannot be parsed or has a schema error.
 struct LdParseError : std::runtime_error
 {
-  explicit LdParseError(const std::string &msg) : std::runtime_error(msg) {}
+  explicit LdParseError(const std::string &msg) : std::runtime_error(msg)
+  {
+  }
 };
 
 // Thrown when an unsupported Tier-2+ construct is encountered.
@@ -16,10 +18,12 @@ struct UnsupportedConstructError : std::runtime_error
   std::string construct;
   int tier;
   UnsupportedConstructError(const std::string &name, int t)
-    : std::runtime_error("UnsupportedConstruct(" + name + ", tier=" + std::to_string(t) + ")"),
+    : std::runtime_error(
+        "UnsupportedConstruct(" + name + ", tier=" + std::to_string(t) + ")"),
       construct(name),
       tier(t)
-  {}
+  {
+  }
 };
 
 class PlcopenXmlParser

@@ -18,18 +18,18 @@
 
 enum class LdIRNodeKind
 {
-  ContactEval,  // evaluate a contact → produces power-flow value
-  CoilAssign,   // assign coil output
-  TimerStep,    // TON/TOF/TP fixed-tick step
-  CounterStep,  // CTU/CTD per-scan step
-  ArithStep,    // arithmetic FB step
+  ContactEval, // evaluate a contact → produces power-flow value
+  CoilAssign,  // assign coil output
+  TimerStep,   // TON/TOF/TP fixed-tick step
+  CounterStep, // CTU/CTD per-scan step
+  ArithStep,   // arithmetic FB step
 };
 
 // One IR instruction corresponding to a single SOS rule application.
 struct LdIRNode
 {
   LdIRNodeKind kind;
-  SosRule rule;      // which SOS rule generated this node
+  SosRule rule; // which SOS rule generated this node
 
   // Fields used by ContactEval / CoilAssign
   std::string variable;

@@ -5,16 +5,20 @@
 #include <util/symbol.h>
 #include <stdexcept>
 
-property_encoder::property_encoder(contextt &context, const std::string &source_file)
+property_encoder::property_encoder(
+  contextt &context,
+  const std::string &source_file)
   : context_(context), source_file_(source_file)
-{}
+{
+}
 
 static std::string ld_name(const std::string &var)
 {
   return "ld::" + var;
 }
 
-symbol_exprt property_encoder::var_expr(const std::string &name, const LdProperty &p) const
+symbol_exprt
+property_encoder::var_expr(const std::string &name, const LdProperty &p) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
   if (!sym)
@@ -27,7 +31,8 @@ symbol_exprt property_encoder::var_expr(const std::string &name, const LdPropert
 //   var, !var, A && B, A || B, (expr)
 // Full expression language is deferred to T1.3.
 exprt property_encoder::parse_bool_expr(
-  const std::string &expr_str, const LdProperty &p) const
+  const std::string &expr_str,
+  const LdProperty &p) const
 {
   std::string s = expr_str;
   while (!s.empty() && isspace(static_cast<unsigned char>(s.front())))
@@ -38,9 +43,7 @@ exprt property_encoder::parse_bool_expr(
   if (s.front() == '(' && s.back() == ')')
     return parse_bool_expr(s.substr(1, s.size() - 2), p);
 
-  auto find_op = [&](const std::string &op) -> size_t {
-    return s.find(op);
-  };
+  auto find_op = [&](const std::string &op) -> size_t { return s.find(op); };
 
   size_t or_pos = find_op("||");
   if (or_pos != std::string::npos)
@@ -64,7 +67,8 @@ exprt property_encoder::parse_bool_expr(
   return var_expr(s, p);
 }
 
-code_assertt property_encoder::make_assert(const exprt &cond, const LdProperty &p) const
+code_assertt
+property_encoder::make_assert(const exprt &cond, const LdProperty &p) const
 {
   code_assertt asrt(cond);
   locationt loc;
@@ -104,7 +108,8 @@ code_blockt property_encoder::encode_invariant(const LdProperty &p)
 code_blockt property_encoder::encode_absence(const LdProperty &p)
 {
   code_blockt blk;
-  code_assertt asrt = make_assert(not_exprt(parse_bool_expr(p.expression, p)), p);
+  code_assertt asrt =
+    make_assert(not_exprt(parse_bool_expr(p.expression, p)), p);
   blk.copy_to_operands(asrt);
   return blk;
 }
@@ -116,7 +121,7 @@ code_blockt property_encoder::encode_reachability(const LdProperty &p)
   exprt guard = parse_bool_expr(p.expression, p);
   code_assertt inner = make_assert(false_exprt(), p);
   code_ifthenelset ite;
-  ite.cond()      = guard;
+  ite.cond() = guard;
   ite.then_case() = inner;
   blk.copy_to_operands(ite);
   return blk;
@@ -145,15 +150,15 @@ code_blockt property_encoder::encode_response(const LdProperty &p)
   }
 
   symbol_exprt ctr(ctr_name, int_type());
-  symbol_exprt trigger  = var_expr(p.trigger, p);
+  symbol_exprt trigger = var_expr(p.trigger, p);
   symbol_exprt response = var_expr(p.response_var, p);
   exprt limit = from_integer(BigInt(p.max_scans), int_type());
-  exprt one   = gen_one(int_type());
-  exprt zero  = gen_zero(int_type());
+  exprt one = gen_one(int_type());
+  exprt zero = gen_zero(int_type());
 
   // if (trigger && !response) then ctr++ else ctr := 0
   code_ifthenelset ctr_step;
-  ctr_step.cond()      = and_exprt(trigger, not_exprt(response));
+  ctr_step.cond() = and_exprt(trigger, not_exprt(response));
   ctr_step.then_case() = code_assignt(ctr, plus_exprt(ctr, one));
   ctr_step.else_case() = code_assignt(ctr, zero);
   blk.copy_to_operands(ctr_step);

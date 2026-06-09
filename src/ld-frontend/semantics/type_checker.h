@@ -7,7 +7,9 @@
 
 struct TypeCheckError : std::runtime_error
 {
-  explicit TypeCheckError(const std::string &msg) : std::runtime_error(msg) {}
+  explicit TypeCheckError(const std::string &msg) : std::runtime_error(msg)
+  {
+  }
 };
 
 class TypeChecker

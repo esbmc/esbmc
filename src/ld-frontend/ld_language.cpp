@@ -150,6 +150,7 @@ void ld_languaget::show_parse(std::ostream &out)
   {
     out << "Network '" << net.name << "': " << net.rungs.size() << " rungs\n";
     for (const auto &rung : net.rungs)
-      out << "  Rung " << rung.id << ": " << rung.elements.size() << " elements\n";
+      out << "  Rung " << rung.id << ": " << rung.elements.size()
+          << " elements\n";
   }
 }

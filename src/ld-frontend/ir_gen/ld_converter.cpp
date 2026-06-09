@@ -7,7 +7,8 @@
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
   : context_(context), ir_(ir)
-{}
+{
+}
 
 // -----------------------------------------------------------------------
 // Helpers
@@ -38,7 +39,7 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
 {
   symbolt sym;
   sym.id = ld_name(v.name);
-  sym.name = v.name;  // human-readable short name
+  sym.name = v.name; // human-readable short name
   sym.module = "ld";
   sym.lvalue = true;
   sym.static_lifetime = true;
@@ -73,7 +74,8 @@ symbol_exprt ld_converter::var_expr(const std::string &name) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
   if (!sym)
-    throw std::runtime_error("ld_converter: undeclared variable '" + name + "'");
+    throw std::runtime_error(
+      "ld_converter: undeclared variable '" + name + "'");
   return symbol_exprt(ld_name(name), sym->get_type());
 }
 
@@ -149,10 +151,10 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 {
   symbol_exprt et_sym = var_expr(n.timer_ET);
   symbol_exprt pt_sym = var_expr(n.timer_PT);
-  symbol_exprt q_sym  = var_expr(n.timer_Q);
+  symbol_exprt q_sym = var_expr(n.timer_Q);
   symbol_exprt in_sym = var_expr(n.timer_IN);
 
-  exprt one  = gen_one(int32_t_());
+  exprt one = gen_one(int32_t_());
   exprt zero = gen_zero(int32_t_());
 
   // if (IN|!IN) then ET := ET+1 else ET := 0
@@ -163,9 +165,9 @@ codet ld_converter::translate_timer(const LdIRNode &n)
     condition = in_sym;
 
   code_ifthenelset et_step;
-  et_step.cond()       = condition;
-  et_step.then_case()  = code_assignt(et_sym, plus_exprt(et_sym, one));
-  et_step.else_case()  = code_assignt(et_sym, zero);
+  et_step.cond() = condition;
+  et_step.then_case() = code_assignt(et_sym, plus_exprt(et_sym, one));
+  et_step.else_case() = code_assignt(et_sym, zero);
 
   // Q := (ET >= PT)  for TON/TP;  Q := (ET < PT) for TOF
   exprt q_expr;
@@ -186,18 +188,18 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 codet ld_converter::translate_counter(const LdIRNode &n)
 {
   code_blockt blk;
-  exprt one  = gen_one(int32_t_());
+  exprt one = gen_one(int32_t_());
   exprt zero = gen_zero(int32_t_());
 
   if (n.ctr_kind == FBKind::CTU)
   {
-    symbol_exprt cu  = var_expr(n.ctr_CU);
-    symbol_exprt cv  = var_expr(n.ctr_CV);
-    symbol_exprt pv  = var_expr(n.ctr_PV);
-    symbol_exprt q   = var_expr(n.ctr_Q);
+    symbol_exprt cu = var_expr(n.ctr_CU);
+    symbol_exprt cv = var_expr(n.ctr_CV);
+    symbol_exprt pv = var_expr(n.ctr_PV);
+    symbol_exprt q = var_expr(n.ctr_Q);
 
     code_ifthenelset cu_step;
-    cu_step.cond()      = cu;
+    cu_step.cond() = cu;
     cu_step.then_case() = code_assignt(cv, plus_exprt(cv, one));
     blk.copy_to_operands(cu_step);
     blk.copy_to_operands(code_assignt(q, binary_relation_exprt(cv, ">=", pv)));
@@ -206,23 +208,24 @@ codet ld_converter::translate_counter(const LdIRNode &n)
     {
       symbol_exprt r = var_expr(n.ctr_R);
       code_ifthenelset r_step;
-      r_step.cond()      = r;
+      r_step.cond() = r;
       r_step.then_case() = code_assignt(cv, zero);
       blk.copy_to_operands(r_step);
     }
   }
   else // CTD
   {
-    symbol_exprt cd  = var_expr(n.ctr_CD);
-    symbol_exprt cv  = var_expr(n.ctr_CV);
-    symbol_exprt q   = var_expr(n.ctr_Q);
+    symbol_exprt cd = var_expr(n.ctr_CD);
+    symbol_exprt cv = var_expr(n.ctr_CV);
+    symbol_exprt q = var_expr(n.ctr_Q);
     exprt neg_one = from_integer(BigInt(-1), int32_t_());
 
     code_ifthenelset cd_step;
-    cd_step.cond()      = cd;
+    cd_step.cond() = cd;
     cd_step.then_case() = code_assignt(cv, plus_exprt(cv, neg_one));
     blk.copy_to_operands(cd_step);
-    blk.copy_to_operands(code_assignt(q, binary_relation_exprt(cv, "<=", zero)));
+    blk.copy_to_operands(
+      code_assignt(q, binary_relation_exprt(cv, "<=", zero)));
   }
   return blk;
 }
