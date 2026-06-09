@@ -659,8 +659,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             bp.empty() ? flow_class_map_.end() : flow_class_map_.find(bp);
           if (it != flow_class_map_.end())
           {
-            exprt cast = typecast_exprt(
-              base_expr, gen_pointer_type(symbol_typet("tag-" + it->second)));
+            // (tag-Cls*)base_expr, built in IREP2 (V.3).
+            const typet cast_t =
+              gen_pointer_type(symbol_typet("tag-" + it->second));
+            expr2tc base2;
+            migrate_expr(base_expr, base2);
+            exprt cast =
+              migrate_expr_back(typecast2tc(migrate_type(cast_t), base2));
+            cast.type() = cast_t; // restore #cpp_type that migrate_type drops
             resolved = resolve_member_on_base(cast, attr_name);
           }
         }
@@ -956,10 +962,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class*
+        // Create a typecast from char* to target_class* in IREP2 (V.3).
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
-        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+        expr2tc expr2;
+        migrate_expr(expr, expr2);
+        exprt casted_expr =
+          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
+        casted_expr.type() = target_ptr_type;
 
         // Dereference to get the object
         exprt deref_expr("dereference", target_class_symbol->get_type());
@@ -1062,7 +1072,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!(base_type.is_struct() || base_type.is_union() ||
               points_to_struct))
-          base = typecast_exprt(base, gen_pointer_type(class_type));
+        {
+          // (class_type*)base, built in IREP2 (V.3).
+          const typet bt = gen_pointer_type(class_type);
+          expr2tc base2;
+          migrate_expr(base, base2);
+          base = migrate_expr_back(typecast2tc(migrate_type(bt), base2));
+          base.type() = bt; // restore #cpp_type that migrate_type drops
+        }
 
         if (base.type().is_pointer())
         {
@@ -1443,7 +1460,13 @@ static exprt make_slice_struct_expr(
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
-      value = typecast_exprt(value, field_type);
+    {
+      // (field_type)value, built in IREP2 (V.3).
+      expr2tc v2;
+      migrate_expr(value, v2);
+      value = migrate_expr_back(typecast2tc(migrate_type(field_type), v2));
+      value.type() = field_type; // restore #cpp_type that migrate_type drops
+    }
     return value;
   };
 
