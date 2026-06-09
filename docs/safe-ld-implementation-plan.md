@@ -122,7 +122,7 @@ regression/
 
 Key design points:
 
-- Use a DOM parser (libxml2 — a **new** dependency, added via `find_package(LibXml2)`) to walk the XML tree.
+- Use a DOM parser (**pugixml** — a **new** dependency, bundled via CMake `FetchContent`) to walk the XML tree. pugixml is a single-header + single-`.cpp` library with no system dependencies, linking cleanly as a static target on macOS, Windows, and Linux without pkg-config or ABI concerns.
 - Normalize vendor-specific schema deviations (TIA Portal, Codesys, Rockwell) in a
   **schema normalisation layer** before constructing the AST. This directly mitigates the
   PLCopen XML schema-variation risk identified in the proposal.
@@ -167,6 +167,30 @@ Each `RUNG_k` block is a sequence of `ContactEval`, `CoilAssign`, `FBCall` nodes
 directly correspond to SOS rule applications. This representation makes it straightforward
 to prove the translation preserves the cyclic-scan semantics.
 
+**Execution model scope (Tier 1).** The IR models a **strictly synchronous, single-task**
+cyclic scan: one periodic task, no I/O interrupt tasks, no multi-task PLC configurations,
+no pre-emptive scheduling. This is the correct scope for the IEC 61131-3 safety properties
+targeted by SAFE-LD. Programs containing interrupt task declarations or multi-task
+configurations are rejected by the semantic analyser with a structured
+`UnsupportedConstruct(InterruptTask, tier=2)` error. Multi-task support is Tier 2; if
+addressed in future work, ESBMC's existing concurrency primitives would be the integration
+point. The single `code_whilet(true_exprt(), scan_body)` model must not be used to
+represent concurrent tasks.
+
+**Synchronous fixed-tick time model.** Rather than tracking wall-clock time (which causes
+state-space explosion in SMT), the IR uses an **abstract tick model**: every scan-loop
+iteration advances time by exactly **one tick**. Timer preset values (`PT`) are
+dimensionless tick counts. This gives a fully concrete, deterministic time encoding:
+
+- `ET` is incremented by 1 per scan while `IN = true` — encoded as `plus_exprt(ET, one)`.
+- `Q` is assigned `geq_exprt(ET, PT)` at the end of each scan.
+
+No nondeterminism in time progression and no `__ESBMC_assume` needed. This eliminates
+the vacuous-failure risk that arises when Δt is unconstrained: a TON timer with `PT = N`
+fires after exactly N scan iterations, making `response` properties and timer-dependent
+invariants checkable with a known induction depth of N. Wall-clock jitter is out of scope
+(see §3.7 "What is Not Guaranteed").
+
 ### 3.4 GOTO IR Generator (`ir_gen/`)
 
 **Input:** `LdIR` + property `code_assertt` nodes from the property encoder.  
@@ -198,7 +222,7 @@ following the SOS state-transition rules:
 | Output coil `--( )--` | `code_assignt(symbol_exprt(var), pf)` |
 | Set coil `--( S )--` | `code_ifthenelset(pf, code_assignt(var, true_exprt()))` |
 | Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
-| TON timer *(per-scan step)* | sequence of `code_ifthenelset` + `code_assignt` for `IN`, `ET`, `Q` fields — full logic defined in SOS spec (T1.2) |
+| TON timer *(fixed-tick model)* | `code_ifthenelset(IN, code_assignt(ET, plus_exprt(ET, one)))` to increment `ET`; `code_assignt(Q, geq_exprt(ET, PT))` for output — fires deterministically after exactly `PT` scan ticks; full SOS step function in T1.2 |
 | CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
 
 **Fault injection mode.** An optional converter flag negates selected contact polarities
@@ -363,6 +387,13 @@ evidence prior to a formal proof.
 - **Correctness of the SOS specification.** The SOS spec (T1.2) is validated by review
   and fault injection but is not itself formally proven against the IEC 61131-3 normative
   text. It is the assumed semantic ground truth for the theorem above.
+- **Wall-clock timing accuracy.** The fixed-tick model (§3.3) proves properties in terms
+  of scan counts, not wall-clock seconds. If the physical scan cycle time varies (jitter),
+  the abstract tick count does not map directly to real time. Jitter analysis requires a
+  separate real-time model and is out of scope for Tier 1.
+- **Multi-task and interrupt-driven behaviour.** The theorem applies only to programs
+  matching the single-task synchronous execution model (§3.3). Any program rejected with
+  `UnsupportedConstruct(InterruptTask, tier=2)` is outside the theorem's domain.
 
 ---
 
@@ -428,7 +459,13 @@ The core changes required (mirroring the Python front-end addition):
 `src/ld-frontend/CMakeLists.txt`:
 
 ```cmake
-find_package(LibXml2 REQUIRED)
+include(FetchContent)
+FetchContent_Declare(
+  pugixml
+  GIT_REPOSITORY https://github.com/zeux/pugixml.git
+  GIT_TAG        v1.14
+)
+FetchContent_MakeAvailable(pugixml)
 
 add_library(ldfrontend STATIC
   ld_language.cpp
@@ -443,10 +480,9 @@ add_library(ldfrontend STATIC
   verify/ld_verify.cpp
 )
 
-target_include_directories(ldfrontend PUBLIC ${LIBXML2_INCLUDE_DIR})
 # irep2 and util are already linked transitively via the ESBMC build graph;
 # explicit linkage follows the python-frontend pattern.
-target_link_libraries(ldfrontend PUBLIC ${LIBXML2_LIBRARIES} util irep2)
+target_link_libraries(ldfrontend PUBLIC pugixml::static util irep2)
 ```
 
 `tools/ld-verify/CMakeLists.txt` links `ldfrontend` and produces the `ld-verify` binary.
@@ -455,7 +491,7 @@ target_link_libraries(ldfrontend PUBLIC ${LIBXML2_LIBRARIES} util irep2)
 
 | Dependency | Role | Already in ESBMC? |
 |---|---|---|
-| libxml2 | PLCopen XML DOM parsing | **No** — new dependency; add via `find_package(LibXml2 REQUIRED)` gated on `ENABLE_LD_FRONTEND` |
+| pugixml | PLCopen XML DOM parsing | **No** — new dependency; bundled via `FetchContent_Declare(pugixml GIT_TAG v1.14)`. Single `.cpp` + header, no system dependency, links as `pugixml::static` on all platforms. Chosen over libxml2 to avoid static-linking fragility on macOS/Windows CI runners. |
 | yaml-cpp | YAML property file parsing | **Yes** — already required (`src/util/CMakeLists.txt` links `yaml-cpp::yaml-cpp`; `util/yaml_parser.h` exposes the interface) |
 | nlohmann/json | JSON report output | **Yes** — already used by the Python frontend |
 
