@@ -385,6 +385,20 @@ class LoopMixin:
             # homogeneous pure literals to preserve runtime isinstance semantics.
             self.is_range_loop = False
             return self._unroll_list_literal_for(node, list_literal)
+        # Inline list-literal iterable with a tuple/list-unpacking target, e.g.
+        # `for u, v in [(1, 2), (3, 4)]:`. Unroll like a name-bound list literal
+        # so each statically-known element keeps its tuple/list shape and feeds
+        # the converter's assignment-unpacking pipeline (`u, v = (1, 2)`). The
+        # generic iterable path would instead bind the element to an Any-typed
+        # temp and subscript-unpack it, which aborts with type2t::symbolic_type_excp.
+        # Shares _unroll_list_literal_for's tuple-target limitation: the RHS must
+        # stay a literal for the converter, so element sub-expressions are not
+        # snapshotted -- a tuple element naming a body-mutated variable would read
+        # the mutated value (evaluate-once divergence). Constant tuples are exact.
+        if (isinstance(node.iter, ast.List) and isinstance(node.target, (ast.Tuple, ast.List))
+                and self._can_safely_unroll_list_literal_for(node, node.iter)):
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(node, node.iter)
         # Check if iterating over a generator variable
         if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
             inlined = self._inline_generator_for(node)
