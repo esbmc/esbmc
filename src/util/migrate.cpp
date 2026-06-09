@@ -1951,6 +1951,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
     }
+    else if (expr.statement() == "statement_expression")
+      t = sideeffect2t::allockind::statement_expression;
     else if (expr.statement() == "cpp-throw")
     {
       // Python/C++ throw expression: side_effect_exprt("cpp-throw").
@@ -1996,18 +1998,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       new_expr_ref = code_decl2tc(thetype, sym_name);
       return;
     }
-    // 2-operand form: declaration with initializer. Split into decl + assign
-    // so code_decl2t (which has no initializer field) can represent both parts.
-    // For simple (side-effect-free) initializers the resulting goto program is
-    // identical to the original path; for call-expression initializers the DECL
-    // instruction may appear before the call rather than after, but this is
-    // valid for the round-trip validation purpose of --irep2-bodies.
+    // 2-operand form: declaration with initializer. Preserve as code_decl2tc
+    // with the init field so that migrate_expr_back can reconstruct the 2-op
+    // codet and goto_convert places DEAD at the right scope boundary.
     expr2tc rhs;
     migrate_expr(expr.op1(), rhs);
-    std::vector<expr2tc> decl_block = {
-      code_decl2tc(thetype, sym_name),
-      code_assign2tc(symbol2tc(thetype, sym_name), rhs)};
-    new_expr_ref = code_block2tc(decl_block);
+    new_expr_ref = code_decl2tc(thetype, sym_name, rhs);
     return;
   }
 
@@ -2201,9 +2197,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     ops.reserve(expr.operands().size());
     for (const auto &op : expr.operands())
     {
-      expr2tc o;
-      migrate_expr(op, o);
-      ops.push_back(o);
+      // Flatten decl-block children into this block so the back-migrated
+      // code_block contains code_decl2tc items directly. This prevents an
+      // extra code_block layer that would cause convert_block to emit DEAD
+      // immediately after the initializer assignment instead of at scope end.
+      if (op.id() == irept::id_code && op.statement() == "decl-block")
+      {
+        for (const auto &decl_op : op.operands())
+        {
+          expr2tc o;
+          migrate_expr(decl_op, o);
+          ops.push_back(o);
+        }
+      }
+      else
+      {
+        expr2tc o;
+        migrate_expr(op, o);
+        ops.push_back(o);
+      }
     }
     new_expr_ref = code_block2tc(ops);
     return;
@@ -2304,8 +2316,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
 
   // decl-block: a compound-declaration block (e.g. "int x, y;" in C99
-  // for-init). Migrated as code_block2t — back-migration loses the original
-  // "decl-block" statement kind, but goto_convert processes both identically.
+  // for-init). When the enclosing code("block") is migrated, decl-block
+  // children are flattened inline (see the block arm above). This arm handles
+  // decl-block appearing outside a block context (e.g. as a for-init); migrate
+  // each decl and wrap in a code_block2t that back-migrates as code("block").
+  // goto_convert treats "block" and "decl-block" identically for for-init, so
+  // the extra scope boundary is harmless there.
   if (expr.id() == "code" && expr.statement() == "decl-block")
   {
     std::vector<expr2tc> ops;
@@ -3586,6 +3602,9 @@ exprt migrate_expr_back(const expr2tc &ref)
     case sideeffect2t::allockind::assigns_target:
       theexpr.statement("assigns_target");
       break;
+    case sideeffect2t::allockind::statement_expression:
+      theexpr.statement("statement_expression");
+      break;
     default:
 
       log_error("Unexpected side effect type when back-converting");
@@ -3612,6 +3631,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
+    if (!is_nil_expr(ref2.init))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.init));
     return codeexpr;
   }
   case expr2t::code_dead_id:
