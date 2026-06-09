@@ -1,0 +1,45 @@
+name: Doxygen API docs
+
+# Builds the doxygen API reference from src/. On master this validates that the
+# docs the website deploys (esbmc/esbmc.github.io -> /docs/api) still generate
+# cleanly; on pull requests it catches broken doc comments before they merge.
+# The public deploy itself is performed by the esbmc.github.io pages workflow,
+# which runs `doxygen .doxygen` against this repository.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths:
+      - 'src/**'
+      - '.doxygen'
+      - '.github/workflows/doxygen.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  doxygen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Doxygen and Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends doxygen graphviz
+
+      - name: Generate API documentation
+        run: |
+          maj=$(sed -nE 's/^set\(ESBMC_VERSION_MAJOR ([0-9]+)\).*/\1/p' CMakeLists.txt)
+          min=$(sed -nE 's/^set\(ESBMC_VERSION_MINOR ([0-9]+)\).*/\1/p' CMakeLists.txt)
+          pat=$(sed -nE 's/^set\(ESBMC_VERSION_PATCH ([0-9]+)\).*/\1/p' CMakeLists.txt)
+          ( cat .doxygen; echo "PROJECT_NUMBER = ${maj}.${min}.${pat}" ) | doxygen -
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: doxygen-html
+          path: docs/html
+          if-no-files-found: error
