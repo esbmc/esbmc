@@ -324,12 +324,34 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   return command_line
 
+# Solver-selection flags ESBMC accepts; only one may appear on a command line.
+SOLVER_FLAGS = ("--z3", "--bitwuzla", "--boolector", "--cvc4", "--cvc5",
+                "--yices", "--mathsat", "--smtlib")
+
+def apply_smt_export(command_line, output_path, solver):
+  # Export the SMTLIB formula from the chosen solver while still verifying.
+  # --multi-property makes ESBMC solve each property separately, and ESBMC
+  # writes one formula per claim by inserting the claim index before the
+  # extension (PATH -> PATH.1, PATH.2, ...), so the dumps never overwrite.
+  #
+  # Strip any solver already on the line (e.g. --bitwuzla added for concurrent
+  # benchmarks) so the requested export solver does not trip ESBMC's
+  # "Please only specify one solver" error.
+  tokens = [t for t in command_line.split() if t not in SOLVER_FLAGS]
+  tokens += ["--" + solver, "--multi-property", "--smt-formula-too",
+             "--output", output_path]
+  return " ".join(tokens) + " "
+
 def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
     esbmc_command_line += "--witness " + witness_path + " "
+
+  if args.export_smt is not None:
+    esbmc_command_line = apply_smt_export(
+      esbmc_command_line, args.export_smt, args.smt_solver)
 
   output = run(esbmc_command_line)
   res = parse_result(output.decode(), category_property)
@@ -350,6 +372,12 @@ parser.add_argument("--validate-violation-witness", dest="validate_violation", a
                     help="Validate a violation witness (use with --witness)")
 parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
                     help="Validate a correctness witness (use with --witness)")
+parser.add_argument("--export-smt", nargs='?', const="formula.smt2", default=None, metavar="PATH",
+                    help="Export the SMTLIB formula(s) to PATH (default: formula.smt2) and still "
+                         "verify. Runs in --multi-property mode, so each property is written to its "
+                         "own file (PATH -> PATH.1, PATH.2, ...).")
+parser.add_argument("--smt-solver", choices=["z3", "bitwuzla"], default="z3",
+                    help="Solver used for --export-smt (default: z3)")
 
 args = parser.parse_args()
 
