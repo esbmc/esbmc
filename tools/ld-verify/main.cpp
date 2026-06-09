@@ -86,5 +86,17 @@ int main(int argc, char *argv[])
   LdVerifyRunner runner;
   LdVerifyResult result = runner.run(opts);
   std::cout << result.to_json();
-  return (result.verdict == LdVerifyResult::Verdict::Violation) ? 10 : 0;
+  switch (result.verdict)
+  {
+  case LdVerifyResult::Verdict::Safe:
+    return 0;
+  case LdVerifyResult::Verdict::Violation:
+    return 10;
+  case LdVerifyResult::Verdict::Unknown:
+  case LdVerifyResult::Verdict::Incomplete:
+    return 1;
+  case LdVerifyResult::Verdict::Error:
+    return 2;
+  }
+  return 2;
 }

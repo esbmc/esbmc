@@ -138,7 +138,11 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
   if (tag == "coil" || tag == "Coil" || tag == "SetCoil" || tag == "ResetCoil")
   {
     elem.kind = RungElementKind::Coil;
-    elem.coil.kind = coil_kind_from_string(tag);
+    // PLCopen XML encodes coil kind either as the tag name (SetCoil/ResetCoil)
+    // or as a "kind" attribute on a generic <coil kind="set|reset"/> element.
+    std::string kind_str = text_or_attr(n, "kind", nullptr);
+    elem.coil.kind = kind_str.empty() ? coil_kind_from_string(tag)
+                                      : coil_kind_from_string(kind_str);
     if (auto var_node = n.child("variable"))
       elem.coil.variable = var_node.child_value();
     else
@@ -199,9 +203,7 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
     return elem;
   }
 
-  // Unknown element — skip silently; type checker will validate completeness
-  elem.kind = RungElementKind::Contact; // placeholder
-  return elem;
+  throw UnsupportedConstructError(tag, 2);
 }
 
 // -----------------------------------------------------------------------
@@ -216,7 +218,11 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
   rung.loc = loc_from_node(n, source_file_);
 
   for (auto child : n.children())
+  {
+    if (child.type() != pugi::node_element)
+      continue;
     rung.elements.push_back(parse_rung_element(&child));
+  }
   return rung;
 }
 

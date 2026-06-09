@@ -61,6 +61,7 @@ LdIRNode LdIRBuilder::lower_element(const RungElement &elem)
   case RungElementKind::CounterFB:
     node.kind = LdIRNodeKind::CounterStep;
     node.ctr_kind = elem.counter_fb.kind;
+    node.ctr_instance = elem.counter_fb.instance_name;
     node.ctr_CU = elem.counter_fb.CU_var;
     node.ctr_CD = elem.counter_fb.CD_var;
     node.ctr_R = elem.counter_fb.R_var;

@@ -72,6 +72,10 @@ std::vector<LdProperty> YamlPropertyParser::parse(const std::string &path)
           "' missing 'variables'");
       for (const auto &v : node["variables"])
         p.variables.push_back(v.as<std::string>());
+      if (p.variables.size() < 2)
+        throw LdPropertyParseError(
+          path + ": mutual_exclusion property '" + p.id +
+          "' requires at least 2 variables");
       break;
 
     case PropertyKind::invariant:

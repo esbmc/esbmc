@@ -44,6 +44,7 @@ struct LdIRNode
   FBKind timer_kind = FBKind::TON;
 
   // Fields used by CounterStep
+  std::string ctr_instance; // FB instance name (for shadow edge variable)
   std::string ctr_CU;
   std::string ctr_CD;
   std::string ctr_R;

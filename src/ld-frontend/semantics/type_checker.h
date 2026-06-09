@@ -29,6 +29,11 @@ private:
   void check_arith_fb(const ArithFBNode &fb);
 
   VarKind lookup_type(const std::string &var, const LdLocation &loc) const;
+  void require_port(
+    const std::string &instance,
+    const char *port,
+    const std::string &var,
+    const LdLocation &loc) const;
 
   static std::string loc_str(const LdLocation &loc);
 };

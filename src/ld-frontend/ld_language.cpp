@@ -72,31 +72,32 @@ bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
     ld_converter converter(context, ir);
     converter.convert();
 
-    // Append property assertions into the scan-loop body of __ESBMC_main.
+    // Append property assertions into the scan-loop body of ld::scan_loop.
     if (!props_.empty())
     {
       property_encoder encoder(context, ast_.source_file);
       code_blockt prop_code = encoder.encode(props_);
 
-      symbolt *main_sym = context.find_symbol("__ESBMC_main");
-      if (main_sym && !prop_code.operands().empty())
+      symbolt *scan_sym = context.find_symbol("ld::scan_loop");
+      if (scan_sym && !prop_code.operands().empty())
       {
-        // main body is a code_blockt; last operand is the while loop.
-        // get_value() is const-only; take a copy, mutate, and set back.
-        exprt main_val = main_sym->get_value();
+        // scan_loop body is a code_blockt whose only operand is the while loop.
+        exprt scan_val = scan_sym->get_value();
         if (
-          !main_val.operands().empty() &&
-          to_code(main_val.operands().back()).get_statement() == "while")
+          !scan_val.operands().empty() &&
+          to_code(scan_val.operands().front()).get_statement() == "while")
         {
-          codet &loop = static_cast<codet &>(main_val.operands().back());
+          codet &loop = static_cast<codet &>(scan_val.operands().front());
           code_whilet &whl = static_cast<code_whilet &>(loop);
-          codet &loop_body = whl.body();
           for (const auto &op : prop_code.operands())
-            loop_body.copy_to_operands(op);
+            whl.body().copy_to_operands(op);
         }
-        main_sym->set_value(main_val);
+        scan_sym->set_value(scan_val);
       }
     }
+
+    // Emit static init after all symbols (including property counters) exist.
+    converter.prepend_static_init();
   }
   catch (const std::runtime_error &e)
   {
