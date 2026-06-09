@@ -138,9 +138,8 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     migrate_expr(to_code(symbol.get_value()), irep2_body);
     roundtrip_body_storage = migrate_expr_back(irep2_body);
   }
-  const codet &code =
-    use_irep2_bodies ? to_code(roundtrip_body_storage)
-                     : to_code(symbol.get_value());
+  const codet &code = use_irep2_bodies ? to_code(roundtrip_body_storage)
+                                       : to_code(symbol.get_value());
 
   locationt end_location;
 

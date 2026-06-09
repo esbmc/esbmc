@@ -1836,10 +1836,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (
       stmt == "assign" || stmt == "assign+" || stmt == "assign-" ||
       stmt == "assign*" || stmt == "assign_div" || stmt == "assign_mod" ||
-      stmt == "assign_shl" || stmt == "assign_shr" ||
-      stmt == "assign_ashr" || stmt == "assign_lshr" ||
-      stmt == "assign_bitand" || stmt == "assign_bitxor" ||
-      stmt == "assign_bitor")
+      stmt == "assign_shl" || stmt == "assign_shr" || stmt == "assign_ashr" ||
+      stmt == "assign_lshr" || stmt == "assign_bitand" ||
+      stmt == "assign_bitxor" || stmt == "assign_bitor")
     {
       assert(expr.operands().size() == 2);
       expr2tc lhs, rhs;
@@ -1988,8 +1987,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // valid for the round-trip validation purpose of --irep2-bodies.
     expr2tc rhs;
     migrate_expr(expr.op1(), rhs);
-    std::vector<expr2tc> decl_block = {code_decl2tc(thetype, sym_name),
-                                       code_assign2tc(symbol2tc(thetype, sym_name), rhs)};
+    std::vector<expr2tc> decl_block = {
+      code_decl2tc(thetype, sym_name),
+      code_assign2tc(symbol2tc(thetype, sym_name), rhs)};
     new_expr_ref = code_block2tc(decl_block);
     return;
   }
@@ -2205,9 +2205,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), then_case);
     // The Clang C frontend only adds an else operand when an else branch
     // exists; op2() on a 2-operand node is UB. Check via the count.
-    if (
-      expr.operands().size() >= 3 &&
-      expr.operands()[2].is_not_nil())
+    if (expr.operands().size() >= 3 && expr.operands()[2].is_not_nil())
       migrate_expr(expr.op2(), else_case);
     new_expr_ref =
       code_ifthenelse2tc(cond, then_case, else_case, expr.location());
