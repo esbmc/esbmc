@@ -1,5 +1,253 @@
 Release Notes of the ESBMC model checker
 
+*** ESBMC v8.3.1 Release Notes
+This release of ESBMC v8.3.1 significantly advances the Python frontend through a sweeping IREP2 migration (V.3/V.4), adds symbolic exception lowering (--lower-exceptions) for C++ programs including full stack-unwinding and noexcept specifications, and extends NumPy/PyTorch operational models. Verification gains a new ranking-function termination checker, Partial Order Reduction for concurrency, symex-side pointer invariants for k-induction, a Z3 fix for negative bitvector numerals, and IRep2 V.4.0 structured control-flow code kinds. Below is a summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Python Frontend
+*** IREP2 Migration (V.3 / V.4)
+- Migrated string_handler, string_method_handler, and char_utils to IREP2 construction (#5086, #5087, #5088).
+- Migrated dict_handler member/symbol/typecast/deref/address-of construction to IREP2 (#5089).
+- Migrated set_handler construction idioms to IREP2 (#5091).
+- Migrated list_handler clean construction and index-access sites to IREP2 (guarded) (#5093, #5094).
+- Migrated list_handler side_effect calls to IREP2 (guarded) (#5097).
+- Migrated function_call/builtins.cpp, expr.cpp bulk idioms, builder.cpp typecasts, and converter_dunder dispatch to IREP2 (#5101, #5106, #5112, #5117, #5246).
+- Migrated python_exception_handler, tuple_handler, numpy_call_expr, and python_math construction to IREP2 (#5083, #5084, #5107, #5109).
+- Migrated python_typechecking construction to IREP2 (#5119).
+- Migrated Phase 4.1 encapsulation of frontend irep attribute access (#4990).
+- Migrated Phase 4.2 IREP2 construction helpers (#4997).
+- Migrated Phase 4.3 elementary type builders, Callable function-pointer type, float/double, and array builders to IREP2 (#5000, #5001, #5002, #5018).
+- Migrated Phase 4.4 dict/list not-truthiness and not-on-string expression wiring to IREP2 (#5041, #5045).
+- Built lambda address-of, raise-expression call, and single-char comparison subtree in IREP2 (#5235, #5256, #5263).
+- Built list-truthiness len()!=0 condition and complex int->double promotion cast in IREP2 (#5239, #5260).
+- Built class/union attribute-cast pointers and tuple/complex member access in IREP2 (#5245, #5250).
+- Routed builder.cpp typecasts, string_method_handler, tuple/complex member access, numpy 2D-result indexing, obj_value element extraction, and .shape list-length subtree through IREP2 helpers (#5242, #5245, #5246, #5247, #5248, #5251).
+- Routed python_math operand float-cast and enum-member &str[0] through IREP2 (#5253, #5255).
+- Extracted set and PyObject element fields via IREP2 helpers (#5240, #5242).
+- Relaxed member/index source assert to unblock V.3 construction (#5061).
+- Added IRep2 V.4.0 structured control-flow code kinds (dead-but-tested) (#5265).
+- Added IREP2 type round-trip equivalence harness (Phase 4.0) (#4992).
+- Collapsed contextt's three symbol maps into one multi_index container (#5053).
+
+*** String Operations
+- Implemented real runtime str.split() model; fixed str.split() on join/replace/repeat, concatenated, and reassigned receivers (#5147, #5100, #5090, #5227).
+- Added asserting regression tests for symbolic str.split() (#5184).
+- Modelled str.partition() as a 3-tuple (#5182).
+- Added runtime str.title(), str.swapcase(), str.capitalize(), str.isalnum(), str.isupper(), and str.count() operational models (#4818, #4821, #4822, #4823, #4824, #4826).
+- Routed str.join through runtime model for mutated lists and added nondet fallback for non-foldable iterables (#5174, #4848).
+- Added runtime __python_str_join operational model (#4861).
+- Folded str methods at consteval and added nondet fallback on non-constant receivers (#4811, #4813, #4814, #4815, #4817).
+- Typed str() iterables as str so for-loops use strlen bound (#4863).
+- Fixed str.startswith() crash on a symbolic prefix (#5031).
+- Fixed str()/arithmetic on unresolved list elements and str() of unannotated parameters (#5218, #5216).
+- Supported str() on int/float/bool variables (#4643).
+
+*** Dict / List / Tuple / Set Operations
+- Iterated dict comprehension over symbolic range via a counter (#5236).
+- Typed dict-comprehension value reads and loop variable from list element type (#5215, #5232).
+- Lowered dict() over a comprehension to {} + population loops (#5223).
+- Routed len() to dict-size handler for dict-typed symbols (#5231).
+- Supported del of a list element (#5221).
+- Fixed for-loop tuple unpacking over inline list literals (#5254).
+- Supported nested tuple-unpacking targets and subscript/attribute targets in tuple unpacking (#5217, #4934).
+- Fixed list repetition with non-constant count (#5152).
+- Fixed nested-list element corruption on list copy and cross-function-return value/type (#5113, #5111).
+- Fixed abort subscripting a tuple literal with string elements (#5204).
+- Fixed list.extend() leaving the list size non-deterministic (#5064).
+- Implemented list.count() and list.index() (#5063).
+- Inferred list return type for list-returning functions (#5210).
+- Promoted int/float list literals to float and fixed dynamic-index read of mixed int/float lists (#5176, #5193).
+- Compared int/float list elements numerically in list_eq (#5207).
+- Fixed `x in tuple_of_strings` membership (#5154).
+- Unrolled iteration over dict literals with tuple keys (#4845).
+- Desugared list(filter(pred, seq)) to a comprehension (#5005).
+- Routed list(dict)/sorted(dict) through d.keys() (#4974).
+- Fixed empty-list equality crash from one-value BoolOp (#5194).
+
+*** Type Inference
+- Scoped return-type inference to the enclosing function (#4996, #5118).
+- Inferred float return type for expr / float-literal BinOp (#4867).
+- Inferred empty-list element type from first append (#4707).
+- Resolved typing.List/Dict/Set aliases to builtin collection types (#5200).
+- Kept list-comprehension element type in param inference (#5023).
+- Inferred imported-class attribute types across module boundaries (#5046).
+- Carried referenced module globals through named imports (#4984).
+- Pre-registered imported-module globals for LEGB forward references (#4983).
+- Supported flow-sensitive class tracking (function-local + last-write) (#5015).
+- Typed Any-annotated string comprehension elements as str (#5181).
+- Recovered self-attr type from constructor calls and default-None params (#4851).
+- Supported PEP 604 T | None class attributes (#4752).
+- Fixed Optional[T] return type and inline-call `is None` (#4878).
+
+*** Built-ins and Higher-Order Functions
+- Implemented pow, bin, hex, oct, ascii, callable, issubclass, zip, reversed, filter (#4711, #4880).
+- Fixed ord() of runtime strings crashing goto_check (#5209).
+- Fixed bin() result type and mixed-return inference (#5199).
+- Fixed float() of conditionally-retyped variable folding to 0.0 (#5180).
+- Fixed int() of constant numeric variable folding to 0 (#4968).
+- Evaluated print() Call arguments for their side-effects (#4675).
+- Supported __ESBMC_assert and __ESBMC_unreachable intrinsics in the Python frontend (#4597, #4683).
+- Materialised __file__ as a module-level string built-in (#4663).
+- Supported the walrus operator (PEP 572 :=) (#5057).
+- Supported re.Match.group/groups/span (#4639).
+- Honoured re.match's at-the-start semantics for \d+/[x-y]+ patterns (#4687).
+- Fixed float() of string variable via runtime model (#4943).
+- Rejected unmodelled list slice assignment (was unsound) (#5219).
+
+*** Module Models
+- Added torch operational model (mm/matmul/cat/split/allclose) (#5120).
+- Added NumPy dtype preservation for array constructors (#5099).
+- Expanded NumPy complex support and added regression coverage (#5026).
+- Extended NumPy broadcasting support and added .shape, 2D indexing, and safe broadcasting (#4963, #5065).
+- Fixed symbolic numpy matmul/dot element type and float backend (#5205).
+- Fixed numpy matmul and dot bounds handling (#5173).
+- Supported numpy.fmod on scalar operands (#5213).
+- Added queue.Queue/LifoQueue model and fixed dict-method shadowing (#5006).
+- Modelled deque.popleft/appendleft and fixed aliased model imports (#5008).
+- Built a real byte array for bytes(list)/bytes(n) (#5068).
+- Supported try/finally in the Python frontend (#5072).
+- Supported for-else lowering into a did-not-break flag (#4874).
+- Rewrote sum(range(EXPR)) to Gauss closed form (#4869).
+- Supported model slice expressions and slice() builtin (#4528).
+
+*** Threading / Concurrency (Python)
+- Wired threading.Thread end-to-end via pthread primitives (#4577).
+- Added threading.Lock; lowered Thread.start/join at parse level (#4565, #4569, #4573).
+- Supported threading.Thread subclassing via run() lowering (#4593).
+- Exposed threading.Lock blocking to --deadlock-check (#4596).
+- Recognised Python module globals as shared at interleaving points (#4587).
+- Made module-level globals visible to --data-races-check (#4585).
+- Preserved object identity on Thread(args=instance,) capture (#4589).
+
+*** Robustness and Fixes
+- Fixed SMT abort on math.sqrt of an any-typed value (#5034).
+- Fixed list_size abort on inline subscript of a list call (#5033).
+- Fixed member2t abort on inline optional comparison (#5032).
+- Fixed migrate-expr crashes on empty char[1] and list() ctor (#4810).
+- Fixed segfault on assertion in catch-all handler (#5070).
+- Fixed crash on nested-list subscript assignment (#4622).
+- Fixed JSON crash on negative list index with variable operand (#4928).
+- Fixed integer modulo sign for negative operands (floored division) (#5058).
+- Normalised call operands of boolean short-circuit (#4999).
+- Warned on missing str runtime-model dispatch instead of log_debug (#4985).
+- Rejected Python 2 interpreter with a clear error (#4705).
+
+*** Regression and Testing
+- Promoted multiple quixbugs and humaneval tests from KNOWNBUG to CORE (#4808, #4809, #5171).
+- Reclassified humaneval scalability-bounded tests from KNOWNBUG to FUTURE (#4881-#4914).
+- Added ord()-on-split regression coverage and enabled humaneval_134 (#5214).
+
+** C/C++ Verification
+*** Language Support
+- Implemented __atomic_fetch_{add,sub,or,and,xor,nand} and __atomic_compare_exchange{,_n} (#4922, #4875).
+- Supported __builtin_clz, __builtin_parity, and __builtin_assume (#5082).
+- Added support for C++20 <compare> with three-way comparison support (#4386).
+- Fixed virtual base destructor (#4720).
+- Fixed scanf overflow check skipped on &arr[i] (#4957).
+- Added byte-level __builtin_bit_cast (#4411).
+
+*** Exception Handling (--lower-exceptions)
+- Introduced symbolic exception lowering (--lower-exceptions), enabled by default (#5108, #5192).
+- Lowered try blocks with a pruned CATCH pop in --lower-exceptions (#5183).
+- Lowered dynamic exception specifications in --lower-exceptions (#5178).
+- Lowered noexcept/throw() specifications in --lower-exceptions (#5127, #5149).
+- Lowered dynamic_cast<T&> bad_cast in --lower-exceptions (#5168).
+- Lowered empty catch-all handlers in --lower-exceptions (#5241).
+- Ran destructors on the throw path (C++ stack unwinding) (#5132).
+- Removed the legacy imperative exception path (#5244).
+- Resolved std::bad_cast under elaborated tag name (LLVM 22) (#5148).
+- Fell back on dynamic_cast<T&> in --lower-exceptions (fix dropped bad_cast) (#5128).
+
+*** Function Contracts
+- Deduped pointer-param malloc emission and tightened out-param checks (#4925).
+- Modelled main's implicit return as 0 under contract enforcement (#5203).
+- Freed pointer-param backing on enforce-contract exit (#4916).
+
+*** Operational Models
+- Fixed strncmp to return 0 for n==0 without OOB read (#5060).
+- Added operational model for fseeko (#5039).
+- Fixed set/multiset iterator copy ctor/op= args by const ref (#4759).
+
+*** Concurrency
+- Added Partial Order Reduction for concurrency (#4696).
+- Added interleaving point at atomic-region boundaries (#4965).
+- Instrumented atomic-only callees as atomic in goto-race (#5233).
+- Flagged shared writes inside atomic regions (#4982).
+- Detected races on shared function-pointer call targets (#4967).
+- Detected escaped-stack-local data races (#4955).
+- Modelled __thread storage class with per-thread SSA chains (#4949).
+- Cleaned up concurrency symex: explicit transitions, exploration frames, merge_statet (#4479).
+
+** Solidity Frontend
+- Added special treatment for reach_error in SV-COMP mode (#4945).
+- Encapsulated Solidity-specific irep attributes behind typed setters/accessors (#4951-#4959).
+
+** Verification Features
+*** Symbolic Execution / GOTO
+- Constant-propagated structs that contain pointer fields in symex (#5238).
+- Enabled goto_loop_simplify pass by default: erase/step-recognise/assume-rewrite empty-body loops (#4877).
+- Made symex guard cost linear at high unwind (Θ(N²) → linear) (#5003).
+- Made function iteration order deterministic across builds (#5059).
+- Added sound printf return-length model (#5017).
+- Detected unchecked return values of fallible calls as CWE-252 (#4506).
+- Added vacuity probe for loop-invariant verification (--check-vacuity/--no-check-vacuity) (#4209).
+
+*** SMT Backend
+- Fixed Z3 SIGABRT building error trace for negative bitvector numerals (#5208).
+- Fixed int/real bitcast-to-fixedbv sort in --ir mode (#5074).
+- Auto-selected an int/real solver for --ir-ieee (not just --ir) (#5197).
+- Preserved BigInt precision in mk_smt_int across SMT backends (#4647).
+- Moved guardt into irep2 as guard2tc, fixed latent bugs, improved performance (#4640).
+
+*** K-Induction / Loop Invariants
+- Disabled inductive step on pointer-array writes (#5228).
+- Added symex-side pointer invariants for inductive-step havocs (#4838).
+
+*** Termination
+- Added ranking-function checker with supporting-invariant synthesis (#4919).
+- Reduced non-termination to assert(false) reachability (#4615).
+- Added do-while + write-only-deref elision + prefix-deref seeds to termination (#5079).
+
+*** Witness
+- Implemented Witness 2.1 function_enter waypoint and refactored witness cursor (#5078).
+- Implemented Witness 2.1 function_return waypoint and improved branching/function_enter matching (#5153).
+- Validated witness flags, detected witness type mismatch, and fixed branching (#4530).
+- Dropped aggregate-initialiser assumptions from GraphML witnesses (#5038).
+
+*** IRep2 / Internals
+- Avoided recursive CRC traversal in irep2 (#5098).
+- Flattened 4-layer hierarchy to switch-on-id dispatch in irep2 (#4594).
+- Deep refactored irep2: bug fixes, intrusive refcount, manifest-driven kinds, flat methods (#4486).
+- Shrank SSA_stept from 248 to 136 bytes and instructiont from 208 to 128 bytes (#4911, #4912).
+- Flipped symbolt::value and symbolt::type source of truth to IREP2 (#4741, #4735).
+- Retired the legacy CBMC simplifier (Phase 2.2) (#4938).
+- Dropped vestigial util/type.h; reached frontend boundary (Phase 2.5) (#4947).
+- Migrated goto_functiont::type to IREP2 (Phase 3) (#4721).
+- Migrated rw_set data-race analysis and built race-check exprs to IREP2 (#4718, #4719).
+
+** Build System / CI
+- Fixed Linux ARM64 build: SVE types, 32-bit libc, Solidity stub (#5252).
+- Supported system libraries when DOWNLOAD_DEPENDENCIES=OFF (#5030).
+- Supported Boost 1.88+ where boost/process/v1.hpp umbrella was removed (#4519).
+- Updated CI to LLVM 22 (#4651).
+- Added macOS to nightly release matrix (#4693).
+- Added concurrency limit to push workflow and cancelled stale PR runs on new push (#5164, #4734).
+- Checked clang-format on changed lines only and stopped auto-committing (#4862).
+- Reorganised and cleaned up docs and deps build process (#5202).
+- Split python_converter.cpp into 11 translation units and split string method handlers into dedicated translation units (#4547, #4714, #4726).
+
+** Documentation
+- Refreshed SV-COMP history graph (multiple quarterly updates) (#5019, #5021, #5066, #5081, #5130, #5229).
+- Added NumPy support assessment and roadmap (#5258).
+- Added irep2 grammar and worked examples to README (#5186).
+- Fixed stale macro refs and inaccuracies in irep2 README (#5195).
+- Added pointer-analysis README with diagram, invariants, and walkthrough (#4872).
+- Added Witness 2.1 function_enter and function_return waypoint documentation.
+- Documented Python threading support and concurrency limitations (#4586).
+- Modernised CBMC differences page and added SPARK Ada comparison (#4590).
+- Updated competition statistics across stats-30s/100s/300s/600s files.
+
+
 *** ESBMC v8.3 Release Notes
 This release of ESBMC v8.3 substantially expands the Python frontend with broad tuple and set support, comprehensive dataclass conformance, context manager (with/async with) lowering, and new operational models for collections (deque, OrderedDict), random, and time. C/C++ verification gains C++17/20/23 language features (structured bindings, deducing this, C++20 paren aggregate init, class template argument deduction, if consteval, paren aggregate init) and a large batch of new operational models (std::filesystem, std::any, std::variant, std::expected, std::source_location, std::span, std::underlying_type). The release introduces CWE mapping with SARIF output, k-path coverage, violation-witness validation, a rewritten simplifier with reassociation and peephole expansion, and makes Bitwuzla the default SMT solver. Toolchain support is bumped to Clang 22, and interval range analysis (IR-IEEE) is extended with theorem-driven RNA/RDN/RUP/RTZ rounding-mode lifting for ieee_div. Below is a summary of the new features, enhancements, and bug fixes:
 
