@@ -201,6 +201,8 @@ irep_typedefs(code_switch);
 irep_typedefs(code_break);
 irep_typedefs(code_continue);
 irep_typedefs(code_label);
+irep_typedefs(code_switch_case);
+irep_typedefs(sideeffect_assign);
 irep_typedefs(code_comma);
 irep_typedefs(invalid_pointer);
 irep_typedefs(code_asm);
@@ -2114,6 +2116,70 @@ public:
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &code_label2t::label, &code_label2t::code);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.2: one case/default arm of a switch body. `is_default` is true for the
+ *  default arm; `case_op` is nil in that case. `location` is not reflected
+ *  (same pattern as the other V.4 kinds). */
+class code_switch_case2t : public expr2t
+{
+public:
+  bool is_default;
+  expr2tc case_op; // nil when is_default
+  expr2tc code;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_switch_case2t(
+    bool _is_default,
+    const expr2tc &_case_op,
+    const expr2tc &_code,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_switch_case_id),
+      is_default(_is_default),
+      case_op(_case_op),
+      code(_code),
+      location(loc)
+  {
+  }
+  code_switch_case2t(const code_switch_case2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_switch_case2t::is_default,
+    &code_switch_case2t::case_op,
+    &code_switch_case2t::code);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.2: wraps C-frontend sideeffect assignment nodes — simple `=` and
+ *  compound `+=`, `-=`, etc. — for round-trip through migrate_expr /
+ *  migrate_expr_back.  `op` carries the operator string exactly as it appears
+ *  in the legacy irept (e.g. "assign", "assign+", "assign_div"), so that the
+ *  back-migration can reconstruct the original sideeffect node verbatim. */
+class sideeffect_assign2t : public expr2t
+{
+public:
+  irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+  expr2tc lhs;
+  expr2tc rhs;
+
+  sideeffect_assign2t(
+    const type2tc &t,
+    const irep_idt &o,
+    const expr2tc &l,
+    const expr2tc &r)
+    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r)
+  {
+  }
+  sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &sideeffect_assign2t::op,
+    &sideeffect_assign2t::lhs,
+    &sideeffect_assign2t::rhs);
   static std::string field_names[esbmct::num_type_fields];
 };
 

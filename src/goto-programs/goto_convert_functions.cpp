@@ -126,11 +126,25 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     abort();
   }
 
-  const codet &code = to_code(symbol.get_value());
+  // V.4.2 (esbmc/esbmc#4715): When --irep2-bodies is on, round-trip the
+  // legacy body through IREP2 (migrate_expr → code_*2t → migrate_expr_back
+  // → codet) before handing it to goto_convert_rec. Validates losslessness
+  // of the structured-CF migration arms; flag off ⇒ byte-identical to today.
+  exprt roundtrip_body_storage;
+  const bool use_irep2_bodies = options.get_bool_option("irep2-bodies");
+  if (use_irep2_bodies)
+  {
+    expr2tc irep2_body;
+    migrate_expr(to_code(symbol.get_value()), irep2_body);
+    roundtrip_body_storage = migrate_expr_back(irep2_body);
+  }
+  const codet &code =
+    use_irep2_bodies ? to_code(roundtrip_body_storage)
+                     : to_code(symbol.get_value());
 
   locationt end_location;
 
-  if (to_code(symbol.get_value()).get_statement() == "block")
+  if (code.get_statement() == "block")
     end_location =
       static_cast<const locationt &>(to_code_block(code).end_location());
   else

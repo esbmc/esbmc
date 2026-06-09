@@ -797,6 +797,13 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Interactively choose thread scheduling at interleaving points"},
    }},
+  {"IREP2 migration (esbmc/esbmc#4715)",
+   {{"irep2-bodies",
+     NULL,
+     "V.4.2: route goto_convert through the IREP2 body round-trip "
+     "(migrate legacy codet → code_*2t → codet) to validate losslessness. "
+     "Flag off (default) ⇒ byte-identical to the legacy path. "
+     "Gate for Phase V.4.3 (Python converter flip)."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

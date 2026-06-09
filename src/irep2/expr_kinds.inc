@@ -135,3 +135,9 @@ IREP2_EXPR(code_switch,           "code_switch")
 IREP2_EXPR(code_break,            "code_break")
 IREP2_EXPR(code_continue,         "code_continue")
 IREP2_EXPR(code_label,            "code_label")
+IREP2_EXPR(code_switch_case,      "code_switch_case")
+// Assignment side-effects (sideeffect("assign"), "assign+", etc.) used in the
+// C frontend as expression-level assignments and compound-assignment operators.
+// Encoded as a single IREP2 kind carrying the operator string so that every
+// variant round-trips exactly without requiring one enum entry per operator.
+IREP2_EXPR(sideeffect_assign,     "sideeffect_assign")

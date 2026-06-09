@@ -851,6 +851,10 @@ std::string code_continue2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
 std::string code_label2t::field_names[esbmct::num_type_fields] =
   {"label", "code", "", "", ""};
+std::string code_switch_case2t::field_names[esbmct::num_type_fields] =
+  {"is_default", "case_op", "code", "", ""};
+std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
+  {"op", "lhs", "rhs", "", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =

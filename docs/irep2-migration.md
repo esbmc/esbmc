@@ -3461,7 +3461,8 @@ Ordered lowest-risk first; one reviewable commit each; gate every commit
 on the full unit suite + `regression/{python,esbmc,esbmc-cpp,floats}`
 verdict parity, dual-solver, asserts build (§V.5).
 
-1. **V.4.0 — code-kind infrastructure, dead-but-tested.** Add the 7
+1. **V.4.0 — code-kind infrastructure, dead-but-tested.** **LANDED
+   [#5265](https://github.com/esbmc/esbmc/pull/5265).** Add the 7
    structured-CF kinds to `expr_kinds.inc` + `irep_typedefs(...)` +
    class defs in `irep2_expr.h` + `field_names` in `irep2_expr.cpp`; add
    `migrate_expr` (forward, legacy `code_*t` → `code_*2t`) and
@@ -3474,21 +3475,34 @@ verdict parity, dual-solver, asserts build (§V.5).
    migrate arms + 1 test. `num_type_fields = 6` accommodates `code_for2t`
    (init/cond/iter/body). The hand-written expr-id switches all carry a
    `default:`, so the additions do not break `-Werror`.
-2. **V.4.1 — flag + IREP2-side `goto_convert` entry.** Add a feature flag
-   (default off) that routes `convert_function` through an IREP2 body
-   path. Behind the flag, accept an IREP2 body and either (i) dispatch on
-   `code_*2t` kinds natively or (ii) `migrate_expr_back` once at entry and
-   reuse the legacy handlers. Flag off ⇒ byte-identical to today.
-3. **V.4.2 — one frontend at a time.** Flip the Python converter (only)
+2. **V.4.1 — source location carriage, dead-but-tested.** **LANDED
+   [#5266](https://github.com/esbmc/esbmc/pull/5266).** Give the 7
+   structured-CF kinds a `locationt location` member (non-reflected —
+   outside the `fields` tuple and excluded from cmp/crc/hash via
+   `K::excluded_field_bytes`). `migrate_expr` copies `code.location()`
+   into the field; `migrate_expr_back` restores it. Adds a round-trip
+   test asserting the location survives (it is outside `operator==`, so
+   the existing `==` round-trip cannot catch a drop). Prerequisite for
+   V.4.2: `goto_convert` reads `code.location()` at ~15 sites; without
+   this, IREP2 bodies would lose source locations in the goto output.
+3. **V.4.2 — flag + IREP2-side `goto_convert` entry.** Add a feature flag
+   `--irep2-bodies` (default off) that routes `convert_function` through
+   an IREP2 body round-trip: `migrate_expr` the legacy body to
+   `code_*2t`, then `migrate_expr_back` to `codet`, then process through
+   the existing `goto_convert_rec` handlers. Flag off ⇒ byte-identical to
+   today. Add regression tests gated on `--irep2-bodies` that verify
+   verdict parity on programs exercising all 7 structured-CF kinds.
+4. **V.4.3 — one frontend at a time.** Flip the Python converter (only)
    to emit IREP2 bodies under the flag; gate on byte-identical GOTO +
    verdict parity. Then C/C++/CUDA/Solidity/Jimple, each its own commit.
-4. **V.4.3 — remove the legacy path** once all frontends are flipped and
+5. **V.4.4 — remove the legacy path** once all frontends are flipped and
    the flag is the only path; delete `to_code(symbol.get_value())` seam.
 
-**Risk/scope:** V.4.0 is small and safe (infra only). V.4.1+ touch the
-shared goto pipeline → gate on `esbmc-cpp` and a Solidity/CUDA stratum,
-not only `python` (RV3), and require byte-identical GOTO (RV4). Stage
-behind the flag; never flip two frontends in one commit.
+**Risk/scope:** V.4.0 and V.4.1 are small and safe (infra only). V.4.2+
+touch the shared goto pipeline → gate on `esbmc-cpp` and a
+Solidity/CUDA stratum, not only `python` (RV3), and require
+byte-identical GOTO (RV4). Stage behind the flag; never flip two
+frontends in one commit.
 
 ### Phase V.5 — IREP2-native counterexample printer (removes W4)
 Part II Phase 2.7: an IREP2 C/C++ printer so traces / `test.desc`-matched text
