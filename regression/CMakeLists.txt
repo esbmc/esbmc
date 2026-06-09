@@ -415,6 +415,14 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
+    # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
+    # None-handle (pointer-width int) against a by-value Node struct via ==.
+    # With the pointer-identity reconciliation fix (PR #5274) the crash is gone
+    # and ESBMC reaches the real linked-list reversal symex (list-equality +
+    # loop scalability wall), which does not converge under --incremental-bmc.
+    # It stays KNOWNBUG; the larger inner timeout lets testing_tool record the
+    # KNOWNBUG verdict instead of ctest hard-killing the run.
+    "regression/quixbugs/reverse_linked_list"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
