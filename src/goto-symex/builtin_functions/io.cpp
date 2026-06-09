@@ -267,9 +267,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     //    >1 GB formatted string — infeasible in practice. Tightening further
     //    would risk masking real overflows; see also GitHub #4976-#4979.
     const bool sound_bound = format_is_constant && printf_formatter.bounded;
-    const bool is_allocating =
-      new_rhs.kind == printf_kindt::ASPRINTF ||
-      new_rhs.kind == printf_kindt::VASPRINTF;
+    const bool is_allocating = new_rhs.kind == printf_kindt::ASPRINTF ||
+                               new_rhs.kind == printf_kindt::VASPRINTF;
     if (
       sound_bound && printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
@@ -305,8 +304,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
       }
       else
-        assume(greaterthanequal2tc(
-          nondet, constant_int2tc(int_type2(), BigInt(0))));
+        assume(
+          greaterthanequal2tc(nondet, constant_int2tc(int_type2(), BigInt(0))));
       symex_assign(code_assign2tc(lhs, nondet));
     }
   }
