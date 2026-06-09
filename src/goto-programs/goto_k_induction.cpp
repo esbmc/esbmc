@@ -403,19 +403,36 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
 }
 } // namespace
 
-void goto_k_induction(goto_functionst &goto_functions)
+bool goto_k_induction(goto_functionst &goto_functions)
 {
+  bool disable_inductive_step = false;
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
       continue;
+    // Library helpers (body.hide) write through pointers in nearly every
+    // model (memcpy, string ops, ...). Letting them set the gate would
+    // disable the inductive step for essentially every program. Their loops
+    // are never the user property's witness, so exclude them from the
+    // decision — mirrors the body.hide guard in goto_termination.
+    const bool user_function = !it->second.body.hide;
     goto_loopst loops(it->first, goto_functions, it->second);
     for (auto &loop : loops.get_loops())
     {
+      // A loop that writes an array element through a pointer cannot be
+      // soundly havoc'd by the inductive step (the pointer-reached storage
+      // is not a named symbol), so the IS hypothesis is under-generalised.
+      // Report it so the strategy layer disables the inductive step.
+      // Checked before the empty-modified-set skip below, since such a loop
+      // may have no named modified vars yet is still unsound. See #5224.
+      if (user_function && loop.modifies_pointer_array())
+        disable_inductive_step = true;
+
       if (loop.get_modified_loop_vars().empty())
         continue;
       transform_loop(it->second, loop);
     }
   }
   goto_functions.update();
+  return disable_inductive_step;
 }
