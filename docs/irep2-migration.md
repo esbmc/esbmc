@@ -3495,9 +3495,13 @@ verdict parity, dual-solver, asserts build (§V.5).
    `decl-block`. Fixed a latent UB in `ifthenelse` migration (2-operand
    form from Clang C frontend). Regression tests
    `github_4715_irep2_bodies_01{,_fail}` gate on `--irep2-bodies`.
-4. **V.4.3 — one frontend at a time.** Flip the Python converter (only)
-   to emit IREP2 bodies under the flag; gate on byte-identical GOTO +
-   verdict parity. Then C/C++/CUDA/Solidity/Jimple, each its own commit.
+4. **V.4.3 — one frontend at a time.** **LANDED** Flip the Python
+   converter (only) to emit IREP2 bodies under the flag; gate on
+   byte-identical GOTO + verdict parity. Completed: added `code_dowhile2t`,
+   `code_assert2t`, `code_assume2t` IREP2 kinds; `sideeffect("cpp-throw")`
+   forward/back migration; `--irep2-bodies` Python regression tests
+   `github_4715_irep2_bodies_py_01{,_fail}`. Then C/C++/CUDA/Solidity/Jimple,
+   each its own commit.
 5. **V.4.4 — remove the legacy path** once all frontends are flipped and
    the flag is the only path; delete `to_code(symbol.get_value())` seam.
 
