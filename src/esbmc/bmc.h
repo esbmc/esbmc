@@ -52,8 +52,13 @@ protected:
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
-  virtual smt_convt::resultt
-  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
+  // claim_id (>= 0) selects a per-claim SMT dump filename in multi-property
+  // mode so each claim's formula is written to its own file; -1 (the default,
+  // single-property mode) keeps the original --output path untouched.
+  virtual smt_convt::resultt run_decision_procedure(
+    smt_convt &smt_conv,
+    symex_target_equationt &eq,
+    int claim_id = -1) const;
 
   // Re-encode `local_eq` in vacuity mode against a fresh solver and check
   // whether the path to each kept claim is reachable. UNSAT means the

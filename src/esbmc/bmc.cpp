@@ -229,9 +229,31 @@ void bmct::keep_alive_function() const
   }
 }
 
+// Insert ".<id>" before the file extension so that multi-property runs write
+// one SMT formula per claim instead of overwriting a single output file.
+// e.g. ("out.smt2", 2) -> "out.2.smt2"; ("out", 2) -> "out.2". A negative id
+// (single-property mode) leaves the path untouched.
+static std::string
+smt_dump_path_for_claim(const std::string &path, int claim_id)
+{
+  if (claim_id < 0 || path.empty() || path == "-")
+    return path;
+
+  const std::string suffix = "." + std::to_string(claim_id);
+  const std::string::size_type slash = path.find_last_of("/\\");
+  const std::string::size_type dot = path.find_last_of('.');
+
+  // No extension (or the dot belongs to a directory component): just append.
+  if (dot == std::string::npos || (slash != std::string::npos && dot < slash))
+    return path + suffix;
+
+  return path.substr(0, dot) + suffix + path.substr(dot);
+}
+
 smt_convt::resultt bmct::run_decision_procedure(
   smt_convt &smt_conv,
-  symex_target_equationt &eq) const
+  symex_target_equationt &eq,
+  int claim_id) const
 {
   if (options.get_bool_option("enable-keep-alive"))
   {
@@ -256,11 +278,15 @@ smt_convt::resultt bmct::run_decision_procedure(
     // Print the SMT formula to stdout or file
     if (!smt_formula.empty())
     {
-      const std::string &output_path = options.get_option("output");
+      const std::string output_path =
+        smt_dump_path_for_claim(options.get_option("output"), claim_id);
 
       if (output_path.empty() || output_path == "-")
       {
-        // Print to stdout
+        // Print to stdout. In multi-property mode tag each claim so the
+        // concatenated formulas stay distinguishable.
+        if (claim_id >= 0)
+          fprintf(stdout, "; ===== SMT formula for claim %d =====\n", claim_id);
         fprintf(stdout, "%s", smt_formula.c_str());
       }
       else
@@ -1978,7 +2004,7 @@ smt_convt::resultt bmct::multi_property_check(
     // Save current instance with timing
     fine_timet solve_start = current_time();
     smt_convt::resultt solver_result =
-      run_decision_procedure(*solver_ptr, local_eq);
+      run_decision_procedure(*solver_ptr, local_eq, static_cast<int>(i));
     fine_timet solve_stop = current_time();
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
