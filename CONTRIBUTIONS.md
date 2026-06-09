@@ -64,20 +64,11 @@ the MD format can be accessed in `/website/content/docs`.
 
 ## Automatically Generated Documentation
 
-A limited number of classes have been marked up with doxygen documentation 
-headers. Comments are put in the header files declaring classes and methods. 
-The generated API reference is published at 
-[esbmc.github.io/docs/api](https://esbmc.github.io/docs/api) and is rebuilt 
-automatically on every push to `master`.
-
-To build it locally, install `doxygen` and `graphviz`, then run the following 
-from the top-level directory of the source tree:
-
-```sh
-doxygen .doxygen
-```
-
-The output will be in `docs/html`; open `index.html` to get started.
+ESBMC's C++ classes and methods are documented with doxygen comments in the 
+headers. The generated API reference is published at 
+[esbmc.github.io/docs/api](https://esbmc.github.io/docs/api). See the 
+[API Reference](https://esbmc.github.io/docs/development/api-reference) 
+development guide for how to build it locally.
 
 ## Contributing to the Docs
 
