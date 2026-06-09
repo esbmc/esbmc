@@ -428,7 +428,7 @@ smt_astt boolector_convt::mk_bvsge(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   return new_ast(
     boolector_eq(
       btor,
@@ -439,7 +439,7 @@ smt_astt boolector_convt::mk_eq(smt_astt a, smt_astt b)
 
 smt_astt boolector_convt::mk_neq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "DISTINCT");
   return new_ast(
     boolector_ne(
       btor,

@@ -467,7 +467,7 @@ smt_astt bitwuzla_convt::mk_bvsge(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   return new_ast(
     bitwuzla_mk_term2(
       bitw_term_manager,
@@ -479,7 +479,7 @@ smt_astt bitwuzla_convt::mk_eq(smt_astt a, smt_astt b)
 
 smt_astt bitwuzla_convt::mk_neq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "DISTINCT");
   return new_ast(
     bitwuzla_mk_term2(
       bitw_term_manager,

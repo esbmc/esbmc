@@ -587,7 +587,7 @@ smt_astt mathsat_convt::mk_bvsle(smt_astt a, smt_astt b)
 
 smt_astt mathsat_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   if (a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
     return new_ast(
       msat_make_iff(

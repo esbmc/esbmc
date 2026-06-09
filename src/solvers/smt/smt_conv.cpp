@@ -4282,6 +4282,23 @@ smt_astt smt_convt::mk_neq(smt_astt a, smt_astt b)
   return mk_not(mk_eq(a, b));
 }
 
+void smt_convt::check_eq_operand_widths(
+  smt_astt a,
+  smt_astt b,
+  const char *kind) const
+{
+  if (a->sort->get_data_width() != b->sort->get_data_width())
+  {
+    log_error(
+      "{}: operand bit-width mismatch ({} vs {}); the comparison operands have "
+      "incompatible types (frontend codegen error)",
+      kind,
+      a->sort->get_data_width(),
+      b->sort->get_data_width());
+    abort();
+  }
+}
+
 smt_astt smt_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
 {
   (void)a;

@@ -1388,7 +1388,7 @@ smt_astt smtlib_convt::mk_bvsge(smt_astt a, smt_astt b)
 
 smt_astt smtlib_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EQ);
   ast->args.push_back(a);
   ast->args.push_back(b);

@@ -720,7 +720,7 @@ smt_astt z3_convt::mk_bvsge(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   auto &za = to_solver_smt_ast<z3_smt_ast>(a)->a;
   auto &zb = to_solver_smt_ast<z3_smt_ast>(b)->a;
   return new_ast(za == zb, boolean_sort);
@@ -728,7 +728,7 @@ smt_astt z3_convt::mk_eq(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_neq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "DISTINCT");
   return new_ast(
     (to_solver_smt_ast<z3_smt_ast>(a)->a !=
      to_solver_smt_ast<z3_smt_ast>(b)->a),

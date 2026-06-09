@@ -367,6 +367,18 @@ public:
   virtual smt_astt mk_bvsge(smt_astt a, smt_astt b);
   virtual smt_astt mk_eq(smt_astt a, smt_astt b);
   virtual smt_astt mk_neq(smt_astt a, smt_astt b);
+
+  /** Abort with a clear diagnostic when the two operands of a (dis)equality do
+   *  not share a bit-width. A mismatch is a frontend codegen bug — e.g. #4796,
+   *  a Python object pointer compared against None modelled at a different
+   *  width. The per-solver mk_eq/mk_neq asserts that enforced this are elided
+   *  under NDEBUG, so release builds fed mismatched terms straight to the solver
+   *  API and crashed (SIGSEGV in Bitwuzla). Centralising the check keeps the
+   *  same controlled hard-stop in every build configuration and solver, and
+   *  surfaces the codegen bug rather than masking it. @param kind names the
+   *  operation for the message ("EQUAL" / "DISTINCT"). */
+  void check_eq_operand_widths(smt_astt a, smt_astt b, const char *kind) const;
+
   virtual smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c);
   virtual smt_astt mk_select(smt_astt a, smt_astt b);
   virtual smt_astt mk_real2int(smt_astt a);

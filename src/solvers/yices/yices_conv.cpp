@@ -548,7 +548,7 @@ smt_astt yices_convt::mk_bvsge(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "EQUAL");
   if (a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
     return new_ast(
       yices_eq(
@@ -572,7 +572,7 @@ smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
 
 smt_astt yices_convt::mk_neq(smt_astt a, smt_astt b)
 {
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
+  check_eq_operand_widths(a, b, "DISTINCT");
   if (a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
     return new_ast(
       yices_neq(
