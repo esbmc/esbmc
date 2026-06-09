@@ -1,6 +1,7 @@
 #include "goto-programs/goto_binary_reader.h"
 #include "irep2/irep2_expr.h"
 #include <util/c_types.h>
+#include <util/std_code.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
@@ -1827,6 +1828,27 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "sideeffect")
   {
+    // Assignment side-effects: "assign", "assign+", "assign-", etc.
+    // Emitted by the Clang C frontend for assignment expressions used as
+    // statements (x = y) and compound-assignment operators (x += y, ...).
+    // These have exactly two operands: lhs and rhs.
+    const irep_idt &stmt = expr.statement();
+    if (
+      stmt == "assign" || stmt == "assign+" || stmt == "assign-" ||
+      stmt == "assign*" || stmt == "assign_div" || stmt == "assign_mod" ||
+      stmt == "assign_shl" || stmt == "assign_shr" || stmt == "assign_ashr" ||
+      stmt == "assign_lshr" || stmt == "assign_bitand" ||
+      stmt == "assign_bitxor" || stmt == "assign_bitor")
+    {
+      assert(expr.operands().size() == 2);
+      expr2tc lhs, rhs;
+      migrate_expr(expr.op0(), lhs);
+      migrate_expr(expr.op1(), rhs);
+      new_expr_ref =
+        sideeffect_assign2tc(migrate_type(expr.type()), stmt, lhs, rhs);
+      return;
+    }
+
     expr2tc operand, thesize;
     std::vector<expr2tc> args;
     if (
@@ -1950,10 +1972,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   if (expr.id() == irept::id_code && expr.statement() == "decl")
   {
     assert(expr.op0().id() == "symbol");
-    irep_idt sym_name;
     type2tc thetype = migrate_type(expr.op0().type());
-    sym_name = expr.op0().identifier();
-    new_expr_ref = code_decl2tc(thetype, sym_name);
+    irep_idt sym_name = expr.op0().identifier();
+    if (expr.operands().size() == 1)
+    {
+      new_expr_ref = code_decl2tc(thetype, sym_name);
+      return;
+    }
+    // 2-operand form: declaration with initializer. Split into decl + assign
+    // so code_decl2t (which has no initializer field) can represent both parts.
+    // For simple (side-effect-free) initializers the resulting goto program is
+    // identical to the original path; for call-expression initializers the DECL
+    // instruction may appear before the call rather than after, but this is
+    // valid for the round-trip validation purpose of --irep2-bodies.
+    expr2tc rhs;
+    migrate_expr(expr.op1(), rhs);
+    std::vector<expr2tc> decl_block = {
+      code_decl2tc(thetype, sym_name),
+      code_assign2tc(symbol2tc(thetype, sym_name), rhs)};
+    new_expr_ref = code_block2tc(decl_block);
     return;
   }
 
@@ -2166,7 +2203,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc cond, then_case, else_case;
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), then_case);
-    migrate_expr(expr.op2(), else_case);
+    // The Clang C frontend only adds an else operand when an else branch
+    // exists; op2() on a 2-operand node is UB. Check via the count.
+    if (expr.operands().size() >= 3 && expr.operands()[2].is_not_nil())
+      migrate_expr(expr.op2(), else_case);
     new_expr_ref =
       code_ifthenelse2tc(cond, then_case, else_case, expr.location());
     return;
@@ -2218,6 +2258,35 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc code;
     migrate_expr(expr.op0(), code);
     new_expr_ref = code_label2tc(expr.get("label"), code, expr.location());
+    return;
+  }
+
+  // decl-block: a compound-declaration block (e.g. "int x, y;" in C99
+  // for-init). Migrated as code_block2t — back-migration loses the original
+  // "decl-block" statement kind, but goto_convert processes both identically.
+  if (expr.id() == "code" && expr.statement() == "decl-block")
+  {
+    std::vector<expr2tc> ops;
+    for (const auto &op : expr.operands())
+    {
+      expr2tc o;
+      migrate_expr(op, o);
+      ops.push_back(o);
+    }
+    new_expr_ref = code_block2tc(ops);
+    return;
+  }
+
+  // switch_case: one case/default arm inside a switch body.
+  if (expr.id() == "code" && expr.statement() == "switch_case")
+  {
+    const auto &sc = to_code_switch_case(to_code(expr));
+    expr2tc case_op, body;
+    if (!sc.is_default())
+      migrate_expr(sc.case_op(), case_op);
+    migrate_expr(sc.code(), body);
+    new_expr_ref =
+      code_switch_case2tc(sc.is_default(), case_op, body, expr.location());
     return;
   }
 
@@ -3700,10 +3769,12 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_ifthenelse2t &ref2 = to_code_ifthenelse2t(ref);
     exprt codeexpr("code", typet("code"));
     codeexpr.statement("ifthenelse");
-    codeexpr.operands().resize(3);
-    codeexpr.op0() = migrate_expr_back(ref2.cond);
-    codeexpr.op1() = migrate_expr_back(ref2.then_case);
-    codeexpr.op2() = migrate_expr_back(ref2.else_case);
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.cond));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.then_case));
+    // Mirror the Clang frontend: only add op2 when there is an else branch.
+    // goto_convert checks op2().is_not_nil(), not the operand count.
+    if (!is_nil_expr(ref2.else_case))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.else_case));
     if (ref2.location.is_not_nil())
       codeexpr.location() = ref2.location;
     return codeexpr;
@@ -3774,6 +3845,29 @@ exprt migrate_expr_back(const expr2tc &ref)
     if (ref2.location.is_not_nil())
       codeexpr.location() = ref2.location;
     return codeexpr;
+  }
+  case expr2t::code_switch_case_id:
+  {
+    const code_switch_case2t &ref2 = to_code_switch_case2t(ref);
+    code_switch_caset sc;
+    if (ref2.is_default)
+      sc.set_default(true);
+    else
+      sc.op0() = migrate_expr_back(ref2.case_op);
+    sc.op1() = migrate_expr_back(ref2.code);
+    if (ref2.location.is_not_nil())
+      sc.location() = ref2.location;
+    return sc;
+  }
+  case expr2t::sideeffect_assign_id:
+  {
+    const sideeffect_assign2t &ref2 = to_sideeffect_assign2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt theexpr("sideeffect", thetype);
+    theexpr.statement(ref2.op);
+    theexpr.copy_to_operands(
+      migrate_expr_back(ref2.lhs), migrate_expr_back(ref2.rhs));
+    return theexpr;
   }
   case expr2t::code_cpp_catch_id:
   {
