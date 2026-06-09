@@ -31,15 +31,20 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   switch (new_rhs.kind)
   {
   case printf_kindt::PRINTF:
+  case printf_kindt::VPRINTF:
     fmt_idx = 0;
     break;
   case printf_kindt::FPRINTF:
   case printf_kindt::DPRINTF:
   case printf_kindt::SPRINTF:
   case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::ASPRINTF:
+  case printf_kindt::VASPRINTF:
     fmt_idx = 1;
     break;
   case printf_kindt::SNPRINTF:
+  case printf_kindt::VSNPRINTF:
     fmt_idx = 2;
     break;
   }

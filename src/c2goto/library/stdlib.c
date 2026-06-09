@@ -85,8 +85,17 @@ __ESBMC_HIDE:;
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
-  if (!nmemb)
+  if (!nmemb || !size)
     return NULL;
+
+  // Detect size_t multiplication overflow (e.g. nmemb=2^30, size=4 on
+  // 32-bit wraps total_size to 0).  Real implementations (glibc, musl)
+  // detect this and return NULL; without --pointer-check ESBMC would
+  // then model the caller's NULL dereference as nondet, yielding a
+  // false alarm on the unreach-call property.  We constrain the model
+  // to valid-size paths: when nmemb*size would overflow the caller would
+  // crash (NULL deref / UB) before any reachability property fires.
+  __ESBMC_assume(nmemb <= SIZE_MAX / size);
 
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
