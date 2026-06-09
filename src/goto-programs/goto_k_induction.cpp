@@ -4,10 +4,13 @@
 #include <goto-programs/remove_no_op.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_guard.h>
+#include <pointer-analysis/value_set.h>
+#include <pointer-analysis/value_set_analysis.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/std_expr.h>
+#include <memory>
 #include <unordered_map>
 
 namespace
@@ -401,10 +404,116 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   // assume that was inserted in the previous transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
 }
+
+/// Phase 2 (#5230): for a loop that writes array elements through a pointer,
+/// resolve every directly-written pointer against the value-set fixpoint @p
+/// vsa and inject the referenced named objects into the loop's modified-
+/// variable set, so make_nondet_assign havocs them as whole symbols. The
+/// fixpoint is a sound over-approximation of the objects each pointer may
+/// reference at the loop head, so havocing all of them generalises the loop
+/// at least as much as its real effect — the inductive hypothesis is no
+/// longer too strong.
+///
+/// Returns true iff every write resolved to concrete named objects (the
+/// inductive step can stay enabled); returns false to abstain, in which case
+/// the caller disables the inductive step (the conservative Phase 1
+/// behaviour). We abstain whenever the points-to set is empty, unknown,
+/// invalid, or contains a heap (dynamic) object — none of which has a
+/// nameable symbol to havoc.
+bool resolve_pointer_array_writes(loopst &loop, value_set_analysist &vsa)
+{
+  // A write reaching the loop through a callee (pointer is a callee
+  // parameter, not in scope here) or with no extractable pointer cannot be
+  // resolved at the loop head.
+  if (loop.pointer_array_write_unresolvable())
+    return false;
+
+  const auto &ptrs = loop.get_pointer_array_write_ptrs();
+  if (ptrs.empty())
+    return false;
+
+  goto_programt::const_targett loc = loop.get_original_loop_head();
+  if (!vsa.has_location(loc))
+    return false;
+
+  loopst::loop_varst objects;
+  for (const expr2tc &ptr : ptrs)
+  {
+    value_setst::valuest values;
+    vsa.get_values(loc, ptr, values);
+
+    // No points-to information means the pointer could reference anything.
+    if (values.empty())
+      return false;
+
+    for (const expr2tc &v : values)
+    {
+      // Only a concrete, named object can be havoc'd as a whole symbol.
+      // unknown / invalid / heap (dynamic) objects have no nameable symbol,
+      // so abstain and let Phase 1 disable the inductive step.
+      if (!is_object_descriptor2t(v))
+        return false;
+      const expr2tc &object = to_object_descriptor2t(v).object;
+      if (!is_symbol2t(object) || !check_var_name(object))
+        return false;
+      objects.insert(object);
+    }
+  }
+
+  // Every write resolved: havoc each referenced object as a whole symbol.
+  for (const expr2tc &obj : objects)
+    loop.add_modified_var_to_loop(obj);
+  return true;
+}
+
+/// True iff any user function directly writes an array element through a
+/// pointer (`is_assign` whose LHS `indexes_through_pointer`). Used to decide
+/// whether to build the value-set fixpoint at all. Non-mutating, so it is
+/// safe to run before goto_loopst construction (which can rewrite self-loops)
+/// and before any transform_loop. Over-approximates: a write outside any loop
+/// also counts, which only ever builds the fixpoint unnecessarily (never
+/// wrong). The via-callee write path always abstains without the fixpoint, so
+/// it need not be detected here. See #5230.
+bool has_direct_pointer_array_write(const goto_functionst &goto_functions)
+{
+  forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available || it->second.body.hide)
+      continue;
+    for (const auto &instr : it->second.body.instructions)
+      if (
+        instr.is_assign() &&
+        indexes_through_pointer(to_code_assign2t(instr.code).target))
+        return true;
+  }
+  return false;
+}
 } // namespace
 
-bool goto_k_induction(goto_functionst &goto_functions)
+bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
 {
+  // Build the value-set fixpoint once, up front, on the pristine program —
+  // value_set_analysist asserts on k-induction-transformed CFGs, so it must
+  // run before any transform_loop mutation, not lazily from inside the loop
+  // (an earlier plain loop would already have been transformed). Built only
+  // when a pointer-array write is present, to avoid paying the cost.
+  std::shared_ptr<value_set_analysist> vsa;
+  if (has_direct_pointer_array_write(goto_functions))
+  {
+    vsa = std::make_shared<value_set_analysist>(ns);
+    try
+    {
+      (*vsa)(goto_functions);
+    }
+    catch (...)
+    {
+      // VSA is best-effort: any failure (incomplete implementation, symbolic
+      // type, ...) just means we cannot resolve pointees and fall back to
+      // disabling the inductive step.
+      vsa = nullptr;
+    }
+  }
+
   bool disable_inductive_step = false;
   Forall_goto_functions (it, goto_functions)
   {
@@ -420,12 +529,15 @@ bool goto_k_induction(goto_functionst &goto_functions)
     for (auto &loop : loops.get_loops())
     {
       // A loop that writes an array element through a pointer cannot be
-      // soundly havoc'd by the inductive step (the pointer-reached storage
-      // is not a named symbol), so the IS hypothesis is under-generalised.
-      // Report it so the strategy layer disables the inductive step.
-      // Checked before the empty-modified-set skip below, since such a loop
-      // may have no named modified vars yet is still unsound. See #5224.
-      if (user_function && loop.modifies_pointer_array())
+      // havoc'd as a named symbol by the inductive step. Phase 2 tries to
+      // resolve the written pointer to concrete named objects and havoc
+      // those instead, keeping the inductive step sound and enabled. If the
+      // pointee cannot be resolved, fall back to Phase 1: disable the
+      // inductive step. Checked before the empty-modified-set skip below,
+      // since such a loop may have no named modified vars yet. See #5230.
+      if (
+        user_function && loop.modifies_pointer_array() &&
+        !(vsa && resolve_pointer_array_writes(loop, *vsa)))
         disable_inductive_step = true;
 
       if (loop.get_modified_loop_vars().empty())
