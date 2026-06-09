@@ -1949,10 +1949,7 @@ public:
   expr2tc then_case;
   expr2tc else_case; // nil when there is no else branch
 
-  code_ifthenelse2t(
-    const expr2tc &c,
-    const expr2tc &t,
-    const expr2tc &e)
+  code_ifthenelse2t(const expr2tc &c, const expr2tc &t, const expr2tc &e)
     : expr2t(get_empty_type(), code_ifthenelse_id),
       cond(c),
       then_case(t),
@@ -1999,11 +1996,7 @@ public:
     const expr2tc &c,
     const expr2tc &it,
     const expr2tc &b)
-    : expr2t(get_empty_type(), code_for_id),
-      init(i),
-      cond(c),
-      iter(it),
-      body(b)
+    : expr2t(get_empty_type(), code_for_id), init(i), cond(c), iter(it), body(b)
   {
   }
   code_for2t(const code_for2t &ref) = default;
