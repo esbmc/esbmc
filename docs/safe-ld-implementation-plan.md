@@ -11,30 +11,31 @@
 
 SAFE-LD adds a new language front-end to ESBMC for IEC 61131-3 Ladder Diagram (LD) programs,
 the most widely deployed PLC programming language. The front-end accepts vendor-neutral
-**PLCopen XML** files exported from TIA Portal, Codesys, or Rockwell, translates them to
-ANSI-C with `__ESBMC_assert()` annotations derived from a YAML property specification, and
-feeds the resulting C file into the existing ESBMC verification pipeline unchanged.
+**PLCopen XML** files exported from TIA Portal, Codesys, or Rockwell and translates them
+**directly into ESBMC's GOTO IR** (via the irep2 type system), with safety assertions
+derived from a YAML property specification encoded as native `code_assertt` nodes. No
+intermediate C file is produced.
 
 The approach is semantics-driven: every LD construct is first given a formal meaning as a
 **Structural Operational Semantics (SOS)** state-transition function over the PLC variable
-store, and the C translation is derived systematically from that semantics. This grounds
-translation correctness mathematically and distinguishes SAFE-LD from prior syntax-driven
-approaches.
+store, and the GOTO IR is derived systematically from that semantics. This grounds
+translation correctness mathematically, eliminates the C front-end from the trusted base,
+and distinguishes SAFE-LD from prior syntax-driven approaches.
 
 ```
-PLCopen XML  ──►  Parser  ──►  Semantic Analyser  ──►  IR
-                                                        │
-YAML props   ──────────────────────────────────────►  Property Encoder
-                                                        │
-                                    Code Generator ◄────┘
-                                         │
-                                    ANSI-C + __ESBMC_assert()
-                                         │
-                                    ESBMC (existing)
-                                         │
-                               ┌─────────┴──────────┐
-                          Safety proof ✓       Counterexample ✗
-                                              (JSON / ld-verify report)
+PLCopen XML  ──►  Parser  ──►  Semantic Analyser  ──►  LdIR
+                                                         │
+YAML props   ────────────────────────────────────►  Property Encoder
+                                                         │
+                                     GOTO IR Generator ◄─┘
+                                              │
+                               GOTO IR (irep2 symbolt / code_blockt)
+                                              │
+                                    ESBMC verification engine
+                                              │
+                               ┌──────────────┴──────────────┐
+                          Safety proof ✓              Counterexample ✗
+                                                  (LD-native JSON report)
 ```
 
 The verification pipeline is exposed as `ld-verify`, a thin wrapper that orchestrates
@@ -68,18 +69,18 @@ src/
     │   └── type_checker.cpp         # enforces IEC 61131-3 type rules
     │
     ├── ir/                    # WP2 / T2.2
-    │   ├── ld_ir.h                  # IR node types (cyclic control-flow model)
+    │   ├── ld_ir.h                  # LdIR node types (cyclic control-flow model)
     │   └── ld_ir.cpp
     │
-    ├── codegen/               # WP2 / T2.2
-    │   ├── c_codegen.h
-    │   └── c_codegen.cpp            # IR → ANSI-C translation
+    ├── ir_gen/                # WP2 / T2.2
+    │   ├── ld_converter.h
+    │   └── ld_converter.cpp         # LdIR → GOTO IR (irep2 symbolt / code_blockt)
     │
     ├── property/              # WP1 / T1.3 + WP2 / T2.2
     │   ├── yaml_property_parser.h
     │   ├── yaml_property_parser.cpp # YAML → property AST
     │   ├── property_encoder.h
-    │   └── property_encoder.cpp     # property AST → __ESBMC_assert() calls
+    │   └── property_encoder.cpp     # property AST → code_assertt nodes in GOTO IR
     │
     └── verify/                # WP2 / T2.3
         ├── ld_verify.h
@@ -105,6 +106,7 @@ regression/
         ├── parser/
         ├── semantics/
         ├── codegen/
+        ├── ir_gen/
         └── property/
 ```
 
@@ -165,34 +167,49 @@ Each `RUNG_k` block is a sequence of `ContactEval`, `CoilAssign`, `FBCall` nodes
 directly correspond to SOS rule applications. This representation makes it straightforward
 to prove the translation preserves the cyclic-scan semantics.
 
-### 3.4 Code Generator (`codegen/`)
+### 3.4 GOTO IR Generator (`ir_gen/`)
 
-**Input:** `LdIR`  
-**Output:** ANSI-C source file.
+**Input:** `LdIR` + property `code_assertt` nodes from the property encoder.  
+**Output:** Populated `contextt` (ESBMC symbol table + GOTO function bodies).
 
-The translation follows the SOS state-transition functions mechanically:
+`ld_converter` follows the same pattern as `python_converter`: it builds `symbolt` entries
+and `codet` trees directly using ESBMC's irep2 types, then inserts them into the `contextt`
+passed in by `ld_languaget::typecheck()`. No C file is produced at any stage.
 
-| LD construct | Generated C |
+**Symbol table construction.** Every LD variable (BOOL contact/coil, TIME timer field,
+INT/DINT counter field) becomes a `symbolt` with:
+- `type` drawn from `bool_type()`, `uint_type(32)`, etc.
+- `location` set to the originating PLCopen XML file/line/col.
+- `base_name` equal to the PLCopen XML variable identifier; `name` prefixed with
+  `ld::` to avoid clashes.
+
+**Scan-loop function.** The converter emits a single `__ESBMC_main`-equivalent function
+whose body is a `code_whilet(true_exprt(), scan_body)`, where `scan_body` is a
+`code_blockt` containing one `code_blockt` per rung. This directly models the IEC 61131-3
+cyclic scan without requiring ESBMC to see a C `while(1)`.
+
+**Per-rung translation.** Each `LdIR` rung block maps mechanically to irep2 nodes
+following the SOS state-transition rules:
+
+| LD construct | GOTO IR node |
 |---|---|
-| Normally-open contact `--[ ]--` | `bool pf = pf_in && var;` |
-| Normally-closed contact `--[/]--` | `bool pf = pf_in && !var;` |
-| Output coil `--( )--` | `var = pf;` |
-| Set coil `--( S )--` | `if (pf) var = true;` |
-| Reset coil `--( R )--` | `if (pf) var = false;` |
-| TON timer | *(pseudocode sketch)* `if (pf) { if (!ton.IN) { ton.ET = 0; } ton.IN = true; ton.ET += SCAN_TIME; ton.Q = (ton.ET >= ton.PT); } else { ton.IN = false; ton.Q = false; ton.ET = 0; }` — full per-scan `ET` accumulation and `Q` logic are defined precisely in the SOS spec (T1.2) |
-| CTU counter | `if (pf && !ctu_prev) ctu.CV++; if (ctu.CV >= ctu.PV) ctu.Q = true;` |
+| Normally-open contact `--[ ]--` | `and_exprt(pf_in, symbol_exprt(var))` |
+| Normally-closed contact `--[/]--` | `and_exprt(pf_in, not_exprt(symbol_exprt(var)))` |
+| Output coil `--( )--` | `code_assignt(symbol_exprt(var), pf)` |
+| Set coil `--( S )--` | `code_ifthenelset(pf, code_assignt(var, true_exprt()))` |
+| Reset coil `--( R )--` | `code_ifthenelset(pf, code_assignt(var, false_exprt()))` |
+| TON timer *(per-scan step)* | sequence of `code_ifthenelset` + `code_assignt` for `IN`, `ET`, `Q` fields — full logic defined in SOS spec (T1.2) |
+| CTU counter *(per-scan step)* | `code_ifthenelset` on rising edge → increment `CV`; `code_assignt` of `Q = (CV >= PV)` |
 
-The scan loop is translated to a C `while(1)` loop. ESBMC's k-induction engine naturally
-handles this loop structure; no special k-induction support is needed in the front-end.
-
-A **fault injection mode** generates variants that introduce known semantic errors
-(e.g., negated contact polarity) to validate that `ld-verify` detects them (WP1 validation
-criteria).
+**Fault injection mode.** An optional converter flag negates selected contact polarities
+or skips coil assignments to produce known-faulty GOTO programs. Used in WP1 validation
+to confirm `ld-verify` detects each planted semantic error.
 
 ### 3.5 Property Encoder (`property/`)
 
 **Input:** YAML property specification file + validated `LdAst`.  
-**Output:** `__ESBMC_assert()` call sites inserted into the generated C file.
+**Output:** `code_assertt` nodes to be appended to the scan-loop body by the GOTO IR
+generator (§3.4).
 
 The YAML format (specified in `docs/safe-ld-property-format.md`) supports the following
 property classes, covering IEC 61508 safety requirements:
@@ -219,16 +236,21 @@ properties:
 
 Property kinds (WP1 taxonomy):
 
-| Kind | IEC 61508 class | Generated assertion |
+| Kind | IEC 61508 class | GOTO IR node emitted |
 |---|---|---|
-| `mutual_exclusion` | Safety integrity (independence) | `__ESBMC_assert(!(A && B), ...)` |
-| `invariant` | Safety function activation | `__ESBMC_assert(expr, ...)` |
-| `response` | Activation time | auxiliary scan-counter + assert |
-| `absence` | Safe state persistence | `__ESBMC_assert(!expr, ...)` |
-| `reachability` | Liveness | `__ESBMC_assert(false)` on target state |
+| `mutual_exclusion` | Safety integrity (independence) | `code_assertt(not_exprt(and_exprt(A, B)))` |
+| `invariant` | Safety function activation | `code_assertt(expr)` |
+| `response` | Activation time | auxiliary scan-counter `symbolt` + `code_assertt` on counter bound |
+| `absence` | Safe state persistence | `code_assertt(not_exprt(expr))` |
+| `reachability` | Liveness | `code_assertt(false_exprt())` on target-state guard |
 
-The encoder inserts assertions at the end of every scan-loop iteration so ESBMC checks
-them across all reachable scan sequences.
+Each `code_assertt` node carries:
+- `location` referencing the YAML property file and property id.
+- `comment` set to the property `description` field so ESBMC's counterexample output
+  names the violated property in human-readable form.
+
+The encoder appends all `code_assertt` nodes at the end of every scan-loop iteration
+body so ESBMC checks them across all reachable scan sequences.
 
 ### 3.6 `ld-verify` Pipeline (`verify/` + `tools/ld-verify/`)
 
@@ -238,13 +260,13 @@ them across all reachable scan sequences.
 ld-verify [options] <program.xml> [--props <props.yaml>]
 ```
 
-Internally it:
+Internally it invokes `esbmc` with the `.ld`-renamed input file and the configured
+strategy (default: `--k-induction --unlimited-k-steps --z3` with fallback to
+`--bmc --unwind 100`). Because SAFE-LD generates GOTO IR directly, ESBMC's clang
+front-end is **never invoked** — `ld_languaget::typecheck()` populates the `contextt`
+and control passes straight to symex.
 
-1. Invokes the parser, semantic analyser, IR lowering, code generator, and property encoder
-   to produce a self-contained `.c` file.
-2. Calls `esbmc` on the `.c` file with the configured solver and strategy (default:
-   `--k-induction --unlimited-k-steps --z3` with fallback to `--bmc --unwind 100`).
-3. Parses ESBMC's output and emits a structured JSON report:
+`ld-verify` then parses ESBMC's output and emits a structured JSON report:
 
 ```json
 {
@@ -259,8 +281,10 @@ Internally it:
 }
 ```
 
-Counterexample variable assignments are back-translated from C variable names to original
-LD variable names using a symbol table built during code generation.
+Because every `symbolt` and `code_assertt` node was created with LD source locations
+and LD variable names, the counterexample trace produced by ESBMC already references
+the original rung numbers and PLCopen XML identifiers. No back-translation table is
+needed.
 
 ---
 
@@ -275,14 +299,28 @@ LD variable names using a symbol table built during code generation.
 class ld_languaget : public languaget
 {
 public:
-  bool parse(const std::string &path) override;   // invoke PLCopen XML parser
-  bool typecheck(contextt &, const std::string &) override; // semantic analysis
-  bool final(contextt &) override;                // code generation + property encoding
+  // Parse PLCopen XML → LdAst (stored in member); run semantic analyser.
+  bool parse(const std::string &path) override;
+
+  // Run ld_converter: populate contextt with symbolt entries and the
+  // scan-loop GOTO function body. This is where all IR generation happens,
+  // mirroring python_languaget::typecheck() calling python_converter::convert().
+  bool typecheck(contextt &context, const std::string &module) override;
+
+  bool final(contextt &) override { return false; }
   std::string id() const override { return "ld"; }
   void show_parse(std::ostream &) override;
   languaget *new_language() const override { return new ld_languaget; }
+
+private:
+  LdAst ast_;
+  std::string props_path_; // set from --ld-props CLI option
 };
 ```
+
+The division of responsibilities mirrors the Python frontend: `parse()` produces the
+validated AST; `typecheck()` drives `ld_converter`, which fills the `contextt` with all
+symbols and the main scan-loop function; `final()` is a no-op.
 
 ### 4.2 Language Dispatch Registration
 
@@ -321,14 +359,16 @@ add_library(ldfrontend STATIC
   semantics/sos_semantics.cpp
   semantics/type_checker.cpp
   ir/ld_ir.cpp
-  codegen/c_codegen.cpp
+  ir_gen/ld_converter.cpp
   property/yaml_property_parser.cpp
   property/property_encoder.cpp
   verify/ld_verify.cpp
 )
 
 target_include_directories(ldfrontend PUBLIC ${LIBXML2_INCLUDE_DIR})
-target_link_libraries(ldfrontend PUBLIC ${LIBXML2_LIBRARIES} util)
+# irep2 and util are already linked transitively via the ESBMC build graph;
+# explicit linkage follows the python-frontend pattern.
+target_link_libraries(ldfrontend PUBLIC ${LIBXML2_LIBRARIES} util irep2)
 ```
 
 `tools/ld-verify/CMakeLists.txt` links `ldfrontend` and produces the `ld-verify` binary.
@@ -365,13 +405,13 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | Task | Subtasks | Milestone |
 |---|---|---|
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs |
-| T2.2 Code Generator & Property Encoder | IR; C codegen; YAML parser; property encoder | M4 (Month 9): code generator correct on all benchmark programs |
+| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready |
 | T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov |
 
 **Success criteria (WP2):**
-- **Correctness:** ≥95% of benchmark programs translated with semantic equivalence verified
-  by property checks and fault injection.
+- **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
+  equivalence verified by property checks and fault injection.
 - **Performance:** average translation time <5 s for programs up to 1000 rungs.
 - **Coverage:** >90% line coverage across `src/ld-frontend/`.
 
@@ -418,10 +458,11 @@ Each pipeline stage has a dedicated unit-test suite under `regression/ld/unit/`:
   schema normalisation for each vendor export format.
 - **Semantics:** type-error detection on crafted invalid programs; SOS consistency
   acceptance on all WP1 synthetic programs.
-- **Code generator:** output C file compiles clean with `-Wall -Wextra`; fault-injection
-  variants detected by `ld-verify`.
-- **Property encoder:** each property kind generates the correct `__ESBMC_assert()` call;
-  vacuous assertions (always true/false) flagged.
+- **GOTO IR generator:** each `LdIR` node maps to the expected irep2 `codet`/`exprt`
+  type; the emitted `contextt` passes ESBMC's `clang_cpp_adjust` equivalent without
+  errors; fault-injection variants produce a `VIOLATION` verdict.
+- **Property encoder:** each property kind produces a `code_assertt` with the correct
+  guard expression and location; vacuous assertions (always true/false) are flagged.
 
 ### Integration Tests
 
@@ -450,14 +491,14 @@ both the translation and the verifier on real semantic errors, not just syntacti
 
 ## 8. Key Design Decisions
 
-1. **Minimal ESBMC core changes; no pipeline modifications.** SAFE-LD produces standard
-   ANSI-C with `__ESBMC_assert()` and hands off to the existing verification pipeline
-   unchanged. Registering the new front-end requires the same small additions to
-   `mode.h`, `mode.cpp`, and `globals.cpp` that every other ESBMC front-end requires
-   (Python, Jimple, Solidity — see §4.2). The verification pipeline, solvers, symex,
-   and GOTO-program IR are not touched. This eliminates integration risk and immediately
-   delivers k-induction, multi-solver portfolio, and witness generation without any
-   front-end work.
+1. **Direct GOTO IR generation; no C intermediary.** SAFE-LD's `ld_converter` populates
+   ESBMC's `contextt` directly with `symbolt` entries and `codet` trees, following the
+   same pattern as `python_converter`. ESBMC's clang front-end is never invoked. This
+   keeps the trusted base minimal: the only path from LD semantics to the verifier is the
+   SOS specification → `ld_converter` → symex, with no C compilation step in between.
+   Registering the front-end requires the same small additions to `mode.h`, `mode.cpp`,
+   and `globals.cpp` that every other ESBMC front-end requires (Python, Jimple, Solidity
+   — see §4.2). The verification pipeline, solvers, and symex are not touched.
 
 2. **Semantics-driven translation.** The SOS specification is the primary design artefact.
    The parser, IR, and code generator are all derived from it. This provides a mathematical
@@ -470,13 +511,15 @@ both the translation and the verifier on real semantic errors, not just syntacti
 
 4. **YAML property specification.** Safety engineers express properties in domain vocabulary
    (variable names, scan counts) rather than temporal logic. The property encoder handles
-   the mapping to `__ESBMC_assert()` automatically, lowering the expertise barrier for
+   the mapping to `code_assertt` nodes automatically, lowering the expertise barrier for
    industrial adoption.
 
-5. **Back-translated counterexamples.** The symbol table built during code generation maps
-   every C variable back to its LD name and rung. ESBMC's counterexample trace is therefore
-   presented in LD terms (scan cycle, rung, variable store), not in C terms, which is
-   essential for practitioner usability.
+5. **Native LD counterexamples.** Because every `symbolt` is created with its PLCopen XML
+   identifier as `base_name` and every `code_assertt` carries the originating LD source
+   location, ESBMC's counterexample trace already references rung numbers and variable
+   names from the LD program directly. No back-translation step is needed, and the
+   structured JSON report is produced by reading ESBMC's native output rather than
+   remapping from C names.
 
 ---
 
