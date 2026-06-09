@@ -5,6 +5,7 @@
 #include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
+#include <util/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -1942,18 +1943,35 @@ public:
 // dead-but-tested first: nothing builds them until the goto_convert wiring
 // phase, so they are behaviour-inert and only the round-trip unit tests
 // exercise them (the V-track pattern).
+//
+// V.4.1: each kind carries a `locationt location` so a future IREP2-native
+// goto_convert can stamp each instruction's source location -- the legacy
+// codet carries it on the node, but expr2t/migrate do not, so an IREP2 body
+// would otherwise lose all counterexample line numbers. The field is
+// deliberately NOT part of the `fields` tuple, so it does not enter the IREP2
+// hash/equality (matching how a goto instructiont stores its locationt
+// separately); it is preserved through clone() by the defaulted copy ctor and
+// threaded by hand in migrate (forward copies code.location(), back restores
+// it).
 class code_ifthenelse2t : public expr2t
 {
 public:
   expr2tc cond;
   expr2tc then_case;
   expr2tc else_case; // nil when there is no else branch
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_ifthenelse2t(const expr2tc &c, const expr2tc &t, const expr2tc &e)
+  code_ifthenelse2t(
+    const expr2tc &c,
+    const expr2tc &t,
+    const expr2tc &e,
+    const locationt &loc = locationt())
     : expr2t(get_empty_type(), code_ifthenelse_id),
       cond(c),
       then_case(t),
-      else_case(e)
+      else_case(e),
+      location(loc)
   {
   }
   code_ifthenelse2t(const code_ifthenelse2t &ref) = default;
@@ -1971,9 +1989,14 @@ class code_while2t : public expr2t
 public:
   expr2tc cond;
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_while2t(const expr2tc &c, const expr2tc &b)
-    : expr2t(get_empty_type(), code_while_id), cond(c), body(b)
+  code_while2t(
+    const expr2tc &c,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_while_id), cond(c), body(b), location(loc)
   {
   }
   code_while2t(const code_while2t &ref) = default;
@@ -1990,13 +2013,21 @@ public:
   expr2tc cond; // nil when absent
   expr2tc iter; // nil when absent
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   code_for2t(
     const expr2tc &i,
     const expr2tc &c,
     const expr2tc &it,
-    const expr2tc &b)
-    : expr2t(get_empty_type(), code_for_id), init(i), cond(c), iter(it), body(b)
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_for_id),
+      init(i),
+      cond(c),
+      iter(it),
+      body(b),
+      location(loc)
   {
   }
   code_for2t(const code_for2t &ref) = default;
@@ -2015,9 +2046,14 @@ class code_switch2t : public expr2t
 public:
   expr2tc value;
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_switch2t(const expr2tc &v, const expr2tc &b)
-    : expr2t(get_empty_type(), code_switch_id), value(v), body(b)
+  code_switch2t(
+    const expr2tc &v,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_switch_id), value(v), body(b), location(loc)
   {
   }
   code_switch2t(const code_switch2t &ref) = default;
@@ -2030,7 +2066,11 @@ public:
 class code_break2t : public expr2t
 {
 public:
-  code_break2t() : expr2t(get_empty_type(), code_break_id)
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_break2t(const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_break_id), location(loc)
   {
   }
   code_break2t(const code_break2t &ref) = default;
@@ -2042,7 +2082,11 @@ public:
 class code_continue2t : public expr2t
 {
 public:
-  code_continue2t() : expr2t(get_empty_type(), code_continue_id)
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_continue2t(const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_continue_id), location(loc)
   {
   }
   code_continue2t(const code_continue2t &ref) = default;
@@ -2056,9 +2100,14 @@ class code_label2t : public expr2t
 public:
   irep_idt label;
   expr2tc code;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_label2t(const irep_idt &l, const expr2tc &c)
-    : expr2t(get_empty_type(), code_label_id), label(l), code(c)
+  code_label2t(
+    const irep_idt &l,
+    const expr2tc &c,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_label_id), label(l), code(c), location(loc)
   {
   }
   code_label2t(const code_label2t &ref) = default;

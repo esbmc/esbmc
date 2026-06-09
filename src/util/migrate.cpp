@@ -2158,14 +2158,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Forward arms
   // for the legacy structured codet statements; nil sub-operands (an absent
   // else / for-init / for-cond / for-iter) migrate to a null expr2tc and back,
-  // so the round-trip is exact.
+  // so the round-trip is exact. V.4.1: the legacy node's source location is
+  // carried into the (non-reflected) code_*2t::location field and restored on
+  // the way back, so a future IREP2-native goto_convert can stamp instructions.
   if (expr.id() == "code" && expr.statement() == "ifthenelse")
   {
     expr2tc cond, then_case, else_case;
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), then_case);
     migrate_expr(expr.op2(), else_case);
-    new_expr_ref = code_ifthenelse2tc(cond, then_case, else_case);
+    new_expr_ref =
+      code_ifthenelse2tc(cond, then_case, else_case, expr.location());
     return;
   }
 
@@ -2174,7 +2177,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc cond, body;
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), body);
-    new_expr_ref = code_while2tc(cond, body);
+    new_expr_ref = code_while2tc(cond, body, expr.location());
     return;
   }
 
@@ -2185,7 +2188,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), cond);
     migrate_expr(expr.op2(), iter);
     migrate_expr(expr.op3(), body);
-    new_expr_ref = code_for2tc(init, cond, iter, body);
+    new_expr_ref = code_for2tc(init, cond, iter, body, expr.location());
     return;
   }
 
@@ -2194,19 +2197,19 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc value, body;
     migrate_expr(expr.op0(), value);
     migrate_expr(expr.op1(), body);
-    new_expr_ref = code_switch2tc(value, body);
+    new_expr_ref = code_switch2tc(value, body, expr.location());
     return;
   }
 
   if (expr.id() == "code" && expr.statement() == "break")
   {
-    new_expr_ref = code_break2tc();
+    new_expr_ref = code_break2tc(expr.location());
     return;
   }
 
   if (expr.id() == "code" && expr.statement() == "continue")
   {
-    new_expr_ref = code_continue2tc();
+    new_expr_ref = code_continue2tc(expr.location());
     return;
   }
 
@@ -2214,7 +2217,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     expr2tc code;
     migrate_expr(expr.op0(), code);
-    new_expr_ref = code_label2tc(expr.get("label"), code);
+    new_expr_ref = code_label2tc(expr.get("label"), code, expr.location());
     return;
   }
 
@@ -3686,6 +3689,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.op0() = migrate_expr_back(ref2.cond);
     codeexpr.op1() = migrate_expr_back(ref2.then_case);
     codeexpr.op2() = migrate_expr_back(ref2.else_case);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_while_id:
@@ -3696,6 +3701,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.operands().resize(2);
     codeexpr.op0() = migrate_expr_back(ref2.cond);
     codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_for_id:
@@ -3708,6 +3715,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.op1() = migrate_expr_back(ref2.cond);
     codeexpr.op2() = migrate_expr_back(ref2.iter);
     codeexpr.op3() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_switch_id:
@@ -3718,18 +3727,26 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.operands().resize(2);
     codeexpr.op0() = migrate_expr_back(ref2.value);
     codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_break_id:
   {
+    const code_break2t &ref2 = to_code_break2t(ref);
     exprt codeexpr("code", typet("code"));
     codeexpr.statement("break");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_continue_id:
   {
+    const code_continue2t &ref2 = to_code_continue2t(ref);
     exprt codeexpr("code", typet("code"));
     codeexpr.statement("continue");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_label_id:
@@ -3739,6 +3756,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement("label");
     codeexpr.set("label", ref2.label);
     codeexpr.copy_to_operands(migrate_expr_back(ref2.code));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_catch_id:
