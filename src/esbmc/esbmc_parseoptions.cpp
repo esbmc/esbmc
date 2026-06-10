@@ -2309,26 +2309,23 @@ bool esbmc_parseoptionst::parse_goto_program(
 /// over-approximation: on real 64-bit targets, non-NULL pointers cast to
 /// uint64_t are always non-zero, and NULL as a hash key is disallowed by
 /// every hash table that reserves 0 as an empty-slot marker.
-static void constrain_cprover_uninterpreted_calls(
-  goto_functionst &goto_functions)
+static void
+constrain_cprover_uninterpreted_calls(goto_functionst &goto_functions)
 {
-  Forall_goto_functions(func_it, goto_functions)
+  Forall_goto_functions (func_it, goto_functions)
   {
     if (!func_it->second.body_available)
       continue;
-    goto_programt::instructionst &insns =
-      func_it->second.body.instructions;
+    goto_programt::instructionst &insns = func_it->second.body.instructions;
 
     for (auto it = insns.begin(); it != insns.end(); ++it)
     {
       if (!it->is_function_call())
         continue;
-      const code_function_call2t &call =
-        to_code_function_call2t(it->code);
+      const code_function_call2t &call = to_code_function_call2t(it->code);
       if (!is_symbol2t(call.function))
         continue;
-      const std::string &fname =
-        id2string(to_symbol2t(call.function).thename);
+      const std::string &fname = id2string(to_symbol2t(call.function).thename);
       if (fname.find("__CPROVER_uninterpreted_") == std::string::npos)
         continue;
       if (is_nil_expr(call.ret) || !is_bv_type(call.ret->type))
@@ -2336,8 +2333,7 @@ static void constrain_cprover_uninterpreted_calls(
 
       goto_programt::instructiont assume_instr;
       assume_instr.type = ASSUME;
-      assume_instr.guard =
-        notequal2tc(call.ret, gen_zero(call.ret->type));
+      assume_instr.guard = notequal2tc(call.ret, gen_zero(call.ret->type));
       assume_instr.location = it->location;
       insns.insert(std::next(it), std::move(assume_instr));
     }
