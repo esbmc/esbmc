@@ -22,7 +22,7 @@ each entry into a `code_assertt` node appended to the scan-loop body.
 | `invariant` | **Implemented**, encodes and verifies |
 | `absence` | **Implemented & exercised** (regression test `motor_interlock`) |
 | `reachability` | **Implemented**, encodes and verifies |
-| `response` | **Not yet working** — the auxiliary scan counter trips an irep2 bit-width assertion during GOTO generation (shared root cause with the timer/counter encoding; see the implementation plan §10) |
+| `response` | **Implemented & exercised** (regression tests `response_direct` SAFE, `response_blocked_fail` VIOLATION); the auxiliary scan counter is emitted as typed arithmetic |
 
 The `description` field is propagated into the `code_assertt` comment, so a
 violated property is named in the ESBMC counterexample and in the `ld-verify`
