@@ -11,7 +11,7 @@ struct LdVerifyOptions
 {
   std::string program_path; // PLCopen XML or .ld input
   std::string props_path;   // YAML property file (optional)
-  std::string strategy;     // "k-induction" | "bmc" | "portfolio"
+  std::string strategy;     // "k-induction" | "bmc"
   unsigned bmc_unwind = 100;
   bool fault_injection = false;
 };

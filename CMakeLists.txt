@@ -141,10 +141,6 @@ endif()
 
 add_subdirectory(src)
 
-if(ENABLE_LD_FRONTEND)
-  add_subdirectory(tools/ld-verify)
-endif()
-
 include(Irep2Optimization)
 
 # Generate ac_config.h. This must be generated after solvers
@@ -164,6 +160,11 @@ if(BUILD_TESTING)
     if(ENABLE_LD_FRONTEND)
         add_subdirectory(regression/ld)
     endif()
+endif()
+# Added after enable_testing() so the ld-verify CLI's own CTest cases register;
+# the binary itself is built whenever the LD front-end is enabled.
+if(ENABLE_LD_FRONTEND)
+  add_subdirectory(tools/ld-verify)
 endif()
 if(ENABLE_REGRESSION)
     add_subdirectory(regression)

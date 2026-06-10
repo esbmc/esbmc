@@ -1,10 +1,28 @@
 #include <ld-frontend/verify/ld_verify.h>
-#include <array>
-#include <cstdio>
-#include <cstdlib>
-#include <filesystem>
 #include <sstream>
-#include <unistd.h>
+#include <vector>
+#include <cstdlib>
+
+#include <boost/version.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/dll/runtime_symbol_info.hpp>
+
+// Boost.Process header layout differs between releases (see the same block in
+// src/python-frontend/python_language.cpp).  We use it to run the esbmc binary.
+#if defined(__APPLE__) || (BOOST_VERSION == 108700)
+#  include <boost/process/v1.hpp>
+namespace bp = boost::process::v1;
+#elif BOOST_VERSION >= 108800
+#  include <boost/process/v1/child.hpp>
+#  include <boost/process/v1/io.hpp>
+#  include <boost/process/v1/search_path.hpp>
+namespace bp = boost::process::v1;
+#else
+#  include <boost/process.hpp>
+namespace bp = boost::process;
+#endif
+
+namespace fs = boost::filesystem;
 
 static std::string json_escape(const std::string &s)
 {
@@ -76,162 +94,205 @@ std::string LdVerifyResult::to_json() const
   return s.str();
 }
 
-// Single-quote a string for safe inclusion in a /bin/sh command line.
-static std::string shell_quote(const std::string &s)
+// Locate the esbmc binary: the $ESBMC override, then alongside or relative to
+// this executable (installed bin/ and the build tree), then $PATH.
+static fs::path locate_esbmc()
 {
-  std::string q = "'";
-  for (char c : s)
-    q += (c == '\'') ? std::string("'\\''") : std::string(1, c);
-  q += "'";
-  return q;
-}
+  if (const char *env = std::getenv("ESBMC"))
+    if (*env && fs::exists(env))
+      return fs::path(env);
 
-// Locate the esbmc binary: honour $ESBMC, else rely on $PATH.
-static std::string esbmc_binary()
-{
-  const char *e = std::getenv("ESBMC");
-  return (e && *e) ? std::string(e) : std::string("esbmc");
-}
-
-// Pull the violated-property description out of an ESBMC counterexample.
-// The trace prints "Violated property:" then an indented "file <path>" line,
-// then the assertion comment (the property description).  Scan for the first
-// non-empty, non-"file" line after the header rather than assuming a fixed
-// layout, so the field survives minor trace-format changes.
-static std::string extract_violated_description(const std::string &output)
-{
-  auto pos = output.find("Violated property:");
-  if (pos == std::string::npos)
-    return {};
-
-  std::istringstream is(output.substr(pos));
-  std::string line;
-  std::getline(is, line); // consume the "Violated property:" header
-  while (std::getline(is, line))
+  boost::system::error_code ec;
+  fs::path self = boost::dll::program_location(ec);
+  if (!ec)
   {
-    auto begin = line.find_first_not_of(" \t");
-    if (begin == std::string::npos)
-      continue; // blank line
-    std::string trimmed = line.substr(begin);
-    if (trimmed.rfind("file ", 0) == 0)
-      continue; // source-location line, not the description
-    return trimmed;
+    const fs::path dir = self.parent_path();
+    const fs::path candidates[] = {
+      dir / "esbmc",                                // installed: bin/esbmc
+      dir / ".." / ".." / "src" / "esbmc" / "esbmc" // build tree
+    };
+    for (const auto &cand : candidates)
+      if (fs::exists(cand))
+        return cand;
   }
-  return {};
+
+  return bp::search_path("esbmc");
+}
+
+// Run esbmc with the given arguments, returning its merged stdout+stderr.
+static std::string
+run_esbmc(const fs::path &esbmc, const std::vector<std::string> &args)
+{
+  bp::ipstream out;
+  bp::child proc(esbmc, args, (bp::std_out & bp::std_err) > out);
+
+  std::ostringstream captured;
+  std::string line;
+  while (std::getline(out, line))
+    captured << line << '\n';
+  proc.wait();
+  return captured.str();
+}
+
+// Extract the human-readable description from esbmc's "Violated property:"
+// block, which lists the source location, the property comment (the description
+// set by the property encoder), and the guard expression on consecutive lines.
+static void
+parse_violated_property(const std::string &output, LdVerifyResult &r)
+{
+  std::istringstream ss(output);
+  std::string line;
+  while (std::getline(ss, line) &&
+         line.find("Violated property:") == std::string::npos)
+    ;
+
+  std::vector<std::string> block;
+  while (std::getline(ss, line))
+  {
+    const size_t start = line.find_first_not_of(" \t");
+    if (start == std::string::npos)
+      break; // a blank line ends the block
+    block.push_back(line.substr(start));
+  }
+
+  // location, description, guard — the description is present only when the
+  // property carried a comment (the encoder always sets one).
+  if (block.size() >= 3)
+    r.description = block[1];
+}
+
+// esbmc prints its verdict as a standalone, unindented line; match the whole
+// line so that descriptive text echoed into the counterexample cannot be
+// mistaken for a verdict.
+static bool has_verdict_line(const std::string &output, const char *verdict)
+{
+  std::istringstream ss(output);
+  std::string line;
+  while (std::getline(ss, line))
+  {
+    if (!line.empty() && line.back() == '\r')
+      line.pop_back(); // tolerate CRLF
+    if (line == verdict)
+      return true;
+  }
+  return false;
 }
 
 LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
 {
-  namespace fs = std::filesystem;
   LdVerifyResult r;
 
-  if (opts.program_path.empty())
-  {
-    r.verdict = LdVerifyResult::Verdict::Error;
-    r.description = "no input program specified";
-    return r;
-  }
-
-  // "portfolio" currently shares the k-induction invocation (the dedicated
-  // portfolio orchestration is future work); reject anything else so a typo is
-  // not silently treated as k-induction.
-  const bool bmc = (opts.strategy == "bmc");
-  if (!bmc && opts.strategy != "k-induction" && opts.strategy != "portfolio")
+  const fs::path esbmc = locate_esbmc();
+  if (esbmc.empty())
   {
     r.verdict = LdVerifyResult::Verdict::Error;
     r.description =
-      "unknown strategy '" + opts.strategy + "' (expected k-induction|bmc)";
+      "esbmc binary not found; set the ESBMC environment variable or add "
+      "esbmc to PATH";
     return r;
   }
 
-  // ESBMC dispatches frontends by file extension (§4.2), so a PLCopen .xml
-  // file must be staged as a .ld copy before invocation.  A PID-tagged name
-  // keeps concurrent ld-verify runs from clobbering each other's staging file.
-  std::string program = opts.program_path;
-  std::string staged;
-  if (fs::path(program).extension() != ".ld")
+  // esbmc dispatches frontends by file extension, so a PLCopen .xml input must
+  // be presented to it as a .ld file (plan §4.2).  Copy to a temp .ld when the
+  // suffix is not already .ld.
+  fs::path input = opts.program_path;
+  fs::path temp_ld;
+
+  // Remove the staged temp .ld on every exit path, including exceptions.
+  struct temp_cleanup
   {
-    std::error_code ec;
-    fs::path tmp = fs::temp_directory_path() /
-                   (fs::path(program).stem().string() + "-ldverify-" +
-                    std::to_string(static_cast<long>(getpid())) + ".ld");
-    fs::copy_file(program, tmp, fs::copy_options::overwrite_existing, ec);
+    const fs::path &path;
+    ~temp_cleanup()
+    {
+      if (!path.empty())
+      {
+        boost::system::error_code ec;
+        fs::remove(path, ec);
+      }
+    }
+  } cleanup{temp_ld};
+
+  if (input.extension() != ".ld")
+  {
+    boost::system::error_code ec;
+    temp_ld =
+      fs::temp_directory_path(ec) / fs::unique_path("ld-verify-%%%%-%%%%.ld");
+    fs::copy_file(input, temp_ld, fs::copy_options::overwrite_existing, ec);
     if (ec)
     {
       r.verdict = LdVerifyResult::Verdict::Error;
-      r.description = "could not stage .ld copy: " + ec.message();
+      r.description = "failed to stage input '" + opts.program_path +
+                      "' as a .ld file: " + ec.message();
       return r;
     }
-    staged = tmp.string();
-    program = staged;
+    input = temp_ld;
   }
 
-  std::ostringstream cmd;
-  cmd << shell_quote(esbmc_binary()) << ' ' << shell_quote(program);
-  if (!opts.props_path.empty())
-    cmd << " --ld-props " << shell_quote(opts.props_path);
-  if (bmc)
-    // The scan loop is while(true); without --no-unwinding-assertions the
-    // unwinding assertion fires at the bound and masquerades as a property
-    // violation.  Suppressing it gives genuine bounded semantics: a real
-    // property violation within the bound still FAILS, while its absence maps
-    // to INCOMPLETE (never SAFE) below.
-    cmd << " --unwind " << opts.bmc_unwind << " --no-unwinding-assertions";
-  else
-    cmd << " --k-induction --unlimited-k-steps";
-  cmd << " 2>&1";
+  std::vector<std::string> args{input.string()};
 
-  std::string output;
-  FILE *pipe = popen(cmd.str().c_str(), "r");
-  if (!pipe)
+  const std::string strategy =
+    opts.strategy.empty() ? "k-induction" : opts.strategy;
+  if (strategy == "k-induction")
   {
-    if (!staged.empty())
-    {
-      std::error_code ec;
-      fs::remove(staged, ec);
-    }
+    args.push_back("--k-induction");
+    args.push_back("--unlimited-k-steps");
+  }
+  else if (strategy == "bmc")
+  {
+    args.push_back("--incremental-bmc");
+    args.push_back("--unwind");
+    args.push_back(std::to_string(opts.bmc_unwind));
+  }
+  else
+  {
     r.verdict = LdVerifyResult::Verdict::Error;
-    r.description = "failed to launch esbmc (set $ESBMC or add it to PATH)";
+    r.description = "unsupported strategy '" + strategy +
+                    "' (expected 'k-induction' or 'bmc')";
     return r;
   }
 
-  std::array<char, 4096> buf;
-  size_t n;
-  while ((n = fread(buf.data(), 1, buf.size(), pipe)) > 0)
-    output.append(buf.data(), n);
-  int status = pclose(pipe);
-
-  if (!staged.empty())
+  if (!opts.props_path.empty())
   {
-    std::error_code ec;
-    fs::remove(staged, ec);
+    args.push_back("--ld-props");
+    args.push_back(opts.props_path);
+  }
+  if (opts.fault_injection)
+    args.push_back("--ld-fault-injection");
+
+  std::string output;
+  try
+  {
+    output = run_esbmc(esbmc, args);
+  }
+  catch (const std::exception &e)
+  {
+    r.verdict = LdVerifyResult::Verdict::Error;
+    r.description = std::string("failed to run esbmc: ") + e.what();
+    return r;
   }
 
-  r.raw_output = output;
-
-  if (output.find("VERIFICATION FAILED") != std::string::npos)
+  if (has_verdict_line(output, "VERIFICATION SUCCESSFUL"))
+    r.verdict = LdVerifyResult::Verdict::Safe;
+  else if (has_verdict_line(output, "VERIFICATION FAILED"))
   {
     r.verdict = LdVerifyResult::Verdict::Violation;
-    r.description = extract_violated_description(output);
+    parse_violated_property(output, r);
+    r.raw_output = output;
   }
-  else if (output.find("VERIFICATION SUCCESSFUL") != std::string::npos)
+  else if (has_verdict_line(output, "VERIFICATION UNKNOWN"))
   {
-    // A bounded BMC pass proves safety only up to the unwind depth (§3.7).
-    r.verdict =
-      bmc ? LdVerifyResult::Verdict::Incomplete : LdVerifyResult::Verdict::Safe;
-  }
-  else if (status != 0)
-  {
-    // No verdict token and a non-zero exit means esbmc never ran or crashed
-    // (e.g. missing binary, parse error); this is an error, not an
-    // inconclusive run.
-    r.verdict = LdVerifyResult::Verdict::Error;
-    r.description = "esbmc produced no verdict (exit status " +
-                    std::to_string(status) + "); set $ESBMC or check the input";
+    // BMC is only complete up to its unwind bound; an "unknown" under
+    // k-induction means the proof did not converge.
+    r.verdict = (strategy == "bmc") ? LdVerifyResult::Verdict::Incomplete
+                                    : LdVerifyResult::Verdict::Unknown;
+    r.raw_output = output;
   }
   else
   {
-    r.verdict = LdVerifyResult::Verdict::Unknown;
+    // No recognisable verdict: esbmc crashed, was killed, or rejected the input.
+    r.verdict = LdVerifyResult::Verdict::Error;
+    r.description = "esbmc produced no verdict";
+    r.raw_output = output;
   }
 
   return r;
