@@ -190,9 +190,15 @@ code_blockt property_encoder::encode_response(const LdProperty &p)
   exprt one = gen_one(int_type());
   exprt zero = gen_zero(int_type());
 
+  // plus_exprt leaves its result type unset; set it explicitly (int_type)
+  // since the LD frontend has no adjust pass to infer it, otherwise the node
+  // migrates to a typeless add2t and trips an irep2 bit-width assertion.
+  exprt incr(exprt::plus, int_type());
+  incr.copy_to_operands(ctr, one);
+
   code_ifthenelset ctr_step;
   ctr_step.cond() = and_exprt(trigger, not_exprt(response));
-  ctr_step.then_case() = code_assignt(ctr, plus_exprt(ctr, one));
+  ctr_step.then_case() = code_assignt(ctr, incr);
   ctr_step.else_case() = code_assignt(ctr, zero);
 
   code_blockt blk;
