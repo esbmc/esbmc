@@ -68,8 +68,13 @@ Sound and complete.
 
 ### `response`
 
-Whenever a `trigger` variable becomes `TRUE`, a `response` variable becomes
-`TRUE` within `max_scans` scan iterations.
+Whenever a `trigger` variable is held `TRUE`, a `response` variable becomes
+`TRUE` within `max_scans` scan iterations. The check is **level-triggered**: an
+auxiliary counter counts consecutive scans in which `trigger` is `TRUE` and
+`response` is not, and resets whenever `trigger` goes `FALSE` or `response`
+becomes `TRUE`. If the trigger is released before the bound is reached, no
+violation is reported — the property constrains sustained trigger conditions,
+not one-shot edges.
 
 ```yaml
 - id: P4
@@ -85,9 +90,12 @@ analysis (recorded in the required `justification` field).
 
 ### `reachability`
 
-A target state is reachable — useful for liveness checks. Under BMC, a
-`VIOLATION` means the target state was reached; `SAFE` under k-induction means it
-was proved unreachable.
+A target state is reachable — useful for liveness checks. The property is
+encoded as an assertion that fails when the target state is reached, so the
+ESBMC verdict reads inverted: `VERIFICATION FAILED` under BMC means the target
+state **was reached** (the liveness goal is attainable), while
+`VERIFICATION SUCCESSFUL` under k-induction means it was **proved
+unreachable**.
 
 ```yaml
 - id: P5

@@ -11,8 +11,9 @@ supported and the known restrictions.
 
 - **Contacts and coils** — normally-open and normally-closed contacts; output,
   Set, and Reset coils.
-- **Timers** — `TON` (on-delay), `TOF` (off-delay), and `TP` (pulse), with their
-  retained `ET`/`Q` state evaluated per scan.
+- **Timers** — `TON` (on-delay) and `TOF` (off-delay), with their retained
+  `ET`/`Q` state evaluated per scan. `TP` (pulse) blocks are accepted but
+  currently simplified to `TON` semantics — see Restrictions below.
 - **Counters** — `CTU` (count-up) and `CTD` (count-down), edge-triggered on the
   count input, with reset handling.
 - **Arithmetic function blocks** — `ADD`, `SUB`, `MUL`, `DIV`, and `MOVE`.
@@ -25,6 +26,10 @@ supported and the known restrictions.
 
 - **Input format.** Programs must be supplied as PLCopen XML. Other LD
   serialisations are not parsed.
+- **`TP` pulse timers.** `TP` blocks are modelled with `TON` (on-delay)
+  semantics: `Q` rises after `IN` has been held for `PT` ticks, rather than
+  emitting a fixed-width pulse on a rising edge of `IN`. Properties that depend
+  on accurate pulse-timer behaviour are not faithfully checked yet.
 - **Property expression syntax.** Expressions in `invariant` and `absence`
   properties are Boolean-only: variable names combined with `!`, `&&`, `||`, and
   parentheses. Arithmetic relations (for example `Counter >= 5`) are not yet

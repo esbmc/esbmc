@@ -52,6 +52,11 @@ esbmc unsafe.ld --ld-props props.yaml --incremental-bmc
 VERIFICATION FAILED
 ```
 
+Incremental BMC raises the unwind bound automatically, so no explicit
+`--unwind` is needed for the infinite scan loop, and unwinding assertions are
+disabled during its base case — `VERIFICATION FAILED` therefore always
+indicates a genuine property violation, never an artifact of the bound.
+
 When a property is violated, the counterexample names it via the property's
 `description` field:
 
