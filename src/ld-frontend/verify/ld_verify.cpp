@@ -135,8 +135,11 @@ run_esbmc(const fs::path &esbmc, const std::vector<std::string> &args)
 }
 
 // Extract the human-readable description from esbmc's "Violated property:"
-// block, which lists the source location, the property comment (the description
-// set by the property encoder), and the guard expression on consecutive lines.
+// block, which lists the source location ("file ... line ..."), the property
+// comment (the description set by the property encoder), and the guard
+// expression on consecutive lines.  The location line may be absent or the
+// layout may shift, so take the first non-empty, non-location line as the
+// description rather than indexing a fixed position.
 static void
 parse_violated_property(const std::string &output, LdVerifyResult &r)
 {
@@ -146,19 +149,17 @@ parse_violated_property(const std::string &output, LdVerifyResult &r)
          line.find("Violated property:") == std::string::npos)
     ;
 
-  std::vector<std::string> block;
   while (std::getline(ss, line))
   {
     const size_t start = line.find_first_not_of(" \t");
     if (start == std::string::npos)
       break; // a blank line ends the block
-    block.push_back(line.substr(start));
+    const std::string trimmed = line.substr(start);
+    if (trimmed.rfind("file ", 0) == 0)
+      continue; // source-location line, not the description
+    r.description = trimmed;
+    return;
   }
-
-  // location, description, guard — the description is present only when the
-  // property carried a comment (the encoder always sets one).
-  if (block.size() >= 3)
-    r.description = block[1];
 }
 
 // esbmc prints its verdict as a standalone, unindented line; match the whole
@@ -181,6 +182,13 @@ static bool has_verdict_line(const std::string &output, const char *verdict)
 LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
 {
   LdVerifyResult r;
+
+  if (opts.program_path.empty())
+  {
+    r.verdict = LdVerifyResult::Verdict::Error;
+    r.description = "no input program specified";
+    return r;
+  }
 
   const fs::path esbmc = locate_esbmc();
   if (esbmc.empty())
@@ -215,9 +223,18 @@ LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
   if (input.extension() != ".ld")
   {
     boost::system::error_code ec;
-    temp_ld =
-      fs::temp_directory_path(ec) / fs::unique_path("ld-verify-%%%%-%%%%.ld");
-    fs::copy_file(input, temp_ld, fs::copy_options::overwrite_existing, ec);
+    const fs::path tmp_dir = fs::temp_directory_path(ec);
+    if (ec)
+    {
+      r.verdict = LdVerifyResult::Verdict::Error;
+      r.description =
+        "could not determine the temporary directory: " + ec.message();
+      return r;
+    }
+    // unique_path guarantees a fresh name, so the plain copy_file overload
+    // suffices (no overwrite option needed).
+    temp_ld = tmp_dir / fs::unique_path("ld-verify-%%%%-%%%%.ld");
+    fs::copy_file(input, temp_ld, ec);
     if (ec)
     {
       r.verdict = LdVerifyResult::Verdict::Error;
