@@ -1,9 +1,16 @@
 # SAFE-LD Implementation Plan: SMT-Based Formal Verification of Ladder Diagram Programs
 
-**Status:** PLANNING  
+**Status:** PLANNING — WP2 partially implemented (skeleton #5280, pipeline #5289)  
 **Project:** APP113435 — SAFE-LD (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
 **Date:** 2026-06-09
+
+> **Implementation note.** The boolean/combinational Tier-1 subset now verifies
+> end-to-end (see §10). The integer-arithmetic constructs — TON/TOF/TP timers,
+> CTU/CTD counters, and the `response` property (auxiliary scan counter) — do
+> **not** yet work: they abort GOTO generation with an irep2 bit-width
+> assertion. Treat the timer/counter/response rows of the tables below as
+> *planned*, not *delivered*.
 
 ---
 
@@ -300,10 +307,32 @@ ld-verify [options] <program.xml> [--props <props.yaml>]
 ```
 
 Internally it invokes `esbmc` with the `.ld`-renamed input file and the configured
-strategy (default: `--k-induction --unlimited-k-steps --z3` with fallback to
-`--bmc --unwind 100`). Because SAFE-LD generates GOTO IR directly, ESBMC's clang
-front-end is **never invoked** — `ld_languaget::typecheck()` populates the `contextt`
-and control passes straight to symex.
+strategy. Because SAFE-LD generates GOTO IR directly, ESBMC's clang front-end is
+**never invoked** — `ld_languaget::typecheck()` populates the `contextt` and
+control passes straight to symex.
+
+**As implemented (#5289).** `LdVerifyRunner::run()`:
+
+- Stages a non-`.ld` input (e.g. PLCopen `.xml`) into a PID-tagged temporary
+  `.ld` copy so ESBMC's extension dispatch (§4.2) routes it to the LD front-end,
+  and removes the copy afterwards.
+- Locates the `esbmc` binary via `$ESBMC`, else `$PATH`.
+- Maps `--strategy`: `k-induction` → `--k-induction --unlimited-k-steps`;
+  `bmc` → `--unwind <N> --no-unwinding-assertions` (the `--no-unwinding-assertions`
+  flag is required because the scan loop is `while(true)` — otherwise the
+  unwinding assertion fires at the bound and is indistinguishable from a property
+  violation). `portfolio` currently aliases `k-induction`; an unrecognised
+  strategy is rejected as `ERROR`.
+- Passes the YAML file through as `--ld-props <file>`.
+- Parses the verdict and emits the JSON report, with the verdict set
+  `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`. A `k-induction` success is
+  reported as `SAFE`; a `bmc` success is reported as `INCOMPLETE` (bounded — it
+  proves nothing beyond the unwind depth, §3.7); a non-zero exit with no verdict
+  token is reported as `ERROR` rather than silently as `UNKNOWN`.
+
+The same `--ld-props` option is available on bare `esbmc` (e.g.
+`esbmc program.ld --ld-props props.yaml --k-induction`), which is what the
+regression tests drive directly.
 
 `ld-verify` then parses ESBMC's output and emits a structured JSON report:
 
@@ -516,12 +545,12 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 
 ### WP2 — SAFE-LD Tool Development (Months 4–12)
 
-| Task | Subtasks | Milestone |
-|---|---|---|
-| T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs |
-| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs |
-| T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov |
+| Task | Subtasks | Milestone | Status |
+|---|---|---|---|
+| T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280) |
+| T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | partial — boolean subset works; timers/counters/`response` abort with an irep2 bit-width assertion (§10) |
+| T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired, `ld-verify` runner + JSON report implemented (#5289) |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 2 driver regression tests; `ld-verify` runner not yet covered |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -663,3 +692,67 @@ both the translation and the verifier on real semantic errors, not just syntacti
 | M9 | 28 | Paper 1 submitted |
 | M10 | 32 | Paper 2 submitted |
 | M11 | 36 | Full open-source release + SV-COMP category proposal |
+
+---
+
+## 10. Implementation Status
+
+This section records what has actually landed against the plan above, so the
+prose in §3 is not mistaken for delivered functionality.
+
+### Landed
+
+- **WP2 skeleton (#5280).** Front-end scaffolding: `ld_languaget`, PLCopen XML
+  parser, type checker, LdIR + builder, `ld_converter`, YAML property parser,
+  property encoder, `ld-verify` tool, CMake wiring behind `ENABLE_LD_FRONTEND`
+  (default `OFF`), and unit tests.
+- **Property pipeline + ld-verify runner (#5289).**
+  - `--ld-props <file>` option on the `esbmc` driver; `ld_languaget::parse()`
+    reads it (an explicit `set_props_path` from `ld-verify` still wins). Before
+    this, the property file was never loaded and every program verified
+    vacuously.
+  - **READ_INPUTS** (§3.3): each `is_input` variable is re-sampled
+    nondeterministically at the top of every scan iteration. Before this, inputs
+    were frozen at their initial value, so verification was vacuous even with
+    properties loaded.
+  - `LdVerifyRunner::run()` implemented end-to-end (see §3.6) with the verdict
+    set `{SAFE, VIOLATION, INCOMPLETE, UNKNOWN, ERROR}`.
+  - Regression suite `regression/ld/` registered (guarded by
+    `ENABLE_LD_FRONTEND`, excluding the `benchmarks/` dataset): `motor_interlock`
+    (SAFE under k-induction) and `missing_interlock_fail` (mutual-exclusion
+    VIOLATION).
+
+### Working end-to-end
+
+Contacts and coils (`--( )--`, `--( S )--`, `--( R )--`), and the property kinds
+`mutual_exclusion`, `invariant`, `absence`, and `reachability`. These encode to
+GOTO IR and verify under both k-induction and bounded BMC.
+
+### Known limitations / not yet working
+
+- **Timers and counters abort GOTO generation.** TON/TOF/TP and CTU/CTD
+  encodings, and the `response` property (which builds an auxiliary scan
+  counter), trigger an irep2 assertion —
+  `assert_arith_2ops_consistency` (`irep2_expr.cpp`) — during
+  "Generating GOTO Program". Reproduced both with the `conveyor_sequencing`
+  benchmark (timer FB, no properties) and with a `response` property on a
+  boolean-only program, so the integer-arithmetic encoding mixes operand
+  bit-widths. This blocks the timer/counter rows of the §3.4 table and the
+  `response` row of the §3.5 table, and is why `conveyor_sequencing` and
+  `emergency_shutdown` are **not** yet wired as passing regression tests.
+- **`ld-verify` runner has no automated test.** The two regression tests drive
+  the `esbmc` driver directly; the runner (process spawning, `.xml` staging,
+  verdict mapping) is exercised manually only.
+- **Fault-injection mode** exists on `ld_converter` but is not exposed through
+  the `esbmc` driver or `ld-verify`.
+- **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
+  variable assignments (sufficient for the current property checks).
+
+### Suggested next increments
+
+1. Fix the timer/counter/`response` bit-width assertion in `ld_converter` /
+   `property_encoder`, then promote `conveyor_sequencing` and
+   `emergency_shutdown` to passing regression tests.
+2. Enable `-DENABLE_LD_FRONTEND=On` in a CI job so `regression/ld/` actually
+   runs upstream (the suite is skipped on a default build).
+3. Add coverage for the `ld-verify` runner itself.
