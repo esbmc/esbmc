@@ -1,5 +1,6 @@
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/read_bin_goto_object.h>
+#include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/goto_functions.h>
 #include <util/message.h>
 #include <fstream>
@@ -24,5 +25,19 @@ bool goto_binary_reader::read_goto_binary(
   goto_functionst &dest)
 {
   std::ifstream in(path, std::ios::in | std::ios::binary);
+
+  // Auto-detect the format from the magic header: a CBMC goto-binary starts
+  // with 0x7f 'G' 'B' 'F', whereas ESBMC's own format starts with 'G' 'B' 'F'.
+  char hdr[4] = {0, 0, 0, 0};
+  in.read(hdr, 4);
+  std::streamsize got = in.gcount();
+  in.clear();
+  in.seekg(0, std::ios::beg);
+
+  if (
+    got >= 4 && static_cast<unsigned char>(hdr[0]) == 0x7f && hdr[1] == 'G' &&
+    hdr[2] == 'B' && hdr[3] == 'F')
+    return read_cbmc_goto_object(in, path, context, dest);
+
   return read_bin_goto_object(in, path, context, dest);
 }
