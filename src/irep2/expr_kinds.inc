@@ -144,3 +144,12 @@ IREP2_EXPR(code_assume,           "code_assume")
 // Encoded as a single IREP2 kind carrying the operator string so that every
 // variant round-trips exactly without requiring one enum entry per operator.
 IREP2_EXPR(sideeffect_assign,     "sideeffect_assign")
+// C++ constructor "this" placeholder: exprt("new_object") in the legacy IR.
+// Appears in temporary_object initializers; replaced by replace_new_object
+// before goto_convert processes the body.
+IREP2_EXPR(new_object,            "new_object")
+// Source-level exception specification: codet("throw_decl") with operands
+// that carry throw_decl_id attributes. Distinct from code_cpp_throw_decl
+// (GOTO-level "throw-decl") so that back-migration produces "throw_decl"
+// (underscore) and goto_convert_rec calls convert_throw_decl.
+IREP2_EXPR(code_cpp_src_throw_decl, "cpp_src_throw_decl")

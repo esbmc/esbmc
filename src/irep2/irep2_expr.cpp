@@ -839,6 +839,8 @@ std::string code_return2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_skip2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
+std::string new_object2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
 std::string code_free2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_goto2t::field_names[esbmct::num_type_fields] =
@@ -888,6 +890,8 @@ std::string code_cpp_throw2t::field_names[esbmct::num_type_fields] =
 std::string code_cpp_throw_decl2t::field_names[esbmct::num_type_fields] =
   {"exception_list", "", "", "", ""};
 std::string code_cpp_throw_decl_end2t::field_names[esbmct::num_type_fields] =
+  {"exception_list", "", "", "", ""};
+std::string code_cpp_src_throw_decl2t::field_names[esbmct::num_type_fields] =
   {"exception_list", "", "", "", ""};
 std::string isinf2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};

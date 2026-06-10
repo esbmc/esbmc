@@ -1853,7 +1853,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     std::vector<expr2tc> args;
     if (
       expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
-      expr.statement() != "cpp_new[]" && expr.statement() != "cpp-throw")
+      expr.statement() != "cpp_new[]" && expr.statement() != "cpp-throw" &&
+      expr.statement() != "temporary_object")
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
@@ -1861,8 +1862,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call" &&
-      expr.statement() != "cpp-throw")
-      // For everything other than nondet / cpp-throw,
+      expr.statement() != "cpp-throw" &&
+      expr.statement() != "temporary_object")
+      // For everything other than nondet / cpp-throw / temporary_object,
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
     type2tc cmt_type =
@@ -1953,6 +1955,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "statement_expression")
       t = sideeffect2t::allockind::statement_expression;
+    else if (expr.statement() == "temporary_object")
+    {
+      t = sideeffect2t::allockind::temporary_object;
+      if (expr.operands().size() == 1)
+        migrate_expr(expr.op0(), operand);
+      else if (expr.initializer().is_not_nil())
+      {
+        expr2tc init;
+        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+        args.push_back(init);
+      }
+    }
     else if (expr.statement() == "cpp-throw")
     {
       // Python/C++ throw expression: side_effect_exprt("cpp-throw").
@@ -2181,6 +2195,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = code_cpp_throw_decl2tc(expr_list);
+    return;
+  }
+
+  // Source-level exception specification: codet("throw_decl") (underscore) with
+  // operands carrying throw_decl_id attributes. Distinct from the GOTO-level
+  // "throw-decl" (hyphen) which uses a throw_list sub-irept.
+  if (expr.id() == "code" && expr.statement() == "throw_decl")
+  {
+    std::vector<irep_idt> expr_list;
+    for (const auto &op : expr.operands())
+      expr_list.push_back(op.get("throw_decl_id"));
+    new_expr_ref = code_cpp_src_throw_decl2tc(expr_list);
     return;
   }
 
@@ -2555,6 +2581,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // FUTURE: call __ESBMC_r_ok
     true_exprt t;
     migrate_expr(t, new_expr_ref);
+    return;
+  }
+
+  if (expr.id() == "new_object")
+  {
+    // C++ constructor "this" placeholder: typed, no operands. Appears inside
+    // temporary_object initializers; replaced by replace_new_object before
+    // goto_convert processes the body.
+    new_expr_ref = new_object2tc(migrate_type(expr.type()));
     return;
   }
   // TRANSCODER END
@@ -3549,6 +3584,16 @@ exprt migrate_expr_back(const expr2tc &ref)
     {
       ; // Do nothing
     }
+    else if (ref2.kind == sideeffect2t::allockind::temporary_object)
+    {
+      // initializer-form (operands empty, initializer carries body) vs
+      // 1-op form (single direct operand). Back-migration preserves the
+      // invariant: arguments[0] → theexpr.initializer(), operand → copy_to_operands().
+      if (!ref2.arguments.empty())
+        theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+      else if (!is_nil_expr(ref2.operand))
+        theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    }
     else
     {
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3604,6 +3649,9 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::allockind::statement_expression:
       theexpr.statement("statement_expression");
+      break;
+    case sideeffect2t::allockind::temporary_object:
+      theexpr.statement("temporary_object");
       break;
     default:
 
@@ -4000,6 +4048,22 @@ exprt migrate_expr_back(const expr2tc &ref)
       throw_list.emplace_back(it);
     return codeexpr;
   }
+  case expr2t::code_cpp_src_throw_decl_id:
+  {
+    // Source-level exception spec: back-migrate to codet("throw_decl") with
+    // operands carrying throw_decl_id attributes so that goto_convert_rec
+    // calls convert_throw_decl rather than emitting a copy-to-OTHER instruction.
+    const code_cpp_src_throw_decl2t &ref2 = to_code_cpp_src_throw_decl2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw_decl");
+    for (auto const &id : ref2.exception_list)
+    {
+      exprt op;
+      op.set("throw_decl_id", id);
+      codeexpr.move_to_operands(op);
+    }
+    return codeexpr;
+  }
   case expr2t::pointer_capability_id:
   {
     const pointer_capability2t &ref2 = to_pointer_capability2t(ref);
@@ -4109,6 +4173,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
     return back;
   }
+  case expr2t::new_object_id:
+    return exprt("new_object", migrate_type_back(ref->type));
   default:
 
     log_error("Unrecognized expr in migrate_expr_back");

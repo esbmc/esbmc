@@ -225,6 +225,60 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "migrate expr round-trips for code_cpp_src_throw_decl",
+  "[migrate][b2-vtrack]")
+{
+  // code_cpp_src_throw_decl is the source-level exception spec: back-migrates
+  // to codet("throw_decl") (underscore) with operands carrying throw_decl_id
+  // attributes, and forward-migrates from that form back to IREP2.
+  std::vector<irep_idt> exceptions{"noexcept"};
+  require_expr_roundtrip(code_cpp_src_throw_decl2tc(exceptions));
+}
+
+TEST_CASE("migrate expr round-trips for new_object", "[migrate][b2-vtrack]")
+{
+  // new_object is the C++ "this" placeholder in temporary_object initializers.
+  // Back-migrates to exprt("new_object") carrying the type, then re-migrates
+  // to the same new_object2tc.
+  use_test_ns();
+  type2tc t = make_struct_type();
+  require_expr_roundtrip(new_object2tc(t));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (1-op form)",
+  "[migrate][b2-vtrack]")
+{
+  // 1-op form: operand carries the constructor call; arguments empty.
+  // Back-migrates to side_effect_exprt("temporary_object") with one operand.
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc operand = symbol2tc(get_int_type(32), "x");
+  expr2tc nil_expr;
+  std::vector<expr2tc> no_args;
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st, operand, nil_expr, no_args, st, sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (initializer form)",
+  "[migrate][b2-vtrack]")
+{
+  // initializer-form: operand is nil; initializer stored in arguments[0].
+  // Back-migrates to side_effect_exprt("temporary_object") with no direct
+  // operands and the initializer restored via theexpr.initializer().
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc nil_expr;
+  expr2tc init = symbol2tc(get_int_type(32), "x");
+  std::vector<expr2tc> args{init};
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st, nil_expr, nil_expr, args, st, sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
   "migrate expr round-trips for pointer_capability",
   "[migrate][b2-vtrack]")
 {
