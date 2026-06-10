@@ -296,6 +296,19 @@ code_blockt ld_converter::build_scan_body(const exprt &)
 {
   code_blockt scan_body;
 
+  // READ_INPUTS (SOS cyclic-scan model, §3.3): at the start of every scan
+  // iteration each physical input is re-sampled nondeterministically.  Without
+  // this the inputs stay frozen at their initial value and every property
+  // verifies vacuously.
+  for (const auto &v : ir_.variables)
+  {
+    if (!v.is_input)
+      continue;
+    symbol_exprt input = var_expr(v.name);
+    scan_body.copy_to_operands(
+      code_assignt(input, side_effect_expr_nondett(input.type())));
+  }
+
   for (const auto &rung : ir_.rungs)
   {
     code_blockt rung_blk;
