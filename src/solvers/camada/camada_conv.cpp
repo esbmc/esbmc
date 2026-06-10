@@ -125,10 +125,16 @@ public:
   }
 
 private:
+  // Pre-camada the Z3 backend built its solver from the same simplify ->
+  // solve-eqs -> simplify -> smt tactic pipeline. The plain z3::solver(c)
+  // camada used by default skips that preprocessing; restore the pipeline so
+  // VC encoding mirrors the old behaviour (notably the simplification before
+  // equality propagation, then a second simplify pass after).
   static z3::solver make_solver(z3::context &c)
   {
-    z3::set_param("tactic.default_tactic", "smt");
-    return z3::solver(c);
+    return (z3::tactic(c, "simplify") & z3::tactic(c, "solve-eqs") &
+            z3::tactic(c, "simplify") & z3::tactic(c, "smt"))
+      .mk_solver();
   }
 };
 #endif
