@@ -3846,12 +3846,13 @@ exprt migrate_expr_back(const expr2tc &ref)
   }
   case expr2t::code_cpp_throw_id:
   {
-    // Back-migrate to side_effect_exprt("cpp-throw") so the forward arm
-    // (which handles both sideeffect and code forms) can reconstruct the
-    // same code_cpp_throw2tc. Both sideeffect and code forms of cpp-throw
-    // produce identical GOTO instructions via convert_throw.
+    // Back-migrate to codet("cpp-throw") so that (a) is_code() is true for
+    // goto_convert_block's non-code-operand guard, and (b) the dedicated
+    // forward arm at "code" + "cpp-throw" (not the sideeffect arm) relifts
+    // this back to code_cpp_throw2tc. Both sideeffect and code forms of
+    // cpp-throw produce identical GOTO instructions via convert_throw.
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
-    exprt codeexpr("sideeffect");
+    exprt codeexpr("code");
     codeexpr.statement("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
