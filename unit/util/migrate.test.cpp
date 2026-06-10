@@ -339,6 +339,51 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "migrate preserves source location on basic code kinds",
+  "[migrate][v4-cf]")
+{
+  // V.4.5 (esbmc#4715): the basic code kinds (assign/decl/expression/...) carry
+  // a non-reflected `location` so the source location survives the body
+  // round-trip under --irep2-bodies. Without it, goto_convert stamps empty
+  // instruction locations and filename-gated checks (e.g. Solidity narrowing
+  // overflow, which only fires on ".sol" files) silently vanish -> unsound.
+  // Equality ignores `location`, so this asserts on it explicitly rather than
+  // via require_expr_roundtrip.
+  use_test_ns();
+  locationt loc;
+  loc.set_file("contract.sol");
+  loc.set_line(8);
+
+  // code_assign: legacy codet("assign") -> code_assign2t -> codet, loc intact.
+  codet assign("assign");
+  assign.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(7, migrate_type_back(get_int_type(32))));
+  assign.location() = loc;
+  expr2tc m;
+  migrate_expr(assign, m);
+  REQUIRE(is_code_assign2t(m));
+  REQUIRE(to_code_assign2t(m).location.get_file() == "contract.sol");
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_file() == "contract.sol");
+  REQUIRE(back.location().get_line() == "8");
+
+  // sideeffect_assign (compound `x += 10`) carries location too: it lowers to
+  // an ASSIGN instruction in goto_convert, whose location gates the Solidity
+  // narrowing-assignment overflow check.
+  side_effect_exprt comp("assign+");
+  comp.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(10, migrate_type_back(get_int_type(32))));
+  comp.location() = loc;
+  expr2tc mc;
+  migrate_expr(comp, mc);
+  REQUIRE(is_sideeffect_assign2t(mc));
+  REQUIRE(to_sideeffect_assign2t(mc).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mc).location().get_file() == "contract.sol");
+}
+
+TEST_CASE(
   "migrate expr round-trips for pointer_capability",
   "[migrate][b2-vtrack]")
 {

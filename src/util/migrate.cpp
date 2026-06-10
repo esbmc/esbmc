@@ -1844,8 +1844,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       expr2tc lhs, rhs;
       migrate_expr(expr.op0(), lhs);
       migrate_expr(expr.op1(), rhs);
-      new_expr_ref =
-        sideeffect_assign2tc(migrate_type(expr.type()), stmt, lhs, rhs);
+      new_expr_ref = sideeffect_assign2tc(
+        migrate_type(expr.type()), stmt, lhs, rhs, expr.location());
       return;
     }
 
@@ -1926,8 +1926,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      new_expr_ref =
-        code_printf2tc(args, printf_kind_from_name(expr.base_name()));
+      new_expr_ref = code_printf2tc(
+        args, printf_kind_from_name(expr.base_name()), expr.location());
       return;
     }
     else if (expr.statement() == "printf2")
@@ -2030,7 +2030,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       expr2tc cpp_throw_operand;
       if (expr.operands().size() == 1)
         migrate_expr(expr.op0(), cpp_throw_operand);
-      new_expr_ref = code_cpp_throw2tc(cpp_throw_operand, expr_list);
+      new_expr_ref =
+        code_cpp_throw2tc(cpp_throw_operand, expr_list, expr.location());
       return;
     }
     else
@@ -2048,7 +2049,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    new_expr_ref = code_assign2tc(op0, op1);
+    new_expr_ref = code_assign2tc(op0, op1, expr.location());
     return;
   }
 
@@ -2059,7 +2060,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     irep_idt sym_name = expr.op0().identifier();
     if (expr.operands().size() == 1)
     {
-      new_expr_ref = code_decl2tc(thetype, sym_name);
+      new_expr_ref =
+        code_decl2tc(thetype, sym_name, expr2tc(), expr.location());
       return;
     }
     // 2-operand form: declaration with initializer. Preserve as code_decl2tc
@@ -2067,7 +2069,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // codet and goto_convert places DEAD at the right scope boundary.
     expr2tc rhs;
     migrate_expr(expr.op1(), rhs);
-    new_expr_ref = code_decl2tc(thetype, sym_name, rhs);
+    new_expr_ref = code_decl2tc(thetype, sym_name, rhs, expr.location());
     return;
   }
 
@@ -2077,7 +2079,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     irep_idt sym_name;
     type2tc thetype = migrate_type(expr.op0().type());
     sym_name = expr.op0().identifier();
-    new_expr_ref = code_dead2tc(thetype, sym_name);
+    new_expr_ref = code_dead2tc(thetype, sym_name, expr.location());
     return;
   }
 
@@ -2093,7 +2095,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    new_expr_ref = code_printf2tc(ops, printf_kind_from_name(expr.base_name()));
+    new_expr_ref = code_printf2tc(
+      ops, printf_kind_from_name(expr.base_name()), expr.location());
     return;
   }
 
@@ -2102,7 +2105,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_expression2tc(theop);
+    new_expr_ref = code_expression2tc(theop, expr.location());
     return;
   }
 
@@ -2113,7 +2116,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), theop);
     else
       assert(expr.operands().size() == 0);
-    new_expr_ref = code_return2tc(theop);
+    new_expr_ref = code_return2tc(theop, expr.location());
     return;
   }
 
@@ -2122,7 +2125,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_free2tc(theop);
+    new_expr_ref = code_free2tc(theop, expr.location());
     return;
   }
 
@@ -2131,7 +2134,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_cpp_del_array2tc(theop);
+    new_expr_ref = code_cpp_del_array2tc(theop, expr.location());
     return;
   }
 
@@ -2140,7 +2143,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_cpp_delete2tc(theop);
+    new_expr_ref = code_cpp_delete2tc(theop, expr.location());
     return;
   }
 
@@ -2168,7 +2171,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       args.push_back(tmp);
     }
 
-    new_expr_ref = code_function_call2tc(op0, op1, args);
+    new_expr_ref = code_function_call2tc(op0, op1, args, expr.location());
     return;
   }
 
@@ -2182,13 +2185,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "code" && expr.statement() == "skip")
   {
-    new_expr_ref = code_skip2tc(get_empty_type());
+    new_expr_ref = code_skip2tc(get_empty_type(), expr.location());
     return;
   }
 
   if (expr.id() == "code" && expr.statement() == "goto")
   {
-    new_expr_ref = code_goto2tc(expr.get("destination"));
+    new_expr_ref = code_goto2tc(expr.get("destination"), expr.location());
     return;
   }
 
@@ -2205,7 +2208,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     type = migrate_type(expr.type());
     const irep_idt &str = expr.op0().value();
-    new_expr_ref = code_asm2tc(type, str);
+    new_expr_ref = code_asm2tc(type, str, expr.location());
     return;
   }
 
@@ -2231,7 +2234,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       operand = expr2tc();
     }
 
-    new_expr_ref = code_cpp_throw2tc(operand, expr_list);
+    new_expr_ref = code_cpp_throw2tc(operand, expr_list, expr.location());
     return;
   }
 
@@ -2293,7 +2296,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         ops.push_back(o);
       }
     }
-    new_expr_ref = code_block2tc(ops);
+    new_expr_ref = code_block2tc(ops, expr.location());
     return;
   }
 
@@ -2407,7 +2410,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(op, o);
       ops.push_back(o);
     }
-    new_expr_ref = code_block2tc(ops);
+    new_expr_ref = code_block2tc(ops, expr.location());
     return;
   }
 
@@ -2460,7 +2463,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
           expr_list.push_back(operands[i].get("exception_id"));
       }
     }
-    new_expr_ref = code_cpp_catch2tc(expr_list, ops);
+    new_expr_ref = code_cpp_catch2tc(expr_list, ops, expr.location());
     return;
   }
 
@@ -3794,6 +3797,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.target);
     exprt op1 = migrate_expr_back(ref2.source);
     codeexpr.copy_to_operands(op0, op1);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_decl_id:
@@ -3806,6 +3811,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.copy_to_operands(symbol);
     if (!is_nil_expr(ref2.init))
       codeexpr.copy_to_operands(migrate_expr_back(ref2.init));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_dead_id:
@@ -3816,6 +3823,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_printf_id:
@@ -3863,6 +3872,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     }
     codeexpr.base_name(bs_name);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_expression_id:
@@ -3872,6 +3883,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("expression"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_return_id:
@@ -3881,12 +3894,17 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("return"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_skip_id:
   {
+    const code_skip2t &ref2 = to_code_skip2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement("skip");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_free_id:
@@ -3896,6 +3914,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("free"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::object_descriptor_id:
@@ -3920,6 +3940,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt &args = codeexpr.op2();
     for (auto const &it : ref2.operands)
       args.operands().push_back(migrate_expr_back(it));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_comma_id:
@@ -3943,6 +3965,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("goto"));
     codeexpr.set("destination", ref2.target);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_asm_id:
@@ -3954,6 +3978,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     // no purpose.
     codeexpr.operands().resize(1);
     codeexpr.op0() = exprt("string-constant");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_del_array_id:
@@ -3961,6 +3987,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_cpp_del_array2t &ref2 = to_code_cpp_del_array2t(ref);
     exprt codeexpr("cpp_delete[]", typet());
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_delete_id:
@@ -3968,6 +3996,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
     exprt codeexpr("cpp_delete", typet());
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_throw_id:
@@ -3987,6 +4017,8 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     if (!is_nil_expr(ref2.operand))
       codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
@@ -4002,6 +4034,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     block.statement("block");
     for (auto const &op : ref2.operands)
       block.copy_to_operands(migrate_expr_back(op));
+    if (ref2.location.is_not_nil())
+      block.location() = ref2.location;
     return block;
   }
   // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Reproduce the
@@ -4142,6 +4176,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     theexpr.statement(ref2.op);
     theexpr.copy_to_operands(
       migrate_expr_back(ref2.lhs), migrate_expr_back(ref2.rhs));
+    if (ref2.location.is_not_nil())
+      theexpr.location() = ref2.location;
     return theexpr;
   }
   case expr2t::code_cpp_catch_id:
@@ -4170,6 +4206,8 @@ exprt migrate_expr_back(const expr2tc &ref)
         op.set("exception_id", ref2.exception_list[i - 1]);
       codeexpr.copy_to_operands(op);
     }
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_throw_decl_id:
