@@ -127,11 +127,21 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     abort();
   }
 
-  const codet &code = to_code(symbol.get_value());
+  // V.4.3 (esbmc/esbmc#4715): When --irep2-bodies is on, convert the body
+  // through IREP2 before handing it to goto_convert_rec. get_value2() returns
+  // the IREP2 body directly when a frontend stored it (e.g. the Python frontend
+  // post-adjust), or lazily forward-migrates the legacy body for other
+  // frontends. Flag off ⇒ byte-identical to the legacy path.
+  exprt roundtrip_body_storage;
+  const bool use_irep2_bodies = options.get_bool_option("irep2-bodies");
+  if (use_irep2_bodies)
+    roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
+  const codet &code = use_irep2_bodies ? to_code(roundtrip_body_storage)
+                                       : to_code(symbol.get_value());
 
   locationt end_location;
 
-  if (to_code(symbol.get_value()).get_statement() == "block")
+  if (code.get_statement() == "block")
     end_location =
       static_cast<const locationt &>(to_code_block(code).end_location());
   else

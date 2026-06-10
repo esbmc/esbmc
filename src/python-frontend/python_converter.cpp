@@ -135,7 +135,7 @@ static void add_global_static_variable(
     symbol.set_value(std::move(v));
   }
 
-  symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
+  [[maybe_unused]] symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
   assert(added_symbol);
 }
 

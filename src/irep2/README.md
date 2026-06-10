@@ -384,8 +384,6 @@ cpp-statement ::= "code_cpp_delete"         «empty» "(" expr ")"
                 | "code_cpp_del_array"      «empty» "(" expr ")"
                 | "code_cpp_throw"          «empty» "(" expr "," "[" { name } "]" ")"
                 | "code_cpp_catch"          «empty» "(" "[" { name } "]" ")"
-                | "code_cpp_throw_decl"     «empty» "(" "[" { name } "]" ")"
-                | "code_cpp_throw_decl_end" «empty» "(" "[" { name } "]" ")"
 ```
 
 Leaf terminals:

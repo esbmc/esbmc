@@ -128,8 +128,21 @@ IREP2_EXPR(isnone,                "isnone")
 // end so existing expr_id enum values are not renumbered.
 IREP2_EXPR(code_ifthenelse,       "code_ifthenelse")
 IREP2_EXPR(code_while,            "code_while")
+IREP2_EXPR(code_dowhile,          "code_dowhile")
 IREP2_EXPR(code_for,              "code_for")
 IREP2_EXPR(code_switch,           "code_switch")
 IREP2_EXPR(code_break,            "code_break")
 IREP2_EXPR(code_continue,         "code_continue")
 IREP2_EXPR(code_label,            "code_label")
+IREP2_EXPR(code_switch_case,      "code_switch_case")
+IREP2_EXPR(code_assert,           "code_assert")
+IREP2_EXPR(code_assume,           "code_assume")
+// Assignment side-effects (sideeffect("assign"), "assign+", etc.) used in the
+// C frontend as expression-level assignments and compound-assignment operators.
+// Encoded as a single IREP2 kind carrying the operator string so that every
+// variant round-trips exactly without requiring one enum entry per operator.
+IREP2_EXPR(sideeffect_assign,     "sideeffect_assign")
+// C++ constructor "this" placeholder: exprt("new_object") in the legacy IR.
+// Appears in temporary_object initializers; replaced by replace_new_object
+// before goto_convert processes the body.
+IREP2_EXPR(new_object,            "new_object")

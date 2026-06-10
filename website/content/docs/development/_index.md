@@ -13,6 +13,7 @@ start with the [Build Guide](/docs/development/building) and the
   {{< card link="/docs/development/building" title="Build Guide" subtitle="Build ESBMC from source on your platform." >}}
   {{< card link="/docs/development/architecture" title="Architecture" subtitle="How the parser, GOTO program, symbolic execution, and SMT backend fit together." >}}
   {{< card link="/docs/development/esbmc-intermediate-algorithms" title="Intermediate Algorithms" subtitle="The core algorithms ESBMC runs between the frontend and the solver." >}}
+  {{< card link="/docs/development/api-reference" title="API Reference" subtitle="Browse or build the Doxygen reference for ESBMC's C++ classes." >}}
 {{< /cards >}}
 
 ## Extending ESBMC
