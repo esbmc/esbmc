@@ -318,8 +318,8 @@ TEST_CASE(
   use_test_ns();
   typet int_t = migrate_type_back(get_int_type(32));
   side_effect_exprt e("cpp_new[]", gen_pointer_type(int_t));
-  e.size(symbol_exprt("x", int_t));        // array-count leaf, in "size" only
-  e.initializer(from_integer(7, int_t));   // initializer in "initializer" sub
+  e.size(symbol_exprt("x", int_t));      // array-count leaf, in "size" only
+  e.initializer(from_integer(7, int_t)); // initializer in "initializer" sub
 
   expr2tc m;
   migrate_expr(e, m);

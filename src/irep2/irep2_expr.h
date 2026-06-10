@@ -83,10 +83,10 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,         // For __ESBMC_old() in function contracts
-  assigns_target,       // For __ESBMC_assigns() in function contracts
-  statement_expression, // GNU C ({ ... }) extension
-  temporary_object,     // C++ temporary created inline (constructor)
+  old_snapshot,               // For __ESBMC_old() in function contracts
+  assigns_target,             // For __ESBMC_assigns() in function contracts
+  statement_expression,       // GNU C ({ ... }) extension
+  temporary_object,           // C++ temporary created inline (constructor)
   gcc_conditional_expression, // GNU C `a ?: b` (omitted middle operand)
   cpp_delete,                 // C++ `delete p` in expression position
   cpp_delete_array            // C++ `delete[] p` in expression position
@@ -1111,7 +1111,8 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
     locationt location; /* not reflected: source loc travels with the stmt */  \
     static constexpr std::size_t excluded_field_bytes = sizeof(locationt);     \
     name##2t(                                                                  \
-      const type2tc &type, const irep_idt &n,                                  \
+      const type2tc &type,                                                     \
+      const irep_idt &n,                                                       \
       const locationt &loc = locationt())                                      \
       : expr2t(type, name##_id), value(n), location(loc)                       \
     {                                                                          \
