@@ -23,33 +23,43 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   if (is_races_check2t(expr))
   {
-    // replace with __ESBMC_races_flag[index]
+    // Replace RACE_CHECK(&x) with __ESBMC_races_flag[key(&x)].
     const races_check2t &obj = to_races_check2t(expr);
 
     expr2tc flag;
     migrate_expr(symbol_expr(*ns.lookup("c:@F@__ESBMC_races_flag")), flag);
 
-    expr2tc max_offset =
-      constant_int2tc(get_uint_type(config.ansi_c.address_width), 1000);
-    // The reason for not using address directly is that address
-    // is modeled as an nondet value, which depends on the address space constraints.
-    // VCC becomes complex and inefficient in this case.
+    // Index __ESBMC_races_flag by a word-sized key that packs the access's
+    // pointer object into the high half of the word and its (masked) byte offset
+    // into the low half: (object << word_size/2) | (offset & (2^(word_size/2)-1)).
+    // The races_flag array domain is the machine word, so the key must stay
+    // word-sized; placing the object in the high half and masking the offset to
+    // the low half guarantees an offset can never reach another object's bits.
+    // Distinct objects therefore never alias as long as the object number and
+    // the in-object offset each fit in word_size/2 bits -- which they do for the
+    // accesses these checks instrument. The previous encoding flattened the two
+    // into `object * 1000 + offset`, where any offset of 1000 or more (e.g. a
+    // write to arr[i] with a large i) spilled into the next object's band and
+    // fabricated a data race. See issue #5137.
+    //
+    // pointer_object/pointer_offset lower to projections of the pointer tuple,
+    // whose fields are address_width wide regardless of the type carried here;
+    // cast both to key_type so the bitwise ops below see matching widths even on
+    // data models where address_width != word_size (e.g. LP32).
+    unsigned int half = config.ansi_c.word_size / 2;
+    type2tc key_type = get_uint_type(config.ansi_c.word_size);
 
-    // The current method is similar to a two-dimensional array: array[obj][offset]
-    // But we flatten it out: obj * MAX_VALUE + offset
-    // In theory, this should create a unique index for variables.
-    // We need to think carefully about the value of MAX_VALUE
-    // XL: Should we let the user choose this value?
-    expr2tc mul = mul2tc(
-      size_type2(), pointer_object2tc(pointer_type2(), obj.value), max_offset);
-    expr2tc add = add2tc(
-      size_type2(),
-      mul,
-      pointer_offset2tc(get_int_type(config.ansi_c.address_width), obj.value));
+    expr2tc object =
+      typecast2tc(key_type, pointer_object2tc(ptraddr_type2(), obj.value));
+    expr2tc offset =
+      typecast2tc(key_type, pointer_offset2tc(ptraddr_type2(), obj.value));
+    expr2tc index = bitor2tc(
+      key_type,
+      shl2tc(key_type, object, constant_int2tc(key_type, BigInt(half))),
+      bitand2tc(
+        key_type, offset, constant_int2tc(key_type, BigInt::power2m1(half))));
 
-    expr2tc index_expr = index2tc(get_bool_type(), flag, add);
-
-    expr = index_expr;
+    expr = index2tc(get_bool_type(), flag, index);
   }
 }
 
