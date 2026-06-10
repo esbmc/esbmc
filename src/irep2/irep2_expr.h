@@ -86,7 +86,10 @@ enum class sideeffect_allockind
   old_snapshot,         // For __ESBMC_old() in function contracts
   assigns_target,       // For __ESBMC_assigns() in function contracts
   statement_expression, // GNU C ({ ... }) extension
-  temporary_object      // C++ temporary created inline (constructor)
+  temporary_object,     // C++ temporary created inline (constructor)
+  gcc_conditional_expression, // GNU C `a ?: b` (omitted middle operand)
+  cpp_delete,                 // C++ `delete p` in expression position
+  cpp_delete_array            // C++ `delete[] p` in expression position
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */

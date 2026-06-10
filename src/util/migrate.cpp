@@ -1858,8 +1858,28 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
-      // These hide the size in a real size field,
-      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
+    {
+      // cpp_new[] hides the array size in a size field. The frontend stores it
+      // under "size" (size_irep); the conversion pipeline later mirrors it into
+      // "#size" (cmt_size). Under --irep2-bodies the body is migrated before
+      // that mirroring runs, so "#size" is still empty — read "size" in that
+      // case, otherwise the whole size operand is silently dropped.
+      const exprt &sz = expr.cmt_size().is_not_nil()
+                          ? static_cast<const exprt &>(expr.cmt_size())
+                          : static_cast<const exprt &>(expr.size_irep());
+      migrate_expr(sz, thesize);
+
+      // The new-expression's initializer lives in the "initializer" sub, not
+      // in the operands. Carry it through `arguments` so the round-trip back
+      // to side_effect_exprt re-attaches it; otherwise the object is left
+      // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
+      if (expr.initializer().is_not_nil())
+      {
+        expr2tc init;
+        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+        args.push_back(init);
+      }
+    }
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call" &&
       expr.statement() != "cpp-throw" && expr.statement() != "temporary_object")
@@ -1937,7 +1957,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "postdecrement")
     {
-      t = sideeffect2t::allockind::predecrement;
+      t = sideeffect2t::allockind::postdecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "old_snapshot")
@@ -1954,6 +1974,37 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "statement_expression")
       t = sideeffect2t::allockind::statement_expression;
+    else if (expr.statement() == "gcc_conditional_expression")
+    {
+      // GNU `a ?: b`: op0 is the condition (already migrated into `operand`
+      // above), op1 is the false-branch expression. Carry op1 in `arguments`
+      // so goto_convert's remove_gcc_conditional_expression sees both after
+      // the round-trip.
+      t = sideeffect2t::allockind::gcc_conditional_expression;
+      expr2tc else_op;
+      migrate_expr(expr.op1(), else_op);
+      args.push_back(else_op);
+    }
+    else if (
+      expr.statement() == "cpp_delete" || expr.statement() == "cpp_delete[]")
+    {
+      // C++ `delete`/`delete[]` in expression position (side_effect form).
+      // op0 (the pointer) is already migrated into `operand` above. The C++
+      // adjust phase attaches a `destructor` call (a code_function_call with a
+      // `new_object` placeholder); carry it through `arguments` so the
+      // round-trip back to side_effect_exprt lets remove_cpp_delete re-emit it.
+      t = expr.statement() == "cpp_delete"
+            ? sideeffect2t::allockind::cpp_delete
+            : sideeffect2t::allockind::cpp_delete_array;
+      const exprt &destructor =
+        static_cast<const exprt &>(expr.find("destructor"));
+      if (destructor.is_not_nil())
+      {
+        expr2tc d;
+        migrate_expr(destructor, d);
+        args.push_back(d);
+      }
+    }
     else if (expr.statement() == "temporary_object")
     {
       t = sideeffect2t::allockind::temporary_object;
@@ -3623,6 +3674,32 @@ exprt migrate_expr_back(const expr2tc &ref)
       else if (!is_nil_expr(ref2.operand))
         theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     }
+    else if (ref2.kind == sideeffect2t::allockind::gcc_conditional_expression)
+    {
+      // op0 = condition (in `operand`), op1 = false-branch (in arguments[0]).
+      theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+      if (!ref2.arguments.empty())
+        theexpr.copy_to_operands(migrate_expr_back(ref2.arguments[0]));
+    }
+    else if (
+      ref2.kind == sideeffect2t::allockind::cpp_delete ||
+      ref2.kind == sideeffect2t::allockind::cpp_delete_array)
+    {
+      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any.
+      // remove_cpp_delete asserts exactly one operand and reads "destructor".
+      theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+      if (!ref2.arguments.empty())
+        theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
+    }
+    else if (
+      ref2.kind == sideeffect2t::allockind::cpp_new ||
+      ref2.kind == sideeffect2t::allockind::cpp_new_arr)
+    {
+      // cpp_new has no operands in source form (size lives in the size field,
+      // handled below; the initializer, if any, is carried in arguments[0]).
+      if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
+        theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+    }
     else
     {
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3631,6 +3708,16 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
+
+    // For cpp_new[] also restore the "size" field the frontend uses. Under
+    // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
+    // which reads "size" and re-mirrors it into "#size"; writing only "#size"
+    // would leave "size" empty and the array size would be lost downstream.
+    if (
+      (ref2.kind == sideeffect2t::allockind::cpp_new ||
+       ref2.kind == sideeffect2t::allockind::cpp_new_arr) &&
+      size.is_not_nil())
+      theexpr.size(size);
 
     switch (ref2.kind)
     {
@@ -3681,6 +3768,15 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::allockind::temporary_object:
       theexpr.statement("temporary_object");
+      break;
+    case sideeffect2t::allockind::gcc_conditional_expression:
+      theexpr.statement("gcc_conditional_expression");
+      break;
+    case sideeffect2t::allockind::cpp_delete:
+      theexpr.statement("cpp_delete");
+      break;
+    case sideeffect2t::allockind::cpp_delete_array:
+      theexpr.statement("cpp_delete[]");
       break;
     default:
 
