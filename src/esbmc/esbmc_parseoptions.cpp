@@ -2151,10 +2151,6 @@ bool esbmc_parseoptionst::create_goto_program(
         if (synthesize_cprover_additions(options, goto_functions))
           return true;
       }
-      else if (cmdline.isset("cprover"))
-        log_warning(
-          "Be sure you are manually linking with the cprover libraries. This "
-          "will be automated in the future.");
 
       if (read_goto_binary(goto_functions))
         return true;
