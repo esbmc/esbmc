@@ -6,9 +6,9 @@
 // return value for a constant format with no conversion specifiers (5 chars).
 // The subsequent addition cannot overflow, so verification must succeed.
 //
-// Note: the symex_printf model does not allocate the output buffer pointed to
-// by *strp — only the return length is modelled.  We avoid dereferencing or
-// freeing the result pointer to stay within the modelled behaviour.
+// The symex_printf model also allocates a 1-byte tracked heap buffer for *strp
+// (GitHub #5139/#5141 fix). We avoid dereferencing with exact-size checks
+// since the buffer is modelled as 1 byte regardless of format length.
 int main(void)
 {
   char *s = NULL;
