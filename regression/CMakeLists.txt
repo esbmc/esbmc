@@ -60,6 +60,10 @@ function(add_esbmc_regression folder modes)
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
+    if(${folder} STREQUAL "ld")
+        # WP3 benchmark dataset, not a CTest test (no test.desc)
+        list(REMOVE_ITEM SUBDIRS benchmarks)
+    endif()
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
     endforeach()
@@ -92,6 +96,9 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
+endif()
+if(ENABLE_LD_FRONTEND)
+    set(REGRESSIONS_LD ld)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
@@ -209,6 +216,7 @@ if(APPLE)
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -277,6 +285,7 @@ else()
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage
