@@ -41,26 +41,11 @@ private:
   typet int32_t_() const;
   exprt int_const(long long value) const;
 
-  /// Build an integer arithmetic expression (plus/minus/mult/div) carrying an
-  /// explicit int32 result type.  The LD front-end emits GOTO IR with no adjust
-  /// pass, so an untyped result (as left by the two-operand plus_exprt/mult_exprt
-  /// constructors) would abort the irep2 migration on a width-consistency check.
-  exprt int_arith(const irep_idt &op, const exprt &a, const exprt &b) const;
-
   symbol_exprt declare_variable(const VarDecl &v);
   symbol_exprt declare_bool_shadow(const std::string &id);
   symbol_exprt var_expr(const std::string &name) const;
 
   code_blockt build_scan_body(const exprt &pf_in);
-
-  /// READ_INPUTS phase: assign a fresh nondeterministic value to every input
-  /// variable at the start of each scan cycle, modelling the physical capture
-  /// of plant inputs.  Without this the scan loop would only ever explore the
-  /// all-zero input trace, making every safety proof vacuous.
-  /// Inputs are re-sampled each cycle and assumed not to be coil-driven; if a
-  /// variable were both an input and a coil target, re-sampling over-approximates
-  /// its value, which stays sound for safety (it never hides a violation).
-  code_blockt build_read_inputs() const;
 
   codet translate_contact(const LdIRNode &n, const exprt &pf_in, exprt &pf_out);
   codet translate_coil(const LdIRNode &n, const exprt &pf);

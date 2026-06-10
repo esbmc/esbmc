@@ -61,8 +61,7 @@ function(add_esbmc_regression folder modes)
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
     if(${folder} STREQUAL "ld")
-        # WP3 case-study assets live under benchmarks/; they are not CTest
-        # tests themselves (no test.desc), so skip them during discovery.
+        # WP3 benchmark dataset, not a CTest test (no test.desc)
         list(REMOVE_ITEM SUBDIRS benchmarks)
     endif()
     foreach(test ${SUBDIRS})
@@ -193,7 +192,6 @@ if(APPLE)
                     floats
                     floats-regression
                     ${REGRESSIONS_JIMPLE}
-                    ${REGRESSIONS_LD}
                     k-induction
                     k-induction-parallel
                     termination
@@ -218,6 +216,7 @@ if(APPLE)
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -234,7 +233,6 @@ elseif(WIN32)
                     termination
                     windows
                     ${REGRESSIONS_JIMPLE}
-                    ${REGRESSIONS_LD}
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
@@ -275,7 +273,6 @@ else()
                     ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR}
                     ${REGRESSIONS_JIMPLE}
-                    ${REGRESSIONS_LD}
                     extensions
                     cuda/COM_sanity_checks
                     linux
@@ -288,6 +285,7 @@ else()
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage

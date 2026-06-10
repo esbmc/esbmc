@@ -187,17 +187,18 @@ code_blockt property_encoder::encode_response(const LdProperty &p)
   symbol_exprt trigger = var_expr(p.trigger, p);
   symbol_exprt response = var_expr(p.response_var, p);
   exprt limit = from_integer(BigInt(p.max_scans), int_type());
+  exprt one = gen_one(int_type());
   exprt zero = gen_zero(int_type());
 
-  // A typed plus is required: the property assertions are spliced straight into
-  // the GOTO IR with no adjust pass, so the two-operand plus_exprt (which leaves
-  // the result type nil) would abort the irep2 migration on a width check.
-  exprt incremented(exprt::plus, int_type());
-  incremented.copy_to_operands(ctr, gen_one(int_type()));
+  // plus_exprt leaves its result type unset; set it explicitly (int_type)
+  // since the LD frontend has no adjust pass to infer it, otherwise the node
+  // migrates to a typeless add2t and trips an irep2 bit-width assertion.
+  exprt incr(exprt::plus, int_type());
+  incr.copy_to_operands(ctr, one);
 
   code_ifthenelset ctr_step;
   ctr_step.cond() = and_exprt(trigger, not_exprt(response));
-  ctr_step.then_case() = code_assignt(ctr, incremented);
+  ctr_step.then_case() = code_assignt(ctr, incr);
   ctr_step.else_case() = code_assignt(ctr, zero);
 
   code_blockt blk;

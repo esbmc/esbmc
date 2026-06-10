@@ -1,4 +1,4 @@
 CORE
-motor_interlock.ld
+response_direct.ld
 --ld-props props.yaml --k-induction
 ^VERIFICATION SUCCESSFUL$

@@ -19,6 +19,11 @@ bool ld_languaget::parse(const std::string &path)
 {
   log_debug("ld", "Parsing: {}", path);
 
+  // When driven by the esbmc CLI (not ld-verify), pick up the property file
+  // from the --ld-props option unless one was already set explicitly.
+  if (props_path_.empty())
+    props_path_ = config.options.get_option("ld-props");
+
   try
   {
     PlcopenXmlParser parser;
@@ -45,11 +50,6 @@ bool ld_languaget::parse(const std::string &path)
     log_error("{}", e.what());
     return true;
   }
-
-  // The ld-verify CLI sets props_path_ directly; bare esbmc passes the YAML
-  // file through the --ld-props command-line option.
-  if (props_path_.empty())
-    props_path_ = config.options.get_option("ld-props");
 
   if (!props_path_.empty())
   {

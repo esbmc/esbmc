@@ -122,6 +122,13 @@ const struct group_opt_templ all_cmd_options[] = {
       "Set maximum nesting depth for Python list comparison (default is 4)"},
    }},
 #endif
+#ifdef ENABLE_LD_FRONTEND
+  {"LD frontend",
+   {{"ld-props",
+     boost::program_options::value<std::string>()->value_name("file"),
+     "YAML safety-property specification for IEC 61131-3 Ladder Diagram "
+     "(.ld) programs"}}},
+#endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
    {{"sol",
@@ -153,14 +160,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"negating-property",
      boost::program_options::value<std::string>()->value_name("fname"),
      "Convert the assert(cond) to assert(!cond)"}}},
-#endif
-#ifdef ENABLE_LD_FRONTEND
-  {"LD frontend",
-   {{"ld-props",
-     boost::program_options::value<std::string>()->value_name("file"),
-     "YAML safety-property specification for an IEC 61131-3 Ladder Diagram "
-     "(.ld) program; properties are encoded as assertions checked every scan "
-     "cycle"}}},
 #endif
   {"Frontend",
    {{"include,I",
