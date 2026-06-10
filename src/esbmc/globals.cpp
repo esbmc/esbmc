@@ -14,4 +14,7 @@ const mode_table_et mode_table[] = {
 #ifdef ENABLE_PYTHON_FRONTEND
   LANGAPI_MODE_PYTHON,
 #endif
+#ifdef ENABLE_LD_FRONTEND
+  LANGAPI_MODE_LD,
+#endif
   LANGAPI_MODE_END};
