@@ -3495,20 +3495,46 @@ verdict parity, dual-solver, asserts build (§V.5).
    `decl-block`. Fixed a latent UB in `ifthenelse` migration (2-operand
    form from Clang C frontend). Regression tests
    `github_4715_irep2_bodies_01{,_fail}` gate on `--irep2-bodies`.
-4. **V.4.3 — one frontend at a time.** **LANDED (Python + C)**
-   - **Python** (commit `45a024710c`): added `code_dowhile2t`, `code_assert2t`,
-     `code_assume2t` IREP2 kinds; `sideeffect("cpp-throw")` forward/back
-     migration; regression tests `github_4715_irep2_bodies_py_01{,_fail}`.
-   - **C** (commit `8deb03d108`): extended `code_decl2t` with optional `init`
-     field; 2-op `code_decl(sym, init)` preserved directly (was incorrectly
-     split into `code_block` causing premature DEAD); `code("decl-block")`
-     children flattened inline (prevents spurious extra scope boundary);
-     `sideeffect("statement_expression")` (GNU `{ }` / `assert()` macro)
-     added to `sideeffect_allockind` with forward/back arms; regression tests
-     `github_4715_irep2_bodies_c_01{,_fail}`. Remaining: C++/CUDA/Solidity/
-     Jimple, each its own commit.
-5. **V.4.4 — remove the legacy path** once all frontends are flipped and
-   the flag is the only path; delete `to_code(symbol.get_value())` seam.
+4. **V.4.3 — one frontend at a time.** **LANDED (all frontends).**
+   - **Python** (#5281, commit `45a024710c`): added `code_dowhile2t`,
+     `code_assert2t`, `code_assume2t` IREP2 kinds; `sideeffect("cpp-throw")`
+     forward/back migration; tests `github_4715_irep2_bodies_py_01{,_fail}`.
+   - **C** (#5282, commit `8deb03d108`): extended `code_decl2t` with optional
+     `init` field; 2-op `code_decl(sym, init)` preserved directly (was
+     incorrectly split into `code_block` causing premature DEAD);
+     `code("decl-block")` children flattened inline (prevents spurious extra
+     scope boundary); `sideeffect("statement_expression")` (GNU `{ }` /
+     `assert()` macro) added to `sideeffect_allockind` with forward/back arms;
+     tests `github_4715_irep2_bodies_c_01{,_fail}`.
+   - **C++** (#5284) and **Jimple + Solidity** (#5286) followed, each its own
+     commit; CUDA rides the C/clang-c path.
+   - **Exception round-trip fixes (post-flip).** A verdict-parity sweep over
+     the flag found two exception-handling defects that the per-frontend
+     `_01` tests missed — both **flag-only**, the legacy (flag-off) path is
+     unaffected:
+     1. *throw dropped → false `SUCCESSFUL`.* A `side_effect_exprt("cpp-throw")`
+        nested in a `code_expression` round-trips to the code form
+        `codet("cpp-throw")`; `convert_expression`'s `remove_sideeffects`
+        recognizes only the side-effect form, so the throw became an inert
+        `OTHER`. Affected **every** frontend that throws (Python `raise`/builtin
+        TypeErrors, C++ `throw`). Fix: `convert_expression` dispatches a
+        code-valued operand via `convert(to_code(...))` (goto_convert.cpp).
+     2. *try/catch → SIGSEGV.* `code_cpp_catch2t` stored only `exception_list`
+        and **no operand storage**, so the forward migrate dropped the try/
+        handler blocks and `convert_catch` read `op0()` on an empty operand
+        list. Fix: added `std::vector<expr2tc> operands` to the kind; forward/
+        back migration carry the operands and re-attach each handler's
+        `exception_id` from the parallel `exception_list`; the post-goto-convert
+        CATCH marker (no operands) is preserved by disambiguating on
+        `operands.empty()` (irep2_expr.{h,cpp}, migrate.cpp).
+     Gated dual-solver (Z3 + Bitwuzla) with the asserts cross-check live; tests
+     `github_4715_irep2_bodies_{py,cpp}_exc_01{,_fail}`.
+5. **V.4.4 — remove the legacy path** once all frontends are flipped and the
+   flag is the only path; delete `to_code(symbol.get_value())` seam. **Gated
+   on full verdict parity** — the exception fixes above were the first parity
+   blockers found; before flipping the default, run the deterministic
+   verdict-equivalence sweep (§V.5) flag-on across **all** frontends, since
+   the per-frontend `_01` smoke tests do not exercise every body construct.
 
 **Risk/scope:** V.4.0 and V.4.1 are small and safe (infra only). V.4.2+
 touch the shared goto pipeline → gate on `esbmc-cpp` and a

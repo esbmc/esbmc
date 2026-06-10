@@ -6,6 +6,7 @@
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <ld-frontend/property/property_encoder.h>
 #include <util/c_expr2string.h>
+#include <util/config.h>
 #include <util/message.h>
 #include <iostream>
 
@@ -17,6 +18,11 @@ languaget *new_ld_language()
 bool ld_languaget::parse(const std::string &path)
 {
   log_debug("ld", "Parsing: {}", path);
+
+  // When driven by the esbmc CLI (not ld-verify), pick up the property file
+  // from the --ld-props option unless one was already set explicitly.
+  if (props_path_.empty())
+    props_path_ = config.options.get_option("ld-props");
 
   try
   {

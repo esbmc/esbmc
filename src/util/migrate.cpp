@@ -2350,11 +2350,41 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "code" && expr.statement() == "cpp-catch")
   {
+    // A cpp-catch node is one of two things:
+    //  - the source-level try/catch statement, whose operands[0] is the try
+    //    block and operands[1..N] the catch-handler blocks (each carrying its
+    //    catchable-type id in the "exception_id" attribute set by adjust_catch);
+    //  - the post-goto-convert CATCH-push/pop marker, built directly by
+    //    convert_catch with only a catchable-type list and no operands.
+    // Carry the operands and per-handler ids so the source form survives the
+    // --irep2-bodies round-trip; convert_catch reads them back. The marker form
+    // simply has no operands. The legacy top-level "exception_list" attribute
+    // belongs to the throw-decl family and is not set on a catch, so the id
+    // list is derived from the per-handler "exception_id" attributes.
     std::vector<irep_idt> expr_list;
-    const irept::subt &exceptions = expr.find("exception_list").get_sub();
-    for (const auto &e_it : exceptions)
-      expr_list.push_back(e_it.id());
-    new_expr_ref = code_cpp_catch2tc(expr_list);
+    std::vector<expr2tc> ops;
+    const codet::operandst &operands = expr.operands();
+    if (operands.empty())
+    {
+      // Marker form: the catchable-type list rides the top-level attribute.
+      const irept::subt &exceptions = expr.find("exception_list").get_sub();
+      for (const auto &e_it : exceptions)
+        expr_list.push_back(e_it.id());
+    }
+    else
+    {
+      // Source form: operands[0] is the try block, operands[1..N] the handler
+      // blocks, each carrying its id in the "exception_id" attribute.
+      for (std::size_t i = 0; i < operands.size(); i++)
+      {
+        expr2tc op;
+        migrate_expr(operands[i], op);
+        ops.push_back(op);
+        if (i != 0)
+          expr_list.push_back(operands[i].get("exception_id"));
+      }
+    }
+    new_expr_ref = code_cpp_catch2tc(expr_list, ops);
     return;
   }
 
@@ -3991,6 +4021,24 @@ exprt migrate_expr_back(const expr2tc &ref)
     irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
     for (auto const &it : ref2.exception_list)
       exceptions.emplace_back(it);
+    // Source-level try/catch: restore the try/handler operands and re-attach
+    // each handler's "exception_id" (operands[1..N] parallel exception_list) so
+    // convert_catch can rebuild the CATCH targets. The marker form has no
+    // operands and falls straight through. The forward arm guarantees one id
+    // per handler, i.e. operands == try-block + N handlers == exception_list+1.
+    assert(
+      ref2.operands.empty() ||
+      ref2.operands.size() == ref2.exception_list.size() + 1);
+    for (std::size_t i = 0; i < ref2.operands.size(); i++)
+    {
+      exprt op = migrate_expr_back(ref2.operands[i]);
+      // The assert above is elided under -DNDEBUG (release builds), so this
+      // bounds check is the actual guard against an out-of-range read when the
+      // parallel-array invariant is somehow violated.
+      if (i != 0 && i - 1 < ref2.exception_list.size())
+        op.set("exception_id", ref2.exception_list[i - 1]);
+      codeexpr.copy_to_operands(op);
+    }
     return codeexpr;
   }
   case expr2t::pointer_capability_id:

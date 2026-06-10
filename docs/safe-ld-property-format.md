@@ -9,6 +9,27 @@ IEC 61131-3 Ladder Diagram programs verified with SAFE-LD.
 
 ---
 
+## Implementation Status (#5289)
+
+A property file is consumed either by the `esbmc` driver directly —
+`esbmc program.ld --ld-props props.yaml --k-induction` — or via `ld-verify`
+(`ld-verify program.{ld,xml} --props props.yaml`). The property encoder turns
+each entry into a `code_assertt` node appended to the scan-loop body.
+
+| Kind | Status |
+|---|---|
+| `mutual_exclusion` | **Implemented & exercised** (regression test `missing_interlock_fail`) |
+| `invariant` | **Implemented**, encodes and verifies |
+| `absence` | **Implemented & exercised** (regression test `motor_interlock`) |
+| `reachability` | **Implemented**, encodes and verifies |
+| `response` | **Implemented & exercised** (regression tests `response_direct` SAFE, `response_blocked_fail` VIOLATION); the auxiliary scan counter is emitted as typed arithmetic |
+
+The `description` field is propagated into the `code_assertt` comment, so a
+violated property is named in the ESBMC counterexample and in the `ld-verify`
+JSON report's `description` field.
+
+---
+
 ## File Structure
 
 ```yaml

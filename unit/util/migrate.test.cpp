@@ -190,8 +190,25 @@ TEST_CASE(
 
 TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
 {
+  // Marker form (post-goto-convert CATCH-push/pop): catchable-type list only.
   std::vector<irep_idt> exceptions{"std::exception", "std::runtime_error"};
   require_expr_roundtrip(code_cpp_catch2tc(exceptions));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_cpp_catch with operands",
+  "[migrate][b2-vtrack]")
+{
+  // Source-level try/catch (the --irep2-bodies form): operands[0] is the try
+  // block, operands[1..N] the catch-handler blocks parallel to the id list.
+  // The per-handler ids ride the legacy "exception_id" attribute across the
+  // round-trip, so dropping them would surface here.
+  std::vector<irep_idt> exceptions{"std::runtime_error", "std::logic_error"};
+  std::vector<expr2tc> ops{
+    code_block2tc(std::vector<expr2tc>{}),  // try block
+    code_block2tc(std::vector<expr2tc>{}),  // handler for std::runtime_error
+    code_block2tc(std::vector<expr2tc>{})}; // handler for std::logic_error
+  require_expr_roundtrip(code_cpp_catch2tc(exceptions, ops));
 }
 
 TEST_CASE("migrate expr round-trips for code_cpp_throw", "[migrate][b2-vtrack]")

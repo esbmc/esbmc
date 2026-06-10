@@ -34,6 +34,21 @@ static std::string ld_name(const std::string &var)
   return "ld::" + var;
 }
 
+// plus_exprt/mult_exprt set no result type (the C frontend fills it in during
+// its adjust pass; the LD frontend builds final IR directly and has none), so
+// an untyped arith node migrates to a typeless add2t and trips the irep2
+// bit-width assertion.  Build arith nodes with an explicit result type.
+static exprt make_arith(
+  const irep_idt &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  exprt e(op, type);
+  e.copy_to_operands(lhs, rhs);
+  return e;
+}
+
 symbol_exprt ld_converter::declare_variable(const VarDecl &v)
 {
   symbolt sym;
@@ -181,7 +196,8 @@ codet ld_converter::translate_timer(const LdIRNode &n)
 
   code_ifthenelset et_step;
   et_step.cond() = condition;
-  et_step.then_case() = code_assignt(et_sym, plus_exprt(et_sym, one));
+  et_step.then_case() =
+    code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
   et_step.else_case() = code_assignt(et_sym, zero);
 
   exprt q_expr =
@@ -214,7 +230,8 @@ codet ld_converter::translate_counter(const LdIRNode &n)
 
     code_ifthenelset cu_step;
     cu_step.cond() = and_exprt(cu, not_exprt(cu_prev));
-    cu_step.then_case() = code_assignt(cv, plus_exprt(cv, one));
+    cu_step.then_case() =
+      code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
     blk.copy_to_operands(cu_step);
 
     if (!n.ctr_R.empty())
@@ -246,7 +263,8 @@ codet ld_converter::translate_counter(const LdIRNode &n)
 
     code_ifthenelset cd_step;
     cd_step.cond() = and_exprt(cd, not_exprt(cd_prev));
-    cd_step.then_case() = code_assignt(cv, plus_exprt(cv, neg_one));
+    cd_step.then_case() =
+      code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
     blk.copy_to_operands(cd_step);
 
     blk.copy_to_operands(code_assignt(cd_prev, cd));
@@ -265,22 +283,18 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   switch (n.arith_kind)
   {
   case FBKind::ADD:
-    op_expr = plus_exprt(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::plus, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::SUB:
-    op_expr = exprt(exprt::minus, int32_t_());
-    op_expr.copy_to_operands(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::minus, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::MUL:
-    op_expr = mult_exprt(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::mult, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::DIV:
-    op_expr = exprt(exprt::div, int32_t_());
-    op_expr.copy_to_operands(in1, var_expr(n.arith_IN2));
+    op_expr = make_arith(exprt::div, in1, var_expr(n.arith_IN2), int32_t_());
     break;
   case FBKind::MOVE:
-    op_expr = in1;
-    break;
   default:
     op_expr = in1;
     break;
@@ -295,6 +309,19 @@ codet ld_converter::translate_arith(const LdIRNode &n)
 code_blockt ld_converter::build_scan_body(const exprt &)
 {
   code_blockt scan_body;
+
+  // READ_INPUTS (SOS cyclic-scan model, §3.3): at the start of every scan
+  // iteration each physical input is re-sampled nondeterministically.  Without
+  // this the inputs stay frozen at their initial value and every property
+  // verifies vacuously.
+  for (const auto &v : ir_.variables)
+  {
+    if (!v.is_input)
+      continue;
+    symbol_exprt input = var_expr(v.name);
+    scan_body.copy_to_operands(
+      code_assignt(input, side_effect_expr_nondett(input.type())));
+  }
 
   for (const auto &rung : ir_.rungs)
   {

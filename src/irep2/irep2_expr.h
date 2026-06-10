@@ -2329,15 +2329,31 @@ class code_cpp_catch2t : public expr2t
 {
 public:
   std::vector<irep_idt> exception_list;
+  // Source-level try/catch operands: operands[0] is the try block, operands
+  // [1..N] the catch-handler blocks (parallel to exception_list). Empty for
+  // the post-goto-convert CATCH-push/pop marker instructions, which carry only
+  // the catchable-type list. Retained so a try/catch body survives the
+  // --irep2-bodies round-trip (esbmc/esbmc#4715); convert_catch reads it back.
+  std::vector<expr2tc> operands;
 
   code_cpp_catch2t(const std::vector<irep_idt> &el)
     : expr2t(get_empty_type(), code_cpp_catch_id), exception_list(el)
   {
   }
+  code_cpp_catch2t(
+    const std::vector<irep_idt> &el,
+    const std::vector<expr2tc> &ops)
+    : expr2t(get_empty_type(), code_cpp_catch_id),
+      exception_list(el),
+      operands(ops)
+  {
+  }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &code_cpp_catch2t::exception_list);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_cpp_catch2t::exception_list,
+    &code_cpp_catch2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
