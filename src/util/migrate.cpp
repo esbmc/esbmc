@@ -1862,8 +1862,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call" &&
-      expr.statement() != "cpp-throw" &&
-      expr.statement() != "temporary_object")
+      expr.statement() != "cpp-throw" && expr.statement() != "temporary_object")
       // For everything other than nondet / cpp-throw / temporary_object,
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 

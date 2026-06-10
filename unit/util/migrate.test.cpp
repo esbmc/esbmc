@@ -258,7 +258,12 @@ TEST_CASE(
   std::vector<expr2tc> no_args;
   // alloctype is the constructed struct type (as set by the C++ frontend).
   require_expr_roundtrip(sideeffect2tc(
-    st, operand, nil_expr, no_args, st, sideeffect_allockind::temporary_object));
+    st,
+    operand,
+    nil_expr,
+    no_args,
+    st,
+    sideeffect_allockind::temporary_object));
 }
 
 TEST_CASE(
