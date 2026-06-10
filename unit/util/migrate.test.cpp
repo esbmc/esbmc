@@ -342,7 +342,7 @@ TEST_CASE(
   "migrate preserves source location on basic code kinds",
   "[migrate][v4-cf]")
 {
-  // V.4.5 (esbmc#4715): the basic code kinds (assign/decl/expression/...) carry
+  // V.4.4 (esbmc#4715): the basic code kinds (assign/decl/expression/...) carry
   // a non-reflected `location` so the source location survives the body
   // round-trip under --irep2-bodies. Without it, goto_convert stamps empty
   // instruction locations and filename-gated checks (e.g. Solidity narrowing
