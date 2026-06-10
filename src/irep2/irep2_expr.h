@@ -83,9 +83,10 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,        // For __ESBMC_old() in function contracts
-  assigns_target,      // For __ESBMC_assigns() in function contracts
-  statement_expression // GNU C ({ ... }) extension
+  old_snapshot,         // For __ESBMC_old() in function contracts
+  assigns_target,       // For __ESBMC_assigns() in function contracts
+  statement_expression, // GNU C ({ ... }) extension
+  temporary_object      // C++ temporary created inline (constructor)
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */
@@ -221,6 +222,7 @@ irep_typedefs(code_cpp_catch);
 irep_typedefs(code_cpp_throw);
 irep_typedefs(code_cpp_throw_decl);
 irep_typedefs(code_cpp_throw_decl_end);
+irep_typedefs(code_cpp_src_throw_decl);
 irep_typedefs(isinf);
 irep_typedefs(isnormal);
 irep_typedefs(isfinite);
@@ -236,6 +238,7 @@ irep_typedefs(exists);
 irep_typedefs(isinstance);
 irep_typedefs(hasattr);
 irep_typedefs(isnone);
+irep_typedefs(new_object);
 
 class exists2t : public expr2t
 {
@@ -1162,6 +1165,10 @@ public:
 
 ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl);
 ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
+// Source-level exception spec: codet("throw_decl") with operands carrying
+// throw_decl_id attributes. Back-migrates to "throw_decl" (underscore) so
+// goto_convert_rec calls convert_throw_decl rather than copy-to-OTHER.
+ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_src_throw_decl);
 #undef ESBMC_DEFINE_CODE_CPP_THROW_DECL
 
 /** C++20 three-way comparison `a <=> b`. Result type is the
@@ -1895,6 +1902,22 @@ public:
   }
   code_skip2t(const code_skip2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(&expr2t::type);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** C++ constructor "this" placeholder (`exprt("new_object")`). Appears inside
+ *  a `temporary_object` initializer before `replace_new_object` substitutes
+ *  the real symbol. Carries only the struct type being constructed. */
+class new_object2t : public expr2t
+{
+public:
+  new_object2t(const type2tc &type) : expr2t(type, new_object_id)
+  {
+  }
+  new_object2t(const new_object2t &ref) = default;
+
+  expr2tc do_simplify() const override;
   static constexpr auto fields = std::make_tuple(&expr2t::type);
   static std::string field_names[esbmct::num_type_fields];
 };
