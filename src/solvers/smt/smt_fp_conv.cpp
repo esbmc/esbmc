@@ -51,6 +51,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
   else
   {
     assert(!"apply_ieee754_rne_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -113,6 +114,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   else
   {
     assert(!"apply_ieee754_rna_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -177,6 +179,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
   else
   {
     assert(!"apply_ieee754_rup_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -237,6 +240,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
   else
   {
     assert(!"apply_ieee754_rdn_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -308,6 +312,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
   else
   {
     assert(!"apply_ieee754_rtz_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();

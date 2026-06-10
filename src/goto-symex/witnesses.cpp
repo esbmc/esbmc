@@ -1227,7 +1227,8 @@ static expr2tc zero_fill_aggregate(
       // arrays) cannot be checked here.
       if (is_constant_int2t(at.array_size))
       {
-        const BigInt &n = to_constant_int2t(at.array_size).value;
+        [[maybe_unused]] const BigInt &n =
+          to_constant_int2t(at.array_size).value;
         assert(
           n == BigInt(ca.datatype_members.size()) &&
           "constant_array2t element count != array_type2t::array_size");

@@ -28,7 +28,8 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   if (symbol.get_value().is_not_nil())
   {
     value = symbol.get_value();
-    const code_blockt &existing_body = to_code_block(to_code(value));
+    [[maybe_unused]] const code_blockt &existing_body =
+      to_code_block(to_code(value));
     assert(
       existing_body.operands().size() == 1 &&
       existing_body.op0().statement() ==
