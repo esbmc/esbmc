@@ -972,7 +972,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       list_value["annotation"].contains("value") &&
       list_value["annotation"]["value"].contains("id"))
     {
-      const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
+      [[maybe_unused]] const nlohmann::json &type_ann =
+        list_value["annotation"]["value"]["id"];
       assert(type_ann == "list" || type_ann == "List");
       typet t =
         get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
