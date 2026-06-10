@@ -143,28 +143,23 @@ private:
 class esbmc_yices_solver : public camada::YicesSolver
 {
 public:
-  explicit esbmc_yices_solver(const char *logic, bool enable_push_pop)
-    : logic(logic), enable_push_pop(enable_push_pop)
+  explicit esbmc_yices_solver(const char *logic) : logic(logic)
   {
-    destroy_and_recreate();
+    // The pre-camada Yices backend always created its context with
+    // mode=push-pop because camada_convt::push_ctx/pop_ctx push and pop the
+    // solver every dec_solve cycle. Without push-pop mode Yices's default
+    // (multi-checks for QF_AUFBV, one-shot otherwise) either drops the
+    // intermediate state or errors on push, so keep push-pop unconditional.
+    recreateContextWithConfig(logic, configure_push_pop);
   }
 
 private:
-  void destroy_and_recreate()
-  {
-    if (enable_push_pop)
-      recreateContextWithConfig(logic, configure_push_pop);
-    else
-      recreateContext(logic);
-  }
-
   static void configure_push_pop(ctx_config_t *config)
   {
     yices_set_config(config, "mode", "push-pop");
   }
 
   const char *logic;
-  bool enable_push_pop;
 };
 #endif
 
@@ -316,8 +311,7 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 {
 #if CAMADA_HAVE_YICES
   const std::string logic = pick_logic(options, false);
-  return std::make_unique<esbmc_yices_solver>(
-    logic.c_str(), options.get_bool_option("smt-during-symex"));
+  return std::make_unique<esbmc_yices_solver>(logic.c_str());
 #else
   (void)options;
   unsupported("Yices support in Camada");
