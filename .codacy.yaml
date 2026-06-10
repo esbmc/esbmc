@@ -1,11 +1,28 @@
 ---
 # Codacy project configuration. Documents and silences static-analyser
 # warnings that are intentional given ESBMC's design (operational models
-# for libc and Python stdlib, class methods named read(), etc.).
+# for libc and Python stdlib, class methods named read(), regression test
+# fixtures that deliberately contain bugs, etc.).
 #
 # Issues in scope here are confirmed false positives or by-design
 # behaviour the project deliberately keeps. Real issues are still
 # surfaced by these tools elsewhere in the tree.
+
+# Global exclusions, applied to every engine.
+exclude_paths:
+  # Regression test fixtures. NOTHING under regression/ is host code: it is
+  # not compiled into the ESBMC binary and never executed as a Python/shell
+  # program on the host. Every file there is an *input* that ESBMC parses
+  # and symbolically executes, written to exercise a specific frontend or
+  # operational-model path. The bugs are the point — e.g. github_3015_fail
+  # exists to check ESBMC flags "argument passed by position and keyword",
+  # the *_fail Python fixtures encode properties ESBMC must refute, and the
+  # `assert` statements are lowered straight to GOTO ASSERT directives (see
+  # src/python-frontend/python_converter.cpp), so rewriting them to satisfy
+  # a linter would silently weaken the suite. Helper/experiment shell
+  # scripts under regression/ are likewise throwaway drivers. Linting any
+  # of this against host-side style is pure noise.
+  - 'regression/**'
 
 engines:
 
@@ -52,23 +69,6 @@ engines:
       # removed in optimised bytecode") does not apply.
       - 'src/python-frontend/models/**'
 
-      # Regression test fixtures. Every .py file under regression/ is an
-      # input that ESBMC's Python frontend parses and symbolically
-      # executes — none of it is run as a host-side Python program, none
-      # is compiled to optimised bytecode (`python -O`), and none is
-      # exposed to network input. The `assert` statements ARE the
-      # verification properties: ESBMC lowers Python `ast.Assert` to a
-      # GOTO ASSERT directly (see src/python-frontend/python_converter
-      # .cpp), so rewriting them as `if not <cond>: raise AssertionError`
-      # would change the AST shape and silently weaken the suite. Same
-      # rationale as the cppcheck exclusion above. Likewise, idioms such
-      # as `popen("ls /tmp")` in regression/python/import-os/main.py and
-      # `rand.random()` in regression/python/div6_fail/main.py are
-      # fixtures exercising specific operational-model code paths in the
-      # frontend — their presence is the point. Real bandit issues in
-      # src/, unit/ (excluding pytest), and scripts/ are still surfaced.
-      - 'regression/**'
-
       # Pytest property-based tests for the Python frontend. Pytest's
       # assertion-rewriting machinery requires plain `assert` (Bandit
       # B101 is incompatible with the pytest idiom), and these suites
@@ -81,16 +81,27 @@ engines:
   cppcheck:
     enabled: true
     exclude_paths:
-      # Regression test fixtures. Every C/C++ file under regression/ is
-      # an input that ESBMC parses and symbolically executes — none of
-      # it is compiled into the ESBMC binary or run on the host. The
-      # files are written to exercise specific frontend / operational-
-      # model paths (e.g. postfix `it++` on STL iterators goes through a
-      # different operator overload than prefix `++it`; `strcmp("a","a")`
-      # is the literal subject of github_1351; `std::string` pass-by-
-      # value mirrors the signatures of textbooks the fixtures are
-      # derived from). Rewriting these for host-side style would change
-      # what is being verified and silently weaken the test suite.
-      # Real cppcheck findings in src/, unit/, and scripts/ are still
-      # surfaced.
-      - 'regression/**'
+      # Operational models of the C standard library / libm. These files
+      # mirror libc and musl verbatim (pow, exp, and the long-double
+      # dispatch in musl/libm.h, etc.). cppcheck's style/portability
+      # findings here — "log(1+x) can be replaced by log1p", dead stores
+      # in the deliberately-unrolled exponentiation, the upstream musl
+      # `#error Unsupported long double representation` guard — are about
+      # libc/libm idioms that must not be "modernised" without changing
+      # what ESBMC verifies. Same rationale as the flawfinder block above.
+      - 'src/c2goto/headers/**'
+      - 'src/c2goto/library/**'
+
+      # Assertion-heavy / fixture-style unit tests. Catch2 REQUIRE()s here
+      # compare known compile-time constants on purpose (that IS the
+      # assertion), so cppcheck's knownConditionTrueFalse fires on every
+      # one; filesystem.fuzz.cpp bounds-checks a fuzzer-fixed length, and
+      # config_file_test.cpp's fixture intentionally owns a raw pointer.
+      # These are test scaffolding, not shipped code. Real cppcheck
+      # findings in other unit/ files remain in scope.
+      - 'unit/big-int/bigint.test.cpp'
+      - 'unit/util/string_pool.test.cpp'
+      - 'unit/util/filesystem.fuzz.cpp'
+      - 'unit/util/config_file_test.cpp'
+      - 'unit/goto-programs/interval_template.test.cpp'
+      - 'unit/goto-programs/loop_unroll.test.cpp'

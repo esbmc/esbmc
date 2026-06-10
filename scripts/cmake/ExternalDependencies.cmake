@@ -1,23 +1,46 @@
 # Module to add dependencies that do not belong
 # anywhere else
 
-include(FetchContent)
-# FMT
-fetchcontent_declare(fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 12.1.0)
-fetchcontent_makeavailable(fmt)
+if(DOWNLOAD_DEPENDENCIES)
+  include(FetchContent)
 
-#nlohmann json
-fetchcontent_declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
-fetchcontent_makeavailable(json)
+  # FMT
+  fetchcontent_declare(fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 12.1.0)
+  fetchcontent_makeavailable(fmt)
 
-# yaml-cpp
-fetchcontent_declare(yaml-cpp
-  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git)
-fetchcontent_makeavailable(yaml-cpp)
+  #nlohmann json
+  fetchcontent_declare(json
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d)
+  fetchcontent_makeavailable(json)
+
+  # yaml-cpp (pinned for reproducible builds; was tracking the default branch)
+  fetchcontent_declare(yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG yaml-cpp-0.9.0)
+  fetchcontent_makeavailable(yaml-cpp)
+else()
+  # Use system-installed libraries (required for distro packaging).
+  find_package(fmt REQUIRED)
+  if(TARGET fmt AND NOT TARGET fmt::fmt)
+    add_library(fmt::fmt ALIAS fmt)
+  endif()
+
+  find_package(nlohmann_json 3.2.0 REQUIRED)
+  if(TARGET nlohmann_json AND NOT TARGET nlohmann_json::nlohmann_json)
+    add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+  endif()
+
+  find_package(yaml-cpp REQUIRED)
+  if(TARGET yaml-cpp AND NOT TARGET yaml-cpp::yaml-cpp)
+    add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+  endif()
+endif()
 
 if(ESBMC_CHERI_CLANG)
+  include(FetchContent)
   fetchcontent_declare(cheri_compressed_cap
     GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git)
   fetchcontent_getproperties(cheri_compressed_cap)

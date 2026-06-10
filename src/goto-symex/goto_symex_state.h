@@ -12,7 +12,6 @@
 #include <stack>
 #include <string>
 #include <unordered_set>
-#include <util/crypto_hash.h>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
@@ -221,35 +220,12 @@ public:
     /** The stack size of the frame. */
     BigInt stack_frame_total;
 
-    framet(unsigned int thread_id)
+    framet(unsigned int thread_id, const namespacet *ns = nullptr)
       : return_value(expr2tc()), hidden(false), stack_frame_total(0)
     {
       level1.thread_id = thread_id;
+      level1.ns = ns;
     }
-  };
-
-  // Exception Handling
-
-  class exceptiont
-  {
-  public:
-    exceptiont() : has_throw_decl(false)
-    {
-    }
-
-    // types -> locations
-    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
-    catch_mapt catch_map;
-
-    // types -> what order they were declared in, important for polymorphism etc
-    typedef std::map<irep_idt, unsigned> catch_ordert;
-    catch_ordert catch_order;
-
-    // list of exception types than can be thrown
-    typedef std::set<irep_idt> throw_list_sett;
-    throw_list_sett throw_list_set;
-
-    bool has_throw_decl;
   };
 
   // Macros
@@ -309,7 +285,7 @@ public:
    */
   inline framet &new_frame(unsigned int thread_id)
   {
-    call_stack.emplace_back(thread_id);
+    call_stack.emplace_back(thread_id, &ns);
     return call_stack.back();
   }
 
@@ -478,12 +454,11 @@ public:
 
   // --- Violation-witness replay state ---
 
-  /// witness_segs[seg][wp]: all actionable waypoints
+  /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  size_t cur_wp;
 
-  /// Advance the cursor to the next waypoint.
+  /// Advance to the next segment (called when a follow waypoint is matched).
   void advance_witness_position();
 };
 

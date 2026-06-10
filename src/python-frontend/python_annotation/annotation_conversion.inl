@@ -127,6 +127,26 @@ bool python_annotation<Json>::extract_type_info(
 
     return true;
   }
+
+  // Handle generic annotations represented as Subscript nodes, e.g. the
+  // `list[int]` written `Subscript(value=Name("list"), slice=Name("int"))`.
+  // The previous Name-only path missed these, so an annotated `list[T]`
+  // without a usable initializer degraded to "Any" (Fixes #5122 review).
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    base_type = annotation["value"]["id"];
+
+    // Only a Name slice yields a concrete element type (list[int]). A
+    // Subscript slice (list[list[int]]) or Tuple slice (dict[K, V]) is left
+    // unresolved, matching the prior behaviour for those shapes.
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      element_type = annotation["slice"]["id"];
+
+    return true;
+  }
+
   return false;
 }
 
@@ -337,6 +357,15 @@ std::string python_annotation<Json>::get_string_method_return_type(
 
   if (method == "split")
     return "list";
+
+  // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
+  // which resolves to an empty type so the concrete struct type of the 3-tuple
+  // produced by handle_string_partition is copied onto the target symbol.
+  // Mapping it to the default "str" mistypes the target as a scalar char, which
+  // makes len()/subscript on the result wrong (unsound — proves false
+  // assertions, #5114).
+  if (method == "partition")
+    return "tuple";
 
   // Keep previous behavior for unmapped string methods.
   return "str";
@@ -617,6 +646,20 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       !var_node.empty() && var_node.contains("value") &&
       !var_node["value"].is_null())
     {
+      // A name bound to an *empty* list literal loses its element type. This
+      // is how list comprehensions lower (`tmp = []; tmp.append(elt)`), so
+      // recover `list[T]` from the first append before falling back to the
+      // bare `list` the empty literal would otherwise yield (issue #5022).
+      const Json &value = var_node["value"];
+      if (
+        value.contains("_type") && value["_type"] == "List" &&
+        (!value.contains("elts") || value["elts"].empty()))
+      {
+        std::string recovered = recover_list_type_from_appends(var_name);
+        if (!recovered.empty())
+          return recovered;
+      }
+
       std::string inferred_type = get_argument_type(var_node["value"]);
       if (!inferred_type.empty())
         return inferred_type;
@@ -806,25 +849,82 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
     return "list[int]"; // Fallback for numeric contexts
   }
 
-  // Check if all elements have the same type
+  // Check if all elements have the same type, tracking numeric promotion.
+  // In Python an int/float mix promotes to float (e.g. [4.0, 3] is list[float]),
+  // so a single leading int must not truncate the float elements.
+  auto is_numeric = [](const std::string &t) {
+    return t == "int" || t == "float" || t == "bool";
+  };
+  bool all_numeric = is_numeric(element_type);
+  bool saw_float = element_type == "float";
+  bool mixed = false;
+
   for (size_t i = 1; i < list_arg["elts"].size(); ++i)
   {
     std::string current_type = get_argument_type(list_arg["elts"][i]);
-    if (current_type != element_type && !current_type.empty())
+    if (current_type.empty())
+      continue;
+    if (current_type == "float")
+      saw_float = true;
+    if (!is_numeric(current_type))
+      all_numeric = false;
+
+    if (current_type != element_type)
     {
-      log_warning(
-        "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
-        "as fallback ({}:{})",
-        element_type,
-        current_type,
-        python_filename_,
-        current_line_);
-      return "list[int]"; // Fallback for mixed numeric types
+      mixed = true;
+      // Non-numeric heterogeneity (e.g. str vs int) has no common element
+      // type we can represent, so keep the historical int fallback.
+      if (!all_numeric)
+      {
+        log_warning(
+          "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+          "as fallback ({}:{})",
+          element_type,
+          current_type,
+          python_filename_,
+          current_line_);
+        return "list[int]";
+      }
     }
   }
 
+  // All elements numeric: promote an int/float mix to float (Python widens int
+  // to float). Any other numeric mix (e.g. int/bool) keeps the int fallback.
+  if (mixed && all_numeric)
+    return saw_float ? "list[float]" : "list[int]";
+
   // Return the full generic type notation
   return "list[" + element_type + "]";
+}
+
+template <class Json>
+std::string python_annotation<Json>::recover_list_type_from_appends(
+  const std::string &var_name)
+{
+  // Look for `<var_name>.append(arg)` inside the enclosing function. The
+  // comprehension lowering emits the empty-list init and its appends in the
+  // same function body, so prefer that scope; fall back to the module body
+  // for module-level comprehensions (where no current function name is set).
+  const std::string &scope = get_current_func_name();
+  const Json &module_body = ast_["body"];
+  Json func =
+    scope.empty() ? Json() : json_utils::find_function(module_body, scope);
+  const Json &body =
+    (!func.empty() && func.contains("body")) ? func["body"] : module_body;
+
+  Json append_arg = find_first_append_arg(body, var_name);
+  if (append_arg.empty())
+    return "";
+
+  // Only commit to a parameterised list when the element type resolves to a
+  // concrete type. An unresolved ("") or dynamic ("Any") element keeps the
+  // permissive bare `list` so heterogeneous/object lists are unaffected
+  // (mirrors the jpl_1 / #3239 guard in infer_type).
+  std::string elem_type = get_argument_type(append_arg);
+  if (elem_type.empty() || elem_type == "Any")
+    return "";
+
+  return "list[" + elem_type + "]";
 }
 
 template <class Json>
@@ -920,57 +1020,11 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
     else if (lhs["_type"] == "Subscript")
     {
-      // Handle subscript operations like dp[i-1], prices[i], etc.
-      const std::string &var_name = lhs["value"]["id"];
-      Json var_node =
-        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
-
-      if (!var_node.empty() && var_node.contains("annotation"))
-      {
-        std::string var_type;
-
-        // Handle generic type annotations like list[int] (Subscript nodes)
-        if (
-          var_node["annotation"].contains("_type") &&
-          var_node["annotation"]["_type"] == "Subscript" &&
-          var_node["annotation"].contains("value") &&
-          var_node["annotation"]["value"].contains("id"))
-        {
-          var_type = var_node["annotation"]["value"]["id"];
-
-          // For list[T], return T directly from slice
-          if (
-            var_type == "list" && var_node["annotation"].contains("slice") &&
-            var_node["annotation"]["slice"].contains("id"))
-          {
-            type = var_node["annotation"]["slice"]["id"];
-          }
-        }
-        // Handle simple type annotations like int, str (Name nodes)
-        else if (
-          var_node["annotation"].contains("id") &&
-          var_node["annotation"]["id"].is_string())
-        {
-          var_type = var_node["annotation"]["id"];
-
-          // For list[T], return T. For other types, return the type itself
-          if (var_type == "list")
-          {
-            // Try to get subtype from list initialization
-            if (var_node.contains("value") && !var_node["value"].is_null())
-            {
-              std::string subtype = get_list_subtype(var_node["value"]);
-              type = subtype.empty() ? "Any" : subtype;
-            }
-            else
-              type = "Any"; // Unknown list element type
-          }
-          else
-          {
-            type = var_type;
-          }
-        }
-      }
+      // Handle subscript operations like dp[i-1], prices[i], M[0][0], etc.
+      // Delegate to the nested-aware resolver so multi-level subscripts
+      // (e.g. M[0][0], whose value is itself a Subscript rather than a Name)
+      // do not blindly dereference lhs["value"]["id"] (Fixes #5122).
+      type = resolve_subscript_type(lhs, body);
     }
     else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
     {
@@ -1070,9 +1124,14 @@ std::string python_annotation<Json>::get_function_return_type(
           return elem["returns"]["id"];
         }
 
-        // Try to infer from return statements (excluding recursive calls)
+        // Try to infer from return statements (excluding recursive calls).
+        // Resolve names in func_name's own scope (see the non-recursive path
+        // below; GitHub #5104, #5105).
+        std::string saved_rec_ctx = current_func_name_context_;
+        current_func_name_context_ = func_name;
         std::string inferred =
           infer_from_return_statements(elem["body"], func_name);
+        current_func_name_context_ = saved_rec_ctx;
         if (!inferred.empty())
         {
           functions_in_analysis_.erase(func_name);
@@ -1201,9 +1260,18 @@ std::string python_annotation<Json>::get_function_return_type(
     }
 
     // Try to infer return type from actual return statements
-    // Use recursive inference to find return types in all blocks
+    // Use recursive inference to find return types in all blocks.
+    // Names in a return expression resolve in THIS function's scope, not the
+    // caller's. Switch the inference context to func_name so a local variable
+    // referenced by a return statement (e.g. `return v` where
+    // `v = nondet_float()`) is found; otherwise the type cannot be inferred
+    // and the parameter/return default to a pointer, crashing the FP backend
+    // (GitHub #5104, #5105).
+    std::string saved_return_ctx = current_func_name_context_;
+    current_func_name_context_ = func_name;
     std::string inferred_type =
       infer_from_return_statements(func_elem["body"], func_name);
+    current_func_name_context_ = saved_return_ctx;
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
@@ -1223,6 +1291,8 @@ std::string python_annotation<Json>::get_function_return_type(
     if (!return_node.empty())
     {
       std::string fallback_type;
+      std::string saved_fallback_ctx = current_func_name_context_;
+      current_func_name_context_ = func_name;
       try
       {
         infer_type(return_node, func_elem, fallback_type);
@@ -1232,6 +1302,7 @@ std::string python_annotation<Json>::get_function_return_type(
         // Return value type could not be inferred (e.g. call through a
         // function-pointer parameter); leave fallback_type empty.
       }
+      current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
       return fallback_type;
     }
@@ -2179,6 +2250,17 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
         }
       }
     }
+
+    // Method call chained on another call's result, e.g.
+    // ",".join([...]).split(",") or "a-b".replace("-", ".").split("."). The
+    // inner receiver is a temporary with no symbol name and no class to
+    // resolve, so report an unknown type instead of throwing.
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"].contains("_type") &&
+      call["func"]["value"]["_type"] == "Call")
+      return "Any";
+
     throw std::runtime_error("Object \"" + obj + "\" not found.");
   }
 
@@ -2623,27 +2705,73 @@ bool python_annotation<Json>::append_arg_is_plain_int(const Json &arg)
   return false;
 }
 
-// Infer return type from non-recursive return statements
 template <class Json>
-std::string python_annotation<Json>::infer_from_return_statements(
-  const Json &body,
+bool python_annotation<Json>::expr_calls_function(
+  const Json &node,
   const std::string &func_name)
+{
+  if (node.is_object())
+  {
+    auto type_it = node.find("_type");
+    if (type_it != node.end() && *type_it == "Call")
+    {
+      auto func_it = node.find("func");
+      if (func_it != node.end() && func_it->is_object())
+      {
+        auto ft = func_it->find("_type");
+        auto fid = func_it->find("id");
+        if (
+          ft != func_it->end() && *ft == "Name" && fid != func_it->end() &&
+          *fid == func_name)
+          return true;
+      }
+    }
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (expr_calls_function(*it, func_name))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const Json &child : node)
+      if (expr_calls_function(child, func_name))
+        return true;
+  }
+  return false;
+}
+
+template <class Json>
+void python_annotation<Json>::collect_return_types(
+  const Json &body,
+  const std::string &func_name,
+  std::set<std::string> &types)
 {
   for (const Json &stmt : body)
   {
+    // A nested function or class owns its own `return` statements: Python
+    // scopes them to the nested definition, so they must not leak into the
+    // enclosing function's inferred return type. Without this guard, an
+    // unannotated function whose body declares a nested helper that returns a
+    // different type (e.g. a `check()` returning bool) would wrongly inherit
+    // that type, mis-categorising the enclosing return and breaking downstream
+    // type-dependent logic such as the cross-type `==` fold (GitHub #4807).
+    const std::string &stmt_type = stmt["_type"];
+    if (
+      stmt_type == "FunctionDef" || stmt_type == "AsyncFunctionDef" ||
+      stmt_type == "ClassDef")
+      continue;
+
     // Found a return statement
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
       const Json &return_val = stmt["value"];
 
-      // Skip recursive calls
-      if (
-        return_val["_type"] == "Call" && return_val.contains("func") &&
-        return_val["func"]["_type"] == "Name" &&
-        return_val["func"]["id"] == func_name)
-      {
-        continue; // Skip this recursive call
-      }
+      // Skip self-recursive returns. A bare `return f(...)` or a compound
+      // expression embedding a recursive call (e.g. `return f(n-1) + f(n-2)`)
+      // would re-enter return-type inference for `f` while `f` is still under
+      // analysis, recursing until the stack overflows. The base-case returns
+      // supply the type; the recursive combination cannot add a new one.
+      if (expr_calls_function(return_val, func_name))
+        continue;
 
       // Handle function calls (including nested functions)
       if (
@@ -2658,7 +2786,10 @@ std::string python_annotation<Json>::infer_from_return_statements(
           std::string called_func_type =
             get_function_return_type(called_func, ast_);
           if (!called_func_type.empty() && called_func_type != "NoneType")
-            return called_func_type;
+          {
+            types.insert(called_func_type);
+            continue;
+          }
         }
         catch (std::runtime_error &)
         {
@@ -2669,28 +2800,122 @@ std::string python_annotation<Json>::infer_from_return_statements(
       // Reuse get_argument_type to infer the return value type
       std::string inferred_type = get_argument_type(return_val);
       if (!inferred_type.empty())
-        return inferred_type;
+        types.insert(inferred_type);
     }
 
     // Recursively check nested blocks (if/while/for/try)
     if (stmt.contains("body") && stmt["body"].is_array())
-    {
-      std::string nested_type =
-        infer_from_return_statements(stmt["body"], func_name);
-      if (!nested_type.empty())
-        return nested_type;
-    }
+      collect_return_types(stmt["body"], func_name, types);
 
     if (stmt.contains("orelse") && stmt["orelse"].is_array())
-    {
-      std::string nested_type =
-        infer_from_return_statements(stmt["orelse"], func_name);
-      if (!nested_type.empty())
-        return nested_type;
-    }
+      collect_return_types(stmt["orelse"], func_name, types);
+  }
+}
+
+template <class Json>
+std::string python_annotation<Json>::infer_from_return_statements(
+  const Json &body,
+  const std::string &func_name)
+{
+  std::set<std::string> types;
+  collect_return_types(body, func_name, types);
+
+  // Drop non-informative markers when concrete return types are also present.
+  //   - NoneType: a `return None` alongside value returns marks the function as
+  //     Optional; that optionality is handled separately by the caller's
+  //     has_return_none() check (mixed value+None -> Optional wrapping), so it
+  //     must not suppress the value-type inference (e.g. `return 0` /
+  //     `return None` must still infer `int`, GitHub #3563).
+  //   - Any: an under-specified branch (e.g. `return arr` for a not-yet-typed
+  //     parameter) carries no type information and must not veto a sibling
+  //     branch that does (GitHub quixbugs mergesort).
+  // Both are kept only when sole, so a function returning just None/Any is
+  // still annotated.
+  if (types.size() > 1)
+  {
+    types.erase("NoneType");
+    types.erase("Any");
   }
 
-  return ""; // Couldn't infer
+  // Exactly one inferred return type: narrow the function to it.
+  if (types.size() == 1)
+    return *types.begin();
+
+  if (types.empty())
+    return "";
+
+  // Branches return different numeric-tower types (e.g. `int` on one path and
+  // `float` on another). Python promotes within bool < int < float < complex,
+  // so widen to the broadest present rather than leaving it unannotated. This
+  // matches the int->float promotion the ternary (IfExp) inference already
+  // applies and keeps numeric functions concretely typed.
+  {
+    static const std::map<std::string, int> numeric_rank = {
+      {"bool", 0}, {"int", 1}, {"float", 2}, {"complex", 3}};
+    std::string widest;
+    int best = -1;
+    for (const std::string &t : types)
+    {
+      auto it = numeric_rank.find(t);
+      if (it == numeric_rank.end())
+      {
+        widest.clear();
+        break;
+      }
+      if (it->second > best)
+      {
+        best = it->second;
+        widest = t;
+      }
+    }
+    if (!widest.empty())
+      return widest;
+  }
+
+  // All remaining types share one collection base (e.g. `list` / `list[int]` /
+  // `list[list]`, or `dict` / `dict[...]`): they are the same kind of container
+  // and differ only in how precisely the element is known. Returning "" here
+  // would strip the collection-ness and break callers that iterate the result
+  // (quixbugs mergesort/subsequences). When exactly one element-typed
+  // ("bracketed") form is present — e.g. {list, list[int]} from a bare list
+  // literal alongside a typed one — return it so comprehensions and element
+  // access still see the element type. When the branches disagree on the
+  // element type itself (e.g. {list[int], list[str]}), fall back to the bare
+  // base: still iterable, without asserting a false element type.
+  {
+    auto base_of = [](const std::string &t) {
+      auto p = t.find('[');
+      return p == std::string::npos ? t : t.substr(0, p);
+    };
+    const std::string base = base_of(*types.begin());
+    std::string bracketed;
+    bool same_base = true, conflicting_elements = false;
+    for (const std::string &t : types)
+    {
+      if (base_of(t) != base)
+      {
+        same_base = false;
+        break;
+      }
+      if (t != base) // an element-typed form, e.g. list[int]
+      {
+        if (!bracketed.empty() && bracketed != t)
+          conflicting_elements = true;
+        bracketed = t;
+      }
+    }
+    if (same_base)
+      return (bracketed.empty() || conflicting_elements) ? base : bracketed;
+  }
+
+  // Either no return value could be typed, or distinct branches return
+  // incompatible types (e.g. a `return -1` sentinel alongside a `return
+  // bin(...)` string, the common HumanEval shape). Leaving the function
+  // unannotated keeps the converter from narrowing it to one branch's type,
+  // which would otherwise make the cross-type `==`/`!=` fold collapse a valid
+  // comparison against the other branch's type to a constant False
+  // (GitHub #5157). Mirrors the mixed value+None -> Optional handling above.
+  return "";
 }
 
 template <class Json>

@@ -36,6 +36,8 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_termination.h>
+#include <esbmc/ranking_synthesis.h>
+#include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
@@ -45,6 +47,7 @@ extern "C"
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -568,6 +571,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
+
+  if (cmdline.isset("clz-zero-check"))
+    options.set_option("clz-zero-check", true);
 
   if (cmdline.isset("timeout"))
   {
@@ -1674,6 +1680,29 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // need more iters. Disable the IS non-termination signal in
       // that mode and rely on FC alone.
       //
+      // A linear ranking function proved every loop terminates (checked
+      // once, before the havoc transform). This is k-independent, so
+      // report success immediately without unwinding.
+      if (options.get_bool_option("termination-ranking-proved"))
+      {
+        log_success(
+          "\nRanking function shows all executions terminate\n"
+          "VERIFICATION SUCCESSFUL");
+        return 0;
+      }
+
+      // A recurrent-set non-termination check found an inductive R such
+      // that every reachable state under R has an input continuation
+      // staying in R and avoiding all exits (Gupta et al., POPL 2008).
+      // The loop is non-terminating; report FAILED without unwinding.
+      if (options.get_bool_option("termination-non-termination-proved"))
+      {
+        log_fail(
+          "\nRecurrent set shows a non-terminating execution\n"
+          "VERIFICATION FAILED");
+        return 0;
+      }
+
       // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
@@ -2379,6 +2408,13 @@ bool esbmc_parseoptionst::process_goto_program(
       algorithm->run(goto_functions);
     }
 
+    // Lower throw/catch to symbolic guarded control flow (#5075). Run before
+    // inlining so per-call-site exception propagation is still explicit. This
+    // is now the only exception path: a program the pass cannot lower is
+    // reported as an error rather than silently miscompiled (the legacy
+    // imperative path in symex was removed once the lowered subset covered it).
+    remove_exceptions(goto_functions, context, ns);
+
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
     {
@@ -2470,13 +2506,27 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
+    // goto_k_induction returns true when a loop writes an array element
+    // through a pointer, which the inductive-step havoc cannot soundly
+    // generalise. Disable the inductive step in that case so its UNSAT is
+    // not reported as proof (#5224); base case and forward condition run.
+    auto disable_is_if_unsound = [&](bool unsound) {
+      if (unsound)
+      {
+        log_warning(
+          "k-induction does not support loops that write array elements "
+          "through a pointer yet. Disabling inductive step");
+        options.set_option("disable-inductive-step", true);
+      }
+    };
+
     if (cmdline.isset("loop-invariant"))
     {
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      goto_k_induction(goto_functions);
+      disable_is_if_unsound(goto_k_induction(goto_functions));
     }
     else
     {
@@ -2486,7 +2536,7 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        goto_k_induction(goto_functions);
+        disable_is_if_unsound(goto_k_induction(goto_functions));
 
       if (cmdline.isset("loop-invariant-check"))
       {
@@ -2507,7 +2557,35 @@ bool esbmc_parseoptionst::process_goto_program(
     // would still see the original CLI value, incorrectly firing
     // goto_termination on k-induction-only runs.
     if (options.get_bool_option("termination"))
-      goto_termination(goto_functions, options);
+    {
+      // Recurrent-set non-termination check (Gupta et al., POPL 2008).
+      // Looks for `while(1)`-shaped loops with a constant-equality
+      // recurrent set R such that R is reachable from init, closed
+      // under some input choice, and disjoint from any exit path. If
+      // found, the program is non-terminating and we record it so the
+      // verdict loop can report FAILED without unwinding. Never
+      // returns TV_TRUE; only TV_FALSE (proved non-terminating) or
+      // TV_UNKNOWN.
+      bool non_term_proved =
+        try_prove_non_termination_by_recurrent_set(goto_functions, options, ns)
+          .is_false();
+      options.set_option("termination-non-termination-proved", non_term_proved);
+
+      // Ranking-function termination check, on the CLEAN (un-havoced)
+      // goto program. If it proves every loop terminates, record it so
+      // the verdict loop can report SUCCESSFUL without the marker/FC/IS
+      // machinery. Never returns TV_FALSE, so it can only upgrade an
+      // UNKNOWN to a proof, never produce a wrong verdict.
+      bool ranking_proved =
+        try_prove_termination_by_ranking(goto_functions, options, ns).is_true();
+      options.set_option("termination-ranking-proved", ranking_proved);
+
+      // Only run the marker/havoc transform when the ranking check did
+      // NOT settle it — otherwise the verdict loop short-circuits on the
+      // ranking flag and the havoc'd markers would just be dead work.
+      if (!ranking_proved)
+        goto_termination(goto_functions, options);
+    }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran
     // earlier and k-induction (or --termination's equivalent havoc) has

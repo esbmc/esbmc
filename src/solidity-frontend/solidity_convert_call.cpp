@@ -281,7 +281,7 @@ void solidity_convertert::extract_new_contracts()
           }
           if (get_sol_type(new_type) == SolidityGrammar::SolType::CONTRACT)
           {
-            std::string contract_name = new_type.get("#sol_contract").c_str();
+            std::string contract_name = get_sol_contract(new_type);
             newContractSet.insert(contract_name);
           }
         }
@@ -322,13 +322,13 @@ bool solidity_convertert::get_base_contract_name(
 {
   log_debug("solidity", "\t\t@@@ get_base_contract_name");
 
-  if (base.type().get("#sol_contract").as_string().empty())
+  if (!has_sol_contract(base.type()))
   {
     log_error("cannot find base contract name");
     return true;
   }
 
-  cname = base.type().get("#sol_contract").as_string();
+  cname = get_sol_contract(base.type());
   return false;
 }
 
@@ -441,7 +441,7 @@ bool solidity_convertert::assign_param_nondet(
               / / where its cname = ["Base", "Derive"]
             }
           */
-        std::string base_cname = t.get("#sol_contract").as_string();
+        std::string base_cname = get_sol_contract(t);
         assert(!base_cname.empty());
         exprt s;
         get_static_contract_instance_ref(base_cname, s);

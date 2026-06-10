@@ -873,52 +873,6 @@ void create_violation_yaml_emitter(
   _create_yaml_metadata_emitter(verifiedfile, options, root);
 }
 
-static const std::regex
-  regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
-
-void reformat_assignment_array(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  std::string &assignment)
-{
-  std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
-  using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
-  std::string assignment_array = "";
-  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-       it != end;)
-  {
-    std::string value = *it++;
-    assignment_array += lhs + "[" + integer2string(pos) + "] = " + value + "; ";
-    ++pos;
-  }
-  assignment_array.pop_back();
-  assignment = assignment_array;
-}
-
-static const std::regex regex_structs(
-  "[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
-
-void reformat_assignment_structs(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  std::string &assignment)
-{
-  std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
-  using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
-  std::string assignment_struct = "";
-  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-       it != end;)
-  {
-    std::string a = *it++;
-    assignment_struct += lhs + a + "; ";
-  }
-  assignment_struct.pop_back();
-  assignment = assignment_struct;
-}
-
 void check_replace_invalid_assignment(std::string &assignment)
 {
   /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
@@ -938,7 +892,13 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("CONCAT")) ||
     std::regex_search(assignment, m, std::regex("BITCAST:")) ||
     std::regex_search(assignment, m, std::regex("byte_extract")) ||
-    std::regex_search(assignment, m, std::regex("byte_update")))
+    std::regex_search(assignment, m, std::regex("byte_update")) ||
+    /* Aggregate initialisers ({ ... }, including nested and array-of forms)
+     * are not valid C scalar expressions, so the SV-COMP witness validators
+     * (CPAchecker, cpa-witness2test) reject the whole automaton when one
+     * appears in an assumption. Dropping the assumption only loses replay
+     * precision; it never changes the verdict. See #1520 (nested array). */
+    std::regex_search(assignment, m, std::regex("[{}]")))
     assignment.clear();
 }
 
@@ -960,10 +920,6 @@ std::string get_formated_assignment(
       assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
-    if (std::regex_match(assignment, regex_array))
-      reformat_assignment_array(ns, step, assignment);
-    else if (std::regex_match(assignment, regex_structs))
-      reformat_assignment_structs(ns, step, assignment);
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
@@ -1271,7 +1227,8 @@ static expr2tc zero_fill_aggregate(
       // arrays) cannot be checked here.
       if (is_constant_int2t(at.array_size))
       {
-        const BigInt &n = to_constant_int2t(at.array_size).value;
+        [[maybe_unused]] const BigInt &n =
+          to_constant_int2t(at.array_size).value;
         assert(
           n == BigInt(ca.datatype_members.size()) &&
           "constant_array2t element count != array_type2t::array_size");

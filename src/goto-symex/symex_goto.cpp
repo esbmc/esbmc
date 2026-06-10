@@ -106,34 +106,54 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
-  // Violation-witness: steer branch direction if the current waypoint is a
-  // branching at this location.  Skip backward GOTOs (loop back edges).
+  // Violation-witness: steer branch direction if a branching waypoint in the
+  // current segment matches this location.  Skip backward GOTOs (loop back
+  // edges).
+  //
+  // 'avoid' waypoints are persistent: scan all entries in the segment each
+  // time; matching ones apply their constraint without advancing the segment.
+  // 'follow' waypoints consume the segment on match (advance_witness_position).
+  // Non-matching 'follow' entries stop the scan (they are ordered).
   if (
     validate_witness && forward &&
     cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    if (cur_state->cur_wp < seg.size())
+    const auto &loc = cur_state->source.pc->location;
+
+    for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
     {
-      const waypoint &wp = seg[cur_state->cur_wp];
-      if (wp.type == waypoint::branching)
+      const waypoint &wp = seg[wp_idx];
+      if (wp.type != waypoint::branching)
+        continue;
+
+      const bool loc_matches =
+        !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+        (wp.function_id.empty() || wp.function_id == loc.get_function());
+
+      if (loc_matches)
       {
-        const auto &loc = cur_state->source.pc->location;
-        if (
-          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-          (wp.function_id.empty() || wp.function_id == loc.get_function()))
+        const bool is_avoid = (wp.action == waypoint::avoid);
+        bool direction_true = (wp.value == "true") ^ is_avoid;
+        bool goto_taken =
+          instruction.flipped_guard ? direction_true : !direction_true;
+        if (goto_taken)
         {
-          const bool is_avoid = (wp.action == waypoint::avoid);
-          bool direction_true = (wp.value == "true") ^ is_avoid;
-          bool goto_taken =
-            instruction.flipped_guard ? direction_true : !direction_true;
-          if (goto_taken)
-            new_guard_true = true;
-          else
-            new_guard_false = true;
-          cur_state->advance_witness_position();
+          new_guard_true = true;
+          new_guard_false = false;
         }
+        else
+        {
+          new_guard_false = true;
+          new_guard_true = false;
+        }
+        if (!is_avoid)
+          cur_state->advance_witness_position();
+        break;
       }
+
+      if (wp.action != waypoint::avoid)
+        break;
     }
   }
 
@@ -163,7 +183,17 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    if (goto_target == cur_state->source.pc)
+    // A bare self-loop `A: IF cond GOTO A` / `A: GOTO A` is normally
+    // shortcut to assume(!cond) (assume(false) for the unconditional case):
+    // the guard's truth value never changes, so the loop either exits
+    // immediately or spins forever, and assuming the exit condition kills the
+    // non-terminating path. That is sound for reachability but masks
+    // non-termination, so under --termination fall through to the normal
+    // backwards-goto unwinding instead, letting loop_bound_exceeded raise the
+    // forward-condition signal that the loop never exits. See issue #4426.
+    if (
+      goto_target == cur_state->source.pc &&
+      !config.options.get_bool_option("termination"))
     {
       assert(
         cur_state->source.pc->location_number == goto_target->location_number);
@@ -426,9 +456,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (
-      has_prefix(variable.base_name.as_string(), "symex::invalid_object") ||
-      has_prefix(variable.base_name.as_string(), "symex_throw::thrown_obj"))
+    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment

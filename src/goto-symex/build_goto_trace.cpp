@@ -59,6 +59,14 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
 
+  // The solver model is fixed for the duration of trace construction
+  // (no further solve / context change happens until we return), so
+  // memoise l_get() results. Guard ASTs recur across thousands of SSA
+  // steps and each l_get bottoms out in an O(formula) solver
+  // get_value(); the cache collapses repeated queries to one per
+  // distinct AST.
+  smt_convt::model_cache_scopet model_cache(smt_conv);
+
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (SSA_step.hidden && is_compact_trace)
@@ -71,13 +79,14 @@ void build_goto_trace(
 
     goto_trace_step.thread_nr = SSA_step.source.thread_nr;
     goto_trace_step.pc = SSA_step.source.pc;
-    goto_trace_step.comment = SSA_step.comment;
+    goto_trace_step.comment = id2string(SSA_step.comment);
     goto_trace_step.original_lhs = SSA_step.original_lhs;
     goto_trace_step.type = SSA_step.type;
     goto_trace_step.step_nr = ++step_nr;
-    goto_trace_step.format_string = SSA_step.format_string;
+    if (SSA_step.output_data)
+      goto_trace_step.format_string = SSA_step.output_data->format_string;
 
-    goto_trace_step.stack_trace = SSA_step.stack_trace;
+    goto_trace_step.stack_trace = SSA_step.stack_trace();
 
     if (SSA_step.is_assignment())
     {
@@ -115,9 +124,9 @@ void build_goto_trace(
       }
     }
 
-    if (SSA_step.is_output())
+    if (SSA_step.is_output() && SSA_step.output_data)
     {
-      for (const auto &arg : SSA_step.converted_output_args)
+      for (const auto &arg : SSA_step.output_data->converted_output_args)
       {
         if (is_constant_expr(arg))
           goto_trace_step.output_args.push_back(arg);
@@ -156,12 +165,13 @@ void build_successful_goto_trace(
       goto_trace_step.lhs = SSA_step.lhs;
       goto_trace_step.rhs = SSA_step.rhs;
       goto_trace_step.pc = SSA_step.source.pc;
-      goto_trace_step.comment = SSA_step.comment;
+      goto_trace_step.comment = id2string(SSA_step.comment);
       goto_trace_step.original_lhs = SSA_step.original_lhs;
       goto_trace_step.type = SSA_step.type;
       goto_trace_step.step_nr = step_nr++;
-      goto_trace_step.format_string = SSA_step.format_string;
-      goto_trace_step.stack_trace = SSA_step.stack_trace;
+      if (SSA_step.output_data)
+        goto_trace_step.format_string = SSA_step.output_data->format_string;
+      goto_trace_step.stack_trace = SSA_step.stack_trace();
     }
   }
 }

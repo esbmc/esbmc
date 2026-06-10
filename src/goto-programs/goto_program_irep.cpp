@@ -98,12 +98,12 @@ void convert(const irept &irep, goto_programt &program)
   for (goto_programt::instructionst::iterator lit =
          program.instructions.begin();
        lit != program.instructions.end() && nit != number_targets_list.end();
-       lit++, nit++)
+       ++lit, ++nit)
   {
     for (unsigned int &tit : *nit)
     {
       goto_programt::targett fit = program.instructions.begin();
-      for (; fit != program.instructions.end(); fit++)
+      for (; fit != program.instructions.end(); ++fit)
       {
         if (fit->location_number == tit)
         {

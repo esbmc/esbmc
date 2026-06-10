@@ -195,7 +195,7 @@ bool solidity_convertert::get_var_decl(
     get_sol_type(t) == SolidityGrammar::SolType::CONTRACT ? true : false;
   bool is_mapping =
     get_sol_type(t) == SolidityGrammar::SolType::MAPPING ? true : false;
-  bool is_mapping_array = t.get_bool("#sol_mapping_array");
+  bool is_mapping_array = get_sol_mapping_array(t);
   bool is_new_expr = should_treat_as_new(current_contractName);
   bool is_byte_static = is_bytesN_type(t);
   // Detect state-var dynamic arrays: model as infinite SMT array + length var
@@ -203,7 +203,7 @@ bool solidity_convertert::get_var_decl(
     ast_node.contains("stateVariable") && ast_node["stateVariable"].get<bool>();
   bool is_dynarray_state =
     get_sol_type(t) == SolidityGrammar::SolType::DYNARRAY &&
-    is_state_var_check && !is_new_expr && !t.get_bool("#sol_mapping_array");
+    is_state_var_check && !is_new_expr && !get_sol_mapping_array(t);
 
   // for mapping: populate the element type (recursively for nested mappings)
   if (is_mapping && !is_new_expr)
@@ -269,7 +269,7 @@ bool solidity_convertert::get_var_decl(
     typet elem_type = t.subtype();
     t = array_typet(elem_type, exprt("infinity"));
     set_sol_type(t, SolidityGrammar::SolType::DYNARRAY);
-    t.set("#sol_dynarray_state", true);
+    set_sol_dynarray_state(t, true);
   }
 
   // set const qualifier
@@ -282,7 +282,7 @@ bool solidity_convertert::get_var_decl(
   // this will be used to decide if the var will be converted to this->var
   // when parsing function body.
   bool is_state_var = ast_node["stateVariable"].get<bool>();
-  t.set("#sol_state_var", std::to_string(is_state_var));
+  set_sol_state_var(t, is_state_var);
 
   // For local storage reference variables (e.g. Wrapper storage ref = param),
   // register an alias so that uses of 'ref' resolve to the source symbol.
@@ -462,10 +462,10 @@ bool solidity_convertert::get_var_decl(
 
     // get size
     std::string arr_size = "0";
-    if (!t.get("#sol_array_size").empty())
-      arr_size = t.get("#sol_array_size").as_string();
-    else if (t.has_subtype() && !t.subtype().get("#sol_array_size").empty())
-      arr_size = t.subtype().get("#sol_array_size").as_string();
+    if (has_sol_array_size(t))
+      arr_size = get_sol_array_size(t);
+    else if (t.has_subtype() && has_sol_array_size(t.subtype()))
+      arr_size = get_sol_array_size(t.subtype());
     else
     {
       log_error("cannot get the size of fixed array");
@@ -492,7 +492,7 @@ bool solidity_convertert::get_var_decl(
       acpy_call.arguments().push_back(size_of_expr);
       // typecast
       solidity_gen_typecast(ns, acpy_call, t);
-      acpy_call.type().set("#sol_array_size", arr_size);
+      set_sol_array_size(acpy_call.type(), arr_size);
       // set as rvalue
       added_symbol.set_value(acpy_call);
       decl.operands().push_back(acpy_call);
@@ -701,9 +701,8 @@ bool solidity_convertert::get_var_decl(
       t,
       location_begin,
       call);
-    assert(!t.get("#sol_bytesn_size").empty());
-    exprt len = from_integer(
-      std::stoul(t.get("#sol_bytesn_size").as_string()), uint_type());
+    assert(has_sol_bytesn_size(t));
+    exprt len = from_integer(std::stoul(get_sol_bytesn_size(t)), uint_type());
     call.arguments().push_back(len);
     added_symbol.set_value(call);
     decl.operands().push_back(call);
@@ -1015,11 +1014,11 @@ bool solidity_convertert::get_struct_class_fields(
   }
 
   // mapping(K=>V)[] is also modeled as a 2D infinite array (not a pointer)
-  if (comp.type().get_bool("#sol_mapping_array"))
+  if (get_sol_mapping_array(comp.type()))
     return false;
 
   // dynarray state vars are modeled as global infinite arrays (not struct members)
-  if (comp.type().get_bool("#sol_dynarray_state"))
+  if (get_sol_dynarray_state(comp.type()))
     return false;
 
   comp.id("component");

@@ -2,8 +2,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -273,18 +275,31 @@ exprt python_converter::handle_string_comparison(
       return true;
     };
 
-    auto char_at_index = [&](const exprt &expr, int idx) -> exprt {
+    // Build a single-character access as IREP2; the comparison below composes
+    // these and back-migrates once at the return boundary (V.3).
+    auto char_at_index = [&](const exprt &expr, int idx) -> expr2tc {
       exprt index = from_integer(idx, index_type());
-      if (expr.type().is_array())
-        return index_exprt(expr, index, char_type());
 
+      if (expr.type().is_array())
+      {
+        // exact round-trip of index_exprt(expr, index, char_type())
+        expr2tc expr2, index2;
+        migrate_expr(expr, expr2);
+        migrate_expr(index, index2);
+        return index2tc(migrate_type(char_type()), expr2, index2);
+      }
+
+      // Pointer path: reproduce the legacy dereference node verbatim — its
+      // two-arg constructor takes char_type().subtype() (nil), not char_type(),
+      // as the result type — then migrate it forward for a uniform expr2tc.
       exprt ptr = expr;
       if (!ptr.type().is_pointer())
         ptr = address_of_exprt(expr);
-
       plus_exprt ptr_plus(ptr, index);
       ptr_plus.type() = ptr.type();
-      return dereference_exprt(ptr_plus, char_type());
+      expr2tc deref2;
+      migrate_expr(dereference_exprt(ptr_plus, char_type()), deref2);
+      return deref2;
     };
 
     char literal_char = 0;
@@ -297,31 +312,29 @@ exprt python_converter::handle_string_comparison(
        type_utils::is_string_type(resolved_rhs.type())))
     {
       const exprt &str_expr = lhs_is_char_literal ? resolved_rhs : resolved_lhs;
-      exprt first_char = char_at_index(str_expr, 0);
-      exprt second_char = char_at_index(str_expr, 1);
+      expr2tc first_char = char_at_index(str_expr, 0);
+      expr2tc second_char = char_at_index(str_expr, 1);
 
-      exprt lit =
-        from_integer(static_cast<unsigned char>(literal_char), char_type());
-      exprt zero = from_integer(0, char_type());
+      expr2tc lit, zero;
+      migrate_expr(
+        from_integer(static_cast<unsigned char>(literal_char), char_type()),
+        lit);
+      migrate_expr(from_integer(0, char_type()), zero);
 
-      exprt first_eq("=", bool_type());
-      first_eq.copy_to_operands(first_char, lit);
-      exprt second_eq("=", bool_type());
-      second_eq.copy_to_operands(second_char, zero);
-
-      exprt both_eq("and", bool_type());
-      both_eq.copy_to_operands(first_eq, second_eq);
+      // (str[0] == lit) and (str[1] == '\0'); negated for NotEq.
+      expr2tc both_eq =
+        and2tc(equality2tc(first_char, lit), equality2tc(second_char, zero));
 
       if (op == "NotEq")
       {
-        exprt not_expr("not", bool_type());
-        not_expr.copy_to_operands(both_eq);
+        exprt not_expr = migrate_expr_back(not2tc(both_eq));
         not_expr.location() = get_location_from_decl(element);
         return not_expr;
       }
 
-      both_eq.location() = get_location_from_decl(element);
-      return both_eq;
+      exprt both_eq_expr = migrate_expr_back(both_eq);
+      both_eq_expr.location() = get_location_from_decl(element);
+      return both_eq_expr;
     }
   }
 
@@ -401,7 +414,11 @@ exprt python_converter::try_lower_slice_member_is_none(
     return nil_exprt();
   const typet flag_type = slice_struct.get_component(flag_name).type();
 
-  member_exprt flag_access(member_side->op0(), flag_name, flag_type);
+  // V.3: IREP2 member access (exact round-trip of member_exprt).
+  expr2tc fb2;
+  migrate_expr(member_side->op0(), fb2);
+  exprt flag_access =
+    migrate_expr_back(member2tc(migrate_type(flag_type), fb2, flag_name));
   // `sl.start is None` ⇔ flag is zero (bound was absent).
   // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
   equality_exprt eq(flag_access, gen_zero(flag_type));

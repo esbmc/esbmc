@@ -27,8 +27,8 @@ weight: 4
 
 ## Complex Numbers
 
-- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
-- `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
+- The `complex()` constructor accepts literal strings and a limited set of frontend-folded string expressions (for example, conditionals between literal complex strings). Arbitrary runtime strings are still rejected with the error `complex() does not support non-literal string arguments`.
+
 
 ## Built-in Functions
 
@@ -39,6 +39,12 @@ weight: 4
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `print()` evaluates each argument expression once (so safety checks and call side effects reach the GOTO program) but produces no actual output during verification.
 - `enumerate()` supports the iterable + `start` keyword forms; nested or unusually-shaped iterables are not exercised by the regression suite and may surface edge cases.
+
+## Walrus Operator
+
+- The walrus operator `:=` is supported only where the target is evaluated exactly once: `if`/`elif` conditions, standalone assignment expressions, and comprehension filters (see [Supported Features](./supported-features#basic-constructs)).
+- Use inside a boolean (`and`/`or`) operand is refused: `ERROR: Walrus operator ':=' in a boolean (and/or) operand is not supported`.
+- Use in a `while`-loop condition is refused: `ERROR: Walrus operator ':=' in a while-loop condition is not supported`.
 
 ## Lambda Expressions
 
@@ -84,7 +90,7 @@ weight: 4
 - `defaultdict`: subscript access/assignment and the common type-factory forms are supported — `defaultdict(list)` (with `.append()` on the materialised list), the built-in scalar factories `defaultdict(int)` / `float` / `bool` / `str`, and nullary `lambda` factories whose body is a constant or built-in constructor (e.g. `defaultdict(lambda: float('inf'))`). On an unannotated dict the value type is also inferred from a constant literal subscript assignment (`d[k] = 5`). The `__missing__` hook and other methods are not.
 - `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
 - `Counter.update(...)` / `dict.update(...)` accept only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is rejected at parse time even though it is valid CPython.
-- `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
+- `OrderedDict` supports construction and basic indexing / append / `__setitem__`. `deque` adds the FIFO-front methods `popleft()` and `appendleft()` on top of construction / indexing / `append` / `__setitem__`; other `deque` methods (`extend`, `rotate`, `maxlen`, etc.) are not supported. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
 
 ## Datetime Module
 
@@ -108,20 +114,21 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported. Reading `.shape` raises `AttributeError`, and `a[i, j]` is rejected with `TypeError: multi-dimensional indexing (a[i, j, ...]) is not supported`.
-- Adding a scalar to a 1D array (`a + n`) currently aborts the SMT encoder with a sort-width assertion in `mk_store` ([#4668](https://github.com/esbmc/esbmc/issues/4668)).
-- Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
-- Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
-- `numpy.linalg.det` is a 2-scalar stub; general matrix operations are not supported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Array constructors preserve explicit `dtype` for supported literal `bool`/`int`/`float` inputs in the 1D/2D recorte; unsupported constructor dtypes and higher-dimensional arrays are rejected explicitly. Full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
+- Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
+- The remaining type-inference-only stubs are `np.arccos`, `np.fmod`, `np.dot`, `np.matmul`, and `np.transpose`.
+- `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
 
 ## Exception Handling
 
 - Core built-in exception types are supported, but not all Python standard library exceptions; custom exception hierarchies with complex inheritance patterns may not be fully handled.
+- `try`/`finally` is supported (including bare `try`/`finally`), but two shapes are refused at parse time rather than lowered unsoundly: a non-empty `else` clause on the `try` (a pre-existing gap — `orelse` is silently dropped today), and a `return`/`break`/`continue` that escapes the `try`, an `except` handler, or the `finally` body (it would bypass the appended `finally`).
 
 ## Class Attributes
 
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
-- Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) is scoped to the module currently being processed. When the class is imported from another module (`from node import Node`), the module-level instances in the importing file are not visible while `__init__` is processed, so the type is not recovered.
+- Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) works both within a module and across the module boundary for an imported class (`from node import Node`). It relies on unifying against module-level `ClassName(...)` instantiations: if the class is never instantiated at module scope with the relevant positional argument, the attribute type cannot be recovered and an explicit annotation is required.
 
 ## Missing Return Detection
 
@@ -143,7 +150,7 @@ weight: 4
   - `Thread` as a class attribute (`class C: t = Thread(...)`)
   - `target` defined after the caller in source order
   - `from threading import *`
-- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. `queue.Queue` is also unsupported and blocks the existing `regression/python/concurrency_fail` example.
+- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](./supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
 - **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 
 ## Module System

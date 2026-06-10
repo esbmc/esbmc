@@ -214,18 +214,22 @@ unsigned goto_symext::argument_assignments(
   unsigned va_index = UINT_MAX;
   if (function_type.ellipsis)
   {
-    // These are va_arg arguments; their types may differ from call to call
+    // These are va_arg arguments; their types may differ from call to call.
+    // Build the `<fn>::va_arg` prefix once; each iteration only appends the
+    // counter, rather than rebuilding the whole prefix string every probe.
+    const std::string va_prefix = id2string(function_identifier) + "::va_arg";
+    auto va_name = [&va_prefix](unsigned n) {
+      return va_prefix + std::to_string(n);
+    };
+
     unsigned va_count = 0;
-    while (new_context.find_symbol(
-             id2string(function_identifier) + "::va_arg" +
-             std::to_string(va_count)) != nullptr)
+    while (new_context.find_symbol(va_name(va_count)) != nullptr)
       ++va_count;
 
     va_index = va_count;
     for (; it1 != arguments.end(); ++it1, va_count++)
     {
-      irep_idt identifier =
-        id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
+      irep_idt identifier = va_name(va_count);
 
       // add to symbol table
       symbolt symbol;
@@ -636,7 +640,7 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false() && stack_catch.empty())
+  if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming

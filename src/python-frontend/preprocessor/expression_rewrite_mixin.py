@@ -112,6 +112,48 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            # list(filter(pred, seq)) -> [x for x in seq if pred(x)], the exact
+            # CPython desugaring (filter keeps the elements for which pred is
+            # truthy, in order). filter(None, seq) keeps the truthy elements,
+            # so the guard is the element itself. The for-loop form is handled
+            # separately by loop_mixin._transform_filter_for.
+            is_list_filter_call = (isinstance(node.func, ast.Name) and node.func.id == "list"
+                                   and len(node.args) == 1 and not node.keywords
+                                   and isinstance(node.args[0], ast.Call)
+                                   and isinstance(node.args[0].func, ast.Name)
+                                   and node.args[0].func.id == "filter"
+                                   and len(node.args[0].args) == 2)
+            if is_list_filter_call:
+                filter_call = node.args[0]
+                func_expr = filter_call.args[0]
+                iterable_expr = filter_call.args[1]
+                if isinstance(func_expr, ast.Lambda) and len(func_expr.args.args) == 1:
+                    param = func_expr.args.args[0]
+                    target = ast.Name(id=param.arg, ctx=ast.Store())
+                    elt = ast.Name(id=param.arg, ctx=ast.Load())
+                    test = func_expr.body
+                else:
+                    tmp_id = f"ESBMC_filter_elt_{self.preprocessor.listcomp_counter}"
+                    target = ast.Name(id=tmp_id, ctx=ast.Store())
+                    elt = ast.Name(id=tmp_id, ctx=ast.Load())
+                    if isinstance(func_expr, ast.Constant) and func_expr.value is None:
+                        test = ast.Name(id=tmp_id, ctx=ast.Load())
+                    else:
+                        test = ast.Call(
+                            func=func_expr,
+                            args=[ast.Name(id=tmp_id, ctx=ast.Load())],
+                            keywords=[],
+                        )
+                listcomp = ast.ListComp(
+                    elt=elt,
+                    generators=[
+                        ast.comprehension(target=target, iter=iterable_expr, ifs=[test], is_async=0)
+                    ],
+                )
+                ast.copy_location(listcomp, node)
+                ast.fix_missing_locations(listcomp)
+                return self.visit(listcomp)
+
             if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
                     and not node.keywords and isinstance(node.args[0], ast.Call)
                     and isinstance(node.args[0].func, ast.Name)
@@ -195,6 +237,13 @@ class ExpressionRewriteMixin:
 
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
+
+        # Only constant-fold subscript *reads* (Load context). A subscript in a
+        # Store/Del context (e.g. `del a[1]`, `a[1] = x`) is an lvalue target;
+        # replacing it with the element's literal value corrupts the statement
+        # (a `del a[1]` would become `del 2`).
+        if not isinstance(getattr(node, "ctx", None), ast.Load):
+            return node
 
         if (isinstance(node.value, ast.Name) and node.value.id in self.list_literal_values):
             list_node = self.list_literal_values[node.value.id]
@@ -322,17 +371,48 @@ class ExpressionRewriteMixin:
         "_try_transform_list_tuple_eq",
     )
 
+    def _resolve_call_origin(self, node):
+        """Return a deepcopy of ``x``'s tracked Call origin when ``node`` is
+        the Name ``x``, else return ``node`` unchanged. Refuse the inline
+        for items-view origins on non-dict receivers — the downstream
+        cascade only rejects receivers explicitly recorded as non-dict, so
+        an unannotated user class with .items() would otherwise be rewritten
+        into a dict-membership check.
+        """
+        if isinstance(node, ast.Name):
+            origin = self._assignment_call_origins.get(node.id)
+            if origin is None:
+                return node
+            if self._is_items_view_call(origin):
+                recv = self._items_view_receiver_name(origin)
+                if recv is None or not self._is_known_dict_name(recv):
+                    return node
+            return copy.deepcopy(origin)
+        return node
+
     def _apply_assert_eq_rewrites(self, node):
         if not (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
                 and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
             return [], None
         left, right = node.test.left, node.test.comparators[0]
+        left_inlined = self._resolve_call_origin(left)
+        right_inlined = self._resolve_call_origin(right)
+        # Cross-product of raw and origin-substituted sides so transforms
+        # that match Name on one side and Call on the other still fire.
+        candidate_pairs = [(left, right)]
+        if left_inlined is not left:
+            candidate_pairs.append((left_inlined, right))
+        if right_inlined is not right:
+            candidate_pairs.append((left, right_inlined))
+        if left_inlined is not left and right_inlined is not right:
+            candidate_pairs.append((left_inlined, right_inlined))
         for name in self._SYMMETRIC_EQ_TRANSFORMS:
             fn = getattr(self, name)
-            for lhs, rhs in ((left, right), (right, left)):
-                rewritten = fn(lhs, rhs, node)
-                if rewritten is not None:
-                    return [], rewritten
+            for pair_left, pair_right in candidate_pairs:
+                for lhs, rhs in ((pair_left, pair_right), (pair_right, pair_left)):
+                    rewritten = fn(lhs, rhs, node)
+                    if rewritten is not None:
+                        return [], rewritten
         for lhs, rhs in ((left, right), (right, left)):
             prefix, rewritten = self._try_lower_expr_tuple_literal_eq(lhs, rhs, node)
             if rewritten is not None:

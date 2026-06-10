@@ -109,6 +109,14 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  // Recover a `list[T]` type for a name bound to an *empty* list literal by
+  // inspecting the first `<var_name>.append(arg)` in the enclosing scope.
+  // Comprehensions lower to `tmp = []; tmp.append(elt)`, so the element type
+  // is lost through the empty literal; without recovery a parameter bound to
+  // the list is typed bare `list` and element reads are mis-modelled as nested
+  // lists (issue #5022). Returns "" when no append is found or the element
+  // type does not resolve concretely (then the caller keeps the bare list).
+  std::string recover_list_type_from_appends(const std::string &var_name);
   std::string get_object_name(const Json &call, const std::string &prefix);
   std::string get_string_method_return_type(const std::string &method) const;
   bool extract_type_info(
@@ -143,6 +151,15 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  void collect_return_types(
+    const Json &body,
+    const std::string &func_name,
+    std::set<std::string> &types);
+  // True if @p node (a return-value expression subtree) contains a direct call
+  // to @p func_name. Used to skip self-recursive returns during return-type
+  // inference so they don't re-enter the analysis (stack overflow).
+  static bool
+  expr_calls_function(const Json &node, const std::string &func_name);
 
   // ----- annotation-node constructors (annotation_expr.inl) -----
   Json create_name_annotation(

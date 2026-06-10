@@ -217,6 +217,7 @@ class LoopMixin:
         their `while ... orelse=[]` shape uniformly without each having to
         remember to preserve the original `orelse`.
         """
+        self._update_assignment_call_origins([node.target], None)
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
@@ -384,6 +385,20 @@ class LoopMixin:
             # homogeneous pure literals to preserve runtime isinstance semantics.
             self.is_range_loop = False
             return self._unroll_list_literal_for(node, list_literal)
+        # Inline list-literal iterable with a tuple/list-unpacking target, e.g.
+        # `for u, v in [(1, 2), (3, 4)]:`. Unroll like a name-bound list literal
+        # so each statically-known element keeps its tuple/list shape and feeds
+        # the converter's assignment-unpacking pipeline (`u, v = (1, 2)`). The
+        # generic iterable path would instead bind the element to an Any-typed
+        # temp and subscript-unpack it, which aborts with type2t::symbolic_type_excp.
+        # Shares _unroll_list_literal_for's tuple-target limitation: the RHS must
+        # stay a literal for the converter, so element sub-expressions are not
+        # snapshotted -- a tuple element naming a body-mutated variable would read
+        # the mutated value (evaluate-once divergence). Constant tuples are exact.
+        if (isinstance(node.iter, ast.List) and isinstance(node.target, (ast.Tuple, ast.List))
+                and self._can_safely_unroll_list_literal_for(node, node.iter)):
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(node, node.iter)
         # Check if iterating over a generator variable
         if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
             inlined = self._inline_generator_for(node)
@@ -2797,6 +2812,26 @@ class LoopMixin:
 
         return pre_stmts + [if_stmt], key_load
 
+    @staticmethod
+    def _defaultdict_key_signature(key_node):
+        """Return a stable signature for literal keys whose value is known."""
+        if isinstance(key_node, ast.Constant):
+            return ast.dump(key_node, include_attributes=False)
+        if isinstance(key_node, ast.Tuple) and all(
+                isinstance(elt, ast.Constant) for elt in key_node.elts):
+            return ast.dump(key_node, include_attributes=False)
+        return None
+
+    def _is_defaultdict_key_initialized(self, dict_name, key_node):
+        signature = self._defaultdict_key_signature(key_node)
+        return (signature is not None
+                and signature in self._defaultdict_initialized_keys.get(dict_name, set()))
+
+    def _record_defaultdict_key_initialized(self, dict_name, key_node):
+        signature = self._defaultdict_key_signature(key_node)
+        if signature is not None:
+            self._defaultdict_initialized_keys.setdefault(dict_name, set()).add(signature)
+
     def _lower_defaultdict_reads_in_expr(self, expr, template):
         """Walk expr, find all Load-context d[k] where d is a known defaultdict,
         generate missing-key init stmts, and rewrite each subscript slice to use
@@ -2812,6 +2847,7 @@ class LoopMixin:
         all_inits = []
         defaultdict_factory = self._defaultdict_factory
         make_missing_check = self._make_defaultdict_missing_check
+        is_key_initialized = self._is_defaultdict_key_initialized
 
         class _Lowerer(ast.NodeTransformer):
 
@@ -2822,6 +2858,8 @@ class LoopMixin:
                         and node.value.id in defaultdict_factory):
                     return node
                 dict_name = node.value.id
+                if is_key_initialized(dict_name, node.slice):
+                    return node
                 factory = defaultdict_factory[dict_name]
                 stmts, key_expr = make_missing_check(dict_name, node.slice, factory, template)
                 all_inits.extend(stmts)

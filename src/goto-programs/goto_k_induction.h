@@ -8,6 +8,10 @@
 /// before the loop head. Applied to every function with a body
 /// (including __ESBMC_main, which is loop-free and therefore
 /// untouched, and library helpers).
-void goto_k_induction(goto_functionst &goto_functions);
+///
+/// Returns true when at least one loop writes an array element through a
+/// pointer, which the inductive step cannot soundly havoc; the caller must
+/// then disable the inductive step (see issue #5224).
+bool goto_k_induction(goto_functionst &goto_functions);
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

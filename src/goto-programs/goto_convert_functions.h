@@ -25,6 +25,16 @@ public:
   rename_types(irept &type, const symbolt &cur_name_sym, const irep_idt &sname);
   void
   rename_exprs(irept &expr, const symbolt &cur_name_sym, const irep_idt &sname);
+
+  // Const probes mirroring rename_types/rename_exprs: return true iff the
+  // subtree actually contains a `symbol` type that rename_types would
+  // replace. rename_*() only mutate at those points, but the mutable
+  // Forall_* traversal detaches (deep-copies, under COW) every node it
+  // walks regardless. Gating the mutable descent on these read-only
+  // checks avoids detaching the overwhelming majority of nodes that
+  // have nothing to rename.
+  bool type_needs_rename(const irept &type, const irep_idt &sname) const;
+  bool expr_needs_rename(const irept &expr, const irep_idt &sname) const;
   void
   wallop_type(irep_idt name, typename_mapt &typenames, const irep_idt &sname);
 
@@ -41,7 +51,10 @@ protected:
   //
   // function calls
   //
-  void add_return(goto_functiont &f, const locationt &location);
+  void add_return(
+    goto_functiont &f,
+    const irep_idt &identifier,
+    const locationt &location);
 
   void wallop_type_impl(
     irep_idt name,

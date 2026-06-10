@@ -199,7 +199,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-loops", NULL, "Show the loops in the program"},
     {"show-claims", NULL, "Only show claims"},
     {"show-vcc", NULL, "Show the verification conditions"},
-    {"document-subgoals", NULL, "Generate subgoals documentation"},
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
@@ -382,9 +381,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
     {"slice-assumes", NULL, "Remove unused assume statements"},
-    {"extended-try-analysis",
-     NULL,
-     "Skip backward stack search for C++ throw targets"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
@@ -576,6 +572,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ub-shift-check",
      NULL,
      "Enable undefined behavior check on shift operations"},
+    {"clz-zero-check",
+     NULL,
+     "Enable undefined behavior check on __builtin_clz of a zero argument"},
     {"struct-fields-check",
      NULL,
      "Enable over-sized read checks for struct fields"},
@@ -612,8 +611,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "Enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"},
+     "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
+     "treats reach_error()/__VERIFIER_error() as error sentinels"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
@@ -798,6 +797,13 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Interactively choose thread scheduling at interleaving points"},
    }},
+  {"IREP2 migration (esbmc/esbmc#4715)",
+   {{"irep2-bodies",
+     NULL,
+     "V.4.2: route goto_convert through the IREP2 body round-trip "
+     "(migrate legacy codet → code_*2t → codet) to validate losslessness. "
+     "Flag off (default) ⇒ byte-identical to the legacy path. "
+     "Gate for Phase V.4.3 (Python converter flip)."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

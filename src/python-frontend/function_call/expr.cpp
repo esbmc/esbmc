@@ -21,6 +21,8 @@
 #include <util/python_types.h>
 #include <util/std_expr.h>
 #include <util/string_constant.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
 
 #include <algorithm>
 #include <cctype>
@@ -30,6 +32,75 @@
 #include <unordered_set>
 
 using namespace json_utils;
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam.
+//
+// A dynamically-sized array type (non-constant size) does not survive the
+// migrate_type round-trip (get_width throws downstream), so the helpers fall
+// back to the legacy constructor when the relevant type contains one.
+bool contains_dyn_array(const typet &t)
+{
+  if (t.is_array())
+  {
+    const array_typet &at = to_array_type(t);
+    if (at.size().is_nil() || !at.size().is_constant())
+      return true;
+    return contains_dyn_array(at.subtype());
+  }
+  if (t.is_pointer())
+    return contains_dyn_array(t.subtype());
+  return false;
+}
+
+exprt build_symbol(const symbolt &sym)
+{
+  if (contains_dyn_array(sym.get_type()))
+    return symbol_expr(sym);
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
+    return typecast_exprt(from, t);
+  expr2tc from2;
+  migrate_expr(from, from2);
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  // migrate_type does not round-trip type attributes such as #cpp_type;
+  // restore the exact target type so legacy typecast_exprt(from, t) is
+  // reproduced faithfully.
+  result.type() = t;
+  return result;
+}
+
+exprt build_address_of(const exprt &obj)
+{
+  if (contains_dyn_array(obj.type()))
+    return address_of_exprt(obj);
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(address_of2tc(obj2->type, obj2));
+}
+
+// Struct member access base.field : t (V.3). `base` must be a struct/union/
+// complex value (member2t's source precondition); the callers here pass a
+// tuple or complex struct whose component is named `name`.
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(base.type()))
+    return member_exprt(base, name, t);
+  expr2tc base2;
+  migrate_expr(base, base2);
+  exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+  // migrate_type does not round-trip #cpp_type; restore the exact member type
+  // so legacy member_exprt(base, name, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
+}
+} // namespace
+
 namespace
 {
 // Constants for UTF-8 encoding
@@ -414,6 +485,55 @@ exprt function_call_expr::build_constant_from_arg() const
 
   auto arg = call_["args"][0];
 
+  // bytes(...) constructor. The generic constructor path below relabels the
+  // argument expression's type as the bytes array type without converting the
+  // value; for a list/int argument that yields a list-pointer (or scalar) value
+  // tagged as an array, which trips base_type_eq in value_set (a crash). Build
+  // a real byte array here instead, matching the bytes-literal representation.
+  if (func_name == "bytes")
+  {
+    // bytes([i0, i1, ...]) — a list of constant ints in range(0, 256).
+    if (
+      arg.is_object() && arg.value("_type", "") == "List" &&
+      arg.contains("elts"))
+    {
+      std::vector<uint8_t> bytes;
+      for (const auto &e : arg["elts"])
+      {
+        if (
+          !e.is_object() || e.value("_type", "") != "Constant" ||
+          !e.contains("value") || !e["value"].is_number_integer())
+          throw std::runtime_error(
+            "bytes(): only a list of constant integers is supported");
+        const long long v = e["value"].get<long long>();
+        if (v < 0 || v > 255)
+          throw std::runtime_error(
+            "ValueError: bytes must be in range(0, 256)");
+        bytes.push_back(static_cast<uint8_t>(v));
+      }
+      // An empty byte array is modelled as a size-0 (variable-length) array,
+      // which len()/iteration then route through strlen; reuse the no-argument
+      // bytes() representation, which the size-0 path handles correctly.
+      if (bytes.empty())
+        return exprt("constant", type_handler_.get_typet("bytes", 0));
+      return converter_.get_string_builder().build_raw_byte_array(bytes);
+    }
+
+    // bytes(n) — a constant non-negative count of zero bytes.
+    if (
+      arg.is_object() && arg.value("_type", "") == "Constant" &&
+      arg.contains("value") && arg["value"].is_number_integer())
+    {
+      const long long n = arg["value"].get<long long>();
+      if (n < 0)
+        throw std::runtime_error("ValueError: negative count");
+      if (n == 0)
+        return exprt("constant", type_handler_.get_typet("bytes", 0));
+      return converter_.get_string_builder().build_raw_byte_array(
+        std::vector<uint8_t>(static_cast<size_t>(n), 0));
+    }
+  }
+
   // Handle str(z) / repr(z) where z is a complex expression.
   // Must check before the arg["value"]-based dispatch below, since
   // complex args come from Name/Call nodes without a "value" field.
@@ -482,7 +602,16 @@ exprt function_call_expr::build_constant_from_arg() const
     if (first_arg["_type"] == "Name")
     {
       const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      if (sym && sym->get_value().is_constant())
+      // The compile-time fast path below decodes the symbol's stored value as
+      // a string; it is only valid for constant *string* symbols. For numeric
+      // symbols (int/float/bool) extract_string_from_symbol misreads the value
+      // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
+      // float yields no string at all — so int(x) wrongly folds to 0. Route
+      // numeric symbols through the general numeric conversion instead, which
+      // truncates floats toward zero and treats ints as identity. (GitHub #4770)
+      if (
+        sym && sym->get_value().is_constant() &&
+        type_utils::is_string_type(sym->get_type()))
       {
         if (base_expr.is_nil())
         {
@@ -491,7 +620,7 @@ exprt function_call_expr::build_constant_from_arg() const
         else
         {
           // Convert symbol to expression and use with base
-          exprt value_expr = symbol_expr(*sym);
+          exprt value_expr = build_symbol(*sym);
           return converter_.get_string_handler()
             .handle_int_conversion_with_base(
               value_expr, base_expr, converter_.get_location_from_decl(call_));
@@ -647,8 +776,16 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "float" && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
+    // Only take the constant-string fast path when the variable is genuinely
+    // string-typed here. A numeric variable conditionally reassigned a string
+    // (e.g. `if isinstance(x, str): x = x.replace(...)`) leaves a stale string
+    // value on its symbol even on paths where it stays numeric; keying off the
+    // value alone would mis-route float(x) into string parsing and fold it to
+    // 0.0 (#5161). Gate on the declared type so such cases fall through to the
+    // numeric typecast in the else branch.
     if (
       sym && sym->get_value().is_constant() &&
+      type_utils::is_string_type(sym->get_type()) &&
       type_utils::is_string_type(sym->get_value().type()))
       return handle_str_symbol_to_float(sym);
     else
@@ -657,17 +794,31 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (type_utils::is_string_type(expr.type()))
       {
-        std::string var_name = arg["id"].get<std::string>();
-        std::string m = "float() conversion may fail - variable " + var_name +
-                        " may contain non-float string";
+        // Runtime string -> float. float("10") must succeed, but float() of an
+        // arbitrary string may raise ValueError. Gate the conversion on a
+        // runtime validity check so a concrete valid literal folds away while a
+        // genuinely non-float string still raises a reachable ValueError (the
+        // same exception path used by the string-literal case above).
+        auto &sh = converter_.get_string_handler();
+        auto loc = converter_.get_location_from_decl(call_);
 
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
+        exprt valid = sh.handle_string_is_float(expr, loc);
+        exprt raise = converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", "could not convert string to float");
+        codet throw_code("expression");
+        throw_code.operands().push_back(raise);
+        code_ifthenelset guard;
+        guard.cond() = not_exprt(valid);
+        guard.then_case() = throw_code;
+        guard.location() = loc;
+        converter_.add_instruction(guard);
+
+        return sh.handle_string_to_float(expr, loc);
       }
       // Numeric variable: emit a proper typecast to avoid mislabeled IR
       typet float_t = type_handler_.get_typet("float", 0);
       if (!expr.type().is_floatbv())
-        return typecast_exprt(expr, float_t);
+        return build_typecast(expr, float_t);
       return expr;
     }
   }
@@ -741,8 +892,32 @@ exprt function_call_expr::build_constant_from_arg() const
         vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
         type_utils::is_string_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
+
+      // Element of a list whose element type could not be statically resolved
+      // (e.g. iterating an empty/untyped list) is typed as the generic list
+      // pointer. Treat it as the documented list[int] default so str() lowers
+      // through the integer model instead of aborting the whole run; the loop
+      // body is dead for the empty list, mirroring the arithmetic coercion in
+      // get_binary_operator_expr. Other unresolved pointers (e.g. an
+      // unannotated void* parameter) fall through to the sound nondet-string
+      // fallback below rather than being guessed as int.
+      if (vt == type_handler_.get_list_type())
+        return converter_.get_string_handler().convert_to_string(
+          build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
-    arg_size = handle_str(arg);
+
+    // A string literal argument folds to its length below.
+    if (arg.contains("value") && arg["value"].is_string())
+      arg_size = handle_str(arg);
+    else
+      // The argument has no statically stringifiable type. This happens for an
+      // unannotated parameter, modelled as Any (void*): its dynamic type is
+      // unknown, so str() cannot be folded. Fall back to a sound nondet string
+      // rather than aborting conversion of the whole program — subsequent ops
+      // see arbitrary content, which over-approximates str() of an unknown
+      // value without wrongly concluding any specific result.
+      return converter_.get_string_handler().build_nondet_string_fallback(
+        converter_.get_location_from_decl(call_));
   }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
@@ -753,7 +928,7 @@ exprt function_call_expr::build_constant_from_arg() const
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
-    return typecast_exprt(expr, t);
+    return build_typecast(expr, t);
 
   if (func_name != "str")
     expr.type() = t;
@@ -1035,7 +1210,7 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$call_list$") == std::string::npos &&
     name.find("$dict_list$") == std::string::npos)
     return;
-  code_declt decl(symbol_expr(*sym));
+  code_declt decl(build_symbol(*sym));
   decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
   converter_.current_block->copy_to_operands(decl);
@@ -1117,7 +1292,7 @@ exprt function_call_expr::handle_list_insert() const
   {
     symbolt &insert_value_symbol = converter_.create_tmp_symbol(
       call_, "insert_value", size_type(), gen_zero(size_type()));
-    code_declt insert_value(symbol_expr(insert_value_symbol));
+    code_declt insert_value(build_symbol(insert_value_symbol));
     insert_value.copy_to_operands(value_to_insert);
     converter_.current_block->copy_to_operands(insert_value);
   }
@@ -1148,8 +1323,8 @@ exprt function_call_expr::handle_list_clear() const
 
   // Build function call
   code_function_callt clear_call;
-  clear_call.function() = symbol_expr(*clear_func);
-  clear_call.arguments().push_back(symbol_expr(*list_symbol));
+  clear_call.function() = build_symbol(*clear_func);
+  clear_call.arguments().push_back(build_symbol(*list_symbol));
   clear_call.type() = empty_typet();
   clear_call.location() = converter_.get_location_from_decl(call_);
 
@@ -1207,6 +1382,65 @@ exprt function_call_expr::handle_list_pop() const
   return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
 }
 
+exprt function_call_expr::handle_list_popleft() const
+{
+  // collections.deque.popleft(): remove and return the front element.
+  // deque is modelled as a list, so this is pop(0).
+  if (!call_["args"].empty())
+    throw std::runtime_error("popleft() takes no arguments");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  // build_pop_list_call infers the popped element's compile-time type from the
+  // back of the type map (it was written for pop()); for a homogeneous deque
+  // — the FIFO use case (e.g. breadth_first_search) — front and back share a
+  // type, so this is exact. A heterogeneous deque could mis-type the front
+  // element; that richer case is left to a future index-aware type map.
+  python_list list_helper(converter_, call_);
+  return list_helper.build_pop_list_call(
+    *list_symbol, from_integer(0, signedbv_typet(64)), call_);
+}
+
+exprt function_call_expr::handle_list_appendleft() const
+{
+  // collections.deque.appendleft(x): prepend x. deque is modelled as a list,
+  // so this is insert(0, x).
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("appendleft() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt index_expr = from_integer(0, signedbv_typet(64));
+  exprt value_to_insert = converter_.get_expr(args[0]);
+
+  if (value_to_insert.is_constant())
+  {
+    symbolt &insert_value_symbol = converter_.create_tmp_symbol(
+      call_, "insert_value", size_type(), gen_zero(size_type()));
+    code_declt insert_value(build_symbol(insert_value_symbol));
+    insert_value.copy_to_operands(value_to_insert);
+    converter_.current_block->copy_to_operands(insert_value);
+  }
+
+  python_list list(converter_, nlohmann::json());
+  list.add_type_info(
+    list_symbol->id.as_string(),
+    value_to_insert.identifier().as_string(),
+    value_to_insert.type());
+
+  return list.build_insert_list_call(
+    *list_symbol, index_expr, call_, value_to_insert);
+}
+
 bool function_call_expr::is_tuple_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1241,7 +1475,7 @@ exprt function_call_expr::handle_tuple_method() const
     exprt total = gen_zero(result_type);
     for (const auto &comp : components)
     {
-      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+      exprt member = build_member(receiver, comp.get_name(), comp.type());
       exprt eq = equality_exprt(member, elem);
       if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
       sel.type() = result_type;
@@ -1261,7 +1495,7 @@ exprt function_call_expr::handle_tuple_method() const
   exprt any_match = gen_boolean(false);
   for (const auto &comp : components)
   {
-    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+    exprt member = build_member(receiver, comp.get_name(), comp.type());
     exprt eq = equality_exprt(member, elem);
     any_match = or_exprt(any_match, eq);
   }
@@ -1277,7 +1511,7 @@ exprt function_call_expr::handle_tuple_method() const
   for (size_t k = n - 1; k-- > 0;)
   {
     exprt member =
-      member_exprt(receiver, components[k].get_name(), components[k].type());
+      build_member(receiver, components[k].get_name(), components[k].type());
     exprt eq = equality_exprt(member, elem);
     if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
     sel.type() = result_type;
@@ -1298,6 +1532,15 @@ bool function_call_expr::is_dict_method_call() const
     method_name != "update")
     return false;
 
+  // A receiver that resolves to a non-dict object (e.g. a class instance whose
+  // own method shadows the same-named dict method, such as queue.Queue.get())
+  // must defer to instance-method dispatch. Real dicts carry the
+  // "__python_dict__" struct tag; class instances carry "tag-<Class>". An
+  // unresolved or genuinely dict-typed receiver is left to the dict handler, so
+  // existing dict dispatch is unchanged. Mirrors the list guard for pop below.
+  if (receiver_is_non_dict_object())
+    return false;
+
   // For "pop", which exists on both list and dict, treat as dict.pop() when
   // the receiver does not resolve to a list symbol.
   if (method_name == "pop")
@@ -1309,6 +1552,43 @@ bool function_call_expr::is_dict_method_call() const
   }
 
   return true;
+}
+
+bool function_call_expr::receiver_is_non_dict_object() const
+{
+  const auto &recv = call_["func"]["value"];
+  if (recv["_type"] != "Name" || !recv.contains("id"))
+    return false;
+
+  // Resolve the receiver name in function then module scope. This mirrors
+  // lookup_python_symbol but is kept warning-free: is_dict_method_call is a
+  // discriminator, so a miss here must stay silent (a genuine dict whose
+  // receiver does not resolve through these scopes still defers to the dict
+  // handler below — the safe direction).
+  const std::string var_name = recv["id"].get<std::string>();
+  const std::string filename = function_id_.get_filename();
+  const symbolt *sym = converter_.find_symbol(
+    "py:" + filename + "@F@" + converter_.current_function_name() + "@" +
+    var_name);
+  if (!sym)
+    sym = converter_.find_symbol("py:" + filename + "@" + var_name);
+  if (!sym)
+    return false;
+
+  typet t = sym->get_type();
+  if (t.is_pointer())
+    t = t.subtype();
+  if (t.id() == "symbol")
+    t = converter_.ns.follow(t);
+
+  // Only a positively-resolved non-dict struct defers to instance dispatch; an
+  // unresolved or "__python_dict__"-tagged receiver stays with the dict handler.
+  // list/set receivers also resolve to a (non-dict) struct here, but their
+  // dict-overlapping methods (pop/copy/update) are claimed by the list/set
+  // discriminators earlier in the dispatch table, so they never reach this.
+  if (!t.is_struct())
+    return false;
+  return to_struct_type(t).tag().as_string() != "__python_dict__";
 }
 
 exprt function_call_expr::handle_dict_method() const
@@ -1329,16 +1609,16 @@ exprt function_call_expr::handle_dict_method() const
       converter_.find_symbol(dict_symbol_id.to_string());
     if (!dict_symbol)
       throw std::runtime_error("Dictionary variable not found: " + dict_name);
-    dict_expr = symbol_expr(*dict_symbol);
+    dict_expr = build_symbol(*dict_symbol);
   }
   else
   {
     exprt literal = converter_.get_expr(call_["func"]["value"]);
     symbolt &tmp = converter_.create_tmp_symbol(
       call_, "$dict_lit$", literal.type(), exprt());
-    converter_.add_instruction(code_declt(symbol_expr(tmp)));
-    converter_.add_instruction(code_assignt(symbol_expr(tmp), literal));
-    dict_expr = symbol_expr(tmp);
+    converter_.add_instruction(code_declt(build_symbol(tmp)));
+    converter_.add_instruction(code_assignt(build_symbol(tmp), literal));
+    dict_expr = build_symbol(tmp);
   }
 
   if (method_name == "get")
@@ -1419,6 +1699,40 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+exprt function_call_expr::handle_list_count() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("list.count() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.build_count_list_call(*list_symbol, call_, value);
+}
+
+exprt function_call_expr::handle_list_index() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("list.index() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt value = converter_.get_expr(args[0]);
+  python_list list_helper(converter_, call_);
+  return list_helper.build_index_list_call(*list_symbol, call_, value);
+}
+
 exprt function_call_expr::handle_list_sort() const
 {
   const auto &args = call_["args"];
@@ -1481,8 +1795,8 @@ exprt function_call_expr::handle_list_sort() const
 
   // ── Emit the call: __ESBMC_list_sort(list, type_flag, float_type_id) ──────
   code_function_callt sort_call;
-  sort_call.function() = symbol_expr(*sort_func);
-  sort_call.arguments().push_back(symbol_expr(*list_symbol));
+  sort_call.function() = build_symbol(*sort_func);
+  sort_call.arguments().push_back(build_symbol(*list_symbol));
   sort_call.arguments().push_back(from_integer(type_flag, int_type()));
   sort_call.arguments().push_back(
     from_integer(float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
@@ -1501,8 +1815,8 @@ exprt function_call_expr::handle_list_sort() const
       "__ESBMC_list_reverse function not found in symbol table");
 
   code_function_callt reverse_call;
-  reverse_call.function() = symbol_expr(*reverse_func);
-  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
+  reverse_call.function() = build_symbol(*reverse_func);
+  reverse_call.arguments().push_back(build_symbol(*list_symbol));
   reverse_call.type() = empty_typet();
   reverse_call.location() = converter_.get_location_from_decl(call_);
 
@@ -1535,8 +1849,8 @@ exprt function_call_expr::handle_list_reverse() const
 
   // Emit: __ESBMC_list_reverse(list)
   code_function_callt reverse_call;
-  reverse_call.function() = symbol_expr(*reverse_func);
-  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
+  reverse_call.function() = build_symbol(*reverse_func);
+  reverse_call.arguments().push_back(build_symbol(*list_symbol));
   reverse_call.type() = empty_typet();
   reverse_call.location() = converter_.get_location_from_decl(call_);
 
@@ -1605,8 +1919,21 @@ bool function_call_expr::is_list_method_call() const
     method_name != "append" && method_name != "pop" &&
     method_name != "insert" && method_name != "remove" &&
     method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" && method_name != "reverse")
+    method_name != "copy" && method_name != "sort" &&
+    method_name != "reverse" && method_name != "popleft" &&
+    method_name != "appendleft" && method_name != "count" &&
+    method_name != "index")
     return false;
+
+  // Tuples are claimed earlier; only claim count/index here when the receiver
+  // resolves to a list symbol so str receivers fall through.
+  if (method_name == "count" || method_name == "index")
+  {
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
+  }
 
   // "pop" is shared between list and dict. Disambiguate using the actual
   // symbol type: only treat as list.pop() when the receiver resolves to a
@@ -1664,6 +1991,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_clear();
   if (method_name == "pop")
     return handle_list_pop();
+  if (method_name == "popleft")
+    return handle_list_popleft();
+  if (method_name == "appendleft")
+    return handle_list_appendleft();
   if (method_name == "copy")
     return handle_list_copy();
   if (method_name == "remove")
@@ -1672,6 +2003,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_sort();
   if (method_name == "reverse")
     return handle_list_reverse();
+  if (method_name == "count")
+    return handle_list_count();
+  if (method_name == "index")
+    return handle_list_index();
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
@@ -1734,7 +2069,7 @@ exprt function_call_expr::handle_list_append() const
     symbolt &tmp_var = converter_.create_tmp_symbol(
       call_, "$append_ret$", ret_type, gen_zero(ret_type));
 
-    code_declt tmp_decl(symbol_expr(tmp_var));
+    code_declt tmp_decl(build_symbol(tmp_var));
     tmp_decl.location() = converter_.get_location_from_decl(call_);
     converter_.current_block->copy_to_operands(tmp_decl);
 
@@ -1742,13 +2077,13 @@ exprt function_call_expr::handle_list_append() const
     code_function_callt new_call;
     new_call.function() = func_expr;
     new_call.arguments() = func_args;
-    new_call.lhs() = symbol_expr(tmp_var);
+    new_call.lhs() = build_symbol(tmp_var);
     new_call.type() = ret_type;
     new_call.location() = converter_.get_location_from_decl(call_);
     converter_.current_block->copy_to_operands(new_call);
 
     // Replace value_to_append with the temporary variable
-    value_to_append = symbol_expr(tmp_var);
+    value_to_append = build_symbol(tmp_var);
   }
 
   // Treat a single-element char array (`char[1]`) as a `char *` for storage
@@ -1778,7 +2113,7 @@ exprt function_call_expr::handle_list_append() const
     // Create tmp variable to hold value
     symbolt &append_value_symbol = converter_.create_tmp_symbol(
       call_, "append_value", size_type(), gen_zero(size_type()));
-    code_declt append_value(symbol_expr(append_value_symbol));
+    code_declt append_value(build_symbol(append_value_symbol));
     append_value.copy_to_operands(value_to_append);
     converter_.current_block->copy_to_operands(append_value);
   }
@@ -2069,7 +2404,7 @@ function_call_expr::get_dispatch_table()
            if (!is_cpp_throw_expr(z))
            {
              side_effect_expr_function_callt model_call;
-             model_call.function() = symbol_expr(*model_sym);
+             model_call.function() = build_symbol(*model_sym);
              model_call.arguments() = {z};
              model_call.type() =
                to_code_type(model_sym->get_type()).return_type();
@@ -2136,13 +2471,13 @@ function_call_expr::get_dispatch_table()
        }
 
        side_effect_expr_function_callt model_call;
-       model_call.function() = symbol_expr(*model_symbol);
+       model_call.function() = build_symbol(*model_symbol);
        model_call.arguments() = {z};
        model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
-       exprt zr = member_exprt(z, "real", double_type());
-       exprt zi = member_exprt(z, "imag", double_type());
+       exprt zr = build_member(z, "real", double_type());
+       exprt zi = build_member(z, "imag", double_type());
 
        exprt imag_result;
        if (func_name == "asin")
@@ -2341,18 +2676,35 @@ function_call_expr::get_dispatch_table()
              type_error.has_value())
 
            return *type_error;
-         // Domain check for sqrt: operand must be >= 0
-         exprt double_operand = arg_expr;
-         if (!arg_expr.type().is_floatbv())
+         // Domain check for sqrt: operand must be >= 0.
+         exprt domain_check;
+         if (arg_expr.type().is_pointer())
          {
-           double_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
+           // A pointer-typed ("any") operand -- e.g. an unannotated parameter
+           // bound to a dynamic-list element (#2848) -- has no numeric value,
+           // so typecasting it to float builds an FP op over a pointer sort
+           // that aborts the SMT backend (get_significand_width; see
+           // humaneval/39). Its sign is unknown, so guard the domain error
+           // with a nondet condition: both the math-domain-error path and the
+           // normal path stay reachable (sound), while handle_sqrt below
+           // over-approximates the result as nondet.
+           domain_check =
+             side_effect_expr_nondett(type_handler_.get_typet("bool", 0));
          }
+         else
+         {
+           exprt double_operand = arg_expr;
+           if (!arg_expr.type().is_floatbv())
+           {
+             double_operand =
+               exprt("typecast", type_handler_.get_typet("float", 0));
+             double_operand.copy_to_operands(arg_expr);
+           }
 
-         exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-         exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(double_operand, zero);
+           exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+           domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+           domain_check.copy_to_operands(double_operand, zero);
+         }
 
          // Create the exception raise as a code expression
          exprt raise_expr =
@@ -2375,7 +2727,7 @@ function_call_expr::get_dispatch_table()
          // Add the guard to the current block
          converter_.current_block->copy_to_operands(guard);
 
-         // Now compute sqrt (only reached if operand >= 0)
+         // Now compute sqrt (>= 0 enforced above for numeric operands).
          exprt sqrt_result =
            converter_.get_math_handler().handle_sqrt(arg_expr, call_);
 
@@ -2522,10 +2874,10 @@ function_call_expr::get_dispatch_table()
              {
                symbolt &tmp = converter_.create_tmp_symbol(
                  call_, "$dist_arg$", arg.type(), arg);
-               code_declt decl(symbol_expr(tmp));
+               code_declt decl(build_symbol(tmp));
                decl.location() = converter_.get_location_from_decl(call_);
                converter_.current_block->copy_to_operands(decl);
-               arg = symbol_expr(tmp);
+               arg = build_symbol(tmp);
              }
            };
            materialize(lhs_expr);
@@ -2902,11 +3254,11 @@ exprt function_call_expr::handle_general_function_call()
     {
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
-      exprt func_expr = symbol_expr(*var_symbol);
+      exprt func_expr = build_symbol(*var_symbol);
       if (
         !var_symbol->get_type().is_pointer() ||
         !var_symbol->get_type().subtype().is_code())
-        func_expr = typecast_exprt(func_expr, gen_pointer_type(code_typet()));
+        func_expr = build_typecast(func_expr, gen_pointer_type(code_typet()));
       call.function() = func_expr;
 
       bool resolved = false;
@@ -2938,7 +3290,7 @@ exprt function_call_expr::handle_general_function_call()
       {
         exprt arg = converter_.get_expr(arg_node);
         if (arg.type().is_code() && arg.is_symbol())
-          arg = address_of_exprt(arg);
+          arg = build_address_of(arg);
         call.arguments().push_back(arg);
       }
       return call;
@@ -2981,7 +3333,7 @@ exprt function_call_expr::handle_general_function_call()
       {
         exprt arg = converter_.get_expr(arg_node);
         if (arg.type().is_array())
-          call.arguments().push_back(address_of_exprt(arg));
+          call.arguments().push_back(build_address_of(arg));
         else
           call.arguments().push_back(arg);
       }
@@ -3134,7 +3486,7 @@ exprt function_call_expr::handle_general_function_call()
 
           if (obj_symbol)
           {
-            exprt receiver = symbol_expr(*obj_symbol);
+            exprt receiver = build_symbol(*obj_symbol);
             call.arguments().push_back(
               receiver.type().is_pointer() ? receiver
                                            : gen_address_of(receiver));
@@ -3159,12 +3511,12 @@ exprt function_call_expr::handle_general_function_call()
                 // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
                 symbolt &tmp = converter_.create_tmp_symbol(
                   call_, "$const_str_arg$", arg.type(), arg);
-                code_declt tmp_decl(symbol_expr(tmp));
+                code_declt tmp_decl(build_symbol(tmp));
                 tmp_decl.location() = location;
                 converter_.current_block->copy_to_operands(tmp_decl);
-                arg = symbol_expr(tmp);
+                arg = build_symbol(tmp);
               }
-              call.arguments().push_back(address_of_exprt(arg));
+              call.arguments().push_back(build_address_of(arg));
             }
             else
               call.arguments().push_back(arg);
@@ -3245,12 +3597,12 @@ exprt function_call_expr::handle_general_function_call()
                 // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
                 symbolt &tmp = converter_.create_tmp_symbol(
                   call_, "$const_str_arg$", arg.type(), arg);
-                code_declt tmp_decl(symbol_expr(tmp));
+                code_declt tmp_decl(build_symbol(tmp));
                 tmp_decl.location() = location;
                 converter_.current_block->copy_to_operands(tmp_decl);
-                arg = symbol_expr(tmp);
+                arg = build_symbol(tmp);
               }
-              call.arguments().push_back(address_of_exprt(arg));
+              call.arguments().push_back(build_address_of(arg));
             }
             else
               call.arguments().push_back(arg);
@@ -3301,7 +3653,7 @@ exprt function_call_expr::handle_general_function_call()
 
   code_function_callt call;
   call.location() = location;
-  call.function() = symbol_expr(*func_symbol);
+  call.function() = build_symbol(*func_symbol);
   const typet &return_type =
     to_code_type(func_symbol->get_type()).return_type();
   call.type() = return_type;
@@ -3312,7 +3664,7 @@ exprt function_call_expr::handle_general_function_call()
 
   auto bind_instance_receiver_symbol =
     [&](const symbolt &receiver_symbol) -> exprt {
-    exprt receiver = symbol_expr(receiver_symbol);
+    exprt receiver = build_symbol(receiver_symbol);
     return bind_instance_receiver(receiver);
   };
 
@@ -3386,18 +3738,18 @@ exprt function_call_expr::handle_general_function_call()
           symbolt &tmp = converter_.create_tmp_symbol(
             func_value, "$inst$", class_type, exprt());
           converter_.symbol_table().add(tmp);
-          code_declt tmp_decl(symbol_expr(tmp));
+          code_declt tmp_decl(build_symbol(tmp));
           tmp_decl.location() = location;
           converter_.current_block->copy_to_operands(tmp_decl);
 
           // Call the constructor if it is defined, using tmp as self.
           exprt *saved_lhs = converter_.current_lhs;
-          exprt tmp_expr = symbol_expr(tmp);
+          exprt tmp_expr = build_symbol(tmp);
           converter_.current_lhs = &tmp_expr;
           exprt ctor_result = converter_.get_expr(func_value);
           converter_.current_lhs = saved_lhs;
 
-          call.arguments().push_back(bind_instance_receiver(symbol_expr(tmp)));
+          call.arguments().push_back(bind_instance_receiver(build_symbol(tmp)));
         }
         else if (func_value["_type"] == "Call")
         {
@@ -3412,7 +3764,7 @@ exprt function_call_expr::handle_general_function_call()
             symbolt &tmp = converter_.create_tmp_symbol(
               func_value, "$inst$", class_type, exprt());
             converter_.symbol_table().add(tmp);
-            code_declt tmp_decl(symbol_expr(tmp));
+            code_declt tmp_decl(build_symbol(tmp));
             tmp_decl.location() = location;
             converter_.current_block->copy_to_operands(tmp_decl);
 
@@ -3422,12 +3774,12 @@ exprt function_call_expr::handle_general_function_call()
             if (
               inner_call.is_code() && inner_call.statement() == "function_call")
             {
-              inner_call.op0() = symbol_expr(tmp);
+              inner_call.op0() = build_symbol(tmp);
               inner_call.location() = location;
               converter_.add_instruction(inner_call);
             }
             call.arguments().push_back(
-              bind_instance_receiver(symbol_expr(tmp)));
+              bind_instance_receiver(build_symbol(tmp)));
           }
           else
           {
@@ -3492,7 +3844,7 @@ exprt function_call_expr::handle_general_function_call()
         type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
         call_["args"].empty())
       {
-        call.arguments().push_back(symbol_expr(*obj_symbol));
+        call.arguments().push_back(build_symbol(*obj_symbol));
       }
       else if (call_["func"]["value"]["_type"] == "BinOp")
       {
@@ -3522,7 +3874,7 @@ exprt function_call_expr::handle_general_function_call()
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
-      arg = address_of_exprt(arg);
+      arg = build_address_of(arg);
 
     // Check if the corresponding parameter is Optional
     size_t param_idx = arg_index + param_offset;
@@ -3549,12 +3901,12 @@ exprt function_call_expr::handle_general_function_call()
           exprt()); // No initial value here
 
         // Declare the temporary in the current block
-        code_declt temp_decl(symbol_expr(temp_symbol));
+        code_declt temp_decl(build_symbol(temp_symbol));
         temp_decl.location() = location;
         converter_.current_block->copy_to_operands(temp_decl);
 
         // Assign the character to the first element
-        exprt temp_array = symbol_expr(temp_symbol);
+        exprt temp_array = build_symbol(temp_symbol);
         exprt first_element =
           index_exprt(temp_array, from_integer(0, size_type()));
         code_assignt assign_char(first_element, arg);
@@ -3569,7 +3921,7 @@ exprt function_call_expr::handle_general_function_call()
         converter_.current_block->copy_to_operands(assign_null);
 
         // Take address of the temporary variable
-        arg = address_of_exprt(symbol_expr(temp_symbol));
+        arg = build_address_of(build_symbol(temp_symbol));
       }
 
       // Check if parameter is an Optional type
@@ -3605,15 +3957,15 @@ exprt function_call_expr::handle_general_function_call()
           // Materialize the struct in a temp variable first
           symbolt &tmp = converter_.create_tmp_symbol(
             call_, "$union_arg$", arg.type(), gen_zero(arg.type()));
-          code_declt tmp_decl(symbol_expr(tmp));
+          code_declt tmp_decl(build_symbol(tmp));
           tmp_decl.location() = location;
           converter_.current_block->copy_to_operands(tmp_decl);
-          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          code_assignt tmp_assign(build_symbol(tmp), arg);
           tmp_assign.location() = location;
           converter_.current_block->copy_to_operands(tmp_assign);
-          arg = symbol_expr(tmp);
+          arg = build_symbol(tmp);
         }
-        arg = typecast_exprt(address_of_exprt(arg), param_type);
+        arg = build_typecast(build_address_of(arg), param_type);
       }
 
       // General object-reference coercion:
@@ -3628,18 +3980,18 @@ exprt function_call_expr::handle_general_function_call()
         {
           symbolt &tmp = converter_.create_tmp_symbol(
             call_, "$ptr_arg$", arg.type(), gen_zero(arg.type()));
-          code_declt tmp_decl(symbol_expr(tmp));
+          code_declt tmp_decl(build_symbol(tmp));
           tmp_decl.location() = location;
           converter_.current_block->copy_to_operands(tmp_decl);
-          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          code_assignt tmp_assign(build_symbol(tmp), arg);
           tmp_assign.location() = location;
           converter_.current_block->copy_to_operands(tmp_assign);
-          arg = symbol_expr(tmp);
+          arg = build_symbol(tmp);
         }
 
-        arg = address_of_exprt(arg);
+        arg = build_address_of(arg);
         if (!base_type_eq(arg.type(), param_type, converter_.ns))
-          arg = typecast_exprt(arg, param_type);
+          arg = build_typecast(arg, param_type);
       }
     }
 
@@ -3671,11 +4023,11 @@ exprt function_call_expr::handle_general_function_call()
         symbolt &tmp_list = converter_.create_tmp_symbol(
           call_, "$obj_size_list_arg$", list_type, exprt());
 
-        code_declt tmp_decl(symbol_expr(tmp_list));
+        code_declt tmp_decl(build_symbol(tmp_list));
         tmp_decl.location() = location;
         converter_.current_block->copy_to_operands(tmp_decl);
 
-        code_assignt tmp_assign(symbol_expr(tmp_list), arg);
+        code_assignt tmp_assign(build_symbol(tmp_list), arg);
         tmp_assign.location() = location;
         converter_.current_block->copy_to_operands(tmp_assign);
 
@@ -3689,10 +4041,10 @@ exprt function_call_expr::handle_general_function_call()
       assert(list_size_func_sym);
 
       code_function_callt list_size_func_call;
-      list_size_func_call.function() = symbol_expr(*list_size_func_sym);
+      list_size_func_call.function() = build_symbol(*list_size_func_sym);
 
       // passing arguments to list_size
-      list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
+      list_size_func_call.arguments().push_back(build_symbol(*list_symbol));
 
       // setting return type
       list_size_func_call.type() = signedbv_typet(64);
@@ -3787,12 +4139,12 @@ exprt function_call_expr::handle_general_function_call()
         // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
         symbolt &tmp = converter_.create_tmp_symbol(
           call_, "$const_str_arg$", arg.type(), arg);
-        code_declt tmp_decl(symbol_expr(tmp));
+        code_declt tmp_decl(build_symbol(tmp));
         tmp_decl.location() = location;
         converter_.current_block->copy_to_operands(tmp_decl);
-        arg = symbol_expr(tmp);
+        arg = build_symbol(tmp);
       }
-      call.arguments().push_back(address_of_exprt(arg));
+      call.arguments().push_back(build_address_of(arg));
     }
     else
       call.arguments().push_back(arg);
@@ -3972,7 +4324,7 @@ exprt function_call_expr::handle_general_function_call()
           // For string constants, use address_of
           if (default_val.id() == "string-constant")
           {
-            default_val = address_of_exprt(default_val);
+            default_val = build_address_of(default_val);
           }
           else
           {
@@ -4030,13 +4382,13 @@ exprt function_call_expr::handle_general_function_call()
       converter_.symbol_table().add(temp_self);
 
       // Add declaration for temporary object
-      code_declt temp_decl(symbol_expr(temp_self));
+      code_declt temp_decl(build_symbol(temp_self));
       temp_decl.location() = location;
       converter_.current_block->copy_to_operands(temp_decl);
 
       // Insert self as first argument
       call.arguments().insert(
-        call.arguments().begin(), gen_address_of(symbol_expr(temp_self)));
+        call.arguments().begin(), gen_address_of(build_symbol(temp_self)));
 
       // Emit the constructor call directly as a FUNCTION_CALL instruction so
       // ESBMC inlines it (codet("expression") would produce OTHER and be
@@ -4044,7 +4396,7 @@ exprt function_call_expr::handle_general_function_call()
       // list literals receive the properly constructed object.
       call.location() = location;
       converter_.add_instruction(call);
-      return symbol_expr(temp_self);
+      return build_symbol(temp_self);
     }
   }
 

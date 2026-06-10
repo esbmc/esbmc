@@ -30,7 +30,7 @@ void convert(const xmlt &xml, irept &irep)
 {
   irep.id("nil");
   xmlt::elementst::const_iterator it = xml.elements.begin();
-  for (; it != xml.elements.end(); it++)
+  for (; it != xml.elements.end(); ++it)
   {
     if (it->name == "id")
     {

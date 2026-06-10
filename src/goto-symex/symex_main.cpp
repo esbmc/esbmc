@@ -253,23 +253,7 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -321,41 +305,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false())
-    {
-      code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
-      symex_assign(code_assign2tc(std::move(deref_code)));
-    }
+      symex_assign(instruction.code);
 
     cur_state->source.pc++;
     break;
@@ -424,6 +374,38 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
+    // Violation-witness: handle function_enter waypoints in the current segment.
+    // avoid, not matching: skip (persistent).
+    // avoid, matching: skip the call (pc++), segment does not advance.
+    // follow, not matching: stop (follows are ordered; cannot bypass).
+    // follow, matching: advance to next segment; fall through to the call.
+    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    {
+      const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+      const auto &loc = cur_state->source.pc->location;
+      for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
+      {
+        const waypoint &wp = seg[wp_idx];
+        if (wp.type != waypoint::function_enter)
+          continue;
+        const bool loc_matches =
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function());
+        if (loc_matches)
+        {
+          if (wp.action == waypoint::avoid)
+          {
+            cur_state->source.pc++;
+            return;
+          }
+          cur_state->advance_witness_position();
+          break;
+        }
+        if (wp.action != waypoint::avoid)
+          break;
+      }
+    }
+
     symex_function_call(deref_code);
   }
   break;
@@ -446,41 +428,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-    symex_catch();
-    break;
-
-  case THROW:
-    if (!cur_state->guard.is_false())
-    {
-      if (symex_throw())
-        cur_state->source.pc++;
-    }
-    else
-    {
-      cur_state->source.pc++;
-    }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
-    break;
-
+  // THROW / CATCH / THROW_DECL / THROW_DECL_END are rewritten into ordinary
+  // guarded control flow by remove_exceptions before symex (issue #5075), so
+  // they never reach here; an exception-using program the pass cannot lower is
+  // reported as unsupported. Any such instruction surviving to symex is a bug,
+  // caught by the default abort below.
   default:
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
@@ -616,6 +568,12 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_init_thread_local")
+  {
+    intrinsic_init_thread_local(art);
     return;
   }
 
@@ -1085,35 +1043,47 @@ void goto_symext::run_intrinsic(
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
 
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
-  {
-    symex_throw_bad_cast();
-    return;
-  }
-
   if (symname == "c:@F@__ESBMC_witness_assume")
   {
     if (!validate_witness)
       return;
 
-    // operands: [seg_idx_const, wp_idx_const, constraint]
-    if (func_call.operands.size() < 3)
+    // operands: [seg_idx_const, constraint]
+    if (func_call.operands.size() < 2)
       return;
     size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    size_t wp_idx = to_constant_int2t(func_call.operands[1]).value.to_uint64();
-
-    if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
+    if (seg_idx != cur_state->cur_seg)
       return;
 
-    const waypoint &wp = cur_state->witness_segs[seg_idx][wp_idx];
-    expr2tc arg = func_call.operands[2];
+    // pc has already been incremented past this intrinsic call; step back one
+    // to get the location of the __ESBMC_witness_assume instruction itself.
+    const irep_idt cur_line =
+      std::prev(cur_state->source.pc)->location.get_line();
+    const waypoint *matched = nullptr;
+    for (const auto &wp : cur_state->witness_segs[seg_idx])
+    {
+      if (
+        (wp.type == waypoint::assumption ||
+         wp.type == waypoint::function_return) &&
+        wp.line_id == cur_line)
+      {
+        matched = &wp;
+        break;
+      }
+    }
+    if (!matched)
+      return;
+
+    expr2tc arg = func_call.operands[1];
     cur_state->rename(arg);
 
-    if (wp.action == waypoint::avoid)
+    if (matched->action == waypoint::avoid)
       assume(not2tc(arg));
     else
       assume(arg);
-    cur_state->advance_witness_position();
+
+    if (matched->action != waypoint::avoid)
+      cur_state->advance_witness_position();
     return;
   }
 

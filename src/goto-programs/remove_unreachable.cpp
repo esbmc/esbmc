@@ -48,7 +48,7 @@ void remove_unreachable(goto_programt &goto_program)
       for (goto_programt::const_targetst::const_iterator s_it =
              successors.begin();
            s_it != successors.end();
-           s_it++)
+           ++s_it)
         working.push(*s_it);
     }
   }

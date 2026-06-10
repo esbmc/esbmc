@@ -19,7 +19,6 @@
 #include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
-#include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
@@ -46,6 +45,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -470,11 +470,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -829,14 +829,16 @@ void report_coverage(
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-claims-rm");
 
-    // reached claims:
+    // Local copy: the JSON writer downstream reads the original
+    // reached_claims; mutating it here would mark every claim uncovered.
+    auto reached_claims_local = reached_claims;
     auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim_pair : total_cond_assert)
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
       std::string claim_sig = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim_sig))
+      if (reached_claims_local.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
@@ -850,7 +852,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        reached_claims.erase(claim_sig);
+        reached_claims_local.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -862,7 +864,7 @@ void report_coverage(
           claim_msg = "!(" + claim_msg + ")";
         std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim_sig))
+        if (reached_claims_local.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
@@ -879,7 +881,7 @@ void report_coverage(
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        reached_claims.erase(r_claim_sig);
+        reached_claims_local.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);
@@ -1419,7 +1421,7 @@ void bmct::bidirectional_search(
         return;
 
       // Save the location of the failed assertion
-      frames = ssait.stack_trace;
+      frames = ssait.stack_trace();
       assert_loop_number = ssait.loop_number;
 
       // We are not interested in instructions before the failed assertion yet
@@ -1588,14 +1590,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    if (options.get_bool_option("document-subgoals"))
-    {
-      std::ostringstream oss;
-      document_subgoals(*eq, oss);
-      log_status("{}", oss.str());
-      return smt_convt::P_SMTLIB;
-    }
-
     if (options.get_bool_option("show-vcc"))
     {
       show_vcc(*eq);
@@ -1716,8 +1710,11 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
   /* LTL checking - first check for whether we have a negative prefix, then
    * the indeterminate ones. */
-  using Type = std::pair<std::string_view, ltl_res>;
-  static constexpr std::array seq = {
+  // Keys are interned irep_idt, matching SSA_stept::comment, so the
+  // comparisons below are dstring identity checks with no per-step
+  // string materialisation.
+  using Type = std::pair<irep_idt, ltl_res>;
+  static const std::array seq = {
     Type{"LTL_BAD", ltl_res_bad},
     Type{"LTL_FAILING", ltl_res_failing},
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},

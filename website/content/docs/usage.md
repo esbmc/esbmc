@@ -95,7 +95,9 @@ Here, ESBMC is invoked as follows:
 esbmc file.c --memory-leak-check
 ```
 
-<p> where <i>file.c</i> is the C program to be checked and <i>--memory-leak-check</i> indicates that ESBMC will check for memory leaks. For this particular C program, ESBMC produces the following counterexample:</p>
+where `file.c` is the C program to be checked and `--memory-leak-check`
+indicates that ESBMC will check for memory leaks. For this particular C program,
+ESBMC produces the following counterexample:
 
 ```
 Counterexample:
@@ -152,7 +154,7 @@ int main (void) {
 
 Here, we create two threads `id1` and `id1`; both threads will run the same code as implemented in **P**. Note that these two threads communicate via the shared memory `n`, which is protected by a mutex via **pthread_mutex_lock** and **pthread_mutex_unlock**. Note further that the thread `main` contains two joining points via **pthread_join** for `id1` and `id2`.
 
-ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
+ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where `file.c` is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
 
 ```
 *** Thread interleavings 612 ***
@@ -181,66 +183,10 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
-## Verification of Python Programs
+## Verifying Python Programs
 
-As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
-
-```Python
-def divide(a: int, b: int) -> int:
-    assert b != 0
-    return a // b
-
-def main():
-    a: int = nondet_int()
-    b: int = nondet_int()
-
-    __ESBMC_assume(b != 0)
-    result: int = divide(a, b)
-    assert result == a // b
-
-main()
-```
-
-Here, ESBMC is invoked as follows:
-
-```sh
-esbmc file.py
-```
-
-where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
-
-```
-Converting
-Generating GOTO Program
-GOTO program creation time: 1.216s
-GOTO program processing time: 0.025s
-Starting Bounded Model Checking
-Symex completed in: 0.003s (63 assignments)
-Caching time: 0.000s (removed 1 assertions)
-Slicing time: 0.000s (removed 53 assignments)
-Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
-No solver specified; defaulting to z3
-Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
-Encoding to solver time: 0.000s
-Solving with solver Z3 v4.15.4
-Runtime decision procedure: 0.001s
-BMC program time: 0.016s
-
-VERIFICATION SUCCESSFUL
-```
-
-## Using the SMT Boolector Solver
-
-Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
-
-```
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
-```
-Now rerun cmake,
-
-```
-cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
-```
+ESBMC has a dedicated Python frontend. See the [Python](/docs/python) section for
+how to verify Python programs, the supported features, and worked examples.
 
 ## Witness Generation
 
@@ -266,7 +212,6 @@ esbmc main.c --witness-output main.graphml
 ```
 
 ```xml
-<xmp>
 <?xml version="1.0" encoding="utf-8"?>
 <graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node">
@@ -345,7 +290,6 @@ esbmc main.c --witness-output main.graphml
     </edge>
   </graph>
 </graphml>
-</xmp>
 ```
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
@@ -411,49 +355,193 @@ file file.c line 5 function main
 unwinding assertion loop
 ```
 
-## Docker Build
+## Verification Strategies
 
-```
-FROM node:18-slim
+ESBMC offers several incremental strategies that control how loops are unwound
+and whether correctness can be proven. For an in-depth explanation of how each
+algorithm works, see
+[Verification Algorithms](/docs/theory/verification-algorithms).
 
-## Install dependencies for ESBMC and other build tools
-RUN apt-get update && apt-get install -y \
-    clang-14 \
-    llvm-14 \
-    clang-tidy-14 \
-    python-is-python3 \
-    python3 \
-    git \
-    ccache \
-    unzip \
-    wget \
-    curl \
-    bison \
-    flex \
-    g++-multilib \
-    linux-libc-dev \
-    libboost-all-dev \
-    libz3-dev \
-    libclang-14-dev \
-    libclang-cpp-dev \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
+| Flag | Strategy | Proves correctness? |
+|---|---|---|
+| `--falsification` | Iteratively unwind, looking only for bugs | No (bug-finding only) |
+| `--incremental-bmc` | Iteratively unwind; also detect full unrolling | Yes, once all loops fully unwind |
+| `--k-induction` | Base case + forward condition + inductive step | Yes |
 
-# Keep the container running with tail -f /dev/null
-CMD ["bash", "-c", "tail -f /dev/null"]
-```
+`--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
+increment granularity.
 
-Docker compose file:
-```
-version: '3.8'
-services:
-  esbmc:
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
-    tty: true
-    stdin_open: true
+## Verifying modules that span multiple files
+
+ESBMC can verify code that relies on existing infrastructure. Consider a program
+whose `mul` function lives in a separate library:
+
+```c
+#include "lib.h"
+// Running with: esbmc --overflow-check main.c lib.c
+int main() {
+  int64_t a, b, r;
+  if (mul(a, b, &r)) {
+    __ESBMC_assert(r == a * b, "Expected result from multiplication");
+  }
+  return 0;
+}
 ```
 
-The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.
+Invoke ESBMC with the include path and the implementation file:
+
+```sh
+esbmc main.c --overflow-check -I lib/ lib/lib.c
+```
+
+where `--overflow-check` enables arithmetic over-/underflow checks and `-I path`
+sets the include path. The library under `lib/` is:
+
+```c
+// lib.h
+#include <stdint.h>
+_Bool mul(const int64_t a, const int64_t b, int64_t *res);
+```
+
+```c
+// lib.c
+#include "lib.h"
+_Bool mul(int64_t a, int64_t b, int64_t *res) {
+  if ((a == 0) || (b == 0)) { *res = 0; return 1; }
+  else if (a == 1)          { *res = b; return 1; }
+  else if (b == 1)          { *res = a; return 1; }
+  *res = a * b;   // there exists an overflow
+  return 1;
+}
+```
+
+ESBMC reports the overflow at the unguarded multiplication:
+
+```
+Counterexample:
+
+State 1 file lib.c line 14 function mul thread 0
+----------------------------------------------------
+Violated property:
+file lib.c line 14 function mul
+arithmetic overflow on mul
+!overflow("*", a, b)
+
+VERIFICATION FAILED
+```
+
+## Multiple Property Verification
+
+```sh
+esbmc file.c --multi-property
+```
+
+ESBMC can verify the satisfiability of all claims of a given bound. In
+multi-property mode, ESBMC does not stop at the first counterexample; it
+continues until all bugs are found. Relevant options:
+
+- `--multi-property` — verify all claims of the current bound (also activates `--no-remove-unreachable`).
+- `--multi-fail-fast N` — stop after the first `N` violations.
+- `--keep-verified-claims` — do not skip verified claims (assertions inside a loop body are then re-verified during unwinding).
+- `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
+- `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
+
+### Enumerating all violating inputs
+
+```sh
+esbmc file.c --all-witnesses
+esbmc file.c --all-witnesses --max-witnesses 4
+```
+
+By default `--multi-property` reports a single counterexample per failing
+property. `--all-witnesses` instead enumerates *distinct concrete input vectors*
+that violate the same property, until the set is exhausted (UNSAT) or the
+`--max-witnesses` cap is reached — useful for fault localisation, test-case
+mining, and characterising the failing-input sub-domain.
+
+```c
+#include <assert.h>
+int main(void) {
+  int x;                 // nondet
+  if (x > 0) x--; else x++;
+  assert(x != 0);        // violated by x == 1 AND x == -1
+  return 0;
+}
+```
+
+`esbmc file.c --all-witnesses` reports both witnesses:
+
+```
+[Counterexamples – 2 witnesses]
+
+  Witness 1 of 2
+    Inputs : [0] = -1
+  Witness 2 of 2
+    Inputs : [0] = 1
+
+Summary: 2 distinct input tuples violate this property
+         (enumeration stopped: UNSAT after 2 witnesses)
+```
+
+Internally the same SMT instance is re-solved with a blocking clause over the
+nondet input symbols, so enumerating *N* witnesses is much cheaper than running
+ESBMC *N* times. Floating-point inputs are handled specially (the NaN
+equivalence class is excluded as a whole; other values use bit-pattern equality,
+so `+0` and `-0` are distinct). The footer states why enumeration stopped; only
+*UNSAT after N* means the witness set is complete.
+
+**Implementation notes.** Blocking clauses are scoped to a single SMT context
+frame (`push_ctx`/`pop_ctx`) per claim, so the feature is safe under
+`--smt-during-symex` and does not leak between claims. Machine-readable artifacts
+(`--cex-output`, `--generate-testcase`, `--generate-html-report`,
+`--generate-json-report`, `--witness-output-graphml`, `--witness-output-yaml`)
+fan out per witness using the `<ce>-<file>` prefix scheme, one file per witness,
+so it is also safe under `--parallel-solving`. Enumeration is skipped during the
+inductive step of k-induction (a SAT result there means UNKNOWN, not a real
+counterexample).
+
+**Scaling caveat.** The textual report dumps each witness's full goto trace; with
+`--no-slice` on a deeply unrolled program this grows quickly. If you only need the
+violating inputs, the per-witness `Inputs : ...` line is usually enough, and the
+machine-readable per-witness files give the full data without the noise.
+
+Formally this is *bounded projected model enumeration* for a fixed property: the
+blocking-clause loop from SAT all-solutions algorithms, lifted to SMT and
+projected onto the nondet input symbols. See McMillan, *Applying SAT Methods in
+Unbounded Symbolic Model Checking*, CAV 2002
+([doi](https://doi.org/10.1007/3-540-45657-0_19)), and Grumberg, Schuster,
+Yadgar, *Memory Efficient All-Solutions SAT Solver and Its Application for
+Reachability Analysis*, FMCAD 2004
+([doi](https://doi.org/10.1007/978-3-540-30494-4_20)). It complements
+dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the
+path condition to maximise coverage; `--all-witnesses` instead fixes the failure
+path and enumerates input vectors on it.
+
+## Supported SMT backends {#smt-backends}
+
+ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
+also drive an external solver process over a pipe:
+
+| Backend | Option |
+|---|---|
+| Bitwuzla | `--bitwuzla` (default) |
+| Boolector | `--boolector` |
+| Z3 | `--z3` |
+| MathSAT | `--mathsat` |
+| CVC4 | `--cvc` |
+| Yices | `--yices` |
+| SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
+
+An alternative default solver can be set with `--default-solver SOLVER` (the
+name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
+environment variable. The `CMD` for the SMTLIB backend is interpreted by the
+shell, so it can include options or chain commands (the tools must be on
+`PATH`):
+
+- `boolector --incremental`
+- `z3 -in`
+- `tee formula.smt2 | z3 -in | tee output.txt`
+- `yices-smt2 --incremental`
+- `cvc5 -L smt2 -m`
+
+Remember to quote the `CMD` string when invoking ESBMC.

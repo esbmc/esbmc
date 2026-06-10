@@ -17,14 +17,17 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
+#include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -34,6 +37,52 @@
 #include <stdexcept>
 
 using namespace json_utils;
+
+namespace
+{
+// Straight-line dynamic-retyping classification (#4770, #4774). A Python str is
+// a char array or char* ; a numeric scalar is a Python int (>=16-bit bitvector,
+// excluding the 8-bit char that backs a 1-character string), float, or bool.
+bool is_py_string_type(const typet &t)
+{
+  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+bool is_py_numeric_scalar_type(const typet &t)
+{
+  if (t.is_floatbv() || t.is_bool())
+    return true;
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return bv_width(t) >= 16;
+  return false;
+}
+
+// True when reassigning a value of type rhs to a variable currently typed lhs
+// crosses the numeric<->string boundary, which a single GOTO symbol cannot
+// represent in place.
+bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
+{
+  return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
+         (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
+}
+
+// RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
+// top-level (module/imported-module) statement; anything deeper is nested in a
+// function or a conditionally-executed body, where straight-line retyping is
+// unsound (see #4770/#4774).
+struct block_nesting_guard
+{
+  unsigned &depth;
+  explicit block_nesting_guard(unsigned &d) : depth(d)
+  {
+    ++depth;
+  }
+  ~block_nesting_guard()
+  {
+    --depth;
+  }
+};
+} // namespace
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
@@ -504,9 +553,16 @@ void python_converter::handle_array_unpacking(
       var_symbol = symbol_table_.move_symbol_to_context(new_symbol);
     }
 
-    // Create subscript: rhs[i]
+    // Create subscript: rhs[i]. V.3: IREP2 index access (exact round-trip of
+    // index_exprt); this path runs only when rhs is array-typed (see the
+    // is_array() guard at the call site), so the index2t source precondition
+    // holds.
     exprt index_expr = from_integer(i, size_type());
-    index_exprt subscript(rhs, index_expr, rhs.type().subtype());
+    expr2tc rhs2, idx2;
+    migrate_expr(rhs, rhs2);
+    migrate_expr(index_expr, idx2);
+    exprt subscript = migrate_expr_back(
+      index2tc(migrate_type(rhs.type().subtype()), rhs2, idx2));
 
     code_assignt assign(symbol_expr(*var_symbol), subscript);
     assign.location() = get_location_from_decl(ast_node);
@@ -1393,6 +1449,45 @@ void python_converter::preregister_global_variables(
   }
 }
 
+std::string python_converter::flow_lvalue_path(const nlohmann::json &node) const
+{
+  if (!node.is_object())
+    return "";
+  const std::string k = node.value("_type", "");
+  if (k == "Name" && node.contains("id") && node["id"].is_string())
+    return node["id"].get<std::string>();
+  if (
+    k == "Attribute" && node.contains("attr") && node["attr"].is_string() &&
+    node.contains("value") && node["value"].is_object() &&
+    node["value"].value("_type", "") == "Name" &&
+    node["value"].contains("id") && node["value"]["id"].is_string())
+    return node["value"]["id"].get<std::string>() + "." +
+           node["attr"].get<std::string>();
+  return "";
+}
+
+std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
+{
+  if (!rhs.is_object())
+    return "";
+  const std::string k = rhs.value("_type", "");
+  if (
+    k == "Call" && rhs.contains("func") && rhs["func"].is_object() &&
+    rhs["func"].value("_type", "") == "Name" && rhs["func"].contains("id") &&
+    rhs["func"]["id"].is_string())
+  {
+    const std::string cls = rhs["func"]["id"].get<std::string>();
+    return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+  }
+  if (k == "Name" && rhs.contains("id") && rhs["id"].is_string())
+  {
+    auto it = flow_class_map_.find(rhs["id"].get<std::string>());
+    if (it != flow_class_map_.end())
+      return it->second;
+  }
+  return "";
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1423,6 +1518,41 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+
+  // Flow-sensitive class tracking (#4771/#4772): at an unconditional top-level
+  // (depth-1) assignment, record the class most recently assigned to the target
+  // lvalue ("v" or "v.attr"), last-write-wins. Read back in converter_expr to
+  // resolve nested attribute access on a field the usage-site scanner left as
+  // any_type(). Depth-1 gating + clearing on nested-body entry (get_block) keep
+  // it from adopting a class across a control-flow join.
+  if (
+    block_nesting_ == 1 && ast_node.contains("value") &&
+    !ast_node["value"].is_null())
+  {
+    const std::string path = flow_lvalue_path(target);
+    if (!path.empty())
+    {
+      // Rebinding a bare variable `v` makes its previously-tracked attributes
+      // (`v.attr`) refer to the old object; drop them so a later `v.attr` read
+      // can't reuse a stale class.
+      if (path.find('.') == std::string::npos)
+      {
+        const std::string prefix = path + ".";
+        for (auto it = flow_class_map_.begin(); it != flow_class_map_.end();)
+        {
+          if (it->first.rfind(prefix, 0) == 0)
+            it = flow_class_map_.erase(it);
+          else
+            ++it;
+        }
+      }
+      const std::string cls = flow_rhs_class(ast_node["value"]);
+      if (!cls.empty())
+        flow_class_map_[path] = cls;
+      else
+        flow_class_map_.erase(path);
+    }
+  }
 
   // Handle forward references
   if (
@@ -1469,6 +1599,21 @@ void python_converter::get_var_assign(
       exprt setitem_call = get_function_call(call_node);
       target_block.copy_to_operands(convert_expression_to_code(setitem_call));
       return;
+    }
+
+    // List slice assignment (a[i:j] = ...) is not modelled. Falling through to
+    // the generic store evaluates get_expr(a[i:j]) — a *copy* of the slice —
+    // and assigns into that temporary, leaving the original list unchanged. A
+    // later read then sees stale values, so ESBMC would report a buggy program
+    // as SUCCESSFUL (silent unsoundness). Reject it explicitly instead. Object
+    // slice __setitem__ is handled above; tuples raise TypeError above; dict
+    // subscripts are handled by handle_subscript_assignment_check earlier.
+    if (
+      target.contains("slice") && target["slice"].is_object() &&
+      target["slice"].value("_type", "") == "Slice")
+    {
+      throw std::runtime_error(
+        "List slice assignment (a[i:j] = ...) is not supported");
     }
   }
 
@@ -1520,6 +1665,22 @@ void python_converter::get_var_assign(
         }
       }
       is_right = false;
+    }
+
+    // When the annotation resolves to `Any` (void*) but the RHS is a concrete
+    // string (char*), adopt the string type for the symbol. Comprehension and
+    // `for`-loop targets over an unannotated string parameter are lowered as
+    // `char: Any = s[i]`; leaving the target void* makes list.append() miss the
+    // string-pointer storage branch in build_list_push_call, so the element
+    // pointer is byte-copied and corrupted (esbmc/esbmc#5158). This mirrors the
+    // Call-RHS handling in infer_type_from_any_annotation for a non-Call RHS.
+    // `rhs` is default-constructed (empty type) outside function scope, where
+    // is_pointer() is false, so no extra nil guard is needed.
+    if (
+      current_element_type == any_type() && rhs.type().is_pointer() &&
+      rhs.type().subtype() == char_type())
+    {
+      current_element_type = rhs.type();
     }
 
     // Location and symbol lookup
@@ -1793,6 +1954,83 @@ void python_converter::get_var_assign(
       target_block.copy_to_operands(decl);
       current_lhs = nullptr;
       return;
+    }
+
+    // Straight-line dynamic retyping (#4770, #4774). A variable whose current
+    // static type is a numeric scalar is being reassigned a string value (or
+    // vice versa). The GOTO IR binds one type per symbol, so the new value
+    // cannot be stored in the old slot. At block_nesting_ == 1 (an
+    // unconditional top-level statement) there is no control-flow join that
+    // could leave the runtime type ambiguous, so we model the rebinding
+    // soundly: mint a fresh symbol of the new type, declare it, and redirect
+    // later loads of the name to it via retype_aliases_. We then fall through
+    // to the normal assignment path with the new, correctly typed symbol,
+    // reusing its function-call/type-adjustment handling. Deeper statements
+    // (function bodies, conditional bodies) are left to the existing fallback.
+    // Class bodies are also converted at nesting 1 (via python_class_builder)
+    // but their attribute symbols are managed separately, so exclude them: only
+    // module/imported-module top-level statements qualify.
+    if (
+      block_nesting_ == 1 && current_class_name_.empty() && lhs_symbol &&
+      lhs.is_symbol())
+    {
+      // The LHS lookup above returns the ORIGINAL symbol. If this variable was
+      // already retyped, its live value lives in the alias target; resolve to
+      // it so a further retype is detected against the current type and a
+      // same-type write lands in the live slot (mirrors the load redirect in
+      // converter_expr). The alias is always keyed by the original id, which is
+      // what loads resolve before redirecting.
+      const std::string orig_id = lhs_symbol->id.as_string();
+      auto existing = retype_aliases_.find(orig_id);
+      if (existing != retype_aliases_.end())
+      {
+        if (symbolt *live = symbol_table_.find_symbol(existing->second))
+        {
+          lhs_symbol = live;
+          lhs = symbol_expr(*live);
+          current_lhs = &lhs;
+        }
+      }
+
+      if (is_incompatible_scalar_string_retype(lhs.type(), rhs.type()))
+      {
+        std::string new_id;
+        unsigned gen = 1;
+        do
+        {
+          new_id = orig_id + "$ret" + std::to_string(gen++);
+        } while (symbol_table_.find_symbol(new_id) != nullptr);
+
+        const std::string module_name = location_begin.get_file().as_string();
+        symbolt new_symbol = create_symbol(
+          module_name,
+          lhs_symbol->name.as_string(),
+          new_id,
+          location_begin,
+          rhs.type());
+        new_symbol.lvalue = true;
+        new_symbol.file_local = lhs_symbol->file_local;
+        new_symbol.is_extern = false;
+
+        symbolt *new_symbol_ptr =
+          symbol_table_.move_symbol_to_context(new_symbol);
+
+        // Locals need a declaration; module globals are not declared (matching
+        // the symbol-creation path above).
+        if (!current_func_name_.empty() && !is_global_variable(sid))
+        {
+          code_declt decl(symbol_expr(*new_symbol_ptr));
+          decl.location() = location_begin;
+          target_block.copy_to_operands(decl);
+        }
+
+        retype_aliases_[orig_id] = new_id;
+        lhs_symbol = new_symbol_ptr;
+        lhs = symbol_expr(*new_symbol_ptr);
+        current_lhs = &lhs;
+        // Fall through: the normal assignment handling below now stores rhs
+        // into the new, type-matched symbol.
+      }
     }
 
     // Python dynamic typing: if a variable already has a numeric type (e.g.
@@ -2257,8 +2495,39 @@ typet resolve_ternary_type(
   return default_type;
 }
 
+bool python_converter::contains_named_expr(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "NamedExpr")
+      return true;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (contains_named_expr(it.value()))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const auto &e : node)
+      if (contains_named_expr(e))
+        return true;
+  }
+  return false;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
+  // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
+  // emits the binding once into the enclosing block (it would go stale). Refuse
+  // with a clean diagnostic rather than return an unsound verdict. A plain `if`
+  // condition and a comprehension filter evaluate the walrus exactly once, so
+  // they remain supported. (Ternary-branch and short-circuit-operand walrus are
+  // refused at their own lowering sites: get_expr and get_logical_operator_expr.)
+  if (
+    ast_node.value("_type", "") == "While" && ast_node.contains("test") &&
+    contains_named_expr(ast_node["test"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a while-loop condition is not supported");
+
   // Copy current type
   typet t = current_element_type;
   // Change to boolean before extracting condition
@@ -2376,7 +2645,33 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
   auto to_bool_condition =
-    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt {
+    [&](const exprt &value_expr_in, const nlohmann::json &value_node) -> exprt {
+    exprt value_expr = value_expr_in;
+
+    // A non-folded call (e.g. to a multi-return function) arrives here as a
+    // code_function_callt — a *statement*, not a value. Used directly as a
+    // boolean-operator operand it is wrapped in an assignment / condition and
+    // survives into the SSA as a code_function_call2t whose operands the SMT
+    // encoder then dereferences, segfaulting on a null operand (GitHub #4998).
+    // Normalise it to a value-producing side-effect call, which goto-conversion
+    // correctly hoists into a function-call instruction.
+    if (value_expr.is_function_call())
+    {
+      const code_function_callt &code =
+        to_code_function_call(to_code(value_expr));
+      typet return_type = code.type();
+      // A void/None-returning call has an empty type; fall back to int so the
+      // downstream bool typecast is well-defined (mirrors get_logical_operator_expr).
+      if (return_type.is_empty() || return_type.id() == typet::t_empty)
+        return_type = type_handler_.get_typet("int", 0);
+      side_effect_expr_function_callt side_effect;
+      side_effect.function() = code.function();
+      side_effect.arguments() = code.arguments();
+      side_effect.type() = return_type;
+      side_effect.location() = code.location();
+      value_expr = side_effect;
+    }
+
     if (value_expr.type().is_bool())
       return value_expr;
 
@@ -2686,6 +2981,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
+    // A condition that raised while being evaluated (e.g. ord() of a bad
+    // argument) arrives as a cpp-throw side effect, not a boolean value.
+    // Propagate the exception instead of building an if2t with a non-boolean
+    // condition, which migrates to a null cond and crashes goto_check. Mirrors
+    // the cpp-throw guards in get_binary_operator_expr.
+    if (cond.statement() == "cpp-throw")
+      return cond;
+
     // Normalize branches: code_function_callt must become side_effect_expr so
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
@@ -2961,6 +3264,18 @@ void python_converter::get_return_statements(
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
+  // Track block nesting so straight-line retyping (#4770/#4774) only fires for
+  // unconditional top-level statements (depth 1). Every nested body -- function
+  // bodies, if/while/for bodies, try/except handlers -- is converted through a
+  // deeper get_block(), so this single guard covers them all.
+  block_nesting_guard nesting_guard(block_nesting_);
+
+  // Entering any nested/conditional body (function, if/while/for, try/except):
+  // straight-line flow-sensitive class tracking is no longer valid here, so
+  // drop the map rather than risk adopting a class across a control-flow join.
+  if (block_nesting_ >= 2)
+    flow_class_map_.clear();
+
   code_blockt block, *old_block = current_block;
   current_block = &block;
 
@@ -3027,8 +3342,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
         locationt location = get_location_from_decl(element);
         typet list_type = type_handler_.get_list_type();
 
-        // Get dict.keys member
-        member_exprt keys_member(test, "keys", list_type);
+        // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+        // member_exprt); `test` is dict-typed (is_dict_type ⇒ struct), so the
+        // member2t source precondition holds.
+        expr2tc dict2;
+        migrate_expr(test, dict2);
+        exprt keys_member =
+          migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
 
         // Find __ESBMC_list_size function
         const symbolt *size_func =
@@ -3278,6 +3598,24 @@ void python_converter::get_delete_statement(
 
       if (dict_type.id() == "symbol")
         dict_type = ns.follow(dict_type);
+
+      // del a[i] on a list removes (and shifts out) the element at index i.
+      // This is exactly list.pop(i) with the result discarded, and pop is
+      // already modelled (bounds-checked, shifting), so desugar to it instead
+      // of requiring a dict.
+      if (dict_type == type_handler_.get_list_type())
+      {
+        nlohmann::json pop_call;
+        pop_call["_type"] = "Call";
+        pop_call["func"] = {
+          {"_type", "Attribute"}, {"value", target["value"]}, {"attr", "pop"}};
+        pop_call["args"] = nlohmann::json::array({slice});
+        pop_call["keywords"] = nlohmann::json::array();
+        copy_location_fields_from_decl(ast_node, pop_call);
+        exprt pop_expr = get_function_call(pop_call);
+        target_block.copy_to_operands(convert_expression_to_code(pop_expr));
+        continue;
+      }
 
       if (!dict_type.is_struct())
       {

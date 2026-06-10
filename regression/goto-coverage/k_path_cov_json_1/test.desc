@@ -1,0 +1,11 @@
+CORE
+main.c
+--k-path-coverage=3 --cov-report-json
+^k-Path Coverage: 12\.5%$
+^Coverage report written to cov-report\.json$
+^VERIFICATION FAILED$
+CHECK_JSON cov-report.json $.coverage_type == "k-path"
+CHECK_JSON cov-report.json $.summary.total == 8
+CHECK_JSON cov-report.json $.summary.covered == 1
+CHECK_JSON cov-report.json $.summary.percentage == 12.5
+CHECK_JSON cov-report.json $.claims[13].status == "covered"

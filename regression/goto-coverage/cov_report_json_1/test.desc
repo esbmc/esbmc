@@ -1,5 +1,9 @@
 CORE
 main.c
 --branch-coverage --cov-report-json
-^Coverage report written to cov-report.json$
+^Coverage report written to cov-report\.json$
 ^VERIFICATION FAILED$
+CHECK_JSON cov-report.json $.coverage_type == "branch"
+CHECK_JSON cov-report.json $.summary.total == 2
+CHECK_JSON cov-report.json $.summary.covered == 1
+CHECK_JSON cov-report.json $.summary.percentage == 50.0

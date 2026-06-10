@@ -8,26 +8,35 @@
 
 void python_converter::update_symbol(const exprt &expr) const
 {
-  // Don't update if expression has no name
-  // prevents corruption of function symbols
-  if (expr.name().empty())
+  symbolt *sym = nullptr;
+
+  // For symbol_exprt, the full symbol ID (e.g. "py:file@A") is stored in
+  // identifier(), not in name(). Try identifier-based lookup first.
+  if (!expr.identifier().empty())
   {
-    log_debug(
-      "python-frontend",
-      "[update_symbol]: skipping symbol update since expression has no name");
-    return;
+    sym = symbol_table_.find_symbol(expr.identifier());
   }
 
-  // Generate a symbol ID from the expression's name.
-  symbol_id sid = create_symbol_id();
-  sid.set_object(expr.name().c_str());
+  // Fall back to name-based lookup (name() = base name, e.g. "A").
+  // This handles expressions that carry only the base name.
+  if (sym == nullptr && !expr.name().empty())
+  {
+    symbol_id sid = create_symbol_id();
+    sid.set_object(expr.name().c_str());
 
-  // Try to locate the symbol in the symbol table.
-  symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+    // Try scoped ID first (py:file@F@func@var), then global (py:file@var)
+    sym = symbol_table_.find_symbol(sid.to_string());
+    if (sym == nullptr)
+      sym = symbol_table_.find_symbol(sid.global_to_string());
+  }
 
   if (sym == nullptr)
   {
-    // Symbol not found, nothing to update.
+    log_debug(
+      "python-frontend",
+      "[update_symbol]: symbol not found for name='{}' identifier='{}'",
+      expr.name().as_string(),
+      expr.identifier().as_string());
     return;
   }
 
@@ -77,7 +86,7 @@ void python_converter::update_symbol(const exprt &expr) const
           "update_symbol: Failed to convert binary value '{}' to integer for "
           "symbol '{}'. Error: {}",
           binary_value_str,
-          sid.to_string(),
+          sym->id.as_string(),
           e.what());
       }
     }
@@ -158,6 +167,10 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     {
       // For ImportFrom, only match if the specific name was imported.
       // This prevents "from other import sum" from also hijacking "max".
+      // When the import is aliased (`from m import orig as alias`), the caller
+      // looks up `alias`, but the imported module defines `orig` — so probe the
+      // module with the original name, not the alias.
+      std::string resolved_name = lookup_name;
       if (
         obj["_type"] == "ImportFrom" && obj.contains("names") &&
         !lookup_name.empty())
@@ -176,6 +189,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
             name["asname"].get<std::string>() == lookup_name)
           {
             name_imported = true;
+            resolved_name = n;
             break;
           }
         }
@@ -187,6 +201,16 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       std::string imported_symbol = std::regex_replace(
         symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
 
+      // For an aliased import the trailing component of symbol_id is the alias;
+      // swap it for the original name so the direct lookup targets the real
+      // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
+      if (resolved_name != lookup_name && !lookup_name.empty())
+      {
+        const std::size_t at = imported_symbol.rfind('@');
+        if (at != std::string::npos)
+          imported_symbol.replace(at + 1, std::string::npos, resolved_name);
+      }
+
       if (
         symbolt *func_symbol =
           symbol_table_.find_symbol(imported_symbol.c_str()))
@@ -195,13 +219,13 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       // Imported free functions are often looked up as object symbols in the
       // caller scope (e.g., py:main@replace). Also probe the equivalent
       // function-id form in the imported module (py:module@F@replace).
-      if (!lookup_name.empty())
+      if (!resolved_name.empty())
       {
         ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
         imported_sid.set_class("");
         imported_sid.set_object("");
         imported_sid.set_attribute("");
-        imported_sid.set_function(lookup_name);
+        imported_sid.set_function(resolved_name);
 
         if (
           symbolt *func_symbol =
@@ -209,7 +233,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
           return func_symbol;
 
         imported_sid.set_function("");
-        imported_sid.set_object(lookup_name);
+        imported_sid.set_object(resolved_name);
         if (
           symbolt *obj_symbol =
             symbol_table_.find_symbol(imported_sid.to_string().c_str()))

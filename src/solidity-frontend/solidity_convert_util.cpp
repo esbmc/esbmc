@@ -666,7 +666,7 @@ void solidity_convertert::get_aux_array(
   std::string debug_modulename =
     get_modulename_from_path(loc.file().as_string());
 
-  assert(!new_src_expr.type().get("#sol_array_size").empty());
+  assert(has_sol_array_size(new_src_expr.type()));
   typet t = new_src_expr.type();
 
   symbolt sym;
@@ -685,10 +685,10 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
   typet rt = rhs.type();
 
   unsigned int arr_size = 0;
-  if (!rt.get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.get("#sol_array_size").as_string());
-  else if (rt.has_subtype() && !rt.subtype().get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
+  if (has_sol_array_size(rt))
+    arr_size = std::stoi(get_sol_array_size(rt));
+  else if (rt.has_subtype() && has_sol_array_size(rt.subtype()))
+    arr_size = std::stoi(get_sol_array_size(rt.subtype()));
   else
   {
     // arr_size = _ESBMC_array_length(rhs);

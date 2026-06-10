@@ -861,8 +861,8 @@ bool solidity_convertert::get_literal_expr(
     std::string expected_size;
     if (is_static)
     {
-      assert(!byte_t.get("#sol_bytesn_size").empty());
-      expected_size = byte_t.get("#sol_bytesn_size").as_string();
+      assert(has_sol_bytesn_size(byte_t));
+      expected_size = get_sol_bytesn_size(byte_t);
     }
 
     if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
@@ -906,7 +906,7 @@ bool solidity_convertert::get_literal_expr(
           byte_t,
           location,
           call);
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         exprt len = from_integer(std::stoul(expected_size), uint_type());
         call.arguments().push_back(len);
       }
@@ -917,7 +917,7 @@ bool solidity_convertert::get_literal_expr(
         return true;
       }
       set_sol_type(call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-      call.type().set("#sol_bytesn_size", expected_size);
+      set_sol_bytesn_size(call.type(), expected_size);
       new_expr = make_aux_var(call, location);
       return false;
     }
@@ -934,7 +934,7 @@ bool solidity_convertert::get_literal_expr(
       // add padding
       if (is_static && is_hex_string)
       {
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         size_t actual_len = val_str.length() / 2;
         size_t expected_len = std::stoul(expected_size);
 
@@ -985,7 +985,7 @@ bool solidity_convertert::get_literal_expr(
       else
       {
         set_sol_type(str_call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-        str_call.type().set("#sol_bytesn_size", byte_t.get("#sol_bytesn_size"));
+        set_sol_bytesn_size(str_call.type(), get_sol_bytesn_size(byte_t));
       }
       new_expr = make_aux_var(str_call, location);
       return false;
@@ -1109,7 +1109,7 @@ bool solidity_convertert::get_tuple_expr(
     exprt inits;
     inits = gen_zero(arr_type);
     set_sol_type(inits.type(), SolidityGrammar::SolType::ARRAY_LITERAL);
-    inits.type().set("#sol_array_size", size.cformat().as_string());
+    set_sol_array_size(inits.type(), size.cformat().as_string());
 
     // populate array
     int i = 0;
@@ -1354,7 +1354,7 @@ bool solidity_convertert::get_call_expr(
     if (new_expr.is_member() && new_expr.component_name() == "length")
       return false;
 
-    std::string sol_name = new_expr.type().get("#sol_name").as_string();
+    std::string sol_name = get_sol_name(new_expr.type());
     if (sol_name == "revert")
     {
       // Special case: revert
@@ -1686,7 +1686,7 @@ bool solidity_convertert::get_contract_member_call_expr(
   {
     if (get_var_decl_ref(base_expr_json, true, base))
       return true;
-    base_cname = base.type().get("#sol_contract").as_string();
+    base_cname = get_sol_contract(base.type());
     assert(!base_cname.empty());
   }
 
@@ -2002,7 +2002,7 @@ bool solidity_convertert::get_index_access_expr(
   {
     bool is_bytes_set = is_mapping_set_lvalue(expr); // set vs get
     typet result_type = byte_static_t;
-    result_type.set("#sol_bytesn_size", 1);
+    set_sol_bytesn_size(result_type, 1);
 
     std::string aux_name, aux_id;
     get_aux_var(aux_name, aux_id);
@@ -2124,7 +2124,7 @@ bool solidity_convertert::get_index_access_expr(
   // them.  This ensures the result carries the inner mapping's element type
   // so that subsequent m[k] indexing works correctly.
   if (
-    array.type().is_array() && array.type().get_bool("#sol_mapping_array") &&
+    array.type().is_array() && get_sol_mapping_array(array.type()) &&
     array.type().has_subtype())
   {
     new_expr = index_exprt(array, pos, array.type().subtype());
@@ -2713,7 +2713,7 @@ bool solidity_convertert::get_binary_operator_expr(
     else if (
       (rt_sol == SolidityGrammar::SolType::ARRAY ||
        rt_sol == SolidityGrammar::SolType::ARRAY_LITERAL) &&
-      lhs.is_symbol() && lt.get_bool("#sol_dynarray_state"))
+      lhs.is_symbol() && get_sol_dynarray_state(lt))
     {
       // Dynarray state var: element-wise assignment from array literal
       // e.g. items = [1,2,3] → items[0]=1; items[1]=2; items[2]=3; items_len=3
@@ -2791,7 +2791,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::DYNARRAY && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: skip arrcpy, just note the assignment is handled
       // by the caller's existing mechanism (element-wise via loops would be
@@ -2832,7 +2832,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::ARRAY_CALLOC && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: `items = new uint[](n)` → just set length = n
       exprt size_expr;

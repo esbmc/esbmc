@@ -120,8 +120,11 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (solver_name == "")
     solver_name = resolve_user_solver_choice(options);
 
-  // Check for --ir option and default to Z3 for integer/real arithmetic
-  if (solver_name == "" && options.get_bool_option("ir"))
+  // --ir and --ir-ieee both request integer/real arithmetic (both set the
+  // "int-encoding" option). Default to Z3, which supports the Int/Real sorts,
+  // when no solver was chosen. Keying off "int-encoding" rather than the raw
+  // "ir" flag is what lets --ir-ieee auto-select too (issue #5179).
+  if (solver_name == "" && options.get_bool_option("int-encoding"))
   {
 #ifdef Z3
     if (esbmc_solvers.count("z3"))
@@ -143,6 +146,24 @@ pick_solver(std::string &solver_name, const optionst &options)
   }
   if (solver_name == "")
     solver_name = pick_default_solver();
+
+  // Integer/real encoding is incompatible with bit-vector-only backends
+  // (Bitwuzla, Boolector). Fail with a clear message and a clean exit instead
+  // of letting the backend abort() at construction time (issue #5179). This is
+  // reachable when Z3 is not built in, or when a bit-vector-only solver is
+  // forced via --default-solver together with --ir / --ir-ieee.
+  if (
+    options.get_bool_option("int-encoding") &&
+    (solver_name == "bitwuzla" || solver_name == "boolector"))
+  {
+    log_error(
+      "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
+      "supports the Int/Real sorts (e.g. Z3); the '{}' backend is "
+      "bit-vector-only. Re-run with an integer/real-capable solver, or build "
+      "Z3 into ESBMC.",
+      solver_name);
+    exit(1);
+  }
 
   auto it = esbmc_solvers.find(solver_name);
   if (it != esbmc_solvers.end())

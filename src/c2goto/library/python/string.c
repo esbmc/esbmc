@@ -976,9 +976,54 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-// Python string split - splits a string by separator
-// Returns a Python list (represented as PyListObject*)
-// For ESBMC, we'll return a simple structure representing the split result
+// Whitespace predicate matching CPython str.split(None) and the constant-fold
+// path in python_list.cpp (space, tab, newline, vertical tab, form feed, CR).
+static _Bool __python_str_split_isspace(char c)
+{
+__ESBMC_HIDE:;
+  return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+         c == '\r';
+}
+
+// Copy str[start, end) into a fresh NUL-terminated __ESBMC_alloca buffer and
+// append it as the next list element. Each token gets its own allocation (the
+// frontend reads element pointers independently); __ESBMC_alloca survives the
+// function return (see python_list.cpp), so the buffer stays valid.
+static void __python_str_split_emit(
+  PyObject *items,
+  size_t *count,
+  const char *str,
+  size_t start,
+  size_t end)
+{
+__ESBMC_HIDE:;
+  size_t tok_len = end - start;
+  char *buf = __ESBMC_alloca(tok_len + 1);
+  size_t k = 0;
+  while (k < tok_len)
+  {
+    buf[k] = str[start + k];
+    k++;
+  }
+  buf[tok_len] = '\0';
+  items[*count].value = buf;
+  items[*count].type_id = 0;
+  items[*count].size = tok_len + 1;
+  (*count)++;
+}
+
+// Python string split - splits a string by separator and returns a Python list
+// (PyListObject*) of the substring tokens. Mirrors CPython semantics and the
+// constant-fold path in python_list.cpp::build_split_list:
+//   - sep == "" (str.split() / sep=None): split on whitespace runs, drop empty
+//     tokens.
+//   - non-empty sep: split on each occurrence, keep empty tokens.
+//   - maxsplit >= 0 caps the number of splits; the remainder becomes the final
+//     token. maxsplit < 0 means unlimited.
+//
+// The string is traversed with a single monotonic scan (O(n)); each token is
+// copied into its own buffer. Keeping the scan linear (rather than re-searching
+// from each token start) matters under tight --unwind bounds.
 struct __ESBMC_PyListObj *
 __python_str_split(const char *str, const char *sep, long long maxsplit)
 {
@@ -989,63 +1034,82 @@ __ESBMC_HIDE:;
     return (PyListObject *)0;
 
   size_t len_sep = __python_strnlen_bounded(sep, 64);
-  size_t len_str = __python_strnlen_bounded(str, 256);
-  _Bool has_empty = 0;
+  size_t len_str = __python_strnlen_bounded(str, ESBMC_PY_STRNLEN_BOUND);
 
-  (void)maxsplit;
+  // At most len_str + 1 tokens (every character a separator boundary).
+  PyObject *items = __ESBMC_alloca((len_str + 1) * sizeof(PyObject));
+  PyListObject *list = __ESBMC_alloca(sizeof(PyListObject));
+  size_t count = 0;
 
-  if (len_sep == 1)
+  if (len_sep == 0)
   {
-    char sep_ch = sep[0];
-
-    if (len_str == 0)
+    // Whitespace split: collapse runs and drop empty tokens.
+    long long splits = 0;
+    size_t i = 0;
+    while (i < len_str)
     {
-      has_empty = 1;
-    }
-    else
-    {
-      if (str[0] == sep_ch || str[len_str - 1] == sep_ch)
-        has_empty = 1;
-
-      size_t i = 1;
-      while (i < len_str && !has_empty)
-      {
-        if (str[i] == sep_ch && str[i - 1] == sep_ch)
-          has_empty = 1;
+      while (i < len_str && __python_str_split_isspace(str[i]))
         i++;
-      }
-    }
-  }
+      if (i == len_str)
+        break;
 
-  if (has_empty)
-  {
-    const char *empty = "";
-    static PyObject empty_items[1];
-    static PyListObject empty_list;
-    empty_items[0].value = empty;
-    empty_items[0].type_id = 0;
-    empty_items[0].size = 1;
-    empty_list.type = NULL;
-    empty_list.items = empty_items;
-    empty_list.size = 1;
-    return &empty_list;
+      size_t start = i;
+      if (maxsplit >= 0 && splits >= maxsplit)
+      {
+        // Remainder is a single token kept verbatim. Leading whitespace was
+        // already skipped above; CPython keeps any trailing whitespace here
+        // (e.g. 'a  b  '.split(None, 1) == ['a', 'b  ']).
+        __python_str_split_emit(items, &count, str, start, len_str);
+        break;
+      }
+
+      while (i < len_str && !__python_str_split_isspace(str[i]))
+        i++;
+      __python_str_split_emit(items, &count, str, start, i);
+      splits++;
+    }
   }
   else
   {
-    const char *nonempty = "a";
-    static PyObject nonempty_items[1];
-    static PyListObject nonempty_list;
-    nonempty_items[0].value = nonempty;
-    nonempty_items[0].type_id = 0;
-    nonempty_items[0].size = 2;
-    nonempty_list.type = NULL;
-    nonempty_list.items = nonempty_items;
-    nonempty_list.size = 1;
-    return &nonempty_list;
+    // Explicit separator: one linear scan, keeping empty tokens.
+    long long splits = 0;
+    size_t start = 0;
+    size_t i = 0;
+    while (i + len_sep <= len_str)
+    {
+      if (maxsplit >= 0 && splits >= maxsplit)
+        break;
+
+      size_t j = 0;
+      while (j < len_sep && str[i + j] == sep[j])
+        j++;
+
+      if (j == len_sep)
+      {
+        __python_str_split_emit(items, &count, str, start, i);
+        i += len_sep;
+        start = i;
+        splits++;
+      }
+      else
+        i++;
+    }
+
+    // Final token: the remainder of the string.
+    __python_str_split_emit(items, &count, str, start, len_str);
   }
+
+  list->type = NULL;
+  list->items = items;
+  list->size = count;
+  return list;
 }
-// Python int() builtin - converts string to integer
-int __python_int(const char *s, int base)
+// Python int() builtin - converts string to integer.
+// Returns a 64-bit value: Python ints are modelled as 64-bit everywhere else
+// in the frontend (type_handler::get_typet("int")), so a 32-bit return here
+// makes the result symbol 32-bit and truncates a string pointer that is later
+// rebound through it (e.g. `a, b = s.split('-'); a = int(a)`). See issue #5159.
+long long __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -1126,7 +1190,7 @@ __ESBMC_HIDE:;
     return 0;
   }
 
-  int result = 0;
+  long long result = 0;
   _Bool found_digit = 0;
 
   while (*s)
@@ -1171,7 +1235,7 @@ __ESBMC_HIDE:;
 
     found_digit = 1;
 
-    if (result > (INT_MAX / base))
+    if (result > (LLONG_MAX / base))
     {
       __ESBMC_assert(0, "int() conversion overflow");
       return 0;
@@ -1198,6 +1262,98 @@ __ESBMC_HIDE:;
   }
 
   return sign * result;
+}
+
+// Shared core for float(str): validates `s` as a Python float literal and, when
+// valid, writes the parsed value to *out. Returns 1 on success, 0 otherwise.
+// The accepted grammar is a subset of CPython's float(): optional surrounding
+// ASCII whitespace, an optional sign, and a decimal mantissa with at least one
+// digit and at most one '.'. Scientific notation, inf and nan are handled by
+// the frontend's compile-time strtod paths (string literals and constant
+// symbols); this runtime model deliberately stays a single bounded scan over
+// the string so it remains cheap on nondeterministic inputs.
+static _Bool __python_parse_float(const char *s, double *out)
+{
+__ESBMC_HIDE:;
+  *out = 0.0;
+  if (!s)
+    return 0;
+
+  size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
+  size_t i = 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  int sign = 1;
+  if (i < len && (s[i] == '+' || s[i] == '-'))
+  {
+    if (s[i] == '-')
+      sign = -1;
+    i++;
+  }
+
+  // Accumulate integer and fractional digits into a single mantissa and divide
+  // by 10^(fractional digit count) exactly once at the end. A single rounding
+  // step matches std::strtod for short decimal literals, so float("0.3") on a
+  // variable agrees with the compile-time strtod path; the alternative of
+  // accumulating with a repeatedly-scaled 0.1 weight compounds rounding error.
+  double value = 0.0;
+  double divisor = 1.0;
+  _Bool any_digit = 0;
+
+  while (i < len && s[i] >= '0' && s[i] <= '9')
+  {
+    value = value * 10.0 + (double)(s[i] - '0');
+    any_digit = 1;
+    i++;
+  }
+
+  if (i < len && s[i] == '.')
+  {
+    i++;
+    while (i < len && s[i] >= '0' && s[i] <= '9')
+    {
+      value = value * 10.0 + (double)(s[i] - '0');
+      divisor *= 10.0;
+      any_digit = 1;
+      i++;
+    }
+  }
+
+  if (!any_digit)
+    return 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  if (i != len)
+    return 0;
+
+  *out = (double)sign * (value / divisor);
+  return 1;
+}
+
+// Python float() builtin - converts a string to a double. Returns 0.0 when the
+// string is not a valid float literal; callers gate the conversion on
+// __python_str_is_float() and raise ValueError on the invalid path.
+double __python_str_to_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  __python_parse_float(s, &value);
+  return value;
+}
+
+// Returns 1 iff `s` is a valid Python float literal accepted by
+// __python_str_to_float, else 0.
+_Bool __python_str_is_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  return __python_parse_float(s, &value);
 }
 
 // Python chr() builtin - converts Unicode code point to string

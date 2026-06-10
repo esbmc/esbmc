@@ -115,6 +115,12 @@ __ESBMC_HIDE:;
 int strncmp(const char *s1, const char *s2, size_t n)
 {
 __ESBMC_HIDE:;
+  /* C11/C17 7.24.4.4: compare "not more than n characters". For n == 0 no
+   * characters are examined, so the result is 0 and neither pointer is read
+   * (a read here would be out of bounds at a one-past-the-end pointer). */
+  if (n == 0)
+    return 0;
+
   size_t i = 0;
   unsigned char ch1, ch2;
   do

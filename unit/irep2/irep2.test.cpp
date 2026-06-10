@@ -4,16 +4,9 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_dispatch.h>
 #include <irep2/irep2_utils.h>
-#include <util/crypto_hash.h>
 
 namespace
 {
-std::array<unsigned int, 5> to_array(const crypto_hash &h)
-{
-  std::array<unsigned int, 5> result;
-  std::copy(h.hash, h.hash + 5, result.begin());
-  return result;
-}
 type2tc testing_struct2t()
 {
   std::vector<type2tc> struct_members{
@@ -54,42 +47,29 @@ expr2tc gen_testing_array(unsigned int count)
   return constant_array2tc(array_ty, members);
 }
 
+expr2tc gen_deep_add_chain(unsigned int depth)
+{
+  type2tc word_type = get_uint_type(config.ansi_c.word_size);
+  expr2tc acc = constant_int2tc(word_type, BigInt(0));
+  for (unsigned int i = 1; i <= depth; ++i)
+    acc = add2tc(word_type, acc, constant_int2tc(word_type, BigInt(i)));
+  return acc;
+}
+
 void test_constructed_equally(const expr2tc e1, const expr2tc e2)
 {
-  crypto_hash c_hash;
-  crypto_hash c_hash2;
   // "The == operator should return true"
   REQUIRE(e1 == e2);
   // "Their crc should be the same"
   REQUIRE(e1->crc() == e2->crc());
-  // Their hash should be the same"
-  e1->hash(c_hash);
-  e2->hash(c_hash2);
-
-  c_hash.fin();
-  c_hash2.fin();
-  REQUIRE(to_array(c_hash) == to_array(c_hash2));
-  REQUIRE(c_hash.to_size_t() == c_hash2.to_size_t());
 }
 
 void test_constructed_differently(const expr2tc e1, const expr2tc e2)
 {
-  crypto_hash c_hash;
-  crypto_hash c_hash2;
-
   // "The == operator should return false"
   REQUIRE(e1 != e2);
   // "Their crc should not be the same"
   REQUIRE(e1->crc() != e2->crc());
-  // "Their hash should not be the same"
-
-  e1->hash(c_hash);
-  e2->hash(c_hash2);
-
-  c_hash.fin();
-  c_hash2.fin();
-  REQUIRE(to_array(c_hash) != to_array(c_hash2));
-  REQUIRE(c_hash.to_size_t() != c_hash2.to_size_t());
 }
 
 } // namespace
@@ -128,6 +108,21 @@ SCENARIO("irep2 hashing", "[core][irep2]")
     {
       for (auto &e : expressions)
         test_constructed_differently(e.first, e.second);
+    }
+  }
+}
+
+SCENARIO("CRC handles deep irep2 expression trees iteratively", "[core][irep2]")
+{
+  GIVEN("A deep left-leaning add expression")
+  {
+    config.ansi_c.word_size = 32;
+    expr2tc chain = gen_deep_add_chain(50000);
+
+    THEN("cold and warm CRC calls complete and agree")
+    {
+      const size_t cold_crc = chain->crc();
+      REQUIRE(chain->crc() == cold_crc);
     }
   }
 }

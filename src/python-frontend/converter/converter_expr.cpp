@@ -17,11 +17,13 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
@@ -40,6 +42,44 @@ static bool contains_cpp_throw(const exprt &expr)
   }
 
   return false;
+}
+
+static exprt build_shape_tuple_expr(
+  python_converter &converter,
+  const std::vector<exprt> &dims)
+{
+  std::vector<typet> element_types(dims.size(), int_type());
+  struct_typet tuple_type =
+    converter.get_tuple_handler().create_tuple_struct_type(element_types);
+  struct_exprt tuple_expr(tuple_type);
+  tuple_expr.operands() = dims;
+  return tuple_expr;
+}
+
+static nlohmann::json normalize_bool_index_node(const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_boolean())
+  {
+    nlohmann::json converted = node;
+    converted["value"] = node["value"].get<bool>() ? 1 : 0;
+    return converted;
+  }
+  return node;
+}
+
+static void throw_numpy_multidim_index_error(
+  python_converter &converter,
+  const nlohmann::json &element)
+{
+  std::ostringstream msg;
+  msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+         "supported; numpy arrays are modelled as 1D lists";
+  const locationt loc = converter.get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
 }
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
@@ -264,8 +304,61 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return lambda_handler_->get_lambda_expr(element);
 }
 
+exprt python_converter::get_named_expr(const nlohmann::json &element)
+{
+  // PEP 572 walrus `(target := value)`: assign value to target, then evaluate
+  // to the assigned value. Lower to a plain assignment emitted into the current
+  // block and read the target back, so the existing assignment machinery
+  // (symbol creation, type inference, flow tracking) is reused unchanged.
+  const nlohmann::json &target = element["target"];
+
+  // No block to emit into (e.g. a type-inference pre-pass): evaluate the value
+  // without binding rather than dropping a half-formed declaration.
+  if (!current_block)
+    return get_expr(element["value"]);
+
+  nlohmann::json assign = nlohmann::json::object();
+  assign["_type"] = "Assign";
+  assign["targets"] = nlohmann::json::array({target});
+  assign["value"] = element["value"];
+  copy_location_fields_from_decl(element, assign);
+
+  // get_var_assign mutates converter state (current_lhs, is_converting_rhs,
+  // is_converting_lhs, current_element_type); save/restore so the enclosing
+  // expression conversion is unaffected. flow_class_map_ is intentionally
+  // persistent (flow tracking) and left as get_var_assign updates it.
+  exprt *saved_lhs = current_lhs;
+  bool saved_rhs = is_converting_rhs;
+  bool saved_lhs_flag = is_converting_lhs;
+  typet saved_elem_type = current_element_type;
+  get_var_assign(assign, *current_block);
+  current_lhs = saved_lhs;
+  is_converting_rhs = saved_rhs;
+  is_converting_lhs = saved_lhs_flag;
+  current_element_type = saved_elem_type;
+
+  return get_expr(target);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
+  // Walrus operator `(target := value)` — assign as a side effect, evaluate to
+  // the bound value. Handled before the type switch since NamedExpr is not in
+  // the expression-type map.
+  if (element.is_object() && element.value("_type", "") == "NamedExpr")
+    return get_named_expr(element);
+
+  // A walrus in a ternary branch (`a if c else b`) is evaluated conditionally,
+  // but get_named_expr binds unconditionally. Refuse with a clean diagnostic
+  // here (before type inference) rather than return an unsound verdict. The
+  // ternary test is always evaluated, so a walrus there stays supported.
+  if (
+    element.is_object() && element.value("_type", "") == "IfExp" &&
+    ((element.contains("body") && contains_named_expr(element["body"])) ||
+     (element.contains("orelse") && contains_named_expr(element["orelse"]))))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a conditional expression is not supported");
+
   exprt expr;
 
   ExpressionType type = get_expression_type(element);
@@ -385,7 +478,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               deref.move_to_operands(optional_base);
               optional_base = std::move(deref);
             }
-            base_expr = member_exprt(optional_base, "value", inner_raw);
+            expr2tc ob2;
+            migrate_expr(optional_base, ob2);
+            base_expr = migrate_expr_back(
+              member2tc(migrate_type(inner_raw), ob2, "value"));
             base_type = inner_raw;
             if (base_type.is_pointer())
               base_type = base_type.subtype();
@@ -413,6 +509,47 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return result;
         }
 
+        // NumPy baseline support: expose `.shape` for modelled arrays/lists.
+        // - C arrays: shape is extracted from nested array dimensions.
+        // - ESBMC runtime list model: shape is a 1D tuple (len(list),).
+        if (attr_name == "shape")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<int> dims =
+              type_handler_.get_array_type_shape(base_type);
+            std::vector<exprt> dim_exprs;
+            dim_exprs.reserve(dims.size());
+            for (int dim : dims)
+              dim_exprs.push_back(from_integer(dim, int_type()));
+            return build_shape_tuple_expr(*this, dim_exprs);
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (
+            base_type == list_type || (base_expr.type().is_pointer() &&
+                                       base_expr.type().subtype() == list_type))
+          {
+            const symbolt *size_func =
+              symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+            if (!size_func)
+              throw std::runtime_error(
+                "__ESBMC_list_size not found for list shape access");
+
+            // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
+            expr2tc base2;
+            migrate_expr(
+              base_expr.type().is_pointer() ? base_expr
+                                            : address_of_exprt(base_expr),
+              base2);
+            expr2tc size_call = side_effect_function_call2tc(
+              migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+            exprt list_len = migrate_expr_back(
+              typecast2tc(migrate_type(int_type()), size_call));
+            return build_shape_tuple_expr(*this, {list_len});
+          }
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -429,7 +566,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               deref.move_to_operands(member_base);
               member_base = std::move(deref);
             }
-            return member_exprt(member_base, attr_name, clean_type);
+            // V.1k step-2 hypothesis: build member2t with the (possibly
+            // symbol-typed) source permitted by the step-1 relaxation, then
+            // back-migrate to the legacy body so the EXISTING adjust + goto
+            // -convert resolves it as today. No converter-side ns.follow.
+            expr2tc src2;
+            migrate_expr(member_base, src2);
+            return migrate_expr_back(
+              member2tc(migrate_type(clean_type), src2, attr_name));
           }
         }
 
@@ -480,7 +624,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                 {
                   const typet &vt =
                     clean_attribute_type(st.get_component("value").type());
-                  expr = member_exprt(base_expr, "value", vt);
+                  expr2tc bv2;
+                  migrate_expr(base_expr, bv2);
+                  expr = migrate_expr_back(
+                    member2tc(migrate_type(vt), bv2, "value"));
                   break;
                 }
               }
@@ -498,6 +645,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         exprt resolved = resolve_member_on_base(base_expr, attr_name);
+
+        // Flow-sensitive class tracking (#4771/#4772): the usage-site scanner
+        // left this attribute as any_type() (void*) because it was assigned
+        // values of different classes; resolve_member_on_base can't find the
+        // field on a void* base. If the base lvalue was last assigned a known
+        // class at an unconditional top-level point, cast the base to that
+        // class's struct and retry, so last-write-wins layout is used here.
+        if (resolved.is_nil())
+        {
+          const std::string bp = flow_lvalue_path(element["value"]);
+          auto it =
+            bp.empty() ? flow_class_map_.end() : flow_class_map_.find(bp);
+          if (it != flow_class_map_.end())
+          {
+            // (tag-Cls*)base_expr, built in IREP2 (V.3).
+            const typet cast_t =
+              gen_pointer_type(symbol_typet("tag-" + it->second));
+            expr2tc base2;
+            migrate_expr(base_expr, base2);
+            exprt cast =
+              migrate_expr_back(typecast2tc(migrate_type(cast_t), base2));
+            cast.type() = cast_t; // restore #cpp_type that migrate_type drops
+            resolved = resolve_member_on_base(cast, attr_name);
+          }
+        }
+
         if (!resolved.is_nil())
         {
           expr = resolved;
@@ -661,6 +834,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
     }
 
+    // Straight-line dynamic retyping (#4770, #4774): if this variable was
+    // reassigned across the numeric<->string boundary, get_var_assign minted a
+    // fresh symbol of the new type and recorded it here. Redirect the load to
+    // that symbol so it observes the variable's current type and value.
+    if (!is_class_attr)
+    {
+      auto alias = retype_aliases_.find(symbol->id.as_string());
+      if (alias != retype_aliases_.end())
+      {
+        if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
+          symbol = retyped;
+      }
+    }
+
     expr = symbol_expr(*symbol);
 
     // If the looked-up symbol is an enum class attribute with int type,
@@ -684,6 +871,49 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      if (attr_name == "shape")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
+          std::vector<exprt> dim_exprs;
+          dim_exprs.reserve(dims.size());
+          for (int dim : dims)
+            dim_exprs.push_back(from_integer(dim, int_type()));
+          expr = build_shape_tuple_expr(*this, dim_exprs);
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          sym_type == list_type || (symbol->get_type().is_pointer() &&
+                                    symbol->get_type().subtype() == list_type))
+        {
+          const symbolt *size_func =
+            symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+          if (!size_func)
+            throw std::runtime_error(
+              "__ESBMC_list_size not found for list shape access");
+
+          // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
+          expr2tc base2;
+          migrate_expr(
+            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          expr2tc size_call = side_effect_function_call2tc(
+            migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+          exprt list_len =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
+          expr = build_shape_tuple_expr(*this, {list_len});
+          break;
+        }
+      }
 
       // Delegate complex attribute access (.real, .imag) to the handler.
       if (is_complex_type(symbol->get_type()))
@@ -732,10 +962,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class*
+        // Create a typecast from char* to target_class* in IREP2 (V.3).
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
-        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+        expr2tc expr2;
+        migrate_expr(expr, expr2);
+        exprt casted_expr =
+          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
+        casted_expr.type() = target_ptr_type;
 
         // Dereference to get the object
         exprt deref_expr("dereference", target_class_symbol->get_type());
@@ -747,8 +981,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        member_exprt member_expr(deref_expr, attr_name, clean_type);
-        expr = member_expr;
+        // V.3: IREP2 member access (exact round-trip of member_exprt).
+        expr2tc de2;
+        migrate_expr(deref_expr, de2);
+        expr = migrate_expr_back(
+          member2tc(migrate_type(clean_type), de2, attr_name));
         break;
       }
 
@@ -835,7 +1072,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!(base_type.is_struct() || base_type.is_union() ||
               points_to_struct))
-          base = typecast_exprt(base, gen_pointer_type(class_type));
+        {
+          // (class_type*)base, built in IREP2 (V.3).
+          const typet bt = gen_pointer_type(class_type);
+          expr2tc base2;
+          migrate_expr(base, base2);
+          base = migrate_expr_back(typecast2tc(migrate_type(bt), base2));
+          base.type() = bt; // restore #cpp_type that migrate_type drops
+        }
 
         if (base.type().is_pointer())
         {
@@ -845,7 +1089,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           base = std::move(deref);
         }
 
-        return member_exprt(base, attr_name, clean_type);
+        expr2tc b2;
+        migrate_expr(base, b2);
+        return migrate_expr_back(
+          member2tc(migrate_type(clean_type), b2, attr_name));
       };
 
       if (is_converting_lhs)
@@ -994,6 +1241,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // An inline list-returning call used directly as a subscript base --
+    // e.g. sorted(words)[0] -- comes back as a code_function_callt statement.
+    // Indexing it builds __ESBMC_list_size over the call statement, whose
+    // operand type is empty, aborting symex ("got empty, expected pointer").
+    // Materialise the call into a temporary first, mirroring the assigned
+    // path (s = sorted(words); s[0]). See #4807.
+    if (current_block)
+      array =
+        materialize_list_function_call(array, element["value"], *current_block);
+
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
@@ -1053,6 +1310,49 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    const typet list_type = type_handler_.get_list_type();
+    const bool array_is_runtime_list =
+      array_type == list_type ||
+      (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
+    const bool array_is_builtin_array = array_type.is_array();
+    const bool tuple_index_targets_list_model =
+      array_is_runtime_list || array_is_builtin_array;
+
+    // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
+    // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "Tuple")
+    {
+      if (
+        slice.contains("elts") && slice["elts"].is_array() &&
+        slice["elts"].size() == 2)
+      {
+        const auto &row_idx_raw = slice["elts"][0];
+        const auto &col_idx_raw = slice["elts"][1];
+        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
+        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
+        const bool has_slice_dim =
+          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
+          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
+        if (has_slice_dim)
+          throw_numpy_multidim_index_error(*this, element);
+
+        python_list list(*this, element);
+        exprt row = list.index(array, row_idx);
+        if (contains_cpp_throw(row))
+        {
+          expr = row;
+          break;
+        }
+
+        expr = list.index(row, col_idx);
+        break;
+      }
+
+      throw_numpy_multidim_index_error(*this, element);
+    }
+
     // Handle object subscripting through __getitem__:
     //   obj[key] -> obj.__getitem__(key)
     if (has_dunder_method(element["value"], "__getitem__"))
@@ -1063,23 +1363,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
-    }
-
-    // Multi-dimensional indexing ``a[i, j]`` -- the slice AST is a Tuple of
-    // index expressions. This is the canonical numpy 2D-indexing form. The
-    // frontend models numpy arrays as plain 1D Python lists, so the operation
-    // is unsupported; rejecting it explicitly produces a clean Python-level
-    // error rather than tripping `Unexpected type in int/ptr typecast` deep
-    // inside the SMT encoder when the resulting expression is consumed.
-    if (slice.contains("_type") && slice["_type"] == "Tuple")
-    {
-      std::ostringstream msg;
-      msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
-             "supported; numpy arrays are modelled as 1D lists";
-      const locationt loc = get_location_from_decl(element);
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
     }
 
     // Reject subscripting scalar numeric / boolean values up front. CPython
@@ -1113,7 +1396,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     // Handle regular array/list subscripting
     python_list list(*this, element);
-    expr = list.index(array, slice);
+    expr = list.index(array, normalize_bool_index_node(slice));
     break;
   }
   case ExpressionType::FSTRING:
@@ -1177,7 +1460,13 @@ static exprt make_slice_struct_expr(
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
-      value = typecast_exprt(value, field_type);
+    {
+      // (field_type)value, built in IREP2 (V.3).
+      expr2tc v2;
+      migrate_expr(value, v2);
+      value = migrate_expr_back(typecast2tc(migrate_type(field_type), v2));
+      value.type() = field_type; // restore #cpp_type that migrate_type drops
+    }
     return value;
   };
 

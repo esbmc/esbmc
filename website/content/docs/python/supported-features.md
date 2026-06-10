@@ -11,7 +11,8 @@ This page is a reference of all Python language constructs, data structures, and
 - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`, `**`
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
-- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment.
+- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`).
+- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](./limitations#walrus-operator)).
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
 - **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
@@ -41,7 +42,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **PEP 604 attribute annotations**: `self.x: T | None` (and other `T1 | T2` `BinOp` annotations) are recognised and mapped to the same pointer-to-`T` encoding used for `Optional[T]`
 - **Instance variables**: Attributes defined in `__init__`
 - **Object reference semantics**: When an instance attribute is assigned an aliased class-instance reference (e.g. `self.head = head` from a constructor parameter), the field is stored as a reference, so mutating the object through one binding is visible through the attribute (and vice versa). This makes linked-list, queue, and tree patterns that reassign such attributes through chained references (`curr = q.head; curr = curr.nxt; q.head = curr`) verify correctly. A fresh-constructor RHS (`self.a: A = A()`) is still constructed in place by value.
-- **Self-referential instance attributes**: When an attribute set in `__init__` from a `param=None`-defaulted parameter (e.g. `self.successor = successor`) is populated at construction time (`Node(2, a)`), its field type is recovered by unifying the matching positional constructor argument across module-level `ClassName(...)` calls — enabling linked-list / tree patterns and multi-level attribute chains such as `c.successor.successor`. Recovery is limited to the module being processed (see [Limitations — Class Attributes](./limitations#class-attributes)).
+- **Self-referential instance attributes**: When an attribute set in `__init__` from a `param=None`-defaulted parameter (e.g. `self.successor = successor`) is populated at construction time (`Node(2, a)`), its field type is recovered by unifying the matching positional constructor argument across module-level `ClassName(...)` calls — enabling linked-list / tree patterns and multi-level attribute chains such as `c.successor.successor`. This also works when the class is imported from another module (`from node import Node`): the attribute types are inferred across the module boundary, so a nested read like `node.successor.value` on an imported-class instance resolves.
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
@@ -70,6 +71,8 @@ This page is a reference of all Python language constructs, data structures, and
 - `reverse()`: Reverse in place
 - `sort()`: Sort in place (no arguments; key/reverse parameters not supported)
 - `insert(i, x)`: Insert at position; handles index at/beyond end, within bounds, and empty lists
+- `count(x)`: Return the number of occurrences of a value
+- `index(x)`: Return the position of the first occurrence of a value
 - `in` operator: Membership testing (`2 in [1, 2, 3]`)
 - `+` operator: List concatenation (`[1,2] + [3,4]`)
 - **Repetition**: `lst * n` with both literal and variable lists
@@ -164,12 +167,14 @@ This page is a reference of all Python language constructs, data structures, and
 
 Byte sequences and integer class methods:
 
+- **`bytes(...)` constructor** — `bytes(iterable-of-ints)` (e.g. `bytes([1, 2, 3])`) and `bytes(n)` (`n` zero bytes) build a real byte array, like a `b"..."` literal, so `len()` and indexing work; byte literals (`b"abc"`) are also supported
 - **`int.from_bytes(bytes_data, big_endian, signed)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned
 - **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary. The operational model bounds the loop length by `512`, which covers narrow 64-bit `IntWide` and 512-bit `--ir` bignum receivers and guarantees termination on symbolic `n` without an explicit `--unwind`.
 
 ## Error Handling
 
 - **`try`/`except`** blocks with multiple handlers and `except ExceptionType as var` binding
+- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, and when an exception propagates uncaught (run `finally`, then re-raise). Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](./limitations#exception-handling))
 - **`raise`** statements with exception instantiation and custom messages; bare `raise` re-raises the active exception inside an `except` handler
 - **`assert`** statements for property verification
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
@@ -359,6 +364,19 @@ See also: [Random Operational Model](./random-operational-model)
 
 - **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default. When the dict has no value annotation, the value type is inferred from the factory or from a subscript assignment in the enclosing function: built-in type factories (`defaultdict(int)`, `float`, `bool`, `str`), nullary `lambda` factories whose body is a constant or a built-in constructor call (`defaultdict(lambda: float('inf'))`), and constant literal assignments (`d[k] = 5`, `0.0`, `True`, `"x"`) all map to the matching value type, so `min`/`max`/comparisons over `d[k]` no longer fall back to `char *`
 - **`Counter`**: Mapping of elements to integer counts; supports `__getitem__`, `__setitem__`, `values()`, and boolean truthiness
+- **`deque`**: List-backed double-ended queue; supports construction, indexing, `__setitem__`, `append()`, and the FIFO-front methods `popleft()` (front pop) and `appendleft()` (front insert), enabling FIFO/BFS patterns. Aliased imports such as `from collections import deque as Queue` resolve correctly
+- **`OrderedDict`**: Supports construction and basic indexing / `append` / `__setitem__`
+
+## Queue Module (`queue`)
+
+A single-threaded verification model: `queue.Queue` is backed by a plain list (FIFO) and `queue.LifoQueue` by a list-backed stack (LIFO). Both the qualified form (`queue.Queue()`) and `from queue import LifoQueue` work.
+
+- **`Queue`** (FIFO): `put(item)` → append, `get()` → pop front, in insertion order
+- **`LifoQueue`** (LIFO / stack): `put(item)` → append, `get()` → pop back
+- **Shared methods**: `qsize()`, `empty()`, `full()`, `put_nowait()`, `get_nowait()`; `task_done()` and `join()` are accepted no-ops
+- **`maxsize`**: tracked by `full()` (`Queue(2)`); `put()` does not block on it
+
+The blocking semantics of `put()`/`get()` (the `block`/`timeout` arguments) are not modelled — there is nothing to block on under sequential symbolic execution. An unguarded `get()` on an empty queue pops from an empty list, reported as an `IndexError`; guard with `empty()`/`qsize()` first.
 
 ## Datetime Module (`datetime`)
 
@@ -406,14 +424,16 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 ## NumPy Module (`numpy`)
 
-Partial stub-level support for type-inference and basic arithmetic verification. Arrays are modelled as plain Python lists.
+Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)`
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for supported 1D/2D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs
 
-**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)`
+**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
 
-**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`
+**Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](./limitations#numpy-module))
 
-**Additional stubs** (return constant placeholder values for type inference only): `np.cos(x)`, `np.arccos(x)`, `np.arctan(x)`, `np.exp(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.arctan(x)`, `np.exp(x)` on scalar or literal list-backed 1D/2D inputs
 
-**Linear algebra** (`numpy.linalg`): `np.linalg.det(a, b)` (2×2 stub)
+**Additional stubs** (return constant placeholder values for type inference only): `np.arccos(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+
+**Linear algebra** (`numpy.linalg`): `np.linalg.det(a)` for constant numeric 2x2 and 3x3 matrices

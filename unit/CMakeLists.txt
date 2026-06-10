@@ -12,7 +12,11 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 
 if(ENABLE_PYTHON_FRONTEND)
-add_subdirectory(python-frontend)
+  add_subdirectory(python-frontend)
+endif()
+
+if(ENABLE_LD_FRONTEND)
+  add_subdirectory(ld-frontend)
 endif()
 
 add_subdirectory(util)

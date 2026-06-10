@@ -69,7 +69,7 @@ protected:
 
   void parameter_assignments(
     const locationt &location,
-    const code_typet &code_type,
+    const code_type2t &code_type,
     const std::vector<expr2tc> &arguments,
     goto_programt &dest);
 

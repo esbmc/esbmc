@@ -144,18 +144,34 @@ class GeneratorMixin:
                 self.ensure_all_locations(if_stmt, generator.ifs[0])
                 ast.fix_missing_locations(if_stmt)
                 loop_body = [if_stmt]
+            # A comprehension used directly as the iterable — e.g.
+            # [x for x in [y for y in xs]], which is how list(filter(p, [..]))
+            # desugars — must be materialised into its own temp list first.
+            # Otherwise the inner comprehension is left in the For's iter and
+            # reaches the C++ converter unlowered ("Unsupported expression
+            # ListComp"). The lowered prefix runs just before this loop.
+            gen_iter = generator.iter
+            if isinstance(gen_iter, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
+                iter_prefix, gen_iter, _ = self._lower_listcomp_in_expr(gen_iter)
+            else:
+                iter_prefix = []
+                gen_iter = self.visit(gen_iter)
             for_stmt = ast.For(
                 target=generator.target,
-                iter=self.visit(generator.iter),
+                iter=gen_iter,
                 body=loop_body,
                 orelse=[],
             )
             self.ensure_all_locations(for_stmt, node)
-            loop_body = [for_stmt]
+            loop_body = iter_prefix + [for_stmt]
 
-        transformed_for = self.visit_For(loop_body[0])
+        # loop_body is [<already-lowered iter prefix...>, outermost_for]; only
+        # the For node built above still needs lowering to a while loop.
+        *pre_stmts, outer_for = loop_body
+        transformed_for = self.visit_For(outer_for)
         if not isinstance(transformed_for, list):
             transformed_for = [transformed_for]
+        transformed_for = pre_stmts + transformed_for
 
         for stmt in transformed_for:
             self.ensure_all_locations(stmt, node)
@@ -1433,13 +1449,20 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         apply soundness checks that depend on which wrapper is in use
-        (list/sorted/set differ in ordering semantics).
+        (list/sorted/set differ in ordering semantics). ``sorted(list(...))``
+        folds to ``sorted(...)`` (list() is identity on a view) so the
+        cascade matches both idioms.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id
                 in wrappers and len(node.args) == 1 and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         arg = node.args[0]
+        if wrapper == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
             return self.dict_items_vars[arg.id], wrapper
         dict_expr = self._get_dict_expr_from_items_call(arg)
@@ -1489,17 +1512,22 @@ class GeneratorMixin:
 
         Returns (None, None) on no match. The wrapper name lets the caller
         enforce wrapper-vs-literal-type compatibility (e.g. set wrapper
-        requires a Set literal, list/sorted requires a List literal).
+        requires a Set literal). ``sorted(list(...))`` is peeled to
+        ``sorted(...)`` since list() is identity on a view.
         """
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id in ("list", "sorted", "set")
-                and len(node.args) == 1 and not getattr(node, "keywords", [])):
+                and node.func.id in ("list", "sorted", "set") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
             return None, None
         wrapper = node.func.id
         inner = node.args[0]
-        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
-                and inner.func.attr == attr and not inner.args
-                and not getattr(inner, "keywords", [])):
+        if wrapper == "sorted":
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "list" and len(inner.args) == 1
+                    and not getattr(inner, "keywords", [])):
+                inner = inner.args[0]
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) and
+                inner.func.attr == attr and not inner.args and not getattr(inner, "keywords", [])):
             return None, None
         base = inner.func.value
         if isinstance(base, ast.Name):
@@ -1515,7 +1543,7 @@ class GeneratorMixin:
         This avoids tuple struct comparison and uses only proven-working primitives.
         Returns the new AST node, or None if the pattern doesn't match.
         """
-        dict_expr, _ = self._get_items_dict_expr(set_side, ("set",))
+        dict_expr, _ = self._get_items_dict_expr(set_side, ("set", ))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.Set) or not literal_side.elts:
@@ -1698,8 +1726,7 @@ class GeneratorMixin:
         - list wrapper: literal must have at most one pair (ESBMC's dict
           model does not preserve insertion order).
         """
-        dict_expr, wrapper = self._get_items_dict_expr(list_side,
-                                                       ("list", "sorted"))
+        dict_expr, wrapper = self._get_items_dict_expr(list_side, ("list", "sorted"))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.List):
@@ -1711,8 +1738,7 @@ class GeneratorMixin:
             pairs.append((elt.elts[0], elt.elts[1]))
         if pairs and not self._all_constants_distinct([k for k, _ in pairs]):
             return None
-        if wrapper == "sorted" and not self._is_sorted_const_list(
-                literal_side.elts, by="first"):
+        if wrapper == "sorted" and not self._is_sorted_const_list(literal_side.elts, by="first"):
             return None
         if wrapper == "list" and len(pairs) > 1:
             return None
@@ -1732,6 +1758,8 @@ class GeneratorMixin:
             ast.fix_missing_locations(len_eq)
             return len_eq
 
+        # d[k] emits THROW KeyError, use d.get(k) on Name receivers.
+        use_get = isinstance(dict_expr, ast.Name)
         value_checks = [len_eq]
         for k, v in pairs:
             key_in_dict = ast.Compare(
@@ -1739,14 +1767,19 @@ class GeneratorMixin:
                 ops=[ast.In()],
                 comparators=[copy.deepcopy(dict_expr)],
             )
-            subscript = ast.Subscript(
-                value=copy.deepcopy(dict_expr),
-                slice=copy.deepcopy(k),
-                ctx=ast.Load(),
-            )
-            val_eq = ast.Compare(left=subscript,
-                                 ops=[ast.Eq()],
-                                 comparators=[copy.deepcopy(v)])
+            if use_get:
+                value_lookup = ast.Call(
+                    func=ast.Attribute(value=copy.deepcopy(dict_expr), attr="get", ctx=ast.Load()),
+                    args=[copy.deepcopy(k)],
+                    keywords=[],
+                )
+            else:
+                value_lookup = ast.Subscript(
+                    value=copy.deepcopy(dict_expr),
+                    slice=copy.deepcopy(k),
+                    ctx=ast.Load(),
+                )
+            val_eq = ast.Compare(left=value_lookup, ops=[ast.Eq()], comparators=[copy.deepcopy(v)])
             value_checks.append(key_in_dict)
             value_checks.append(val_eq)
 
@@ -1798,7 +1831,15 @@ class GeneratorMixin:
                         comparators=[copy.deepcopy(value_node)],
                     ))
 
-        result = ast.BoolOp(op=ast.And(), values=checks)
+        # An empty literal (``x == []``) yields a single ``len(x) == 0`` check.
+        # A one-value ``BoolOp(And)`` is degenerate AST that lowers to a
+        # malformed single-operand ``and`` expr, so collapse it to the lone
+        # check (mirrors the guards in _lower_assert_eq_literal and
+        # _try_lower_expr_tuple_literal_eq).
+        if len(checks) == 1:
+            result = checks[0]
+        else:
+            result = ast.BoolOp(op=ast.And(), values=checks)
         self.ensure_all_locations(result, source_node)
         ast.fix_missing_locations(result)
         return result

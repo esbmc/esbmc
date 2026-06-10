@@ -23,6 +23,7 @@
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/context.h>
+#include <util/expr_util.h>
 
 namespace
 {
@@ -148,6 +149,17 @@ TEST_CASE("migrate expr round-trips for code statements", "[migrate]")
   require_expr_roundtrip(code_assign2tc(lhs, rhs));
 }
 
+TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
+{
+  use_test_ns();
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(42));
+  // 2-op code_decl: declaration with initializer -- must round-trip so that
+  // goto_convert places the DEAD instruction at end-of-scope, not early.
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x"), rhs));
+  // 1-op code_decl: no initializer -- init field is nil, round-trips as 1-op
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
@@ -182,6 +194,18 @@ TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
   require_expr_roundtrip(code_cpp_catch2tc(exceptions));
 }
 
+TEST_CASE("migrate expr round-trips for code_cpp_throw", "[migrate][b2-vtrack]")
+{
+  // Back-arm produces sideeffect("cpp-throw"); forward arm re-lifts that to
+  // code_cpp_throw2tc, completing the IREP2->legacy->IREP2 round-trip.
+  use_test_ns();
+  std::vector<irep_idt> exceptions{"std::runtime_error"};
+  expr2tc operand = symbol2tc(get_int_type(32), "ex");
+  require_expr_roundtrip(code_cpp_throw2tc(operand, exceptions));
+  // rethrow: null operand, empty exception list
+  require_expr_roundtrip(code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}));
+}
+
 TEST_CASE(
   "migrate expr round-trips for code_cpp_throw_decl",
   "[migrate][b2-vtrack]")
@@ -201,6 +225,65 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "migrate expr round-trips for code_cpp_src_throw_decl",
+  "[migrate][b2-vtrack]")
+{
+  // code_cpp_src_throw_decl is the source-level exception spec: back-migrates
+  // to codet("throw_decl") (underscore) with operands carrying throw_decl_id
+  // attributes, and forward-migrates from that form back to IREP2.
+  std::vector<irep_idt> exceptions{"noexcept"};
+  require_expr_roundtrip(code_cpp_src_throw_decl2tc(exceptions));
+}
+
+TEST_CASE("migrate expr round-trips for new_object", "[migrate][b2-vtrack]")
+{
+  // new_object is the C++ "this" placeholder in temporary_object initializers.
+  // Back-migrates to exprt("new_object") carrying the type, then re-migrates
+  // to the same new_object2tc.
+  use_test_ns();
+  type2tc t = make_struct_type();
+  require_expr_roundtrip(new_object2tc(t));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (1-op form)",
+  "[migrate][b2-vtrack]")
+{
+  // 1-op form: operand carries the constructor call; arguments empty.
+  // Back-migrates to side_effect_exprt("temporary_object") with one operand.
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc operand = symbol2tc(get_int_type(32), "x");
+  expr2tc nil_expr;
+  std::vector<expr2tc> no_args;
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st,
+    operand,
+    nil_expr,
+    no_args,
+    st,
+    sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (initializer form)",
+  "[migrate][b2-vtrack]")
+{
+  // initializer-form: operand is nil; initializer stored in arguments[0].
+  // Back-migrates to side_effect_exprt("temporary_object") with no direct
+  // operands and the initializer restored via theexpr.initializer().
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc nil_expr;
+  expr2tc init = symbol2tc(get_int_type(32), "x");
+  std::vector<expr2tc> args{init};
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st, nil_expr, nil_expr, args, st, sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
   "migrate expr round-trips for pointer_capability",
   "[migrate][b2-vtrack]")
 {
@@ -212,4 +295,208 @@ TEST_CASE(
   expr2tc base = symbol2tc(get_int_type(32), "x");
   type2tc cap_t = unsignedbv_type2tc(64);
   require_expr_roundtrip(pointer_capability2tc(cap_t, base));
+}
+
+// V.4 of the migration (esbmc/esbmc#4715): structured control-flow code kinds.
+// These are dead-but-tested infrastructure -- nothing in the pipeline builds
+// them yet (the converter emits legacy structured codet, which goto_convert
+// lowers). The round-trip property pinned here is the precondition for the
+// goto_convert wiring phase that lets a frontend emit IREP2 bodies. The
+// nil-operand variants (else-less if, head-less for) exercise the null<->nil
+// mapping that an emitted body would hit.
+
+// A small legacy-shaped IREP2 body used as a sub-statement of the CF kinds.
+static expr2tc cf_block()
+{
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(1));
+  return code_block2tc(std::vector<expr2tc>{code_assign2tc(lhs, rhs)});
+}
+
+TEST_CASE("migrate expr round-trips for code_ifthenelse", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), cf_block()));
+  // No else branch: the else_case is a null expr2tc <-> nil exprt.
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), expr2tc()));
+}
+
+TEST_CASE("migrate expr round-trips for code_while", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_while2tc(gen_true_expr(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_dowhile", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_for", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc i = symbol2tc(get_int_type(32), "i");
+  expr2tc init =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(0)));
+  expr2tc iter =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(1)));
+  require_expr_roundtrip(code_for2tc(init, gen_true_expr(), iter, cf_block()));
+  // Absent init/cond/iter -- the null<->nil corner for every head slot.
+  require_expr_roundtrip(
+    code_for2tc(expr2tc(), expr2tc(), expr2tc(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_switch", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+  require_expr_roundtrip(code_switch2tc(value, cf_block()));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_break and code_continue",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_break2tc());
+  require_expr_roundtrip(code_continue2tc());
+}
+
+TEST_CASE("migrate expr round-trips for code_label", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_label2tc("L1", cf_block()));
+}
+
+// V.4.1: each CF kind carries a source location through migrate in both
+// directions. The location field is intentionally NOT in the fields tuple, so
+// it does not enter operator== -- require_expr_roundtrip would pass even if it
+// were dropped. Assert it survives explicitly via the typed accessor.
+static locationt cf_loc()
+{
+  locationt l;
+  l.set_file("cf.c");
+  l.set_line(42u);
+  return l;
+}
+
+static expr2tc cf_roundtrip(const expr2tc &e2)
+{
+  expr2tc back;
+  migrate_expr(migrate_expr_back(e2), back);
+  return back;
+}
+
+TEST_CASE(
+  "migrate carries source location on CF code kinds",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const locationt loc = cf_loc();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+
+  REQUIRE(
+    to_code_ifthenelse2t(cf_roundtrip(code_ifthenelse2tc(
+                           gen_true_expr(), cf_block(), expr2tc(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_while2t(
+      cf_roundtrip(code_while2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_dowhile2t(
+      cf_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_for2t(cf_roundtrip(code_for2tc(
+                    expr2tc(), expr2tc(), expr2tc(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_switch2t(cf_roundtrip(code_switch2tc(value, cf_block(), loc)))
+      .location == loc);
+  REQUIRE(to_code_break2t(cf_roundtrip(code_break2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_continue2t(cf_roundtrip(code_continue2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_label2t(cf_roundtrip(code_label2tc("L1", cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assert2t(cf_roundtrip(code_assert2tc(gen_true_expr(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assume2t(cf_roundtrip(code_assume2tc(gen_true_expr(), loc)))
+      .location == loc);
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_assert and code_assume",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_assert2tc(gen_true_expr()));
+  require_expr_roundtrip(code_assume2tc(gen_false_expr()));
+}
+
+// Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and
+// side_effect_function_call2tc. The contract is that each is a faithful
+// drop-in for the legacy constructor it replaces -- it produces the same IREP2
+// node migrate_expr would yield from the legacy form -- and round-trips
+// losslessly. No frontend call site is wired to them yet (Phase 4.3/4.4).
+
+TEST_CASE(
+  "symbol_expr2tc is a drop-in for the migrated legacy symbol_expr",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const symbolt *sym = test_context().find_symbol("x");
+  REQUIRE(sym != nullptr);
+
+  const expr2tc via_helper = symbol_expr2tc(*sym);
+  REQUIRE(is_symbol2t(via_helper));
+  REQUIRE(via_helper->type == migrate_symbol_type(*sym));
+
+  // Equal to migrating the legacy symbol_expr(sym): the helper is what the
+  // ~844 symbol_expr(symbolt) sites migrate to.
+  expr2tc via_legacy;
+  migrate_expr(symbol_expr(*sym), via_legacy);
+  REQUIRE(via_helper == via_legacy);
+
+  require_expr_roundtrip(via_helper);
+}
+
+TEST_CASE(
+  "side_effect_function_call2tc builds a function_call side-effect",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const type2tc ret = get_int_type(32);
+  const symbolt *xsym = test_context().find_symbol("x");
+  const expr2tc fn = symbol_expr2tc(*xsym); // callee reference
+  const std::vector<expr2tc> args{
+    constant_int2tc(get_int_type(32), BigInt(7)),
+    constant_int2tc(get_int_type(32), BigInt(9))};
+
+  // Canonical IREP2 form: what migrate_expr yields from a real legacy
+  // side_effect_expr_function_callt. The helper must reproduce it exactly.
+  side_effect_expr_function_callt legacy(migrate_type_back(ret));
+  legacy.function() = symbol_expr(*xsym);
+  legacy.arguments().push_back(migrate_expr_back(args[0]));
+  legacy.arguments().push_back(migrate_expr_back(args[1]));
+  expr2tc via_legacy;
+  migrate_expr(legacy, via_legacy);
+
+  const expr2tc via_helper = side_effect_function_call2tc(ret, fn, args);
+  REQUIRE(is_sideeffect2t(via_helper));
+
+  const sideeffect2t &se = to_sideeffect2t(via_helper);
+  REQUIRE(se.kind == sideeffect2t::allockind::function_call);
+  REQUIRE(se.operand == fn);
+  REQUIRE(se.arguments == args);
+  REQUIRE(via_helper->type == ret);
+
+  REQUIRE(via_helper == via_legacy); // faithful drop-in
+  require_expr_roundtrip(via_helper);
 }

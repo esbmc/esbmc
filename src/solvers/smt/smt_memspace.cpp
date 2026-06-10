@@ -131,9 +131,27 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
       }
 
-      assert(side1->type == side2->type);
+      // C11 6.5.6p9: both operands of a pointer difference must point to
+      // elements of the same array object, so their element types are
+      // compatible and -- crucially for the division below -- have equal
+      // size. ESBMC's value-set/dereference machinery can nonetheless hand us
+      // two operands whose pointer subtypes are structurally distinct yet
+      // same-sized: classically a void* operand (subtype `empty`, for which
+      // sizeof==1 by the GCC extension) paired with the concrete `char`
+      // element type of the object it was resolved to. Sanity-check equal
+      // element *size* rather than identical pointer types so these legitimate
+      // cases are encoded instead of aborting; the divisor is still side1's
+      // element size, which equals side2's whenever the old structural check
+      // held. The size comparison is structural, so only assert it for
+      // constant (non-VLA) sizes -- two semantically-equal symbolic sizes can
+      // be different expression trees and must not abort a well-formed run.
       expr2tc type_size =
         type_byte_size_expr(to_pointer_type(side1->type).subtype, &ns);
+      expr2tc side2_size =
+        type_byte_size_expr(to_pointer_type(side2->type).subtype, &ns);
+      assert(
+        !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
+        type_size == side2_size);
       type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
       expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
 

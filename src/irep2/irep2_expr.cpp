@@ -1,4 +1,6 @@
 #include <memory>
+#include <charconv>
+#include <unordered_map>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -8,7 +10,6 @@
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
@@ -40,16 +41,6 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
     expected_name,
     actual_name,
     target));
-}
-
-void irep2_bad_family_cast(unsigned actual, const char *accessor)
-{
-  const char *actual_name =
-    (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: {}() called on incompatible expr (expr_id = {})",
-    accessor,
-    actual_name));
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -132,25 +123,105 @@ bool constant_bool2t::is_false() const
 
 std::string symbol2t::get_symbol_name() const
 {
+  // The fully-qualified SSA name is a pure function of the symbol's
+  // (thename, rlevel, l1, thread, node, l2) identity fields, which are
+  // immutable for a given node. symex requests the same symbol's name many
+  // times (~18x measured on test_locks_13), and each rebuild allocated
+  // several short-lived strings. Memoise via a thread-local side table keyed
+  // by that identity: the qualified name accounted for ~16% of runtime
+  // (mostly i2string + string concatenation), and caching removes the bulk
+  // of it.
+  //
+  // The cache lives outside the node because irep2's node-layout invariant
+  // (fields_cover_class) does not admit a non-identity member on the node.
+  // thread_local keeps it correct under the single-writer-per-thread
+  // contract without locking; values are interned irep_idt (4 bytes) so the
+  // table stays compact regardless of name length.
+  struct keyt
+  {
+    unsigned name_no, l1, thr, node, l2;
+    int lvl;
+    bool operator==(const keyt &o) const
+    {
+      return name_no == o.name_no && l1 == o.l1 && thr == o.thr &&
+             node == o.node && l2 == o.l2 && lvl == o.lvl;
+    }
+  };
+  struct key_hash
+  {
+    std::size_t operator()(const keyt &k) const
+    {
+      std::size_t h = k.name_no;
+      h = h * 1000003u + k.l1;
+      h = h * 1000003u + k.thr;
+      h = h * 1000003u + k.node;
+      h = h * 1000003u + k.l2;
+      h = h * 1000003u + (unsigned)k.lvl;
+      return h;
+    }
+  };
+  static thread_local std::unordered_map<keyt, irep_idt, key_hash> memo;
+
+  keyt key{
+    thename.get_no(),
+    level1_num,
+    thread_num,
+    node_num,
+    level2_num,
+    (int)rlevel};
+  auto it = memo.find(key);
+  if (it != memo.end())
+    return it->second.as_string();
+
+  // Build the qualified name into a single pre-sized buffer. The previous
+  // `as_string() + "?" + i2string(n) + ...` form allocated ~9 temporary
+  // strings per name (each i2string is an sprintf + heap string, and each
+  // operator+ reallocates the growing prefix). Appending decimal digits in
+  // place with std::to_chars keeps it to one allocation and no sprintf.
+  auto append_uint = [](std::string &out, unsigned v) {
+    char buf[10]; // unsigned <= 4294967295 -> at most 10 digits
+    auto [end, ec] = std::to_chars(buf, buf + sizeof(buf), v);
+    (void)ec;
+    out.append(buf, end);
+  };
+
+  const std::string &base = thename.as_string();
+  std::string built;
+  built.reserve(base.size() + 32);
+  built = base;
   switch (rlevel)
   {
   case symbol_renaming_level::level0:
-    return thename.as_string();
-  case symbol_renaming_level::level1:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num);
-  case symbol_renaming_level::level2:
-    return thename.as_string() + "?" + i2string(level1_num) + "!" +
-           i2string(thread_num) + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
   case symbol_renaming_level::level1_global:
-    return thename.as_string();
+    break;
+  case symbol_renaming_level::level1:
+    built += '?';
+    append_uint(built, level1_num);
+    built += '!';
+    append_uint(built, thread_num);
+    break;
+  case symbol_renaming_level::level2:
+    built += '?';
+    append_uint(built, level1_num);
+    built += '!';
+    append_uint(built, thread_num);
+    built += '&';
+    append_uint(built, node_num);
+    built += '#';
+    append_uint(built, level2_num);
+    break;
   case symbol_renaming_level::level2_global:
-    return thename.as_string() + "&" + i2string(node_num) + "#" +
-           i2string(level2_num);
+    built += '&';
+    append_uint(built, node_num);
+    built += '#';
+    append_uint(built, level2_num);
+    break;
+  default:
+    assert(0 && "Unrecognized renaming level enum");
+    abort();
   }
-  assert(0 && "Unrecognized renaming level enum");
-  abort();
+  memo.emplace(key, irep_idt(built));
+  return built;
 }
 
 namespace
@@ -315,6 +386,16 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
     return printf_kindt::VFPRINTF;
   if (name == "snprintf")
     return printf_kindt::SNPRINTF;
+  if (name == "vprintf")
+    return printf_kindt::VPRINTF;
+  if (name == "vsprintf")
+    return printf_kindt::VSPRINTF;
+  if (name == "vsnprintf")
+    return printf_kindt::VSNPRINTF;
+  if (name == "asprintf")
+    return printf_kindt::ASPRINTF;
+  if (name == "vasprintf")
+    return printf_kindt::VASPRINTF;
   assert(0 && "Unrecognized printf-family base_name");
   abort();
 }
@@ -478,36 +559,6 @@ expr2tc expr2t::with_type(const type2tc &new_type) const
         static_cast<const kind##2t &>(*this), new_type);                       \
     else                                                                       \
       with_type_unsupported(*this);
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  case end_expr_id:
-    break;
-  }
-  std::unreachable();
-}
-
-size_t expr2t::crc() const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  case end_expr_id:
-    break;
-  }
-  std::unreachable();
-}
-
-void expr2t::hash(crypto_hash &h) const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_hash(static_cast<const kind##2t &>(*this), h);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   case end_expr_id:
@@ -777,7 +828,7 @@ std::string code_block2t::field_names[esbmct::num_type_fields] =
 std::string code_assign2t::field_names[esbmct::num_type_fields] =
   {"target", "source", "", "", ""};
 std::string code_decl2t::field_names[esbmct::num_type_fields] =
-  {"value", "", "", "", ""};
+  {"value", "init", "", "", ""};
 std::string code_dead2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_printf2t::field_names[esbmct::num_type_fields] =
@@ -788,6 +839,8 @@ std::string code_return2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_skip2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
+std::string new_object2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
 std::string code_free2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_goto2t::field_names[esbmct::num_type_fields] =
@@ -796,6 +849,30 @@ std::string object_descriptor2t::field_names[esbmct::num_type_fields] =
   {"object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names[esbmct::num_type_fields] =
   {"return_sym", "function", "operands", "", ""};
+std::string code_ifthenelse2t::field_names[esbmct::num_type_fields] =
+  {"cond", "then_case", "else_case", "", ""};
+std::string code_while2t::field_names[esbmct::num_type_fields] =
+  {"cond", "body", "", "", ""};
+std::string code_dowhile2t::field_names[esbmct::num_type_fields] =
+  {"cond", "body", "", "", ""};
+std::string code_for2t::field_names[esbmct::num_type_fields] =
+  {"init", "cond", "iter", "body", ""};
+std::string code_switch2t::field_names[esbmct::num_type_fields] =
+  {"value", "body", "", "", ""};
+std::string code_break2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_continue2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_label2t::field_names[esbmct::num_type_fields] =
+  {"label", "code", "", "", ""};
+std::string code_switch_case2t::field_names[esbmct::num_type_fields] =
+  {"is_default", "case_op", "code", "", ""};
+std::string code_assert2t::field_names[esbmct::num_type_fields] =
+  {"guard", "", "", "", ""};
+std::string code_assume2t::field_names[esbmct::num_type_fields] =
+  {"guard", "", "", "", ""};
+std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
+  {"op", "lhs", "rhs", "", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =
@@ -813,6 +890,8 @@ std::string code_cpp_throw2t::field_names[esbmct::num_type_fields] =
 std::string code_cpp_throw_decl2t::field_names[esbmct::num_type_fields] =
   {"exception_list", "", "", "", ""};
 std::string code_cpp_throw_decl_end2t::field_names[esbmct::num_type_fields] =
+  {"exception_list", "", "", "", ""};
+std::string code_cpp_src_throw_decl2t::field_names[esbmct::num_type_fields] =
   {"exception_list", "", "", "", ""};
 std::string isinf2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};

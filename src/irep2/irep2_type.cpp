@@ -9,7 +9,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 
 /*************************** Base type2t definitions **************************/
 
@@ -48,6 +47,22 @@ void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
     expected_name,
     actual_name,
     target));
+}
+
+// Family accessors (struct_union_member_names, array_or_vector_subtype, ...)
+// reject types outside the family they serve. Every caller passes a
+// `type2t::type_id`, so format with the type-name table — defined here in
+// irep2_type.cpp so `type_names[]` is in scope. (Previously this lived in
+// irep2_expr.cpp and printed via expr_names[], so a rejected `symbol` type
+// (type_id 2) was mislabelled as "constant_floatbv" (expr_id 2).)
+void irep2_bad_family_cast(unsigned actual, const char *accessor)
+{
+  const char *actual_name =
+    (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: {}() called on incompatible type (type_id = {})",
+    accessor,
+    actual_name));
 }
 
 type2t::type2t(type_ids id) : type_id(id), crc_val(0)
@@ -257,38 +272,6 @@ type2tc type2t::clone() const
 #define IREP2_TYPE(kind, _)                                                    \
   case kind##_id:                                                              \
     return make_irep<kind##_type2t>(static_cast<const kind##_type2t &>(*this));
-#include <irep2/type_kinds.inc>
-#undef IREP2_TYPE
-  case end_type_id:
-    break;
-  }
-  std::unreachable();
-}
-
-size_t type2t::crc() const
-{
-  switch (type_id)
-  {
-#define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                              \
-    return esbmct::generic_do_crc_type(                                        \
-      static_cast<const kind##_type2t &>(*this));
-#include <irep2/type_kinds.inc>
-#undef IREP2_TYPE
-  case end_type_id:
-    break;
-  }
-  std::unreachable();
-}
-
-void type2t::hash(crypto_hash &h) const
-{
-  switch (type_id)
-  {
-#define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                              \
-    esbmct::generic_hash_type(static_cast<const kind##_type2t &>(*this), h);   \
-    return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   case end_type_id:

@@ -1,7 +1,6 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <util/config.h>
-#include <util/crypto_hash.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/message.h>
@@ -142,8 +141,7 @@ bool reachability_treet::check_for_hash_collision() const
 {
   const execution_statet &ex_state = get_cur_state();
 
-  crypto_hash hash;
-  hash = ex_state.generate_hash();
+  std::size_t hash = ex_state.generate_hash();
   if (hit_hashes.find(hash) != hit_hashes.end())
     return true;
 
@@ -160,8 +158,7 @@ void reachability_treet::update_hash_collision_set()
 {
   execution_statet &ex_state = get_cur_state();
 
-  crypto_hash hash;
-  hash = ex_state.generate_hash();
+  std::size_t hash = ex_state.generate_hash();
   hit_hashes.insert(hash);
 }
 

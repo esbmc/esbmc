@@ -5,11 +5,10 @@ weight: 2
 
 ## Prerequisites
 
-ESBMC-Python requires Python 3.10 or later and the `ast2json` package:
-
-```bash
-pip install ast2json
-```
+ESBMC-Python requires Python 3.10 or later. `ast2json` is bundled with ESBMC
+(vendored in the source tree since
+[#3790](https://github.com/esbmc/esbmc/pull/3790)), so no extra packages are
+needed.
 
 ## Basic Invocation
 
@@ -38,6 +37,8 @@ esbmc main.py --unwind 10
 | `--k-path-witness-depth=D` | Cap post-simplification guard depth for k-path witnesses (default 8). |
 | `--k-path-max-goals=M` | Per-function goal cap for k-path coverage (default 10000). |
 | `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest-testgen)) |
+| `--python <path>` | Python interpreter binary to use (searched in `$PATH`; default `python`). It must be Python 3 — ESBMC errors out on a Python 2 interpreter. |
+| `--function <name>` | Verify a single function instead of the entire file |
 
 ## Writing Verification Harnesses
 
