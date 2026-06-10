@@ -201,12 +201,15 @@ irep_typedefs(object_descriptor);
 irep_typedefs(code_function_call);
 irep_typedefs(code_ifthenelse);
 irep_typedefs(code_while);
+irep_typedefs(code_dowhile);
 irep_typedefs(code_for);
 irep_typedefs(code_switch);
 irep_typedefs(code_break);
 irep_typedefs(code_continue);
 irep_typedefs(code_label);
 irep_typedefs(code_switch_case);
+irep_typedefs(code_assert);
+irep_typedefs(code_assume);
 irep_typedefs(sideeffect_assign);
 irep_typedefs(code_comma);
 irep_typedefs(invalid_pointer);
@@ -2013,6 +2016,30 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_dowhile2t : public expr2t
+{
+public:
+  expr2tc cond;
+  expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_dowhile2t(
+    const expr2tc &c,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_dowhile_id), cond(c), body(b), location(loc)
+  {
+  }
+  code_dowhile2t(const code_dowhile2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_dowhile2t::cond,
+    &code_dowhile2t::body);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 class code_for2t : public expr2t
 {
 public:
@@ -2155,6 +2182,46 @@ public:
     &code_switch_case2t::is_default,
     &code_switch_case2t::case_op,
     &code_switch_case2t::code);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.3: code_assert / code_assume — single-guard code kinds emitted by the
+ *  Python / C++ frontends for assert and __ESBMC_assume.
+ *  The guard is the boolean condition; the location carries the user-visible
+ *  comment (assertion message) and source coordinates. */
+class code_assert2t : public expr2t
+{
+public:
+  expr2tc guard;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_assert2t(const expr2tc &g, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assert_id), guard(g), location(loc)
+  {
+  }
+  code_assert2t(const code_assert2t &ref) = default;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_assert2t::guard);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_assume2t : public expr2t
+{
+public:
+  expr2tc guard;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_assume2t(const expr2tc &g, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assume_id), guard(g), location(loc)
+  {
+  }
+  code_assume2t(const code_assume2t &ref) = default;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_assume2t::guard);
   static std::string field_names[esbmct::num_type_fields];
 };
 

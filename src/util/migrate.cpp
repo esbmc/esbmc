@@ -1853,15 +1853,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     std::vector<expr2tc> args;
     if (
       expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
-      expr.statement() != "cpp_new[]")
+      expr.statement() != "cpp_new[]" && expr.statement() != "cpp-throw")
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
-      expr.statement() != "nondet" && expr.statement() != "function_call")
-      // For everything other than nondet,
+      expr.statement() != "nondet" && expr.statement() != "function_call" &&
+      expr.statement() != "cpp-throw")
+      // For everything other than nondet / cpp-throw,
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
     type2tc cmt_type =
@@ -1949,6 +1950,22 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       // __ESBMC_assigns() in function contracts
       t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if (expr.statement() == "cpp-throw")
+    {
+      // Python/C++ throw expression: side_effect_exprt("cpp-throw").
+      // Maps to code_cpp_throw2tc (same IREP2 kind as the code-level throw),
+      // since both ultimately call convert_throw with identical data.
+      const irept::subt &exceptions_thrown =
+        expr.find("exception_list").get_sub();
+      std::vector<irep_idt> expr_list;
+      for (const auto &e_it : exceptions_thrown)
+        expr_list.push_back(e_it.id());
+      expr2tc cpp_throw_operand;
+      if (expr.operands().size() == 1)
+        migrate_expr(expr.op0(), cpp_throw_operand);
+      new_expr_ref = code_cpp_throw2tc(cpp_throw_operand, expr_list);
+      return;
     }
     else
     {
@@ -2218,6 +2235,31 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), body);
     new_expr_ref = code_while2tc(cond, body, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "dowhile")
+  {
+    expr2tc cond, body;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref = code_dowhile2tc(cond, body, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "assert")
+  {
+    expr2tc guard;
+    migrate_expr(expr.op0(), guard);
+    new_expr_ref = code_assert2tc(guard, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "assume")
+  {
+    expr2tc guard;
+    migrate_expr(expr.op0(), guard);
+    new_expr_ref = code_assume2tc(guard, expr.location());
     return;
   }
 
@@ -3736,14 +3778,20 @@ exprt migrate_expr_back(const expr2tc &ref)
   }
   case expr2t::code_cpp_throw_id:
   {
+    // Back-migrate to side_effect_exprt("cpp-throw") so the forward arm
+    // (which handles both sideeffect and code forms) can reconstruct the
+    // same code_cpp_throw2tc. Both sideeffect and code forms of cpp-throw
+    // produce identical GOTO instructions via convert_throw.
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
-    exprt codeexpr("cpp-throw");
+    exprt codeexpr("sideeffect");
+    codeexpr.statement("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
     for (auto const &it : ref2.exception_list)
       exceptions_thrown.emplace_back(it);
 
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (!is_nil_expr(ref2.operand))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }
   // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
@@ -3784,6 +3832,18 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_while2t &ref2 = to_code_while2t(ref);
     exprt codeexpr("code", typet("code"));
     codeexpr.statement("while");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.cond);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_dowhile_id:
+  {
+    const code_dowhile2t &ref2 = to_code_dowhile2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("dowhile");
     codeexpr.operands().resize(2);
     codeexpr.op0() = migrate_expr_back(ref2.cond);
     codeexpr.op1() = migrate_expr_back(ref2.body);
@@ -3858,6 +3918,26 @@ exprt migrate_expr_back(const expr2tc &ref)
     if (ref2.location.is_not_nil())
       sc.location() = ref2.location;
     return sc;
+  }
+  case expr2t::code_assert_id:
+  {
+    const code_assert2t &ref2 = to_code_assert2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("assert");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.guard));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_assume_id:
+  {
+    const code_assume2t &ref2 = to_code_assume2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("assume");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.guard));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
   }
   case expr2t::sideeffect_assign_id:
   {
