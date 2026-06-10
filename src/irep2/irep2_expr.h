@@ -83,8 +83,9 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,  // For __ESBMC_old() in function contracts
-  assigns_target // For __ESBMC_assigns() in function contracts
+  old_snapshot,        // For __ESBMC_old() in function contracts
+  assigns_target,      // For __ESBMC_assigns() in function contracts
+  statement_expression // GNU C ({ ... }) extension
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */
@@ -1110,9 +1111,35 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
-ESBMC_DEFINE_CODE_DECL(code_decl);
 ESBMC_DEFINE_CODE_DECL(code_dead);
 #undef ESBMC_DEFINE_CODE_DECL
+
+/** `code_decl2t` — variable declaration, with optional initializer.
+ *
+ *  The `init` field carries the initializer expression when the source form
+ *  is a 2-operand `code_decl(symbol, init)`.  It is nil when there is no
+ *  initializer (1-operand form).  Keeping the initializer here (rather than
+ *  splitting into a separate `code_block`) ensures that `goto_convert` places
+ *  the DEAD instruction at the correct scope boundary instead of immediately
+ *  after the assignment. */
+class code_decl2t : public expr2t
+{
+public:
+  irep_idt value; // symbol name
+  expr2tc init;   // optional initializer; nil when absent
+  code_decl2t(
+    const type2tc &type,
+    const irep_idt &n,
+    const expr2tc &i = expr2tc())
+    : expr2t(type, code_decl_id), value(n), init(i)
+  {
+  }
+  code_decl2t(const code_decl2t &ref) = default;
+  expr2tc do_simplify() const override;
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_decl2t::value, &code_decl2t::init);
+  static std::string field_names[esbmct::num_type_fields];
+};
 
 /** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
  *  of exception names. Used for `code_cpp_throw_decl`/

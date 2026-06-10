@@ -149,6 +149,17 @@ TEST_CASE("migrate expr round-trips for code statements", "[migrate]")
   require_expr_roundtrip(code_assign2tc(lhs, rhs));
 }
 
+TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
+{
+  use_test_ns();
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(42));
+  // 2-op code_decl: declaration with initializer -- must round-trip so that
+  // goto_convert places the DEAD instruction at end-of-scope, not early.
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x"), rhs));
+  // 1-op code_decl: no initializer -- init field is nil, round-trips as 1-op
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
