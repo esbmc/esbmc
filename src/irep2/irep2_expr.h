@@ -5,6 +5,7 @@
 #include <util/c_types.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
+#include <util/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -82,8 +83,9 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,  // For __ESBMC_old() in function contracts
-  assigns_target // For __ESBMC_assigns() in function contracts
+  old_snapshot,        // For __ESBMC_old() in function contracts
+  assigns_target,      // For __ESBMC_assigns() in function contracts
+  statement_expression // GNU C ({ ... }) extension
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */
@@ -95,6 +97,11 @@ enum class printf_kindt
   SPRINTF,
   VFPRINTF,
   SNPRINTF,
+  VPRINTF,
+  VSPRINTF,
+  VSNPRINTF,
+  ASPRINTF,
+  VASPRINTF,
 };
 
 /** Maps the textual base_name of a printf-family symbol (e.g. "printf",
@@ -195,11 +202,16 @@ irep_typedefs(object_descriptor);
 irep_typedefs(code_function_call);
 irep_typedefs(code_ifthenelse);
 irep_typedefs(code_while);
+irep_typedefs(code_dowhile);
 irep_typedefs(code_for);
 irep_typedefs(code_switch);
 irep_typedefs(code_break);
 irep_typedefs(code_continue);
 irep_typedefs(code_label);
+irep_typedefs(code_switch_case);
+irep_typedefs(code_assert);
+irep_typedefs(code_assume);
+irep_typedefs(sideeffect_assign);
 irep_typedefs(code_comma);
 irep_typedefs(invalid_pointer);
 irep_typedefs(code_asm);
@@ -1099,9 +1111,35 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
-ESBMC_DEFINE_CODE_DECL(code_decl);
 ESBMC_DEFINE_CODE_DECL(code_dead);
 #undef ESBMC_DEFINE_CODE_DECL
+
+/** `code_decl2t` — variable declaration, with optional initializer.
+ *
+ *  The `init` field carries the initializer expression when the source form
+ *  is a 2-operand `code_decl(symbol, init)`.  It is nil when there is no
+ *  initializer (1-operand form).  Keeping the initializer here (rather than
+ *  splitting into a separate `code_block`) ensures that `goto_convert` places
+ *  the DEAD instruction at the correct scope boundary instead of immediately
+ *  after the assignment. */
+class code_decl2t : public expr2t
+{
+public:
+  irep_idt value; // symbol name
+  expr2tc init;   // optional initializer; nil when absent
+  code_decl2t(
+    const type2tc &type,
+    const irep_idt &n,
+    const expr2tc &i = expr2tc())
+    : expr2t(type, code_decl_id), value(n), init(i)
+  {
+  }
+  code_decl2t(const code_decl2t &ref) = default;
+  expr2tc do_simplify() const override;
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_decl2t::value, &code_decl2t::init);
+  static std::string field_names[esbmct::num_type_fields];
+};
 
 /** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
  *  of exception names. Used for `code_cpp_throw_decl`/
@@ -1942,18 +1980,35 @@ public:
 // dead-but-tested first: nothing builds them until the goto_convert wiring
 // phase, so they are behaviour-inert and only the round-trip unit tests
 // exercise them (the V-track pattern).
+//
+// V.4.1: each kind carries a `locationt location` so a future IREP2-native
+// goto_convert can stamp each instruction's source location -- the legacy
+// codet carries it on the node, but expr2t/migrate do not, so an IREP2 body
+// would otherwise lose all counterexample line numbers. The field is
+// deliberately NOT part of the `fields` tuple, so it does not enter the IREP2
+// hash/equality (matching how a goto instructiont stores its locationt
+// separately); it is preserved through clone() by the defaulted copy ctor and
+// threaded by hand in migrate (forward copies code.location(), back restores
+// it).
 class code_ifthenelse2t : public expr2t
 {
 public:
   expr2tc cond;
   expr2tc then_case;
   expr2tc else_case; // nil when there is no else branch
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_ifthenelse2t(const expr2tc &c, const expr2tc &t, const expr2tc &e)
+  code_ifthenelse2t(
+    const expr2tc &c,
+    const expr2tc &t,
+    const expr2tc &e,
+    const locationt &loc = locationt())
     : expr2t(get_empty_type(), code_ifthenelse_id),
       cond(c),
       then_case(t),
-      else_case(e)
+      else_case(e),
+      location(loc)
   {
   }
   code_ifthenelse2t(const code_ifthenelse2t &ref) = default;
@@ -1971,15 +2026,44 @@ class code_while2t : public expr2t
 public:
   expr2tc cond;
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_while2t(const expr2tc &c, const expr2tc &b)
-    : expr2t(get_empty_type(), code_while_id), cond(c), body(b)
+  code_while2t(
+    const expr2tc &c,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_while_id), cond(c), body(b), location(loc)
   {
   }
   code_while2t(const code_while2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &code_while2t::cond, &code_while2t::body);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_dowhile2t : public expr2t
+{
+public:
+  expr2tc cond;
+  expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_dowhile2t(
+    const expr2tc &c,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_dowhile_id), cond(c), body(b), location(loc)
+  {
+  }
+  code_dowhile2t(const code_dowhile2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_dowhile2t::cond,
+    &code_dowhile2t::body);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1990,13 +2074,21 @@ public:
   expr2tc cond; // nil when absent
   expr2tc iter; // nil when absent
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   code_for2t(
     const expr2tc &i,
     const expr2tc &c,
     const expr2tc &it,
-    const expr2tc &b)
-    : expr2t(get_empty_type(), code_for_id), init(i), cond(c), iter(it), body(b)
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_for_id),
+      init(i),
+      cond(c),
+      iter(it),
+      body(b),
+      location(loc)
   {
   }
   code_for2t(const code_for2t &ref) = default;
@@ -2015,9 +2107,14 @@ class code_switch2t : public expr2t
 public:
   expr2tc value;
   expr2tc body;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_switch2t(const expr2tc &v, const expr2tc &b)
-    : expr2t(get_empty_type(), code_switch_id), value(v), body(b)
+  code_switch2t(
+    const expr2tc &v,
+    const expr2tc &b,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_switch_id), value(v), body(b), location(loc)
   {
   }
   code_switch2t(const code_switch2t &ref) = default;
@@ -2030,7 +2127,11 @@ public:
 class code_break2t : public expr2t
 {
 public:
-  code_break2t() : expr2t(get_empty_type(), code_break_id)
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_break2t(const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_break_id), location(loc)
   {
   }
   code_break2t(const code_break2t &ref) = default;
@@ -2042,7 +2143,11 @@ public:
 class code_continue2t : public expr2t
 {
 public:
-  code_continue2t() : expr2t(get_empty_type(), code_continue_id)
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_continue2t(const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_continue_id), location(loc)
   {
   }
   code_continue2t(const code_continue2t &ref) = default;
@@ -2056,15 +2161,124 @@ class code_label2t : public expr2t
 public:
   irep_idt label;
   expr2tc code;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_label2t(const irep_idt &l, const expr2tc &c)
-    : expr2t(get_empty_type(), code_label_id), label(l), code(c)
+  code_label2t(
+    const irep_idt &l,
+    const expr2tc &c,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_label_id), label(l), code(c), location(loc)
   {
   }
   code_label2t(const code_label2t &ref) = default;
 
   static constexpr auto fields =
     std::make_tuple(&expr2t::type, &code_label2t::label, &code_label2t::code);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.2: one case/default arm of a switch body. `is_default` is true for the
+ *  default arm; `case_op` is nil in that case. `location` is not reflected
+ *  (same pattern as the other V.4 kinds). */
+class code_switch_case2t : public expr2t
+{
+public:
+  bool is_default;
+  expr2tc case_op; // nil when is_default
+  expr2tc code;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_switch_case2t(
+    bool _is_default,
+    const expr2tc &_case_op,
+    const expr2tc &_code,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_switch_case_id),
+      is_default(_is_default),
+      case_op(_case_op),
+      code(_code),
+      location(loc)
+  {
+  }
+  code_switch_case2t(const code_switch_case2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_switch_case2t::is_default,
+    &code_switch_case2t::case_op,
+    &code_switch_case2t::code);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.3: code_assert / code_assume — single-guard code kinds emitted by the
+ *  Python / C++ frontends for assert and __ESBMC_assume.
+ *  The guard is the boolean condition; the location carries the user-visible
+ *  comment (assertion message) and source coordinates. */
+class code_assert2t : public expr2t
+{
+public:
+  expr2tc guard;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_assert2t(const expr2tc &g, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assert_id), guard(g), location(loc)
+  {
+  }
+  code_assert2t(const code_assert2t &ref) = default;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_assert2t::guard);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_assume2t : public expr2t
+{
+public:
+  expr2tc guard;
+  locationt location; // not reflected (see note above)
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+
+  code_assume2t(const expr2tc &g, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assume_id), guard(g), location(loc)
+  {
+  }
+  code_assume2t(const code_assume2t &ref) = default;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_assume2t::guard);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** V.4.2: wraps C-frontend sideeffect assignment nodes — simple `=` and
+ *  compound `+=`, `-=`, etc. — for round-trip through migrate_expr /
+ *  migrate_expr_back.  `op` carries the operator string exactly as it appears
+ *  in the legacy irept (e.g. "assign", "assign+", "assign_div"), so that the
+ *  back-migration can reconstruct the original sideeffect node verbatim. */
+class sideeffect_assign2t : public expr2t
+{
+public:
+  irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+  expr2tc lhs;
+  expr2tc rhs;
+
+  sideeffect_assign2t(
+    const type2tc &t,
+    const irep_idt &o,
+    const expr2tc &l,
+    const expr2tc &r)
+    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r)
+  {
+  }
+  sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &sideeffect_assign2t::op,
+    &sideeffect_assign2t::lhs,
+    &sideeffect_assign2t::rhs);
   static std::string field_names[esbmct::num_type_fields];
 };
 

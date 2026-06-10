@@ -149,6 +149,17 @@ TEST_CASE("migrate expr round-trips for code statements", "[migrate]")
   require_expr_roundtrip(code_assign2tc(lhs, rhs));
 }
 
+TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
+{
+  use_test_ns();
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(42));
+  // 2-op code_decl: declaration with initializer -- must round-trip so that
+  // goto_convert places the DEAD instruction at end-of-scope, not early.
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x"), rhs));
+  // 1-op code_decl: no initializer -- init field is nil, round-trips as 1-op
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
@@ -181,6 +192,18 @@ TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
 {
   std::vector<irep_idt> exceptions{"std::exception", "std::runtime_error"};
   require_expr_roundtrip(code_cpp_catch2tc(exceptions));
+}
+
+TEST_CASE("migrate expr round-trips for code_cpp_throw", "[migrate][b2-vtrack]")
+{
+  // Back-arm produces sideeffect("cpp-throw"); forward arm re-lifts that to
+  // code_cpp_throw2tc, completing the IREP2->legacy->IREP2 round-trip.
+  use_test_ns();
+  std::vector<irep_idt> exceptions{"std::runtime_error"};
+  expr2tc operand = symbol2tc(get_int_type(32), "ex");
+  require_expr_roundtrip(code_cpp_throw2tc(operand, exceptions));
+  // rethrow: null operand, empty exception list
+  require_expr_roundtrip(code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}));
 }
 
 TEST_CASE(
@@ -247,6 +270,12 @@ TEST_CASE("migrate expr round-trips for code_while", "[migrate][v4-cf]")
   require_expr_roundtrip(code_while2tc(gen_true_expr(), cf_block()));
 }
 
+TEST_CASE("migrate expr round-trips for code_dowhile", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block()));
+}
+
 TEST_CASE("migrate expr round-trips for code_for", "[migrate][v4-cf]")
 {
   use_test_ns();
@@ -281,6 +310,75 @@ TEST_CASE("migrate expr round-trips for code_label", "[migrate][v4-cf]")
 {
   use_test_ns();
   require_expr_roundtrip(code_label2tc("L1", cf_block()));
+}
+
+// V.4.1: each CF kind carries a source location through migrate in both
+// directions. The location field is intentionally NOT in the fields tuple, so
+// it does not enter operator== -- require_expr_roundtrip would pass even if it
+// were dropped. Assert it survives explicitly via the typed accessor.
+static locationt cf_loc()
+{
+  locationt l;
+  l.set_file("cf.c");
+  l.set_line(42u);
+  return l;
+}
+
+static expr2tc cf_roundtrip(const expr2tc &e2)
+{
+  expr2tc back;
+  migrate_expr(migrate_expr_back(e2), back);
+  return back;
+}
+
+TEST_CASE(
+  "migrate carries source location on CF code kinds",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const locationt loc = cf_loc();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+
+  REQUIRE(
+    to_code_ifthenelse2t(cf_roundtrip(code_ifthenelse2tc(
+                           gen_true_expr(), cf_block(), expr2tc(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_while2t(
+      cf_roundtrip(code_while2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_dowhile2t(
+      cf_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_for2t(cf_roundtrip(code_for2tc(
+                    expr2tc(), expr2tc(), expr2tc(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_switch2t(cf_roundtrip(code_switch2tc(value, cf_block(), loc)))
+      .location == loc);
+  REQUIRE(to_code_break2t(cf_roundtrip(code_break2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_continue2t(cf_roundtrip(code_continue2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_label2t(cf_roundtrip(code_label2tc("L1", cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assert2t(cf_roundtrip(code_assert2tc(gen_true_expr(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assume2t(cf_roundtrip(code_assume2tc(gen_true_expr(), loc)))
+      .location == loc);
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_assert and code_assume",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_assert2tc(gen_true_expr()));
+  require_expr_roundtrip(code_assume2tc(gen_false_expr()));
 }
 
 // Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and

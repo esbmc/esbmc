@@ -495,6 +495,16 @@ std::string type_to_string(const printf_kindt &theval, int)
     return "vfprintf";
   case printf_kindt::SNPRINTF:
     return "snprintf";
+  case printf_kindt::VPRINTF:
+    return "vprintf";
+  case printf_kindt::VSPRINTF:
+    return "vsprintf";
+  case printf_kindt::VSNPRINTF:
+    return "vsnprintf";
+  case printf_kindt::ASPRINTF:
+    return "asprintf";
+  case printf_kindt::VASPRINTF:
+    return "vasprintf";
   }
   assert(0 && "Unrecognized printf_kindt enum value");
   abort();

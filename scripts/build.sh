@@ -194,6 +194,7 @@ prepare_platform_config() {
           "-DENABLE_GOTO_CONTRACTOR=OFF"
           "-DENABLE_CVC5=Off"
         )
+        BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
       fi
       ;;
 

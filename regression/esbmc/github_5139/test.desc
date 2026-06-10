@@ -1,0 +1,4 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --force-malloc-success --force-realloc-success --add-symex-value-sets --incremental-bmc
+^VERIFICATION SUCCESSFUL$

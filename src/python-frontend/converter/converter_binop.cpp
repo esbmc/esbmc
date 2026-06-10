@@ -540,6 +540,57 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       struct_side = gen_address_of(struct_side);
   }
 
+  // Python reference-identity when one operand is a by-value class instance and
+  // the other is a None-able object *handle*. A bare `x = None` local — and any
+  // value flowing from it, including a function's return — is modelled as a
+  // pointer-width unsigned integer handle (value 0 for None; see
+  // type_handler `NoneType`/`Optional`). A freshly constructed instance such as
+  // `Node(0)` is stored by value (tag-Node). Comparing the two fed a struct sort
+  // and a pointer-width scalar to the solver's mk_eq, whose operand-width assert
+  // is elided under NDEBUG -> SIGSEGV in release builds (github #4796). The
+  // tag-matched pointer case above does not fire because the handle carries no
+  // class tag. Reinterpret the struct as its address cast to the handle type so
+  // both sides compare as object references.
+  if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
+  {
+    // A None-able object handle: a pointer-width unsigned integer (how
+    // NoneType/Optional are modelled). Python ints are signed, so this excludes
+    // ordinary integer comparisons; it does also match other pointer-width
+    // unsigned values (e.g. a size_t/len() result), but those reach the
+    // numeric-vs-numeric paths above before this block when compared to a
+    // number, and comparing one to a class instance is nonsensical in Python.
+    auto is_object_handle = [](const typet &t) {
+      return t.is_unsignedbv() &&
+             to_unsignedbv_type(t).get_width() == config.ansi_c.pointer_width();
+    };
+    // A by-value user-defined class instance. dict/tuple are also structs and
+    // own the equality paths above; list values are pointer-typed, not structs.
+    auto is_user_class_struct = [&](const typet &t) {
+      typet r = (t.id() == "symbol") ? ns.follow(t) : t;
+      return r.is_struct() && !dict_handler_->is_dict_type(r) &&
+             !tuple_handler_->is_tuple_type(r);
+    };
+
+    const bool lhs_handle = is_object_handle(lhs.type());
+    const bool rhs_handle = is_object_handle(rhs.type());
+    if (lhs_handle != rhs_handle)
+    {
+      exprt &struct_side = lhs_handle ? rhs : lhs;
+      exprt &handle_side = lhs_handle ? lhs : rhs;
+      if (is_user_class_struct(struct_side.type()))
+      {
+        // Compare as pointers, not integers: take the struct's address and
+        // reinterpret the integer handle as a pointer to the same class, so
+        // ESBMC's object/offset pointer model decides identity. Casting both
+        // to the integer handle instead would lose the distinct-object
+        // guarantee and spuriously satisfy `a != b` for distinct instances.
+        typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
+        struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
+        handle_side = typecast_exprt(handle_side, ptr_t);
+      }
+    }
+  }
+
   // Handle identity comparisons
   if (op == "Is")
     return get_binary_operator_expr_for_is(lhs, rhs);
