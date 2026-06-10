@@ -46,13 +46,19 @@ void goto_symext::replace_races_check(expr2tc &expr)
     // whose fields are address_width wide regardless of the type carried here;
     // cast both to key_type so the bitwise ops below see matching widths even on
     // data models where address_width != word_size (e.g. LP32).
+    //
+    // pointer_offset2t models a signed byte difference and asserts a signed
+    // address-width type, so build it with get_int_type, not the unsigned
+    // ptraddr_type2; the cast to the unsigned key_type and the low-half mask
+    // then discard the sign for the always-non-negative in-object offsets.
     unsigned int half = config.ansi_c.word_size / 2;
     type2tc key_type = get_uint_type(config.ansi_c.word_size);
 
     expr2tc object =
       typecast2tc(key_type, pointer_object2tc(ptraddr_type2(), obj.value));
-    expr2tc offset =
-      typecast2tc(key_type, pointer_offset2tc(ptraddr_type2(), obj.value));
+    expr2tc offset = typecast2tc(
+      key_type,
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), obj.value));
     expr2tc index = bitor2tc(
       key_type,
       shl2tc(key_type, object, constant_int2tc(key_type, BigInt(half))),
