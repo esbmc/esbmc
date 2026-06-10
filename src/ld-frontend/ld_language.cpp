@@ -6,6 +6,7 @@
 #include <ld-frontend/property/yaml_property_parser.h>
 #include <ld-frontend/property/property_encoder.h>
 #include <util/c_expr2string.h>
+#include <util/config.h>
 #include <util/message.h>
 #include <iostream>
 
@@ -44,6 +45,11 @@ bool ld_languaget::parse(const std::string &path)
     log_error("{}", e.what());
     return true;
   }
+
+  // The ld-verify CLI sets props_path_ directly; bare esbmc passes the YAML
+  // file through the --ld-props command-line option.
+  if (props_path_.empty())
+    props_path_ = config.options.get_option("ld-props");
 
   if (!props_path_.empty())
   {

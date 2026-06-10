@@ -60,6 +60,11 @@ function(add_esbmc_regression folder modes)
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
+    if(${folder} STREQUAL "ld")
+        # WP3 case-study assets live under benchmarks/; they are not CTest
+        # tests themselves (no test.desc), so skip them during discovery.
+        list(REMOVE_ITEM SUBDIRS benchmarks)
+    endif()
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
     endforeach()
@@ -92,6 +97,9 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
+endif()
+if(ENABLE_LD_FRONTEND)
+    set(REGRESSIONS_LD ld)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
@@ -185,6 +193,7 @@ if(APPLE)
                     floats
                     floats-regression
                     ${REGRESSIONS_JIMPLE}
+                    ${REGRESSIONS_LD}
                     k-induction
                     k-induction-parallel
                     termination
@@ -225,6 +234,7 @@ elseif(WIN32)
                     termination
                     windows
                     ${REGRESSIONS_JIMPLE}
+                    ${REGRESSIONS_LD}
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
@@ -265,6 +275,7 @@ else()
                     ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR}
                     ${REGRESSIONS_JIMPLE}
+                    ${REGRESSIONS_LD}
                     extensions
                     cuda/COM_sanity_checks
                     linux
