@@ -1,0 +1,12 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "(Shutdown || !Alarm)"
+    description: "Alarm always forces Shutdown in the same scan"
+
+  - id: P2
+    kind: response
+    trigger: Btn
+    response: Light
+    max_scans: 1
+    justification: "Direct coil; Light energises in the same scan as Btn"

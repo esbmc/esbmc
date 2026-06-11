@@ -83,9 +83,13 @@ enum class sideeffect_allockind
   postincrement,
   predecrement,
   postdecrement,
-  old_snapshot,        // For __ESBMC_old() in function contracts
-  assigns_target,      // For __ESBMC_assigns() in function contracts
-  statement_expression // GNU C ({ ... }) extension
+  old_snapshot,               // For __ESBMC_old() in function contracts
+  assigns_target,             // For __ESBMC_assigns() in function contracts
+  statement_expression,       // GNU C ({ ... }) extension
+  temporary_object,           // C++ temporary created inline (constructor)
+  gcc_conditional_expression, // GNU C `a ?: b` (omitted middle operand)
+  cpp_delete,                 // C++ `delete p` in expression position
+  cpp_delete_array            // C++ `delete[] p` in expression position
 };
 
 /** Which member of the printf family a `code_printf2t` represents. */
@@ -219,8 +223,6 @@ irep_typedefs(code_cpp_del_array);
 irep_typedefs(code_cpp_delete);
 irep_typedefs(code_cpp_catch);
 irep_typedefs(code_cpp_throw);
-irep_typedefs(code_cpp_throw_decl);
-irep_typedefs(code_cpp_throw_decl_end);
 irep_typedefs(isinf);
 irep_typedefs(isnormal);
 irep_typedefs(isfinite);
@@ -236,6 +238,7 @@ irep_typedefs(exists);
 irep_typedefs(isinstance);
 irep_typedefs(hasattr);
 irep_typedefs(isnone);
+irep_typedefs(new_object);
 
 class exists2t : public expr2t
 {
@@ -1076,8 +1079,10 @@ ESBMC_DEFINE_TYPE_ONLY(null_object);
   {                                                                            \
   public:                                                                      \
     expr2tc operand;                                                           \
-    name##2t(const expr2tc &op)                                                \
-      : expr2t(get_empty_type(), name##_id), operand(op)                       \
+    locationt location; /* not reflected: source loc travels with the stmt */  \
+    static constexpr std::size_t excluded_field_bytes = sizeof(locationt);     \
+    name##2t(const expr2tc &op, const locationt &loc = locationt())            \
+      : expr2t(get_empty_type(), name##_id), operand(op), location(loc)        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1100,8 +1105,13 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
   {                                                                            \
   public:                                                                      \
     irep_idt value;                                                            \
-    name##2t(const type2tc &type, const irep_idt &n)                           \
-      : expr2t(type, name##_id), value(n)                                      \
+    locationt location; /* not reflected: source loc travels with the stmt */  \
+    static constexpr std::size_t excluded_field_bytes = sizeof(locationt);     \
+    name##2t(                                                                  \
+      const type2tc &type,                                                     \
+      const irep_idt &n,                                                       \
+      const locationt &loc = locationt())                                      \
+      : expr2t(type, name##_id), value(n), location(loc)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1127,11 +1137,14 @@ class code_decl2t : public expr2t
 public:
   irep_idt value; // symbol name
   expr2tc init;   // optional initializer; nil when absent
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
   code_decl2t(
     const type2tc &type,
     const irep_idt &n,
-    const expr2tc &i = expr2tc())
-    : expr2t(type, code_decl_id), value(n), init(i)
+    const expr2tc &i = expr2tc(),
+    const locationt &loc = locationt())
+    : expr2t(type, code_decl_id), value(n), init(i), location(loc)
   {
   }
   code_decl2t(const code_decl2t &ref) = default;
@@ -1140,29 +1153,6 @@ public:
     std::make_tuple(&expr2t::type, &code_decl2t::value, &code_decl2t::init);
   static std::string field_names[esbmct::num_type_fields];
 };
-
-/** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
- *  of exception names. Used for `code_cpp_throw_decl`/
- *  `code_cpp_throw_decl_end`. */
-#define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
-  class name##2t : public expr2t                                               \
-  {                                                                            \
-  public:                                                                      \
-    std::vector<irep_idt> exception_list;                                      \
-    name##2t(const std::vector<irep_idt> &names)                               \
-      : expr2t(get_empty_type(), name##_id), exception_list(names)             \
-    {                                                                          \
-    }                                                                          \
-    name##2t(const name##2t & ref) = default;                                  \
-    expr2tc do_simplify() const override;                                      \
-    static constexpr auto fields =                                             \
-      std::make_tuple(&expr2t::type, &name##2t ::exception_list);              \
-    static std::string field_names[esbmct::num_type_fields];                   \
-  }
-
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl);
-ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
-#undef ESBMC_DEFINE_CODE_CPP_THROW_DECL
 
 /** C++20 three-way comparison `a <=> b`. Result type is the
  * comparison-category struct (`std::strong_ordering` /
@@ -1837,9 +1827,13 @@ class code_block2t : public expr2t
 {
 public:
   std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_block2t(const std::vector<expr2tc> &ops)
-    : expr2t(get_empty_type(), code_block_id), operands(ops)
+  code_block2t(
+    const std::vector<expr2tc> &ops,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_block_id), operands(ops), location(loc)
   {
   }
   code_block2t(const code_block2t &ref) = default;
@@ -1854,9 +1848,17 @@ class code_assign2t : public expr2t
 public:
   expr2tc target;
   expr2tc source;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_assign2t(const expr2tc &tgt, const expr2tc &src)
-    : expr2t(get_empty_type(), code_assign_id), target(tgt), source(src)
+  code_assign2t(
+    const expr2tc &tgt,
+    const expr2tc &src,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_assign_id),
+      target(tgt),
+      source(src),
+      location(loc)
   {
   }
   code_assign2t(const code_assign2t &ref) = default;
@@ -1873,9 +1875,17 @@ class code_printf2t : public expr2t
 public:
   std::vector<expr2tc> operands;
   printf_kindt kind;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_printf2t(const std::vector<expr2tc> &opers, printf_kindt k)
-    : expr2t(get_empty_type(), code_printf_id), operands(opers), kind(k)
+  code_printf2t(
+    const std::vector<expr2tc> &opers,
+    printf_kindt k,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_printf_id),
+      operands(opers),
+      kind(k),
+      location(loc)
   {
   }
   code_printf2t(const code_printf2t &ref) = default;
@@ -1890,7 +1900,10 @@ public:
 class code_skip2t : public expr2t
 {
 public:
-  code_skip2t(const type2tc &type) : expr2t(type, code_skip_id)
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  code_skip2t(const type2tc &type, const locationt &loc = locationt())
+    : expr2t(type, code_skip_id), location(loc)
   {
   }
   code_skip2t(const code_skip2t &ref) = default;
@@ -1899,13 +1912,31 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** C++ constructor "this" placeholder (`exprt("new_object")`). Appears inside
+ *  a `temporary_object` initializer before `replace_new_object` substitutes
+ *  the real symbol. Carries only the struct type being constructed. */
+class new_object2t : public expr2t
+{
+public:
+  new_object2t(const type2tc &type) : expr2t(type, new_object_id)
+  {
+  }
+  new_object2t(const new_object2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+  static constexpr auto fields = std::make_tuple(&expr2t::type);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 class code_goto2t : public expr2t
 {
 public:
   irep_idt target;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_goto2t(const irep_idt &targ)
-    : expr2t(get_empty_type(), code_goto_id), target(targ)
+  code_goto2t(const irep_idt &targ, const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_goto_id), target(targ), location(loc)
   {
   }
   code_goto2t(const code_goto2t &ref) = default;
@@ -1951,15 +1982,19 @@ public:
   expr2tc ret;
   expr2tc function;
   std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   code_function_call2t(
     const expr2tc &r,
     const expr2tc &func,
-    const std::vector<expr2tc> &args)
+    const std::vector<expr2tc> &args,
+    const locationt &loc = locationt())
     : expr2t(get_empty_type(), code_function_call_id),
       ret(r),
       function(func),
-      operands(args)
+      operands(args),
+      location(loc)
   {
   }
   code_function_call2t(const code_function_call2t &ref) = default;
@@ -2263,13 +2298,16 @@ public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
   expr2tc lhs;
   expr2tc rhs;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   sideeffect_assign2t(
     const type2tc &t,
     const irep_idt &o,
     const expr2tc &l,
-    const expr2tc &r)
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r)
+    const expr2tc &r,
+    const locationt &loc = locationt())
+    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
@@ -2320,9 +2358,14 @@ class code_asm2t : public expr2t
 {
 public:
   irep_idt value;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_asm2t(const type2tc &type, const irep_idt &stringref)
-    : expr2t(type, code_asm_id), value(stringref)
+  code_asm2t(
+    const type2tc &type,
+    const irep_idt &stringref,
+    const locationt &loc = locationt())
+    : expr2t(type, code_asm_id), value(stringref), location(loc)
   {
   }
   code_asm2t(const code_asm2t &ref) = default;
@@ -2336,15 +2379,39 @@ class code_cpp_catch2t : public expr2t
 {
 public:
   std::vector<irep_idt> exception_list;
+  // Source-level try/catch operands: operands[0] is the try block, operands
+  // [1..N] the catch-handler blocks (parallel to exception_list). Empty for
+  // the post-goto-convert CATCH-push/pop marker instructions, which carry only
+  // the catchable-type list. Retained so a try/catch body survives the
+  // --irep2-bodies round-trip (esbmc/esbmc#4715); convert_catch reads it back.
+  std::vector<expr2tc> operands;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_cpp_catch2t(const std::vector<irep_idt> &el)
-    : expr2t(get_empty_type(), code_cpp_catch_id), exception_list(el)
+  code_cpp_catch2t(
+    const std::vector<irep_idt> &el,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_catch_id),
+      exception_list(el),
+      location(loc)
+  {
+  }
+  code_cpp_catch2t(
+    const std::vector<irep_idt> &el,
+    const std::vector<expr2tc> &ops,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_catch_id),
+      exception_list(el),
+      operands(ops),
+      location(loc)
   {
   }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &code_cpp_catch2t::exception_list);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_cpp_catch2t::exception_list,
+    &code_cpp_catch2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2353,9 +2420,17 @@ class code_cpp_throw2t : public expr2t
 public:
   expr2tc operand;
   std::vector<irep_idt> exception_list;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
-  code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
-    : expr2t(get_empty_type(), code_cpp_throw_id), operand(o), exception_list(l)
+  code_cpp_throw2t(
+    const expr2tc &o,
+    const std::vector<irep_idt> &l,
+    const locationt &loc = locationt())
+    : expr2t(get_empty_type(), code_cpp_throw_id),
+      operand(o),
+      exception_list(l),
+      location(loc)
   {
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;

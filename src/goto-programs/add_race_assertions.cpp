@@ -3,6 +3,7 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <irep2/irep2_guard.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
@@ -14,46 +15,6 @@ class w_guardst
 public:
   explicit w_guardst(contextt &_context) : context(_context)
   {
-  }
-
-  std::list<irep_idt> w_guards;
-
-  const symbolt &
-  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
-  {
-    const irep_idt identifier = "tmp_" + id2string(object);
-
-    const symbolt *s = context.find_symbol(identifier);
-    if (s != nullptr)
-      return *s;
-
-    w_guards.push_back(identifier);
-
-    type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
-
-    symbolt new_symbol;
-    new_symbol.id = identifier;
-    new_symbol.name = identifier;
-    set_symbol_type(
-      new_symbol, original_expr.is_index() ? index : get_bool_type());
-    new_symbol.static_lifetime = true;
-    {
-      exprt v = new_symbol.get_value();
-      v.make_false();
-      new_symbol.set_value(std::move(v));
-    }
-
-    symbolt *symbol_ptr;
-    context.move(new_symbol, symbol_ptr);
-    return *symbol_ptr;
-  }
-
-  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
-  {
-    // introduce a new expression: RACE_CHECK(&x)
-    // its operand is the address of the variable
-    // which we will replace during symbolic execution.
-    return races_check2tc(address_of2tc(original_expr->type, original_expr));
   }
 
   expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
@@ -70,46 +31,40 @@ public:
 
 protected:
   contextt &context;
+
+  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
+  {
+    // Introduce a RACE_CHECK(&x) marker whose operand is the address of the
+    // accessed object; goto_symext::replace_races_check lowers it to the
+    // __ESBMC_races_flag slot for that (object, offset) during symbolic
+    // execution.
+    return races_check2tc(address_of2tc(original_expr->type, original_expr));
+  }
 };
 
 void w_guardst::add_initialization(goto_programt &goto_program)
 {
-  goto_programt::targett t = goto_program.instructions.begin();
-  const namespacet ns(context);
+  // __ESBMC_races_flag is an infinite array of booleans indexed by a unique
+  // (pointer object, byte offset) key (see goto_symext::replace_races_check).
+  // Declare it and reset every slot to false at program entry.
+  type2tc flag_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc all_false = constant_array_of2tc(flag_type, gen_false_expr());
 
-  // introduce new infinite array: __ESBMC_races_flag[]
-  // initialize it to zero: ARRAY_OF(0)
-  type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
-  const irep_idt identifier = "c:@F@__ESBMC_races_flag";
-  w_guards.push_back(identifier);
   symbolt new_symbol;
-  new_symbol.id = identifier;
-  new_symbol.name = identifier;
-  set_symbol_type(new_symbol, arrayt);
+  new_symbol.id = "c:@F@__ESBMC_races_flag";
+  new_symbol.name = new_symbol.id;
+  set_symbol_type(new_symbol, flag_type);
   new_symbol.static_lifetime = true;
-  {
-    exprt v = new_symbol.get_value();
-    v.make_false();
-    new_symbol.set_value(std::move(v));
-  }
-  context.move_symbol_to_context(new_symbol);
+  new_symbol.set_value(migrate_expr_back(all_false));
+  const symbolt &flag = *context.move_symbol_to_context(new_symbol);
 
-  for (const auto &w_guard : w_guards)
-  {
-    const symbolt &s = *ns.lookup(w_guard);
-    exprt symbol = symbol_expr(s);
-    expr2tc new_sym;
-    migrate_expr(symbol, new_sym);
+  expr2tc flag_symbol;
+  migrate_expr(symbol_expr(flag), flag_symbol);
 
-    expr2tc falsity = s.get_type().is_array()
-                        ? gen_zero(migrate_symbol_type(s), true)
-                        : gen_false_expr();
-    t = goto_program.insert(t);
-    t->type = ASSIGN;
-    t->code = code_assign2tc(new_sym, falsity);
-
-    t++;
-  }
+  goto_programt::targett t =
+    goto_program.insert(goto_program.instructions.begin());
+  t->type = ASSIGN;
+  t->code = code_assign2tc(flag_symbol, all_false);
 }
 
 // Collect the root symbol of every object whose address is taken in `expr`,

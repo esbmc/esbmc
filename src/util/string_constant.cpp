@@ -114,7 +114,8 @@ struct switch_locale
 
   ~switch_locale() noexcept
   {
-    const char *n = setlocale(cat, orig.c_str()); // restore locale
+    [[maybe_unused]] const char *n =
+      setlocale(cat, orig.c_str()); // restore locale
     assert(n);
     assert(n == orig);
   }

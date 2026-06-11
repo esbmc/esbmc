@@ -27,6 +27,7 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include <util/exception_specification.h>
 #include <util/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
@@ -1857,47 +1858,49 @@ bool clang_cpp_convertert::get_function_body(
       return true;
   }
 
-  auto *type = fd.getType().getTypePtr();
-  if (const auto *fpt = llvm::dyn_cast<const clang::FunctionProtoType>(type))
-  {
-    if (fpt->hasExceptionSpec())
-    {
-      codet decl = codet("throw_decl");
-      bool emit = true;
-      if (fpt->hasDynamicExceptionSpec())
-      {
-        // e.g: void func() throw(int) { throw 1;}
-        // body is converted to
-        // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
-        for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
-        {
-          codet tmp;
-          if (get_type(fpt->getExceptionType(i), tmp.type()))
-            return true;
+  return false;
+}
 
-          decl.move_to_operands(tmp);
-        }
-      }
-      else if (fpt->hasNoexceptExceptionSpec())
-      {
-        // hasNoexceptExceptionSpec() is also true for noexcept(false), which
-        // permits exceptions to escape — record the no-throw marker only when
-        // the function genuinely cannot throw.
-        if (fpt->canThrow() == clang::CT_Cannot)
-        {
-          codet tmp;
-          tmp.type() = typet("noexcept");
-          decl.move_to_operands(tmp);
-        }
-        else
-          emit = false;
-      }
-      if (emit)
-        body.operands().insert(body.operands().begin(), decl);
+void clang_cpp_convertert::annotate_exception_specification(
+  const clang::FunctionDecl &fd,
+  typet &type)
+{
+  const auto *fpt =
+    llvm::dyn_cast<const clang::FunctionProtoType>(fd.getType().getTypePtr());
+  if (!fpt || !fpt->hasExceptionSpec())
+    return;
+
+  // A C++ exception specification constrains the function boundary, not any
+  // region of its body. Record it as metadata on the function type so it
+  // survives serialization and stays attached to the function frame. The
+  // allowed-type ids for a dynamic specification are derived later, in
+  // clang_cpp_adjust, where the namespace is available for base-class lookup;
+  // here we only stash the raw exception types.
+  if (fpt->hasNoexceptExceptionSpec())
+  {
+    // noexcept / noexcept(true) / noexcept(expr): only restrictive when the
+    // function actually cannot throw. noexcept(false) (and any noexcept(expr)
+    // evaluating to false) leaves the function potentially throwing, so it
+    // gets no metadata. canThrow() resolves the expression for us; a still
+    // value-dependent result is treated conservatively as throwing.
+    if (fpt->canThrow() == clang::CT_Cannot)
+      type.set(exception_specificationt::kind_attribute(), "non_throwing");
+  }
+  else if (fpt->hasDynamicExceptionSpec())
+  {
+    // Legacy dynamic spec throw(T...) (incl. empty throw()): violation calls
+    // std::unexpected.
+    type.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept &decl = type.add("exception_spec_decl");
+    decl.get_sub().clear();
+    for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+    {
+      typet exc_type;
+      if (get_type(fpt->getExceptionType(i), exc_type))
+        continue;
+      decl.get_sub().push_back(exc_type);
     }
   }
-
-  return false;
 }
 
 bool clang_cpp_convertert::get_function_this_pointer_param(
