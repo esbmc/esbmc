@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <util/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
+#include <clang-c-frontend/clang_c_lexer.h>
 #include <util/yaml_parser.h>
 
 #include <ac_config.h>
@@ -338,7 +339,22 @@ bool clang_c_languaget::parse(const std::string &path)
   else if (config.options.get_bool_option("validate-violation-witness"))
   {
     const std::string witness_path = config.options.get_option("witness");
-    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    auto &waypoints = yaml_parser::get_waypoints(witness_path);
+    clang_c_lexert lexer;
+    for (auto &wp : waypoints)
+    {
+      if (wp.format != "ext_c_expression")
+        continue;
+      expr2tc e = lexer.parse_expr(wp.value);
+      if (e)
+      {
+        wp.parsed_cond.expr = e;
+        wp.parsed_cond.valid = true;
+      }
+      else
+        log_warning(
+          "witness: could not parse constraint '{}', skipping", wp.value);
+    }
     std::string content =
       yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
     if (!content.empty())
