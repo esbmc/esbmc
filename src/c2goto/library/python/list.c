@@ -30,7 +30,20 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Fallback for larger/unusual sizes
+  // Word-wise compare for 8-byte-multiple payloads (e.g. class-instance
+  // structs): size/8 unwind iterations instead of memcmp's size iterations.
+  if (size % 8 == 0)
+  {
+    size_t i = 0;
+    while (i < size / 8)
+    {
+      if (((const uint64_t *)a)[i] != ((const uint64_t *)b)[i])
+        return false;
+      ++i;
+    }
+    return true;
+  }
+  // Fallback for unusual sizes
   return memcmp(a, b, size) == 0;
 }
 
@@ -96,8 +109,14 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths for scalars and small tuple keys.
-  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
+  // 8-byte-aligned fast paths. Avoids memcpy's per-byte loop, which blows up
+  // incremental-bmc (size unwind iterations per copied element; a 48-byte
+  // class instance pushed the verdict for quixbugs/topological_ordering past
+  // any practical bound, #4805). Pointer-bearing payloads (ptr_free=0) take
+  // this path too: ESBMC's dereference layer reconstructs pointer objects
+  // from the word-wise copy — validated by the quixbugs/topological_ordering
+  // tests, whose copied Node structs carry list pointers that are
+  // dereferenced after the copy.
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -105,18 +124,14 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (ptr_free && size == 24)
+  else if (size % 8 == 0)
   {
-    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
-    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
-    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
-  }
-  else if (ptr_free && size == 32)
-  {
-    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
-    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
-    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
-    ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
+    size_t i = 0;
+    while (i < size / 8)
+    {
+      ((uint64_t *)copied)[i] = ((const uint64_t *)value)[i];
+      ++i;
+    }
   }
   else
     memcpy(copied, value, size);
