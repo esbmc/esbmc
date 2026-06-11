@@ -30,20 +30,10 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Word-wise compare for 8-byte-multiple payloads (e.g. class-instance
-  // structs): size/8 unwind iterations instead of memcmp's size iterations.
-  if (size % 8 == 0)
-  {
-    size_t i = 0;
-    while (i < size / 8)
-    {
-      if (((const uint64_t *)a)[i] != ((const uint64_t *)b)[i])
-        return false;
-      ++i;
-    }
-    return true;
-  }
-  // Fallback for unusual sizes
+  // Fallback for larger/unusual sizes. A word-wise compare loop here would
+  // unwind --unwind times on every symbolic-size comparison, with no benefit
+  // to any converging test (large-struct compares only occur in tests that
+  // stay KNOWNBUG on the symbolic-list scalability wall, #5121).
   return memcmp(a, b, size) == 0;
 }
 
@@ -109,14 +99,16 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths. Avoids memcpy's per-byte loop, which blows up
-  // incremental-bmc (size unwind iterations per copied element; a 48-byte
-  // class instance pushed the verdict for quixbugs/topological_ordering past
-  // any practical bound, #4805). Pointer-bearing payloads (ptr_free=0) take
-  // this path too: ESBMC's dereference layer reconstructs pointer objects
-  // from the word-wise copy — validated by the quixbugs/topological_ordering
-  // tests, whose copied Node structs carry list pointers that are
-  // dereferenced after the copy.
+  // Branch-free 8-byte-aligned fast paths for the common small sizes. These
+  // avoid memcpy's per-byte loop, which blows up incremental-bmc (size unwind
+  // iterations per copied element) and, under a tight --unwind, trips the copy
+  // loop's unwinding assertion (dict_tuple_key copies a 3-int tuple key at
+  // --unwind 3, #4805). Larger payloads fall through to memcpy: a word-wise
+  // loop here would unwind --unwind times on every call where size is symbolic
+  // (e.g. the list_slice_assign snapshot loop), on top of memcpy's own loop,
+  // pushing list-slice-assign past the CI per-test cap for no benefit to any
+  // converging test (large-struct copies only appear in tests that stay
+  // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -124,33 +116,18 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (size == 24)
+  else if (ptr_free && size == 24)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
   }
-  else if (size == 32)
+  else if (ptr_free && size == 32)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
     ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
-  }
-  else if (size % 8 == 0)
-  {
-    // Larger 8-byte-multiple payloads (e.g. a 48-byte class instance) use a
-    // word-wise loop: size/8 unwind iterations instead of memcpy's per-byte
-    // size iterations. The small fixed sizes above stay branch-free so that
-    // copying small tuples/lists needs no loop unwinding — tests such as
-    // dict_tuple_key run with a tight --unwind and would otherwise trip the
-    // copy loop's unwinding assertion (#4805).
-    size_t i = 0;
-    while (i < size / 8)
-    {
-      ((uint64_t *)copied)[i] = ((const uint64_t *)value)[i];
-      ++i;
-    }
   }
   else
     memcpy(copied, value, size);
