@@ -448,15 +448,50 @@ std::string type_to_string(const bool &thebool, int)
 
 std::string type_to_string(const sideeffect_allockind &data, int)
 {
-  return (data == sideeffect_allockind::malloc)          ? "malloc"
-         : (data == sideeffect_allockind::realloc)       ? "realloc"
-         : (data == sideeffect_allockind::alloca)        ? "alloca"
-         : (data == sideeffect_allockind::cpp_new)       ? "cpp_new"
-         : (data == sideeffect_allockind::cpp_new_arr)   ? "cpp_new_arr"
-         : (data == sideeffect_allockind::nondet)        ? "nondet"
-         : (data == sideeffect_allockind::va_arg)        ? "va_arg"
-         : (data == sideeffect_allockind::function_call) ? "function_call"
-                                                         : "unknown";
+  switch (data)
+  {
+  case sideeffect_allockind::malloc:
+    return "malloc";
+  case sideeffect_allockind::realloc:
+    return "realloc";
+  case sideeffect_allockind::alloca:
+    return "alloca";
+  case sideeffect_allockind::cpp_new:
+    return "cpp_new";
+  case sideeffect_allockind::cpp_new_arr:
+    return "cpp_new_arr";
+  case sideeffect_allockind::nondet:
+    return "nondet";
+  case sideeffect_allockind::va_arg:
+    return "va_arg";
+  case sideeffect_allockind::printf2:
+    return "printf2";
+  case sideeffect_allockind::function_call:
+    return "function_call";
+  case sideeffect_allockind::preincrement:
+    return "preincrement";
+  case sideeffect_allockind::postincrement:
+    return "postincrement";
+  case sideeffect_allockind::predecrement:
+    return "predecrement";
+  case sideeffect_allockind::postdecrement:
+    return "postdecrement";
+  case sideeffect_allockind::old_snapshot:
+    return "old_snapshot";
+  case sideeffect_allockind::assigns_target:
+    return "assigns_target";
+  case sideeffect_allockind::statement_expression:
+    return "statement_expression";
+  case sideeffect_allockind::temporary_object:
+    return "temporary_object";
+  case sideeffect_allockind::gcc_conditional_expression:
+    return "gcc_conditional_expression";
+  case sideeffect_allockind::cpp_delete:
+    return "cpp_delete";
+  case sideeffect_allockind::cpp_delete_array:
+    return "cpp_delete_array";
+  }
+  return "unknown";
 }
 
 std::string type_to_string(const unsigned int &theval, int)

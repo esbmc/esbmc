@@ -24,6 +24,10 @@
 #include <util/namespace.h>
 #include <util/context.h>
 #include <util/expr_util.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/c_types.h>
+#include <util/arith_tools.h>
 
 namespace
 {
@@ -269,6 +273,85 @@ TEST_CASE(
   // alloctype is the constructed struct type (as set by the C++ frontend).
   require_expr_roundtrip(sideeffect2tc(
     st, nil_expr, nil_expr, args, st, sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
+  "migrate cpp_new[] recovers size and initializer from frontend fields",
+  "[migrate][v4-cf]")
+{
+  // Regression for esbmc#4715 V.4.4 cpp_new parity. The C++ frontend builds
+  // side_effect_exprt("cpp_new[]") with the array size in the "size" field
+  // (size_irep) and the initializer in the "initializer" sub; the "#size"
+  // (cmt_size) mirror is only populated later in the pipeline. Under
+  // --irep2-bodies the body is migrated before that mirror runs, so forward
+  // migration must read "size" — otherwise the whole size operand (and the
+  // initializer) is silently dropped.
+  use_test_ns();
+  typet int_t = migrate_type_back(get_int_type(32));
+  side_effect_exprt e("cpp_new[]", gen_pointer_type(int_t));
+  e.size(symbol_exprt("x", int_t));      // array-count leaf, in "size" only
+  e.initializer(from_integer(7, int_t)); // initializer in "initializer" sub
+
+  expr2tc m;
+  migrate_expr(e, m);
+  REQUIRE(is_sideeffect2t(m));
+  const sideeffect2t &se = to_sideeffect2t(m);
+  REQUIRE(se.kind == sideeffect_allockind::cpp_new_arr);
+  REQUIRE(!is_nil_expr(se.size));
+  REQUIRE(se.size == symbol2tc(get_int_type(32), "x"));
+  REQUIRE(se.arguments.size() == 1);
+  REQUIRE(se.arguments[0] == constant_int2tc(get_int_type(32), BigInt(7)));
+
+  // And the round-trip back must restore both the "size" field and the
+  // initializer so the legacy conversion pipeline sees them.
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.size_irep().is_not_nil());
+  REQUIRE(back.initializer().is_not_nil());
+}
+
+TEST_CASE(
+  "migrate preserves source location on basic code kinds",
+  "[migrate][v4-cf]")
+{
+  // V.4.4 (esbmc#4715): the basic code kinds (assign/decl/expression/...) carry
+  // a non-reflected `location` so the source location survives the body
+  // round-trip under --irep2-bodies. Without it, goto_convert stamps empty
+  // instruction locations and filename-gated checks (e.g. Solidity narrowing
+  // overflow, which only fires on ".sol" files) silently vanish -> unsound.
+  // Equality ignores `location`, so this asserts on it explicitly rather than
+  // via require_expr_roundtrip.
+  use_test_ns();
+  locationt loc;
+  loc.set_file("contract.sol");
+  loc.set_line(8);
+
+  // code_assign: legacy codet("assign") -> code_assign2t -> codet, loc intact.
+  codet assign("assign");
+  assign.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(7, migrate_type_back(get_int_type(32))));
+  assign.location() = loc;
+  expr2tc m;
+  migrate_expr(assign, m);
+  REQUIRE(is_code_assign2t(m));
+  REQUIRE(to_code_assign2t(m).location.get_file() == "contract.sol");
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_file() == "contract.sol");
+  REQUIRE(back.location().get_line() == "8");
+
+  // sideeffect_assign (compound `x += 10`) carries location too: it lowers to
+  // an ASSIGN instruction in goto_convert, whose location gates the Solidity
+  // narrowing-assignment overflow check.
+  side_effect_exprt comp("assign+");
+  comp.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(10, migrate_type_back(get_int_type(32))));
+  comp.location() = loc;
+  expr2tc mc;
+  migrate_expr(comp, mc);
+  REQUIRE(is_sideeffect_assign2t(mc));
+  REQUIRE(to_sideeffect_assign2t(mc).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mc).location().get_file() == "contract.sol");
 }
 
 TEST_CASE(
