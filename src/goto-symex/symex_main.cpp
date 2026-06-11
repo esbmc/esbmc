@@ -235,6 +235,13 @@ static void substitute_result(expr2tc &e, const expr2tc &ret_val)
   }
   if (is_constant_int2t(e))
   {
+    if (
+      is_unsignedbv_type(ret_val->type) &&
+      to_constant_int2t(e).value.is_negative())
+      log_warning(
+        "witness: function_return constraint compares signed constant {} "
+        "against unsigned return type; constraint may be trivially false",
+        integer2string(to_constant_int2t(e).value));
     e = from_integer(to_constant_int2t(e).value, ret_val->type);
     return;
   }

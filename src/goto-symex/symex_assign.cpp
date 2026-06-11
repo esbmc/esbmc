@@ -531,7 +531,7 @@ void goto_symext::symex_assign(
   if (validate_witness && is_symbol2t(original_lhs))
   {
     const std::string nm = to_symbol2t(original_lhs).thename.as_string();
-    if (nm.find("return_value$_") != std::string::npos)
+    if (nm.find("$tmp::return_value$_") != std::string::npos)
     {
       irep_idt call_line;
       if (cur_state->source.pc->is_return())
