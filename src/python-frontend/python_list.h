@@ -279,6 +279,18 @@ public:
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
   /**
+   * @brief Emit a __ESBMC_list_copy_shallow call producing a shallow copy of
+   * src_list (Python copy semantics: scalar elements get independent buffers,
+   * nested containers stay shared). Used by tuple(list), which must snapshot
+   * the source so later list mutations do not show through the tuple.
+   * @param src_list List-typed expression (symbol or list-returning call)
+   * @param element  AST node used for location info and temp naming
+   * @return Symbol expression of the copied list
+   */
+  exprt
+  build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
    */
