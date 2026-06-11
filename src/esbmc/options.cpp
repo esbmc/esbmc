@@ -127,7 +127,12 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"ld-props",
      boost::program_options::value<std::string>()->value_name("file"),
      "YAML safety-property specification for IEC 61131-3 Ladder Diagram "
-     "(.ld) programs"}}},
+     "(.ld) programs"},
+    {"ld-fault-injection",
+     NULL,
+     "Plant known semantic errors in the Ladder Diagram (negate contact "
+     "polarities, degrade Set/Reset coils to plain output coils) to validate "
+     "that the property checks detect them"}}},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",

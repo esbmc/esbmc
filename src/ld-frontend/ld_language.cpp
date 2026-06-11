@@ -76,6 +76,8 @@ bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
     LdIR ir = builder.build(ast_);
 
     ld_converter converter(context, ir);
+    if (config.options.get_bool_option("ld-fault-injection"))
+      converter.enable_fault_injection(true);
     converter.convert();
 
     // Append property assertions into the scan-loop body of ld::scan_loop.
