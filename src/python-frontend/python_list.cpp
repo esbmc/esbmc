@@ -2055,8 +2055,7 @@ void python_list::handle_slice_assignment(
       "List slice assignment requires a list right-hand side");
 
   const typet i64 = signedbv_typet(64);
-  auto bound_expr = [&](const char *name, bool &present) -> exprt
-  {
+  auto bound_expr = [&](const char *name, bool &present) -> exprt {
     present = slice_node.contains(name) && !slice_node[name].is_null();
     if (!present)
       return from_integer(0, i64);
