@@ -6,6 +6,9 @@
 
 #include <camada/camada.h>
 #include <camada/camadafeatures.h>
+#if CAMADA_HAVE_BITWUZLA
+#  include <camada/bitwuzlasolver.h>
+#endif
 #if CAMADA_HAVE_MATHSAT
 #  include <camada/mathsatsolver.h>
 #endif
@@ -176,6 +179,24 @@ public:
   explicit esbmc_mathsat_solver(const msat_config &config)
     : camada::MathSATSolver(config)
   {
+  }
+};
+#endif
+
+#if CAMADA_HAVE_BITWUZLA
+class esbmc_bitwuzla_solver : public camada::BitwuzlaSolver
+{
+public:
+  esbmc_bitwuzla_solver() = default;
+
+  // Bitwuzla cannot decide equality over native constant arrays
+  // ("Equality over constant arrays not fully supported yet" -> the solve
+  // aborts). Opt into camada's lazy constant-array lowering, the same way
+  // its Yices backend does, so the equalities ESBMC emits over list/dict
+  // arrays are dischargeable.
+  bool nativeConstArraySupport() const override
+  {
+    return false;
   }
 };
 #endif
@@ -357,7 +378,11 @@ public:
       solver = create_esbmc_yices_solver(options);
       break;
     case camada_backendt::bitwuzla:
-      solver = camada::createBitwuzlaSolver();
+#if CAMADA_HAVE_BITWUZLA
+      solver = std::make_unique<esbmc_bitwuzla_solver>();
+#else
+      unsupported("Bitwuzla support in Camada");
+#endif
       break;
     }
   }
