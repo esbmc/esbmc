@@ -1881,9 +1881,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       }
     }
     else if (
-      expr.statement() != "nondet" && expr.statement() != "function_call" &&
-      expr.statement() != "cpp-throw" && expr.statement() != "temporary_object")
-      // For everything other than nondet / cpp-throw / temporary_object,
+      expr.statement() == "malloc" || expr.statement() == "realloc" ||
+      expr.statement() == "alloca" || expr.statement() == "va_arg")
+      // Only the allocation side-effects carry a "#size" (cpp_new is handled
+      // above). The other non-allocation forms (increment/decrement,
+      // statement_expression, gcc_conditional, cpp_delete, ...) leave "#size"
+      // empty; reading it would migrate an empty exprt and abort. This surfaces
+      // under --irep2-bodies when a side-effect appears in a type's size
+      // expression (e.g. the VLA dimension `b[++a]`), migrated before
+      // goto_convert lowers it. `thesize` stays nil there, which is correct.
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
     type2tc cmt_type =
