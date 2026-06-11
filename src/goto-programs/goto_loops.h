@@ -6,6 +6,19 @@
 #include <util/std_types.h>
 #include <unordered_map>
 
+/// True for symbols that name genuine user storage — excludes ESBMC
+/// internals, return-value temporaries, k-induction-generated names, etc.
+/// Defined in goto_loops.cpp; declared here so the k-induction pass can
+/// reuse it when filtering value-set objects (issue #5230).
+bool check_var_name(const expr2tc &expr);
+
+/// True iff `expr` denotes storage reached through a pointer (a dereference,
+/// or an index/member off pointer-reached storage, or a pointer-typed symbol
+/// being indexed) — i.e. an array-element write the inductive step cannot
+/// havoc as a named symbol. Defined in goto_loops.cpp; declared here so the
+/// k-induction pass can pre-scan for such writes (issue #5230).
+bool indexes_through_pointer(const expr2tc &expr);
+
 class goto_loopst
 {
 protected:

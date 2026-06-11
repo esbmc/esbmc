@@ -10,7 +10,7 @@
 // `(*p)[i]`, `p->arr[i]`), which the inductive step cannot havoc (#5224).
 // A named stack array (array-typed symbol) returns false: the inductive
 // step havocs it as a whole symbol, which is sound.
-static bool indexes_through_pointer(const expr2tc &expr)
+bool indexes_through_pointer(const expr2tc &expr)
 {
   if (is_dereference2t(expr))
     return true;
@@ -25,6 +25,27 @@ static bool indexes_through_pointer(const expr2tc &expr)
   if (is_symbol2t(expr))
     return is_pointer_type(expr->type);
   return false;
+}
+
+// Given the `source_value` of an array write that `indexes_through_pointer`
+// has flagged, return the pointer expression whose pointee Phase 2 should
+// resolve via the value-set fixpoint (e.g. `(*dest)[i]` -> `dest`,
+// `p[i]` -> `p`, `p->arr[i]` -> `p`). Returns a nil expr when no pointer
+// can be extracted, in which case the caller marks the write unresolvable
+// and the inductive step is disabled as in Phase 1. See issue #5230.
+static expr2tc extract_queried_pointer(const expr2tc &expr)
+{
+  if (is_dereference2t(expr))
+    return to_dereference2t(expr).value;
+  if (is_index2t(expr))
+    return extract_queried_pointer(to_index2t(expr).source_value);
+  if (is_member2t(expr))
+    return extract_queried_pointer(to_member2t(expr).source_value);
+  if (is_typecast2t(expr))
+    return extract_queried_pointer(to_typecast2t(expr).from);
+  if (is_symbol2t(expr) && is_pointer_type(expr->type))
+    return expr;
+  return expr2tc();
 }
 
 bool check_var_name(const expr2tc &expr)
@@ -313,7 +334,14 @@ void goto_loopst::get_modified_variables(
     for (const auto &v : summary.unmodified)
       loop->add_unmodified_var_to_loop(v);
     if (summary.modifies_pointer_array)
+    {
       loop->set_modifies_pointer_array();
+      // The write happens inside the callee, so the written pointer (a
+      // callee parameter) is not in scope at the caller's loop head and
+      // cannot be resolved there. Fall back to Phase 1: disable the
+      // inductive step. See issue #5230.
+      loop->set_pointer_array_write_unresolvable();
+    }
   }
   else if (
     instruction->is_goto() || instruction->is_assert() ||
@@ -353,7 +381,18 @@ void goto_loopst::add_loop_var(
     // inductive step (#5224). A stack array (array-typed symbol source)
     // is havoc'd as a whole symbol and stays sound.
     if (indexes_through_pointer(idx.source_value))
+    {
       loop.set_modifies_pointer_array();
+      // Phase 2: record the pointer so it can be resolved against the
+      // value-set fixpoint and the referenced object havoc'd. If no pointer
+      // can be extracted, mark the write unresolvable so the inductive step
+      // is disabled as in Phase 1. See issue #5230.
+      expr2tc ptr = extract_queried_pointer(idx.source_value);
+      if (!is_nil_expr(ptr))
+        loop.add_pointer_array_write_ptr(ptr);
+      else
+        loop.set_pointer_array_write_unresolvable();
+    }
     add_loop_var(loop, idx.source_value, true);
     add_loop_var(loop, idx.index, false);
     return;
