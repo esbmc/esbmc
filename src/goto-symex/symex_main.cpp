@@ -238,8 +238,7 @@ static void substitute_result(expr2tc &e, const expr2tc &ret_val)
     e = from_integer(to_constant_int2t(e).value, ret_val->type);
     return;
   }
-  e->Foreach_operand(
-    [&](expr2tc &op) { substitute_result(op, ret_val); });
+  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
 }
 
 void goto_symext::symex_witness_function_return(

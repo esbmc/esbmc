@@ -211,7 +211,8 @@ protected:
    *  @param code return statement.
    */
   void symex_return(const expr2tc &code);
-  void symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
+  void
+  symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
 
   /**
    *  Interpret an OTHER instruction.

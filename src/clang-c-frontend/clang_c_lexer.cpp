@@ -39,7 +39,10 @@ struct clang_c_lexert::LexerContext
   llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> diag_ids{
     new clang::DiagnosticIDs()};
   clang::DiagnosticsEngine diags{
-    diag_ids, diag_opts, new clang::IgnoringDiagConsumer(), true};
+    diag_ids,
+    diag_opts,
+    new clang::IgnoringDiagConsumer(),
+    true};
   clang::FileSystemOptions fs_opts;
   clang::FileManager fm{fs_opts};
   clang::SourceManager sm{diags, fm};
@@ -57,7 +60,6 @@ struct clang_c_lexert::LexerContext
 
 namespace
 {
-
 struct ParseState
 {
   clang_c_lexert::LexerContext &ctx;
@@ -116,8 +118,8 @@ expr2tc parse_integer(ParseState &ps)
   llvm::APInt val(64, 0);
   parser.GetIntegerValue(val);
 
-  BigInt n = parser.isUnsigned ? BigInt(val.getZExtValue())
-                               : BigInt(val.getSExtValue());
+  BigInt n =
+    parser.isUnsigned ? BigInt(val.getZExtValue()) : BigInt(val.getSExtValue());
   if (neg)
     n = -n;
 
