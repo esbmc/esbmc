@@ -266,9 +266,16 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(tmp);
     volatile_check(tmp);
 
+    // Lower Python predicates (isnone/isinstance/hasattr) *before* dereference:
+    // a short-circuited `a is None or a.b is None` dereferences `a.b` under the
+    // guard `not isnone(a)`, and dereference records the NULL-pointer safety
+    // assertion immediately. If the isnone is still live it leaks into that
+    // assertion's condition and reaches the SMT backend unlowered (no convert
+    // rule for isnone), aborting. dereference never introduces any of these
+    // predicates, so lowering first is strictly safe.
+    simplify_python_builtins(tmp);
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
-    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }

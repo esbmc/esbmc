@@ -1979,6 +1979,123 @@ exprt python_list::handle_range_slice(
   return build_symbol(sliced_list);
 }
 
+void python_list::handle_slice_assignment(
+  const exprt &list_expr,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &value_node)
+{
+  // The step is restricted to a constant integer literal (or absent) for
+  // now; the model receives it as a runtime value and branches on it at
+  // solve time, so this could be lifted, but a symbolic step is untested.
+  // Mirrors the literal-only step extraction in handle_range_slice, but
+  // rejects a non-constant step instead of silently slicing with step 1.
+  long long step_val = 1;
+  if (slice_node.contains("step") && !slice_node["step"].is_null())
+  {
+    const auto &step_node = slice_node["step"];
+    if (
+      step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub" &&
+      step_node["operand"]["_type"] == "Constant" &&
+      step_node["operand"]["value"].is_number_integer())
+      step_val = -(long long)step_node["operand"]["value"].get<std::int64_t>();
+    else if (
+      step_node["_type"] == "Constant" &&
+      step_node["value"].is_number_integer())
+      step_val = step_node["value"].get<std::int64_t>();
+    else
+      throw std::runtime_error(
+        "List slice assignment requires a constant integer step");
+  }
+
+  const locationt location = converter_.get_location_from_decl(slice_node);
+
+  // Evaluate the right-hand side; materialize a call (e.g. sorted(...)) into
+  // a temporary so its result can be passed to the model by address. get_expr
+  // returns calls as code_function_callt, which must be emitted as an
+  // instruction with the temporary as its lhs — embedding it as a decl
+  // operand would leak a side effect into the GOTO program.
+  exprt rhs = converter_.get_expr(value_node);
+  if (rhs.is_function_call())
+  {
+    code_function_callt &fcall = static_cast<code_function_callt &>(rhs);
+    if (!fcall.function().type().is_code())
+      throw std::runtime_error(
+        "Unsupported callable on list slice assignment right-hand side");
+    const typet ret_type = to_code_type(fcall.function().type()).return_type();
+    symbolt &tmp = converter_.create_tmp_symbol(
+      value_node, "$slice_assign_rhs$", ret_type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    fcall.lhs() = build_symbol(tmp);
+    converter_.add_instruction(fcall);
+    rhs = build_symbol(tmp);
+  }
+  else if (rhs.id() == "sideeffect")
+  {
+    symbolt &tmp = converter_.create_tmp_symbol(
+      value_node, "$slice_assign_rhs$", rhs.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.copy_to_operands(rhs);
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    rhs = build_symbol(tmp);
+  }
+
+  const namespacet ns(converter_.symbol_table());
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const typet resolved_list_type = ns.follow(list_type);
+  const typet rhs_type = ns.follow(rhs.type());
+  const bool rhs_is_list =
+    rhs_type == resolved_list_type ||
+    (rhs_type.is_pointer() &&
+     ns.follow(rhs_type.subtype()) == resolved_list_type);
+  if (!rhs_is_list)
+    throw std::runtime_error(
+      "List slice assignment requires a list right-hand side");
+
+  const typet i64 = signedbv_typet(64);
+  auto bound_expr = [&](const char *name, bool &present) -> exprt {
+    present = slice_node.contains(name) && !slice_node[name].is_null();
+    if (!present)
+      return from_integer(0, i64);
+    exprt e = converter_.get_expr(slice_node[name]);
+    e = remove_function_calls_recursive(e, slice_node);
+    return build_typecast(e, i64);
+  };
+  bool has_lower = false, has_upper = false;
+  exprt lower = bound_expr("lower", has_lower);
+  exprt upper = bound_expr("upper", has_upper);
+
+  const symbolt *fn =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_slice_assign");
+  if (!fn)
+    throw std::runtime_error(
+      "__ESBMC_list_slice_assign not found in symbol table");
+
+  // Same nested-list type id as the slice-read path: lets the model keep
+  // nested-list records shared instead of byte-copying them (#5102).
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(list_type)),
+    config.ansi_c.address_width));
+
+  exprt call = build_call_expr(
+    *fn,
+    bool_type(),
+    {list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr),
+     lower,
+     from_integer(has_lower ? 1 : 0, int_type()),
+     upper,
+     from_integer(has_upper ? 1 : 0, int_type()),
+     from_integer(step_val, i64),
+     rhs.type().is_pointer() ? rhs : build_address_of(rhs),
+     list_type_id});
+  call.location() = location;
+  converter_.add_instruction(converter_.convert_expression_to_code(call));
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
