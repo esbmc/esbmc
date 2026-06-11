@@ -59,6 +59,52 @@ class TypeInferenceMixin:
             return element_annotation.value.id
         return None
 
+    def _scan_attr_list_element_classes(self, module):
+        """Map attribute name -> the single class that every list assigned to
+        that attribute anywhere in the module holds (`x.attr = [a, b]` with all
+        elements instances of one class). Attributes whose list elements are
+        ambiguous or not class instances are dropped. Used to type the target
+        of a loop over `obj.attr` when obj's class cannot be resolved (#4805).
+        """
+        class_names = {n.name for n in ast.walk(module)
+                       if isinstance(n, ast.ClassDef)}
+
+        # name -> class for `v = ClassName(...)`; None when rebound to
+        # different classes.
+        var_classes = {}
+        for n in ast.walk(module):
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)
+                    and isinstance(n.value, ast.Call)
+                    and isinstance(n.value.func, ast.Name)
+                    and n.value.func.id in class_names):
+                name = n.targets[0].id
+                cls = n.value.func.id
+                var_classes[name] = cls if var_classes.get(name, cls) == cls else None
+
+        def element_class(elt):
+            if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
+                    and elt.func.id in class_names):
+                return elt.func.id
+            if isinstance(elt, ast.Name):
+                return var_classes.get(elt.id)
+            return None
+
+        attr_classes = {}
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Attribute)
+                    and isinstance(n.value, ast.List)):
+                continue
+            attr = n.targets[0].attr
+            for elt in n.value.elts:
+                cls = element_class(elt)
+                if cls is None or attr_classes.get(attr, cls) != cls:
+                    attr_classes[attr] = None
+                else:
+                    attr_classes.setdefault(attr, cls)
+        return {attr: cls for attr, cls in attr_classes.items() if cls}
+
     def _extract_type_from_annotation(self, annotation):
         if annotation is None:
             return "Any"
@@ -125,6 +171,10 @@ class TypeInferenceMixin:
 
         if container_type == "str":
             return "str"
+        if isinstance(iterable_node, ast.Attribute):
+            attr_class = self.attr_list_element_classes.get(iterable_node.attr)
+            if attr_class:
+                return attr_class
         if isinstance(iterable_node, ast.List) and iterable_node.elts:
             first_elem = iterable_node.elts[0]
             if isinstance(first_elem, ast.Constant):

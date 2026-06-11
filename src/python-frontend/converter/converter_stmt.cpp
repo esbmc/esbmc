@@ -473,19 +473,35 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        // Prevent type change from scalar (int/float/bool) to string/array
-        // when a prior declaration exists with the scalar type, as this
-        // creates a type inconsistency in the GOTO program.
-        bool is_incompatible =
-          rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
-          !lhs_symbol->get_type().is_pointer() &&
-          !lhs_symbol->get_type().id().empty() &&
-          !lhs_symbol->get_type().is_nil() &&
-          lhs_symbol->get_type() != type_handler_.get_list_type();
-        if (!is_incompatible)
+        // An RHS typed any_type() (void*) means "type unknown" — e.g. an
+        // instance attribute of a class the scanner could not resolve — not
+        // "the object is a void*". Demoting a list-annotated LHS to void*
+        // makes the for-loop lowering fall back to the array protocol (raw
+        // __ESBMC_get_object_size + pointer indexing), which aborts symex on
+        // the PyListObj struct (#4805). Keep the annotated list type and
+        // cast the RHS instead.
+        if (
+          lhs.type() == type_handler_.get_list_type() &&
+          rhs.type() == any_type())
         {
-          lhs_symbol->set_type(rhs.type());
-          lhs.type() = rhs.type();
+          rhs = typecast_exprt(rhs, lhs.type());
+        }
+        else
+        {
+          // Prevent type change from scalar (int/float/bool) to string/array
+          // when a prior declaration exists with the scalar type, as this
+          // creates a type inconsistency in the GOTO program.
+          bool is_incompatible =
+            rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
+            !lhs_symbol->get_type().is_pointer() &&
+            !lhs_symbol->get_type().id().empty() &&
+            !lhs_symbol->get_type().is_nil() &&
+            lhs_symbol->get_type() != type_handler_.get_list_type();
+          if (!is_incompatible)
+          {
+            lhs_symbol->set_type(rhs.type());
+            lhs.type() = rhs.type();
+          }
         }
       }
     }
