@@ -352,8 +352,12 @@ bool clang_c_languaget::parse(const std::string &path)
         wp.parsed_cond.valid = true;
       }
       else
-        log_warning(
-          "witness: could not parse constraint '{}', skipping", wp.value);
+      {
+        log_error(
+          "witness: could not parse constraint '{}'; witness is invalid",
+          wp.value);
+        abort();
+      }
     }
     std::string content =
       yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
