@@ -66,18 +66,15 @@ class TypeInferenceMixin:
         ambiguous or not class instances are dropped. Used to type the target
         of a loop over `obj.attr` when obj's class cannot be resolved (#4805).
         """
-        class_names = {n.name for n in ast.walk(module)
-                       if isinstance(n, ast.ClassDef)}
+        class_names = {n.name for n in ast.walk(module) if isinstance(n, ast.ClassDef)}
 
         # name -> class for `v = ClassName(...)`; None when rebound to
         # different classes.
         var_classes = {}
         for n in ast.walk(module):
             if (isinstance(n, ast.Assign) and len(n.targets) == 1
-                    and isinstance(n.targets[0], ast.Name)
-                    and isinstance(n.value, ast.Call)
-                    and isinstance(n.value.func, ast.Name)
-                    and n.value.func.id in class_names):
+                    and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)
+                    and isinstance(n.value.func, ast.Name) and n.value.func.id in class_names):
                 name = n.targets[0].id
                 cls = n.value.func.id
                 var_classes[name] = cls if var_classes.get(name, cls) == cls else None
@@ -93,8 +90,7 @@ class TypeInferenceMixin:
         attr_classes = {}
         for n in ast.walk(module):
             if not (isinstance(n, ast.Assign) and len(n.targets) == 1
-                    and isinstance(n.targets[0], ast.Attribute)
-                    and isinstance(n.value, ast.List)):
+                    and isinstance(n.targets[0], ast.Attribute) and isinstance(n.value, ast.List)):
                 continue
             attr = n.targets[0].attr
             for elt in n.value.elts:
