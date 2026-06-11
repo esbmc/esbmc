@@ -3414,8 +3414,6 @@ void esbmc_parseoptionst::print_ileave_points(
       case DEAD:
       case THROW:
       case CATCH:
-      case THROW_DECL:
-      case THROW_DECL_END:
       case LOOP_INVARIANT:
         break;
       }

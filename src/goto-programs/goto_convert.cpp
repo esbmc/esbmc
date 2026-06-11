@@ -275,10 +275,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_catch(code, dest);
   else if (statement == "cpp-throw")
     convert_throw(code, dest);
-  else if (statement == "throw_decl")
-    convert_throw_decl(code, dest);
-  else if (statement == "throw_decl_end")
-    convert_throw_decl_end(code, dest);
   else if (statement == "dead")
     copy(code, DEAD, dest);
   else
@@ -293,42 +289,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     dest.instructions.back().code = expr2tc();
     dest.instructions.back().location = code.location();
   }
-}
-
-void goto_convertt::convert_throw_decl_end(
-  const exprt &expr,
-  goto_programt &dest)
-{
-  // add the THROW_DECL_END instruction to 'dest'
-  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
-  goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
-  throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
-  throw_decl_end_instruction->location = expr.location();
-}
-
-void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
-{
-  // add the THROW_DECL instruction to 'dest'
-  goto_programt::targett throw_decl_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("throw-decl");
-  c.location() = expr.location();
-
-  // the THROW_DECL instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
-
-  throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->location = expr.location();
-  migrate_expr(c, throw_decl_instruction->code);
 }
 
 /// The automatic object a destructor-stack entry cleans up: the symbol of a

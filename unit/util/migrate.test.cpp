@@ -223,35 +223,6 @@ TEST_CASE("migrate expr round-trips for code_cpp_throw", "[migrate][b2-vtrack]")
   require_expr_roundtrip(code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}));
 }
 
-TEST_CASE(
-  "migrate expr round-trips for code_cpp_throw_decl",
-  "[migrate][b2-vtrack]")
-{
-  // Forward direction already existed pre-V1; V1 added the back-arm so this
-  // round-trips here without the legacy form being constructed by hand.
-  std::vector<irep_idt> exceptions{"std::bad_alloc"};
-  require_expr_roundtrip(code_cpp_throw_decl2tc(exceptions));
-}
-
-TEST_CASE(
-  "migrate expr round-trips for code_cpp_throw_decl_end",
-  "[migrate][b2-vtrack]")
-{
-  std::vector<irep_idt> exceptions{"std::bad_alloc"};
-  require_expr_roundtrip(code_cpp_throw_decl_end2tc(exceptions));
-}
-
-TEST_CASE(
-  "migrate expr round-trips for code_cpp_src_throw_decl",
-  "[migrate][b2-vtrack]")
-{
-  // code_cpp_src_throw_decl is the source-level exception spec: back-migrates
-  // to codet("throw_decl") (underscore) with operands carrying throw_decl_id
-  // attributes, and forward-migrates from that form back to IREP2.
-  std::vector<irep_idt> exceptions{"noexcept"};
-  require_expr_roundtrip(code_cpp_src_throw_decl2tc(exceptions));
-}
-
 TEST_CASE("migrate expr round-trips for new_object", "[migrate][b2-vtrack]")
 {
   // new_object is the C++ "this" placeholder in temporary_object initializers.

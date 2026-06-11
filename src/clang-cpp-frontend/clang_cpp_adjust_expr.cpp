@@ -28,12 +28,11 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   if (symbol.get_value().is_not_nil())
   {
     value = symbol.get_value();
-    [[maybe_unused]] const code_blockt &existing_body =
-      to_code_block(to_code(value));
-    assert(
-      existing_body.operands().size() == 1 &&
-      existing_body.op0().statement() ==
-        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+    const code_blockt &existing_body = to_code_block(to_code(value));
+    // Sanity check that we don't accidentally clobber a clang-generated body:
+    // the implicit union copy/move constructor has no statements of its own.
+    assert(existing_body.operands().empty());
+    (void)existing_body;
   }
   else
   {
@@ -68,6 +67,15 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
+
+  // Resolve a dynamic exception specification's declared types to exception
+  // ids now that the namespace is fully populated.
+  if (symbol.get_type().is_code())
+  {
+    typet t = symbol.get_type();
+    finalize_exception_specification(t);
+    symbol.set_type(std::move(t));
+  }
 
   /*
    * implicit code generation for vptr initializations:

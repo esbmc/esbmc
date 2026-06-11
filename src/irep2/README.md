@@ -384,8 +384,6 @@ cpp-statement ::= "code_cpp_delete"         «empty» "(" expr ")"
                 | "code_cpp_del_array"      «empty» "(" expr ")"
                 | "code_cpp_throw"          «empty» "(" expr "," "[" { name } "]" ")"
                 | "code_cpp_catch"          «empty» "(" "[" { name } "]" "," "[" { expr } "]" ")"
-                | "code_cpp_throw_decl"     «empty» "(" "[" { name } "]" ")"
-                | "code_cpp_throw_decl_end" «empty» "(" "[" { name } "]" ")"
 ```
 
 Leaf terminals:
@@ -816,8 +814,6 @@ IREP2 bodies; they are not yet built by any pipeline path (see the
 | `code_cpp_del_array` | C++ `delete[] expr;`. |
 | `code_cpp_throw` | `throw expr;` with a list of types being thrown. |
 | `code_cpp_catch` | `try`/`catch`: a list of catchable types plus, for the source-level form, the try block and per-type handler blocks as operands (empty on the post-goto-convert CATCH marker). |
-| `code_cpp_throw_decl` | Function-level `throw(...)` declaration (start marker). |
-| `code_cpp_throw_decl_end` | Matching end marker for `code_cpp_throw_decl`. |
 
 ## Gotchas
 

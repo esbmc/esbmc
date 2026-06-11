@@ -753,6 +753,10 @@ bool clang_c_convertert::get_function(
     }
   }
 
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
   added_symbol.set_type(type);
   new_expr.type() = type;
 

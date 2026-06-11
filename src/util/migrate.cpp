@@ -2184,31 +2184,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "code" && expr.statement() == "throw-decl")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &exceptions_thrown = expr.find("throw_list").get_sub();
-    for (const auto &e_it : exceptions_thrown)
-    {
-      expr_list.push_back(e_it.id());
-    }
-
-    new_expr_ref = code_cpp_throw_decl2tc(expr_list);
-    return;
-  }
-
-  // Source-level exception specification: codet("throw_decl") (underscore) with
-  // operands carrying throw_decl_id attributes. Distinct from the GOTO-level
-  // "throw-decl" (hyphen) which uses a throw_list sub-irept.
-  if (expr.id() == "code" && expr.statement() == "throw_decl")
-  {
-    std::vector<irep_idt> expr_list;
-    for (const auto &op : expr.operands())
-      expr_list.push_back(op.get("throw_decl_id"));
-    new_expr_ref = code_cpp_src_throw_decl2tc(expr_list);
-    return;
-  }
-
   // V1 of the symbol-table V-track (esbmc/esbmc#4715). Four kinds had only
   // a back-arm (or neither direction) and could not round-trip through the
   // migration layer. Adding the forward arms here -- with the matching back
@@ -2410,16 +2385,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       }
     }
     new_expr_ref = code_cpp_catch2tc(expr_list, ops);
-    return;
-  }
-
-  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &throw_list = expr.find("throw_list").get_sub();
-    for (const auto &e_it : throw_list)
-      expr_list.push_back(e_it.id());
-    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
     return;
   }
 
@@ -4073,42 +4038,6 @@ exprt migrate_expr_back(const expr2tc &ref)
       if (i != 0 && i - 1 < ref2.exception_list.size())
         op.set("exception_id", ref2.exception_list[i - 1]);
       codeexpr.copy_to_operands(op);
-    }
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_id:
-  {
-    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw-decl");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_end_id:
-  {
-    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw_decl_end");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_src_throw_decl_id:
-  {
-    // Source-level exception spec: back-migrate to codet("throw_decl") with
-    // operands carrying throw_decl_id attributes so that goto_convert_rec
-    // calls convert_throw_decl rather than emitting a copy-to-OTHER instruction.
-    const code_cpp_src_throw_decl2t &ref2 = to_code_cpp_src_throw_decl2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw_decl");
-    for (auto const &id : ref2.exception_list)
-    {
-      exprt op;
-      op.set("throw_decl_id", id);
-      codeexpr.move_to_operands(op);
     }
     return codeexpr;
   }

@@ -16,7 +16,6 @@
 namespace
 {
 const irep_idt ellipsis_id = "ellipsis";
-const irep_idt noexcept_id = "noexcept";
 
 bool is_pointer_catch(const irep_idt &type)
 {
@@ -85,6 +84,14 @@ public:
     {
       if (!fn.second.body_available)
         continue;
+      // A dynamic exception specification's allowed types must each have an id
+      // so the epilogue membership test (spec_guard) can reference them. The
+      // specification is now function metadata, not a THROW_DECL instruction.
+      if (
+        fn.second.exception_spec.kind ==
+        exception_specificationt::kindt::dynamic)
+        for (const irep_idt &ty : fn.second.exception_spec.allowed_types)
+          registry.register_chain({ty});
       for (const auto &ins : fn.second.body.instructions)
       {
         if (ins.type == THROW)
@@ -92,15 +99,6 @@ public:
           const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
           if (!is_nil_expr(t.operand))
             registry.register_chain(t.exception_list);
-        }
-        else if (ins.type == THROW_DECL)
-        {
-          // A dynamic exception specification's allowed types must each have an
-          // id so the epilogue can test the in-flight exception's membership.
-          for (const irep_idt &ty :
-               to_code_cpp_throw_decl2t(ins.code).exception_list)
-            if (ty != noexcept_id)
-              registry.register_chain({ty});
         }
         else if (ins.type == FUNCTION_CALL)
         {
@@ -150,7 +148,7 @@ public:
 
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available)
-        lower_ip(fn.second.body, fn.first);
+        lower_ip(fn.second, fn.first);
 
     // The globals are created after the frontend builds __ESBMC_main's static
     // initialisation, so seed them at entry; otherwise symex does not track the
@@ -169,9 +167,17 @@ public:
   {
     for (const auto &fn : gf.function_map)
       if (fn.second.body_available)
+      {
+        // A restrictive specification (noexcept / throw(...)) gets epilogue
+        // enforcement, so the pass must run when one is present. (lower_ip
+        // still no-ops on a body that cannot reach the epilogue with an
+        // exception in flight — no throws, calls or catches.)
+        if (fn.second.exception_spec.is_restrictive())
+          return true;
         for (const auto &ins : fn.second.body.instructions)
-          if (ins.type == THROW || ins.type == CATCH || ins.type == THROW_DECL)
+          if (ins.type == THROW || ins.type == CATCH)
             return true;
+      }
     return false;
   }
 
@@ -411,9 +417,9 @@ private:
     int depth = 0;
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      // Both no-throw specs (noexcept / throw()) and dynamic exception
-      // specifications (throw(T...)) are enforced at the function epilogue
-      // (see lower_ip), so a THROW_DECL never forces fallback.
+      // Exception specifications (noexcept / throw(T...) / throw()) are function
+      // metadata enforced at the epilogue (see lower_ip), so they never force
+      // fallback here; this scan only rejects unsupported catch/throw shapes.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -621,8 +627,9 @@ private:
     return region == -1 ? epilogue : regions[region].dispatch;
   }
 
-  void lower_ip(goto_programt &body, const irep_idt &fn_id)
+  void lower_ip(goto_functiont &function, const irep_idt &fn_id)
   {
+    goto_programt &body = function.body;
     rebalance_removed_pops(body);
     insert_elided_skip_gotos(body);
 
@@ -630,27 +637,10 @@ private:
     std::vector<sitet> throws, calls;
     collect(body, regions, throws, calls);
 
-    // Throw-spec markers are consumed here; once the throws are lowered the
-    // imperative throw-decl machinery has nothing to act on. Record the
-    // function's exception specification (if any) in the same pass: `has_spec`
-    // is set by any THROW_DECL, and `spec_types` collects its allowed types
-    // (empty for a no-throw spec — noexcept / throw()).
-    bool has_spec = false;
-    std::vector<irep_idt> spec_types;
-    for (auto &ins : body.instructions)
-    {
-      if (ins.type == THROW_DECL)
-      {
-        has_spec = true;
-        for (const irep_idt &ty :
-             to_code_cpp_throw_decl2t(ins.code).exception_list)
-          if (ty != noexcept_id)
-            spec_types.push_back(ty);
-        ins.make_skip();
-      }
-      else if (ins.type == THROW_DECL_END)
-        ins.make_skip();
-    }
+    // The function's exception specification is now metadata on the function
+    // (replacing the old THROW_DECL instructions): non_throwing for noexcept,
+    // dynamic for throw(T...) / throw() with `allowed_types` the listed types.
+    const exception_specificationt &spec = function.exception_spec;
 
     if (regions.empty() && throws.empty() && calls.empty())
       return;
@@ -676,37 +666,32 @@ private:
       r.pop->make_skip();
     }
 
-    // An exception in flight at the epilogue is a hard failure in two cases:
-    //  - main / __ESBMC_main: it is uncaught (escapes the program → terminate);
-    //    __ESBMC_main also covers static-init throws from global constructors.
-    //  - an exception specification is violated: the escaping exception's type
-    //    is not permitted by the function's `throw(...)` / noexcept declaration
-    //    ([except.spec]). A no-throw spec permits nothing, so any escape fails;
-    //    a dynamic spec permits its listed types (and their subtypes). This
-    //    mirrors the imperative path, which reports an escaping out-of-spec
-    //    throw as "not allowed by declaration" (unexpected()/handler dispatch is
-    //    not modelled on either path). A locally-caught throw clears `thrown`,
-    //    so the check fires only on a genuine escape.
-    const bool is_entry =
-      id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
-    if (is_entry || has_spec)
+    // Enforce the function's exception specification at the epilogue, where an
+    // exception still in flight is about to escape. A locally-caught throw
+    // clears `thrown`, so this fires only on a genuine escape.
+    //  - main / __ESBMC_main: any escape is uncaught (covers static-init throws
+    //    from global constructors) → assert(thrown == false).
+    //  - noexcept: an escape calls std::terminate ([except.spec]) →
+    //    assert(thrown == false).
+    //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
+    //    re-checked (build_dynamic_spec_check), matching the imperative path
+    //    (which models the unexpected-handler dispatch and its recovery).
+    const bool is_entry = fn_id == "c:@F@main" ||
+                          id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
+                          fn_id == "__ESBMC_main";
+
+    if (spec.kind == exception_specificationt::kindt::dynamic)
+      build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
+    else if (
+      is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
     {
-      // The assertion is `!thrown || in_spec`; for an uncaught (entry) or
-      // no-throw boundary `in_spec` is empty, leaving the original `!thrown`.
-      expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
-      expr2tc in_spec = is_entry ? expr2tc() : spec_guard(spec_types);
       auto a = body.insert(std::next(epilogue));
-      a->make_assertion(
-        is_nil_expr(in_spec) ? not_thrown : or2tc(not_thrown, in_spec));
+      a->make_assertion(equality2tc(thrown, gen_false_expr()));
       a->location = epilogue->location;
       a->function = epilogue->function;
       a->location.property("exception");
-      // A no-throw spec (empty allowed set) keeps the distinct "noexcept"
-      // wording; a dynamic spec reports a specification violation.
       a->location.comment(
-        is_entry             ? "uncaught exception"
-        : spec_types.empty() ? "noexcept specification violated"
-                             : "exception specification violated");
+        is_entry ? "uncaught exception" : "noexcept specification violated");
     }
 
     body.update();
@@ -830,6 +815,93 @@ private:
         disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
       }
     return disj;
+  }
+
+  /// A call to the installed std::unexpected handler — the set_unexpected
+  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  expr2tc make_unexpected_call()
+  {
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    if (!h)
+      return expr2tc();
+    code_function_callt fc;
+    fc.function() = h->get_value();
+    expr2tc call;
+    migrate_expr(fc, call);
+    return call;
+  }
+
+  /// Enforce a dynamic exception specification throw(allowed...) (including the
+  /// empty throw()) at the epilogue. When an exception the spec does not permit
+  /// is propagating out, run the std::unexpected handler and re-check: a handler
+  /// that rethrows a permitted type lets it propagate; anything else (handler
+  /// returns, rethrows a disallowed type, or no handler installed) is a
+  /// violation. Mirrors the imperative goto_symext path: one handler call, no
+  /// std::bad_exception substitution.
+  void build_dynamic_spec_check(
+    goto_programt &body,
+    goto_programt::targett epilogue,
+    const std::vector<irep_idt> &allowed,
+    bool is_entry)
+  {
+    const locationt loc = epilogue->location;
+    const irep_idt fn = epilogue->function;
+    auto last = std::next(epilogue); // END_FUNCTION
+
+    auto ins = [&](goto_programt::targett pos) {
+      auto n = body.insert(pos);
+      n->location = loc;
+      n->function = fn;
+      return n;
+    };
+    auto not_thrown = [&]() { return equality2tc(thrown, gen_false_expr()); };
+    // spec_guard returns nil for the empty spec throw() (nothing permitted).
+    auto permitted = [&]() {
+      expr2tc g = spec_guard(allowed);
+      return is_nil_expr(g) ? gen_false_expr() : g;
+    };
+
+    // Where a permitted (or absent) exception continues. For an entry function
+    // any escape is uncaught, so route there to an uncaught assertion instead
+    // of returning it to a (non-existent) caller.
+    goto_programt::targett ret = last;
+    if (is_entry)
+    {
+      ret = ins(last);
+      ret->make_assertion(not_thrown());
+      ret->location.property("exception");
+      ret->location.comment("uncaught exception");
+    }
+
+    // The violation point.
+    auto fail = ins(ret);
+    fail->make_assertion(gen_false_expr());
+    fail->location.property("exception");
+    fail->location.comment("exception specification violated");
+
+    // No exception in flight -> done.
+    ins(fail)->make_goto(ret, not_thrown());
+    // Permitted by the specification -> let it propagate.
+    ins(fail)->make_goto(ret, permitted());
+
+    // Disallowed: run the unexpected handler (if any) and re-check.
+    expr2tc call = make_unexpected_call();
+    if (!is_nil_expr(call))
+    {
+      // Clear `thrown` so the handler runs with no exception in flight; keep
+      // typeid/value so a bare `throw;` in the handler rethrows the original.
+      auto clear = ins(fail);
+      clear->make_assignment();
+      clear->code = code_assign2tc(thrown, gen_false_expr());
+
+      ins(fail)->make_function_call(call);
+
+      // Handler returned without throwing -> the specification is violated.
+      ins(fail)->make_goto(fail, not_thrown());
+      // Handler rethrew a permitted type -> let it propagate.
+      ins(fail)->make_goto(ret, permitted());
+    }
+    // Fall through to fail.
   }
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise
