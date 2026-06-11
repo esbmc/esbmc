@@ -89,8 +89,7 @@ static void z3_error_handler(Z3_context c, Z3_error_code e)
 class esbmc_z3_solver : public camada::Z3Solver
 {
 public:
-  explicit esbmc_z3_solver(std::unique_ptr<z3::context> c)
-    : camada::Z3Solver(std::move(c))
+  explicit esbmc_z3_solver(z3::context c) : camada::Z3Solver(std::move(c))
   {
     setSolver(make_solver(camada::Z3Solver::context()));
   }
@@ -120,8 +119,10 @@ public:
   camada::SMTExprRef
   wrap_expr(const camada::SMTSortRef &sort, const z3::expr &value)
   {
-    return newExprRefImpl(camada::Z3Expr(
-      camada::SMTExprKind::Unknown, &camada::Z3Solver::context(), sort, value));
+    // camada v0.11 dropped newExprRefImpl; use the public arena allocator
+    // makeExprRef<SolverExpr>(Kind, args...), which forwards to Z3Expr's ctor.
+    return makeExprRef<camada::Z3Expr>(
+      camada::SMTExprKind::Unknown, &camada::Z3Solver::context(), sort, value);
   }
 
 private:
@@ -248,9 +249,13 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
   const bool smtlib2_compliant = options.get_bool_option("smt-formula-only") ||
                                  options.get_bool_option("smt-formula-too");
 
-  std::unique_ptr<z3::context> context;
-  if (z3_debug || smtlib2_compliant)
-  {
+  // camada v0.11 reverted Z3Solver to take z3::context by value (with a move).
+  // Build the configured context once and pass it through; the cfg branch only
+  // fires for the z3-debug / smtlib-compliant modes.
+  auto make_context = [&] {
+    if (!z3_debug && !smtlib2_compliant)
+      return z3::context();
+
     z3::config cfg;
     if (z3_debug)
     {
@@ -264,14 +269,10 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
     if (smtlib2_compliant)
       cfg.set("smtlib2_compliant", "true");
 
-    context = std::make_unique<z3::context>(cfg);
-  }
-  else
-  {
-    context = std::make_unique<z3::context>();
-  }
+    return z3::context(cfg);
+  };
 
-  auto solver = std::make_unique<esbmc_z3_solver>(std::move(context));
+  auto solver = std::make_unique<esbmc_z3_solver>(make_context());
   solver->configure();
   return solver;
 #else
