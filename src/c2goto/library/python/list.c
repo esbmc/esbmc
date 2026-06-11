@@ -124,8 +124,27 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
+  else if (size == 24)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+  }
+  else if (size == 32)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+    ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
+  }
   else if (size % 8 == 0)
   {
+    // Larger 8-byte-multiple payloads (e.g. a 48-byte class instance) use a
+    // word-wise loop: size/8 unwind iterations instead of memcpy's per-byte
+    // size iterations. The small fixed sizes above stay branch-free so that
+    // copying small tuples/lists needs no loop unwinding — tests such as
+    // dict_tuple_key run with a tight --unwind and would otherwise trip the
+    // copy loop's unwinding assertion (#4805).
     size_t i = 0;
     while (i < size / 8)
     {
