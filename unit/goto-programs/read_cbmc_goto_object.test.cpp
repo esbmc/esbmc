@@ -21,7 +21,7 @@
 #include <string>
 
 #ifndef CBMC_TEST_DATA_DIR
-#define CBMC_TEST_DATA_DIR "."
+#  define CBMC_TEST_DATA_DIR "."
 #endif
 
 // Encode a value the way CBMC does: little-endian 7-bit varint.
@@ -96,8 +96,7 @@ TEST_CASE("rejects a non-CBMC header", "[cbmc-reader]")
 
 TEST_CASE("parses a real CBMC v6 goto-binary", "[cbmc-reader]")
 {
-  const std::string path =
-    std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
+  const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
   std::ifstream in(path, std::ios::in | std::ios::binary);
   REQUIRE(in.good());
 
@@ -132,8 +131,7 @@ TEST_CASE(
   "loads a CBMC binary into a symbol table and goto functions",
   "[cbmc-reader]")
 {
-  const std::string path =
-    std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
+  const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
   std::ifstream in(path, std::ios::in | std::ios::binary);
   REQUIRE(in.good());
 
