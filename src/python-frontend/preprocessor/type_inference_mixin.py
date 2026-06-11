@@ -72,12 +72,16 @@ class TypeInferenceMixin:
         # different classes.
         var_classes = {}
         for n in ast.walk(module):
-            if (isinstance(n, ast.Assign) and len(n.targets) == 1
-                    and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)
-                    and isinstance(n.value.func, ast.Name) and n.value.func.id in class_names):
-                name = n.targets[0].id
-                cls = n.value.func.id
-                var_classes[name] = cls if var_classes.get(name, cls) == cls else None
+            if not (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.value, ast.Call)):
+                continue
+            target, func = n.targets[0], n.value.func
+            if not (isinstance(target, ast.Name) and isinstance(func, ast.Name)
+                    and func.id in class_names):
+                continue
+            name = target.id
+            cls = func.id
+            var_classes[name] = cls if var_classes.get(name, cls) == cls else None
 
         def element_class(elt):
             if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
