@@ -485,6 +485,37 @@ exprt function_call_expr::build_constant_from_arg() const
 
   auto arg = call_["args"][0];
 
+  // tuple(iterable): model the result as a shallow copy of the underlying
+  // list (CPython copy semantics: later mutations of the source list must
+  // not show through the tuple; element references are shared, not deep-
+  // copied). ==, len(), subscript and iteration then route through the
+  // existing list machinery. The generic constructor tail below would
+  // instead relabel the expression with get_typet("tuple") — an empty type —
+  // and every comparison over the result silently lowers to the nondet-bool
+  // fallback in get_binary_operator_expr (#4807).
+  if (func_name == "tuple")
+  {
+    if (call_["args"].size() > 1)
+      throw std::runtime_error("TypeError: tuple expected at most 1 argument");
+    exprt expr = converter_.get_expr(arg);
+    const typet &et = expr.type();
+    if (converter_.get_tuple_handler().is_tuple_type(et))
+      return expr; // returned unchanged — CPython tuple(t) also returns t
+    const namespacet ns(converter_.symbol_table());
+    const typet list_type = type_handler_.get_list_type(); // PyListObject *
+    if (
+      et == list_type ||
+      (et.is_pointer() && list_type.is_pointer() &&
+       ns.follow(et.subtype()) == ns.follow(list_type.subtype())))
+    {
+      // Covers list literals, variables, and list-returning calls.
+      python_list list_handler(converter_, call_);
+      return list_handler.build_shallow_copy_call(expr, call_);
+    }
+    throw std::runtime_error(
+      "tuple() is only supported over list and tuple arguments");
+  }
+
   // bytes(...) constructor. The generic constructor path below relabels the
   // argument expression's type as the bytes array type without converting the
   // value; for a list/int argument that yields a list-pointer (or scalar) value

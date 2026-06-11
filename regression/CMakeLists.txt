@@ -18,6 +18,17 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 #so the Python side never needs its own default.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
+# Grace the ctest TIMEOUT property gets *on top of* the runner's own
+# ESBMC_REGRESS_TIMEOUT budget. The runner (testing_tool.py) enforces the real
+# budget internally: it kills ESBMC at ESBMC_REGRESS_TIMEOUT and, for
+# KNOWNBUG/FUTURE tests, accepts the timeout as satisfying the expected-fail
+# contract instead of erroring. That accept-and-return path needs a few seconds
+# (SIGTERM grace + final communicate) to complete. If ctest's own TIMEOUT
+# property equals ESBMC_REGRESS_TIMEOUT, ctest kills the runner mid-teardown and
+# reports a hard "Timeout" before the accept logic can run, defeating it. The
+# grace keeps ESBMC's compute budget unchanged while letting the runner finish.
+set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
+    "Seconds added to the ctest TIMEOUT property over the runner's own budget")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
@@ -38,6 +49,10 @@ if(BENCHBRINGUP)
   set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
+# Computed after any BENCHBRINGUP override so it tracks the final budget.
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
+     "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
+
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
@@ -50,7 +65,7 @@ function(add_esbmc_regression_test folder modes test)
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/")
 endfunction()
