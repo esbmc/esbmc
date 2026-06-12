@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_result.h>
 #include <irep2/irep2_utils.h>
 #include <util/message.h>
 #include <util/namespace.h>
@@ -164,15 +165,11 @@ public:
   /** @{
    *  @name External API to smt_convt. */
 
-  /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
-   *  historic case that needs to go. */
-  typedef enum
-  {
-    P_UNSATISFIABLE,
-    P_SATISFIABLE,
-    P_ERROR,
-    P_SMTLIB
-  } resultt;
+  typedef smt_resultt resultt;
+  static constexpr resultt P_UNSATISFIABLE = ::P_UNSATISFIABLE;
+  static constexpr resultt P_SATISFIABLE = ::P_SATISFIABLE;
+  static constexpr resultt P_ERROR = ::P_ERROR;
+  static constexpr resultt P_SMTLIB = ::P_SMTLIB;
 
   /** Push one context on the SMT assertion stack. */
   virtual void push_ctx();

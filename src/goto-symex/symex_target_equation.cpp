@@ -675,34 +675,31 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // results are true, false, both.
   push_ctx();
   conv.assert_ast(q);
-  smt_convt::resultt res1 = conv.dec_solve();
+  smt_resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
   conv.assert_ast(conv.invert_ast(q));
-  smt_convt::resultt res2 = conv.dec_solve();
+  smt_resultt res2 = conv.dec_solve();
   pop_ctx();
 
   // So; which result?
   if (
-    res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
-    res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
+    res1 == P_ERROR || res1 == P_SMTLIB || res2 == P_ERROR || res2 == P_SMTLIB)
   {
     log_error("Solver returned error while asking question");
     abort();
   }
-  else if (res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
+  else if (res1 == P_SATISFIABLE && res2 == P_SATISFIABLE)
   {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
   }
-  else if (
-    res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_UNSATISFIABLE)
+  else if (res1 == P_SATISFIABLE && res2 == P_UNSATISFIABLE)
   {
     // Truth of question is satisfiable; other not; so we're true.
     final_res = tvt(tvt::TV_TRUE);
   }
-  else if (
-    res1 == smt_convt::P_UNSATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
+  else if (res1 == P_UNSATISFIABLE && res2 == P_SATISFIABLE)
   {
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
