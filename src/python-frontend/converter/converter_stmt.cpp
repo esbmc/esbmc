@@ -491,9 +491,19 @@ void python_converter::handle_assignment_type_adjustments(
     }
     else if (rhs.type() == none_type())
     {
-      // Adjust pointer_type() to pointer_typet(empty_typet())
-      lhs_symbol->set_type(rhs.type());
-      lhs.type() = rhs.type();
+      // None/Optional unification (#4796), step C: when the lvalue is already a
+      // class reference (`Class*` — a migrated instance), keep that type and
+      // store a typed NULL, so a later `x = Class(...)` construction allocates
+      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+      // would shrink the pointee and corrupt the allocation.
+      if (is_user_class_pointer(lhs.type()))
+        rhs = typecast_exprt(rhs, lhs.type());
+      else
+      {
+        // Adjust pointer_type() to pointer_typet(empty_typet())
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
+      }
     }
     // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
     else if (
@@ -3003,8 +3013,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
           {
             exprt bool_object = cond;
-            // __bool__ expects self by address, so the condition must be an object.
-            if (!bool_object.is_symbol())
+            // __bool__ expects self by reference. A migrated instance is
+            // already a `Class*` pointer (pass it through); a by-value struct
+            // must be a named object whose address we take.
+            const bool object_is_ptr = bool_object.type().is_pointer();
+            if (!object_is_ptr && !bool_object.is_symbol())
               bool_object =
                 store_call_result(bool_object, location, "cond_obj");
             const code_typet &method_type =
@@ -3013,7 +3026,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
             bool_call.function() = symbol_expr(*bool_method);
             bool_call.type() = method_type.return_type();
             bool_call.location() = location;
-            bool_call.arguments().push_back(gen_address_of(bool_object));
+            bool_call.arguments().push_back(
+              object_is_ptr ? bool_object : gen_address_of(bool_object));
             cond = store_call_result(bool_call, location, "cond_bool");
             cond.location() = location;
           }

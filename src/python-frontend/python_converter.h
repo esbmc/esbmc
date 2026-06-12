@@ -377,6 +377,12 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+  // True iff `t` is a pointer to a user-defined Python class struct (a migrated
+  // `Class*` instance), excluding the pointer-typed list/dict/object model
+  // structs. Used to gate the object-model migration's None-keeps-Class* and
+  // dunder-dispatch-through-pointer paths to real user classes only.
+  bool is_user_class_pointer(const typet &t);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);

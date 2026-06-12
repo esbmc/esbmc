@@ -1,6 +1,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/json_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
@@ -148,6 +149,11 @@ static bool is_excluded_struct_tag(const std::string &tag)
   return tag.find("dict_") != std::string::npos ||
          tag.find("tag-dict") != std::string::npos ||
          tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+         // list/object/slice model structs (`tag-struct __ESBMC_Py...`): under
+         // the object-model migration these are pointer-to-struct like a class
+         // instance, but they own their own operator paths and must not be
+         // routed through user-dunder dispatch.
+         tag.find("__ESBMC_Py") != std::string::npos ||
          tag == "__python_dict__";
 }
 
@@ -165,7 +171,29 @@ static typet resolve_operand_type(
   }
   if (t.id() == "symbol")
     t = ns.follow(t);
+  // Object-model migration (#3067/#4773): a class instance is a `Class*`
+  // pointer. Dispatch dunder operators on the pointee struct so user methods
+  // (__eq__, __add__, ...) are still found; the call sites pass the pointer
+  // itself as the (already-by-reference) self/other argument.
+  if (t.is_pointer())
+  {
+    typet sub = t.subtype();
+    if (sub.id() == "symbol")
+      sub = ns.follow(sub);
+    if (sub.is_struct())
+      t = sub;
+  }
   return t;
+}
+
+// self/other argument for a dunder call. A migrated instance is already a
+// `Class*` pointer, which is exactly the by-reference argument the method
+// expects; a by-value struct operand needs its address taken.
+static exprt dunder_ref_arg(const exprt &operand)
+{
+  if (operand.type().is_pointer())
+    return operand;
+  return gen_address_of(operand);
 }
 
 // Check whether the argument type matches the "other" parameter type.
@@ -194,6 +222,20 @@ static bool is_other_param_compatible(
              to_struct_type(operand_type).tag();
   }
   return true;
+}
+
+bool python_converter::is_user_class_pointer(const typet &t)
+{
+  if (!t.is_pointer())
+    return false;
+  typet sub = t.subtype();
+  if (sub.id() == "symbol")
+    sub = ns.follow(sub);
+  if (!sub.is_struct())
+    return false;
+  const std::string cls =
+    extract_class_name_from_tag(to_struct_type(sub).tag().as_string());
+  return !cls.empty() && json_utils::is_class(cls, *ast_json);
 }
 
 exprt python_converter::dispatch_dunder_operator(
@@ -226,7 +268,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {gen_address_of(lhs), gen_address_of(rhs)});
+              {dunder_ref_arg(lhs), dunder_ref_arg(rhs)});
             call.location() = loc;
             return call;
           }
@@ -256,7 +298,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {gen_address_of(rhs), gen_address_of(lhs)});
+              {dunder_ref_arg(rhs), dunder_ref_arg(lhs)});
             call.location() = loc;
             return call;
           }
