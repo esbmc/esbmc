@@ -409,3 +409,32 @@ is_not_none, object_passing_comprehensive_fail. New tests:
 
 The next migration unit is the Thread-subclass / module-scope construction
 cases (`threading_thread_subclass_*`), still failing on the branch.
+
+---
+
+## 15. Call-drop on result type-mismatch — FIXED (2026-06-12)
+
+One of the two orthogonal bugs noted in §14 is fixed (commit `e3f9abb040`).
+
+`n: int = obj.method()` where the method returns a **str**: the assignment is
+skipped (a char* cannot be stored in an int slot — the "Python dynamic typing"
+skip path in `get_var_assign`). That path *intended* to still emit the call as
+a void call so side effects survive, but only matched the
+`side_effect_function_call` **expression** form. A method call arrives as an
+already-lowered `code_function_call` **statement** (nil result), fell through,
+and was dropped entirely — so `self.energy -= 5` inside the method never ran.
+Fix: handle the `code_function_call` form too (emit `void_call` from its
+function + arguments). The call now runs; only the mismatched result is dropped.
+Tests: `method_sideeffect_str_into_int{,_fail}`.
+
+**inheritance2 is still red**, now for the *other* orthogonal reason: line 30
+`assert sound == "Woof!"` where `sound: int = dog.bark()`. CPython ignores the
+`int` annotation at runtime and `sound` holds the str, so the assert passes;
+ESBMC keeps `sound` an int slot (the str result is dropped), so it fails. This
+is the **dynamic-retype-inside-a-function** limitation: the "straight-line
+dynamic retyping" path that rebinds `n` to str is gated to `block_nesting_ == 1`
+(module top level) because conditional retyping at a control-flow join is
+unsound (#4770/#4774). Confirmed general, not call-specific: `n: int = "hello"`
+also fails inside a function but passes at module scope. Lifting the gate
+soundly (distinguishing an unconditional function-body statement from one inside
+an `if`/`while`/`for`/`try` body) is the next unit if inheritance2 must go green.
