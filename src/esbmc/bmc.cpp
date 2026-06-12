@@ -30,7 +30,6 @@
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_solver.h>
 #include <sstream>
 #include <util/i2string.h>
 #include <irep2/irep2.h>

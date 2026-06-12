@@ -3,7 +3,7 @@
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <solvers/solve.h>
-#include <solvers/smt/smt_solver.h>
+#include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <langapi/language_util.h>
 #include <util/c_types.h>
