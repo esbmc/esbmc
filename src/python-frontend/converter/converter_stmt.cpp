@@ -1366,6 +1366,46 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     "Unsupported assignment target type: " + target_type.get<std::string>());
 }
 
+std::string python_converter::annotated_optional_class(
+  const nlohmann::json &annotation) const
+{
+  if (!annotation.is_object() || annotation.is_null())
+    return "";
+
+  std::string cls;
+  // Optional[Class] : Subscript(value=Name("Optional"), slice=Name(Class))
+  if (
+    annotation.value("_type", "") == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id") &&
+    annotation["value"]["id"] == "Optional" && annotation.contains("slice") &&
+    annotation["slice"].contains("id"))
+    cls = annotation["slice"]["id"].get<std::string>();
+  // `Class | None` (PEP 604) : BinOp(BitOr, left, right) with one side None.
+  else if (
+    annotation.value("_type", "") == "BinOp" && annotation.contains("op") &&
+    annotation["op"].value("_type", "") == "BitOr" &&
+    annotation.contains("left") && annotation.contains("right"))
+  {
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    auto name_id = [](const nlohmann::json &n) -> std::string {
+      return n.value("_type", "") == "Name" && n.contains("id")
+               ? n["id"].get<std::string>()
+               : std::string();
+    };
+    if (is_none(annotation["right"]))
+      cls = name_id(annotation["left"]);
+    else if (is_none(annotation["left"]))
+      cls = name_id(annotation["right"]);
+  }
+
+  if (cls.empty() || !json_utils::is_class(cls, *ast_json))
+    return "";
+  return cls;
+}
+
 void python_converter::preregister_global_variables(
   const nlohmann::json &ast_body)
 {
@@ -1412,20 +1452,38 @@ void python_converter::preregister_global_variables(
       continue;
 
     typet var_type;
-    try
+    // None/Optional unification (#4653/#4796), step B: a global annotated
+    // `Optional[Class]` / `Class | None` is a nullable class reference; register
+    // it as `Class*` (a zeroable NULL pointer) so it unifies with the pointer
+    // instances assigned to it, instead of the legacy pointer-width None handle.
+    // The class struct is completed by the main class-build loop; the global's
+    // own value (NULL) needs no complete struct, so no build is required here.
+    std::string opt_cls;
+    if (element.contains("annotation"))
+      opt_cls = annotated_optional_class(element["annotation"]);
+    if (!opt_cls.empty())
     {
-      var_type = extract_type_info(element).second;
+      typet st = type_handler_.get_typet(opt_cls);
+      if (st.id() == "symbol" || st.is_struct())
+        var_type = gen_pointer_type(st);
     }
-    catch (const std::exception &e)
+    if (var_type.is_nil())
     {
-      // Type not yet resolvable (e.g., from an unprocessed import). Skip for
-      // now; the variable will be registered when the assignment is processed
-      // after imports are loaded.
-      log_warning(
-        "preregister_global_variables: skipping '{}' ({})",
-        element["target"].value("id", "<unknown>"),
-        e.what());
-      continue;
+      try
+      {
+        var_type = extract_type_info(element).second;
+      }
+      catch (const std::exception &e)
+      {
+        // Type not yet resolvable (e.g., from an unprocessed import). Skip for
+        // now; the variable will be registered when the assignment is processed
+        // after imports are loaded.
+        log_warning(
+          "preregister_global_variables: skipping '{}' ({})",
+          element["target"].value("id", "<unknown>"),
+          e.what());
+        continue;
+      }
     }
     if (var_type.is_nil() || var_type.is_empty())
       continue;
@@ -1541,6 +1599,34 @@ void python_converter::get_var_assign(
     if (!cls.empty())
     {
       typet st = type_handler_.get_typet(cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
+    }
+  }
+
+  // None/Optional unification (#4653/#4796), step B: a local target annotated
+  // `Optional[Class]` / `Class | None` is a nullable class reference — type it
+  // `Class*` (NULL for None) so it unifies with the pointer instances assigned
+  // to it. Build the class on demand first (process_forward_reference) so its
+  // struct symbol is complete, not a null/incomplete stub. Scoped to nullable
+  // annotations of user classes only, so non-Optional class variables and the
+  // object-lifetime flip are unaffected.
+  if (
+    target.contains("_type") && target["_type"] == "Name" &&
+    !current_element_type.is_pointer() && ast_node.contains("annotation"))
+  {
+    const std::string opt_cls =
+      annotated_optional_class(ast_node["annotation"]);
+    if (!opt_cls.empty())
+    {
+      nlohmann::json cls_ref;
+      cls_ref["_type"] = "Name";
+      cls_ref["id"] = opt_cls;
+      process_forward_reference(cls_ref, target_block);
+      typet st = type_handler_.get_typet(opt_cls);
       if (st.id() == "symbol" || st.is_struct())
       {
         current_element_type = gen_pointer_type(st);

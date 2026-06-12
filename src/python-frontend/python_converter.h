@@ -278,6 +278,13 @@ private:
 
   void preregister_global_variables(const nlohmann::json &ast_body);
 
+  /// None/Optional redesign (step A/B): if `annotation` is a nullable reference
+  /// to a user class — `Optional[Class]` or `Class | None` — return the user
+  /// class name; else "". Callers form `Class*` and build the class on demand
+  /// (so its struct symbol is complete, not a null/incomplete stub) per plan
+  /// section 10.
+  std::string annotated_optional_class(const nlohmann::json &annotation) const;
+
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
