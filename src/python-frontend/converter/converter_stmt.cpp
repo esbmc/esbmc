@@ -1192,12 +1192,20 @@ void python_converter::handle_function_call_rhs(
   }
   else
   {
+    // The callee may not be in the symbol table yet when the called
+    // function is defined later in the module than its call site (a forward
+    // reference, e.g. `def f(): w = make()` with `make` defined afterwards).
+    // The block below only propagates instance-attribute type hints from the
+    // callee's return object to the LHS; it does not affect the GOTO call
+    // itself, which is built from the function identifier elsewhere. When the
+    // callee symbol is not available yet, skip the best-effort copy instead of
+    // aborting.
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<const code_typet &>(func_symbol->get_type())
-           .return_type()
-           .is_empty())
+    if (
+      func_symbol && !static_cast<const code_typet &>(func_symbol->get_type())
+                        .return_type()
+                        .is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
