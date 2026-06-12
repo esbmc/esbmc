@@ -128,9 +128,16 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (
     validate_witness && !witness_target_line.empty() &&
-    !has_prefix(msg, "unwinding assertion loop") &&
-    cur_state->source.pc->location.get_line() != witness_target_line)
-    new_expr = gen_true_expr();
+    !has_prefix(msg, "unwinding assertion loop"))
+  {
+    const bool line_ok =
+      cur_state->source.pc->location.get_line() == witness_target_line;
+    const bool seg_ok = cur_state->cur_seg >= cur_state->witness_segs.size();
+    if (!line_ok || !seg_ok || cur_state->witness_target_reached)
+      new_expr = gen_true_expr();
+    else
+      cur_state->witness_target_reached = true;
+  }
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -303,7 +310,6 @@ void goto_symext::symex_witness_function_return(
       wp.action == waypoint::avoid ? "avoid" : "follow",
       call_line,
       wp.value);
-
     if (wp.action == waypoint::avoid)
       assume(not2tc(constraint));
     else

@@ -114,6 +114,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // time; matching ones apply their constraint without advancing the segment.
   // 'follow' waypoints consume the segment on match (advance_witness_position).
   // Non-matching 'follow' entries stop the scan (they are ordered).
+  bool witness_forced_goto = false;
   if (
     validate_witness && forward &&
     cur_state->cur_seg < cur_state->witness_segs.size())
@@ -147,6 +148,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
           new_guard_false = true;
           new_guard_true = false;
         }
+        witness_forced_goto = true;
         if (!is_avoid)
           cur_state->advance_witness_position();
         break;
@@ -155,6 +157,29 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       if (wp.action != waypoint::avoid)
         break;
     }
+  }
+
+  // When a witness waypoint forces a branch direction, add the corresponding
+  // path constraint.  Without this, spurious witnesses (where the forced path
+  // is infeasible) still admit VCCs satisfiable by the SMT solver because the
+  // assumption is absent from the formula.  With the assume, the solver sees
+  // the contradiction and marks the path UNSAT → VERIFICATION SUCCESSFUL.
+  if (witness_forced_goto)
+  {
+    expr2tc dir_cond = new_guard_true ? new_guard : not2tc(new_guard);
+    do_simplify(dir_cond);
+    log_debug(
+      "witness-goto",
+      "witness_forced_goto at line {}: dir_cond={} is_true={} is_false={} "
+      "new_guard_true={} new_guard_false={}",
+      cur_state->source.pc->location.get_line(),
+      from_expr(ns, "", dir_cond),
+      is_true(dir_cond),
+      is_false(dir_cond),
+      new_guard_true,
+      new_guard_false);
+    if (!is_true(dir_cond))
+      assume(dir_cond);
   }
 
   if (new_guard_false)

@@ -457,6 +457,10 @@ public:
   /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
+  /// Set to true the first time the target assertion is allowed through.
+  /// Subsequent assertions at the target line (from continuation calls after
+  /// the witness call chain returns) are filtered to avoid false positives.
+  bool witness_target_reached;
 
   /// Advance to the next segment (called when a follow waypoint is matched).
   void advance_witness_position();
