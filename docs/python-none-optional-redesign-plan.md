@@ -592,3 +592,25 @@ preserved). Tests: `global_forward_ref_in_method{,_fail}`.
 `threading_thread_annotation_then_assign_safe` — a `target=` thread with a bare
 `t: object` annotation then `t = threading.Thread(...)` aborts in symex
 (`type2t::symbolic_type_excp`); confirmed crashing at HEAD before this fix.
+
+---
+
+## 21. object/Any-typed class-instance lvalue — FIXED; threading family GREEN
+
+The last threading failure, `threading_thread_annotation_then_assign_safe`, is
+fixed (commit `7d5b665cfa`). The entire threading family (41 tests) now passes.
+
+`t: object = Box()` — or `t: object` then `t = threading.Thread(...)` — aborted
+in symex (`type2t::symbolic_type_excp`). `object` resolves to Any (`void*`), so
+the migration ran `t = __ESBMC_new_object()` with a `void*` lvalue; the
+new_object interception sizes the dynamic object from the lvalue's pointee type,
+which for `void*` is empty/void and has no width, so `get_width()` threw.
+
+Fix (in the constructor lowering, function_call_expr): when the constructor
+lvalue is a pointer to void/empty, retype it and its symbol to the class being
+constructed (`call.type()`) before allocating, so new_object sizes a proper
+instance. A `void*`/Any slot legitimately holds the resulting `Class*`, and
+attribute access then resolves through the class. Tests:
+`object_typed_class_instance{,_fail}`.
+
+All Thread-subclass and `target=` threading tests now verify as expected.
