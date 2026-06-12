@@ -561,3 +561,34 @@ tests) clean — only z3-environmental and pre-existing threading failures.
 
 **Remaining open (pre-existing):** Thread-subclass / module-scope construction
 (`threading_thread_subclass_*`).
+
+---
+
+## 20. Thread-subclass safe tests — FIXED (2026-06-12)
+
+`threading_thread_subclass_safe` and `_ctor_args_safe` (CORE on master, failing
+on the branch) are fixed (commit `ea34472746`). Their `run()` writes a module
+global (`shared`/`out`) declared *after* the class, read in `main` after
+`join()`. The spawned write was invisible — `assert shared == 42` failed.
+
+Root cause was a regression from the class-global crash fix (§19, `9abe26eacc`):
+the empty-id placeholder skip in `preregister_global_variables` was too broad.
+`extract_type_info` returns the empty-id placeholder for ANY annotated global at
+pre-registration (annotation not yet in final form), so plain `shared: int = 0`
+was skipped too — and a function (here `run`) writing it via `global`, when
+defined before the global's module-level assignment, resolved to a *separate*
+symbol, so the write was lost. Confirmed general with a non-threaded repro:
+`def f(): global g; g=42` with `g: int = 0` *after* `f` failed; *before* `f`
+passed.
+
+Fix: pre-register the placeholder only for a literal `Constant` value (the
+forward-reference case, where it is harmless). Skip it for a constructor / other
+call-valued / class-annotated / bare-annotation global, where the empty-typed
+slot would corrupt the later assignment (the original class-global fix and the
+`obj: int = Box()` / method-call cases — github_3975, nested-attr — are
+preserved). Tests: `global_forward_ref_in_method{,_fail}`.
+
+**Remaining open (pre-existing, NOT a subclass case):**
+`threading_thread_annotation_then_assign_safe` — a `target=` thread with a bare
+`t: object` annotation then `t = threading.Thread(...)` aborts in symex
+(`type2t::symbolic_type_excp`); confirmed crashing at HEAD before this fix.
