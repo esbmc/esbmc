@@ -438,3 +438,41 @@ unsound (#4770/#4774). Confirmed general, not call-specific: `n: int = "hello"`
 also fails inside a function but passes at module scope. Lifting the gate
 soundly (distinguishing an unconditional function-body statement from one inside
 an `if`/`while`/`for`/`try` body) is the next unit if inheritance2 must go green.
+
+---
+
+## 16. Retyping inside function bodies — FIXED; inheritance2 GREEN (2026-06-12)
+
+The dynamic-retype-in-function limitation from §15 is fixed (commit `ad5724ab12`).
+`inheritance2` now verifies SUCCESSFUL.
+
+Dynamic retyping (rebind a scalar-typed local to a string value or vice versa,
+via a fresh symbol + `retype_aliases_` load redirect) was gated to
+`block_nesting_ == 1` (module top level). It is actually sound on the whole
+**unconditional spine** — the module body plus the chain of enclosing function
+bodies — because there is no control-flow join there to leave the runtime type
+ambiguous. Implementation: a new `function_body_depth_` counter, bumped only
+when `get_block` converts a function body (`is_function_body=true`), and the
+gate becomes `block_nesting_ == function_body_depth_ + 1`. An `if/while/for/try`
+body adds a `block_nesting_` frame *without* a `function_body_depth_` frame, so
+the equality fails and the conditional case stays refused (unsound at a join).
+Fail-safe: an unrecognised block kind is treated as conditional (stricter, not
+looser). `retype_aliases_` is keyed by the function-qualified symbol id, so
+aliases never leak between functions — no cross-function clearing needed.
+
+Validated: all retype-mechanism regressions hold (github_4770_retype_in_try —
+retype in a `try` correctly stays refused; github_4774_*; float_cond_retype{,
+-fail}; type-annotation-reassign-check*). New: retype_str_in_function{,_fail}
+and retype_str_cond_gated (a str write inside a conditional must NOT retype).
+No new failures across the control-flow / function / str / class family sweep.
+
+**Still open (orthogonal, pre-existing — NOT this session's regressions):**
+- `str(obj) == "..."` where `obj` is a migrated `Class*` instance and the class
+  defines `__str__`: fails with `ERROR: Cannot compare non-function side
+  effects`. `dispatch_unary_dunder_operator` (and the `str()` path) require a
+  by-value struct operand, so `__str__` is not dispatched on a pointer instance.
+  Confirmed pre-existing at commit `86c7c3003d` (before this session). Affects
+  strings2, strings2_str_plain, strings2_str_multifield.
+- Augmented attribute assignment `c.value += by` through a `Class*` parameter
+  crashes in Converting (plain `c.value = v` is fine).
+- Thread-subclass / module-scope construction (`threading_thread_subclass_*`).
