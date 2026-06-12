@@ -323,15 +323,11 @@ exprt python_converter::dispatch_unary_dunder_operator(
   exprt &operand,
   const locationt &loc)
 {
-  typet operand_type = operand.type();
-  if (operand.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(operand.identifier());
-    if (sym)
-      operand_type = sym->get_type();
-  }
-  if (operand_type.id() == "symbol")
-    operand_type = ns.follow(operand_type);
+  // Resolve the operand to its (pointee) struct. Under the object-model
+  // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
+  // it to the struct exactly as the binary dispatch does — otherwise str(obj),
+  // abs(obj), -obj, … would not find the user dunder on a pointer instance.
+  typet operand_type = resolve_operand_type(operand, symbol_table_, ns);
 
   if (!operand_type.is_struct())
     return nil_exprt();
@@ -339,11 +335,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   const struct_typet &struct_type = to_struct_type(operand_type);
   std::string tag = struct_type.tag().as_string();
 
-  if (
-    tag.find("dict_") != std::string::npos ||
-    tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-    tag == "__python_dict__")
+  if (is_excluded_struct_tag(tag))
     return nil_exprt();
 
   static const std::map<std::string, std::string> unary_dunder_map = {
@@ -364,8 +356,10 @@ exprt python_converter::dispatch_unary_dunder_operator(
     return nil_exprt();
 
   const code_typet &method_type = to_code_type(method->get_type());
+  // A migrated instance is already a `Class*` self argument (pass through); a
+  // by-value struct operand needs its address taken.
   exprt call = build_call_expr(
-    *method, method_type.return_type(), {gen_address_of(operand)});
+    *method, method_type.return_type(), {dunder_ref_arg(operand)});
   call.location() = loc;
   return call;
 }
