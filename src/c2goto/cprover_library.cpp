@@ -425,10 +425,7 @@ static void ingest_symbol(
   deps.erase(name);
 }
 
-void add_cprover_library(
-  contextt &context,
-  const languaget *language,
-  const std::vector<std::string> *extra_functions)
+void add_cprover_library(contextt &context, const languaget *language)
 {
   if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
@@ -475,17 +472,8 @@ void add_cprover_library(
 
   goto_binary_reader goto_reader;
 
-  std::vector<std::string> python_models_to_read;
   if (language && language->id() == "python")
-  {
-    python_models_to_read = python_c_models;
-    if (extra_functions)
-      python_models_to_read.insert(
-        python_models_to_read.end(),
-        extra_functions->begin(),
-        extra_functions->end());
-    goto_reader.set_functions_to_read(python_models_to_read);
-  }
+    goto_reader.set_functions_to_read(python_c_models);
 
   // Solidity uses a separate, smaller goto binary (sol64) for fast loading.
   // No whitelist needed: sol64 contains ONLY Solidity symbols.

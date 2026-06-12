@@ -21,5 +21,4 @@ void add_bundled_library_sources(
 
 void add_cprover_library(
   contextt &context,
-  const languaget *language = nullptr,
-  const std::vector<std::string> *extra_functions = nullptr);
+  const languaget *language = nullptr);
