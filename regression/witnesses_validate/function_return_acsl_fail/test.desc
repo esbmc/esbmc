@@ -1,4 +1,4 @@
 CORE
 main.c
 --validate-violation-witness --witness witness.yml --k-induction --no-bounds-check --no-pointer-check --enable-unreachability-intrinsic
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
