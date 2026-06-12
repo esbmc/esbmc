@@ -93,7 +93,7 @@ std::string ctest_generator::extract_function_name(
   // Try to extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.source.pc->location.function() != "")
@@ -618,7 +618,7 @@ void ctest_generator::generate_single(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())

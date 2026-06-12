@@ -1414,7 +1414,9 @@ void bmct::bidirectional_search(
   unsigned assert_loop_number = 0;
   for (const auto &ssait : eq.SSA_steps)
   {
-    if (ssait.is_assert() && smt_conv.l_get(ssait.cond_ast).is_false())
+    if (
+      ssait.is_assert() && !is_nil_expr(ssait.cond_expr) &&
+      smt_conv.l_get(ssait.cond_expr).is_false())
     {
       if (!ssait.loop_number)
         return;

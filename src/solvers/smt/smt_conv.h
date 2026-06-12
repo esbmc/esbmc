@@ -293,6 +293,9 @@ public:
    *  @return A three-valued return val, of the assignment to a. */
   virtual tvt l_get(smt_astt a);
 
+  /** Fetch the value of a boolean expression from the current model. */
+  tvt l_get(const expr2tc &expr);
+
   /** Model-value cache.
    *
    *  Each l_get() bottoms out in the backend's get_value(), which for

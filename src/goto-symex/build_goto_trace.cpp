@@ -72,7 +72,7 @@ void build_goto_trace(
     if (SSA_step.hidden && is_compact_trace)
       continue;
 
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     goto_trace_stept goto_trace_step;
@@ -135,8 +135,10 @@ void build_goto_trace(
       }
     }
 
-    if (SSA_step.is_assert() || SSA_step.is_assume() || SSA_step.is_branching())
-      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_ast).is_false();
+    if (SSA_step.is_assert())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_expr).is_false();
+    else if (SSA_step.is_assume() || SSA_step.is_branching())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond).is_false();
 
     goto_trace.steps.push_back(goto_trace_step);
   }

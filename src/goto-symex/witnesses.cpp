@@ -1264,7 +1264,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())

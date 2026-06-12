@@ -3880,6 +3880,12 @@ tvt smt_convt::l_get(smt_astt a)
   return get_bool(a) ? tvt(true) : tvt(false);
 }
 
+tvt smt_convt::l_get(const expr2tc &expr)
+{
+  assert(is_bool_type(expr));
+  return l_get(convert_ast(expr));
+}
+
 expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 {
   switch (type->type_id)
