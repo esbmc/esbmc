@@ -1551,14 +1551,16 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     // Defensive fallback: when the RHS names a Python iterable-producing
     // builtin (e.g. `alias = range`), there is no AST declaration to find.
     // Return the builtin's mapped type so a bare RHS does not abort type
-    // inference. The four entries below are safe because `builtin_functions`
-    // maps each of them to its own name as the call-result type tag
+    // inference. Each entry below is safe because `builtin_functions`
+    // maps it to its own name as the call-result type tag
     // ("range" -> "range", ...), which is also a workable placeholder for
     // the callable. Do NOT extend this set without verifying the same
     // property -- adding e.g. "iter" would return "iterator" as the type
-    // of the callable itself, which is wrong.
+    // of the callable itself, which is wrong. ("reversed" is intentionally
+    // absent: it maps to "list" -- its call-result type, like "sorted" --
+    // not to a self-named callable placeholder.)
     static const std::unordered_set<std::string> iterable_builtins = {
-      "range", "enumerate", "zip", "reversed"};
+      "range", "enumerate", "zip"};
     if (iterable_builtins.count(rhs_var_name))
       return builtin_functions().at(rhs_var_name);
 
