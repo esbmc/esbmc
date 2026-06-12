@@ -198,3 +198,42 @@ Multi-day, multi-pass. Milestones map to §6 steps 1–6; step 1 (D, the build p
 highest-leverage de-risking and should be done and proven crash-free in isolation first. Only
 after D is solid should the representation/typing changes (A/B/C/G) land together, followed by the
 boxing fix (E) and the comparison/dunder audit (F).
+
+---
+
+## 10. Step-D execution finding (2026-06-12) — the incomplete global pre-pass is wrong
+
+Executed option (i)/(iii) of §5-D: a `preregister_classes` pass that, before any conversion,
+calls a new `python_class_builder::ensure_symbol()` for every `ClassDef` in the module (and
+imported modules), creating the incomplete `tag-<class>` struct symbol up front.
+
+**Result: NOT behaviour-neutral.** Canaries (`fn.py` flip, `simple.py`, `github_4796`) stayed
+green, but `object_passing_comprehensive` (44 classes) regressed to
+`ERROR: _init_undefined / migrate expr failed` during *Generating GOTO Program*. Root cause: a
+variable of a class type that is registered **incomplete** but not yet fully built is declared
+with `gen_zero` over an incomplete struct, yielding the `_init_undefined` placeholder that fails
+migration. Pre-registering *incomplete* symbols for classes that are referenced before (or
+without) their lazy completion is unsafe. Reverted; tree restored.
+
+**Refined design for step D — build-on-demand at the typing site, not a global pre-pass.**
+The de-risking the typing step needs is: *when a pointer-to-class type is about to be created for
+a variable* (the `Optional[Class]` typing in step B), **build that specific class first** (the
+existing `process_forward_reference` / `get_class_definition` path, which produces a **complete**
+struct), then form `pointer(tag-Class)`. This guarantees the tag symbol exists and is complete at
+the point of use, without registering incomplete stubs for unrelated/unbuilt classes. Concretely:
+
+- Drop the standalone `preregister_classes` pass.
+- In each typing site that yields `pointer(tag-C)` (locals in `get_var_assign`, globals in
+  `preregister_global_variables`, params/returns), first ensure `C` is built on demand. For the
+  **global preregister** — which runs before the main class-build loop — this means triggering
+  `C`'s build there (it currently only registers variable symbols), so a global typed `C*` never
+  references an unbuilt/incomplete `C`.
+- Keep `option (ii)` (defensive null-subtype guard in the `new_object` symex interception) as a
+  belt-and-braces safety net, but the real fix is the on-demand complete build above.
+
+So step D folds into step B rather than preceding it as a separate pass. The sequencing in §6
+updates to: **(1) on-demand complete-build helper at the typing sites → prove no crash with the
+typing of a single Optional[Class] local *and* global; (2) A+G; (3) the rest as before.** The
+"prove crash-free before broad typing" discipline still holds — validate the build-on-demand on
+one local and one global Optional[Class] (no `_init_undefined`, no segfault) before wiring it
+everywhere.
