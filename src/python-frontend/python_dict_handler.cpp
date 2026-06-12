@@ -433,10 +433,30 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     iterable_expr = build_symbol(tmp_var_symbol);
   }
 
-  if (target["_type"] != "Name")
+  // A tuple target (`{k: v for a, b in pairs}`) iterates a list of tuples and
+  // unpacks each element into the component names. Hold the element in a temp
+  // of the tuple's struct type and let tuple_handler::handle_tuple_unpacking
+  // emit the per-component assignments (the same path `a, b = t` uses), so the
+  // key/value expressions see the unpacked names.
+  const bool is_tuple_target = (target["_type"] == "Tuple");
+  typet tuple_elem_type;
+  if (is_tuple_target)
+  {
+    if (!iterable_expr.is_symbol())
+      throw std::runtime_error(
+        "DictComp tuple target requires a named list of tuples");
+    tuple_elem_type = converter_.name_space().follow(
+      python_list::get_list_element_type(
+        iterable_expr.identifier().as_string(), 0));
+    if (!converter_.get_tuple_handler().is_tuple_type(tuple_elem_type))
+      throw std::runtime_error(
+        "DictComp tuple target requires iterating a list of tuples");
+  }
+  else if (target["_type"] != "Name")
     throw std::runtime_error("Only simple targets are supported in DictComp");
 
-  std::string loop_var_name = target["id"].get<std::string>();
+  std::string loop_var_name =
+    is_tuple_target ? "$dictcomp_tuple$" : target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
   loop_var_sid.set_object(loop_var_name);
 
@@ -449,7 +469,12 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // cannot be determined, so no currently-working case regresses.
   typet loop_var_type = any_type();
   bool mixed_numeric = false;
-  if (
+  if (is_tuple_target)
+  {
+    // The temp holds the element tuple; component reads come from unpacking.
+    loop_var_type = tuple_elem_type;
+  }
+  else if (
     iter.contains("_type") && iter["_type"] == "Call" &&
     iter.contains("func") && iter["func"].contains("_type") &&
     iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
@@ -543,6 +568,15 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   code_assignt loop_var_assign(build_symbol(*loop_var), current_element);
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
+
+  // For a tuple target, unpack the element tuple held in the temp into the
+  // component names (a, b) so the key/value expressions can reference them.
+  if (is_tuple_target)
+  {
+    exprt tuple_value = build_symbol(*loop_var);
+    converter_.get_tuple_handler().handle_tuple_unpacking(
+      element, target, tuple_value, loop_body);
+  }
 
   // Keep current_block redirected to loop_body across the whole pair build:
   // get_expr, contains(), get_list_element_info() and other helpers used by
