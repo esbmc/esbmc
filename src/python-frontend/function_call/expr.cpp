@@ -3740,6 +3740,24 @@ exprt function_call_expr::handle_general_function_call()
       // the class type, so the object is sized symbolically by the struct at
       // symex time — robust to the class struct still gaining fields after this
       // construction (which a byte-sized allocation cannot handle).
+      // If the lvalue is `object`/Any (a pointer to void/empty), the
+      // new_object interception cannot size the allocation — the pointee type
+      // has no width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any slot legitimately holds the resulting
+      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      if (
+        converter_.current_lhs->type().is_pointer() &&
+        (converter_.current_lhs->type().subtype().id() == "empty" ||
+         converter_.current_lhs->type().subtype().id().empty()))
+      {
+        const typet class_ptr = gen_pointer_type(call.type());
+        converter_.current_lhs->type() = class_ptr;
+        if (converter_.current_lhs->is_symbol())
+          if (
+            symbolt *s = converter_.symbol_table().find_symbol(
+              converter_.current_lhs->identifier()))
+            s->set_type(class_ptr);
+      }
       if (converter_.current_lhs->type().is_pointer())
       {
         const symbolt *new_obj_sym =
