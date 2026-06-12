@@ -237,3 +237,37 @@ typing of a single Optional[Class] local *and* global; (2) A+G; (3) the rest as 
 "prove crash-free before broad typing" discipline still holds — validate the build-on-demand on
 one local and one global Optional[Class] (no `_init_undefined`, no segfault) before wiring it
 everywhere.
+
+---
+
+## 11. Step-B execution (2026-06-12) — build-on-demand typing landed, crash-free + a key discovery
+
+Implemented the build-on-demand `Class*` typing for `Optional[Class]` / `Class | None` (commit
+`873ef78ad4`):
+
+- `annotated_optional_class()` extracts the user class from `Optional[C]` / `C | None`.
+- **Local** (`get_var_assign`): on such an annotation, `process_forward_reference` builds the
+  class on demand (complete struct), then type the LHS `Class*`.
+- **Global** (`preregister_global_variables`): type the global `Class*` (a zeroable NULL
+  pointer; the main class-build loop completes the struct — the global's own NULL value needs no
+  complete struct, so no `_init_undefined`, the failure mode of the incomplete pre-pass in §10).
+
+**Proven crash-free + non-regressive (clean binary):** 0 crashes across the class baseline +
+Optional/None subset; the local case (`github_3976` `box`) and the **global** case (`a.py` `x`)
+both lower to `Box*` and reach a verdict (was a segfault for the global). 23/23 class baseline
+unchanged; 39/40 Optional/None pass. The 3 target regressions still FAIL on field-value boxing
+(step E, next), as expected — typing alone does not de-box.
+
+**Critical discovery — the session's "mysterious crashes" were build artifacts.** Every prior
+attempt saw *unrelated* programs (`fn.py`, `inheritance`) hang/crash after a change, which led to
+the wrong conclusion that the typing was fundamentally fragile. Root cause: **incremental builds
+after a `python_converter.h` change produce ABI-inconsistent objects** (some TUs compiled against
+the new header, others stale), which corrupts execution of programs that don't touch the feature.
+A **clean python-frontend rebuild** (delete `build/**/python-frontend/**/*.o`, rebuild) makes the
+hangs/crashes vanish. **Process rule for the rest of this project: after any change to
+`python_converter.h` (or other widely-included headers), force a clean frontend rebuild before
+judging behaviour.** This very likely also explains the earlier "segfault on typing globals."
+
+**Next:** step E (field-value boxing removal) — make a class field declared/assigned a scalar
+keep its scalar type under an `Optional[C]` origin, so `self.value = 7` stores an int (not
+`{.value=7}`) and `x.value == 7` is an integer compare. Then F (comparison/dunder audit).
