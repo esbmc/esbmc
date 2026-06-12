@@ -2797,6 +2797,26 @@ void python_annotation<Json>::collect_return_types(
         }
       }
 
+      // Method calls that always return a list (e.g. `s.split()`). These have
+      // an Attribute func, so the Name-call branch above misses them, and
+      // get_argument_type cannot type the result when the receiver is an
+      // unannotated parameter -- it returns "". Dropping the list branch lets a
+      // sibling scalar return (e.g. `return len(s)`) annotate the whole
+      // function as that scalar, which mistypes the list path and makes its
+      // call result const-fold to a bogus size-1 list. Recording "list" here
+      // means a mixed list+scalar body collects {list, scalar}, which
+      // infer_from_return_statements leaves unannotated (distinct bases) so the
+      // converter's per-RETURN inference types each path correctly.
+      if (
+        return_val["_type"] == "Call" && return_val.contains("func") &&
+        return_val["func"]["_type"] == "Attribute" &&
+        return_val["func"].contains("attr") &&
+        get_string_method_return_type(return_val["func"]["attr"]) == "list")
+      {
+        types.insert("list");
+        continue;
+      }
+
       // Reuse get_argument_type to infer the return value type
       std::string inferred_type = get_argument_type(return_val);
       if (!inferred_type.empty())
