@@ -1317,25 +1317,32 @@ void python_converter::get_function_definition(
   // to a typed function pointer).
   if (type.return_type().is_empty())
   {
-    for (const auto &instr : function_body.operands())
-    {
-      if (!instr.is_code())
-        continue;
-      const codet &code_instr = to_code(instr);
-      if (code_instr.get_statement() == "return")
+    // Recurse into nested blocks (if/else, while, for) so that a typed RETURN
+    // reached only through a branch is still found. A flat scan over the
+    // top-level operands misses functions whose every return sits inside a
+    // conditional (e.g. `if c: return s.split() else: return s.split(',')`),
+    // leaving the return type empty -> void -> the value is stripped by
+    // remove_returns and the call site reads nondet.
+    std::function<std::optional<typet>(const exprt &)> find_return_type =
+      [&](const exprt &node) -> std::optional<typet> {
+      if (node.is_code() && to_code(node).get_statement() == "return")
       {
-        const code_returnt &ret = to_code_return(code_instr);
-        if (ret.has_return_value())
-        {
-          const typet &ret_type = ret.return_value().type();
-          if (!ret_type.is_empty())
-          {
-            type.return_type() = ret_type;
-            added_symbol->set_type(type);
-            break;
-          }
-        }
+        const code_returnt &ret = to_code_return(to_code(node));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
       }
+      for (const auto &op : node.operands())
+      {
+        if (std::optional<typet> found = find_return_type(op))
+          return found;
+      }
+      return std::nullopt;
+    };
+
+    if (std::optional<typet> ret_type = find_return_type(function_body))
+    {
+      type.return_type() = *ret_type;
+      added_symbol->set_type(type);
     }
   }
 
