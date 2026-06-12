@@ -5,7 +5,6 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
-#include <cstdint>
 #include <mutex>
 #include <unordered_set>
 #include <solvers/prop/literal.h>

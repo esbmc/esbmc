@@ -11,14 +11,12 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_result.h>
+#include <solvers/smt/smt_api.h>
 #include <solvers/solve.h>
 #include <util/options.h>
 #include <util/algorithms.h>
 #include <util/cmdline.h>
 #include <atomic>
-
-class smt_convt;
 
 class bmct
 {
