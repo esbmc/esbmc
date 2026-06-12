@@ -228,3 +228,38 @@ that `malloc`s and returns the object pointer — instead of a raw frontend `cpp
    are heap, but a pointer return is cleaner); remove the redundant `$ctor_self$` double
    construction; audit attribute write / method-self / assignment-aliasing.
 4. Validate against the 26-test class baseline + flip `github_4117_function_internal`.
+
+---
+
+## 8. Stage 1 WIP — malloc-helper works, flip achieved (2026-06-12)
+
+The allocation primitive is solved and the target KNOWNBUG flips. **22/26 class baseline green +
+`github_4117_function_internal` now SUCCESSFUL; 5 regressions remain (deeper cascade).**
+
+**Working mechanism.**
+- `__ESBMC_new_object(size)` added to `src/c2goto/library/python/list.c` — `malloc(size)` +
+  `__ESBMC_assume(p != 0)` (CPython objects are never NULL; the constructor's `self` deref must
+  be valid). Whitelisted in `symex_main.cpp` run_intrinsic dispatch (alongside
+  `__ESBMC_list/dict/set`) so `bump_call` executes its body instead of the fatal
+  "non-intrinsic prefixed with __ESBMC".
+- `function_call/expr.cpp` ctor handling: `tmp = __ESBMC_new_object(sizeof(Class));
+  current_lhs = (Class*)tmp; Class(current_lhs, …)`.
+- `converter_stmt.cpp:get_var_assign` types the ctor LHS as `pointer(Class)` up front.
+- Result: `o = Node(1); assert o.value==1` ✓; `def setup(): … return n1; assert n.next.value==2`
+  ✓ (the flip); wrong-value variants ✗ as expected.
+- **Build note:** editing `list.c` requires forcing the c2goto regen (`touch list.c` then
+  rebuild) — plain incremental ninja missed it once, leaving the old `new_object` body (no
+  assume) and a spurious NULL-deref. Confirmed when `libpython.c.o` rebuilds.
+
+**5 regressions (cascade, next).**
+- `class11`, `class13`, `class-attributes` — `array bounds violated`: the `malloc` size is
+  `sizeof(Class)` at construction, but instance attributes added/shadowed later
+  (`obj.class_attr = 2`) make the live struct larger than the allocated object. Need the
+  allocation to cover the final struct size (or a typed allocation).
+- `object_passing_comprehensive` — `assert v1.x == 10` fails: instance value lost across
+  function-argument passing; pointer-aliasing semantics for instance args need auditing.
+- `github_4796_object_handle_eq` — `__eq__` / linked-list path (no verdict / loop).
+
+These are exactly the §4-Stage-1 "audit attribute write / method-self / assignment-aliasing"
+items. The allocation foundation is done; the remaining work is making the rest of the converter
+consistently pointer-aware.

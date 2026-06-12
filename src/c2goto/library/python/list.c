@@ -4,6 +4,21 @@
 #include <string.h>
 #include "python_types.h"
 
+// Heap-allocate a Python object instance of `size` bytes. The frontend emits a
+// call to this for `ClassName(...)` so class instances get CPython reference
+// semantics (a pointer to a non-expiring heap object) and survive escaping
+// their defining function, instead of dangling as expired stack locals. malloc
+// is lowered by goto_convert into a non-expiring dynamic object.
+void *__ESBMC_new_object(size_t size)
+{
+  void *p = malloc(size);
+  // CPython object construction never observes a NULL result (allocation
+  // failure raises MemoryError, which is out of scope); assume success so the
+  // constructor's `self` dereference is always valid.
+  __ESBMC_assume(p != 0);
+  return p;
+}
+
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;

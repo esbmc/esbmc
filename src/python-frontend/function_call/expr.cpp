@@ -20,6 +20,7 @@
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
+#include <util/c_sizeof.h>
 #include <util/string_constant.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
@@ -3732,15 +3733,34 @@ exprt function_call_expr::handle_general_function_call()
     {
       // Stage 1 object-model migration (#3067/#4773): when the LHS has been
       // typed as a pointer-to-class reference, allocate the instance on the
-      // heap (cpp_new) and pass the pointer itself as `self`, so the object
+      // heap (malloc) and pass the pointer itself as `self`, so the object
       // survives escaping its defining function. Otherwise keep the legacy
-      // in-place struct construction (self = &lhs).
+      // in-place struct construction (self = &lhs). We use a `malloc`
+      // side-effect rather than `cpp_new`: the Python pipeline does not run the
+      // clang-cpp adjust pass that `cpp_new` relies on, so a raw `cpp_new`
+      // reaches symex with a malformed default initializer and stalls.
       if (converter_.current_lhs->type().is_pointer())
       {
-        side_effect_exprt alloc("cpp_new", converter_.current_lhs->type());
-        alloc.type() = converter_.current_lhs->type();
-        code_assignt alloc_assign(*converter_.current_lhs, alloc);
-        converter_.add_instruction(alloc_assign);
+        const namespacet ns(converter_.symbol_table());
+        const symbolt *new_obj_sym =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+        assert(new_obj_sym && "__ESBMC_new_object model required");
+        // tmp = __ESBMC_new_object(sizeof(Class)); current_lhs = (Class*)tmp;
+        // __ESBMC_new_object mallocs a non-expiring heap object; the cast binds
+        // the instance reference to it, then the constructor runs with the
+        // pointer as `self`.
+        symbolt &tmp = converter_.create_tmp_symbol(
+          call_, "$obj_alloc$", pointer_typet(empty_typet()), exprt());
+        converter_.add_instruction(code_declt(build_symbol(tmp)));
+        code_function_callt alloc_call;
+        alloc_call.lhs() = build_symbol(tmp);
+        alloc_call.function() = symbol_expr(*new_obj_sym);
+        alloc_call.arguments().push_back(
+          c_sizeof(converter_.current_lhs->type().subtype(), ns));
+        converter_.add_instruction(alloc_call);
+        converter_.add_instruction(code_assignt(
+          *converter_.current_lhs,
+          typecast_exprt(build_symbol(tmp), converter_.current_lhs->type())));
         call.arguments().push_back(*converter_.current_lhs);
       }
       else
