@@ -48,9 +48,6 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-cmake_path(SET MY_MAGIC_PATH NORMALIZE "${cvc5_DIR}/../../")
-cmake_path(ABSOLUTE_PATH MY_MAGIC_PATH OUTPUT_VARIABLE CVC_LINK_DIR)
-message("Looking at ${CVC_LINK_DIR}")
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
@@ -76,5 +73,4 @@ elseif(MIMALLOC_TARGET)
   # malloc/operator new override wins.
   target_link_libraries(esbmc ${MIMALLOC_TARGET})
 endif()
-target_link_directories(esbmc PUBLIC "${CVC_LINK_DIR}")
 install(TARGETS esbmc DESTINATION bin)

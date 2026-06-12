@@ -2030,7 +2030,7 @@ class code_ifthenelse2t : public expr2t
 public:
   expr2tc cond;
   expr2tc then_case;
-  expr2tc else_case; // nil when there is no else branch
+  expr2tc else_case;  // nil when there is no else branch
   locationt location; // not reflected (see note above)
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
