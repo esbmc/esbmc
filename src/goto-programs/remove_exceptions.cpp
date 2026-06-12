@@ -220,41 +220,6 @@ public:
     return false;
   }
 
-  /// True if the function is part of a linked operational model / library
-  /// rather than user code. The C++ exception OM (src/c2goto/library/cpp/
-  /// exception.cpp) itself uses throw/catch (e.g. std::terminate, the
-  /// __ESBMC_rethrow_* helpers); those constructs run single-threaded inside
-  /// the OM and must not be mistaken for user exception flow when deciding
-  /// whether a concurrent program is unsafe to lower.
-  bool is_library_function(const irep_idt &name) const
-  {
-    const symbolt *s = ns.lookup(name);
-    if (!s)
-      return false;
-    const std::string file = s->location.file().as_string();
-    // The OM/library models live under the extracted-headers temp directory at
-    // runtime ("esbmc-headers-…" for the C/CUDA models, "esbmc-cpp-headers-…"
-    // for the C++ models — both contain "-headers-") and under c2goto/library/
-    // when c2goto compiles them in-tree at build time.
-    return file.find("-headers-") != std::string::npos ||
-           file.find("c2goto/library/") != std::string::npos;
-  }
-
-  /// True if the program actually throws or catches in *user* code — real
-  /// exception flow that uses the (single, non-per-thread) global exception
-  /// state. Throw/catch inside the linked exception OM is excluded: it does
-  /// not put a user exception in flight across threads, so a concurrent but
-  /// exception-free user program stays sound to lower.
-  bool program_throws_or_catches(const goto_functionst &gf)
-  {
-    for (const auto &fn : gf.function_map)
-      if (fn.second.body_available && !is_library_function(fn.first))
-        for (const auto &ins : fn.second.body.instructions)
-          if (ins.type == THROW || ins.type == CATCH)
-            return true;
-    return false;
-  }
-
   /// True if any function directly calls the named function symbol.
   static bool program_calls(const goto_functionst &gf, const irep_idt &callee)
   {
@@ -396,14 +361,6 @@ private:
     expr2tc rhs = delta > 0 ? add2tc(t, uncaught_count, one)
                             : sub2tc(t, uncaught_count, one);
     return code_assign2tc(uncaught_count, rhs);
-  }
-
-  expr2tc adjust_terminate_reason(exception_globals::terminate_reasont why)
-  {
-    return code_assign2tc(
-      terminate_reason,
-      constant_int2tc(
-        terminate_reason->type, BigInt(static_cast<unsigned>(why))));
   }
 
   expr2tc make_c_helper_call(const irep_idt &id)
@@ -1097,27 +1054,19 @@ private:
   /// only present when the program references the exception library — which it
   /// must to install a custom handler — so its absence means the default
   /// (assert) behaviour, which emit_terminate falls back to.
-  expr2tc make_terminate_call()
-  {
-    const symbolt *h = ns.lookup("c:@N@std@F@terminate#");
-    if (!h)
-      return expr2tc();
-    code_function_callt fc;
-    fc.function() = symbol_exprt(h->id, h->get_type());
-    expr2tc call;
-    migrate_expr(fc, call);
-    return call;
-  }
-
-  /// Emit a terminate point just before @p before: route through the OM
-  /// std::terminate() when it is linked (so a custom std::set_terminate handler
-  /// runs), else fall back to an assertion (the established "terminate = property
-  /// violation" classification, §5.4). @p skip_cond is the condition under which
-  /// execution continues past the point without terminating (nil = always
-  /// terminate); the assertion fallback is assert(skip_cond), or assert(false)
-  /// when skip_cond is nil. Returns the first inserted instruction so callers can
-  /// target it with a goto. std::terminate() never returns (the OM ends every
-  /// path in __ESBMC_assume(false)).
+  /// Emit a lowering-synthesized terminate point just before @p before. These
+  /// (noexcept/throw-spec violation, uncaught exception at the program entry,
+  /// bare throw with no active exception) are verification errors in ESBMC's
+  /// model, so they are asserted directly — NOT routed through the OM
+  /// std::terminate() — and reported as FAILED. Routing through the OM would let
+  /// a custom std::set_terminate handler that ends the path (e.g. abort(),
+  /// modeled as assume(0)) silently swallow the violation, a false negative. A
+  /// user-written std::terminate() call is an ordinary function call into the OM
+  /// and is unaffected. @p skip_cond is the condition under which execution
+  /// continues past the point without terminating (nil = always terminate); the
+  /// assertion is assert(skip_cond), or assert(false) when skip_cond is nil. @p
+  /// reason selects the diagnostic comment. Returns the inserted instruction so
+  /// callers can target it with a goto.
   goto_programt::targett emit_terminate(
     goto_programt &body,
     goto_programt::targett before,
