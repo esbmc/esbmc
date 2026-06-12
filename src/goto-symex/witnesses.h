@@ -96,6 +96,14 @@ public:
     cycle   // must be passed infinitely
   };
 
+  // Parsed \result constraint for function_return waypoints.
+  // expr is an IRep2 expression tree with symbol2tc("\\result") as placeholder.
+  struct parsed_constraintt
+  {
+    expr2tc expr;
+    bool valid = false;
+  };
+
   Type type = unknown;
   Action action = follow;
   size_t segment_idx = 0;
@@ -107,6 +115,7 @@ public:
   std::string function;
   irep_idt line_id;
   irep_idt function_id;
+  parsed_constraintt parsed_cond;
 };
 
 class invariant
