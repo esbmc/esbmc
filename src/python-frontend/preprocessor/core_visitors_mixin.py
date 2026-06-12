@@ -350,6 +350,79 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _maybe_lower_dictcomp_over_items(self, node):
+        """Lower ``x = {key: val for k, v in d.items()}`` into ``x = {}``
+        followed by a population loop ``for k, v in d.items(): x[key] = val``.
+
+        The converter's dict-comprehension handler models a list-of-tuples
+        iterable but not a ``dict.items()`` view (items() returns the keys list
+        as a placeholder, so the (k, v) tuple target cannot be unpacked).
+        Reusing the for-loop items() lowering (visit_For -> _transform_items_for)
+        gives the comprehension the (key, value) bindings it needs. Scoped to
+        ``.items()`` iterables so list-of-tuples dict comprehensions keep their
+        existing converter path.
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        comp = node.value
+        if not isinstance(comp, ast.DictComp):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+        outer = comp.generators[0].iter
+        is_items_call = (isinstance(outer, ast.Call)
+                         and isinstance(outer.func, ast.Attribute)
+                         and outer.func.attr == "items")
+        if not is_items_call:
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.key)),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.value)))]
+
+        # Wrap with the comprehension's generators, outermost first; each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # (NodeTransformer does not re-visit returned nodes), so run the
+        # outermost loop through visit_For explicitly.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Treat the target as a dict for downstream rewrites/type inference.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
+
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -909,6 +982,10 @@ class CoreVisitorsMixin:
         lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
         if lowered_dict_comp is not None:
             return lowered_dict_comp
+
+        lowered_items_dictcomp = self._maybe_lower_dictcomp_over_items(node)
+        if lowered_items_dictcomp is not None:
+            return lowered_items_dictcomp
 
         lowered_listcomp = self._maybe_lower_listcomp_assign(node)
         if lowered_listcomp is not None:
