@@ -2,6 +2,10 @@
 # returns, but an assertion that does not hold. Confirms the recovered return
 # value flows precisely (the comparison is decided, not nondet) and a false
 # claim is correctly refuted — i.e. the fix is sound, not just non-crashing.
+#
+# A small input string and unwind bound keep the counterexample search (which
+# is markedly more expensive than the positive variant) well under the CI time
+# cap while still exercising the nested-return list inference.
 
 
 def f(txt: str, c: bool):
@@ -11,4 +15,4 @@ def f(txt: str, c: bool):
         return txt.split(',')
 
 
-assert f("Hello world!", True) == ["WRONG", "VALUE"]
+assert f("a b", True) == ["x", "y"]
