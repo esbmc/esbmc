@@ -271,3 +271,37 @@ judging behaviour.** This very likely also explains the earlier "segfault on typ
 **Next:** step E (field-value boxing removal) — make a class field declared/assigned a scalar
 keep its scalar type under an `Optional[C]` origin, so `self.value = 7` stores an int (not
 `{.value=7}`) and `x.value == 7` is an integer compare. Then F (comparison/dunder audit).
+
+---
+
+## 12. Step-E execution finding (2026-06-12) — it is NOT field-type boxing; it's the allocation
+
+Implemented step B (build-on-demand typing) and went to fix the "field-value boxing". The boxing
+turned out to be a symptom of a deeper issue in the **object allocation for Optional-typed
+instance variables**, not the field *type*:
+
+- Counterexample for `x: Optional[Box] = None; x = Box(7)` (`d.py`): `self = (Box *)(&dynamic_1_value)`
+  with `alloc_size = 1` — the `__ESBMC_new_object` symex (`symex_main.cpp`) allocated a **too-small
+  dynamic object** (it needs a cast to `Box*`), so `self->value = value` is out of bounds.
+- The non-Optional global `x: Box = Box(7)` (`c.py`) does **not** use `new_object` — its global
+  keeps the struct type and constructs in place (`Box(&x, 7)`), which works. Only the
+  Optional-typed (pointer) variable takes the `new_object` path.
+- Paradox: a ctor-typed local (`n1 = Node(1)`, `fn.py`) and an Optional-typed local
+  (`box: Optional[Box]`, `github_3976`) end up with the **identical** `pointer(tag-class)` type
+  (both via `get_typet` → `symbol_typet("tag-...")`), yet `n1`'s `new_object` allocates a complete
+  `Node` and `box`'s allocates a too-small `Box`. Confirmed real (survives a clean rebuild, so not
+  the build-artifact issue from §11).
+
+**So step E is mis-named** — there is no field-type widening to undo. The defect is that
+`ns.follow(migrate_type_back(base))` in the `new_object` interception yields an incomplete/too-small
+struct for the Optional-typed class, even though the class is built (the redundant `$ctor_self$`
+DECL shows the complete `Box` struct exists). Either `base` (the LHS pointer's subtype) is not the
+`tag-class` symbol expected, or `ns` does not resolve it to the completed struct at that point.
+
+**Actionable next step (needs interactive symex debug, not static analysis):** at the
+`has_prefix(symname, "c:@F@__ESBMC_new_object")` block in `symex_main.cpp`, log `base`,
+`migrate_type_back(base)`, `ns.follow(...)`, and the `tag-<class>` symbol's completeness, for `d.py`.
+Compare against the working `fn.py` `n1` case. The fix is then either (a) resolve `base` to the
+completed `tag-class` (build-ordering), or (b) make the new_object allocation robust to a
+symbol-typed subtype. Step B (typing) is correct and committed (`873ef78ad4`); this allocation fix
+is the true content of the next unit.
