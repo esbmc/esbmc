@@ -384,3 +384,35 @@ attribute access (`converter_expr`), and value/dunder lowering (`converter_binop
 27/27 class baseline, `github_4117_function_internal` flips. It is **not mergeable** until the
 None/Optional unification lands (≥3 known broader regressions: `github_3976_optional_attr_access`,
 `dataclass-edge-equality_true`, `dunder-bool-condition`).
+
+---
+
+## 13. None/Optional unification — confirmed deeply intertwined, beyond a single pass (2026-06-12)
+
+Implemented and tested the unification across layers; confirmed it is a **deep, intertwined model
+rework** that cannot be landed soundly in isolation, and reverted to keep the clean state.
+
+Findings:
+- **Typing layer alone regresses the flip.** Typing annotated `Class`/`Optional[Class]` targets as
+  `Class*` (broadening the early-typing gate) **breaks `github_4117_function_internal`** (the very
+  flip this work achieved) — the broadened gate/typing perturbs non-Optional class variables too.
+  So the typing layer cannot be applied independently of the rest.
+- **Field access + construction under Optional are separately broken.** With `x: Optional[Box]`
+  typed `Box*`: the in-`__init__` `self.value = value` goes out of bounds, and `x.value == 7`
+  lowers as an object comparison `(__ESBMC_PyObj *)x->value == (void *)7`. The same program without
+  the `Optional` annotation (`x = Box(7)` / `x: Box = Box(7)`) verifies cleanly
+  (`ASSERT x->value == 7`). So the `Optional` annotation specifically contaminates the struct
+  build and the comparison path (via `tag-Optional_` / the `PyObj` handle model).
+
+Conclusion: a sound None/Optional → `Class*` unification must be co-designed across
+`type_handler` (Optional ⇒ `Class*`+NULL, without a parallel `tag-Optional_` struct), the early
+pointer-typing (`get_var_assign`, without perturbing non-Optional class vars or the flip),
+attribute access (`converter_expr`), and value/comparison/dunder lowering (`converter_binop`,
+`converter_dunder`) — changing any one in isolation regresses either the flip or the Optional
+cases. It is a genuine multi-pass `#4653`/`#4796` model rework and the correct next dedicated unit
+of work.
+
+**Final branch state:** Stage 1 object lifetime + the `#4796` class-pointer comparison fix —
+**27/27 class baseline, `github_4117_function_internal` flips, `github_4796` passes**. Not
+mergeable: ≥3 broader regressions (`github_3976_optional_attr_access`,
+`dataclass-edge-equality_true`, `dunder-bool-condition`) await the None/Optional unification.
