@@ -1317,13 +1317,31 @@ void python_converter::get_function_definition(
   // to a typed function pointer).
   if (type.return_type().is_empty())
   {
-    // Recurse into nested blocks (if/else, while, for) so that a typed RETURN
-    // reached only through a branch is still found. A flat scan over the
-    // top-level operands misses functions whose every return sits inside a
-    // conditional (e.g. `if c: return s.split() else: return s.split(',')`),
-    // leaving the return type empty -> void -> the value is stripped by
+    // First, the original top-level scan: a function with a fall-through
+    // `return` at the body's top level (e.g. an early `return -1` sentinel
+    // inside an `if`, followed by `return bin(...)` at the end) is typed from
+    // that top-level return -- the dominant exit. Picking a nested branch's
+    // type instead would narrow a heterogeneous function to the wrong branch
+    // and collapse the call-site cross-type `==` fold to constant False
+    // (GitHub #5157).
+    auto top_level_return_type = [&]() -> std::optional<typet> {
+      for (const auto &instr : function_body.operands())
+      {
+        if (!instr.is_code() || to_code(instr).get_statement() != "return")
+          continue;
+        const code_returnt &ret = to_code_return(to_code(instr));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
+      }
+      return std::nullopt;
+    };
+
+    // Fallback: when every `return` is nested inside a conditional (so the
+    // top-level scan finds nothing), recurse to find a typed RETURN. Otherwise
+    // an all-nested body (e.g. `if c: return s.split() else: return s.split()`)
+    // leaves the return type empty -> void -> the value is stripped by
     // remove_returns and the call site reads nondet.
-    std::function<std::optional<typet>(const exprt &)> find_return_type =
+    std::function<std::optional<typet>(const exprt &)> nested_return_type =
       [&](const exprt &node) -> std::optional<typet> {
       if (node.is_code() && to_code(node).get_statement() == "return")
       {
@@ -1333,13 +1351,16 @@ void python_converter::get_function_definition(
       }
       for (const auto &op : node.operands())
       {
-        if (std::optional<typet> found = find_return_type(op))
+        if (std::optional<typet> found = nested_return_type(op))
           return found;
       }
       return std::nullopt;
     };
 
-    if (std::optional<typet> ret_type = find_return_type(function_body))
+    std::optional<typet> ret_type = top_level_return_type();
+    if (!ret_type)
+      ret_type = nested_return_type(function_body);
+    if (ret_type)
     {
       type.return_type() = *ret_type;
       added_symbol->set_type(type);
