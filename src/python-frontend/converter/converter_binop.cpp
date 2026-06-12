@@ -1161,6 +1161,66 @@ exprt python_converter::handle_tuple_operations(
     return result;
   }
 
+  // Lexicographic ordering for tuples with scalar (integer/bool) components:
+  //   (a0,a1,..) < (b0,b1,..)
+  //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
+  // Lowered to element-wise comparisons; the SMT backend has no struct
+  // ordering (a raw `>` on the tuple struct trips an is_signedbv assertion).
+  // Gt/LtE compare the swapped operands; LtE/GtE negate the strict result.
+  if (
+    lhs_is_tuple && rhs_is_tuple &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
+  {
+    const auto &lc = to_struct_type(lhs.type()).components();
+    const auto &rc = to_struct_type(rhs.type()).components();
+
+    auto is_scalar = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t == bool_type();
+    };
+    bool ok = !lc.empty() && lc.size() == rc.size();
+    for (size_t i = 0; ok && i < lc.size(); ++i)
+      ok = is_scalar(lc[i].type()) && is_scalar(rc[i].type());
+    if (!ok)
+      return nil_exprt(); // floats / nested tuples / different arity: unhandled
+
+    const bool swap = (op == "Gt" || op == "LtE");
+    const bool negate = (op == "LtE" || op == "GtE");
+    exprt &a = swap ? rhs : lhs;
+    exprt &b = swap ? lhs : rhs;
+
+    expr2tc a2, b2;
+    migrate_expr(a, a2);
+    migrate_expr(b, b2);
+    auto memb = [&](const expr2tc &s, const struct_typet::componentt &c) {
+      return migrate_expr_back(
+        member2tc(migrate_type(c.type()), s, c.get_name()));
+    };
+
+    // Build the nested or/and chain from the last component back to the first.
+    exprt result = gen_boolean(false);
+    for (size_t k = lc.size(); k-- > 0;)
+    {
+      exprt ai = memb(a2, lc[k]);
+      exprt bi = memb(b2, rc[k]);
+      exprt lt("<", bool_type());
+      lt.copy_to_operands(ai, bi);
+      exprt eq = equality_exprt(ai, bi);
+      exprt tail("and", bool_type());
+      tail.copy_to_operands(eq, result);
+      exprt head("or", bool_type());
+      head.copy_to_operands(lt, tail);
+      result = head;
+    }
+    if (negate)
+    {
+      exprt n("not", bool_type());
+      n.copy_to_operands(result);
+      result = n;
+    }
+    result.location() = get_location_from_decl(element);
+    return result;
+  }
+
   return nil_exprt();
 }
 
