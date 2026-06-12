@@ -614,3 +614,40 @@ attribute access then resolves through the class. Tests:
 `object_typed_class_instance{,_fail}`.
 
 All Thread-subclass and `target=` threading tests now verify as expected.
+
+---
+
+## 22. Class-instance RETURN migration — diagnosed, scoped (NOT landed)
+
+`github_4558` / `github_4564_*` (CORE on master) fail with
+`function call: argument "...copy@dst" type mismatch: got struct, expected
+pointer`. A function/method that returns a class instance (`def make() -> Tile:
+return Tile(...)`, or `__getitem__ -> "Tile"`) returns a **by-value struct**,
+but a `Class*` parameter (post-migration) expects a pointer — so passing the
+return value to such a parameter mismatches. Minimal repro:
+`def make() -> Tile: return Tile(5,9)` then `use(make())` with
+`def use(dst: Tile)`.
+
+Returns are the one place in the object model NOT yet migrated to `Class*`
+(params, locals, globals, and class-var fields all are). Completing it touches
+several interacting construction paths and was reverted rather than half-landed:
+
+1. **Return type** (converter_funcdef.cpp, ~1147 and ~1172): wrap a user-class
+   return annotation in `gen_pointer_type` (done in the prototype, easy).
+2. **`return C(...)` construction**: the no-lvalue constructor path
+   (`function_call_expr.cpp:4438`) builds a `$ctor_self$` **struct** temp,
+   constructs in place (`C(&tmp)`), and returns the struct symbol — list
+   literals etc. depend on this struct return. get_return_statements
+   (converter_stmt.cpp:3286+, the `is_func_call`/`is_constructor` branch) is a
+   *separate* path with its own `return_value$_<fn>$` temp; for `return C(...)`
+   the value arrives as the already-built `$ctor_self$` symbol, so that branch
+   is bypassed. Both the no-lvalue ctor path and the return-temp path must agree
+   to allocate via `__ESBMC_new_object` and return the pointer.
+3. **Callers**: a `C*` return flows into `r = make()` (r becomes `C*`; `r.attr`
+   derefs — already handled) and into `Class*` parameters (the failing case).
+
+Risk: the `$ctor_self$` struct return is shared with list-of-objects literals
+and chained method calls, so migrating it must keep those working. Treat as a
+focused unit: make all class constructions (lvalue, no-lvalue, return) uniformly
+`Class*` via new_object, then drop the `$ctor_self$` struct path. Pre-existing
+on the branch (master passes); tracked alongside github_4149 and github_2012.
