@@ -445,8 +445,8 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     if (!iterable_expr.is_symbol())
       throw std::runtime_error(
         "DictComp tuple target requires a named list of tuples");
-    tuple_elem_type = converter_.name_space().follow(
-      python_list::get_list_element_type(
+    tuple_elem_type =
+      converter_.name_space().follow(python_list::get_list_element_type(
         iterable_expr.identifier().as_string(), 0));
     if (!converter_.get_tuple_handler().is_tuple_type(tuple_elem_type))
       throw std::runtime_error(
