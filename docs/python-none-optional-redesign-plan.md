@@ -533,3 +533,31 @@ init. The remaining work is synthesising `self.<attr> = <default>` initialisers
 in `gen_ctor` (and, for classes with a user `__init__`, ensuring class-var
 components are likewise defaulted) — a non-trivial change to class construction
 deferred rather than shipped half-done.
+
+---
+
+## 19. Augmented attr assign via Class* param — FIXED (2026-06-12)
+
+The §18 crash is fixed (commits `d6259fa23e`, `7c1bc122c5`). An annotated class
+variable (`class C: value: int = 0`) is now exposed as a per-instance struct
+**component**, and the generated default constructor (`gen_ctor`)
+**default-initialises** it from the class variable's value (`self->value = 0`,
+non-zero defaults too). So the heap instance allocated by `__ESBMC_new_object`
+has the field: `c.value += by` and reads through a `Class*` parameter resolve to
+the instance member instead of aborting / binding the class-level symbol.
+
+The component-add is gated to exactly the classes `gen_ctor` initialises: no
+user `__init__`, **no user base class** (`pc_.methods()` is own-class only, so a
+derived class without its own `__init__` would otherwise get an uninitialised
+component — review Finding 1), and a simple Constant/Name default (a call-valued
+default cannot be hoisted into the ctor body — review Finding 2). Every other
+class variable keeps the class-level fallback, which already reads correctly
+through a parameter, so no path leaves an uninitialised field. Class variables
+set as `self.attr` in a method already get a component via `add_self_attrs`.
+
+Tests: `class_var_param_augassign{,_fail}`, `class_var_inherited_default`.
+ctest subset (class/object/dataclass/enum/inherit/attr/self/init/dunder, 216
+tests) clean — only z3-environmental and pre-existing threading failures.
+
+**Remaining open (pre-existing):** Thread-subclass / module-scope construction
+(`threading_thread_subclass_*`).
