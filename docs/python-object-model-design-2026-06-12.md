@@ -416,3 +416,37 @@ of work.
 **27/27 class baseline, `github_4117_function_internal` flips, `github_4796` passes**. Not
 mergeable: ≥3 broader regressions (`github_3976_optional_attr_access`,
 `dataclass-edge-equality_true`, `dunder-bool-condition`) await the None/Optional unification.
+
+---
+
+## 14. None/Optional unification — full sub-problem map (2026-06-12, final attempt)
+
+A second, deeper implementation pass precisely characterized the unification as **multiple
+independent deep sub-problems**, confirming it is a multi-day model rework. A *narrow*,
+Optional-only early-typing (type `Optional[Class]`/`Class | None` local targets as `Class*`) does
+**not** regress the flip (unlike the broad version in §13) and correctly makes a local
+`box: Optional[Box]` a `Box*`. But the regressions persist for independent reasons:
+
+1. **Module-global Optional targets aren't retyped.** A module-level `x: Optional[Box]` is a
+   *preregistered* global, so local early-typing never overrides its handle type. (`a.py`/`d.py`
+   minimal repros mislead because they use a global; `github_3976` uses a local.)
+2. **Field-type / value boxing under Optional (the core defect).** With `box: Box*`, the
+   counterexample shows the constructor's `self.value = value` (with `value == 7`, an int) writing
+   `self->value = { .value = 7 }` — a *struct*, not the int. The presence of an `Optional[Box]`
+   variable contaminates `Box.value`'s inferred type into a boxed/wrapped struct, so the field is
+   sized wrong → "Access to object out of bounds" at construction. The **same class with no
+   `Optional` variable** keeps `value : int` and verifies (`ASSERT x->value == 7`).
+3. **Comparison routing.** `x.value == 7` then lowers as object identity
+   (`(__ESBMC_PyObj *)x->value == (void *)7`) because the field reads as an object handle.
+4. `dataclass-edge-equality_true`, `dunder-bool-condition` have their own (dataclass/dunder) roots.
+
+So a sound unification requires, at minimum: Optional ⇒ `Class*`+NULL in `type_handler` **without**
+a parallel `tag-Optional_`/value-boxing path, retyping for **preregistered globals** too, the
+attribute/field machinery to keep a class field's *declared* scalar type under an `Optional`
+origin, and the comparison/dunder lowering to match. Each is independent; fixing one leaves the
+others. This is the `#4653`/`#4796` object/Optional model rework and is the correct next dedicated
+multi-pass effort.
+
+**Branch state (unchanged, clean):** Stage 1 object lifetime + `#4796` class-pointer comparison fix
+— **27/27 class baseline, `github_4117_function_internal` flips, `github_4796` passes**. Not
+mergeable: 3 broader regressions await the unification above.
