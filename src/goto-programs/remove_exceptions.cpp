@@ -211,14 +211,35 @@ public:
     return false;
   }
 
-  /// True if the program actually throws or catches — real exception flow that
-  /// uses the global exception state — as opposed to merely declaring an
-  /// exception specification (a THROW_DECL). Used to decide whether a concurrent
-  /// program is genuinely unsound to lower.
-  static bool program_throws_or_catches(const goto_functionst &gf)
+  /// True if the function is part of a linked operational model / library
+  /// rather than user code. The C++ exception OM (src/c2goto/library/cpp/
+  /// exception.cpp) itself uses throw/catch (e.g. std::terminate, the
+  /// __ESBMC_rethrow_* helpers); those constructs run single-threaded inside
+  /// the OM and must not be mistaken for user exception flow when deciding
+  /// whether a concurrent program is unsafe to lower.
+  bool is_library_function(const irep_idt &name) const
+  {
+    const symbolt *s = ns.lookup(name);
+    if (!s)
+      return false;
+    const std::string file = s->location.file().as_string();
+    // The OM/library models live under the extracted-headers temp directory at
+    // runtime ("esbmc-headers-…" for the C/CUDA models, "esbmc-cpp-headers-…"
+    // for the C++ models — both contain "-headers-") and under c2goto/library/
+    // when c2goto compiles them in-tree at build time.
+    return file.find("-headers-") != std::string::npos ||
+           file.find("c2goto/library/") != std::string::npos;
+  }
+
+  /// True if the program actually throws or catches in *user* code — real
+  /// exception flow that uses the (single, non-per-thread) global exception
+  /// state. Throw/catch inside the linked exception OM is excluded: it does
+  /// not put a user exception in flight across threads, so a concurrent but
+  /// exception-free user program stays sound to lower.
+  bool program_throws_or_catches(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
-      if (fn.second.body_available)
+      if (fn.second.body_available && !is_library_function(fn.first))
         for (const auto &ins : fn.second.body.instructions)
           if (ins.type == THROW || ins.type == CATCH)
             return true;
@@ -1051,57 +1072,42 @@ private:
       n->location = loc;
       n->function = fn;
     };
-    expr2tc call = make_terminate_call();
-    if (!is_nil_expr(call))
-    {
-      goto_programt::targett first;
-      if (!is_nil_expr(skip_cond))
-      {
-        first = body.insert(before);
-        first->make_goto(before, skip_cond); // no exception in flight -> skip
-        setmeta(first);
-      }
-      // Clear the in-flight exception before terminating: the std::terminate()
-      // OM has its own try/catch over the handler call, which keys on the same
-      // global, so a leftover `thrown` would corrupt its control flow. We have
-      // decided to terminate, so the exception is no longer propagating.
-      auto why = body.insert(before);
-      why->make_assignment();
-      why->code = adjust_terminate_reason(reason);
-      setmeta(why);
-      auto clear = body.insert(before);
-      clear->make_assignment();
-      clear->code = code_assign2tc(thrown, gen_false_expr());
-      setmeta(clear);
-      auto c = body.insert(before);
-      c->make_function_call(call);
-      setmeta(c);
-      return is_nil_expr(skip_cond) ? why : first;
-    }
 
-    auto a = body.insert(before);
-    a->make_assertion(is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
-    setmeta(a);
-    a->location.property("exception");
+    // A lowering-synthesized terminate point (a noexcept/throw-spec violation or
+    // an uncaught exception at the program entry) is a verification error in
+    // ESBMC's model regardless of any installed std::set_terminate handler
+    // ([except.terminate]: reaching std::terminate is abnormal termination, and
+    // a handler that returns is itself undefined). Assert the violation directly
+    // so it is reported as FAILED — routing it through the OM std::terminate()
+    // would let a custom handler that ends the path (e.g. abort(), modeled as
+    // assume(0)) silently swallow the violation, a false negative. A *user*
+    // `std::terminate()` call is an ordinary function call into the OM and is
+    // unaffected by this path; only the dynamic-spec/noexcept/uncaught checks
+    // synthesized here use emit_terminate.
+    auto first = body.insert(before);
+    first->make_assertion(
+      is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
+    setmeta(first);
+    first->location.property("exception");
     switch (reason)
     {
     case exception_globals::terminate_reason_uncaught:
-      a->location.comment("uncaught exception");
+      first->location.comment("uncaught exception");
       break;
     case exception_globals::terminate_reason_noexcept:
-      a->location.comment("noexcept specification violated");
+      first->location.comment("noexcept specification violated");
       break;
     case exception_globals::terminate_reason_exception_spec:
-      a->location.comment("exception specification violated");
+      first->location.comment("exception specification violated");
       break;
     case exception_globals::terminate_reason_no_active:
-      a->location.comment("throw with no active exception");
+      first->location.comment("throw with no active exception");
       break;
     default:
-      a->location.comment("terminate called after throwing an exception");
+      first->location.comment("terminate called after throwing an exception");
       break;
     }
-    return a;
+    return first;
   }
 
   /// Enforce a dynamic exception specification throw(allowed...) (including the
