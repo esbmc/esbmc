@@ -11,7 +11,7 @@ typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 class smt_tuple_node_flattener : public tuple_iface
 {
 public:
-  smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
+  smt_tuple_node_flattener(smt_solver_baset *_ctx, const namespacet &_ns)
     : ctx(_ctx), ns(_ns), array_conv(_ctx)
   {
   }
@@ -45,7 +45,7 @@ public:
   void push_tuple_ctx() override;
   void pop_tuple_ctx() override;
 
-  smt_convt *ctx;
+  smt_solver_baset *ctx;
   const namespacet &ns;
   array_convt array_conv;
 };

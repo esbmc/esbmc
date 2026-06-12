@@ -7,7 +7,7 @@
 class yices_smt_ast : public solver_smt_ast<term_t>
 {
 public:
-  yices_smt_ast(smt_convt *ctx, term_t _t, const smt_sort *_s)
+  yices_smt_ast(smt_solver_baset *ctx, term_t _t, const smt_sort *_s)
     : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
@@ -22,12 +22,12 @@ public:
 
   // Provide assign semantics for arrays. While yices will swallow array
   // equalities, it appears to silently not honor them? From observation.
-  void assign(smt_convt *ctx, smt_astt sym) const override;
+  void assign(smt_solver_baset *ctx, smt_astt sym) const override;
 
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr = expr2tc()) const override;

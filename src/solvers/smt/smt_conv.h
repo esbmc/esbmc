@@ -17,7 +17,7 @@
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
- *  smt_convt is the base class for everything that attempts to convert the
+ *  smt_solver_baset is the base class for everything that attempts to convert the
  *  contents of an SSA program into something else, generally SMT or SAT based.
  *
  *  The class itself does various accounting and structuring of the conversion,
@@ -36,10 +36,10 @@
  *  from the solver.
  *
  *  To do that, the user must allocate a solver converter object, which extends
- *  the class smt_convt. Currently, create_solver() will do this, in the
+ *  the class smt_solver_baset. Currently, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
- *  abstract methods of smt_convt. When handed an expression to convert,
- *  smt_convt deconstructs it into a series of function applications, which it
+ *  abstract methods of smt_solver_baset. When handed an expression to convert,
+ *  smt_solver_baset deconstructs it into a series of function applications, which it
  *  creates by calling various abstract methods implemented by the converter
  *  (in particular mk_func_app).
  *
@@ -79,15 +79,15 @@
  *  eccentricities of different solvers. This is a necessary part of working in
  *  the tar pit.
  *
- *  @see smt_convt
+ *  @see smt_solver_baset
  *  @see symex_target_equationt
  *  @see create_solver
- *  @see smt_convt::mk_func_app
+ *  @see smt_solver_baset::mk_func_app
  */
 
 // Forward dec.
 class fp_convt;
-class smt_convt;
+class smt_solver_baset;
 class ra_apit;
 
 #include <solvers/smt/smt_array.h>
@@ -95,12 +95,12 @@ class ra_apit;
 #include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
- *  smt_convt handles a number of decisions that must be made when
+ *  smt_solver_baset handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
  *  smt_conv.h for more high level documentation of this.
  *
  *  The basic flow is thus: a class that can create SMT formula in some solver
- *  subclasses smt_convt, implementing abstract methods, in particular
+ *  subclasses smt_solver_baset, implementing abstract methods, in particular
  *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
  *  this class deconstructs it into a series of applications, as documented by
  *  the smt_func_kind enumeration. These are then created via mk_func_app or
@@ -108,7 +108,7 @@ class ra_apit;
  *  into the solver context.
  *
  *  The exact lifetime of smt asts here is currently undefined, unfortunately,
- *  although smt_convt posesses a cache, so they generally have a reference
+ *  although smt_solver_baset posesses a cache, so they generally have a reference
  *  in there. This will probably be fixed in the future.
  *
  *  In theory this class supports pushing and popping of solver contexts,
@@ -131,7 +131,7 @@ class ra_apit;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt
+class smt_solver_baset
 {
 public:
   /** Shorthand for a vector of smt_ast's */
@@ -149,9 +149,9 @@ public:
    *
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param _options Provide all the needed parameters to configure the solver. */
-  smt_convt(const namespacet &_ns, const optionst &_options);
+  smt_solver_baset(const namespacet &_ns, const optionst &_options);
 
-  virtual ~smt_convt() = default;
+  virtual ~smt_solver_baset() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
@@ -162,7 +162,7 @@ public:
 
   // The API that we provide to the rest of the world:
   /** @{
-   *  @name External API to smt_convt. */
+   *  @name External API to smt_solver_baset. */
 
   typedef smt_resultt resultt;
   static constexpr resultt P_UNSATISFIABLE = ::P_UNSATISFIABLE;
@@ -291,7 +291,7 @@ public:
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
    *  potentially it's version, if available.
-   *  @return The name of the solver this smt_convt uses. */
+   *  @return The name of the solver this smt_solver_baset uses. */
   virtual const std::string solver_text() = 0;
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
@@ -320,8 +320,8 @@ public:
    *  such a scope l_get() is uncached, so no staleness is possible. */
   struct model_cache_scopet
   {
-    smt_convt &conv;
-    explicit model_cache_scopet(smt_convt &c) : conv(c)
+    smt_solver_baset &conv;
+    explicit model_cache_scopet(smt_solver_baset &c) : conv(c)
     {
       conv.l_get_cache_active = true;
     }
@@ -335,7 +335,7 @@ public:
   /** @} */
 
   /** @{
-   *  @name Internal conversion API between smt_convt and solver converter */
+   *  @name Internal conversion API between smt_solver_baset and solver converter */
 
   virtual smt_astt mk_add(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
@@ -1155,7 +1155,8 @@ type2tc make_array_domain_type(const array_type2t &arr);
 unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
-inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
+inline smt_ast::smt_ast(smt_solver_baset *ctx, smt_sortt s)
+  : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);

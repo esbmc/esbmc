@@ -8,7 +8,7 @@
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-  mathsat_smt_ast(smt_convt *ctx, msat_term _t, const smt_sort *_s);
+  mathsat_smt_ast(smt_solver_baset *ctx, msat_term _t, const smt_sort *_s);
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;

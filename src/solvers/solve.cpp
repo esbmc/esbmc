@@ -175,7 +175,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   abort();
 }
 
-smt_convt *create_solver(
+smt_solver_baset *create_solver(
   std::string solver_name,
   const namespacet &ns,
   const optionst &options)
@@ -185,7 +185,7 @@ smt_convt *create_solver(
   fp_convt *fp_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
+  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");

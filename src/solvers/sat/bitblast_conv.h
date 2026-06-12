@@ -35,7 +35,7 @@ class bitblast_smt_ast : public smt_ast
 {
 public:
 #define bitblast_ast_downcast(x) static_cast<const bitblast_smt_ast *>(x)
-  bitblast_smt_ast(smt_convt *ctx, const smt_sort *s) : smt_ast(ctx, s)
+  bitblast_smt_ast(smt_solver_baset *ctx, const smt_sort *s) : smt_ast(ctx, s)
   {
   }
 
@@ -76,7 +76,7 @@ public:
   // Update: SAT solver no longer subclasses this class, it instead provides a
   // SAT api pointer. Documentation not yet updated, sorry.
 
-  // smt_convt apis we fufil
+  // smt_solver_baset apis we fufil
 
   virtual smt_astt mk_func_app(
     const smt_sort *ressort,

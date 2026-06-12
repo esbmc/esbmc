@@ -41,8 +41,9 @@ static std::string itos(int64_t i)
   return ss.str();
 }
 
-unsigned int
-smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
+unsigned int smt_solver_baset::get_member_name_field(
+  const type2tc &t,
+  const irep_idt &name) const
 {
   unsigned int idx = 0;
   // Pointer types lower to the synthetic pointer_struct tuple in SMT;
@@ -62,14 +63,17 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
   return idx;
 }
 
-unsigned int
-smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
+unsigned int smt_solver_baset::get_member_name_field(
+  const type2tc &t,
+  const expr2tc &name) const
 {
   const constant_string2t &str = to_constant_string2t(name);
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
+smt_solver_baset::smt_solver_baset(
+  const namespacet &_ns,
+  const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
@@ -119,31 +123,31 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   ptr_foo_inited = false;
 }
 
-void smt_convt::set_tuple_iface(tuple_iface *iface)
+void smt_solver_baset::set_tuple_iface(tuple_iface *iface)
 {
   assert(tuple_api == nullptr && "set_tuple_iface should only be called once");
   tuple_api = iface;
 }
 
-void smt_convt::set_array_iface(array_iface *iface)
+void smt_solver_baset::set_array_iface(array_iface *iface)
 {
   assert(array_api == nullptr && "set_array_iface should only be called once");
   array_api = iface;
 }
 
-void smt_convt::set_fp_conv(fp_convt *iface)
+void smt_solver_baset::set_fp_conv(fp_convt *iface)
 {
   assert(fp_api == NULL && "set_fp_iface should only be called once");
   fp_api = iface;
 }
 
-void smt_convt::set_ra_conv(ra_apit *iface)
+void smt_solver_baset::set_ra_conv(ra_apit *iface)
 {
   assert(ra_api == NULL && "set_ra_conv should only be called once");
   ra_api = iface;
 }
 
-void smt_convt::delete_all_asts()
+void smt_solver_baset::delete_all_asts()
 {
   // Erase all the remaining asts in the live ast vector.
   for (auto *ast : live_asts)
@@ -151,7 +155,7 @@ void smt_convt::delete_all_asts()
   live_asts.clear();
 }
 
-void smt_convt::smt_post_init()
+void smt_solver_baset::smt_post_init()
 {
   boolean_sort = mk_bool_sort();
 
@@ -176,7 +180,7 @@ void smt_convt::smt_post_init()
   ptr_foo_inited = true;
 }
 
-void smt_convt::push_ctx()
+void smt_solver_baset::push_ctx()
 {
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -232,7 +236,7 @@ static void expand_quantifier_defs_in(
     [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
-void smt_convt::pop_ctx()
+void smt_solver_baset::pop_ctx()
 {
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
@@ -258,19 +262,19 @@ void smt_convt::pop_ctx()
   tuple_api->pop_tuple_ctx();
 }
 
-smt_astt smt_convt::invert_ast(smt_astt a)
+smt_astt smt_solver_baset::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   return mk_not(a);
 }
 
-smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   return mk_implies(a, b);
 }
 
-smt_astt smt_convt::convert_concat_int_mode(
+smt_astt smt_solver_baset::convert_concat_int_mode(
   smt_astt left_ast,
   smt_astt right_ast,
   const expr2tc &expr)
@@ -322,7 +326,7 @@ smt_astt smt_convt::convert_concat_int_mode(
   return result;
 }
 
-smt_astt smt_convt::convert_assign(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
 
@@ -364,7 +368,7 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   return side2;
 }
 
-smt_astt smt_convt::convert_ast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
 {
   {
     std::lock_guard lock(smt_cache_mutex);
@@ -1820,12 +1824,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   return a;
 }
 
-void smt_convt::assert_expr(const expr2tc &e)
+void smt_solver_baset::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
 }
 
-smt_sortt smt_convt::convert_sort(const type2tc &type)
+smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 {
   smt_sort_cachet::const_iterator it = sort_cache.find(type);
   if (it != sort_cache.end())
@@ -1980,7 +1984,7 @@ static std::string fixed_point(const std::string &v, unsigned width)
   return result;
 }
 
-smt_astt smt_convt::convert_terminal(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
 {
   switch (expr->expr_id)
   {
@@ -2155,7 +2159,7 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   }
 }
 
-std::string smt_convt::mk_fresh_name(const std::string &tag)
+std::string smt_solver_baset::mk_fresh_name(const std::string &tag)
 {
   std::string new_name = "smt_conv::" + tag;
   std::stringstream ss;
@@ -2163,7 +2167,7 @@ std::string smt_convt::mk_fresh_name(const std::string &tag)
   return ss.str();
 }
 
-smt_astt smt_convt::mk_fresh(
+smt_astt smt_solver_baset::mk_fresh(
   smt_sortt s,
   const std::string &tag,
   smt_sortt array_subtype)
@@ -2184,7 +2188,7 @@ smt_astt smt_convt::mk_fresh(
   return mk_smt_symbol(newname, s);
 }
 
-smt_astt smt_convt::convert_popcount(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_popcount(const expr2tc &expr)
 {
   expr2tc op = to_popcount2t(expr).operand;
 
@@ -2219,7 +2223,7 @@ smt_astt smt_convt::convert_popcount(const expr2tc &expr)
   return convert_ast(op);
 }
 
-smt_astt smt_convt::convert_bswap(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_bswap(const expr2tc &expr)
 {
   expr2tc op = to_bswap2t(expr).value;
 
@@ -2247,7 +2251,7 @@ smt_astt smt_convt::convert_bswap(const expr2tc &expr)
   return convert_ast(swap);
 }
 
-smt_astt smt_convt::convert_member(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
 
@@ -2325,7 +2329,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
   return src->project(this, idx);
 }
 
-smt_astt smt_convt::round_real_to_int(smt_astt a)
+smt_astt smt_solver_baset::round_real_to_int(smt_astt a)
 {
   // SMT truncates downwards; however C truncates towards zero, which is not
   // the same. (Technically, it's also platform dependant). To get around this,
@@ -2347,7 +2351,7 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
   return mk_ite(is_lt_zero, selected, as_int);
 }
 
-smt_astt smt_convt::round_int_to_fp(
+smt_astt smt_solver_baset::round_int_to_fp(
   smt_astt int_val,
   const floatbv_type2t &fbv_type,
   unsigned int source_width)
@@ -2416,7 +2420,7 @@ smt_astt smt_convt::round_int_to_fp(
   return mk_int2real(signed_result);
 }
 
-smt_astt smt_convt::round_fixedbv_to_int(
+smt_astt smt_solver_baset::round_fixedbv_to_int(
   smt_astt a,
   unsigned int fromwidth,
   unsigned int towidth)
@@ -2456,12 +2460,12 @@ smt_astt smt_convt::round_fixedbv_to_int(
   return mk_ite(is_neg, neg_val, intvalue);
 }
 
-smt_astt smt_convt::make_bool_bit(smt_astt a)
+smt_astt smt_solver_baset::make_bool_bit(smt_astt a)
 {
   assert(
     a->sort->id == SMT_SORT_BOOL &&
     "Wrong sort fed to "
-    "smt_convt::make_bool_bit");
+    "smt_solver_baset::make_bool_bit");
   smt_astt one =
     (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
   smt_astt zero =
@@ -2469,12 +2473,12 @@ smt_astt smt_convt::make_bool_bit(smt_astt a)
   return mk_ite(a, one, zero);
 }
 
-smt_astt smt_convt::make_bit_bool(smt_astt a)
+smt_astt smt_solver_baset::make_bit_bool(smt_astt a)
 {
   assert(
     ((!int_encoding && a->sort->id == SMT_SORT_BV) ||
      (int_encoding && a->sort->id == SMT_SORT_INT)) &&
-    "Wrong sort fed to smt_convt::make_bit_bool");
+    "Wrong sort fed to smt_solver_baset::make_bit_bool");
 
   smt_astt one =
     (int_encoding) ? mk_smt_int(BigInt(1)) : mk_smt_bv(BigInt(1), 1);
@@ -2487,7 +2491,7 @@ smt_astt smt_convt::make_bit_bool(smt_astt a)
  */
 template <typename Object, typename Method>
 static smt_astt
-make_n_ary(const Object o, const Method m, const smt_convt::ast_vec &v)
+make_n_ary(const Object o, const Method m, const smt_solver_baset::ast_vec &v)
 {
   assert(!v.empty());
 
@@ -2499,19 +2503,20 @@ make_n_ary(const Object o, const Method m, const smt_convt::ast_vec &v)
   return result;
 }
 
-smt_astt smt_convt::make_n_ary_and(const ast_vec &v)
+smt_astt smt_solver_baset::make_n_ary_and(const ast_vec &v)
 {
   return v.empty() ? mk_smt_bool(true) // empty conjunction is true
-                   : make_n_ary(this, &smt_convt::mk_and, v);
+                   : make_n_ary(this, &smt_solver_baset::mk_and, v);
 }
 
-smt_astt smt_convt::make_n_ary_or(const ast_vec &v)
+smt_astt smt_solver_baset::make_n_ary_or(const ast_vec &v)
 {
   return v.empty() ? mk_smt_bool(false) // empty disjunction is false
-                   : make_n_ary(this, &smt_convt::mk_or, v);
+                   : make_n_ary(this, &smt_solver_baset::mk_or, v);
 }
 
-expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
+expr2tc
+smt_solver_baset::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 {
   if (int_encoding)
     return idx;
@@ -2589,7 +2594,7 @@ type2tc make_array_domain_type(const array_type2t &arr)
   return get_uint_type(domwidth);
 }
 
-expr2tc smt_convt::array_domain_to_width(const type2tc &type)
+expr2tc smt_solver_baset::array_domain_to_width(const type2tc &type)
 {
   const unsignedbv_type2t &uint = to_unsignedbv_type(type);
   return constant_int2tc(index_type2(), BigInt::power2(uint.width));
@@ -2614,7 +2619,8 @@ static expr2tc gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
   return gen_additions(type, exprs);
 }
 
-expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
+expr2tc
+smt_solver_baset::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
   const index2t *idx = &to_index2t(expr);
 
@@ -2663,8 +2669,9 @@ expr2tc smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   return output;
 }
 
-expr2tc
-smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
+expr2tc smt_solver_baset::decompose_store_chain(
+  const expr2tc &expr,
+  expr2tc &update_val)
 {
   const with2t *with = &to_with2t(expr);
 
@@ -2712,7 +2719,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &update_val)
   return output;
 }
 
-smt_astt smt_convt::convert_array_index(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
@@ -2756,7 +2763,7 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   return a;
 }
 
-smt_astt smt_convt::convert_array_store(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
 {
   const with2t &with = to_with2t(expr);
   expr2tc update_val = with.update_value;
@@ -2797,7 +2804,7 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
   return src->update(this, update, 0, newidx);
 }
 
-type2tc smt_convt::flatten_array_type(const type2tc &type)
+type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
 {
   // If vector, convert to array
   if (is_vector_type(type))
@@ -2876,7 +2883,7 @@ static expr2tc constant_index_into_array(const expr2tc &array, uint64_t idx)
  *
  * TODO: also support constant_array_of2t as an optimization
  */
-expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
+expr2tc smt_solver_baset::flatten_array_body(const expr2tc &expr)
 {
   const array_type2t &arr_type = to_array_type(expr->type);
   bool subtype_is_array = is_array_type(arr_type.subtype);
@@ -2908,7 +2915,7 @@ expr2tc smt_convt::flatten_array_body(const expr2tc &expr)
   return constant_array2tc(flatten_array_type(expr->type), sub_exprs);
 }
 
-type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
+type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 {
   // Get the subtype of an array, ensuring that any intermediate arrays have
   // been flattened.
@@ -2931,7 +2938,7 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   return type_rec;
 }
 
-void smt_convt::pre_solve()
+void smt_solver_baset::pre_solve()
 {
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
@@ -2940,7 +2947,7 @@ void smt_convt::pre_solve()
   array_api->add_array_constraints_for_solving();
 }
 
-expr2tc smt_convt::get(const expr2tc &expr)
+expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
   if (is_constant_number(expr))
     return expr;
@@ -3183,7 +3190,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
   return res;
 }
 
-expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
+expr2tc smt_solver_baset::get_by_ast(const type2tc &type, smt_astt a)
 {
   switch (type->type_id)
   {
@@ -3281,7 +3288,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 // Convert a rational number represented by two BigInts into a IEEE 754 double.
 // This replaces the previous std::stod-based approach which could not cope
 // with extremely large/small numerators or denominators exposed by --ir mode.
-double smt_convt::convert_rational_to_double(
+double smt_solver_baset::convert_rational_to_double(
   const BigInt &numerator,
   const BigInt &denominator)
 {
@@ -3438,7 +3445,7 @@ double smt_convt::convert_rational_to_double(
   return result;
 }
 
-expr2tc smt_convt::get_by_type(const expr2tc &expr)
+expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
 {
   switch (expr->type->type_id)
   {
@@ -3483,7 +3490,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   }
 }
 
-expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
+expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 {
   // XXX -- printing multidimensional arrays?
 
@@ -3531,13 +3538,13 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   return constant_array2tc(arr_type, fields);
 }
 
-expr2tc smt_convt::get_array(const expr2tc &expr)
+expr2tc smt_solver_baset::get_array(const expr2tc &expr)
 {
   smt_astt array = convert_ast(expr);
   return get_array(expr->type, array);
 }
 
-smt_astt smt_convt::array_create(const expr2tc &expr)
+smt_astt smt_solver_baset::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
     return convert_array_of_prep(expr);
@@ -3587,7 +3594,7 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   return newsym_ast;
 }
 
-smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
 {
   const constant_array_of2t &arrof = to_constant_array_of2t(expr);
   const array_type2t &arrtype = to_array_type(arrof.type);
@@ -3677,7 +3684,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
 smt_astt array_iface::default_convert_array_of(
   smt_astt init_val,
   unsigned long array_size,
-  smt_convt *ctx)
+  smt_solver_baset *ctx)
 {
   // We now an initializer, and a size of array to build. So:
   // Repeatedly store things into this.
@@ -3702,7 +3709,7 @@ smt_astt array_iface::default_convert_array_of(
   return newsym_ast;
 }
 
-smt_astt smt_convt::pointer_array_of(
+smt_astt smt_solver_baset::pointer_array_of(
   const expr2tc &init_val [[maybe_unused]],
   unsigned long array_width)
 {
@@ -3731,8 +3738,9 @@ smt_astt smt_convt::pointer_array_of(
   return tuple_api->tuple_array_of(strct, array_width);
 }
 
-smt_astt
-smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
+smt_astt smt_solver_baset::tuple_array_create_despatch(
+  const expr2tc &expr,
+  smt_sortt domain)
 {
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.
@@ -3762,7 +3770,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
   return tuple_api->tuple_array_create(arr_type, args.data(), false, domain);
 }
 
-void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
+void smt_solver_baset::rewrite_ptrs_to_structs(type2tc &type)
 {
   // Type may contain pointers; replace those with the structure equivalent.
   // Ideally the real solver will never see pointer types.
@@ -3792,24 +3800,25 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
 
 // Default behaviors for SMT AST's
 
-void smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
   ctx->assert_ast(eq(ctx, sym));
 }
 
-smt_astt smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt
+smt_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
 {
   return ctx->mk_ite(cond, this, falseop);
 }
 
-smt_astt smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
   return ctx->mk_eq(this, other);
 }
 
 smt_astt smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -3834,7 +3843,7 @@ smt_astt smt_ast::update(
   return ctx->mk_store(this, ctx->convert_ast(index), value);
 }
 
-smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+smt_astt smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
   assert(
     sort->id == SMT_SORT_ARRAY &&
@@ -3847,26 +3856,26 @@ smt_astt smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 }
 
 smt_astt smt_ast::project(
-  smt_convt *ctx [[maybe_unused]],
+  smt_solver_baset *ctx [[maybe_unused]],
   unsigned int idx [[maybe_unused]]) const
 {
   log_error("Projecting from non-tuple based AST");
   abort();
 }
 
-std::string smt_convt::dump_smt()
+std::string smt_solver_baset::dump_smt()
 {
   log_error("SMT dump not implemented for {}", solver_text());
   abort();
 }
 
-void smt_convt::print_model()
+void smt_solver_baset::print_model()
 {
   log_error("SMT model printing not implemented for {}", solver_text());
   abort();
 }
 
-tvt smt_convt::l_get(smt_astt a)
+tvt smt_solver_baset::l_get(smt_astt a)
 {
   if (l_get_cache_active)
   {
@@ -3880,23 +3889,23 @@ tvt smt_convt::l_get(smt_astt a)
   return get_bool(a) ? tvt(true) : tvt(false);
 }
 
-tvt smt_convt::l_get(const expr2tc &expr)
+tvt smt_solver_baset::l_get(const expr2tc &expr)
 {
   assert(is_bool_type(expr));
   return l_get(convert_ast(expr));
 }
 
-void smt_convt::dump_expr(const expr2tc &expr)
+void smt_solver_baset::dump_expr(const expr2tc &expr)
 {
   convert_ast(expr)->dump();
 }
 
-expr2tc smt_convt::get_by_ast(const expr2tc &expr)
+expr2tc smt_solver_baset::get_by_ast(const expr2tc &expr)
 {
   return get_by_ast(expr->type, convert_ast(expr));
 }
 
-expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
+expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
 {
   switch (type->type_id)
   {
@@ -3941,55 +3950,55 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
   abort();
 }
 
-smt_sortt smt_convt::mk_bool_sort()
+smt_sortt smt_solver_baset::mk_bool_sort()
 {
   log_error("Chosen solver doesn't support boolean sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_real_sort()
+smt_sortt smt_solver_baset::mk_real_sort()
 {
   log_error("Chosen solver doesn't support real sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_int_sort()
+smt_sortt smt_solver_baset::mk_int_sort()
 {
   log_error("Chosen solver doesn't support integer sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_bv_sort(std::size_t)
+smt_sortt smt_solver_baset::mk_bv_sort(std::size_t)
 {
   log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_fbv_sort(std::size_t)
+smt_sortt smt_solver_baset::mk_fbv_sort(std::size_t)
 {
   log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_array_sort(smt_sortt, smt_sortt)
+smt_sortt smt_solver_baset::mk_array_sort(smt_sortt, smt_sortt)
 {
   log_error("Chosen solver doesn't support array sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_bvfp_sort(std::size_t, std::size_t)
+smt_sortt smt_solver_baset::mk_bvfp_sort(std::size_t, std::size_t)
 {
   log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
-smt_sortt smt_convt::mk_bvfp_rm_sort()
+smt_sortt smt_solver_baset::mk_bvfp_rm_sort()
 {
   log_error("Chosen solver doesn't support bit vector sorts");
   abort();
 }
 
-smt_astt smt_convt::mk_bvredor(smt_astt op)
+smt_astt smt_solver_baset::mk_bvredor(smt_astt op)
 {
   // bvredor = bvnot(bvcomp(x,0)) ? bv1 : bv0;
 
@@ -4001,7 +4010,7 @@ smt_astt smt_convt::mk_bvredor(smt_astt op)
   return mk_ite(ncomp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
-smt_astt smt_convt::mk_bvredand(smt_astt op)
+smt_astt smt_solver_baset::mk_bvredand(smt_astt op)
 {
   // bvredand = bvcomp(x,-1) ? bv1 : bv0;
 
@@ -4012,220 +4021,220 @@ smt_astt smt_convt::mk_bvredand(smt_astt op)
   return mk_ite(comp, mk_smt_bv(1, 1), mk_smt_bv(BigInt(0), 1));
 }
 
-smt_astt smt_convt::mk_add(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_add(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvadd(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvadd(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_sub(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_sub(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvsub(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsub(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_mul(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_mul(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvmul(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvmul(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_mod(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_mod(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvsmod(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsmod(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvumod(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvumod(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_div(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_div(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvsdiv(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsdiv(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvudiv(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvudiv(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_shl(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_shl(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvshl(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvshl(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvashr(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvashr(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvlshr(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvlshr(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_neg(smt_astt a)
+smt_astt smt_solver_baset::mk_neg(smt_astt a)
 {
   (void)a;
   abort();
 }
 
-smt_astt smt_convt::mk_bvneg(smt_astt a)
+smt_astt smt_solver_baset::mk_bvneg(smt_astt a)
 {
   (void)a;
   abort();
 }
 
-smt_astt smt_convt::mk_bvnot(smt_astt a)
+smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
 {
   (void)a;
   abort();
 }
 
-smt_astt smt_convt::mk_bvxor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvor(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvxor(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvand(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvor(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_implies(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvand(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_xor(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_implies(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_or(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_xor(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_and(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_or(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_not(smt_astt a)
-{
-  (void)a;
-  abort();
-}
-
-smt_astt smt_convt::mk_lt(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_and(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvult(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_not(smt_astt a)
+{
+  (void)a;
+  abort();
+}
+
+smt_astt smt_solver_baset::mk_lt(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvslt(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvult(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_gt(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvslt(smt_astt a, smt_astt b)
+{
+  (void)a;
+  (void)b;
+  abort();
+}
+
+smt_astt smt_solver_baset::mk_gt(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   return mk_lt(b, a);
 }
 
-smt_astt smt_convt::mk_bvugt(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvugt(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
@@ -4233,7 +4242,7 @@ smt_astt smt_convt::mk_bvugt(smt_astt a, smt_astt b)
   return mk_not(mk_bvule(a, b));
 }
 
-smt_astt smt_convt::mk_bvsgt(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsgt(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
@@ -4241,28 +4250,28 @@ smt_astt smt_convt::mk_bvsgt(smt_astt a, smt_astt b)
   return mk_not(mk_bvsle(a, b));
 }
 
-smt_astt smt_convt::mk_le(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_le(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvule(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvule(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_bvsle(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsle(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_ge(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_ge(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
@@ -4270,7 +4279,7 @@ smt_astt smt_convt::mk_ge(smt_astt a, smt_astt b)
   return mk_not(mk_lt(a, b));
 }
 
-smt_astt smt_convt::mk_bvuge(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvuge(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
@@ -4278,7 +4287,7 @@ smt_astt smt_convt::mk_bvuge(smt_astt a, smt_astt b)
   return mk_not(mk_bvult(a, b));
 }
 
-smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_bvsge(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
@@ -4286,19 +4295,19 @@ smt_astt smt_convt::mk_bvsge(smt_astt a, smt_astt b)
   return mk_not(mk_bvslt(a, b));
 }
 
-smt_astt smt_convt::mk_eq(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_eq(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_neq(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_neq(smt_astt a, smt_astt b)
 {
   return mk_not(mk_eq(a, b));
 }
 
-smt_astt smt_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
+smt_astt smt_solver_baset::mk_store(smt_astt a, smt_astt b, smt_astt c)
 {
   (void)a;
   (void)b;
@@ -4306,26 +4315,26 @@ smt_astt smt_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)
   abort();
 }
 
-smt_astt smt_convt::mk_select(smt_astt a, smt_astt b)
+smt_astt smt_solver_baset::mk_select(smt_astt a, smt_astt b)
 {
   (void)a;
   (void)b;
   abort();
 }
 
-smt_astt smt_convt::mk_real2int(smt_astt a)
+smt_astt smt_solver_baset::mk_real2int(smt_astt a)
 {
   (void)a;
   abort();
 }
 
-smt_astt smt_convt::mk_int2real(smt_astt a)
+smt_astt smt_solver_baset::mk_int2real(smt_astt a)
 {
   (void)a;
   abort();
 }
 
-smt_astt smt_convt::mk_isint(smt_astt a)
+smt_astt smt_solver_baset::mk_isint(smt_astt a)
 {
   (void)a;
   abort();

@@ -89,7 +89,7 @@ std::string ctest_generator::clean_variable_name(const std::string &name) const
 
 std::string ctest_generator::extract_function_name(
   const symex_target_equationt &target,
-  smt_convt &smt_conv) const
+  smt_solver_baset &smt_conv) const
 {
   // Try to extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
@@ -303,7 +303,7 @@ void ctest_generator::clear()
 
 void ctest_generator::collect(
   const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   const namespacet &ns)
 {
   (void)ns;
@@ -606,7 +606,7 @@ void ctest_generator::generate() const
 void ctest_generator::generate_single(
   const std::string &output_dir,
   const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   const namespacet &ns)
 {
   (void)output_dir;

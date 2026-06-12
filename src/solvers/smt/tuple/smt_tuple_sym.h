@@ -10,7 +10,7 @@ typedef const tuple_sym_smt_ast *tuple_sym_smt_astt;
 class smt_tuple_sym_flattener : public tuple_iface
 {
 public:
-  smt_tuple_sym_flattener(smt_convt *_ctx, const namespacet &_ns)
+  smt_tuple_sym_flattener(smt_solver_baset *_ctx, const namespacet &_ns)
     : ctx(_ctx), ns(_ns)
   {
   }
@@ -39,7 +39,7 @@ public:
     bool const_array,
     smt_sortt domain) override;
 
-  smt_convt *ctx;
+  smt_solver_baset *ctx;
   const namespacet &ns;
 };
 

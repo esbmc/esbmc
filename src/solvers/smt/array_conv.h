@@ -40,14 +40,14 @@ class array_ast;
 class array_ast : public smt_ast
 {
 public:
-  array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
+  array_ast(array_convt *actx, smt_solver_baset *ctx, const smt_sort *_s)
     : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
   }
 
   array_ast(
     array_convt *actx,
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     const smt_sort *_s,
     std::vector<smt_astt> _a)
     : smt_ast(ctx, _s),
@@ -59,17 +59,18 @@ public:
 
   ~array_ast() override = default;
 
-  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
-  smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
-  void assign(smt_convt *ctx, smt_astt sym) const override;
+  smt_astt eq(smt_solver_baset *ctx, smt_astt other) const override;
+  smt_astt
+  ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const override;
+  void assign(smt_solver_baset *ctx, smt_astt sym) const override;
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr = expr2tc()) const override;
-  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
+  smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const override;
 
-  smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
+  smt_astt eq_fixedsize(smt_solver_baset *ctx, const array_ast *other) const;
 
   void dump() const override
   {
@@ -103,7 +104,7 @@ class array_convt : public array_iface
 public:
   struct array_select;
   struct array_with;
-  typedef smt_convt::ast_vec ast_vect;
+  typedef smt_solver_baset::ast_vec ast_vect;
   typedef std::vector<ast_vect> array_update_vect;
 
   // Fgasdf
@@ -125,7 +126,7 @@ public:
         std::greater<unsigned int>>>>
     index_map_containert;
 
-  array_convt(smt_convt *_ctx);
+  array_convt(smt_solver_baset *_ctx);
   ~array_convt() = default;
 
   // Public api
@@ -448,7 +449,7 @@ public:
   // In reverse, these correspond to ast_vect and array_update_vect
   std::vector<std::vector<std::vector<smt_astt>>> array_valuation;
 
-  smt_convt *ctx;
+  smt_solver_baset *ctx;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */

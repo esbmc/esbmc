@@ -140,7 +140,7 @@ static std::string unquote(const std::string_view &s)
 }
 #endif
 
-smt_convt *create_new_smtlib_solver(
+smt_solver_baset *create_new_smtlib_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -350,7 +350,7 @@ smtlib_convt::process_emitter::~process_emitter() noexcept
 }
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options),
+  : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
     emit_proc(_options.get_option("smtlib-solver-prog")),
@@ -577,7 +577,7 @@ void smtlib_smt_ast::dump() const
   ctx_m->emit_proc.out_stream = tmp_proc;
 }
 
-smt_convt::resultt smtlib_convt::dec_solve()
+smt_solver_baset::resultt smtlib_convt::dec_solve()
 {
   pre_solve();
 
@@ -593,7 +593,7 @@ smt_convt::resultt smtlib_convt::dec_solve()
 
   // If we're just outputing to a file, this is where we terminate.
   if (!emit_proc)
-    return smt_convt::P_SMTLIB;
+    return smt_solver_baset::P_SMTLIB;
 
   // And read in the output
   smtlib_send_start_code = 1;
@@ -602,16 +602,16 @@ smt_convt::resultt smtlib_convt::dec_solve()
   // This should generate on sexpr. See what it is.
   if (smtlib_output->token == TOK_KW_SAT)
   {
-    return smt_convt::P_SATISFIABLE;
+    return smt_solver_baset::P_SATISFIABLE;
   }
   if (smtlib_output->token == TOK_KW_UNSAT)
   {
-    return smt_convt::P_UNSATISFIABLE;
+    return smt_solver_baset::P_UNSATISFIABLE;
   }
   else if (smtlib_output->token == TOK_KW_ERROR)
   {
     log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);
-    return smt_convt::P_ERROR;
+    return smt_solver_baset::P_ERROR;
   }
   else
   {
@@ -975,7 +975,7 @@ int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 
 void smtlib_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
 
   emit("%s", "(push 1)\n");
 }
@@ -1451,7 +1451,7 @@ void smtlib_convt::pop_ctx()
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
   syms_numindex.erase(ctx_level);
 
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 smt_astt

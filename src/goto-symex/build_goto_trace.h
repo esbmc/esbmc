@@ -7,7 +7,7 @@
 
 void build_goto_trace(
   const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   goto_tracet &goto_trace,
   const bool &is_compact_trace);
 
@@ -16,7 +16,7 @@ void build_successful_goto_trace(
   const namespacet &ns,
   goto_tracet &goto_trace);
 
-expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs);
-expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs);
+expr2tc build_lhs(smt_solver_baset &smt_conv, const expr2tc &lhs);
+expr2tc build_rhs(smt_solver_baset &smt_conv, const expr2tc &rhs);
 
 #endif

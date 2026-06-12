@@ -20,7 +20,7 @@
 
 #define new_ast new_solver_ast<yices_smt_ast>
 
-smt_convt *create_new_yices_solver(
+smt_solver_baset *create_new_yices_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -35,7 +35,7 @@ smt_convt *create_new_yices_solver(
 }
 
 yices_convt::yices_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(false, false), fp_convt(this)
+  : smt_solver_baset(ns, options), array_iface(false, false), fp_convt(this)
 {
   yices_init();
 
@@ -60,7 +60,7 @@ yices_convt::~yices_convt()
 
 void yices_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   int32_t res = yices_push(yices_ctx);
 
   if (res != 0)
@@ -82,21 +82,21 @@ void yices_convt::pop_ctx()
     abort();
   }
 
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt yices_convt::dec_solve()
+smt_solver_baset::resultt yices_convt::dec_solve()
 {
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
   if (result == STATUS_SAT)
-    return smt_convt::P_SATISFIABLE;
+    return smt_solver_baset::P_SATISFIABLE;
 
   if (result == STATUS_UNSAT)
-    return smt_convt::P_UNSATISFIABLE;
+    return smt_solver_baset::P_UNSATISFIABLE;
 
-  return smt_convt::P_ERROR;
+  return smt_solver_baset::P_ERROR;
 }
 
 const std::string yices_convt::solver_text()
@@ -831,7 +831,7 @@ expr2tc yices_convt::tuple_get_array_elem(
   return get_array_elem(array, index, get_flattened_array_subtype(subtype));
 }
 
-void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void yices_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
   if (sort->id == SMT_SORT_ARRAY)
   {
@@ -849,7 +849,7 @@ void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   }
 }
 
-smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+smt_astt yices_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   type2tc type = sort->get_tuple_type();
   smt_sortt elemsort = ctx->convert_sort(struct_union_members(type)[elem]);
@@ -858,7 +858,7 @@ smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
 }
 
 smt_astt yices_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -1036,7 +1036,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   unsigned int i = 0;
   for (auto const &it : members)
   {
-    outmem.push_back(smt_convt::get_by_ast(
+    outmem.push_back(smt_solver_baset::get_by_ast(
       it,
       new_ast(
         yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),

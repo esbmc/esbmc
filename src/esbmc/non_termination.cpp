@@ -25,7 +25,7 @@ namespace
 /// conservative on the wrong-false side.
 bool is_sat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
-  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_solver_baset> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
   return solver->dec_solve() == P_SATISFIABLE;
 }

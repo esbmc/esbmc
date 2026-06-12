@@ -18,8 +18,8 @@
  *  'HACKS' function represents some kind of special case, according to where
  *  it is encountered; the same for 'INVALID'.
  *
- *  @see smt_convt::convert_terminal
- *  @see smt_convt::convert_ast
+ *  @see smt_solver_baset::convert_terminal
+ *  @see smt_solver_baset::convert_ast
  */
 enum smt_func_kind
 {
@@ -154,7 +154,7 @@ public:
 class smtlib_smt_ast : public smt_ast
 {
 public:
-  smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
+  smtlib_smt_ast(smt_solver_baset *ctx, const smt_sort *s, smt_func_kind k)
     : smt_ast(ctx, s), kind(k)
   {
   }

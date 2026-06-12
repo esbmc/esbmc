@@ -29,7 +29,7 @@ public:
    *               value. */
   tuple_node_smt_ast(
     smt_tuple_node_flattener &f,
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_sortt s,
     std::string _name)
     : smt_ast(ctx, s), name(std::move(_name)), flat(f)
@@ -44,16 +44,17 @@ public:
   smt_tuple_node_flattener &flat;
   std::vector<smt_astt> elements;
 
-  smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
-  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
-  void assign(smt_convt *ctx, smt_astt sym) const override;
+  smt_astt
+  ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const override;
+  smt_astt eq(smt_solver_baset *ctx, smt_astt other) const override;
+  void assign(smt_solver_baset *ctx, smt_astt sym) const override;
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr = expr2tc()) const override;
-  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   void dump() const override
   {
@@ -62,8 +63,8 @@ public:
       e->dump();
   }
 
-  void make_free(smt_convt *ctx);
-  void pre_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop);
+  void make_free(smt_solver_baset *ctx);
+  void pre_ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop);
 };
 
 inline tuple_node_smt_astt to_tuple_node_ast(smt_astt a)

@@ -294,7 +294,7 @@ void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  smt_solver_baset &smt_conv);
 
 /// Helper structure for collected nondet values
 struct collected_nondet_value
@@ -309,7 +309,7 @@ struct collected_nondet_value
 /// Reuses generate_testcase pattern
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
-  smt_convt &smt_conv);
+  smt_solver_baset &smt_conv);
 
 /// Build a blocking clause that excludes the given input tuple from future
 /// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).

@@ -44,15 +44,16 @@ protected:
   const contextt &context;
   namespacet ns;
 
-  std::unique_ptr<smt_convt> runtime_solver;
+  std::unique_ptr<smt_solver_baset> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
   pytest_generator pytest_gen; // For Python pytest test case generation
   ctest_generator ctest_gen;   // For C/C++ CTest test case generation
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
-  virtual smt_resultt
-  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
+  virtual smt_resultt run_decision_procedure(
+    smt_solver_baset &smt_conv,
+    symex_target_equationt &eq) const;
 
   // Re-encode `local_eq` in vacuity mode against a fresh solver and check
   // whether the path to each kept claim is reachable. UNSAT means the
@@ -72,7 +73,7 @@ protected:
   virtual void keep_alive_function() const;
 
   virtual void
-  error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
+  error_trace(smt_solver_baset &smt_conv, const symex_target_equationt &eq);
 
   virtual void successful_trace(const symex_target_equationt &eq);
 
@@ -84,8 +85,9 @@ protected:
 
   virtual void report_result(smt_resultt &res);
 
-  virtual void
-  bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
+  virtual void bidirectional_search(
+    smt_solver_baset &smt_conv,
+    const symex_target_equationt &eq);
 
   smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
@@ -94,12 +96,12 @@ protected:
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
-    smt_convt &runtime_solver);
+    smt_solver_baset &runtime_solver);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
   void generate_smt_from_equation(
-    smt_convt &smt_conv,
+    smt_solver_baset &smt_conv,
     symex_target_equationt &eq) const;
 
   // for multi-property

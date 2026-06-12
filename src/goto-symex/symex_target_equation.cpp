@@ -17,7 +17,7 @@ namespace
 struct equation_conversion_statet
 {
   // Conjunction of all in-scope assumptions, as an expr2tc. Solver-AST
-  // handling stays inside smt_convt: the equation only manipulates
+  // handling stays inside smt_solver_baset: the equation only manipulates
   // expr2tc and lets convert_ast/assert_expr bridge to the solver.
   expr2tc assumpt_expr;
   // Negated discharge condition per kept assertion (or the path
@@ -26,7 +26,7 @@ struct equation_conversion_statet
 };
 
 void pre_register_addresses(
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   symex_target_equationt::SSA_stepst::iterator begin,
   symex_target_equationt::SSA_stepst::iterator end)
 {
@@ -74,7 +74,7 @@ void convert_internal_step(
   bool ssa_trace,
   bool ssa_smt_trace,
   unsigned &output_count,
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   equation_conversion_statet &state,
   symex_target_equationt::SSA_stept &step,
   bool vacuity_mode)
@@ -306,7 +306,9 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
-void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
+void symex_target_equationt::convert(
+  smt_solver_baset &smt_conv,
+  bool vacuity_mode)
 {
   // Register address-taken objects first so int-to-ptr casts see the full
   // set of candidate objects regardless of source-level declaration order.
@@ -528,7 +530,7 @@ struct runtime_encoded_equationt::solver_statet
 
 runtime_encoded_equationt::runtime_encoded_equationt(
   const namespacet &_ns,
-  smt_convt &_conv)
+  smt_solver_baset &_conv)
   : symex_target_equationt(_ns),
     conv(_conv),
     solver_state(std::make_unique<solver_statet>())
@@ -611,7 +613,9 @@ void runtime_encoded_equationt::pop_ctx()
   solver_state->states.pop_back();
 }
 
-void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
+void runtime_encoded_equationt::convert(
+  smt_solver_baset &smt_conv,
+  bool vacuity_mode)
 {
   // The incremental path doesn't re-walk SSA_steps, so the per-assertion
   // path-assumption rewrite that vacuity mode needs cannot be applied here.

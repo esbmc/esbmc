@@ -6,7 +6,7 @@
  *  depending on solver internals.
  */
 
-class smt_convt;
+class smt_solver_baset;
 
 /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is a
  *  historic case used by the SMTLIB backend. */

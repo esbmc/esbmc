@@ -82,7 +82,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   if (options.get_bool_option("smt-during-symex"))
   {
-    runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    runtime_solver =
+      std::unique_ptr<smt_solver_baset>(create_solver("", ns, options));
 
     symex = std::make_unique<reachability_treet>(
       funcs,
@@ -123,7 +124,9 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
     correctness_yaml_goto_trace(options, ns, goto_trace);
 }
 
-void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
+void bmct::error_trace(
+  smt_solver_baset &smt_conv,
+  const symex_target_equationt &eq)
 {
   if (options.get_bool_option("result-only"))
     return;
@@ -192,7 +195,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 }
 
 void bmct::generate_smt_from_equation(
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   symex_target_equationt &eq) const
 {
   std::string logic;
@@ -233,7 +236,7 @@ void bmct::keep_alive_function() const
 }
 
 smt_resultt bmct::run_decision_procedure(
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   symex_target_equationt &eq) const
 {
   if (options.get_bool_option("enable-keep-alive"))
@@ -319,7 +322,7 @@ smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
   // Re-encode in vacuity mode: each kept assertion contributes its path
   // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
   // The result is UNSAT iff the path to every kept claim is unreachable.
-  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_solver_baset> solver(create_solver("", ns, options));
   local_eq.convert(*solver, /*vacuity_mode=*/true);
   return solver->dec_solve();
 }
@@ -1401,7 +1404,7 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 }
 
 void bmct::bidirectional_search(
-  smt_convt &smt_conv,
+  smt_solver_baset &smt_conv,
   const symex_target_equationt &eq)
 {
   // We should only analyze the inductive step's cex and we're running
@@ -1639,7 +1642,7 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
-        std::unique_ptr<smt_convt>(create_solver("", ns, options));
+        std::unique_ptr<smt_solver_baset>(create_solver("", ns, options));
     }
 
     if (
@@ -1741,7 +1744,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
-      std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+      std::unique_ptr<smt_solver_baset> smt_conv(
+        create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
       if (solver_result == P_SATISFIABLE)
         log_status("Found trace satisfying {}", which);
@@ -1779,7 +1783,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
-  smt_convt &runtime_solver)
+  smt_solver_baset &runtime_solver)
 {
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
@@ -1956,11 +1960,12 @@ smt_resultt bmct::multi_property_check(
     }
 
     // Initialize a solver
-    smt_convt *solver_ptr = &runtime_solver;
-    std::unique_ptr<smt_convt> new_solver;
+    smt_solver_baset *solver_ptr = &runtime_solver;
+    std::unique_ptr<smt_solver_baset> new_solver;
     if (!options.get_bool_option("smt-during-symex"))
     {
-      new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      new_solver =
+        std::unique_ptr<smt_solver_baset>(create_solver("", ns, options));
       solver_ptr = new_solver.get();
     }
 

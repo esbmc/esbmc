@@ -8,7 +8,7 @@
 #include <mutex>
 #include "witnesses.h"
 
-class smt_convt;
+class smt_solver_baset;
 
 /// This generates CTest test-cases for C programs
 class ctest_generator
@@ -38,7 +38,7 @@ private:
   /// Extract function name from SSA steps
   std::string extract_function_name(
     const symex_target_equationt &target,
-    smt_convt &smt_conv) const;
+    smt_solver_baset &smt_conv) const;
 
   /// Convert type2t to C type string and VERIFIER type string
   std::string type_to_c_string(const type2tc &type) const;
@@ -56,7 +56,7 @@ public:
   /// Collect test data from a counterexample (called for each CEX in coverage mode)
   void collect(
     const symex_target_equationt &target,
-    smt_convt &smt_conv,
+    smt_solver_baset &smt_conv,
     const namespacet &ns);
 
   /// Generate C test files and CMakeLists.txt from collected data
@@ -66,7 +66,7 @@ public:
   void generate_single(
     const std::string &output_dir,
     const symex_target_equationt &target,
-    smt_convt &smt_conv,
+    smt_solver_baset &smt_conv,
     const namespacet &ns);
 
   /// Check if any test cases have been collected
