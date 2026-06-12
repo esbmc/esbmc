@@ -3237,8 +3237,9 @@ exprt function_call_expr::handle_general_function_call()
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
-  const bool is_sorted_min_max =
-    func_name == "min" || func_name == "max" || func_name == "sorted";
+  const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
+                                 func_name == "sorted" ||
+                                 func_name == "reversed";
 
   // min(iter, default=...) / max(iter, default=...) route to *_default
   // variants that fall back to the supplied default when iter is empty

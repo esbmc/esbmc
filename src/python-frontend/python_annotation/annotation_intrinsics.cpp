@@ -31,7 +31,7 @@ const std::map<std::string, std::string> &builtin_functions()
     {"range", "range"},
     {"enumerate", "enumerate"},
     {"zip", "zip"},
-    {"reversed", "reversed"},
+    {"reversed", "list"},
     {"sorted", "list"},
 
     // I/O functions
