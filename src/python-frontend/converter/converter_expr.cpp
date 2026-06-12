@@ -808,6 +808,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = symbol_expr(*func_symbol);
             break;
           }
+
+          // A bare class name used as a value, e.g. `register(SomeClass)` or
+          // `create_publisher(topic, Twist)` -- passing the class object itself
+          // as an argument. Python classes are first-class objects, but ESBMC
+          // has no first-class type value, so model it as an opaque nondet
+          // placeholder. Inert uses (storing or forwarding the class) then
+          // convert instead of aborting; constructing through such a forwarded
+          // value is not modelled.
+          if (is_class(var_name, *ast_json))
+          {
+            expr = side_effect_expr_nondett(any_type());
+            expr.location() = get_location_from_decl(element);
+            break;
+          }
         }
         locationt location = get_location_from_decl(element);
         std::ostringstream error_msg;
