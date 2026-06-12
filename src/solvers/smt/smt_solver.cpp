@@ -182,6 +182,9 @@ void smt_solver_baset::smt_post_init()
 
 void smt_solver_baset::push_ctx()
 {
+  // Any context change can change the model; drop memoised l_get values.
+  l_get_cache.clear();
+
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
 
@@ -238,6 +241,9 @@ static void expand_quantifier_defs_in(
 
 void smt_solver_baset::pop_ctx()
 {
+  // Any context change can change the model; drop memoised l_get values.
+  l_get_cache.clear();
+
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
@@ -2940,6 +2946,9 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 
 void smt_solver_baset::pre_solve()
 {
+  // A new solve produces a fresh model; drop memoised l_get values.
+  l_get_cache.clear();
+
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in
   // the array api class.
@@ -3877,16 +3886,18 @@ void smt_solver_baset::print_model()
 
 tvt smt_solver_baset::l_get(smt_astt a)
 {
-  if (l_get_cache_active)
-  {
-    auto it = l_get_cache.find(a);
-    if (it != l_get_cache.end())
-      return it->second;
-    tvt res = get_bool(a) ? tvt(true) : tvt(false);
-    l_get_cache.emplace(a, res);
-    return res;
-  }
-  return get_bool(a) ? tvt(true) : tvt(false);
+  // Memoise against the current model. The cache is cleared whenever the
+  // model can change (pre_solve / push_ctx / pop_ctx), so a hit always
+  // reflects the assignment produced by the most recent solve. Guard ASTs
+  // recur across thousands of SSA steps during trace building and each
+  // miss bottoms out in an O(formula) get_bool(), so this collapses
+  // repeated queries to one solver call per distinct AST.
+  auto it = l_get_cache.find(a);
+  if (it != l_get_cache.end())
+    return it->second;
+  tvt res = get_bool(a) ? tvt(true) : tvt(false);
+  l_get_cache.emplace(a, res);
+  return res;
 }
 
 tvt smt_solver_baset::l_get(const expr2tc &expr)

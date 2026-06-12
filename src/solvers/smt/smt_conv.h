@@ -31,12 +31,6 @@ public:
   explicit smt_convt(std::unique_ptr<smt_solver_baset> impl);
   ~smt_convt();
 
-  typedef smt_resultt resultt;
-  static constexpr resultt P_UNSATISFIABLE = ::P_UNSATISFIABLE;
-  static constexpr resultt P_SATISFIABLE = ::P_SATISFIABLE;
-  static constexpr resultt P_ERROR = ::P_ERROR;
-  static constexpr resultt P_SMTLIB = ::P_SMTLIB;
-
   /** The owned solver implementation. Transitional escape hatch for callers
    *  that still drive conversion directly (equation convert loop). */
   smt_solver_baset &solver();
@@ -45,7 +39,7 @@ public:
 
   void push_ctx();
   void pop_ctx();
-  resultt dec_solve();
+  smt_resultt dec_solve();
   void pre_solve();
   const std::string solver_text();
 
@@ -64,18 +58,6 @@ public:
   void dump_expr(const expr2tc &expr);
   std::string dump_smt();
   void print_model();
-
-  /** Scope guard memoising l_get() results for the duration of trace
-   *  construction. Toggles the implementation's model cache; ctor/dtor are
-   *  defined out-of-line so this header needs no complete solver type. */
-  struct model_cache_scopet
-  {
-    explicit model_cache_scopet(smt_convt &c);
-    ~model_cache_scopet();
-
-  private:
-    smt_solver_baset &impl;
-  };
 
 private:
   std::unique_ptr<smt_solver_baset> solver_impl;

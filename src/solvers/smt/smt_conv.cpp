@@ -23,7 +23,7 @@ void smt_convt::pop_ctx()
   solver_impl->pop_ctx();
 }
 
-smt_convt::resultt smt_convt::dec_solve()
+smt_resultt smt_convt::dec_solve()
 {
   return solver_impl->dec_solve();
 }
@@ -76,16 +76,4 @@ std::string smt_convt::dump_smt()
 void smt_convt::print_model()
 {
   solver_impl->print_model();
-}
-
-smt_convt::model_cache_scopet::model_cache_scopet(smt_convt &c)
-  : impl(*c.solver_impl)
-{
-  impl.l_get_cache_active = true;
-}
-
-smt_convt::model_cache_scopet::~model_cache_scopet()
-{
-  impl.l_get_cache.clear();
-  impl.l_get_cache_active = false;
 }

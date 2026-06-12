@@ -21,7 +21,7 @@ public:
   cvc5_convt(const namespacet &ns, const optionst &options);
   ~cvc5_convt() override = default;
 
-  smt_solver_baset::resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   bool get_bool(smt_astt a) override;

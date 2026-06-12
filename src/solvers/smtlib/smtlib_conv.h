@@ -180,7 +180,7 @@ public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
   ~smtlib_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;

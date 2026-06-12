@@ -19,7 +19,7 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/goto_symex.h>
-#include <solvers/smt/smt_api.h>
+#include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>

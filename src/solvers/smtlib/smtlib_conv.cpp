@@ -577,7 +577,7 @@ void smtlib_smt_ast::dump() const
   ctx_m->emit_proc.out_stream = tmp_proc;
 }
 
-smt_solver_baset::resultt smtlib_convt::dec_solve()
+smt_resultt smtlib_convt::dec_solve()
 {
   pre_solve();
 
@@ -593,7 +593,7 @@ smt_solver_baset::resultt smtlib_convt::dec_solve()
 
   // If we're just outputing to a file, this is where we terminate.
   if (!emit_proc)
-    return smt_solver_baset::P_SMTLIB;
+    return P_SMTLIB;
 
   // And read in the output
   smtlib_send_start_code = 1;
@@ -602,16 +602,16 @@ smt_solver_baset::resultt smtlib_convt::dec_solve()
   // This should generate on sexpr. See what it is.
   if (smtlib_output->token == TOK_KW_SAT)
   {
-    return smt_solver_baset::P_SATISFIABLE;
+    return P_SATISFIABLE;
   }
   if (smtlib_output->token == TOK_KW_UNSAT)
   {
-    return smt_solver_baset::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
   }
   else if (smtlib_output->token == TOK_KW_ERROR)
   {
     log_error("SMTLIB solver returned: \"{}\"", smtlib_output->data);
-    return smt_solver_baset::P_ERROR;
+    return P_ERROR;
   }
   else
   {

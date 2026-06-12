@@ -85,18 +85,18 @@ void yices_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
-smt_solver_baset::resultt yices_convt::dec_solve()
+smt_resultt yices_convt::dec_solve()
 {
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
   if (result == STATUS_SAT)
-    return smt_solver_baset::P_SATISFIABLE;
+    return P_SATISFIABLE;
 
   if (result == STATUS_UNSAT)
-    return smt_solver_baset::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
-  return smt_solver_baset::P_ERROR;
+  return P_ERROR;
 }
 
 const std::string yices_convt::solver_text()

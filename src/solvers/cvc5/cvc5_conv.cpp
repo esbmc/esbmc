@@ -30,7 +30,7 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   slv.setOption("produce-assertions", "true");
 }
 
-smt_solver_baset::resultt cvc5_convt::dec_solve()
+smt_resultt cvc5_convt::dec_solve()
 {
   pre_solve();
 

@@ -60,14 +60,10 @@ void build_goto_trace(
 {
   unsigned step_nr = 0;
 
-  // The solver model is fixed for the duration of trace construction
-  // (no further solve / context change happens until we return), so
-  // memoise l_get() results. Guard ASTs recur across thousands of SSA
-  // steps and each l_get bottoms out in an O(formula) solver
-  // get_value(); the cache collapses repeated queries to one per
-  // distinct AST.
-  smt_convt::model_cache_scopet model_cache(smt_conv);
-
+  // l_get() memoises against the current model internally (the cache is
+  // cleared on every solve / context change), so the thousands of repeated
+  // guard-AST queries this loop issues collapse to one solver call each
+  // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
     if (SSA_step.hidden && is_compact_trace)

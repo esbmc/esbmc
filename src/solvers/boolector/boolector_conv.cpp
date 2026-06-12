@@ -61,7 +61,7 @@ void boolector_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
-smt_solver_baset::resultt boolector_convt::dec_solve()
+smt_resultt boolector_convt::dec_solve()
 {
   pre_solve();
 

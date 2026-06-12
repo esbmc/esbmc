@@ -81,7 +81,7 @@ void z3_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
-smt_solver_baset::resultt z3_convt::dec_solve()
+smt_resultt z3_convt::dec_solve()
 {
   pre_solve();
 
@@ -91,9 +91,9 @@ smt_solver_baset::resultt z3_convt::dec_solve()
     return P_SATISFIABLE;
 
   if (result == z3::unsat)
-    return smt_solver_baset::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
-  return smt_solver_baset::P_ERROR;
+  return P_ERROR;
 }
 
 void z3_convt::assert_ast(smt_astt a)

@@ -83,7 +83,7 @@ void mathsat_convt::assert_ast(smt_astt a)
   msat_assert_formula(env, mast->a);
 }
 
-smt_solver_baset::resultt mathsat_convt::dec_solve()
+smt_resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
@@ -94,7 +94,7 @@ smt_solver_baset::resultt mathsat_convt::dec_solve()
   if (r == MSAT_UNSAT)
     return P_UNSATISFIABLE;
 
-  return smt_solver_baset::P_ERROR;
+  return P_ERROR;
 }
 
 bool mathsat_convt::get_bool(smt_astt a)

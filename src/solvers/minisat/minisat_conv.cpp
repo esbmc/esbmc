@@ -82,19 +82,19 @@ minisat_convt::~minisat_convt(void)
 {
 }
 
-smt_solver_baset::resultt minisat_convt::dec_solve()
+smt_resultt minisat_convt::dec_solve()
 {
   pre_solve();
 
   if (false_asserted)
     // Then the formula can never be satisfied.
-    return smt_solver_baset::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
   bool res = solver.solve();
   if (res)
-    return smt_solver_baset::P_SATISFIABLE;
+    return P_SATISFIABLE;
   else
-    return smt_solver_baset::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 }
 
 void minisat_convt::dump_bv(const bvt &bv) const

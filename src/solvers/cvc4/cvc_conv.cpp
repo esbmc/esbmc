@@ -31,7 +31,7 @@ cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
   smt.setOption("produce-assertions", true);
 }
 
-smt_solver_baset::resultt cvc_convt::dec_solve()
+smt_resultt cvc_convt::dec_solve()
 {
   pre_solve();
 

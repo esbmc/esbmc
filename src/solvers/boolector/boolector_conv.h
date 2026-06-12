@@ -30,7 +30,7 @@ public:
 
   void push_ctx() override;
   void pop_ctx() override;
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;

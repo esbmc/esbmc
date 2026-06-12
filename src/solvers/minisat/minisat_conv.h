@@ -33,7 +33,7 @@ public:
   ~minisat_convt();
 
   // Things definitely to be done by the solver:
-  virtual resultt dec_solve();
+  virtual smt_resultt dec_solve();
   virtual const std::string solver_text();
   virtual tvt l_get(const literalt &a);
   virtual literalt new_variable();

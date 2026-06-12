@@ -63,7 +63,7 @@ void bitwuzla_convt::pop_ctx()
   smt_solver_baset::pop_ctx();
 }
 
-smt_solver_baset::resultt bitwuzla_convt::dec_solve()
+smt_resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
 

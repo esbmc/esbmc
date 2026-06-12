@@ -36,7 +36,7 @@ public:
 public:
   void push_ctx() override;
   void pop_ctx() override;
-  smt_solver_baset::resultt dec_solve() override;
+  smt_resultt dec_solve() override;
 
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
