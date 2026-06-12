@@ -1,8 +1,6 @@
-#if __cplusplus >= 201103L
-#  define _ESBMC_NOEXCEPT noexcept
-#else
-#  define _ESBMC_NOEXCEPT throw()
-#endif
+// This operational model is compiled once, at ESBMC build time, by c2goto and
+// embedded into the prebuilt goto library; it is never re-parsed under a user's
+// --std, so noexcept (C++11+) is always available here — no portability macro.
 
 // Per-thread count of exceptions thrown/rethrown but not yet entered into their
 // handler, defined in library/exception_globals.c and maintained by the GOTO
@@ -53,7 +51,7 @@ namespace std
 {
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
-void terminate() _ESBMC_NOEXCEPT;
+void terminate() noexcept;
 
 } // namespace std
 
@@ -224,7 +222,7 @@ __ESBMC_HIDE:;
 
 namespace std
 {
-terminate_handler set_terminate(terminate_handler f) _ESBMC_NOEXCEPT
+terminate_handler set_terminate(terminate_handler f) noexcept
 {
 __ESBMC_HIDE:;
   terminate_handler &slot =
@@ -235,7 +233,7 @@ __ESBMC_HIDE:;
   return old;
 }
 
-terminate_handler get_terminate() _ESBMC_NOEXCEPT
+terminate_handler get_terminate() noexcept
 {
 __ESBMC_HIDE:;
   terminate_handler handler =
@@ -244,7 +242,7 @@ __ESBMC_HIDE:;
                  : __ESBMC_exception_detail::__ESBMC_default_terminate_handler;
 }
 
-void terminate() _ESBMC_NOEXCEPT
+void terminate() noexcept
 {
 __ESBMC_HIDE:;
   terminate_handler handler =
@@ -267,7 +265,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(0);
 }
 
-unexpected_handler set_unexpected(unexpected_handler f) _ESBMC_NOEXCEPT
+unexpected_handler set_unexpected(unexpected_handler f) noexcept
 {
 __ESBMC_HIDE:;
   unexpected_handler &slot =
@@ -278,7 +276,7 @@ __ESBMC_HIDE:;
   return old;
 }
 
-unexpected_handler get_unexpected() _ESBMC_NOEXCEPT
+unexpected_handler get_unexpected() noexcept
 {
 __ESBMC_HIDE:;
   unexpected_handler handler =
@@ -308,13 +306,13 @@ __ESBMC_HIDE:;
 // on-demand-linking gap that the set_unexpected/unexpected models hit. Providing
 // the entry points always is harmless: conformant code at the wrong standard
 // cannot name the form the standard removed, so it stays dead.
-bool uncaught_exception() _ESBMC_NOEXCEPT
+bool uncaught_exception() noexcept
 {
 __ESBMC_HIDE:;
   return __ESBMC_exc_uncaught_count != 0;
 }
 
-int uncaught_exceptions() _ESBMC_NOEXCEPT
+int uncaught_exceptions() noexcept
 {
 __ESBMC_HIDE:;
   return (int)__ESBMC_exc_uncaught_count;
