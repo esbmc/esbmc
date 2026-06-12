@@ -1,6 +1,7 @@
 #include <goto-symex/ctest.h>
 #include <goto-symex/slice.h>
 #include <ac_config.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/prefix.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>

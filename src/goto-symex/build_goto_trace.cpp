@@ -1,6 +1,7 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
+#include <solvers/smt/smt_conv.h>
 
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
