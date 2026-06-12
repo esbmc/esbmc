@@ -305,3 +305,51 @@ Compare against the working `fn.py` `n1` case. The fix is then either (a) resolv
 completed `tag-class` (build-ordering), or (b) make the new_object allocation robust to a
 symbol-typed subtype. Step B (typing) is correct and committed (`873ef78ad4`); this allocation fix
 is the true content of the next unit.
+
+---
+
+## 13. Step C landed (2026-06-12) — None-on-Class* + dunder dispatch through pointers
+
+The §12 "too-small allocation" was a symptom, and the actual root cause was upstream in the
+**frontend typing**, not the symex allocation. `none_type()` is `pointer_typet(bool_typet())`
+(`src/util/python_types.cpp`), i.e. **pointer-to-bool**. In `handle_assignment_type_adjustments`
+(`converter_stmt.cpp`), the `rhs.type() == none_type()` branch *unconditionally* retyped the
+lvalue symbol to `none_type()`. So `x: Optional[Box] = None` overwrote `x`'s freshly-computed
+`Box*` type (from step B) with `pointer(bool)`. The later `x = Box(7)` then drove `new_object`
+with `base = bool`, allocating a bool-sized object — exactly the §12 counterexample. Proof:
+`x: Optional[Box]` **without** `= None` allocated a correct `Box` (`base = symbol → struct`); adding
+`= None` flipped `base` to `bool`.
+
+**Step C fix.** In that branch, if the lvalue is already a user-class reference
+(`is_user_class_pointer`), keep its `Class*` type and assign a `typecast(None, Class*)` typed NULL
+instead of retyping to pointer-bool. Non-class targets keep the legacy retype.
+
+**Two further migration regressions, same root family.** With instances now `Class*` pointers,
+two dispatch sites still assumed by-value structs:
+- `dispatch_dunder_operator` (`converter_dunder.cpp`) checked `lhs_type.is_struct()` and passed
+  `gen_address_of(operand)`. For a `Class*` operand it skipped dispatch (no struct) and, when it
+  did fire, produced `Class**`. Fix: `resolve_operand_type` follows a `Class*` to its pointee
+  struct; a new `dunder_ref_arg` passes the pointer through (a by-value struct still gets its
+  address taken). Restored dataclass `a == b` (synthesised `__eq__`).
+- The `__bool__` truthiness site (`get_conditional_stm`) passed `gen_address_of(bool_object)`,
+  yielding `Class**` for a migrated instance. Fix: pass the pointer directly when it is one.
+  Restored `if obj:` (`dunder-bool-condition`).
+
+**Hardening.** Both new paths gate on `is_user_class_pointer` — a pointer whose pointee struct tag
+resolves to a real user class via `json_utils::is_class`. `is_excluded_struct_tag` additionally
+excludes the `tag-struct __ESBMC_Py...` model structs (list/object/slice), which under the
+migration are *also* pointer-to-struct but own their own operator paths. Without this, a `list`
+lvalue/operand would wrongly enter the class-pointer branches (caught in code review).
+
+**Status:** committed `11f74327c9`. Three regressions cleared: `github_3976_optional_attr_access`,
+`dataclass-edge-equality_true`, `dunder-bool-condition` (all FAIL at the pre-branch baseline, PASS
+now; they are the Phase-2 contract regressions). `dunder-bool-condition-fail` and the `github_4796`
+handle-eq canaries hold. A class/dunder/dataclass/object/optional family sweep shows **zero new
+failures** vs. the step-B baseline; the remaining family failures (threading_*, `inheritance*`,
+`class-attributes-scoped`) are **pre-existing** migration breakage (verified by re-running them at
+the baseline binary), not introduced here.
+
+**Next (still open in the migration):** the class-typed-**parameter** path — e.g.
+`def f(obj: MyClass) -> MyClass` (`class-attributes-scoped`, `inheritance2`) — still hangs/fails
+under the pointer model. That is the next scoped unit (param/return typing + super().__init__
+chains), independent of the None/Optional typing now closed by step C.
