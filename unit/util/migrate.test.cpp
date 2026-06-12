@@ -164,6 +164,35 @@ TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
   require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
 }
 
+TEST_CASE(
+  "migrate flattens a single-decl labeled decl-block",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: `lbl: char *s = p;` is legacy label(decl-block(decl)). The
+  // decl-block must NOT migrate to a code_block -- code_block back-migrates to
+  // code("block"), whose scope boundary makes convert_block emit a premature
+  // DEAD for the declared variable right after its init (killing it before its
+  // uses). A decl-block introduces no scope (convert_decl_block), so a
+  // single-decl labeled decl-block flattens to the bare decl: the label's body
+  // round-trips as a code_decl, deferring the DEAD to the enclosing scope.
+  use_test_ns();
+  typet ct = migrate_type_back(get_int_type(32));
+
+  codet decl("decl");
+  decl.copy_to_operands(symbol_exprt("x", ct), from_integer(7, ct));
+  codet declblock("decl-block");
+  declblock.copy_to_operands(decl);
+  codet label("label");
+  label.set("label", "lbl");
+  label.copy_to_operands(declblock);
+
+  expr2tc m;
+  migrate_expr(label, m);
+  REQUIRE(is_code_label2t(m));
+  // The labeled body is the bare decl, not a scope-introducing block.
+  REQUIRE(is_code_decl2t(to_code_label2t(m).code));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
