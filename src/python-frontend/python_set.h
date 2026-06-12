@@ -80,10 +80,10 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Emit the IR for a binary set method (issubset / update /
-   *        symmetric_difference) called on @p self with @p other.
+   * @brief Emit the IR for a binary set method (issubset / issuperset /
+   *        update / symmetric_difference) called on @p self with @p other.
    *
-   * - issubset returns a bool expression.
+   * - issubset / issuperset return a bool expression.
    * - update mutates @p self in place and returns nil.
    * - symmetric_difference returns a fresh set expression.
    *
@@ -92,6 +92,21 @@ public:
    */
   exprt build_set_method_call(
     const symbolt &self,
+    const exprt &other,
+    const nlohmann::json &element,
+    const std::string &method_name);
+
+  /**
+   * @brief Emit the IR for issubset / issuperset over two list-typed
+   *        expressions and return the bool result expression.
+   *
+   * Set materialization is unnecessary for these relations (deduplication
+   * cannot change a subset/superset verdict), so callers may pass any list
+   * expression as @p self — e.g. the iterable argument of a
+   * `set(<iterable>).issuperset(...)` receiver — without building the set.
+   */
+  exprt build_set_relation_call(
+    const exprt &self,
     const exprt &other,
     const nlohmann::json &element,
     const std::string &method_name);
