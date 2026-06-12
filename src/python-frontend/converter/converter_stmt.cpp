@@ -66,20 +66,27 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
          (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
 }
 
-// RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
-// top-level (module/imported-module) statement; anything deeper is nested in a
-// function or a conditionally-executed body, where straight-line retyping is
-// unsound (see #4770/#4774).
+// RAII bump of the get_block() nesting depth, and optionally the function-body
+// depth. Depth 1 is an unconditional top-level (module) statement; anything
+// deeper is nested in a function or a conditional body. Straight-line retyping
+// (#4770/#4774) is sound on the unconditional spine (module body plus enclosing
+// function bodies): exactly block_nesting_ == function_body_depth_ + 1.
 struct block_nesting_guard
 {
   unsigned &depth;
-  explicit block_nesting_guard(unsigned &d) : depth(d)
+  unsigned *fb_depth;
+  explicit block_nesting_guard(unsigned &d, unsigned *fb = nullptr)
+    : depth(d), fb_depth(fb)
   {
     ++depth;
+    if (fb_depth)
+      ++*fb_depth;
   }
   ~block_nesting_guard()
   {
     --depth;
+    if (fb_depth)
+      --*fb_depth;
   }
 };
 } // namespace
@@ -2124,20 +2131,21 @@ void python_converter::get_var_assign(
     // Straight-line dynamic retyping (#4770, #4774). A variable whose current
     // static type is a numeric scalar is being reassigned a string value (or
     // vice versa). The GOTO IR binds one type per symbol, so the new value
-    // cannot be stored in the old slot. At block_nesting_ == 1 (an
-    // unconditional top-level statement) there is no control-flow join that
-    // could leave the runtime type ambiguous, so we model the rebinding
-    // soundly: mint a fresh symbol of the new type, declare it, and redirect
-    // later loads of the name to it via retype_aliases_. We then fall through
-    // to the normal assignment path with the new, correctly typed symbol,
-    // reusing its function-call/type-adjustment handling. Deeper statements
-    // (function bodies, conditional bodies) are left to the existing fallback.
-    // Class bodies are also converted at nesting 1 (via python_class_builder)
-    // but their attribute symbols are managed separately, so exclude them: only
-    // module/imported-module top-level statements qualify.
+    // cannot be stored in the old slot. On the unconditional spine (the module
+    // body plus the chain of enclosing function bodies, i.e. block_nesting_ ==
+    // function_body_depth_ + 1) there is no control-flow join that could leave
+    // the runtime type ambiguous, so we model the rebinding soundly: mint a
+    // fresh symbol of the new type, declare it, and redirect later loads of the
+    // name to it via retype_aliases_ (keyed by the function-qualified symbol
+    // id, so aliases never leak between functions). We then fall through to the
+    // normal assignment path with the new, correctly typed symbol. Statements
+    // inside any if/while/for/try body add a block_nesting_ frame without a
+    // function_body_depth_ frame, so the equality fails and they fall to the
+    // existing fallback. Class bodies are excluded via current_class_name_:
+    // their attribute symbols are managed separately by python_class_builder.
     if (
-      block_nesting_ == 1 && current_class_name_.empty() && lhs_symbol &&
-      lhs.is_symbol())
+      block_nesting_ == function_body_depth_ + 1 &&
+      current_class_name_.empty() && lhs_symbol && lhs.is_symbol())
     {
       // The LHS lookup above returns the ORIGINAL symbol. If this variable was
       // already retyped, its live value lives in the alias target; resolve to
@@ -3445,13 +3453,17 @@ void python_converter::get_return_statements(
   }
 }
 
-exprt python_converter::get_block(const nlohmann::json &ast_block)
+exprt python_converter::get_block(
+  const nlohmann::json &ast_block,
+  bool is_function_body)
 {
-  // Track block nesting so straight-line retyping (#4770/#4774) only fires for
-  // unconditional top-level statements (depth 1). Every nested body -- function
-  // bodies, if/while/for bodies, try/except handlers -- is converted through a
-  // deeper get_block(), so this single guard covers them all.
-  block_nesting_guard nesting_guard(block_nesting_);
+  // Track block nesting (and, for a function body, function-body depth) so
+  // straight-line retyping (#4770/#4774) fires on the unconditional spine (the
+  // module body plus enclosing function bodies, block_nesting_ ==
+  // function_body_depth_ + 1) but not inside any if/while/for/try body, which
+  // adds a block_nesting_ frame without a function_body_depth_ frame.
+  block_nesting_guard nesting_guard(
+    block_nesting_, is_function_body ? &function_body_depth_ : nullptr);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so

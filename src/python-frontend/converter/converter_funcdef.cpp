@@ -1303,8 +1303,11 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body
-  exprt function_body = get_block(function_node["body"]);
+  // Process function body. Mark it as a function body (not a conditional one)
+  // so straight-line retyping (#4770/#4774) is permitted on the function's own
+  // unconditional statements — see the retype gate in get_var_assign.
+  exprt function_body =
+    get_block(function_node["body"], /*is_function_body=*/true);
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;

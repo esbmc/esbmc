@@ -428,7 +428,9 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt get_block(const nlohmann::json &ast_block);
+  exprt get_block(
+    const nlohmann::json &ast_block,
+    bool is_function_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
@@ -1119,11 +1121,20 @@ private:
 
   /// Nesting depth of get_block() invocations. The module/imported-module body
   /// is depth 1; every nested body (function, if/while/for, try/except) is
-  /// deeper because those bodies are converted through get_block() too. Gates
-  /// straight-line retyping to depth 1 only: a retype inside any nested or
-  /// conditionally-executed body cannot be modelled by a single static type,
-  /// so it is left to the existing fallback instead of being renamed.
+  /// deeper because those bodies are converted through get_block() too.
   unsigned block_nesting_ = 0;
+
+  /// How many of the enclosing get_block() frames are genuine function/method
+  /// bodies (bumped only when get_block is called for a function body). The
+  /// "unconditional spine" — the module body plus the chain of function bodies
+  /// containing the current statement — is exactly the frames where straight-
+  /// line retyping (#4770/#4774) is sound: there is no control-flow join that
+  /// could leave the runtime type ambiguous. That spine is precisely
+  /// block_nesting_ == function_body_depth_ + 1 (the +1 is the module body);
+  /// any if/while/for/try body adds a block_nesting_ frame WITHOUT a
+  /// function_body_depth_ frame, so the equality fails and retyping is refused.
+  /// Fail-safe: an unrecognised block kind is treated as conditional.
+  unsigned function_body_depth_ = 0;
 
   function_call_cache function_call_cache_;
 
