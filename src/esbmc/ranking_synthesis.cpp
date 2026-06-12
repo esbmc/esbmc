@@ -3,7 +3,7 @@
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <solvers/solve.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <irep2/irep2_expr.h>
 #include <langapi/language_util.h>
 #include <util/c_types.h>
@@ -2086,7 +2086,7 @@ expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body)
 /// discharged.
 bool is_unsat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
-  std::unique_ptr<smt_solver_baset> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
   return solver->dec_solve() == P_UNSATISFIABLE;
 }

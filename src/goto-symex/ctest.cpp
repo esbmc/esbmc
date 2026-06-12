@@ -1,7 +1,7 @@
 #include <goto-symex/ctest.h>
 #include <goto-symex/slice.h>
 #include <ac_config.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/prefix.h>
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
@@ -89,7 +89,7 @@ std::string ctest_generator::clean_variable_name(const std::string &name) const
 
 std::string ctest_generator::extract_function_name(
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv) const
+  smt_convt &smt_conv) const
 {
   // Try to extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
@@ -303,7 +303,7 @@ void ctest_generator::clear()
 
 void ctest_generator::collect(
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv,
+  smt_convt &smt_conv,
   const namespacet &ns)
 {
   (void)ns;
@@ -606,7 +606,7 @@ void ctest_generator::generate() const
 void ctest_generator::generate_single(
   const std::string &output_dir,
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv,
+  smt_convt &smt_conv,
   const namespacet &ns)
 {
   (void)output_dir;

@@ -5,7 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -1140,11 +1140,11 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // into nested structs, unions and arrays.
 //
 // The expected type comes from the nondet symbol; `value` is what
-// smt_solver_baset::get() returned for `root_expr` and may be nil at any
+// smt_convt::get() returned for `root_expr` and may be nil at any
 // level. Some backends (notably Z3) return outer aggregates whose
 // nested struct/array fields are not expanded — e.g. `{ .c=N,
 // .i=member(sym).i }` for a struct whose `.i` member is itself a
-// struct, because smt_solver_baset::get's member-id case skips the tuple
+// struct, because smt_convt::get's member-id case skips the tuple
 // re-query when the result is struct-typed. When `value` isn't the
 // matching constant_* for an aggregate type, we re-resolve it via
 // get_by_ast on the root expression — that AST-based path goes through
@@ -1158,7 +1158,7 @@ static expr2tc zero_fill_aggregate(
   const type2tc &expected_type,
   const expr2tc &value,
   const expr2tc &root_expr,
-  smt_solver_baset &smt_conv)
+  smt_convt &smt_conv)
 {
   if (is_struct_type(expected_type))
   {
@@ -1219,7 +1219,7 @@ static expr2tc zero_fill_aggregate(
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
-      // For concrete-size arrays the SMT layer (smt_solver_baset::get_array) and
+      // For concrete-size arrays the SMT layer (smt_convt::get_array) and
       // frontend migrators populate one element per declared index, so
       // datatype_members.size() must match array_size. A shortfall is an
       // upstream invariant violation and would silently truncate the
@@ -1255,9 +1255,8 @@ static expr2tc zero_fill_aggregate(
 }
 
 // Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value> collect_nondet_values(
-  const symex_target_equationt &target,
-  smt_solver_baset &smt_conv)
+std::vector<collected_nondet_value>
+collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
@@ -1376,7 +1375,7 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
 void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv)
+  smt_convt &smt_conv)
 {
   /* Unfortunately, TestCov rely on checking for '<!DOCTYPE test' and as Boost
    * Property Tree is not a proper XML generator... it does not support this */

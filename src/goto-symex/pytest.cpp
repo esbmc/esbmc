@@ -3,7 +3,7 @@
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/config.h>
@@ -100,7 +100,7 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
 
 std::string pytest_generator::extract_function_name(
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv) const
+  smt_convt &smt_conv) const
 {
   // List of functions to skip (C library and ESBMC internal functions)
   static const std::vector<std::string> skip_functions = {
@@ -590,7 +590,7 @@ void pytest_generator::clear()
 
 void pytest_generator::collect(
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv)
+  smt_convt &smt_conv)
 {
   std::vector<std::string> current_params;
   std::vector<std::string> current_param_names;
@@ -1093,7 +1093,7 @@ bool pytest_generator::has_tests() const
 void pytest_generator::generate_single(
   const std::string &file_name,
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv,
+  smt_convt &smt_conv,
   const namespacet &ns)
 {
   (void)ns; // Suppress unused parameter warning

@@ -4,6 +4,7 @@
 #include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
@@ -175,7 +176,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   abort();
 }
 
-smt_solver_baset *create_solver(
+smt_convt *create_solver(
   std::string solver_name,
   const namespacet &ns,
   const optionst &options)
@@ -222,5 +223,5 @@ smt_solver_baset *create_solver(
     ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
-  return ctx;
+  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
 }

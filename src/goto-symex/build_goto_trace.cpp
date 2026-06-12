@@ -1,9 +1,9 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
-expr2tc build_lhs(smt_solver_baset &smt_conv, const expr2tc &lhs)
+expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
   if (is_nil_expr(lhs))
     return lhs;
@@ -41,7 +41,7 @@ expr2tc build_lhs(smt_solver_baset &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(smt_solver_baset &smt_conv, const expr2tc &rhs)
+expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 {
   if (is_nil_expr(rhs) || is_constant_expr(rhs))
     return rhs;
@@ -54,7 +54,7 @@ expr2tc build_rhs(smt_solver_baset &smt_conv, const expr2tc &rhs)
 
 void build_goto_trace(
   const symex_target_equationt &target,
-  smt_solver_baset &smt_conv,
+  smt_convt &smt_conv,
   goto_tracet &goto_trace,
   const bool &is_compact_trace)
 {
@@ -66,7 +66,7 @@ void build_goto_trace(
   // steps and each l_get bottoms out in an O(formula) solver
   // get_value(); the cache collapses repeated queries to one per
   // distinct AST.
-  smt_solver_baset::model_cache_scopet model_cache(smt_conv);
+  smt_convt::model_cache_scopet model_cache(smt_conv);
 
   for (auto const &SSA_step : target.SSA_steps)
   {

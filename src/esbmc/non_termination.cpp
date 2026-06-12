@@ -3,7 +3,7 @@
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <solvers/solve.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <util/c_types.h>
@@ -25,7 +25,7 @@ namespace
 /// conservative on the wrong-false side.
 bool is_sat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
-  std::unique_ptr<smt_solver_baset> solver(create_solver("", ns, options));
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
   return solver->dec_solve() == P_SATISFIABLE;
 }

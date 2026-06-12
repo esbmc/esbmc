@@ -8,7 +8,7 @@
 #include <vector>
 #include <fstream>
 
-class smt_solver_baset;
+class smt_convt;
 
 /// Generates pytest test-cases for Python programs
 class pytest_generator
@@ -25,7 +25,7 @@ private:
   /// Extract function name from SSA steps
   std::string extract_function_name(
     const symex_target_equationt &target,
-    smt_solver_baset &smt_conv) const;
+    smt_convt &smt_conv) const;
 
   /// Convert C-style float string to Python format
   std::string convert_float_to_python(const std::string &c_float) const;
@@ -83,8 +83,7 @@ public:
   void clear();
 
   /// Collect test data from a counterexample (called for each CEX in coverage mode)
-  void
-  collect(const symex_target_equationt &target, smt_solver_baset &smt_conv);
+  void collect(const symex_target_equationt &target, smt_convt &smt_conv);
 
   /// Generate pytest file from collected data (called at end of coverage mode)
   void generate(const std::string &file_name) const;
@@ -93,7 +92,7 @@ public:
   void generate_single(
     const std::string &file_name,
     const symex_target_equationt &target,
-    smt_solver_baset &smt_conv,
+    smt_convt &smt_conv,
     const namespacet &ns);
 
   /// Check if any test cases have been collected

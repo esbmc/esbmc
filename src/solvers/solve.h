@@ -8,6 +8,7 @@
 
 class array_iface;
 class fp_convt;
+class smt_convt;
 class smt_solver_baset;
 class tuple_iface;
 
@@ -18,7 +19,7 @@ typedef smt_solver_baset *(solver_creator)(
   array_iface **array_api,
   fp_convt **fp_api);
 
-smt_solver_baset *create_solver(
+smt_convt *create_solver(
   std::string solver_name,
   const namespacet &ns,
   const optionst &options);
