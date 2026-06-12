@@ -496,3 +496,40 @@ pre-existing threading failures remain.
 **Remaining open (pre-existing):** augmented attribute assignment
 `c.value += by` through a `Class*` parameter crashes in Converting; Thread-
 subclass / module-scope construction (`threading_thread_subclass_*`).
+
+---
+
+## 18. Augmented attr assign via Class* param — diagnosed, fix scoped (2026-06-12)
+
+`c.value += by` where `c: C` is a parameter and `value` is a **class variable**
+(`class C: value: int = 0`) aborts in symex with `type2t::symbolic_type_excp`
+(`get_width()` on an `empty_type2t` during the WRITE-dereference of `c->value`).
+
+Root cause: a class variable is registered only as a class-level symbol
+(`python_class_builder::get_members`), **not** as a struct component. So:
+- The instance struct allocated by `__ESBMC_new_object` has no `value` field.
+- A plain *write* `c.value = …` adds the component on the fly (converter_expr
+  LHS path) and then dereferences `c->value` — but the already-allocated
+  dynamic object's type still lacks the field, so the write deref hits an empty
+  pointee type and aborts.
+- A *read* `c.value` through the param falls to the class-level symbol (bare
+  `value`), returning the wrong value (not the instance member).
+
+Isolation: with `value` set in `__init__` (a real instance attribute, hence a
+component) every case works. Only class variables are affected. A plain write
+through a param works; a read or read-modify-write (`+=`) does not.
+
+**Proper fix (scoped, not yet landed):** make an annotated class variable a
+per-instance struct **component** (so the allocated object has the field — this
+alone removes the crash and fixes read-after-write), **and** have the generated
+constructor **default-initialize** that component from the class-variable's
+default (`self.value = 0`). The component without the default-init is a net
+regression: a fresh-instance default read through a param (`get(c) -> return
+c.value` with `value: int = 0`) goes from SUCCESSFUL (class-level fallback) to
+FAILED (uninitialized component). A prototype adding the component (enum-guarded)
+in `get_members` confirmed: crash gone, read-after-write fixed, class/object/
+dataclass/enum ctest subset clean — but `defparam` regressed for lack of ctor
+init. The remaining work is synthesising `self.<attr> = <default>` initialisers
+in `gen_ctor` (and, for classes with a user `__init__`, ensuring class-var
+components are likewise defaulted) — a non-trivial change to class construction
+deferred rather than shipped half-done.
