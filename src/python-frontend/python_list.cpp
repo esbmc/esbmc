@@ -2081,6 +2081,75 @@ void python_list::handle_slice_assignment(
       converter_.get_type_handler().type_to_string(list_type)),
     config.ansi_c.address_width));
 
+  // Statically-known element byte size, passed to the model so its per-element
+  // copy uses a compile-time-constant size and takes __ESBMC_copy_value's
+  // branch-free fast path, instead of reading the symbolic-index field
+  // src->items[k].size (which forces memcpy's per-byte loop to unwind per
+  // element — the dominant cost on large slice assignments). Emitted ONLY for
+  // an unambiguous fixed-width scalar element type; 0 otherwise, which makes
+  // the model fall back to the per-element o->size read (exact prior behaviour,
+  // so a missing/ambiguous type can never produce a wrong copy length).
+  // Derive the element byte size from the RHS source list's elements so the
+  // model copies with a compile-time-constant size (fast path) instead of the
+  // symbolic-index field read src->items[k].size. We read the *converted* RHS
+  // element type, which is the actual data being stored, so the size is always
+  // correct. Only a plain fixed-width scalar (bitvector) is emitted; anything
+  // else (pointers, structs, strings, nested lists, non-literal/heterogeneous
+  // RHS) keeps elem_size 0, making the model fall back to the per-element
+  // o->size read — exact prior behaviour, so a wrong length is impossible.
+  auto scalar_width = [](const typet &t) -> size_t {
+    if (
+      (t.id() == "signedbv" || t.id() == "unsignedbv" || t.id() == "floatbv" ||
+       t.id() == "fixedbv") &&
+      !t.width().empty())
+      return std::stoull(t.width().as_string(), nullptr, 10) / 8;
+    return 0;
+  };
+  size_t elem_size_bytes = 0;
+  if (
+    value_node.contains("_type") && value_node["_type"] == "List" &&
+    value_node.contains("elts") && value_node["elts"].is_array() &&
+    !value_node["elts"].empty())
+  {
+    // RHS is a list literal: size from its (uniform) element types.
+    bool uniform = true;
+    size_t w = 0;
+    for (const auto &elt : value_node["elts"])
+    {
+      size_t ew = 0;
+      try
+      {
+        ew = scalar_width(converter_.get_expr(elt).type());
+      }
+      catch (...)
+      {
+        uniform = false;
+        break;
+      }
+      if (ew == 0 || (w != 0 && ew != w))
+      {
+        uniform = false;
+        break;
+      }
+      w = ew;
+    }
+    if (uniform)
+      elem_size_bytes = w;
+  }
+  else if (
+    value_node.contains("_type") && value_node["_type"] == "Name" &&
+    value_node.contains("id"))
+  {
+    // RHS is a list variable (includes self-assignment l[...] = l): size from
+    // its declared element type.
+    const typet et = get_list_element_type(value_node["id"].get<std::string>());
+    if (!et.is_nil())
+      elem_size_bytes = scalar_width(et);
+  }
+  constant_exprt elem_size(size_type());
+  elem_size.set_value(
+    integer2binary(BigInt(elem_size_bytes), config.ansi_c.address_width));
+
   exprt call = build_call_expr(
     *fn,
     bool_type(),
@@ -2091,7 +2160,8 @@ void python_list::handle_slice_assignment(
      from_integer(has_upper ? 1 : 0, int_type()),
      from_integer(step_val, i64),
      rhs.type().is_pointer() ? rhs : build_address_of(rhs),
-     list_type_id});
+     list_type_id,
+     elem_size});
   call.location() = location;
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
@@ -3384,6 +3454,32 @@ exprt python_list::compare(
   const size_t float_type_id =
     float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
 
+  // Statically-known element byte size for the primitive comparison, so the
+  // model's __ESBMC_values_equal takes its branch-free fast path instead of
+  // memcmp's symbolic-size byte loop (the dominant cost when comparing large
+  // lists, e.g. `assert l == [...]`). Emitted only when both operands' first
+  // element is the same fixed-width scalar; 0 otherwise, which makes the model
+  // fall back to the per-element a->size read (exact prior behaviour).
+  size_t eq_elem_size_bytes = 0;
+  {
+    auto scalar_width = [](const typet &t) -> size_t {
+      if (
+        (t.id() == "signedbv" || t.id() == "unsignedbv" ||
+         t.id() == "floatbv" || t.id() == "fixedbv") &&
+        !t.width().empty())
+        return std::stoull(t.width().as_string(), nullptr, 10) / 8;
+      return 0;
+    };
+    const typet lt =
+      get_list_element_type(converted_l1.identifier().as_string(), 0);
+    const typet rt =
+      get_list_element_type(converted_l2.identifier().as_string(), 0);
+    size_t lw = lt.is_nil() ? 0 : scalar_width(lt);
+    size_t rw = rt.is_nil() ? 0 : scalar_width(rt);
+    if (lw != 0 && lw == rw)
+      eq_elem_size_bytes = lw;
+  }
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
@@ -3394,6 +3490,8 @@ exprt python_list::compare(
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.arguments().push_back(
     from_integer(float_type_id, size_type())); // float_type_id
+  list_eq_func_call.arguments().push_back(
+    from_integer(eq_elem_size_bytes, size_type())); // elem_size
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
