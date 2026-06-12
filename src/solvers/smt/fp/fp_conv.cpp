@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
 static smt_astt extract_exponent(smt_solver_baset *ctx, smt_astt fp)
 {

@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>

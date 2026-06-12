@@ -1,5 +1,5 @@
 #include "irep2/irep2_expr.h"
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>

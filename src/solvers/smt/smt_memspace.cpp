@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 

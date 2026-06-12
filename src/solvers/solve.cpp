@@ -4,6 +4,7 @@
 #include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 

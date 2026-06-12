@@ -6,8 +6,9 @@ add_library(smt
   array_conv.cpp
   smt_byteops.cpp
   smt_casts.cpp
+  smt_conv.cpp
   smt_solver.cpp
-  # IEEE754 constants/semantics and FP predicates extracted from smt_conv.cpp
+  # IEEE754 constants/semantics and FP predicates extracted from smt_solver.cpp
   smt_fp_conv.cpp
   smt_memspace.cpp
   smt_overflow.cpp

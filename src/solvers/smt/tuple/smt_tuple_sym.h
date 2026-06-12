@@ -1,7 +1,7 @@
 #ifndef SOLVERS_SMT_TUPLE_SMT_TUPLE_SYM_H_
 #define SOLVERS_SMT_TUPLE_SMT_TUPLE_SYM_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/namespace.h>
 
 class tuple_sym_smt_ast;

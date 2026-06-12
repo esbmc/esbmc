@@ -4,7 +4,7 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>

@@ -1,7 +1,7 @@
 #ifndef SOLVERS_SMT_TUPLE_SMT_TUPLE_NODE_AST_H_
 #define SOLVERS_SMT_TUPLE_SMT_TUPLE_NODE_AST_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
 class tuple_node_smt_ast;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;

@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
