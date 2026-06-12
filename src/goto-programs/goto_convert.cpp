@@ -313,8 +313,20 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
-void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
+  // The thrown operand may still carry side effects — most importantly a
+  // `temporary_object` that constructs the thrown value — when convert_throw is
+  // reached through the code-statement path (a codet("cpp-throw"), as produced
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
+  // in remove_sideeffects, which lowers operands before dispatching here. Lower
+  // them now so the thrown value is a plain symbol, matching the legacy flag-off
+  // GOTO; otherwise the constructor never runs and the handler reads an
+  // unconstructed object. A no-op when the operand is already side-effect-free.
+  exprt expr = expr_in;
+  Forall_operands (it, expr)
+    remove_sideeffects(*it, dest);
+
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
   // construction order ([except.ctor]). throw_stack_size is the destructor-stack
