@@ -41,9 +41,14 @@ while IFS= read -r desc; do
   [ -z "$src" ] && continue
   case "$flags" in *--irep2-bodies*) continue;; esac   # skip tests already pinning the flag
   n=$((n+1))
-  out_off=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" $src $flags 2>&1)
+  # Split source and flags into words deliberately: $flags is a flag list that
+  # must reach esbmc as separate arguments. Arrays keep that splitting explicit
+  # (and shellcheck-clean) instead of relying on unquoted expansion.
+  read -ra src_arr <<<"$src"
+  read -ra flag_arr <<<"$flags"
+  out_off=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" 2>&1)
   rc_off=$?
-  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" $src $flags --irep2-bodies 2>&1)
+  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" --irep2-bodies 2>&1)
   rc_on=$?
   v_off=$(verdict "$out_off"); v_on=$(verdict "$out_on")
   # ignore timeouts (rc 124) on either side — not a parity signal
@@ -52,5 +57,6 @@ while IFS= read -r desc; do
     diverged=$((diverged+1))
     echo "DIVERGE  off=$v_off  on=$v_on  rc_on=$rc_on  $tdir"
   fi
-done < <(find "$DIR" -name test.desc | { [ "${PARITY_SHUF:-0}" = 1 ] && shuf || sort; })
+done < <(find "$DIR" -name test.desc |
+  { if [ "${PARITY_SHUF:-0}" = 1 ]; then shuf; else sort; fi; })
 echo "--- swept $n tests in $DIR; $diverged divergence(s) ---"
