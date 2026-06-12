@@ -355,6 +355,35 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "migrate preserves #c_sizeof_type on folded sizeof constants",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: clang folds malloc(sizeof(T)) to a bare size_t constant whose
+  // only record of the element type T is the #c_sizeof_type attribute.
+  // constant_int2t carries a non-reflected sizeof_type so T survives the
+  // --irep2-bodies body round-trip; without it get_alloc_type falls back to
+  // char and the allocated object degrades to a byte blob. Equality ignores
+  // sizeof_type, so assert on it explicitly rather than via the round-trip
+  // helper.
+  use_test_ns();
+
+  exprt sz = from_integer(8, size_type());
+  sz.c_sizeof_type(symbol_typet("tag-s"));
+  expr2tc m;
+  migrate_expr(sz, m);
+  REQUIRE(is_constant_int2t(m));
+  REQUIRE(!is_nil_type(to_constant_int2t(m).sizeof_type));
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.c_sizeof_type().is_not_nil());
+  REQUIRE(back.c_sizeof_type().id() == "symbol");
+
+  // A plain integer constant carries no sizeof type and must not gain one.
+  expr2tc plain = constant_int2tc(get_uint_type(32), BigInt(8));
+  REQUIRE(is_nil_type(to_constant_int2t(plain).sizeof_type));
+  REQUIRE(migrate_expr_back(plain).c_sizeof_type().is_nil());
+}
+
+TEST_CASE(
   "migrate expr round-trips for pointer_capability",
   "[migrate][b2-vtrack]")
 {
