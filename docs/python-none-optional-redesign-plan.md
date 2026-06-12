@@ -476,3 +476,23 @@ No new failures across the control-flow / function / str / class family sweep.
 - Augmented attribute assignment `c.value += by` through a `Class*` parameter
   crashes in Converting (plain `c.value = v` is fine).
 - Thread-subclass / module-scope construction (`threading_thread_subclass_*`).
+
+---
+
+## 17. Unary-dunder dispatch on Class* instances — FIXED (2026-06-12)
+
+`str(obj)`/`abs(obj)`/`-obj`/etc. on a migrated `Class*` instance now dispatch
+the user dunder (commit `76d3dcec4e`). `dispatch_unary_dunder_operator` required
+a by-value struct operand and passed `gen_address_of(operand)` as self — both
+wrong for a pointer instance, so `__str__`/`__abs__`/… were skipped and
+`str(obj) == "..."` aborted with "Cannot compare non-function side effects".
+Fix mirrors the binary dispatch: resolve via `resolve_operand_type` (follows
+`Class*` → struct) and pass self via `dunder_ref_arg`; reuse
+`is_excluded_struct_tag`. Clears strings2, strings2_str_plain,
+strings2_str_multifield. Tests: object_str_dunder{,_fail}. Authoritative ctest
+subset (str/dunder/abs/object/dataclass/class): 362 pass, only z3-`--ir` and
+pre-existing threading failures remain.
+
+**Remaining open (pre-existing):** augmented attribute assignment
+`c.value += by` through a `Class*` parameter crashes in Converting; Thread-
+subclass / module-scope construction (`threading_thread_subclass_*`).
