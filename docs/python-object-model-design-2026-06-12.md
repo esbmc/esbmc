@@ -324,3 +324,30 @@ then assigned a class instance must be typed as the instance **pointer** (`Optio
 `Class*` with NULL for None), so both sides of `==` are class pointers and the comparison is
 clean pointer identity. Note `flow_rhs_class`-based aliasing only fires at module depth-1, so it
 does not retype `prevnode` inside `reverse()`. **Branch remains not mergeable until this lands.**
+
+---
+
+## 11. github_4796 fixed via comparison reconciliation — but broader blast radius found (2026-06-12)
+
+**`github_4796` fixed (27/27 class baseline).** Root cause was *not* the allocation: the `#4796`
+handle-vs-value `==`/`is` reconciliation in `converter_binop.cpp` only matched a **by-value
+struct** instance, but the migration makes instances **`Class*` pointers**, so the reconciliation
+did not fire and `handle == Class*` fell through to a blow-up encoding. Extended it to also accept
+a **class pointer** side (cast the None-handle to that pointer type; skip `gen_address_of` since
+the side is already a pointer). With that, the whole 27-test class baseline passes **and**
+`github_4117_function_internal` flips.
+
+**Broader blast radius (NOT mergeable).** A wider risk-subset run (comparison / None / Optional /
+dunder / dataclass) surfaced **≥3 regressions the class baseline did not cover**:
+- `github_3976_optional_attr_access` — `box: Optional[Box] = None; box = Box(7); box.value`.
+  GOTO shows `box` typed `unsigned long int` (the Optional **handle**), but the migration
+  constructs into it as `Box*` (`box = new_object(); Box(box, 7); box->value`) → out-of-bounds.
+- `dataclass-edge-equality_true`, `dunder-bool-condition` — equality / dunder paths that assume
+  by-value struct instances.
+
+Root: `NoneType`/`Optional` are modelled as pointer-width **`unsignedbv` handles**
+(`type_handler.cpp:457-464`) and `Optional[X]` as a `tag-Optional_` struct — neither aligned with
+pointer instances. **Stage 1 (object lifetime) and Stage 2 (None/Optional → `Class*` unification)
+are therefore entangled**: `Optional[Class]` and `None`-initialised instance variables must become
+`Class*` (NULL for None) for the migration to be sound across the suite. That unification is the
+required next step before this branch can merge; the class baseline alone understated the scope.
