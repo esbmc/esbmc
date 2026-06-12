@@ -8,7 +8,7 @@
 
 namespace
 {
-/// Register one zero-initialised static global.
+/// Register one zero-initialised static global, unless @p id already exists.
 /// The exception state is per-thread: a propagating exception, its type and its
 /// object belong to the thread that raised it, so the globals are thread-local.
 /// symex routes thread-local globals to a per-thread instance (renaming.cpp), so

@@ -1,4 +1,5 @@
 CORE
 main.cpp
+--context-bound 2
 
-exception lowering: cannot lower a concurrent program
+^VERIFICATION SUCCESSFUL$
