@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
 #include <list>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <string>
 #ifndef _WIN32
 #  include <unistd.h>
@@ -172,7 +172,9 @@ public:
   std::vector<smt_astt> args;
 };
 
-class smtlib_convt : public smt_convt, public array_iface, public fp_convt
+class smtlib_convt : public smt_solver_baset,
+                     public array_iface,
+                     public fp_convt
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);

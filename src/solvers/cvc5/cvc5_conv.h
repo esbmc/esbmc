@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 #define _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <cvc5/cvc5.h>
 
 class cvc5_smt_ast : public solver_smt_ast<cvc5::Term>
@@ -12,7 +12,7 @@ public:
   void dump() const override;
 };
 
-class cvc5_convt : public smt_convt, public array_iface, public fp_convt
+class cvc5_convt : public smt_solver_baset, public array_iface, public fp_convt
 {
 private:
   unsigned quantifier_counter = 0;

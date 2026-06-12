@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_Z3_Z3_CONV_H
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <z3++.h>
 #include <fstream>
 
@@ -24,7 +24,7 @@ public:
 
 /* Be sure to not make smt_convt a *virtual* base class: our dtor ~z3_convt()
  * erases all smt_asts early. */
-class z3_convt : public smt_convt,
+class z3_convt : public smt_solver_baset,
                  public tuple_iface,
                  public array_iface,
                  public fp_convt

@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_
 
 #include <cstdio>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
 
@@ -20,7 +20,9 @@ public:
   void dump() const override;
 };
 
-class bitwuzla_convt : public smt_convt, public array_iface, public fp_convt
+class bitwuzla_convt : public smt_solver_baset,
+                       public array_iface,
+                       public fp_convt
 {
 public:
   bitwuzla_convt(const namespacet &ns, const optionst &options);

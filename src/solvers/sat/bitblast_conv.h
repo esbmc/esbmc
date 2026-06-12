@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <sat_iface.h>
 
 class bitblast_smt_sort : public smt_sort
@@ -43,7 +43,7 @@ public:
   bvt bv;
 };
 
-class bitblast_convt : public smt_convt
+class bitblast_convt : public smt_solver_baset
 {
 public:
   typedef enum

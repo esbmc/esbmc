@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <inttypes.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/sat/bitblast_conv.h>

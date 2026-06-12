@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 #define _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <yices.h>
 
 class yices_smt_ast : public solver_smt_ast<term_t>
@@ -37,7 +37,7 @@ public:
   std::string symname;
 };
 
-class yices_convt : public smt_convt,
+class yices_convt : public smt_solver_baset,
                     public array_iface,
                     public tuple_iface,
                     public fp_convt
