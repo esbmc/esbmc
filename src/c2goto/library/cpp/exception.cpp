@@ -37,10 +37,15 @@ struct __ESBMC_handled_exception
   void *object;
 };
 
-static __ESBMC_exception_slot __ESBMC_exception_slots[256];
-static __SIZE_TYPE__ __ESBMC_exception_slot_count = 0;
-static __ESBMC_handled_exception __ESBMC_handled_exceptions[256];
-static __SIZE_TYPE__ __ESBMC_handled_exception_depth = 0;
+// Per-thread, like the in-flight exception state above: the handled-exception
+// stack and the exception_ptr slot table belong to the thread that captures or
+// handles the exception. Were they process-shared, one thread's
+// current_exception()/rethrow could observe or inject another thread's entry,
+// spuriously matching or missing a catch in a concurrent program.
+static __thread __ESBMC_exception_slot __ESBMC_exception_slots[256];
+static __thread __SIZE_TYPE__ __ESBMC_exception_slot_count = 0;
+static __thread __ESBMC_handled_exception __ESBMC_handled_exceptions[256];
+static __thread __SIZE_TYPE__ __ESBMC_handled_exception_depth = 0;
 
 } // namespace __ESBMC_exception_detail
 
