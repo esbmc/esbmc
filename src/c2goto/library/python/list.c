@@ -30,7 +30,10 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Fallback for larger/unusual sizes
+  // Fallback for larger/unusual sizes. A word-wise compare loop here would
+  // unwind --unwind times on every symbolic-size comparison, with no benefit
+  // to any converging test (large-struct compares only occur in tests that
+  // stay KNOWNBUG on the symbolic-list scalability wall, #5121).
   return memcmp(a, b, size) == 0;
 }
 
@@ -96,8 +99,16 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths for scalars and small tuple keys.
-  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
+  // Branch-free 8-byte-aligned fast paths for the common small sizes. These
+  // avoid memcpy's per-byte loop, which blows up incremental-bmc (size unwind
+  // iterations per copied element) and, under a tight --unwind, trips the copy
+  // loop's unwinding assertion (dict_tuple_key copies a 3-int tuple key at
+  // --unwind 3, #4805). Larger payloads fall through to memcpy: a word-wise
+  // loop here would unwind --unwind times on every call where size is symbolic
+  // (e.g. the list_slice_assign snapshot loop), on top of memcpy's own loop,
+  // pushing list-slice-assign past the CI per-test cap for no benefit to any
+  // converging test (large-struct copies only appear in tests that stay
+  // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -847,6 +858,24 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
   return copied;
 }
 
+// Shallow copy with __ESBMC_list_push_shallow's sharing rules: scalar
+// elements get independent buffers, pointer-payload elements (nested
+// lists/dicts/None) keep their pointer record — i.e. Python's shallow-copy
+// semantics, unlike __ESBMC_list_copy whose generic byte-copy drops stored
+// pointers (#5102). Used for tuple(list) and list slice self-assignment.
+PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
+{
+  __ESBMC_assert(l != NULL, "list_copy_shallow: list is null");
+  PyListObject *copied = __ESBMC_list_create();
+  size_t i = 0;
+  while (i < l->size)
+  {
+    __ESBMC_list_push_shallow(copied, &l->items[i], list_type_id);
+    i++;
+  }
+  return copied;
+}
+
 // Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing
 // rules: pointer-payload elements (nested lists/dicts/None, size == 0 or
 // type_id == list_type_id) keep their pointer record; scalars get an
@@ -922,21 +951,10 @@ bool __ESBMC_list_slice_assign(
 
   int64_t srclen = (int64_t)src->size;
 
-  // Self-assignment (l[1:] = l): snapshot src before mutating l. The snapshot
-  // must follow the same sharing rules as the writes below: a generic
-  // __ESBMC_list_copy would byte-copy pointer-payload elements (nested
-  // lists/dicts/None, size == 0) and drop the stored pointer (#5102).
+  // Self-assignment (l[1:] = l): snapshot src before mutating l, with the
+  // same sharing rules as the writes below (see __ESBMC_list_copy_shallow).
   if (src == l)
-  {
-    PyListObject *snap = __ESBMC_list_create();
-    int64_t i = 0;
-    while (i < size)
-    {
-      __ESBMC_list_push_shallow(snap, &l->items[i], list_type_id);
-      i++;
-    }
-    src = snap;
-  }
+    src = __ESBMC_list_copy_shallow(l, list_type_id);
 
   if (step == 1)
   {

@@ -3482,7 +3482,7 @@ exprt python_list::list_repetition(
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
 
-  auto is_integer_type = [](const typet &type) {
+  [[maybe_unused]] auto is_integer_type = [](const typet &type) {
     return type.is_signedbv() || type.is_unsignedbv();
   };
 
@@ -5014,6 +5014,77 @@ exprt python_list::build_copy_list_call(
   copy_type_map_entries(list.id.as_string(), copied_list.id.as_string());
 
   return build_symbol(copied_list);
+}
+
+exprt python_list::build_shallow_copy_call(
+  const exprt &src_list,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow");
+  if (!copy_func)
+    throw std::runtime_error(
+      "__ESBMC_list_copy_shallow not found in symbol table");
+
+  // Materialize a list-returning call into a temporary so it can be passed
+  // to the model by value (same pattern as handle_slice_assignment's RHS).
+  exprt src = src_list;
+  if (src.is_function_call())
+  {
+    code_function_callt &fcall = static_cast<code_function_callt &>(src);
+    if (!fcall.function().type().is_code())
+      throw std::runtime_error(
+        "build_shallow_copy_call: unsupported callable source");
+    const typet ret_type = to_code_type(fcall.function().type()).return_type();
+    symbolt &tmp =
+      converter_.create_tmp_symbol(element, "$tuple_src$", ret_type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    fcall.lhs() = build_symbol(tmp);
+    converter_.add_instruction(fcall);
+    src = build_symbol(tmp);
+  }
+  else if (src.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(element, "$tuple_src$", src.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.copy_to_operands(src);
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    src = build_symbol(tmp);
+  }
+
+  symbolt &copied =
+    converter_.create_tmp_symbol(element, "$tuple_copy$", list_type, exprt());
+  code_declt copied_decl(build_symbol(copied));
+  copied_decl.location() = location;
+  converter_.add_instruction(copied_decl);
+
+  // Same nested-list type id as the other shallow-sharing paths (#5102).
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(list_type)),
+    config.ansi_c.address_width));
+
+  code_function_callt copy_call;
+  copy_call.function() = build_symbol(*copy_func);
+  copy_call.arguments().push_back(src);
+  copy_call.arguments().push_back(list_type_id);
+  copy_call.lhs() = build_symbol(copied);
+  copy_call.type() = list_type;
+  copy_call.location() = location;
+  converter_.add_instruction(copy_call);
+
+  if (src.is_symbol())
+    copy_type_map_entries(src.identifier().as_string(), copied.id.as_string());
+
+  return build_symbol(copied);
 }
 
 exprt python_list::build_set_membership_call(

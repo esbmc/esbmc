@@ -2526,7 +2526,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      disable_is_if_unsound(goto_k_induction(goto_functions));
+      disable_is_if_unsound(goto_k_induction(goto_functions, ns));
     }
     else
     {
@@ -2536,7 +2536,7 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        disable_is_if_unsound(goto_k_induction(goto_functions));
+        disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (cmdline.isset("loop-invariant-check"))
       {
@@ -2584,7 +2584,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options);
+        goto_termination(goto_functions, options, ns);
     }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran

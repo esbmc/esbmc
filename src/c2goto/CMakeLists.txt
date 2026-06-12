@@ -14,7 +14,7 @@ target_include_directories(c2goto
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
     )
 target_link_libraries(c2goto
-  clangcfrontend langapi c2gotoheaders
+  clangcfrontend clangcppfrontend langapi c2gotoheaders
   filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
@@ -149,6 +149,11 @@ function(mangle_clib output)
     set(c2goto_solidity_files "")
   endif()
 
+  # Extract C++ operational models (esbmc/esbmc#5298). These are compiled by
+  # the C++ frontend inside c2goto and serialized into the embedded clib.
+  file(GLOB_RECURSE c2goto_cpp_files CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/cpp/*.cpp")
+
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set(in_f "${${in_f}}")
@@ -170,6 +175,10 @@ function(mangle_clib output)
       list(APPEND inputs_c ${c2goto_python_files})
     endif()
 
+    # C++ operational models (esbmc/esbmc#5298): compiled by the C++ frontend
+    # registered in c2goto and serialized into the clib alongside the C models.
+    list(APPEND inputs_c ${c2goto_cpp_files})
+
     # Solidity models are built as a separate goto binary (sol64.goto),
     # NOT mixed into clib64, for faster runtime loading.
 
@@ -183,7 +192,7 @@ function(mangle_clib output)
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${run_c2goto}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files} ${c2goto_cpp_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM

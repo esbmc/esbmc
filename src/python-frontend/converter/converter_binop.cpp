@@ -440,7 +440,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const std::string lc = get_python_type_category(lhs.type());
     const std::string rc = get_python_type_category(rhs.type());
     if (!lc.empty() && !rc.empty() && lc != rc)
+    {
+      // A tuple built by tuple(<list>) is modelled as a list object, so a
+      // list-vs-tuple pair may actually be tuple-vs-tuple; folding it to a
+      // constant would wrongly decide the comparison (e.g. `tuple([1, 2])
+      // != (1, 2)` folding to True). Elementwise lowering of the mixed
+      // representations is not implemented, and letting the operands flow
+      // into the generic binop builder casts the tuple struct to a list
+      // pointer, which the SMT encoder rejects. Return a sound nondet bool,
+      // mirroring the unresolved-operand fallback below.
+      if ((lc == "list" && rc == "tuple") || (lc == "tuple" && rc == "list"))
+      {
+        side_effect_expr_nondett nondet(bool_type());
+        nondet.location() = get_location_from_decl(element);
+        return nondet;
+      }
       return gen_boolean(op == "NotEq");
+    }
   }
 
   // Handle set operations (difference, intersection, union)

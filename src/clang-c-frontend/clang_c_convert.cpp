@@ -757,8 +757,22 @@ bool clang_c_convertert::get_function(
   // function-boundary metadata on the type. No-op for C.
   annotate_exception_specification(fd, type);
 
-  added_symbol.set_type(type);
-  new_expr.type() = type;
+  // A bodyless re-declaration must not clobber the type of a function that is
+  // already defined. The definition's argument list carries the parameter
+  // identifiers symex uses to bind call arguments; replacing it with a
+  // prototype's nameless arguments silently breaks parameter passing. This
+  // surfaces when several frontends share one context and each prepends the
+  // same intrinsic prototypes — e.g. c2goto registers both the C and C++
+  // frontends, and clang_cpp re-declares the nameless
+  // __VERIFIER_nondet_memory prototype after the C definition with its named
+  // parameters was already converted (esbmc/esbmc#5298).
+  if (!fd.hasBody() && added_symbol.get_value().is_not_nil())
+    new_expr.type() = added_symbol.get_type();
+  else
+  {
+    added_symbol.set_type(type);
+    new_expr.type() = type;
+  }
 
   // We need: a type, a name, and an optional body.
   // Always call get_function_body so overrides (e.g. the C++ frontend) can
