@@ -195,13 +195,31 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 
 void function_call_expr::get_function_type()
 {
-  if (type_handler_.is_constructor_call(call_))
+  const auto &func_node = call_["func"];
+
+  // An explicit `Base.__init__(self, ...)` call invokes the named base class's
+  // constructor with self passed explicitly; it is not an object construction.
+  // Let it fall through to the ClassMethod classification (is_class(caller)
+  // below) so no fresh self object is allocated -- the builder resolves it to
+  // the class's renamed constructor (@C@Base@F@Base) and the explicit self is
+  // the receiver. Without this it would be classified Constructor and the
+  // constructor would write to a throwaway $ctor_self$ temp.
+  const bool is_explicit_class_init =
+    func_node.contains("_type") && func_node["_type"] == "Attribute" &&
+    func_node.contains("attr") && func_node["attr"] == "__init__" &&
+    func_node.contains("value") && func_node["value"].is_object() &&
+    func_node["value"].contains("_type") &&
+    func_node["value"]["_type"] == "Name" &&
+    func_node["value"].contains("id") &&
+    json_utils::is_class(
+      func_node["value"]["id"].get<std::string>(), converter_.ast());
+
+  if (!is_explicit_class_init && type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
     return;
   }
 
-  const auto &func_node = call_["func"];
   if (
     !func_node.contains("_type") || !func_node["_type"].is_string() ||
     func_node["_type"] != "Attribute")
