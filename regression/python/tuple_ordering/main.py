@@ -20,6 +20,19 @@ assert (1, 0) <= (1, 1)
 assert (1, 2, 3) < (1, 2, 4)
 assert (-1, 5) < (0, 0)
 
+# Float components, and a mixed int/float pair (Python promotes int->float).
+assert (1.0, 2.0) < (1.0, 9.0)
+assert (1, 2.0) < (1, 3.0)
+assert (1.0, 2) < (2, 1)
+
+# Nested-tuple components compare recursively.
+assert ((1, 2), 3) < ((1, 2), 4)
+assert ((1, 3), 0) > ((1, 2), 9)
+
+# Tuples of different arity: a proper prefix is the smaller tuple.
+assert (1, 2) < (1, 2, 0)
+assert (1, 2, 3) > (1, 2)
+
 # The practical use: a manual sort driven by tuple comparison.
 pairs = [(3, 1), (1, 2)]
 if pairs[0] > pairs[1]:
