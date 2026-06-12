@@ -353,3 +353,59 @@ the baseline binary), not introduced here.
 `def f(obj: MyClass) -> MyClass` (`class-attributes-scoped`, `inheritance2`) — still hangs/fails
 under the pointer model. That is the next scoped unit (param/return typing + super().__init__
 chains), independent of the None/Optional typing now closed by step C.
+
+---
+
+## 14. Class-typed parameters and class globals landed (2026-06-12)
+
+The "class-typed parameter/return path that still hangs" was three distinct
+defects, all now fixed (commit `9abe26eacc`):
+
+1. **Class-typed parameter** (`def f(obj: C)`) was typed as a by-value struct
+   `C`, but the migrated caller passes a `C*`. The mismatch built a malformed
+   call expr; `goto_symex_statet::rename_type` then dereferenced a null type2tc
+   (`is_array_type`, `EXC_BAD_ACCESS` at offset 0xc). Fix: type the formal `C*`
+   (like `self`) in `register_function_argument`. The existing struct→pointer
+   argument coercion (`converter_funcall.cpp` ~1061) handles a by-value struct
+   argument by taking its address, so both pointer and by-value call sites work.
+   This also gives correct Python reference semantics — a callee mutating the
+   parameter is visible to the caller.
+
+2. **Class return** (`-> C`) already worked (instances are `C*`).
+
+3. **Annotated module-global class instance** (`m: C = C()`) crashed even with
+   no parameter or attribute access. Root cause was upstream in
+   `preregister_global_variables`: `extract_type_info` returns a
+   *default-constructed* `typet` (id `""`, which is **neither** `nil` **nor**
+   `empty` — those are ids `"nil"`/`"empty"`) when the annotation is not yet in
+   its final `id`-bearing form at pre-registration time. The old skip guard
+   (`is_nil() || is_empty()`) missed the empty-id placeholder, so `m` was
+   registered with an invalid type. `move_symbol_to_context` does **not**
+   overwrite a plain variable, so the later, correctly-typed creation in
+   `get_var_assign` was discarded and `m` kept the empty type — the constructor
+   then built `&m` over an empty-typed lvalue and crashed. Fix: also skip when
+   `var_type.id().empty()`, leaving `m` for `get_var_assign` to type as `C*`;
+   and register an annotated plain-class global as `C*` when it does resolve.
+
+Shared helper `is_user_class_struct_type` reads the class tag from a struct or
+an unresolved `tag-<Class>` symbol (no `ns.follow`, no build dependency) and
+validates via `json_utils::is_class`, which naturally excludes the
+`tag-struct __ESBMC_Py...` model structs. `is_user_class_pointer` is now a thin
+wrapper over it.
+
+**Cleared:** class-attributes-scoped, inheritance, github_4543_is_none /
+is_not_none, object_passing_comprehensive_fail. New tests:
+`object_param_global{,_fail}`. Family sweep: zero new failures.
+
+**Two newly-isolated, orthogonal pre-existing bugs (NOT this path; still open):**
+- `sound: int = obj.method()` where the method returns a **str** (or any type
+  mismatching the variable annotation) lowers the call to
+  `ASSIGN sound = NONDET(int)` — the **call is dropped entirely**, so its side
+  effects (e.g. `self.energy -= 5`) never run. Sole remaining cause of
+  `inheritance2` (`assert dog.energy == 85` fails because `bark()` was elided).
+  Independent of inheritance and of the object model.
+- `c.value += by` — an **augmented** assignment to an attribute through a
+  `Class*` parameter — crashes in Converting (plain `c.value = v` is fine).
+
+The next migration unit is the Thread-subclass / module-scope construction
+cases (`threading_thread_subclass_*`), still failing on the branch.
