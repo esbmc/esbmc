@@ -71,7 +71,10 @@ bool python_class_builder::get_bases(struct_typet &st)
 
 /* Converts methods and annotated class-level attributes (AnnAssign)
  * into ESBMC symbols. Recursively processes referenced classes. */
-void python_class_builder::get_members(struct_typet &st, codet &out)
+void python_class_builder::get_members(
+  struct_typet &st,
+  codet &out,
+  bool has_ud_base)
 {
   std::string saved_class_name = conv_.current_class_name_;
   if (conv_.current_class_name_.empty())
@@ -163,15 +166,20 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       // nothing (the read binds the class-level symbol) and `obj.attr += x`
       // aborts in the symex dereference layer on an empty pointee type.
       //
-      // Restricted to classes with no user `__init__`: gen_ctor synthesises a
-      // default constructor that initialises the component from the class
-      // variable's value, so a fresh instance still observes the default. A
-      // class with its own `__init__` would leave the component uninitialised
-      // (a class variable not assigned in `__init__` has no value to copy), so
-      // it keeps the class-level fallback. Class variables that are also set as
-      // `self.attr` in a method already get their component via add_self_attrs.
+      // Add the component only when gen_ctor will default-initialise it from
+      // the class variable's value — i.e. the exact condition under which it
+      // emits a body: no user `__init__` (count is own-class only, hence also
+      // exclude a user base, whose `__init__`/fields gen_ctor likewise skips)
+      // and a simple constant/name default (a call-valued default cannot be
+      // hoisted into the ctor body here). Otherwise the component would be left
+      // nondet. Enum members stay class-level. Class variables also set as
+      // `self.attr` in a method already get a component via add_self_attrs.
+      const auto &val = n["value"];
+      const bool simple_default =
+        val.is_object() && (val.value("_type", "") == "Constant" ||
+                             val.value("_type", "") == "Name");
       if (
-        !st.has_component(attr_name) &&
+        !st.has_component(attr_name) && !has_ud_base && simple_default &&
         pc_.methods().count("__init__") == 0 &&
         !python_frontend::is_enum_class(conv_.current_class_name_, conv_.ast()))
       {
@@ -336,7 +344,7 @@ void python_class_builder::build(codet &out)
   sym->set_type(st);
 
   // Add methods, class attributes, and default constructor
-  get_members(st, out);
+  get_members(st, out, has_ud_base);
   gen_ctor(has_ud_base, st);
 
   // Finalize type and clear context
