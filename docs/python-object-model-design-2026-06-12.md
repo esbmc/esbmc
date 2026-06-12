@@ -263,3 +263,34 @@ The allocation primitive is solved and the target KNOWNBUG flips. **22/26 class 
 These are exactly the §4-Stage-1 "audit attribute write / method-self / assignment-aliasing"
 items. The allocation foundation is done; the remaining work is making the rest of the converter
 consistently pointer-aware.
+
+---
+
+## 9. Stage 1 WIP — cascade mostly cleared, 26/27 (2026-06-12)
+
+Switched from byte-`malloc` to a **typed object allocation** intercepted in symex, and cleared
+4 of the 5 cascade regressions. **26/27 class baseline + `github_4117_function_internal` flips.**
+
+**Allocation (final form).** `o = ClassName(...)` → `o = __ESBMC_new_object()` (a no-arg stub in
+`list.c`); symex (`symex_main.cpp` run_intrinsic) intercepts it and allocates a typed,
+non-expiring object of the class struct **carried by the LHS pointer type** via `symex_mem_inf`
+— the same mechanism `__ESBMC_create_inf_obj` uses for PyObj. This is sized *symbolically* by
+the struct type, so it is robust to the struct still gaining fields after the construction site
+(which a byte-`malloc` of `sizeof` cannot handle — the struct grows when usage adds/​shadows
+instance attributes, e.g. `obj.class_attr = 2`; that was the `class11`/`class13`/`class-attributes`
+`array bounds violated`). Dead ends ruled out: byte-`malloc` (wrong size on lazy struct growth),
+raw `cpp_new` sideeffect (hangs goto-gen — no clang-cpp adjust), `alloca` (frame-freed),
+finite single `dynamic_*_value` via `create_dynamic_memory_symbol` (binding came out broken —
+all reads failed; left for a follow-up, it is the right perf fix).
+
+**Aliasing.** Extended the early pointer-typing in `get_var_assign` to use `flow_rhs_class`, so
+`b = a` (alias of an instance) types `b` as the same class pointer — a pointer copy (shared
+object), not a struct copy. Fixes `github_4117_alias_chain` (was `n1->next = &alias` with `alias`
+already a pointer).
+
+**Remaining: `github_4796_object_handle_eq` (perf regression).** Was CORE; now no verdict inside
+the cap. The infinite-array object (`symex_mem_inf`) makes the `is`/`==` identity reasoning over
+a linked-list `reverse` blow up in the solver. The fix is a **finite** single typed object
+(symbolically sized but not an infinite array); the `create_dynamic_memory_symbol` attempt did
+not bind correctly and needs debugging. Until then this CORE test regresses, so the branch is
+**not mergeable yet**.

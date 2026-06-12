@@ -4,19 +4,16 @@
 #include <string.h>
 #include "python_types.h"
 
-// Heap-allocate a Python object instance of `size` bytes. The frontend emits a
-// call to this for `ClassName(...)` so class instances get CPython reference
-// semantics (a pointer to a non-expiring heap object) and survive escaping
-// their defining function, instead of dangling as expired stack locals. malloc
-// is lowered by goto_convert into a non-expiring dynamic object.
-void *__ESBMC_new_object(size_t size)
+// Allocate a Python object instance. The frontend emits a call to this for
+// `ClassName(...)` so class instances get CPython reference semantics (a
+// pointer to a non-expiring object) and survive escaping their defining
+// function, instead of dangling as expired stack locals. This body is a
+// placeholder: symex intercepts the call (symex_mem_inf) and allocates a typed,
+// non-expiring infinite object of the class struct carried by the call's
+// result pointer type.
+void *__ESBMC_new_object()
 {
-  void *p = malloc(size);
-  // CPython object construction never observes a NULL result (allocation
-  // failure raises MemoryError, which is out of scope); assume success so the
-  // constructor's `self` dereference is always valid.
-  __ESBMC_assume(p != 0);
-  return p;
+  return 0;
 }
 
 // TODO: There is no such a thing as a generic type in python.

@@ -1021,16 +1021,30 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // PythonList / dict / set methods, and the Python object allocator
-  // (__ESBMC_new_object) — model functions with real bodies that must be
-  // executed, not treated as built-in intrinsics.
+  // PythonList / dict / set methods — model functions with real bodies that
+  // must be executed, not treated as built-in intrinsics.
   if (
     has_prefix(symname, "c:@F@__ESBMC_list") ||
     has_prefix(symname, "c:@F@__ESBMC_dict") ||
-    has_prefix(symname, "c:@F@__ESBMC_set") ||
-    has_prefix(symname, "c:@F@__ESBMC_new_object"))
+    has_prefix(symname, "c:@F@__ESBMC_set"))
   {
     bump_call(func_call, symname);
+    return;
+  }
+
+  // Python object allocator (Stage 1 object-model migration, #3067/#4773).
+  // `o = ClassName(...)` lowers to `o = __ESBMC_new_object()` where `o` is a
+  // pointer to the class struct. Allocate a typed, non-expiring object of that
+  // struct (sized symbolically, so fields added to the struct after the
+  // construction site stay in bounds) and bind the result pointer — the same
+  // mechanism __ESBMC_create_inf_obj uses for PyObj.
+  if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
+  {
+    assert(is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    symex_mem_inf(
+      func_call.ret,
+      to_pointer_type(func_call.ret->type).subtype,
+      cur_state->guard);
     return;
   }
 

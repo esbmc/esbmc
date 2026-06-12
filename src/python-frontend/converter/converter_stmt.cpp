@@ -1519,25 +1519,33 @@ void python_converter::get_var_assign(
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
 
-  // Stage 1 object-model migration (#3067/#4773): a constructor call assigned
-  // to a simple Name target binds the target to a *reference* (pointer) to a
-  // heap-allocated instance, matching CPython's reference semantics, so the
-  // object survives escaping its defining function instead of dangling as an
-  // expired stack local. Type the LHS as pointer-to-class up front, before the
-  // declaration is emitted below; function_call_expr then allocates the object
-  // (cpp_new) and passes the pointer as `self`.
+  // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
+  // a class instance — either a constructor call `o = ClassName(...)` or an
+  // alias `b = a` of an existing instance — becomes a *reference* (pointer) to
+  // the object, matching CPython's reference semantics. This makes escaping
+  // objects survive their defining function and makes `b = a` a pointer copy
+  // (shared object) rather than a struct copy. Type the LHS as pointer-to-class
+  // up front, before the declaration is emitted below; function_call_expr then
+  // allocates the object and passes the pointer as `self`.
   if (
     ast_node.contains("value") && !ast_node["value"].is_null() &&
-    type_handler_.is_constructor_call(ast_node["value"]) &&
-    target.contains("_type") && target["_type"] == "Name" &&
-    ast_node["value"]["func"].contains("id"))
+    target.contains("_type") && target["_type"] == "Name")
   {
-    const std::string cls = ast_node["value"]["func"]["id"];
-    typet st = type_handler_.get_typet(cls);
-    if (st.id() == "symbol" || st.is_struct())
+    std::string cls;
+    if (
+      type_handler_.is_constructor_call(ast_node["value"]) &&
+      ast_node["value"]["func"].contains("id"))
+      cls = ast_node["value"]["func"]["id"].get<std::string>();
+    else
+      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+    if (!cls.empty())
     {
-      current_element_type = gen_pointer_type(st);
-      element_type = current_element_type;
+      typet st = type_handler_.get_typet(cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
     }
   }
 
