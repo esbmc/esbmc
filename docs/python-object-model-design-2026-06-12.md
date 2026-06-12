@@ -351,3 +351,36 @@ pointer instances. **Stage 1 (object lifetime) and Stage 2 (None/Optional → `C
 are therefore entangled**: `Optional[Class]` and `None`-initialised instance variables must become
 `Class*` (NULL for None) for the migration to be sound across the suite. That unification is the
 required next step before this branch can merge; the class baseline alone understated the scope.
+
+---
+
+## 12. None/Optional unification — attempted, scoped as multi-layer (2026-06-12)
+
+Took on the None/Optional → `Class*` unification needed to clear the broader regressions
+(github_3976 etc.). Made the **typing layer** work but found the unification is multi-layer and
+larger than one change; reverted the partial attempt to keep the 27/27 + `github_4796` state clean.
+
+**Typing layer (prototyped, works).** Extended the `get_var_assign` early pointer-typing to treat
+a target annotated `Class` / `Optional[Class]` / `Class | None` as `Class*`. GOTO confirms it:
+`box: Optional[Box] = None` now lowers to `DECL Box * box; box = 0` (NULL), and `box = Box(7)`
+allocates and constructs through the pointer. So the **declaration/None side** unifies cleanly.
+
+**But field access + value representation do NOT yet unify (the deeper layers).** With `box: Box*`,
+`box.value == 7` still lowers as an *object* comparison —
+`(__ESBMC_PyObj *)box->value == (void *)7` — and the in-`__init__` `self.value = value` goes
+out of bounds. Reasons:
+- Field access on an `Optional`-origin variable routes `x.value` through the None/object-handle
+  path (treating the field as a `PyObj` handle) rather than the concrete `Box.value : int` field.
+- The `==` lowering then takes the object-identity path for `x.value`, not integer comparison.
+
+So the unification needs, beyond typing: (a) field-read/-write on a `Class*` to resolve the
+concrete struct field regardless of an `Optional` origin, and (b) the comparison/`bool`/dunder
+paths to treat a `Class*` field value by its declared type. That is the `#4653`/`#4796` object/
+Optional model rework — a multi-layer change across `type_handler` (Optional⇒`Class*`+NULL),
+attribute access (`converter_expr`), and value/dunder lowering (`converter_binop`,
+`converter_dunder`). It is the correct next unit of work but is larger than a single pass.
+
+**State:** branch holds Stage 1 (object lifetime) + the `#4796` class-pointer comparison fix —
+27/27 class baseline, `github_4117_function_internal` flips. It is **not mergeable** until the
+None/Optional unification lands (≥3 known broader regressions: `github_3976_optional_attr_access`,
+`dataclass-edge-equality_true`, `dunder-bool-condition`).
