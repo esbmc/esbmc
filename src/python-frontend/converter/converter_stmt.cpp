@@ -1511,16 +1511,26 @@ void python_converter::preregister_global_variables(
     // and build a malformed assignment/call.
     if (is_user_class_struct_type(var_type))
       var_type = gen_pointer_type(var_type);
-    // Skip when no usable type resolved. Besides nil/empty, guard the
-    // default-constructed typet (empty id, neither "nil" nor "empty"):
-    // at pre-registration the annotation may not yet be in its final
-    // `id`-bearing form, so extract_type_info returns a placeholder. Creating
-    // a symbol with that invalid type permanently shadows the real type — and
-    // move_symbol_to_context will not later overwrite a plain variable — so the
-    // constructor assignment builds against an empty-typed lvalue and crashes.
-    // Leaving it unregistered lets get_var_assign create it with the correct
-    // (migrated `Class*`) type when the assignment is processed.
-    if (var_type.is_nil() || var_type.is_empty() || var_type.id().empty())
+    // Skip when no usable type resolved. The default-constructed typet (empty
+    // id, neither "nil" nor "empty") is a pre-registration placeholder that
+    // extract_type_info returns before the annotation is in its final form —
+    // for ANY annotated global. Pre-register the placeholder ONLY for a literal
+    // (`Constant`) value, e.g. `shared: int = 0`. That is the case that needs
+    // it: a function writing the global via `global`, when defined before the
+    // global's module-level assignment, must resolve to the same symbol rather
+    // than mint a separate one — and the placeholder is harmless there because
+    // get_var_assign stores the literal straight into it. For any non-literal
+    // value (a constructor `obj = Box()`, a method/function call, …) or a bare
+    // annotation, skip: registering the empty-typed placeholder would corrupt
+    // the later assignment/construction — move_symbol_to_context will not
+    // overwrite a plain variable, so the value is stored into an empty-typed
+    // slot and crashes. get_var_assign then registers it with the real type.
+    const bool value_is_constant =
+      element.contains("value") && element["value"].is_object() &&
+      element["value"].value("_type", "") == "Constant";
+    if (
+      var_type.is_nil() || var_type.is_empty() ||
+      (var_type.id().empty() && !value_is_constant))
       continue;
 
     locationt location = get_location_from_decl(element);
