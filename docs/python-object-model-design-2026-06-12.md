@@ -189,3 +189,42 @@ consolidates code we already understand.
 Stage 1: medium (core lowering change + audit of attribute/assign paths). Stage 2: medium
 (diagnosis-led, may surface follow-up blockers). Stage 3: large but mechanical (refactor + unit
 tests). Stages are independently shippable PRs.
+
+---
+
+## 7. Stage 1 WIP progress (2026-06-12, branch `feat/python-object-heap-lifetime`)
+
+First migration increment implemented (commits on this branch). **Status: IR-correct but does
+NOT verify yet — do not merge.**
+
+**What works (verified via `--goto-functions-only`).** Two edits — early pointer typing of the
+LHS in `converter_stmt.cpp:get_var_assign` and heap-allocation of the instance in
+`function_call/expr.cpp` constructor handling — now lower `n1 = Node(1)` to the intended
+reference shape:
+```
+DECL Node * n1;
+ASSIGN n1 = sideeffect cpp_new (Node)    // heap object, pointer
+FUNCTION_CALL Node(n1, 1)                 // self = pointer (no &)
+...
+ASSIGN n1->next = n2;                     // pointer field write (NOT &n2 — no stack address)
+RETURN: *n1                               // struct copy whose .next points to heap n2 (valid)
+```
+The UAF source (`&stack_local`) is gone; `n1->next = n2` stores a heap pointer.
+
+**Blocker: the `cpp_new` sideeffect hangs symex.** `cpp_new` is normally lowered by the
+clang-cpp **adjust** pass, which the Python pipeline does not run; the raw sideeffect reaches
+symex with a malformed default initializer (`ASSIGN *n1 = nil`) and symex stalls immediately at
+"Starting Bounded Model Checking" (no unwinding) even for the trivial `o = Node(1)` case. So
+`cpp_new` is the wrong primitive here.
+
+**Next step (clean primitive).** Allocate the instance the way the list OM does — via a C helper
+that `malloc`s and returns the object pointer — instead of a raw frontend `cpp_new` sideeffect:
+1. Add `void *__ESBMC_new_object(unsigned size) { return malloc(size); }` to the Python C OM
+   library (`src/c2goto/library/python/`), rebuild (FLAIL + c2goto).
+2. In `function_call/expr.cpp`, emit a call to it (cast `void*`→`Class*`) and use the result as
+   `self`, replacing the `side_effect_exprt("cpp_new", …)`.
+3. Then handle the remaining cascade: function return type for `-> Class` should become
+   `pointer(tag-Class)` (currently `RETURN: *n1` copies the struct — works because inner pointers
+   are heap, but a pointer return is cleaner); remove the redundant `$ctor_self$` double
+   construction; audit attribute write / method-self / assignment-aliasing.
+4. Validate against the 26-test class baseline + flip `github_4117_function_internal`.

@@ -3730,7 +3730,21 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     else if (converter_.current_lhs)
     {
-      call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+      // Stage 1 object-model migration (#3067/#4773): when the LHS has been
+      // typed as a pointer-to-class reference, allocate the instance on the
+      // heap (cpp_new) and pass the pointer itself as `self`, so the object
+      // survives escaping its defining function. Otherwise keep the legacy
+      // in-place struct construction (self = &lhs).
+      if (converter_.current_lhs->type().is_pointer())
+      {
+        side_effect_exprt alloc("cpp_new", converter_.current_lhs->type());
+        alloc.type() = converter_.current_lhs->type();
+        code_assignt alloc_assign(*converter_.current_lhs, alloc);
+        converter_.add_instruction(alloc_assign);
+        call.arguments().push_back(*converter_.current_lhs);
+      }
+      else
+        call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
     }
     else

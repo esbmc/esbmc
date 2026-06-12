@@ -1519,6 +1519,28 @@ void python_converter::get_var_assign(
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
 
+  // Stage 1 object-model migration (#3067/#4773): a constructor call assigned
+  // to a simple Name target binds the target to a *reference* (pointer) to a
+  // heap-allocated instance, matching CPython's reference semantics, so the
+  // object survives escaping its defining function instead of dangling as an
+  // expired stack local. Type the LHS as pointer-to-class up front, before the
+  // declaration is emitted below; function_call_expr then allocates the object
+  // (cpp_new) and passes the pointer as `self`.
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    type_handler_.is_constructor_call(ast_node["value"]) &&
+    target.contains("_type") && target["_type"] == "Name" &&
+    ast_node["value"]["func"].contains("id"))
+  {
+    const std::string cls = ast_node["value"]["func"]["id"];
+    typet st = type_handler_.get_typet(cls);
+    if (st.id() == "symbol" || st.is_struct())
+    {
+      current_element_type = gen_pointer_type(st);
+      element_type = current_element_type;
+    }
+  }
+
   // Flow-sensitive class tracking (#4771/#4772): at an unconditional top-level
   // (depth-1) assignment, record the class most recently assigned to the target
   // lvalue ("v" or "v.attr"), last-write-wins. Read back in converter_expr to
