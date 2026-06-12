@@ -16,7 +16,7 @@
 #include <util/threeval.h>
 #include <vector>
 
-class smt_solver_baset;
+class smt_convt;
 
 class symex_target_equationt : public symex_targett
 {
@@ -88,7 +88,7 @@ public:
   // Note: `runtime_encoded_equationt` overrides `convert` and does NOT
   // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
   // callers must run vacuity probes through the non-incremental path.
-  virtual void convert(smt_solver_baset &smt_conv, bool vacuity_mode = false);
+  virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
 
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
@@ -311,7 +311,7 @@ public:
   {
   };
 
-  runtime_encoded_equationt(const namespacet &_ns, smt_solver_baset &conv);
+  runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
   ~runtime_encoded_equationt() override;
 
   void push_ctx() override;
@@ -319,12 +319,12 @@ public:
 
   std::shared_ptr<symex_targett> clone() const override;
 
-  void convert(smt_solver_baset &smt_conv, bool vacuity_mode = false) override;
+  void convert(smt_convt &smt_conv, bool vacuity_mode = false) override;
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
 
-  smt_solver_baset &conv;
+  smt_convt &conv;
   struct solver_statet;
   std::unique_ptr<solver_statet> solver_state;
   std::list<SSA_stepst::iterator> scoped_end_points;

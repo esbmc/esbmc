@@ -8,11 +8,6 @@ smt_convt::smt_convt(std::unique_ptr<smt_solver_baset> impl)
 
 smt_convt::~smt_convt() = default;
 
-smt_solver_baset &smt_convt::solver()
-{
-  return *solver_impl;
-}
-
 void smt_convt::push_ctx()
 {
   solver_impl->push_ctx();
@@ -61,6 +56,26 @@ tvt smt_convt::l_get(const expr2tc &expr)
 void smt_convt::assert_expr(const expr2tc &e)
 {
   solver_impl->assert_expr(e);
+}
+
+void smt_convt::convert_ast(const expr2tc &expr)
+{
+  // Discard the handle: callers only need the expression encoded into the
+  // solver, and the AST is retained in the implementation's cache.
+  solver_impl->convert_ast(expr);
+}
+
+void smt_convt::convert_assign(const expr2tc &expr)
+{
+  solver_impl->convert_assign(expr);
+}
+
+void smt_convt::renumber_symbol_address(
+  const expr2tc &guard,
+  const expr2tc &addr_symbol,
+  const expr2tc &new_size)
+{
+  solver_impl->renumber_symbol_address(guard, addr_symbol, new_size);
 }
 
 void smt_convt::dump_expr(const expr2tc &expr)

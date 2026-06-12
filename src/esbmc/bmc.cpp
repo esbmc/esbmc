@@ -88,7 +88,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       funcs,
       ns,
       options,
-      std::make_shared<runtime_encoded_equationt>(ns, runtime_solver->solver()),
+      std::make_shared<runtime_encoded_equationt>(ns, *runtime_solver),
       _context);
   }
   else
@@ -209,7 +209,7 @@ void bmct::generate_smt_from_equation(
   log_status("Encoding remaining VCC(s) using {}", logic);
 
   fine_timet encode_start = current_time();
-  eq.convert(smt_conv.solver());
+  eq.convert(smt_conv);
   fine_timet encode_stop = current_time();
   log_status(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
@@ -320,7 +320,7 @@ smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
   // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
   // The result is UNSAT iff the path to every kept claim is unreachable.
   std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
-  local_eq.convert(solver->solver(), /*vacuity_mode=*/true);
+  local_eq.convert(*solver, /*vacuity_mode=*/true);
   return solver->dec_solve();
 }
 

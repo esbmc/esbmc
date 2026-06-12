@@ -31,10 +31,6 @@ public:
   explicit smt_convt(std::unique_ptr<smt_solver_baset> impl);
   ~smt_convt();
 
-  /** The owned solver implementation. Transitional escape hatch for callers
-   *  that still drive conversion directly (equation convert loop). */
-  smt_solver_baset &solver();
-
   // --- Minimal external API, forwarded to the implementation ---
 
   void push_ctx();
@@ -42,6 +38,19 @@ public:
   smt_resultt dec_solve();
   void pre_solve();
   const std::string solver_text();
+
+  /** Encode an expression into the solver context. The resulting solver AST
+   *  is retained internally (the SSA equation only needs the side effect of
+   *  conversion, never the handle), so neither these nor any other smt_convt
+   *  method exposes a solver-handle type. */
+  void convert_ast(const expr2tc &expr);
+  void convert_assign(const expr2tc &expr);
+
+  /** Re-register the address-space entry for a renumbered dynamic object. */
+  void renumber_symbol_address(
+    const expr2tc &guard,
+    const expr2tc &addr_symbol,
+    const expr2tc &new_size);
 
   /** Fetch the model value of an expression. */
   expr2tc get(const expr2tc &expr);
