@@ -528,6 +528,20 @@ void goto_symext::symex_assign(
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
 
+  if (validate_witness && is_symbol2t(original_lhs))
+  {
+    const std::string nm = to_symbol2t(original_lhs).thename.as_string();
+    if (nm.find("$tmp::return_value$_") != std::string::npos)
+    {
+      irep_idt call_line;
+      if (cur_state->source.pc->is_return())
+        call_line = cur_state->top().calling_location.pc->location.get_line();
+      else
+        call_line = cur_state->source.pc->location.get_line();
+      symex_witness_function_return(original_lhs, call_line);
+    }
+  }
+
   // Restore the value-set entry to the pre-havoc set, replacing the
   // {unknown} the symex assignment just wrote. The next dereference
   // through this pointer (in `symex_dereference.cpp`) will read this

@@ -1108,10 +1108,134 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   case expr2t::ieee_sqrt_id:
   {
     assert(is_floatbv_type(expr));
-    // TODO: no integer mode implementation
-    a = fp_api->mk_smt_fpbv_sqrt(
-      convert_ast(to_ieee_sqrt2t(expr).value),
-      convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
+    if (int_encoding)
+    {
+      smt_astt operand = convert_ast(to_ieee_sqrt2t(expr).value);
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      const expr2tc &rounding_mode = to_ieee_sqrt2t(expr).rounding_mode;
+
+      // Two fresh reals are introduced:
+      //
+      //   sqrt_pos  (tagged "ra_sqrt::")   — for operand >= 0.
+      //     Pinned by the guarded quadratic:
+      //       operand >= 0  →  sqrt_pos >= 0  ∧  sqrt_pos² = operand
+      //     The enclosure is applied to this symbol only.
+      //
+      //   sqrt_nan  (tagged "ra_sqrt_nan::")  — for operand < 0.
+      //     Completely unconstrained.  Models the IEEE 754 NaN result
+      //     without making the formula inconsistent.
+      //
+      // The publicly returned result is  ite(operand >= 0, sqrt_pos, sqrt_nan).
+      // This ensures that for negative operands the enclosure constraints on
+      // sqrt_pos do not propagate to the observable result.
+      //
+      // Limitation: NaN non-reflexivity (NaN != NaN in IEEE 754) is not
+      // modelled.  Under --ir-ieee, sqrt(x < 0) returns an unconstrained real,
+      // not a NaN sentinel.
+      smt_sortt rs = mk_real_sort();
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt op_nonneg = mk_le(zero, operand);
+
+      smt_astt sqrt_pos = mk_fresh(rs, "ra_sqrt::", nullptr);
+      // operand >= 0 → sqrt_pos >= 0
+      assert_ast(mk_or(mk_not(op_nonneg), mk_le(zero, sqrt_pos)));
+      // operand >= 0 → sqrt_pos² = operand
+      assert_ast(
+        mk_or(mk_not(op_nonneg), mk_eq(mk_mul(sqrt_pos, sqrt_pos), operand)));
+
+      // Unconstrained result used when operand < 0.
+      smt_astt sqrt_nan = mk_fresh(rs, "ra_sqrt_nan::", nullptr);
+
+      // Interval-lifted enclosure for ieee_sqrt (--ir-ieee only).
+      // sqrt is monotone increasing on [0, ∞), so the exact hull is:
+      //   lo_r = sqrt(iv.lo),  hi_r = sqrt(iv.hi)
+      // Each bound is a fresh real pinned by the same quadratic axiom.
+      // Mode-dispatch follows the same five-case pattern as add/sub/mul/div.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        (smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_away(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode) ||
+         smt_fp_rounding_utils::is_round_to_zero(rounding_mode)))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv = get_iv(operand);
+
+          // Fresh reals for sqrt of interval bounds.
+          // Clamp bounds to zero: the RNE/RNA enclosures from prior operations
+          // can make iv.lo slightly negative (by eps_abs) even when the float
+          // operand is always non-negative.  sqrt is only defined for x >= 0,
+          // so we tighten to max(0, iv.lo) and max(0, iv.hi).
+          smt_astt iv_lo_pos = mk_ite(mk_lt(iv.lo, zero), zero, iv.lo);
+          smt_astt iv_hi_pos = mk_ite(mk_lt(iv.hi, zero), zero, iv.hi);
+
+          smt_astt lo_r = mk_fresh(rs, "ra_sqrt_lo::", nullptr);
+          smt_astt hi_r = mk_fresh(rs, "ra_sqrt_hi::", nullptr);
+          assert_ast(mk_le(zero, lo_r));
+          assert_ast(mk_eq(mk_mul(lo_r, lo_r), iv_lo_pos));
+          assert_ast(mk_le(zero, hi_r));
+          assert_ast(mk_eq(mk_mul(hi_r, hi_r), iv_hi_pos));
+
+          // Enclosure is applied to sqrt_pos, not to the final ITE result.
+          // The containment assertions (ra_lo <= sqrt_pos <= ra_hi) therefore
+          // do not constrain the result when operand < 0.
+          std::pair<smt_astt, smt_astt> bounds;
+          if (smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode))
+            bounds =
+              apply_ieee754_rne_enclosure(sqrt_pos, lo_r, hi_r, fbv_type);
+          else if (smt_fp_rounding_utils::is_round_to_away(rounding_mode))
+            bounds =
+              apply_ieee754_rna_enclosure(sqrt_pos, lo_r, hi_r, fbv_type);
+          else if (smt_fp_rounding_utils::is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(sqrt_pos, lo_r, hi_r, fbv_type);
+          else if (smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rdn_enclosure(sqrt_pos, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(sqrt_pos, lo_r, hi_r, fbv_type);
+
+          // ITE result: sqrt_pos (enclosure-constrained) for operand >= 0;
+          // sqrt_nan (unconstrained) for operand < 0.
+          smt_astt sqrt_result = mk_ite(op_nonneg, sqrt_pos, sqrt_nan);
+          // ITE interval stored in the map: enclosure bounds for operand >= 0;
+          // point interval {sqrt_result, sqrt_result} for operand < 0, which
+          // degenerates to the single-step behaviour for chained operations.
+          smt_astt map_lo = mk_ite(op_nonneg, bounds.first, sqrt_result);
+          smt_astt map_hi = mk_ite(op_nonneg, bounds.second, sqrt_result);
+          ir_ra_interval_map[sqrt_result] = {map_lo, map_hi};
+          a = sqrt_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+      {
+        smt_astt pos_result =
+          apply_ieee754_semantics(sqrt_pos, fbv_type, nullptr, rounding_mode);
+        a = mk_ite(op_nonneg, pos_result, sqrt_nan);
+      }
+    }
+    else
+    {
+      a = fp_api->mk_smt_fpbv_sqrt(
+        convert_ast(to_ieee_sqrt2t(expr).value),
+        convert_rounding_mode(to_ieee_sqrt2t(expr).rounding_mode));
+    }
     break;
   }
   case expr2t::modulus_id:

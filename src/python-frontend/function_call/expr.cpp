@@ -1900,9 +1900,19 @@ bool function_call_expr::is_set_method_call() const
   const std::string &method_name = function_id_.get_function();
   if (
     method_name != "add" && method_name != "discard" &&
-    method_name != "issubset" && method_name != "update" &&
-    method_name != "symmetric_difference")
+    method_name != "issubset" && method_name != "issuperset" &&
+    method_name != "update" && method_name != "symmetric_difference")
     return false;
+
+  // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
+  // sets by construction. Decide from the AST: resolving a Call receiver
+  // through get_object_list_symbol() would emit the set-construction IR as a
+  // side-effect, and discriminators must stay pure.
+  const auto &func_value = call_["func"]["value"];
+  if (func_value["_type"] == "Call")
+    return func_value["func"].contains("id") &&
+           (func_value["func"]["id"] == "set" ||
+            func_value["func"]["id"] == "frozenset");
 
   std::string dummy;
   const symbolt *sym = get_object_list_symbol(dummy);
@@ -1916,6 +1926,31 @@ exprt function_call_expr::handle_set_method() const
 
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
+  // which cannot change a subset/superset verdict. Use the iterable directly
+  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
+  // inside a loop would otherwise rebuild the set (one push plus one
+  // containment scan per element) on every iteration (#4805).
+  if (method_name == "issubset" || method_name == "issuperset")
+  {
+    const auto &receiver = call_["func"]["value"];
+    if (
+      receiver["_type"] == "Call" && receiver["func"].contains("id") &&
+      (receiver["func"]["id"] == "set" ||
+       receiver["func"]["id"] == "frozenset") &&
+      receiver["args"].size() == 1)
+    {
+      exprt iterable = converter_.get_expr(receiver["args"][0]);
+      if (iterable.type() == type_handler_.get_list_type())
+      {
+        exprt other = converter_.get_expr(args[0]);
+        python_set set_helper(converter_, call_);
+        return set_helper.build_set_relation_call(
+          iterable, other, call_, method_name);
+      }
+    }
+  }
 
   std::string set_display_name;
   const symbolt *set_symbol = get_object_list_symbol(set_display_name);
@@ -1932,7 +1967,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / update / symmetric_difference take another set/iterable.
+  // issubset / issuperset / update / symmetric_difference take another
+  // set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
@@ -3201,8 +3237,9 @@ exprt function_call_expr::handle_general_function_call()
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
-  const bool is_sorted_min_max =
-    func_name == "min" || func_name == "max" || func_name == "sorted";
+  const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
+                                 func_name == "sorted" ||
+                                 func_name == "reversed";
 
   // min(iter, default=...) / max(iter, default=...) route to *_default
   // variants that fall back to the supplied default when iter is empty

@@ -9,6 +9,7 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -223,6 +224,67 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
     target, total_claims, remaining_claims, simplified_claims);
+}
+
+static void substitute_result(expr2tc &e, const expr2tc &ret_val)
+{
+  if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
+  {
+    e = ret_val;
+    return;
+  }
+  if (is_constant_int2t(e))
+  {
+    if (
+      is_unsignedbv_type(ret_val->type) &&
+      to_constant_int2t(e).value.is_negative())
+      log_warning(
+        "witness: function_return constraint compares signed constant {} "
+        "against unsigned return type; constraint may be trivially false",
+        integer2string(to_constant_int2t(e).value));
+    e = from_integer(to_constant_int2t(e).value, ret_val->type);
+    return;
+  }
+  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+}
+
+void goto_symext::symex_witness_function_return(
+  expr2tc ret_val,
+  const irep_idt &call_line)
+{
+  if (cur_state->cur_seg >= cur_state->witness_segs.size())
+    return;
+
+  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+  for (const waypoint &wp : seg)
+  {
+    if (wp.type != waypoint::function_return)
+      continue;
+    if (!wp.parsed_cond.valid)
+      continue;
+    if (wp.line_id != call_line)
+      continue;
+
+    cur_state->rename(ret_val);
+
+    expr2tc constraint = wp.parsed_cond.expr;
+    substitute_result(constraint, ret_val);
+
+    log_progress(
+      "Applying {} function_return constraint at line {}: {}",
+      wp.action == waypoint::avoid ? "avoid" : "follow",
+      call_line,
+      wp.value);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(constraint));
+    else
+    {
+      assume(constraint);
+      cur_state->advance_witness_position();
+    }
+    return;
+  }
 }
 
 void goto_symext::symex_step(reachability_treet &art)
