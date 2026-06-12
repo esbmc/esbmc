@@ -294,3 +294,33 @@ a linked-list `reverse` blow up in the solver. The fix is a **finite** single ty
 (symbolically sized but not an infinite array); the `create_dynamic_memory_symbol` attempt did
 not bind correctly and needs debugging. Until then this CORE test regresses, so the branch is
 **not mergeable yet**.
+
+---
+
+## 10. Stage 1 — finite typed object + github_4796 root cause (2026-06-12)
+
+Replaced the infinite-array allocation with a **single typed `dynamic_*_value`** object (mirrors
+`symex_mem`'s `size_is_one` path: struct-typed symbol, `address_of2tc(struct_type, sym)` →
+`struct*` then cast to the LHS pointer, 3-arg `track_new_pointer`, `auto_deallocd=false`). Key
+bug fixed along the way: `address_of2tc`'s first argument is the **pointee** type, so passing the
+LHS pointer type produced a `Class**` double pointer and broke every read. The single value is
+cleaner and more efficient than the infinite array and avoids its identity-reasoning cost.
+
+**Result: 26/26 other class tests pass + `github_4117_function_internal` flips.** No regressions
+except `github_4796_object_handle_eq`.
+
+**`github_4796` root cause (separate from allocation).** `reverse()` returns `prevnode`, which is
+`None`-initialised then reassigned the `Node` parameter inside the loop. Return-type inference
+keeps it as the scalar **None-handle** (`unsigned long int`), not `Node*`. So `r = reverse(a)` is
+a scalar handle while `b = Node(2)` is a pointer, and `r == b` / `r != b` is the `#4796`
+*handle-vs-value* reconciliation — which, under the new pointer instances, blows up the SMT
+encoding (it stalls in "Encoding remaining VCC(s)"; isolated to `test_distinct`'s distinct-object
+comparison). Minimal same-object identity (`r is n`), the reverse loop, the `None`-default
+signature, and the imported class all verify fine **individually** — only the
+returns-a-None-initialised-instance + cross-object `==`/`!=` combination triggers it.
+
+The fix belongs to the None/Optional model (#4796/#4653): a variable that is `None`-initialised
+then assigned a class instance must be typed as the instance **pointer** (`Optional[Class]` ⇒
+`Class*` with NULL for None), so both sides of `==` are class pointers and the comparison is
+clean pointer identity. Note `flow_rhs_class`-based aliasing only fires at module depth-1, so it
+does not retype `prevnode` inside `reverse()`. **Branch remains not mergeable until this lands.**

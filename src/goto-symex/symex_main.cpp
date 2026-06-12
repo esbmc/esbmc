@@ -1034,17 +1034,59 @@ void goto_symext::run_intrinsic(
 
   // Python object allocator (Stage 1 object-model migration, #3067/#4773).
   // `o = ClassName(...)` lowers to `o = __ESBMC_new_object()` where `o` is a
-  // pointer to the class struct. Allocate a typed, non-expiring object of that
-  // struct (sized symbolically, so fields added to the struct after the
-  // construction site stay in bounds) and bind the result pointer — the same
-  // mechanism __ESBMC_create_inf_obj uses for PyObj.
+  // pointer to the class struct. Allocate a single, typed, non-expiring dynamic
+  // object of that struct and bind `o` to it. Sized symbolically by the struct
+  // type (robust to fields added to the struct after this construction site),
+  // guaranteed valid (CPython construction never fails — no malloc-NULL model),
+  // and finite (a single value, not an infinite array, which would blow up
+  // pointer-identity reasoning). Mirrors symex_mem_inf's binding but with a
+  // size-1 dynamic object.
   if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
   {
     assert(is_pointer_type(func_call.ret->type) && "object ref must be pointer");
-    symex_mem_inf(
-      func_call.ret,
-      to_pointer_type(func_call.ret->type).subtype,
-      cur_state->guard);
+    const expr2tc &lhs = func_call.ret;
+    const type2tc base = to_pointer_type(lhs->type).subtype;
+    const guard2tc &guard = cur_state->guard;
+
+    // Build a single dynamic struct value (mirrors symex_mem's size_is_one
+    // path) — typed (sized symbolically by the struct), guaranteed valid (no
+    // malloc-NULL model) and not auto-deallocated, so it survives the
+    // constructing function's return.
+    unsigned int &dynamic_counter = get_dynamic_counter();
+    dynamic_counter++;
+    symbolt symbol;
+    symbol.name = "dynamic_" + i2string(dynamic_counter) + "_value";
+    symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+    symbol.lvalue = true;
+    symbol.mode = "C";
+    {
+      typet t = ns.follow(migrate_type_back(base));
+      t.dynamic(true);
+      t.set(
+        "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+      symbol.set_type(std::move(t));
+    }
+    new_context.add(symbol);
+
+    const type2tc new_type = migrate_symbol_type(symbol);
+    expr2tc obj = symbol2tc(new_type, symbol.id);
+    // address_of2tc(new_type, e): first argument is the *pointee* type, so the
+    // result is `new_type *` — reconcile with the LHS pointer type.
+    expr2tc rhs = address_of2tc(new_type, obj);
+    do_simplify(rhs);
+    expr2tc ptr_rhs = rhs;
+    guard2tc alloc_guard = guard;
+    if (rhs->type != lhs->type)
+      rhs = typecast2tc(lhs->type, rhs);
+    cur_state->rename(rhs);
+    expr2tc rhs_copy(rhs);
+    symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+    expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+    track_new_pointer(ptr_obj, new_type, guard);
+    alloc_guard.append(guard);
+    dynamic_memory.emplace_back(
+      rhs_copy, alloc_guard, false, symbol.name.as_string());
     return;
   }
 
