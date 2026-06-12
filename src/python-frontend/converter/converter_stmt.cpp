@@ -2213,7 +2213,12 @@ void python_converter::get_var_assign(
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
       // Still emit the RHS as a void call so exceptions/side-effects are
-      // preserved (e.g. chr() out-of-range ValueError).
+      // preserved (e.g. chr() out-of-range ValueError, or a method that mutates
+      // `self` while returning a string that does not fit the annotated scalar
+      // slot, as in `n: int = obj.method_returning_str()`). The call reaches
+      // here either as a side_effect_function_call expression or as an
+      // already-lowered code_function_call statement (nil result); handle both,
+      // otherwise the call — and its side effects — would be dropped entirely.
       if (
         rhs.id() == "sideeffect" &&
         rhs.statement() == irep_idt("function_call"))
@@ -2223,6 +2228,15 @@ void python_converter::get_var_assign(
         code_function_callt void_call;
         void_call.function() = se.function();
         void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
+      else if (rhs.is_code() && rhs.statement() == irep_idt("function_call"))
+      {
+        const code_function_callt &cc = to_code_function_call(to_code(rhs));
+        code_function_callt void_call;
+        void_call.function() = cc.function();
+        void_call.arguments() = cc.arguments();
         void_call.location() = rhs.location();
         add_instruction(void_call);
       }
