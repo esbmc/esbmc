@@ -224,18 +224,26 @@ static bool is_other_param_compatible(
   return true;
 }
 
+bool python_converter::is_user_class_struct_type(const typet &t)
+{
+  // Read the class tag directly from a struct or an unresolved `tag-<Class>`
+  // symbol reference — do not require the struct to be built yet (function
+  // signatures are typed before some referenced classes are completed).
+  std::string tag;
+  if (t.id() == "symbol")
+    tag = to_symbol_type(t).get_identifier().as_string();
+  else if (t.is_struct())
+    tag = to_struct_type(t).tag().as_string();
+  else
+    return false;
+
+  const std::string cls = extract_class_name_from_tag(tag);
+  return !cls.empty() && json_utils::is_class(cls, *ast_json);
+}
+
 bool python_converter::is_user_class_pointer(const typet &t)
 {
-  if (!t.is_pointer())
-    return false;
-  typet sub = t.subtype();
-  if (sub.id() == "symbol")
-    sub = ns.follow(sub);
-  if (!sub.is_struct())
-    return false;
-  const std::string cls =
-    extract_class_name_from_tag(to_struct_type(sub).tag().as_string());
-  return !cls.empty() && json_utils::is_class(cls, *ast_json);
+  return t.is_pointer() && is_user_class_struct_type(t.subtype());
 }
 
 exprt python_converter::dispatch_dunder_operator(

@@ -1495,7 +1495,25 @@ void python_converter::preregister_global_variables(
         continue;
       }
     }
-    if (var_type.is_nil() || var_type.is_empty())
+
+    // Object-model migration (#3067/#4773): an annotated plain-class global
+    // `m: C` is a class reference. Register it as `C*` — the same pointer type
+    // the constructor assignment (`m = C()`) produces and the local ctor path
+    // (get_var_assign) uses — so the pre-registered symbol's type matches the
+    // migrated instance. A by-value struct global would mismatch the pointer
+    // and build a malformed assignment/call.
+    if (is_user_class_struct_type(var_type))
+      var_type = gen_pointer_type(var_type);
+    // Skip when no usable type resolved. Besides nil/empty, guard the
+    // default-constructed typet (empty id, neither "nil" nor "empty"):
+    // at pre-registration the annotation may not yet be in its final
+    // `id`-bearing form, so extract_type_info returns a placeholder. Creating
+    // a symbol with that invalid type permanently shadows the real type — and
+    // move_symbol_to_context will not later overwrite a plain variable — so the
+    // constructor assignment builds against an empty-typed lvalue and crashes.
+    // Leaving it unregistered lets get_var_assign create it with the correct
+    // (migrated `Class*`) type when the assignment is processed.
+    if (var_type.is_nil() || var_type.is_empty() || var_type.id().empty())
       continue;
 
     locationt location = get_location_from_decl(element);

@@ -640,6 +640,15 @@ size_t python_converter::register_function_argument(
   if (arg_type.is_array())
     arg_type = gen_pointer_type(arg_type.subtype());
 
+  // Object-model migration (#3067/#4773): a class-typed parameter receives a
+  // migrated `Class*` instance, and Python passes objects by reference. Type
+  // the formal as `Class*` (like `self`) so the call signature matches the
+  // pointer argument and mutations through the parameter are visible to the
+  // caller. A by-value struct formal would mismatch the pointer argument and
+  // produce a malformed call expression.
+  if (is_user_class_struct_type(arg_type))
+    arg_type = gen_pointer_type(arg_type);
+
   assert(arg_type != typet());
 
   code_typet::argumentt arg;
