@@ -8,7 +8,7 @@
 
 namespace
 {
-/// Register one zero-initialised static global, unless @p id already exists.
+/// Register one zero-initialised static global.
 /// The exception state is per-thread: a propagating exception, its type and its
 /// object belong to the thread that raised it, so the globals are thread-local.
 /// symex routes thread-local globals to a per-thread instance (renaming.cpp), so
@@ -17,22 +17,12 @@ namespace
 ///
 /// If @p id already exists it is a bare extern declaration (the OM
 /// std::uncaught_exceptions() reads __ESBMC_exc_uncaught_count, so linking that
-/// body pulls the declaration into the context before this pass runs). Keep its
-/// frontend-assigned type but upgrade the storage to a real zero-initialised
-/// thread-local static.
+/// body pulls the declaration into the context before this pass runs).
+/// move_symbol_to_context adopts this real definition over the extern decl
+/// (its `s->is_extern && !symbol.is_extern` replace rule), so no manual upgrade
+/// is needed.
 void add_global(contextt &context, const char *id, const typet &type)
 {
-  if (symbolt *existing = context.find_symbol(id))
-  {
-    existing->set_value(gen_zero(existing->get_type()));
-    existing->lvalue = true;
-    existing->static_lifetime = true;
-    existing->file_local = false;
-    existing->is_extern = false;
-    existing->is_thread_local = true;
-    return;
-  }
-
   symbolt sym;
   sym.id = id;
   sym.name = id;
