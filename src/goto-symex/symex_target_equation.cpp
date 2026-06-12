@@ -8,6 +8,7 @@
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
 
@@ -15,9 +16,13 @@ namespace
 {
 struct equation_conversion_statet
 {
-  smt_astt assumpt_ast;
+  // Conjunction of all in-scope assumptions, as an expr2tc. Solver-AST
+  // handling stays inside smt_convt: the equation only manipulates
+  // expr2tc and lets convert_ast/assert_expr bridge to the solver.
   expr2tc assumpt_expr;
-  smt_convt::ast_vec assertions;
+  // Negated discharge condition per kept assertion (or the path
+  // assumption alone in vacuity mode). OR'd together and asserted once.
+  std::vector<expr2tc> assertions;
 };
 
 void pre_register_addresses(
@@ -89,20 +94,17 @@ void convert_internal_step(
 
   smt_conv.convert_ast(step.guard);
 
-  smt_astt cond_ast = nullptr;
   if (step.is_assume() || step.is_assert() || step.is_branching())
   {
-    expr2tc tmp(step.cond);
-    cond_ast = smt_conv.convert_ast(tmp);
-
+    smt_conv.convert_ast(step.cond);
     if (ssa_smt_trace)
-      cond_ast->dump();
+      smt_conv.dump_expr(step.cond);
   }
   else if (step.is_assignment())
   {
-    smt_astt assign = smt_conv.convert_assign(step.cond);
+    smt_conv.convert_assign(step.cond);
     if (ssa_smt_trace)
-      assign->dump();
+      smt_conv.dump_expr(step.cond);
   }
   else if (step.is_output())
   {
@@ -116,9 +118,9 @@ void convert_internal_step(
         expr2tc sym =
           symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
         expr2tc eq = equality2tc(sym, tmp);
-        smt_astt assign = smt_conv.convert_assign(eq);
+        smt_conv.convert_assign(eq);
         if (ssa_smt_trace)
-          assign->dump();
+          smt_conv.dump_expr(eq);
         od.converted_output_args.push_back(sym);
       }
     }
@@ -138,20 +140,18 @@ void convert_internal_step(
     {
       // Vacuity probe: ask whether the path to this claim is reachable at
       // all, ignoring the claim itself. If the OR of all kept claims'
-      // assumpt_ast is UNSAT, every discharge was vacuous.
+      // path assumption is UNSAT, every discharge was vacuous.
       step.cond_expr = state.assumpt_expr;
-      state.assertions.push_back(state.assumpt_ast);
+      state.assertions.push_back(state.assumpt_expr);
     }
     else
     {
       step.cond_expr = implies2tc(state.assumpt_expr, step.cond);
-      smt_astt discharged = smt_conv.imply_ast(state.assumpt_ast, cond_ast);
-      state.assertions.push_back(smt_conv.invert_ast(discharged));
+      state.assertions.push_back(not2tc(step.cond_expr));
     }
   }
   else if (step.is_assume())
   {
-    state.assumpt_ast = smt_conv.mk_and(state.assumpt_ast, cond_ast);
     state.assumpt_expr = and2tc(state.assumpt_expr, step.cond);
   }
   else
@@ -313,7 +313,6 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   equation_conversion_statet state;
-  state.assumpt_ast = smt_conv.convert_ast(gen_true_expr());
   state.assumpt_expr = gen_true_expr();
 
   for (auto &SSA_step : SSA_steps)
@@ -328,7 +327,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
       vacuity_mode);
 
   if (!state.assertions.empty())
-    smt_conv.assert_ast(smt_conv.make_n_ary_or(state.assertions));
+    smt_conv.assert_expr(disjunction(state.assertions));
 }
 
 void symex_target_equationt::output(std::ostream &out) const
@@ -535,7 +534,6 @@ runtime_encoded_equationt::runtime_encoded_equationt(
     solver_state(std::make_unique<solver_statet>())
 {
   solver_state->states.emplace_back();
-  solver_state->states.back().assumpt_ast = conv.convert_ast(gen_true_expr());
   solver_state->states.back().assumpt_expr = gen_true_expr();
   cvt_progress = SSA_steps.end();
 }
@@ -632,8 +630,7 @@ void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 
   // Finally, we also want to assert the set of assertions.
   if (!solver_state->states.back().assertions.empty())
-    smt_conv.assert_ast(
-      smt_conv.make_n_ary_or(solver_state->states.back().assertions));
+    smt_conv.assert_expr(disjunction(solver_state->states.back().assertions));
 }
 
 std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
@@ -659,26 +656,26 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // wipe some state afterwards.
   push_ctx();
 
-  // Convert the question (must be a bool).
+  // Convert the question (must be a bool) at this outer context level so its
+  // AST is cached above the two probe scopes below; otherwise each probe's
+  // pop_ctx would drop the cache entry and force a re-conversion.
   assert(is_bool_type(question));
-  smt_astt q = conv.convert_ast(question);
+  conv.convert_ast(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  conv.assert_ast(solver_state->states.back().assumpt_ast);
+  conv.assert_expr(solver_state->states.back().assumpt_expr);
 
-  // Now, how to ask the question? Unfortunately the clever solver stuff won't
-  // negate the condition, it'll only give us a handle to it that it negates
-  // when we access. So, we have to make an assertion, check it, pop it, then
+  // Now, how to ask the question? We make an assertion, check it, pop it, then
   // check another.
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.assert_ast(q);
+  conv.assert_expr(question);
   smt_resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.assert_ast(conv.invert_ast(q));
+  conv.assert_expr(not2tc(question));
   smt_resultt res2 = conv.dec_solve();
   pop_ctx();
 

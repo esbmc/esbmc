@@ -201,6 +201,11 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
+  /** Convert @p expr and dump the resulting SMT AST in SMT format. Used by
+   *  --ssa-smt-trace so callers outside the solver layer can request the
+   *  dump without ever touching smt_astt. */
+  void dump_expr(const expr2tc &expr);
+
   smt_astt make_n_ary_and(const ast_vec &v);
   smt_astt make_n_ary_or(const ast_vec &v);
 
@@ -246,6 +251,13 @@ public:
    *          which case the solver did not assign a value to it for some
    *          reason. */
   virtual expr2tc get_by_ast(const type2tc &type, smt_astt a);
+
+  /** Resolve @p expr's model value through its converted AST. Unlike
+   *  get_by_type, the struct/pointer case goes through the AST-based
+   *  tuple getter, so @p expr need not be a symbol (it may be a member /
+   *  index access). Lets external callers fetch aggregate values without
+   *  ever naming smt_astt. */
+  expr2tc get_by_ast(const expr2tc &expr);
 
   /** Builds the bitvector based on the value retrieved from the solver.
    *  @param type the type (fixedbv or (un)signedbv),

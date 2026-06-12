@@ -3886,6 +3886,16 @@ tvt smt_convt::l_get(const expr2tc &expr)
   return l_get(convert_ast(expr));
 }
 
+void smt_convt::dump_expr(const expr2tc &expr)
+{
+  convert_ast(expr)->dump();
+}
+
+expr2tc smt_convt::get_by_ast(const expr2tc &expr)
+{
+  return get_by_ast(expr->type, convert_ast(expr));
+}
+
 expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 {
   switch (type->type_id)
