@@ -370,8 +370,7 @@ class CoreVisitorsMixin:
         if not comp.generators or any(gen.is_async for gen in comp.generators):
             return None
         outer = comp.generators[0].iter
-        is_items_call = (isinstance(outer, ast.Call)
-                         and isinstance(outer.func, ast.Attribute)
+        is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
                          and outer.func.attr == "items")
         if not is_items_call:
             return None
