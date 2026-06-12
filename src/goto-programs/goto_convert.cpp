@@ -1595,7 +1595,10 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // do guarded assertions directly
+  // Disabled under --validate-violation-witness: the folding eliminates the
+  // conditional GOTO that witness branching waypoints need to steer the path.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     true_case.instructions.size() == 1 &&
     true_case.instructions.back().is_assert() &&
     is_false(true_case.instructions.back().guard) &&
@@ -1616,7 +1619,9 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // similarly, do guarded assertions directly
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     false_case.instructions.size() == 1 &&
     false_case.instructions.back().is_assert() &&
     is_false(false_case.instructions.back().guard) &&
@@ -1638,7 +1643,9 @@ void goto_convertt::generate_ifthenelse(
 
   // a special case for C libraries that use
   // (void)((cond) || (assert(0),0))
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     is_empty(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&
