@@ -47,6 +47,18 @@ public:
 
   exprt get();
 
+  /**
+   * @brief Materialize a fresh list from already-evaluated element values.
+   *
+   * Unlike get(), which converts AST element nodes, this builds the list from
+   * exprt values directly — used to emit the result of a frontend-computed
+   * sort over tuples, where each element is a conditional (ite) selection over
+   * the input elements. Records each element's type in the type map so later
+   * subscripting recovers the element type. The constructor's @c list_value_
+   * node supplies the source location.
+   */
+  exprt build_list_from_exprs(const std::vector<exprt> &elems);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
   /**
