@@ -508,6 +508,21 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
   /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
    *  resolving to concrete primitive objects, build the lexicographic
    *  comparison result as a single nested-ite expression over the n byte

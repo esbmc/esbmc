@@ -306,31 +306,27 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
     }
 
-    if (in_context.is_extern)
+    if (in_context.is_extern && !new_symbol.is_extern)
     {
-      if (new_symbol.is_extern)
-      {
-        // do nothing if both symbols are extern
-      }
-      else
-      {
-        exprt v = in_context.get_value();
-        exprt nv = new_symbol.get_value();
-        v.swap(nv);
-        in_context.set_value(std::move(v));
-        new_symbol.set_value(std::move(nv));
-        in_context.is_extern = false;
-      }
+      // in_context was only a declaration; adopt the incoming definition.
+      exprt v = in_context.get_value();
+      exprt nv = new_symbol.get_value();
+      v.swap(nv);
+      in_context.set_value(std::move(v));
+      new_symbol.set_value(std::move(nv));
+      in_context.is_extern = false;
     }
-    else
-    {
-      log_error(
-        "duplicate_symbol: in_context is not extern, never seen in tests, "
-        "aborting.");
-      in_context.dump();
-      new_symbol.dump();
-      abort();
-    }
+    // Otherwise keep the symbol already in context. Both-extern declarations
+    // add nothing; and once in_context holds a (tentative or full) definition,
+    // a later extern re-declaration or a duplicate/tentative definition from
+    // another translation unit adds nothing either. This mirrors
+    // contextt::move_symbol_to_context, which replaces a stored variable only
+    // when it is extern and the incoming one is not. The non-extern in_context
+    // path is exercised when frontends convert each TU in an isolated context
+    // and merge here (issue #5309): e.g. `int __ESBMC_return_value;` or
+    // `_Bool __ESBMC_alloc[1];` declared in a shared header pulled into many
+    // TUs, where one TU contributes the tentative definition and others only
+    // the extern declaration.
   }
 }
 

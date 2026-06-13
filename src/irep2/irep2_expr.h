@@ -2077,13 +2077,24 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count: travels with the loop statement so the
+  // --irep2-bodies round-trip preserves the per-loop unwind bound that
+  // goto_convert later stamps onto the loop's GOTO instruction. Not
+  // reflected, so it stays out of value identity (like `location`).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_while2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_while_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_while_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_while2t(const code_while2t &ref) = default;
@@ -2099,13 +2110,21 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_dowhile2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_dowhile_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_dowhile_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_dowhile2t(const code_dowhile2t &ref) = default;
@@ -2125,20 +2144,25 @@ public:
   expr2tc iter; // nil when absent
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_for2t(
     const expr2tc &i,
     const expr2tc &c,
     const expr2tc &it,
     const expr2tc &b,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
     : expr2t(get_empty_type(), code_for_id),
       init(i),
       cond(c),
       iter(it),
       body(b),
-      location(loc)
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_for2t(const code_for2t &ref) = default;

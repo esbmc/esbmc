@@ -352,6 +352,30 @@ TEST_CASE(
   REQUIRE(is_sideeffect_assign2t(mc));
   REQUIRE(to_sideeffect_assign2t(mc).location.get_file() == "contract.sol");
   REQUIRE(migrate_expr_back(mc).location().get_file() == "contract.sol");
+
+  // code_assert: its location becomes the ASSERT instruction location, which
+  // gates --assertion-coverage instrumentation (filename-pooled) and the
+  // coverage assert-count -- a dropped location yields "Total Asserts: 0".
+  codet assert_code("assert");
+  assert_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assert_code.location() = loc;
+  expr2tc ma;
+  migrate_expr(assert_code, ma);
+  REQUIRE(is_code_assert2t(ma));
+  REQUIRE(to_code_assert2t(ma).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(ma).location().get_file() == "contract.sol");
+
+  // code_assume: same, lowers to an ASSUME instruction.
+  codet assume_code("assume");
+  assume_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assume_code.location() = loc;
+  expr2tc mu;
+  migrate_expr(assume_code, mu);
+  REQUIRE(is_code_assume2t(mu));
+  REQUIRE(to_code_assume2t(mu).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
 }
 
 TEST_CASE(

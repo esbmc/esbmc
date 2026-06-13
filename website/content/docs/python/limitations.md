@@ -8,8 +8,8 @@ weight: 4
 ## Control Flow and Loops
 
 - `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
-- `for ... else` is supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop). `while ... else` is not yet supported.
-- List, set, and generator comprehensions are supported. Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
+- `for ... else` and `while ... else` are supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop).
+- List, set, dictionary, and generator comprehensions are supported. Dictionary comprehensions populate a real dict (see [Supported Features — Dictionaries](./supported-features#dictionaries)); the iterable must be a `range(...)`, a list of tuples, or a `d.items()` view (with an optional `if` filter). Comprehensions over other iterables (e.g. another dict comprehension or an arbitrary generator) may not be handled.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys is supported only for **local dict literals**; the same form over a dict received as a function parameter is not yet handled.
 
 ## Lists
@@ -19,7 +19,7 @@ weight: 4
 
 ## Sets
 
-- Set methods `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use the equivalent binary operators (`<=`, `>=`, `^`) instead.
+- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, and `.update()` (see [Supported Features — Sets](./supported-features#sets)). Other named methods (`.add()`, `.remove()`, `.discard()`, `.union()`, `.intersection()`, `.difference()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
 
 ## Dictionaries
 

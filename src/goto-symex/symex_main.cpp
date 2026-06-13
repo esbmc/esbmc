@@ -694,6 +694,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memchr")
+  {
+    intrinsic_memchr(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_memcmp")
   {
     intrinsic_memcmp(art, func_call);
