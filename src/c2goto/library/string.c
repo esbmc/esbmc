@@ -314,7 +314,7 @@ __ESBMC_HIDE:;
   return __ESBMC_memset(s, c, n);
 }
 
-void *memmove(void *dest, const void *src, size_t n)
+void *__memmove_impl(void *dest, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdest = dest;
@@ -338,6 +338,14 @@ __ESBMC_HIDE:;
     }
   }
   return dest;
+}
+
+void *memmove(void *dest, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memmove_impl;
+  (void)hax;
+  return __ESBMC_memmove(dest, src, n);
 }
 
 int memcmp(const void *s1, const void *s2, size_t n)

@@ -505,7 +505,8 @@ extern int __ESBMC_rounding_mode;
 
 void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
       void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
-      
+      void *__ESBMC_memmove(void *, const void *, __SIZE_TYPE__);
+
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);

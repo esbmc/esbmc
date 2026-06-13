@@ -455,15 +455,19 @@ static void offset_simplifier(expr2tc &e)
   simplify(e);
 }
 
-void goto_symext::intrinsic_memcpy(
-
+// Shared core for memcpy and memmove. The optimised path computes the new
+// destination value from the *current* (pre-assignment) bytes of both objects
+// and then assigns it, so overlapping regions are handled correctly — i.e. it
+// already has memmove semantics. memcpy and memmove therefore differ only in
+// the C fallback they bump to (@p bump_name) when the optimisation can't apply.
+void goto_symext::intrinsic_memcpy_impl(
   reachability_treet &art,
-  const code_function_call2t &func_call)
+  const code_function_call2t &func_call,
+  const std::string &bump_name)
 {
-  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+  assert(func_call.operands.size() == 3 && "Wrong memcpy/memmove signature");
 
   using namespace std::string_literals;
-  const auto bump_name = "c:@F@__memcpy_impl"s;
 
   if (options.get_bool_option("no-simplify"))
   {
@@ -708,6 +712,23 @@ void goto_symext::intrinsic_memcpy(
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
   }
+}
+
+void goto_symext::intrinsic_memcpy(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  intrinsic_memcpy_impl(art, func_call, "c:@F@__memcpy_impl");
+}
+
+void goto_symext::intrinsic_memmove(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  // memmove is byte-identical to memcpy in the optimised path (the new value
+  // is built from the current bytes of src/dst before assigning, so overlap is
+  // handled); only the C fallback differs.
+  intrinsic_memcpy_impl(art, func_call, "c:@F@__memmove_impl");
 }
 
 /**
