@@ -94,6 +94,54 @@ void goto_convert_functionst::add_return(
   t->code = code_return2tc(nondet);
 }
 
+// Stamp `loc` onto every value-level sub-expression of `expr` that lacks a
+// source location (used by restore_value_locations below).
+static void stamp_value_locations(exprt &expr, const locationt &loc)
+{
+  // Read this node's OWN location (const overload, non-recursive); the mutable
+  // overload would materialise an empty #location, and find_location() would
+  // descend into operands and report a child's location for this node.
+  const locationt &own = static_cast<const exprt &>(expr).location();
+  if (own.is_nil() || own.get_file().empty())
+    expr.location() = loc;
+
+  Forall_operands (it, expr)
+    stamp_value_locations(*it, loc);
+}
+
+// --irep2-bodies only: IREP2 value-level expressions carry no source location
+// (only the structured-CF code kinds got the V.4.1/V.4.5 non-reflected
+// `location` field). The clang frontends stamp every sub-expression of a
+// statement with that statement's #location, but the legacy->IREP2->legacy body
+// round-trip drops it from the value operands. goto_convert then generates
+// instructions from those operands (e.g. the tmp/GOTO sequence a `&&`/`||`
+// short-circuit lowers to, whose location is read from the operand at
+// goto_sideeffects.cpp:242) with an empty location -- breaking any pass keyed on
+// instruction location, e.g. --condition-coverage skips conditions whose file
+// is not the source file (goto_coverage.cpp:947), reporting 0 conditions and a
+// spurious SUCCESSFUL. Restore the frontend invariant by pushing each
+// statement's location down onto its location-less value operands. Each nested
+// statement governs its own subtree; flag-off uses the legacy body untouched.
+static void restore_value_locations(exprt &code, const locationt &inherited)
+{
+  // This statement's own location (non-recursive const read); falls back to the
+  // enclosing statement's when the round-trip left this node location-less.
+  const locationt &own = static_cast<const exprt &>(code).location();
+  const locationt &here =
+    (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
+
+  if (here.get_file().empty())
+    return; // no location to propagate yet
+
+  Forall_operands (it, code)
+  {
+    if (it->is_code())
+      restore_value_locations(*it, here);
+    else
+      stamp_value_locations(*it, here);
+  }
+}
+
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.id;
@@ -135,7 +183,12 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   exprt roundtrip_body_storage;
   const bool use_irep2_bodies = options.get_bool_option("irep2-bodies");
   if (use_irep2_bodies)
+  {
     roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
+    // Re-attach the per-statement source locations the round-trip dropped from
+    // value operands, so goto_convert-generated instructions stay located.
+    restore_value_locations(roundtrip_body_storage, locationt());
+  }
   const codet &code = use_irep2_bodies ? to_code(roundtrip_body_storage)
                                        : to_code(symbol.get_value());
 
