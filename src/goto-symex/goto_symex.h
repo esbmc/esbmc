@@ -543,6 +543,21 @@ protected:
     uint64_t &offset,
     uint64_t &avail_bytes);
 
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
