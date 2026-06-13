@@ -7,6 +7,28 @@ ESBMC implements several incremental verification strategies on top of its
 symbolic execution engine. This page explains how each works; for the practical
 flags and when to use them, see the [Usage](/docs/usage) guide.
 
+## Bounded Model Checking {#bmc}
+
+```sh
+esbmc file.c --unwind K
+```
+
+Plain bounded model checking is the foundation the strategies below build on.
+ESBMC symbolically executes the program, unrolling each loop at most *K* times,
+encodes the resulting [SSA program and safety properties as a single SMT
+formula](/docs/theory/smt-formula-generation), and asks the solver whether any
+property can be violated. A satisfiable formula yields a counterexample; an
+unsatisfiable one means no property is violated *within the bound K*.
+
+Because a fixed bound can cut a loop short, ESBMC adds an **unwinding assertion**
+after each loop that fails if the loop needed more than *K* iterations — so an
+incompletely unrolled loop is reported rather than silently assumed safe. This
+makes a `VERIFICATION SUCCESSFUL` under `--unwind K` a *bounded* proof. The
+checks can be relaxed with `--no-unwinding-assertions` (turn unwinding
+assertions into assumptions) or `--partial-loops` (permit partial loop paths),
+and per-loop bounds can be set with `--unwindset L:nr`. The strategies below
+remove the need to pick *K* by hand by iterating the bound automatically.
+
 ## Falsification {#falsification}
 
 ```sh
@@ -15,7 +37,8 @@ esbmc file.c --falsification
 
 The falsification approach uses an iterative technique and verifies the program
 for each unwind bound up to a maximum default value of 50 (changeable via
-`--max-k-step N`), or indefinitely (until it exhausts the time or memory limit).
+`--max-k-step N`, or `--unlimited-k-steps` to run until it exhausts the time or
+memory limit).
 The goal is to find a counterexample with up to *k* loop unwindings; the
 symbolic execution engine increasingly unwinds the loop after each iteration.
 
@@ -36,8 +59,9 @@ esbmc file.c --incremental-bmc
 ```
 
 Incremental BMC also iterates over unwind bounds (default max 50, via
-`--max-k-step N`, or indefinitely). It either finds a counterexample within *k*
-unwindings or fully unwinds all loops to provide a correctness result.
+`--max-k-step N`, or `--unlimited-k-steps`). It either finds a counterexample
+within *k* unwindings or fully unwinds all loops to provide a correctness
+result.
 
 The approach has two steps. When searching for a property violation it replaces
 unwinding assertions with assumptions (reporting an unwinding-assertion failure
