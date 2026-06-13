@@ -171,16 +171,20 @@ unsigned goto_symext::argument_assignments(
               break;
           }
 
-          // If pointer points to the expected struct type, allow it
+          // If pointer points to the expected struct type, allow it.
+          // Otherwise the actual is a pointer to some other (often void/
+          // unresolved) type — e.g. a Python comprehension iterating an
+          // untyped list of objects whose element type was not resolved to
+          // the parameter's struct. This is an unsupported front-end codegen
+          // case, not an internal invariant: throw a clean diagnostic (caught
+          // in bmc.cpp) instead of aborting with a core dump.
           if (!base_type_eq(f_arg_type, ptr_subtype, ns))
           {
-            log_error(
-              "function call: argument \"{}\" type mismatch: got {}, expected "
-              "{}",
-              id2string(identifier),
-              get_type_id((*it1)->type),
-              get_type_id(arg_type));
-            abort();
+            throw std::string(
+              "function call: argument \"" + id2string(identifier) +
+              "\" type mismatch: got pointer to " + get_type_id(ptr_subtype) +
+              ", expected " + get_type_id(arg_type) +
+              " (unresolved object element type passed by reference)");
           }
 
           // Type is compatible (pointer to struct), dereference pointer for assignment
