@@ -1,4 +1,4 @@
-#include <cassert>
+// __ESBMC_assert is a built-in intrinsic; no include needed.
 
 // Regression for the --irep2-bodies round-trip dropping a temporary object's
 // destructor. IREP2 struct types store only data members, so the body
@@ -30,6 +30,6 @@ int main()
   // `new Room()` materialises a temporary that is copied into the heap object
   // and then destroyed, so the destructor runs exactly once during
   // construction. Without the fix it was dropped (dtor_calls == 0).
-  assert(dtor_calls == 1);
+  __ESBMC_assert(dtor_calls == 1, "dtor count");
   return 0;
 }

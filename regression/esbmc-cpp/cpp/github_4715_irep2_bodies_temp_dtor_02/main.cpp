@@ -1,4 +1,4 @@
-#include <cassert>
+// __ESBMC_assert is a built-in intrinsic; no include needed.
 
 // Inheritance variant of github_4715_irep2_bodies_temp_dtor_01: destroying a
 // derived temporary runs both the derived and the base destructor. Exercises
@@ -29,6 +29,6 @@ int main()
   House h;
   // The temporary built for `new Room()` is destroyed after the copy, running
   // ~Room then ~Base -> dtor_calls == 2. Without the fix both were dropped.
-  assert(dtor_calls == 2);
+  __ESBMC_assert(dtor_calls == 2, "dtor count");
   return 0;
 }

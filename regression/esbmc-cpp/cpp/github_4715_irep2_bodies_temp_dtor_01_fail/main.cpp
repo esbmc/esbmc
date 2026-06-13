@@ -1,4 +1,4 @@
-#include <cassert>
+// __ESBMC_assert is a built-in intrinsic; no include needed.
 
 // Failing companion to github_4715_irep2_bodies_temp_dtor_01: with the fix the
 // temporary object's destructor runs (dtor_calls == 1), so the assertion below
@@ -22,6 +22,6 @@ struct House
 int main()
 {
   House h;
-  assert(dtor_calls == 0);
+  __ESBMC_assert(dtor_calls == 0, "dtor count");
   return 0;
 }
