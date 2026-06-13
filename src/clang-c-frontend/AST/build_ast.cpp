@@ -176,6 +176,45 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   return unit;
 }
 
+/// Import one decl from the source context into \p Importer's destination.
+/// Returns the imported decl, or nullptr if the import failed (the error is
+/// logged and consumed so the rest of the merge can proceed).
+///
+/// clang::ASTImporter::Import() imports the decl node itself but does NOT
+/// recurse into the children of a DeclContext such as a LinkageSpecDecl
+/// (`extern "C" { ... }`). Importing the wrapper alone yields an empty
+/// linkage-spec, so the functions inside it silently vanish from the merged
+/// AST. Every function in ESBMC's C++ operational models is declared inside an
+/// `extern "C"` block, which is why merging a second C++ translation unit
+/// dropped all of its symbols. C functions are direct children of the
+/// translation unit, so they import individually and were unaffected.
+///
+/// We therefore import each child of a LinkageSpecDecl explicitly and attach it
+/// to the imported wrapper's context.
+static clang::Decl *
+importDecl(clang::ASTImporter &Importer, clang::Decl *FromDecl)
+{
+  llvm::Expected<clang::Decl *> ImportedOrErr = Importer.Import(FromDecl);
+  if (!ImportedOrErr)
+  {
+    llvm::Error Err = ImportedOrErr.takeError();
+    llvm::errs() << "Error: " << Err << "\n";
+    consumeError(std::move(Err));
+    return nullptr;
+  }
+  clang::Decl *Imported = *ImportedOrErr;
+
+  auto *FromLS = llvm::dyn_cast<clang::LinkageSpecDecl>(FromDecl);
+  auto *ToLS = llvm::dyn_cast_or_null<clang::LinkageSpecDecl>(Imported);
+  if (FromLS && ToLS)
+    for (clang::Decl *Child : FromLS->decls())
+      if (clang::Decl *ImportedChild = importDecl(Importer, Child))
+        if (ImportedChild->getLexicalDeclContext() != ToLS)
+          ToLS->addDecl(ImportedChild);
+
+  return Imported;
+}
+
 void mergeASTs(
   const std::unique_ptr<clang::ASTUnit> &FromUnit,
   std::unique_ptr<clang::ASTUnit> &ToUnit)
@@ -195,13 +234,5 @@ void mergeASTs(
   Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
 
   for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())
-  {
-    llvm::Expected<clang::Decl *> ImportedOrErr = Importer.Import(decl);
-    if (!ImportedOrErr)
-    {
-      llvm::Error Err = ImportedOrErr.takeError();
-      llvm::errs() << "Error: " << Err << "\n";
-      consumeError(std::move(Err));
-    }
-  }
+    importDecl(Importer, decl);
 }

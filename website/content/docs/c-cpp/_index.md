@@ -4,9 +4,9 @@ weight: 100
 ---
 
 C and C++ are ESBMC's primary frontends, built on Clang/LLVM. ESBMC verifies C
-(up to C23) and C++ (up to C++20), checking memory safety, arithmetic overflow,
-pointer safety, concurrency properties, and user assertions — or proving their
-absence.
+(up to C23) and C++ (up to C++20, with selected C++23 features), checking memory
+safety, arithmetic overflow, pointer safety, concurrency properties, and user
+assertions — or proving their absence.
 
 To get started, see the [Usage](/docs/usage) guide and the
 [Constructs](/docs/constructs) reference for the verification annotations. The
