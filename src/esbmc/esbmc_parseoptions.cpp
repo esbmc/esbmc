@@ -337,14 +337,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // that are used by ESBMC at later stages but which are not available
   // through CMD, setting groups of options based depending on
   // particular CMD flags)
-
-  // V.4.4 (esbmc/esbmc#4715): IREP2 bodies are now the default goto-convert
-  // path. The full-corpus verdict-parity sweep (Bitwuzla + Z3, all frontends)
-  // is clean, so route every frontend's body through the IREP2 round-trip
-  // unless the user explicitly opts back to the legacy path with
-  // --no-irep2-bodies. (--irep2-bodies remains accepted for explicit opt-in.)
-  options.set_option("irep2-bodies", !cmdline.isset("no-irep2-bodies"));
-
   if (cmdline.isset("bv"))
     options.set_option("int-encoding", false);
 

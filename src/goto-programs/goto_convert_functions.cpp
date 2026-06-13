@@ -109,19 +109,18 @@ static void stamp_value_locations(exprt &expr, const locationt &loc)
     stamp_value_locations(*it, loc);
 }
 
-// --irep2-bodies only: IREP2 value-level expressions carry no source location
-// (only the structured-CF code kinds got the V.4.1/V.4.5 non-reflected
-// `location` field). The clang frontends stamp every sub-expression of a
-// statement with that statement's #location, but the legacy->IREP2->legacy body
-// round-trip drops it from the value operands. goto_convert then generates
-// instructions from those operands (e.g. the tmp/GOTO sequence a `&&`/`||`
-// short-circuit lowers to, whose location is read from the operand at
-// goto_sideeffects.cpp:242) with an empty location -- breaking any pass keyed on
-// instruction location, e.g. --condition-coverage skips conditions whose file
-// is not the source file (goto_coverage.cpp:947), reporting 0 conditions and a
-// spurious SUCCESSFUL. Restore the frontend invariant by pushing each
-// statement's location down onto its location-less value operands. Each nested
-// statement governs its own subtree; flag-off uses the legacy body untouched.
+// IREP2 value-level expressions carry no source location (only the
+// structured-CF code kinds got the V.4.1/V.4.5 non-reflected `location` field).
+// The clang frontends stamp every sub-expression of a statement with that
+// statement's #location, but the legacy->IREP2->legacy body round-trip drops it
+// from the value operands. goto_convert then generates instructions from those
+// operands (e.g. the tmp/GOTO sequence a `&&`/`||` short-circuit lowers to,
+// whose location is read from the operand at goto_sideeffects.cpp:242) with an
+// empty location -- breaking any pass keyed on instruction location, e.g.
+// --condition-coverage skips conditions whose file is not the source file
+// (goto_coverage.cpp:947), reporting 0 conditions and a spurious SUCCESSFUL.
+// Restore the frontend invariant by pushing each statement's location down onto
+// its location-less value operands. Each nested statement governs its subtree.
 static void restore_value_locations(exprt &code, const locationt &inherited)
 {
   // This statement's own location (non-recursive const read); falls back to the
@@ -175,22 +174,18 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     abort();
   }
 
-  // V.4.3 (esbmc/esbmc#4715): When --irep2-bodies is on, convert the body
-  // through IREP2 before handing it to goto_convert_rec. get_value2() returns
-  // the IREP2 body directly when a frontend stored it (e.g. the Python frontend
-  // post-adjust), or lazily forward-migrates the legacy body for other
-  // frontends. Flag off ⇒ byte-identical to the legacy path.
-  exprt roundtrip_body_storage;
-  const bool use_irep2_bodies = options.get_bool_option("irep2-bodies");
-  if (use_irep2_bodies)
-  {
-    roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
-    // Re-attach the per-statement source locations the round-trip dropped from
-    // value operands, so goto_convert-generated instructions stay located.
-    restore_value_locations(roundtrip_body_storage, locationt());
-  }
-  const codet &code = use_irep2_bodies ? to_code(roundtrip_body_storage)
-                                       : to_code(symbol.get_value());
+  // V.4.4 (esbmc/esbmc#4715): the function body is always lowered through the
+  // IREP2 round-trip. get_value2() returns the IREP2 body directly when a
+  // frontend stored it (e.g. the Python frontend post-adjust), or lazily
+  // forward-migrates the legacy body for other frontends; migrate_expr_back
+  // then yields the codet goto_convert_rec consumes. The pre-V.4.4 legacy
+  // bypass (to_code(symbol.get_value())) and the --no-irep2-bodies escape hatch
+  // are gone — this is the only body path.
+  exprt roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
+  // Re-attach the per-statement source locations the round-trip dropped from
+  // value operands, so goto_convert-generated instructions stay located.
+  restore_value_locations(roundtrip_body_storage, locationt());
+  const codet &code = to_code(roundtrip_body_storage);
 
   locationt end_location;
 

@@ -3031,12 +3031,15 @@ so the body-seam back-migration disappears. Active work moves there.
 # Part V — Python frontend → **100 % IREP2** (the deep-pin program)
 
 > **Status: in progress.** Phase V.4 (IREP2-native bodies through
-> `goto_convert`, behind `--irep2-bodies`) has landed V.4.0→V.4.3 across
-> all frontends, and **V.4.4 has flipped the flag on by default** — the
-> full-corpus verdict-parity sweep (Bitwuzla + Z3; Python, C, C++ at every
-> standard, floats, cstd, CUDA, Solidity) is clean, and `--no-irep2-bodies`
-> is retained as the escape hatch. Remaining: V.4.4-final (delete the legacy
-> `to_code(symbol.get_value())` seam), the V.1k IREP2-native adjuster
+> `goto_convert`) has landed V.4.0→V.4.3 across all frontends; **V.4.4a
+> flipped the flag on by default** (full-corpus verdict-parity sweep clean —
+> Bitwuzla + Z3; Python, C, C++ at every standard, floats, cstd, CUDA,
+> Solidity) and **V.4.4b removed the legacy body seam entirely** — the IREP2
+> round-trip is now the only body path, the `to_code(symbol.get_value())`
+> bypass and the `--no-irep2-bodies` escape hatch are gone, and
+> `--irep2-bodies` survives only as a deprecated no-op. Remaining: the deeper
+> W1 removal (rewrite `goto_convert_rec` handlers to consume `code_*2t`
+> directly, dropping the round-trip), the V.1k IREP2-native adjuster
 > keystone, and V.5/V.6. This supersedes the "not started / costed path"
 > framing this paragraph originally carried (it predated the V.4 work); the
 > §V.2 phase entries hold the authoritative per-phase status, and §18's
@@ -3556,13 +3559,24 @@ verdict parity, dual-solver, asserts build (§V.5).
      *Caveat:* the verdict sweep ignores boolector-only `THOROUGH` tests in a
      Z3-only build (pre-existing environment failures, identical on both
      paths).
-   - **V.4.4b — remove the legacy path. REMAINING.** Once the default has
-     baked, delete `to_code(symbol.get_value())` and the `--no-irep2-bodies`
-     escape hatch so the IREP2 round-trip is the only body path. The
-     exception fixes above were the first parity blockers found; #5348/#5357
-     and the per-construct parity fixes (#5330/#5335/#5340/#5346/#5355) closed
-     the rest, since the per-frontend `_01` smoke tests do not exercise every
-     body construct.
+   - **V.4.4b — remove the legacy path. LANDED.** `convert_function`
+     (`goto_convert_functions.cpp`) now lowers every body through the IREP2
+     round-trip unconditionally: the `to_code(symbol.get_value())` legacy
+     bypass, the `options.get_bool_option("irep2-bodies")` gate, the
+     `esbmc_parseoptions.cpp` default-set, and the `--no-irep2-bodies` escape
+     hatch are all deleted — the IREP2 round-trip is the only body path.
+     `--irep2-bodies` is retained as a deprecated, accepted **no-op** so the
+     49 `github_4715_irep2_bodies_*` regression tests (and any external
+     scripts) keep working without a mass `test.desc` rewrite; those tests now
+     validate the unconditional path. Behaviour is identical-by-construction to
+     V.4.4a's already-validated default-on path (this commit only removes the
+     now-unreachable else-branch and the flag plumbing). The exception fixes
+     above were the first parity blockers found; #5348/#5357 and the
+     per-construct parity fixes (#5330/#5335/#5340/#5346/#5355) closed the
+     rest, since the per-frontend `_01` smoke tests do not exercise every body
+     construct. *Next:* the deeper W1 removal — rewrite the `goto_convert_rec`
+     handlers to consume `code_*2t` directly so the back-migration (and its
+     round-trip overhead) disappears — remains future work, not V.4.4.
 
 **Risk/scope:** V.4.0 and V.4.1 are small and safe (infra only). V.4.2+
 touch the shared goto pipeline → gate on `esbmc-cpp` and a
