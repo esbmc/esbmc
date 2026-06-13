@@ -1526,13 +1526,27 @@ void python_converter::preregister_global_variables(
       if (st.id() == "symbol" || st.is_struct())
         var_type = gen_pointer_type(st);
     }
+    // Is the value a bare literal (`s: str = "..."`, `n: int = 0`)? Only such
+    // globals are pre-registered with a real type below; non-literal values
+    // (a constructor `o = C()`, a method/function call, ...) are left to
+    // get_var_assign.
+    const bool value_is_constant =
+      element.contains("value") && element["value"].is_object() &&
+      element["value"].value("_type", "") == "Constant";
+
     // A default-constructed typet has an empty id (""), which is neither "nil"
     // nor "empty"; the Optional path above only sets var_type for nullable
-    // class annotations. For every other annotated global, fall back to
+    // class annotations. For a LITERAL-valued global, fall back to
     // extract_type_info so the symbol is pre-registered with its real type
     // (e.g. a `str` global is char[N], not a placeholder that later decays to
-    // char* and forces a runtime strlen on subscript — github_2885).
-    if (var_type.is_nil() || var_type.id().empty())
+    // char* and forces a runtime strlen on subscript — github_2885). This is
+    // deliberately gated on value_is_constant: a class global with a
+    // constructor/call value (`t: Tile = Tile(...)`, `b: Bar = f.bar()`) must
+    // NOT be pre-registered as `Class*` here — doing so corrupts the later
+    // construction (int/ptr typecast at SMT encoding — github_4541/github_2997).
+    // Such globals fall through to the skip below and are registered by
+    // get_var_assign with the correct migrated pointer type.
+    if ((var_type.is_nil() || var_type.id().empty()) && value_is_constant)
     {
       try
       {
@@ -1560,22 +1574,13 @@ void python_converter::preregister_global_variables(
     if (is_user_class_struct_type(var_type))
       var_type = gen_pointer_type(var_type);
     // Skip when no usable type resolved. The default-constructed typet (empty
-    // id, neither "nil" nor "empty") is a pre-registration placeholder that
-    // extract_type_info returns before the annotation is in its final form —
-    // for ANY annotated global. Pre-register the placeholder ONLY for a literal
-    // (`Constant`) value, e.g. `shared: int = 0`. That is the case that needs
-    // it: a function writing the global via `global`, when defined before the
-    // global's module-level assignment, must resolve to the same symbol rather
-    // than mint a separate one — and the placeholder is harmless there because
-    // get_var_assign stores the literal straight into it. For any non-literal
-    // value (a constructor `obj = Box()`, a method/function call, …) or a bare
-    // annotation, skip: registering the empty-typed placeholder would corrupt
-    // the later assignment/construction — move_symbol_to_context will not
-    // overwrite a plain variable, so the value is stored into an empty-typed
-    // slot and crashes. get_var_assign then registers it with the real type.
-    const bool value_is_constant =
-      element.contains("value") && element["value"].is_object() &&
-      element["value"].value("_type", "") == "Constant";
+    // id, neither "nil" nor "empty") is a pre-registration placeholder. For a
+    // literal value it now carries the real type (resolved above); for any
+    // non-literal value (a constructor `obj = Box()`, a method/function call,
+    // ...) or a bare annotation it stays empty and we skip — registering an
+    // empty-typed (or speculatively Class*) placeholder would corrupt the later
+    // assignment/construction. get_var_assign then registers it with the real
+    // type.
     if (
       var_type.is_nil() || var_type.is_empty() ||
       (var_type.id().empty() && !value_is_constant))
