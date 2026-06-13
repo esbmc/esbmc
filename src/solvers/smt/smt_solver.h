@@ -178,6 +178,14 @@ public:
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
 
+  /** Convert a single node, assuming its operands are already in the cache.
+   *  This is the per-node body of the conversion; convert_ast() drives it
+   *  with an explicit-stack post-order walk so that deeply left-nested
+   *  associative chains (e.g. a huge disjunction) don't recurse one C++
+   *  frame per level and overflow the stack. The operand walk inside this
+   *  body therefore hits the cache instead of recursing. */
+  smt_astt convert_ast_node(const expr2tc &expr);
+
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  depending on the type of the expression.

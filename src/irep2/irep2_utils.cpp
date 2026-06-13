@@ -25,44 +25,28 @@ void make_not(expr2tc &expr)
   expr.swap(new_expr);
 }
 
-// Combine @p cs into a single expr by balanced pairwise reduction, using
-// @p combine (and2tc / or2tc). A left-leaning chain of depth N makes any
-// structural walker that recurses per operand (notably
-// smt_solver_baset::convert_ast) recurse N frames deep and overflow the
-// stack on large inputs (tens of thousands of clauses); a balanced tree
-// keeps the depth at ~log2(N). AND/OR are associative, so the combined
-// result is semantically identical to a chain.
-template <typename Combine>
-static expr2tc balanced_reduce(std::vector<expr2tc> cs, Combine combine)
-{
-  for (std::size_t n = cs.size(); n > 1;)
-  {
-    std::size_t w = 0;
-    for (std::size_t i = 0; i + 1 < n; i += 2)
-      cs[w++] = combine(cs[i], cs[i + 1]);
-    if (n & 1) // carry the unpaired tail element forward
-      cs[w++] = cs[n - 1];
-    n = w;
-  }
-  return cs[0];
-}
-
 expr2tc conjunction(std::vector<expr2tc> cs)
 {
   if (cs.empty())
     return gen_true_expr();
-  return balanced_reduce(std::move(cs), [](const expr2tc &a, const expr2tc &b) {
-    return and2tc(a, b);
-  });
+
+  expr2tc res = cs[0];
+  for (std::size_t i = 1; i < cs.size(); ++i)
+    res = and2tc(res, cs[i]);
+
+  return res;
 }
 
 expr2tc disjunction(std::vector<expr2tc> cs)
 {
   if (cs.empty())
     return gen_true_expr();
-  return balanced_reduce(std::move(cs), [](const expr2tc &a, const expr2tc &b) {
-    return or2tc(a, b);
-  });
+
+  expr2tc res = cs[0];
+  for (std::size_t i = 1; i < cs.size(); ++i)
+    res = or2tc(res, cs[i]);
+
+  return res;
 }
 
 expr2tc gen_nondet(const type2tc &type)

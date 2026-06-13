@@ -374,7 +374,92 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   return side2;
 }
 
+// Returns true when convert_ast_node() would recurse into expr's operands
+// via the default operand walk. Mirrors the switch in convert_ast_node():
+// vector-typed nodes take dedicated rewrite paths, and the listed expr_ids
+// explicitly skip their operands ("Don't convert their operands"). Keep this
+// in sync with that switch.
+static bool walks_operands(const expr2tc &expr)
+{
+  if (is_vector_type(expr))
+    return false;
+
+  switch (expr->expr_id)
+  {
+  case expr2t::with_id:
+  case expr2t::constant_array_id:
+  case expr2t::constant_vector_id:
+  case expr2t::constant_array_of_id:
+  case expr2t::index_id:
+  case expr2t::address_of_id:
+  case expr2t::ieee_add_id:
+  case expr2t::ieee_sub_id:
+  case expr2t::ieee_mul_id:
+  case expr2t::ieee_div_id:
+  case expr2t::ieee_fma_id:
+  case expr2t::ieee_sqrt_id:
+  case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
+  case expr2t::pointer_capability_id:
+    return false;
+  default:
+    return true;
+  }
+}
+
 smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
+{
+  // Warm the cache bottom-up with an explicit-stack post-order walk so that
+  // the per-node body (convert_ast_node) never has to recurse through a long
+  // chain of operands. This keeps deeply left-nested associative expressions
+  // (e.g. a disjunction of tens of thousands of clauses) from overflowing the
+  // C++ stack: each node's operands are already converted by the time we
+  // convert the node itself. We only descend through nodes whose operands the
+  // body would actually convert (walks_operands), so the cache contents match
+  // exactly what recursive conversion would have produced.
+  std::vector<std::pair<expr2tc, bool>> stack; // (node, children_pushed)
+  stack.emplace_back(expr, false);
+
+  while (!stack.empty())
+  {
+    // Copy out of the stack: emplace_back below may reallocate, so we must not
+    // hold a reference into the vector across a push.
+    const expr2tc node = stack.back().first;
+    const bool expanded = stack.back().second;
+
+    {
+      std::lock_guard lock(smt_cache_mutex);
+      if (smt_cache.find(node) != smt_cache.end())
+      {
+        stack.pop_back();
+        continue;
+      }
+    }
+
+    if (!expanded && walks_operands(node))
+    {
+      stack.back().second = true;
+      // Push operands in reverse so they pop (and convert) left-to-right,
+      // matching the recursive foreach_operand order — fresh-symbol numbering
+      // and cache-insertion order then stay identical to recursive conversion.
+      // get_sub_expr() visits the same slots in the same order as
+      // foreach_operand (both fold over K::fields), so no operand is skipped.
+      const size_t n = node->get_num_sub_exprs();
+      for (size_t i = n; i-- > 0;)
+        stack.emplace_back(*node->get_sub_expr(i), false);
+      continue;
+    }
+
+    // All operands (if any) are cached now: convert this node and cache it.
+    convert_ast_node(node);
+    stack.pop_back();
+  }
+
+  std::lock_guard lock(smt_cache_mutex);
+  return smt_cache.find(expr)->ast;
+}
+
+smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
   {
     std::lock_guard lock(smt_cache_mutex);
