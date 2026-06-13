@@ -348,7 +348,7 @@ __ESBMC_HIDE:;
   return __ESBMC_memmove(dest, src, n);
 }
 
-int memcmp(const void *s1, const void *s2, size_t n)
+int __memcmp_impl(const void *s1, const void *s2, size_t n)
 {
 __ESBMC_HIDE:;
   int res = 0;
@@ -363,7 +363,15 @@ __ESBMC_HIDE:;
   return res;
 }
 
-void *memchr(const void *buf, int ch, size_t n)
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcmp_impl;
+  (void)hax;
+  return __ESBMC_memcmp(s1, s2, n);
+}
+
+void *__memchr_impl(const void *buf, int ch, size_t n)
 {
 __ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
@@ -373,4 +381,12 @@ __ESBMC_HIDE:;
   }
 
   return (n ? (void *)buf : NULL);
+}
+
+void *memchr(const void *buf, int ch, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memchr_impl;
+  (void)hax;
+  return __ESBMC_memchr(buf, ch, n);
 }

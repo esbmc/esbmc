@@ -8,26 +8,33 @@ non-determinism and constraining the explored state space.
 
 ## Modeling primitives
 
-`__ESBMC_assert(e, msg)` aborts execution when `e` is false:
+`__ESBMC_assert(cond, msg)` reports a property violation when `cond` is false:
 
 ```c
-void __ESBMC_assert(e, "some message here");
+void __ESBMC_assert(_Bool cond, const char *msg);
+
+__ESBMC_assert(x > 0, "x must be positive");
 ```
 
-`nondet_X()` returns a non-deterministic value of type `X`, where `X` is one of
-`bool`, `char`, `int`, `float`, `double`, `loff_t`, `long`, `pchar`,
-`pthread_t`, `sector_t`, `short`, `size_t`, `u32`, `uchar`, `uint`, `ulong`,
-`unsigned`, `ushort` (no side effects). ESBMC assumes these are implemented as:
+`nondet_X()` returns a non-deterministic, side-effect-free value of type `X`.
+ESBMC forward-declares a convenience set where `X` is one of `bool`, `char`,
+`schar`, `uchar`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`,
+`double`, conceptually defined as:
 
 ```c
 X nondet_X() { X val; return val; }
 ```
 
+The same functions are also available under the SV-COMP `__VERIFIER_nondet_X`
+spelling. More generally, **any function whose body is unavailable returns a
+fresh non-deterministic value of its return type**, so an external function that
+is declared but not defined behaves like a `nondet_` call.
+
 `__ESBMC_assume(e)` ignores the current execution when `e` is false, and is a
-no-op otherwise:
+no-op otherwise (also available as `__VERIFIER_assume`):
 
 ```c
-void __ESBMC_assume(e);
+void __ESBMC_assume(_Bool e);
 ```
 
 `__ESBMC_atomic_begin()` / `__ESBMC_atomic_end()` model the atomic execution of
