@@ -423,18 +423,25 @@ void clang_c_languaget::set_language_version()
     config.language.c_std = c_stdt::c89;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &)
+bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   set_language_version();
-  clang_c_convertert converter(context, AST, "C");
+
+  // Convert + adjust this translation unit in an isolated context, then
+  // merge the fully-adjusted symbols into the shared context via c_link.
+  // This keeps each TU's convert/adjust from re-walking and re-adjusting
+  // symbols contributed by other frontends/TUs sharing `context` (#5309).
+  contextt new_context;
+
+  clang_c_convertert converter(new_context, AST, "C");
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(context);
+  clang_c_adjust adjuster(new_context);
   if (adjuster.adjust())
     return true;
 
-  return false;
+  return c_link(context, new_context, module);
 }
 
 void clang_c_languaget::show_parse(std::ostream &)

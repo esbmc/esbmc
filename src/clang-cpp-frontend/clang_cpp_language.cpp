@@ -116,18 +116,27 @@ void clang_cpp_languaget::set_language_version()
     config.language.cpp_std = cxx_stdt::cpp98;
 }
 
-bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
+bool clang_cpp_languaget::typecheck(
+  contextt &context,
+  const std::string &module)
 {
   set_language_version();
-  clang_cpp_convertert converter(context, AST, "C++");
+
+  // Convert + adjust this translation unit in an isolated context, then
+  // merge the fully-adjusted symbols into the shared context via c_link.
+  // This keeps each TU's convert/adjust from re-walking and re-adjusting
+  // symbols contributed by other frontends/TUs sharing `context` (#5309).
+  contextt new_context;
+
+  clang_cpp_convertert converter(new_context, AST, "C++");
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(context);
+  clang_cpp_adjust adjuster(new_context);
   if (adjuster.adjust())
     return true;
 
-  return false;
+  return c_link(context, new_context, module);
 }
 
 bool clang_cpp_languaget::final(contextt &context)
