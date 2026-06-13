@@ -532,15 +532,6 @@ void __ESBMC_pthread_end_main_hook(void);
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
 
-// Exception-lowering runtime hooks. These must be visible during library
-// linking because remove_exceptions inserts calls to them after parsing, even
-// when the user program never includes <exception>.
-void __ESBMC_push_handled_exception(void);
-void __ESBMC_pop_handled_exception(void);
-void __ESBMC_rethrow_current_exception(void);
-void *__ESBMC_current_exception_raw(void);
-void __ESBMC_rethrow_exception_raw(void *);
-
 // Define a macro to generate overflow result structures and function declarations
 #define DEFINE_ESBMC_OVERFLOW_TYPE(type)              \
   typedef struct {                                          \
