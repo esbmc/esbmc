@@ -110,6 +110,44 @@ program until it finds a bug (base case satisfiable), proves correctness (base
 case unsatisfiable and either the forward condition or inductive step
 unsatisfiable), or exhausts the time or memory limit.
 
+For loops whose termination matters as a property in its own right, the same
+machinery is reused to prove (or refute) that loops halt — see
+[Termination and Non-termination](/docs/theory/termination).
+
+### Strengthening the inductive step {#strengthening-is}
+
+The inductive step is where *k*-induction gets its power to prove unbounded
+safety, and also where it is weakest. To model an *arbitrary* loop iteration it
+**havocs** the loop-modified variables — assigns each a fresh non-deterministic
+value — which erases everything symbolic execution had learned about them. The
+havoc is sound, but imprecise: it admits states no real execution can reach, so
+the inductive step often reports a *spurious* counterexample and fails to close
+an otherwise-valid proof.
+
+ESBMC recovers the lost precision without giving up soundness. The key
+observation is that any *sound over-approximation* of the states reachable at the
+loop head may be re-asserted as an inductive hypothesis immediately after the
+havoc: doing so can only prune spurious havoc-induced states, never a real
+inductive counterexample [6]. ESBMC supplies two such hypotheses:
+
+- **Numeric bounds.** After the havoc is in place, the
+  [interval analysis](/docs/theory/interval-analysis) is recomputed on the
+  transformed program and the inferred range for each loop variable is injected
+  as an assumption at the loop head. This re-establishes the variable bounds the
+  havoc discarded, so the inductive step reasons over realistic values.
+- **Pointer points-to sets.** Under value-set (points-to) analysis, a havoc'd
+  pointer would otherwise range over every object. ESBMC pins it to the sound set
+  of candidate objects the analysis already proved it may reference, recovering
+  enough shape information to discharge traversal-style loops over linked
+  structures.
+
+Both hypotheses are tagged so that **only the inductive step sees them** — the
+base case and forward condition are untouched, so bug-finding and the bounded
+proof are unaffected. Each hypothesis is applied only where it provably
+over-approximates the reachable loop-head states; where that cannot be
+guaranteed, the inductive step falls back to the plain havoc (sound, if less
+precise).
+
 ## References
 
 [1] Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro,
@@ -129,3 +167,7 @@ Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
 [5] Mikhail Y. R. Gadelha, Hussama Ibrahim Ismail, Lucas C. Cordeiro: *Handling
 loops in bounded model checking of C programs via k-induction.* Int. J. Softw.
 Tools Technol. Transf. 19(1):97–114, 2017. [doi:10.1007/s10009-015-0407-9](https://doi.org/10.1007/s10009-015-0407-9)
+
+[6] Martin Brain, Saurabh Joshi, Daniel Kroening, Peter Schrammel: *Safety
+Verification and Refutation by k-Invariants and k-Induction.* SAS 2015, LNCS
+9291: 145–161. [doi:10.1007/978-3-662-48288-9_9](https://doi.org/10.1007/978-3-662-48288-9_9)
