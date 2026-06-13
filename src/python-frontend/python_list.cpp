@@ -241,6 +241,17 @@ static typet get_elem_type_from_annotation(
     if (slice.contains("id") && slice["id"].is_string())
       return type_handler_.get_typet(slice["id"].get<std::string>());
 
+    // Tuple element: list[Tuple[A, B]] / list[tuple[A, B]]. Build the concrete
+    // tuple struct (not the opaque 0-member "Tuple") so subscript/unpack of a
+    // W[i] read sees real components; see type_handler::get_typet(json) for why
+    // the opaque form crashes the SMT cast-to-struct path.
+    if (
+      slice.contains("_type") && slice["_type"] == "Subscript" &&
+      slice.contains("value") && slice["value"].is_object() &&
+      slice["value"].contains("id") && slice["value"]["id"].is_string() &&
+      (slice["value"]["id"] == "Tuple" || slice["value"]["id"] == "tuple"))
+      return type_handler_.get_typet(slice);
+
     // Nested container element: list[list[T]], list[dict[K, V]], ...
     // Resolve to the container's own type (list[T] -> __ESBMC_PyListObj*),
     // so the caller treats W[i] as a list and re-routes W[i][j] through
