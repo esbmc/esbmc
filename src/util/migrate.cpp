@@ -744,7 +744,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    new_expr_ref = constant_int2tc(type, val);
+    // Preserve the `#c_sizeof_type` of a folded sizeof(T) constant (clang stores
+    // the element type T here, e.g. for malloc(sizeof(T))). constant_int2t has
+    // no irept named-subs, so without this the type is lost on the
+    // --irep2-bodies round-trip and the allocated object degrades to char
+    // (esbmc/esbmc#4715).
+    type2tc sizeof_type;
+    const irept &szt = expr.c_sizeof_type();
+    if (szt.is_not_nil())
+      sizeof_type = migrate_type(static_cast<const typet &>(szt));
+
+    new_expr_ref = constant_int2tc(type, val, sizeof_type);
     return;
   }
 
@@ -2862,6 +2872,10 @@ exprt migrate_expr_back(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
+    // Restore the folded sizeof(T) element type so malloc/alloca lowering can
+    // recover the allocated object's type (esbmc/esbmc#4715).
+    if (!is_nil_type(ref2.sizeof_type))
+      theexpr.c_sizeof_type(migrate_type_back(ref2.sizeof_type));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:

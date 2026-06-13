@@ -18,6 +18,8 @@
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
+
+#include <functional>
 #include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -1172,6 +1174,104 @@ exprt python_converter::handle_tuple_operations(
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Lexicographic ordering for tuples, lowered to element-wise comparisons
+  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct trips
+  // an is_signedbv assertion):
+  //   (a0,a1,..) < (b0,b1,..)
+  //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
+  // Components may be integer/bool/float scalars (mixed int/float promote to
+  // double, matching Python's numeric tower) or nested tuples (compared
+  // recursively). Tuples of differing arity compare on the common prefix, with
+  // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
+  // swapped operands; LtE/GtE negate the strict result. Any other component
+  // kind (string/list/...) makes the whole comparison fall through unchanged.
+  if (
+    lhs_is_tuple && rhs_is_tuple &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
+  {
+    bool ok = true;
+    auto is_num = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+             t == bool_type();
+    };
+
+    auto memb = [&](const expr2tc &s, const struct_typet::componentt &c) {
+      return migrate_expr_back(
+        member2tc(migrate_type(c.type()), s, c.get_name()));
+    };
+
+    // Strict lexicographic less-than for two tuple-typed expressions.
+    std::function<exprt(const exprt &, const exprt &)> lex_lt =
+      [&](const exprt &ta, const exprt &tb) -> exprt {
+      const auto &ca = to_struct_type(ta.type()).components();
+      const auto &cb = to_struct_type(tb.type()).components();
+      const size_t m = std::min(ca.size(), cb.size());
+
+      expr2tc a2, b2;
+      migrate_expr(ta, a2);
+      migrate_expr(tb, b2);
+
+      // Base: a proper prefix is strictly less than the longer tuple.
+      exprt result = gen_boolean(ca.size() < cb.size());
+      for (size_t k = m; k-- > 0;)
+      {
+        exprt ai = memb(a2, ca[k]);
+        exprt bi = memb(b2, cb[k]);
+
+        exprt lt, eq;
+        const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
+        const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
+        if (ai_tuple && bi_tuple)
+        {
+          lt = lex_lt(ai, bi);
+          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+        }
+        else if (is_num(ai.type()) && is_num(bi.type()))
+        {
+          // Promote a mixed int/float pair to double (Python int->float).
+          if (ai.type() != bi.type())
+          {
+            ai = typecast_exprt(ai, double_type());
+            bi = typecast_exprt(bi, double_type());
+          }
+          lt = exprt("<", bool_type());
+          lt.copy_to_operands(ai, bi);
+          eq = equality_exprt(ai, bi);
+        }
+        else
+        {
+          ok = false; // unsupported / mismatched component kinds
+          return gen_boolean(false);
+        }
+
+        exprt tail("and", bool_type());
+        tail.copy_to_operands(eq, result);
+        exprt head("or", bool_type());
+        head.copy_to_operands(lt, tail);
+        result = head;
+      }
+      return result;
+    };
+
+    const bool swap = (op == "Gt" || op == "LtE");
+    const bool negate = (op == "LtE" || op == "GtE");
+    exprt &a = swap ? rhs : lhs;
+    exprt &b = swap ? lhs : rhs;
+
+    exprt result = lex_lt(a, b);
+    if (!ok)
+      return nil_exprt(); // a non-orderable component: leave unchanged
+
+    if (negate)
+    {
+      exprt n("not", bool_type());
+      n.copy_to_operands(result);
+      result = n;
+    }
+    result.location() = get_location_from_decl(element);
     return result;
   }
 

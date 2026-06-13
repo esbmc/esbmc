@@ -280,12 +280,27 @@ class constant_int2t : public expr2t
 public:
   BigInt value;
 
+  /** Element type T of a folded `sizeof(T)` operand (the C `#c_sizeof_type`
+   *  attribute); nil for an ordinary integer constant. Not reflected: it rides
+   *  with the constant so the malloc/alloca allocated type survives the
+   *  --irep2-bodies body round-trip (esbmc/esbmc#4715) — clang folds
+   *  `malloc(sizeof(T))` to a bare size_t constant whose only record of T is
+   *  this attribute, and `get_alloc_type` reads it back to type the dynamic
+   *  object. Excluded from cmp/crc/hash (kept out of `fields`) so plain integer
+   *  constants stay identical and constant sharing is unaffected. */
+  type2tc sizeof_type;
+  static constexpr std::size_t excluded_field_bytes = sizeof(type2tc);
+
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
+   *  @param sizeof_t Element type of a folded sizeof(T) operand; nil otherwise
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const type2tc &sizeof_t = type2tc())
+    : expr2t(type, constant_int_id), value(input), sizeof_type(sizeof_t)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -1135,8 +1150,8 @@ ESBMC_DEFINE_CODE_DECL(code_dead);
 class code_decl2t : public expr2t
 {
 public:
-  irep_idt value; // symbol name
-  expr2tc init;   // optional initializer; nil when absent
+  irep_idt value;     // symbol name
+  expr2tc init;       // optional initializer; nil when absent
   locationt location; // not reflected: source loc travels with the stmt
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
   code_decl2t(
@@ -2030,7 +2045,7 @@ class code_ifthenelse2t : public expr2t
 public:
   expr2tc cond;
   expr2tc then_case;
-  expr2tc else_case; // nil when there is no else branch
+  expr2tc else_case;  // nil when there is no else branch
   locationt location; // not reflected (see note above)
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 

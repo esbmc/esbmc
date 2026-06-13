@@ -333,7 +333,6 @@ protected:
   bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
   nlohmann::json reorder_arguments(
     const nlohmann::json &expr,
-    const nlohmann::json &src_ast_json,
     const nlohmann::json &callee_expr_json);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...

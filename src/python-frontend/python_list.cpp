@@ -3482,7 +3482,7 @@ exprt python_list::list_repetition(
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
 
-  auto is_integer_type = [](const typet &type) {
+  [[maybe_unused]] auto is_integer_type = [](const typet &type) {
     return type.is_signedbv() || type.is_unsignedbv();
   };
 
