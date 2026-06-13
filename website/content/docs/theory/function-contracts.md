@@ -12,10 +12,20 @@ annotation syntax, command-line flags, worked examples, and limitations, see the
 ## The assume-guarantee principle
 
 A contract states what a function *assumes* of its callers (a precondition) and
-what it *guarantees* in return (a postcondition), together with a frame
-condition naming the locations it may modify. Given such a contract, a function
-is verified **once** against its specification, and every call to it is then
-replaced by that specification rather than re-analysed.
+what it *guarantees* in return (a postcondition), together with a **frame
+condition**. Given such a contract, a function is verified **once** against its
+specification, and every call to it is then replaced by that specification
+rather than re-analysed.
+
+A *frame condition* names the locations an operation is allowed to modify and —
+crucially — asserts that **every other location is left unchanged**. In a
+contract it is the `assigns` (or `modifies`) clause: `__ESBMC_assigns(x)` says
+"this call may change `x` and nothing else." The "nothing else" half is what
+makes contracts useful — it lets a caller keep everything it already knew about
+the rest of the state across the call, and it is exactly what `replace` mode
+relies on when it havocs *only* the listed locations. The need to state this
+explicitly (rather than leaving "what does not change" implicit) is the *frame
+problem* in procedure specifications [1].
 
 This decomposes a single whole-program proof into independent per-function
 obligations:
@@ -44,7 +54,9 @@ The same assume-guarantee idea applies to loops: a **loop invariant** plus a
 loop frame condition lets ESBMC summarise a loop instead of unrolling it,
 turning a bounded check into an inductive one — closely related to
 [k-induction](/docs/theory/verification-algorithms#k-induction) and detailed in
-the [Loop Invariants](/docs/loop-invariants) guide.
+the [Loop Invariants](/docs/loop-invariants) guide. The "everything else is
+unchanged" guarantee a frame condition provides is the contract-level analogue
+of the *frame rule* in separation logic [2].
 
 ## See also
 
@@ -52,3 +64,13 @@ the [Loop Invariants](/docs/loop-invariants) guide.
   `--enforce-contract` / `--replace-call-with-contract`, quantifiers,
   `__ESBMC_is_fresh`, and known limitations.
 - [Loop Invariants](/docs/loop-invariants) — loop contracts and the frame rule.
+
+## References
+
+[1] Alexander Borgida, John Mylopoulos, Raymond Reiter: *On the Frame Problem in
+Procedure Specifications.* IEEE Trans. Software Eng. 21(10):785–798, 1995.
+[doi:10.1109/32.469460](https://doi.org/10.1109/32.469460)
+
+[2] John C. Reynolds: *Separation Logic: A Logic for Shared Mutable Data
+Structures.* LICS 2002: 55–74.
+[doi:10.1109/LICS.2002.1029817](https://doi.org/10.1109/LICS.2002.1029817)
