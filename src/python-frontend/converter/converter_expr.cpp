@@ -82,6 +82,45 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// True when `method_name` is a method decorated with @property in `class_name`
+// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
+// getter. A same-named non-property method in a derived class shadows a base
+// property (Python MRO), so a match that is not @property stops the search.
+static bool is_property_method(
+  const nlohmann::json &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const nlohmann::json cls = json_utils::find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+  {
+    if (
+      stmt.value("_type", std::string()) != "FunctionDef" ||
+      stmt.value("name", std::string()) != method_name)
+      continue;
+    if (stmt.contains("decorator_list"))
+      for (const auto &dec : stmt["decorator_list"])
+        if (
+          dec.value("_type", std::string()) == "Name" &&
+          dec.value("id", std::string()) == "property")
+          return true;
+    return false; // method exists but is not a property: shadows any base
+  }
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") &&
+        is_property_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
+}
+
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -1202,6 +1241,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
+          }
+          else if (is_property_method(
+                     (*ast_json)["body"],
+                     extract_class_name_from_tag(obj_type_name),
+                     attr_name))
+          {
+            // Reading a @property: invoke its getter. Rewrite `obj.attr` to a
+            // call `obj.attr()` and convert that, reusing the method-call
+            // machinery (the @property decorator is otherwise ignored, so the
+            // getter is a plain self-method returning the value).
+            nlohmann::json call_node;
+            call_node["_type"] = "Call";
+            call_node["func"] = element;
+            call_node["args"] = nlohmann::json::array();
+            call_node["keywords"] = nlohmann::json::array();
+            copy_location_fields_from_decl(element, call_node);
+            expr = get_expr(call_node);
           }
           else
           {
