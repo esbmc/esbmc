@@ -53,7 +53,7 @@ def get_goto_ir(esbmc_bin: str, ld_file: str, props_file: str) -> str:
     """Extract the GOTO IR text using --goto-functions-only."""
     r = subprocess.run(
         [esbmc_bin, ld_file, "--ld-props", props_file, "--goto-functions-only"],
-        capture_output=True, text=True
+        capture_output=True, text=True, check=False
     )
     return r.stdout + r.stderr
 
@@ -135,7 +135,8 @@ def eval_expr(expr: str, state: dict) -> int:
     expr = re.sub(r'^\s*1\s+and\s+', '', expr)
 
     try:
-        return int(bool(eval(expr, {"__builtins__": {}}, {})))
+        # Sandboxed evaluation of a boolean expression with no builtins.
+        return int(bool(eval(expr, {"__builtins__": {}}, {})))  # pylint: disable=eval-used
     except Exception:
         return 0
 
@@ -190,39 +191,40 @@ def execute_scan(nondet_vars: list, assignments: list,
 
 # ── Benchmark processor ───────────────────────────────────────────────────────
 
-def process_benchmark(name: str, ld_file: str, props_file: str,
-                      inp_file: Path, output_dir: Path,
-                      esbmc_bin: str) -> None:
+def run_sequences(nondet_vars: list, assignments: list,
+                  sequences: list, out_vars: list) -> list:
+    """Execute every sequence/scan and collect the output variables per scan."""
+    all_outputs = []
+    for seq in sequences:
+        persistent = {}
+        seq_outputs = []
+        for scan_inputs in seq["scans"]:
+            state = execute_scan(nondet_vars, assignments, scan_inputs, persistent)
+            seq_outputs.append({v: state.get(v, 0) for v in out_vars})
+        all_outputs.append(seq_outputs)
+    return all_outputs
+
+def process_benchmark(name: str, ld_file: str, inp_file: Path,
+                      output_dir: Path, esbmc_bin: str) -> None:
     """Process one benchmark: extract IR, execute all sequences, save outputs."""
 
     # Extract GOTO IR
-    ir_text = get_goto_ir(esbmc_bin, ld_file, props_file)
+    ir_text = get_goto_ir(esbmc_bin, ld_file, PROPS_FILES.get(name))
     nondet_vars, assignments = parse_scan_loop(ir_text)
 
     if not nondet_vars:
         print(f"  ⚠  {name}: no NONDET inputs found in GOTO IR — skipping")
         return
 
-    # Load input sequences
+    # Load input sequences and execute them
     data      = json.loads(inp_file.read_text())
     sequences = data["sequences"]
-    out_vars  = data["outputs"]
+    all_outputs = run_sequences(nondet_vars, assignments, sequences, data["outputs"])
 
     total = len(sequences) * len(sequences[0]["scans"])
     print(f"  → {name}")
     print(f"    inputs ({len(nondet_vars)}): {nondet_vars}")
     print(f"    rungs : {len(assignments)} assignments")
-
-    # Execute all sequences
-    all_outputs = []
-    for seq in sequences:
-        persistent = {}
-        seq_outputs = []
-        for scan_inputs in seq["scans"]:
-            state   = execute_scan(nondet_vars, assignments, scan_inputs, persistent)
-            outputs = {v: state.get(v, 0) for v in out_vars}
-            seq_outputs.append(outputs)
-        all_outputs.append(seq_outputs)
 
     # Save results
     result = {
@@ -261,7 +263,7 @@ def main():
     manifest   = json.loads((inputs_dir / "manifest.json").read_text())
     benchmarks = [args.benchmark] if args.benchmark else manifest["benchmarks"]
 
-    print(f"\nP4a GOTO-IR Concrete Executor")
+    print("\nP4a GOTO-IR Concrete Executor")
     print(f"  ESBMC  : {args.esbmc}")
     print(f"  Inputs : {inputs_dir}")
     print(f"  Output : {output_dir}\n")
@@ -272,8 +274,7 @@ def main():
             print(f"  ⚠  {name}: SKIP — {SKIPPED[name]}")
             continue
 
-        ld_file    = LD_FILES.get(name)
-        props_file = PROPS_FILES.get(name)
+        ld_file = LD_FILES.get(name)
 
         if not ld_file:
             print(f"  ⚠  {name}: not in benchmark registry")
@@ -287,9 +288,10 @@ def main():
             print(f"  ⚠  {name}: inputs not found: {inp_file}")
             continue
 
-        process_benchmark(name, ld_file, props_file, inp_file, output_dir, args.esbmc)
+        process_benchmark(name, ld_file, inp_file, output_dir, args.esbmc)
 
-    print(f"\n✓ Done.")
+    print("\n✓ Done.")
+
 
 if __name__ == "__main__":
     main()

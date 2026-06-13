@@ -7,7 +7,6 @@ Generates 50 random input sequences x 10 scan cycles for each SAFE-LD benchmark.
 import json
 import random
 import argparse
-import os
 from pathlib import Path
 
 BENCHMARKS = {
@@ -132,14 +131,13 @@ def main():
         benchmark = BENCHMARKS[name]
         data = generate_all_sequences(benchmark, args.sequences, args.scans)
         out_file = output_dir / f"{name}_inputs.json"
-        with open(out_file, "w") as f:
+        with open(out_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         print(f"  ✓ {out_file}  ({args.sequences} seqs x {args.scans} scans, {len(benchmark['inputs'])} inputs)")
 
         if args.preview:
             seq0 = data["sequences"][0]["scans"]
-            inputs = data["inputs"]
-            print(f"    Preview (first 3 scans):")
+            print("    Preview (first 3 scans):")
             for i, scan in enumerate(seq0[:3]):
                 print(f"      scan {i}: {scan}")
         generated.append(str(out_file))
@@ -148,10 +146,11 @@ def main():
         "seed": args.seed, "n_sequences": args.sequences,
         "n_scans": args.scans, "benchmarks": targets, "files": generated
     }
-    with open(output_dir / "manifest.json", "w") as f:
+    with open(output_dir / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     print(f"\n✓ Done. Manifest: {output_dir}/manifest.json")
+
 
 if __name__ == "__main__":
     main()

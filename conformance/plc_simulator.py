@@ -16,7 +16,6 @@ This is a reference implementation based on IEC 61131-3 semantics:
 import json
 import argparse
 from pathlib import Path
-from copy import deepcopy
 
 # ── TON Timer model ───────────────────────────────────────────────────────────
 class TON:
@@ -38,7 +37,7 @@ class TON:
 
 # ── Benchmark executors ───────────────────────────────────────────────────────
 
-def exec_motor_interlock(inputs: dict, state: dict) -> dict:
+def exec_motor_interlock(inputs: dict, _state: dict) -> dict:
     """
     motor_interlock: Forward and Reverse are mutually exclusive.
     Forward requires !Reverse and !Emergency_Stop and !Stop_Button.
@@ -118,7 +117,7 @@ def exec_bottle_filling_safe(inputs: dict, state: dict) -> dict:
         "Alarm_No_Bottle": alarm_no_bottle,
     }
 
-def exec_elevator_safe(inputs: dict, state: dict) -> dict:
+def exec_elevator_safe(inputs: dict, _state: dict) -> dict:
     """elevator_safe: motor requires door closed, no emergency, no overload."""
     at = int(inputs["At_Floor1"] or inputs["At_Floor2"] or inputs["At_Floor3"])
     emerg   = inputs["Emergency_Stop"]
@@ -152,16 +151,16 @@ def exec_water_control(inputs: dict, state: dict) -> dict:
     pump = state.get("Water_Pump", 0)
 
     # SET conditions (rung 1: auto mode)
-    if (inputs["Automatic_Manual_Switch"] and
-        inputs["Pool_Low_Level_Sensor"] and
-        not inputs["Tank_Low_Level_Sensor"] and
-        not inputs["Tank_High_Level_Sensor"]):
+    if (inputs["Automatic_Manual_Switch"]
+            and inputs["Pool_Low_Level_Sensor"]
+            and not inputs["Tank_Low_Level_Sensor"]
+            and not inputs["Tank_High_Level_Sensor"]):
         pump = 1
 
     # SET conditions (rung 2: manual start)
-    if (inputs["Start_Button"] and
-        inputs["Pool_Low_Level_Sensor"] and
-        not inputs["Tank_High_Level_Sensor"]):
+    if (inputs["Start_Button"]
+            and inputs["Pool_Low_Level_Sensor"]
+            and not inputs["Tank_High_Level_Sensor"]):
         pump = 1
 
     # RESET conditions (rungs 3,4,5)
@@ -178,13 +177,11 @@ def exec_water_control(inputs: dict, state: dict) -> dict:
 def exec_stairs_light(inputs: dict, state: dict) -> dict:
     """stairs_light: toggle on button press, PIR activates for 20 scans via TOF."""
     btn_state = state.get("lights_buttons_state", 0)
-    pir_prev  = state.get("pir_prev", 0)
     tof_et    = state.get("tof_et", 0)
 
     # Rising edge detection for buttons
     up_edge   = inputs["control_button_up"]   and not state.get("up_prev", 0)
     down_edge = inputs["control_button_down"] and not state.get("down_prev", 0)
-    pir_edge  = inputs["stairs_pir_sensor"]   and not pir_prev
 
     # Toggle logic
     if up_edge or down_edge:
@@ -214,7 +211,6 @@ def exec_stairs_light(inputs: dict, state: dict) -> dict:
 def exec_tank_level_safe(inputs: dict, state: dict) -> dict:
     """tank_level_safe: pump fills LOW->HIGH, valve drains HIGH->LOW, with interlocks."""
     draining = state.get("Draining_Active", 0)
-    filling  = state.get("Filling_Active", 0)
 
     pump = int(inputs["AUTO_MODE"] and
                inputs["LOW_SWITCH"] and
@@ -230,6 +226,7 @@ def exec_tank_level_safe(inputs: dict, state: dict) -> dict:
 
     return {"PUMP": pump, "VALVE": valve}
 
+
 # ── Executor registry ─────────────────────────────────────────────────────────
 EXECUTORS = {
     "motor_interlock":      exec_motor_interlock,
@@ -241,7 +238,7 @@ EXECUTORS = {
     "tank_level_safe":      exec_tank_level_safe,
 }
 
-def run_benchmark(name: str, sequences: list, executor) -> list:
+def run_benchmark(sequences: list, executor) -> list:
     """Run all sequences through the simulator. Returns list of output sequences."""
     all_outputs = []
     for seq in sequences:
@@ -269,7 +266,7 @@ def main():
     manifest   = json.loads((inputs_dir / "manifest.json").read_text())
     benchmarks = [args.benchmark] if args.benchmark else manifest["benchmarks"]
 
-    print(f"\nP4a Python Simulator\n")
+    print("\nP4a Python Simulator\n")
 
     for name in benchmarks:
         if name not in EXECUTORS:
@@ -285,7 +282,7 @@ def main():
         sequences = data["sequences"]
         executor  = EXECUTORS[name]
 
-        outputs = run_benchmark(name, sequences, executor)
+        outputs = run_benchmark(sequences, executor)
 
         result = {
             "benchmark": name,
@@ -305,7 +302,8 @@ def main():
         print(f"    First scan outputs: {seq0[0]}")
 
     print(f"\n✓ Simulator outputs saved to {output_dir}/")
-    print(f"\nNext: run diff_outputs.py to compare with ESBMC outputs")
+    print("\nNext: run diff_outputs.py to compare with ESBMC outputs")
+
 
 if __name__ == "__main__":
     main()

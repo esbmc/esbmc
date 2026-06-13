@@ -7,7 +7,11 @@ This forces Z3 to find a trace with exactly these input values,
 revealing what the LD program computes for those inputs.
 """
 
-import json, subprocess, re, argparse, tempfile
+import json
+import subprocess
+import re
+import argparse
+import tempfile
 from pathlib import Path
 
 ESBMC_BIN = "./build/src/esbmc/esbmc"
@@ -55,7 +59,8 @@ def run_esbmc(ld_file: str, props_file: str, timeout: int = 15) -> str:
     cmd = [ESBMC_BIN, ld_file, "--ld-props", props_file,
            "--incremental-bmc", "--no-slice"]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=timeout, check=False)
         return r.stdout + r.stderr
     except subprocess.TimeoutExpired:
         return "TIMEOUT"
@@ -80,31 +85,34 @@ def get_outputs(ld_file, scan_inputs, output_vars, all_vars, tmpdir):
     values = parse_trace(stdout, all_vars)
     return {v: values.get(v, -1) for v in output_vars}
 
-def process_benchmark(name, inp_file, ld_file, output_dir, limit_seqs=None):
-    data      = json.loads(inp_file.read_text())
-    sequences = data["sequences"]
-    if limit_seqs:
-        sequences = sequences[:limit_seqs]
-    inp_vars  = data["inputs"]
-    out_vars  = data["outputs"]
-    all_vars  = inp_vars + out_vars
-
-    total = len(sequences) * len(sequences[0]["scans"])
-    done  = 0
+def collect_outputs(ld_file, sequences, out_vars, all_vars, total):
+    """Run ESBMC for every scan and collect the concrete output values."""
     all_outputs = []
-
+    done = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         for seq in sequences:
             seq_outputs = []
             for scan_inputs in seq["scans"]:
-                outputs = get_outputs(ld_file, scan_inputs, out_vars, all_vars, tmp)
-                seq_outputs.append(outputs)
+                seq_outputs.append(
+                    get_outputs(ld_file, scan_inputs, out_vars, all_vars, tmp)
+                )
                 done += 1
                 if done % 20 == 0:
-                    pct = done * 100 // total
-                    print(f"    [{pct:3d}%] {done}/{total} scans")
+                    print(f"    [{done * 100 // total:3d}%] {done}/{total} scans")
             all_outputs.append(seq_outputs)
+    return all_outputs
+
+def process_benchmark(name, inp_file, ld_file, output_dir, limit_seqs=None):
+    data      = json.loads(inp_file.read_text())
+    sequences = data["sequences"]
+    if limit_seqs:
+        sequences = sequences[:limit_seqs]
+    out_vars  = data["outputs"]
+    all_vars  = data["inputs"] + out_vars
+
+    total       = len(sequences) * len(sequences[0]["scans"])
+    all_outputs = collect_outputs(ld_file, sequences, out_vars, all_vars, total)
 
     result = {"benchmark": name, "n_sequences": len(sequences),
               "n_scans": len(sequences[0]["scans"]), "outputs": all_outputs}
@@ -131,7 +139,7 @@ def main():
     manifest   = json.loads((inputs_dir / "manifest.json").read_text())
     benchmarks = [args.benchmark] if args.benchmark else manifest["benchmarks"]
 
-    print(f"\nP4a ESBMC Concrete Executor v2 (constrained inputs)\n")
+    print("\nP4a ESBMC Concrete Executor v2 (constrained inputs)\n")
 
     for name in benchmarks:
         ld_file = LD_FILES.get(name)
@@ -143,11 +151,12 @@ def main():
         print(f"  → {name}")
         process_benchmark(name, inp_file, ld_file, output_dir, args.sequences)
 
-    print(f"\n✓ Done. Compare with:")
-    print(f"  python3 conformance/diff_outputs.py \\")
-    print(f"    --openplc conformance/sim_outputs/ \\")
+    print("\n✓ Done. Compare with:")
+    print("  python3 conformance/diff_outputs.py \\")
+    print("    --openplc conformance/sim_outputs/ \\")
     print(f"    --esbmc   {output_dir}/ \\")
     print(f"    --inputs  {inputs_dir}/")
+
 
 if __name__ == "__main__":
     main()

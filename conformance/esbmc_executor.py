@@ -24,12 +24,10 @@ LD_FILES = {
     "tank_level_safe":     "benchmarks/tank_level_control/tank_level_control.ld",
 }
 
-def make_probe_props(inputs: dict, first_output_var: str) -> str:
+def make_probe_props(first_output_var: str) -> str:
     """
-    Generate props.yaml that:
-    1. Assumes the concrete input values (via invariant on inputs)
-    2. Forces a trace via an always-true absence property on an output
-    This gets ESBMC to show us the output values for these exact inputs.
+    Generate props.yaml that forces a trace via an always-true absence
+    property on an output, getting ESBMC to expose the output values.
     """
     # Use the first output variable in a tautology to force trace
     return f"""properties:
@@ -65,24 +63,23 @@ def run_esbmc_probe(ld_file: str, props_file: str, timeout: int = 15) -> str:
         "--no-slice",
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=timeout, check=False)
         return r.stdout + r.stderr
     except subprocess.TimeoutExpired:
         return "TIMEOUT"
     except Exception as e:
         return f"ERROR: {e}"
 
-def get_concrete_outputs(ld_file: str, scan_inputs: dict,
-                         output_vars: list, all_vars: list,
-                         tmpdir: Path) -> dict:
+def get_concrete_outputs(ld_file: str, output_vars: list,
+                         all_vars: list, tmpdir: Path) -> dict:
     """
-    For one scan with concrete inputs, run ESBMC and extract outputs.
-    Since ESBMC samples inputs non-deterministically, we check if the
-    trace matches our desired inputs. If not, we accept the first trace
-    found (all inputs are possible, so any trace is valid for comparison).
+    Run ESBMC once and extract outputs from the counterexample trace.
+    ESBMC samples inputs non-deterministically, so any trace is valid
+    for comparison — we accept the first one found.
     """
     props_file = str(tmpdir / "probe.yaml")
-    Path(props_file).write_text(make_probe_props(scan_inputs, output_vars[0]))
+    Path(props_file).write_text(make_probe_props(output_vars[0]))
 
     stdout = run_esbmc_probe(ld_file, props_file)
 
@@ -94,31 +91,34 @@ def get_concrete_outputs(ld_file: str, scan_inputs: dict,
     # Extract only output variables
     return {v: values.get(v, -1) for v in output_vars}
 
-def process_benchmark(name: str, inp_file: Path, ld_file: str,
-                      output_dir: Path) -> None:
-    data      = json.loads(inp_file.read_text())
-    sequences = data["sequences"]
-    inp_vars  = data["inputs"]
-    out_vars  = data["outputs"]
-    all_vars  = inp_vars + out_vars
-
-    total    = len(sequences) * len(sequences[0]["scans"])
-    done     = 0
-
+def collect_outputs(ld_file: str, sequences: list, out_vars: list,
+                    all_vars: list, total: int) -> list:
+    """Run ESBMC for every scan and collect the concrete output values."""
     all_outputs = []
+    done = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         for seq in sequences:
             seq_outputs = []
-            for scan_inputs in seq["scans"]:
-                outputs = get_concrete_outputs(
-                    ld_file, scan_inputs, out_vars, all_vars, tmp
+            for _ in seq["scans"]:
+                seq_outputs.append(
+                    get_concrete_outputs(ld_file, out_vars, all_vars, tmp)
                 )
-                seq_outputs.append(outputs)
                 done += 1
                 if done % 50 == 0:
                     print(f"    {done}/{total} scans processed...")
             all_outputs.append(seq_outputs)
+    return all_outputs
+
+def process_benchmark(name: str, inp_file: Path, ld_file: str,
+                      output_dir: Path) -> None:
+    data      = json.loads(inp_file.read_text())
+    sequences = data["sequences"]
+    out_vars  = data["outputs"]
+    all_vars  = data["inputs"] + out_vars
+
+    total       = len(sequences) * len(sequences[0]["scans"])
+    all_outputs = collect_outputs(ld_file, sequences, out_vars, all_vars, total)
 
     result = {
         "benchmark": name,
@@ -152,9 +152,9 @@ def main():
     manifest   = json.loads((inputs_dir / "manifest.json").read_text())
     benchmarks = [args.benchmark] if args.benchmark else manifest["benchmarks"]
 
-    print(f"\nP4a ESBMC Concrete Executor")
+    print("\nP4a ESBMC Concrete Executor")
     print(f"  Binary: {args.esbmc}")
-    print(f"  Note: 1 ESBMC call per scan — may take a few minutes\n")
+    print("  Note: 1 ESBMC call per scan — may take a few minutes\n")
 
     for name in benchmarks:
         ld_file = LD_FILES.get(name)
@@ -177,11 +177,12 @@ def main():
         print(f"  Processing: {name}")
         process_benchmark(name, inp_file, ld_file, output_dir)
 
-    print(f"\n✓ Done. Now run:")
-    print(f"  python3 conformance/diff_outputs.py \\")
-    print(f"    --openplc conformance/sim_outputs/ \\")
+    print("\n✓ Done. Now run:")
+    print("  python3 conformance/diff_outputs.py \\")
+    print("    --openplc conformance/sim_outputs/ \\")
     print(f"    --esbmc   {output_dir}/ \\")
     print(f"    --inputs  {inputs_dir}/")
+
 
 if __name__ == "__main__":
     main()
