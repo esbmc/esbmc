@@ -390,7 +390,7 @@ bool clang_c_languaget::parse(const std::string &path)
     return true;
 
   if (!AST)
-    AST = move(newAST);
+    AST = std::move(newAST);
   else
     mergeASTs(newAST, AST);
 
