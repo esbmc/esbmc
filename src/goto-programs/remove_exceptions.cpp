@@ -155,14 +155,21 @@ public:
     // catch is over-reported as a terminate. That needs call-site-sensitive
     // enforcement at the pthread trampoline, which is blocked until thread-local
     // state propagates across its indirect call.
-    if (thread_entry_unresolved)
-      return report_unsupported(
-        goto_functions, "a thread with an unresolved start routine");
-    for (const irep_idt &e : thread_entries)
-      if (direct_call_targets.count(e))
+    // Only decline when an exception can actually escape a thread. A concurrent
+    // program that declares a noexcept spec but never throws or catches puts no
+    // exception in flight, so the thread-entry uncaught-escape check is moot and
+    // the program stays lowerable (lower_ip no-ops its exception-free bodies).
+    if (program_throws_or_catches(goto_functions))
+    {
+      if (thread_entry_unresolved)
         return report_unsupported(
-          goto_functions,
-          "a thread start routine that is also called directly");
+          goto_functions, "a thread with an unresolved start routine");
+      for (const irep_idt &e : thread_entries)
+        if (direct_call_targets.count(e))
+          return report_unsupported(
+            goto_functions,
+            "a thread start routine that is also called directly");
+    }
 
     // Whole-program, all-or-nothing: every participating function must be in
     // the supported subset, otherwise the program is reported as unsupported
@@ -217,6 +224,41 @@ public:
           if (ins.type == THROW || ins.type == CATCH)
             return true;
       }
+    return false;
+  }
+
+  /// True if a function belongs to a linked operational model / library rather
+  /// than user code. The C++ exception OM (library/cpp/exception.cpp) itself
+  /// uses throw/catch (std::terminate's try/catch, the rethrow helpers); linking
+  /// it pulls those constructs into every program's context, but they are not
+  /// *user* exception flow, so they must not count when deciding whether a
+  /// concurrent program can escape an exception out of a thread.
+  bool is_library_function(const irep_idt &name) const
+  {
+    const symbolt *s = ns.lookup(name);
+    if (!s)
+      return false;
+    const std::string file = s->location.file().as_string();
+    // OM/library models live under the extracted-headers temp dir at runtime
+    // ("-headers-") and under c2goto/library/ when built in-tree.
+    return file.find("-headers-") != std::string::npos ||
+           file.find("c2goto/library/") != std::string::npos;
+  }
+
+  /// True if *user* code contains a real throw or catch — i.e. a user exception
+  /// can actually be put in flight (as opposed to merely declaring a noexcept /
+  /// throw(...) spec, which program_uses_exceptions also counts, or the linked
+  /// OM's own internal try/catch). The thread-entry decline below only matters
+  /// when a user exception can escape a thread, so it is gated on this: a
+  /// concurrent program that only declares a noexcept function, or only links
+  /// the OM, but never itself throws/catches, stays lowerable.
+  bool program_throws_or_catches(const goto_functionst &gf) const
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available && !is_library_function(fn.first))
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH)
+            return true;
     return false;
   }
 
