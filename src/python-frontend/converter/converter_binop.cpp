@@ -546,7 +546,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs.type().is_pointer() != rhs.type().is_pointer())
   {
     exprt &struct_side = lhs.type().is_pointer() ? rhs : lhs;
-    const exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
+    exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
     auto class_tag = [&](const typet &t) -> irep_idt {
       typet r = t;
       if (r.id() == "symbol")
@@ -555,7 +555,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
-      struct_side = gen_address_of(struct_side);
+    {
+      // struct_side is a by-value instance of the same class as *ptr_side.
+      // Normally take its address so both compare as references (github #4116).
+      // But a constant-struct rvalue — e.g. an Enum member like `Color.RED`,
+      // which has no storage — cannot be addressed: gen_address_of would emit
+      // address-of-constant, which the SMT backend rejects ("Unrecognized
+      // address_of operand"). Dereference the pointer instead and compare the
+      // two structs by value, the correct semantics for Enum singletons
+      // (github_3642).
+      if (struct_side.is_constant() || struct_side.id() == "struct")
+        ptr_side = dereference_exprt(ptr_side, ptr_side.type());
+      else
+        struct_side = gen_address_of(struct_side);
+    }
   }
 
   // Python reference-identity when one operand is a by-value class instance and
