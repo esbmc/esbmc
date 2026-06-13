@@ -1526,7 +1526,13 @@ void python_converter::preregister_global_variables(
       if (st.id() == "symbol" || st.is_struct())
         var_type = gen_pointer_type(st);
     }
-    if (var_type.is_nil())
+    // A default-constructed typet has an empty id (""), which is neither "nil"
+    // nor "empty"; the Optional path above only sets var_type for nullable
+    // class annotations. For every other annotated global, fall back to
+    // extract_type_info so the symbol is pre-registered with its real type
+    // (e.g. a `str` global is char[N], not a placeholder that later decays to
+    // char* and forces a runtime strlen on subscript — github_2885).
+    if (var_type.is_nil() || var_type.id().empty())
     {
       try
       {
