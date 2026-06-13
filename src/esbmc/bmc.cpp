@@ -122,9 +122,6 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 {
-  if (options.get_bool_option("result-only"))
-    return;
-
   log_progress("Building error trace");
 
   bool is_compact_trace = true;
@@ -135,6 +132,15 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   goto_tracet goto_trace;
   build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
+
+  // Snapshot for callers (k-induction's outer driver wants the loop-
+  // variable values to learn the next k step). Snapshot BEFORE the
+  // result-only short-circuit so we keep the data even when we suppress
+  // user-visible output.
+  last_error_trace = goto_trace;
+
+  if (options.get_bool_option("result-only"))
+    return;
 
   std::string output_file = options.get_option("cex-output");
   if (output_file != "")
@@ -423,6 +429,19 @@ void bmct::report_trace(
     else if (!is && !fc)
     {
       error_trace(*runtime_solver, eq);
+    }
+    else
+    {
+      // For IS / FC the user-visible CEX is suppressed by default, but
+      // the outer k-induction driver may still want to introspect the
+      // CEX (e.g. to read loop-variable values for the next-k hint).
+      // error_trace snapshots into last_error_trace before honoring
+      // result-only, so set it here to suppress printing while keeping
+      // the snapshot.
+      bool prev_result_only = options.get_bool_option("result-only");
+      options.set_option("result-only", true);
+      error_trace(*runtime_solver, eq);
+      options.set_option("result-only", prev_result_only);
     }
     break;
 

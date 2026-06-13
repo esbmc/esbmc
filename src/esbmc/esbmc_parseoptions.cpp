@@ -1544,6 +1544,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 // \param options - options for setting the verification strategy
 // and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
+
+// Forward decls; definitions follow `do_bmc_strategy` for grouping.
+static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions);
+
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1592,10 +1596,29 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
-  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  // Pre-compute a k hint from the goto program's loop bounds. The
+  // k-induction transformation has already run and inserted pre-loop
+  // ASSUMEs containing the bound literals (e.g. `i >= 64` in popcount's
+  // pop4). Use this as a shortcut: if it exceeds the next sequential k,
+  // jump to it directly instead of stepping through intermediate
+  // values. The FC will close at exactly that k.
+  //
+  // NOT applied under `--termination`: termination's win condition is
+  // the inductive step proving UNSAT at SMALL k (markers unreachable
+  // from havoced state), and skipping past intermediate k values
+  // hides those wins. E.g. on the noop-cycle pattern, IS proves
+  // non-termination at k=3 via `inject_noop_cycle_assumes`, but if
+  // the hint jumps the loop from k=3 to k=5 we never run IS at k=3
+  // and miss the proof.
+  uint64_t fc_hint = options.get_bool_option("termination")
+                       ? 0
+                       : learn_k_from_goto_bounds(goto_functions);
+  bool hint_consumed = false;
+
+  // Trying all bounds from 1 to "max_k_step" in "k_step_inc".
   uint64_t last_k_step = k_step_base;
-  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
-       k_step += k_step_inc)
+  uint64_t k_step = k_step_base;
+  while (k_step <= max_k_step)
   {
     last_k_step = k_step;
     // k-induction
@@ -1635,9 +1658,10 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+        uint64_t is_hint = 0;
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step, is_hint);
+        if (!is_bcv && is_res.is_false())
         {
           if (is_coverage)
             report_coverage(
@@ -1648,6 +1672,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
               ctest_gen);
           return conclude();
         }
+        // IS produced a refutation. If its CEX exposes a larger
+        // loop-variable value than the current hint, raise the hint.
+        // The hint is consumed at most once (hint_consumed gates the
+        // jump below), but we keep updating it across IS iterations
+        // so the value adopted is the max the IS model ever picked.
+        if (is_res.is_true() && is_hint > fc_hint && !hint_consumed)
+          fc_hint = is_hint;
       }
     }
     // termination
@@ -1725,8 +1756,15 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // gate is needed.
       if (k_step > 1)
       {
-        tvt is_res =
-          is_inductive_step_violated(options, goto_functions, k_step);
+        // The termination branch doesn't use the dynamic FC-hint
+        // mechanism (k-induction's optimisation for symbolic
+        // bounds), but the signature change to is_inductive_step_-
+        // violated requires us to pass an out-param. Discard the
+        // hint here — adopting it for the termination path is a
+        // separate design question.
+        uint64_t unused_hint = 0;
+        tvt is_res = is_inductive_step_violated(
+          options, goto_functions, k_step, unused_hint);
         // Symex may have set disable-inductive-step mid-run (function
         // pointers, recursion, concurrency). The IS UNSAT result is
         // then a vacuous "0 VCCs to falsify" and not a real
@@ -1774,12 +1812,50 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return conclude();
       }
     }
+
     // falsification
     if (options.get_bool_option("falsification"))
     {
       if (is_base_case_violated(options, goto_functions, k_step).is_true())
         return 1;
     }
+
+    // Bump k. The default increment is `k_step_inc`. If we found a loop
+    // bound in the goto program that exceeds the next sequential k,
+    // jump directly to that value — the FC will close at exactly that
+    // k. Apply the hint at most once so we don't spin if the FC fails
+    // to close at the hinted value. Raise max_k_step if the hint
+    // exceeds it, since otherwise we'd hit the cap before the proof
+    // closes.
+    //
+    // GATING the jump on `next_k > max_inductive_step` (when the cap
+    // is finite): IS UNSAT at small k is a primary win condition
+    // (proves the property by showing the post-havoc state is
+    // unreachable at depth k), and skipping past those k values
+    // silently hides the proof. The hint is a FC-speedup, not an
+    // IS-replacement, so let IS run at every k up to its cap before
+    // letting the hint take over. When --max-inductive-step is the
+    // default -1 (unlimited), the user hasn't asked for the IS cap
+    // so the hint fires as before.
+    uint64_t next_k = k_step + k_step_inc;
+    long max_is_raw = strtol(cmdline.getval("max-inductive-step"), nullptr, 10);
+    bool is_capped = max_is_raw >= 0;
+    bool past_is_cap = is_capped && next_k > static_cast<uint64_t>(max_is_raw);
+    bool hint_safe = !is_capped || past_is_cap;
+    if (!hint_consumed && fc_hint > next_k && hint_safe)
+    {
+      log_status(
+        "Goto program exposes loop bound {:d}; "
+        "skipping k_step from {:d} to {:d}",
+        fc_hint,
+        next_k,
+        fc_hint);
+      next_k = fc_hint;
+      if (fc_hint > max_k_step)
+        max_k_step = fc_hint;
+      hint_consumed = true;
+    }
+    k_step = next_k;
   }
 
   if (
@@ -1861,6 +1937,94 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 //    TV_FALSE if all reachable loops have at most "k_step" iterations
 // for all input values in "goto_functions".
 //    TV_UNKNOWN - otherwise.
+/// Recursively scan @p expr for constant_int2t leaves and update @p best
+/// with the largest non-negative value found. Caps at 1<<20 to avoid
+/// catastrophic jumps when the program contains huge unrelated constants
+/// (INT_MAX, ULONG_MAX, etc.).
+static void collect_max_int_constant(const expr2tc &expr, uint64_t &best)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_constant_int2t(expr))
+  {
+    const BigInt &v = to_constant_int2t(expr).value;
+    if (!v.is_negative() && v.is_uint64())
+    {
+      uint64_t lv = v.to_uint64();
+      // Reject obviously-unrelated huge constants — they're not loop
+      // bounds, just type-max sentinels or pointer offsets.
+      constexpr uint64_t SANE_CAP = 1ULL << 20;
+      if (lv > SANE_CAP)
+        return;
+      if (lv > best)
+        best = lv;
+    }
+    return;
+  }
+  expr->foreach_operand(
+    [&best](const expr2tc &e) { collect_max_int_constant(e, best); });
+}
+
+/// Pre-compute the next-k hint by scanning the goto program for loop-
+/// bound constants. The k-induction transformation has run by this point
+/// and inserts a pre-loop ASSUME of the entry condition containing the
+/// loop bound literals (e.g. `ASSUME !(x == 0 || i >= 64)` for popcount).
+/// Walk all ASSUME and back-edge GOTO instructions, collect integer
+/// constants from their guards, return the max.
+///
+/// Returns 0 when no usable bound is found (caller falls back to the
+/// normal k-step increment).
+static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions)
+{
+  uint64_t best = 0;
+  for (const auto &fn : goto_functions.function_map)
+  {
+    if (!fn.second.body_available)
+      continue;
+    // Skip library helpers (operational models, frontend scaffolding).
+    // Their loops are not the user-program loops we're trying to
+    // hint, and they routinely contain large integer constants
+    // (e.g. ldexp's 2047 exponent range, strtol's 120 char-class
+    // tables) that would mislead the hint to jump to k values
+    // unrelated to any user loop -- causing FC at k=2047 to unwind
+    // every user-side nested loop 2047 times each, hanging the
+    // verification.
+    if (fn.second.body.hide)
+      continue;
+    for (const auto &ins : fn.second.body.instructions)
+    {
+      // Loop bound constants live in two places after k-induction has
+      // transformed the program: the inserted entry ASSUMEs, and the
+      // back-edge IF guards (which still mention `i < N` in the
+      // non-simplified copy).
+      if (ins.is_assume() || ins.is_backwards_goto() || ins.is_goto())
+        collect_max_int_constant(ins.guard, best);
+    }
+  }
+  return best;
+}
+
+/// Dynamic fallback: scan an inductive-step CEX trace for the largest
+/// constant-int value the model assigned to any variable. Used when the
+/// static goto-bounds scan returned 0 (loop bound is symbolic in the
+/// IR — e.g. `for(i=0; i<n; i++)` where `n` is a function parameter
+/// that interval analysis couldn't fold). The IS picks the model's
+/// adversarial value, which for loop-bound patterns is often the bound
+/// the loop will reach.
+///
+/// Considers only ASSIGNMENT steps. Returns 0 when no usable signal.
+static uint64_t learn_k_from_cex_assignments(const goto_tracet &trace)
+{
+  uint64_t best = 0;
+  for (const auto &step : trace.steps)
+  {
+    if (!step.is_assignment())
+      continue;
+    collect_max_int_constant(step.value, best);
+  }
+  return best;
+}
+
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
@@ -1933,8 +2097,11 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const uint64_t &k_step)
+  const uint64_t &k_step,
+  uint64_t &next_k_hint)
 {
+  next_k_hint = 0;
+
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
@@ -1964,6 +2131,8 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   switch (res)
   {
   case smt_convt::P_SATISFIABLE:
+    // IS refutation: model exists. Scan it for the next-k hint.
+    next_k_hint = learn_k_from_cex_assignments(bmc.last_error_trace);
     return tvt(tvt::TV_TRUE);
 
   case smt_convt::P_SMTLIB:
