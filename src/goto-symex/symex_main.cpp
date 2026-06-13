@@ -694,6 +694,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memcmp")
+  {
+    intrinsic_memcmp(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);

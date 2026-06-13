@@ -340,7 +340,7 @@ __ESBMC_HIDE:;
   return dest;
 }
 
-int memcmp(const void *s1, const void *s2, size_t n)
+int __memcmp_impl(const void *s1, const void *s2, size_t n)
 {
 __ESBMC_HIDE:;
   int res = 0;
@@ -353,6 +353,14 @@ __ESBMC_HIDE:;
     n--;
   }
   return res;
+}
+
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcmp_impl;
+  (void)hax;
+  return __ESBMC_memcmp(s1, s2, n);
 }
 
 void *memchr(const void *buf, int ch, size_t n)
