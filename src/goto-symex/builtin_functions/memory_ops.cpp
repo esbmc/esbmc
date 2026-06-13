@@ -711,6 +711,190 @@ void goto_symext::intrinsic_memcpy(
 }
 
 /**
+ * @brief Intrinsic for C memchr.
+ *
+ * memchr(const void *buf, int ch, size_t n) scans the first n bytes of the
+ * object pointed to by buf for the first byte equal to (unsigned char)ch and
+ * returns a pointer to it, or NULL if no such byte appears in those n bytes.
+ *
+ * Instead of unwinding the operational-model loop (one branch per byte), we
+ * read the n candidate bytes with byte_extract and fold them into a single
+ * nested-ite pointer expression:
+ *
+ *   res = ite(byte[0] == ch, buf + 0,
+ *         ite(byte[1] == ch, buf + 1,
+ *         ...
+ *         ite(byte[n-1] == ch, buf + (n-1), NULL)))
+ *
+ * Building from the last position outward keeps the *first* match as the
+ * outermost selected arm. ch is symbolic-friendly (the comparison is encoded);
+ * only n must be a known constant. If the object/offset cannot be resolved to
+ * constants we bump to the __memchr_impl loop.
+ */
+void goto_symext::intrinsic_memchr(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memchr signature");
+
+  using namespace std::string_literals;
+  const auto bump_name = "c:@F@__memchr_impl"s;
+
+  if (options.get_bool_option("no-simplify"))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  expr2tc buf_arg = func_call.operands[0];
+  expr2tc ch_arg = func_call.operands[1];
+  expr2tc n_arg = func_call.operands[2];
+
+  cur_state->rename(ch_arg);
+  cur_state->rename(n_arg);
+  if (!ch_arg || !n_arg || is_symbol2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  simplify(n_arg);
+  if (!is_constant_int2t(n_arg))
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  const unsigned long number_of_bytes = to_constant_int2t(n_arg).as_ulong();
+
+  // Resolve the object(s) buf points to.
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), buf_arg);
+  dereference(deref, dereferencet::INTERNAL);
+
+  if (!internal_deref_items.size())
+  {
+    bump_call(func_call, bump_name);
+    return;
+  }
+
+  std::list<dereference_callbackt::internal_item> buf_items;
+  buf_items.splice(buf_items.end(), internal_deref_items);
+
+  const bool is_big_endian =
+    (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+  expr2tc ret_ref = func_call.ret;
+  if (is_nil_expr(ret_ref))
+    return;
+
+  const type2tc ret_type = ret_ref->type;
+  const expr2tc null_result = symbol2tc(ret_type, "NULL");
+
+  // Byte value to search for: (unsigned char)ch.
+  const expr2tc ch_byte = typecast2tc(get_uint_type(8), ch_arg);
+
+  for (auto &item : buf_items)
+  {
+    guard2tc guard = ex_state.cur_state->guard;
+    guard.add(item.guard);
+
+    expr2tc item_object = item.object;
+    expr2tc item_offset = item.offset;
+    cur_state->rename(item_object);
+    cur_state->rename(item_offset);
+
+    if (!item_object || !item_offset)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    offset_simplifier(item_offset);
+    if (!is_constant_int2t(item_offset))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    const uint64_t number_of_offset =
+      to_constant_int2t(item_offset).value.to_uint64();
+
+    if (is_code_type(item_object->type))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    uint64_t type_size;
+    try
+    {
+      type_size = type_byte_size(item_object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+
+    // Reading the first n bytes must stay within the object.
+    const bool is_out_bounds =
+      (number_of_offset > type_size) ||
+      ((type_size - number_of_offset) < number_of_bytes);
+    if (
+      is_out_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg = fmt::format(
+        "dereference failure on memchr: reading memory segment of size {} with "
+        "{} bytes",
+        type_size - number_of_offset,
+        number_of_bytes);
+      expr2tc check = implies2tc(item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Fold the n candidate bytes into a nested-ite pointer, from the last
+    // position outward so the first match wins.
+    expr2tc result = null_result;
+    for (unsigned long k = number_of_bytes; k-- > 0;)
+    {
+      expr2tc byte = byte_extract2tc(
+        get_uint_type(8),
+        item_object,
+        gen_ulong(number_of_offset + k),
+        is_big_endian);
+      expr2tc match = equality2tc(byte, ch_byte);
+      expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
+      result = if2tc(ret_type, match, hit, result);
+    }
+
+    symex_assign(code_assign2tc(ret_ref, result), false, guard);
+  }
+
+  // C11/C17 7.24.5.1: with n == 0 no bytes are examined, so buf is never
+  // dereferenced and need not be valid. The __memchr_impl model agrees
+  // (its loop is `while (n && ...)`). Only claim non-NULL when n > 0.
+  if (number_of_bytes != 0 && !options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(buf_arg->type, "NULL");
+    expr2tc null_check = not2tc(same_object2tc(buf_arg, null_sym));
+    ex_state.cur_state->guard.guard_expr(null_check);
+    claim(null_check, " dereference failure: NULL pointer on memchr");
+  }
+}
+
+/**
  * @brief This function will try to initialize the object pointed by
  * the address in a smarter way, minimizing the number of assignments.
  * This is intend to optimize the behavior of a memset operation:
