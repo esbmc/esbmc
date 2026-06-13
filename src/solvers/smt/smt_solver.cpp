@@ -450,8 +450,17 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
       continue;
     }
 
-    // All operands (if any) are cached now: convert this node and cache it.
-    convert_ast_node(node);
+    // All operands (if any) are cached now: convert this node. Some
+    // convert_ast_node paths return early without populating the cache
+    // themselves (e.g. they tail-call convert_ast on a rewritten expr), so we
+    // must record the result here — later iterations and the final lookup rely
+    // on every converted node being present in the cache.
+    smt_astt a = convert_ast_node(node);
+    {
+      std::lock_guard lock(smt_cache_mutex);
+      if (smt_cache.find(node) == smt_cache.end())
+        smt_cache.insert(smt_cache_entryt{node, a, ctx_level});
+    }
     stack.pop_back();
   }
 
