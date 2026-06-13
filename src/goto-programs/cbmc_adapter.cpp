@@ -279,6 +279,17 @@ irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
   if (sym.is_extern)
     result.add("is_extern") = mk("1");
 
+  // Flags ESBMC has no equivalent for are dropped (roadmap §4.5). Warn when one
+  // is actually set, since volatile/thread_local in particular affect soundness.
+  if (sym.is_volatile)
+    log_warning("CBMC adapter: dropping 'volatile' on symbol {}", sym.name);
+  if (sym.is_thread_local)
+    log_warning("CBMC adapter: dropping 'thread_local' on symbol {}", sym.name);
+  if (sym.is_weak)
+    log_warning("CBMC adapter: dropping 'weak' on symbol {}", sym.name);
+  if (sym.is_property)
+    log_warning("CBMC adapter: dropping 'property' on symbol {}", sym.name);
+
   result.add("base_name") = mk(sym.base_name);
   result.add("name") = mk(sym.name);
 

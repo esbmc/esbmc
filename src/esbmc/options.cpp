@@ -214,6 +214,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
+    {"cprover", NULL, "Deprecated no-op (kept for backward compatibility)"},
     {"no-cprover-additions",
      NULL,
      "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},

@@ -6,30 +6,46 @@
 #include <util/message.h>
 #include <util/symbol.h>
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <utility>
+
+bool is_cbmc_goto_magic(const unsigned char header[4])
+{
+  return header[0] == 0x7f && header[1] == 'G' && header[2] == 'B' &&
+         header[3] == 'F';
+}
 
 unsigned cbmc_irep_readert::read_word()
 {
   unsigned shift_distance = 0;
-  unsigned res = 0;
+  // Accumulate in 64 bits so that bits shifted past bit 31 stay visible and an
+  // over-wide varint is detectable rather than silently truncated.
+  uint64_t res = 0;
 
   while (in.good())
   {
-    if (shift_distance >= 32)
+    if (shift_distance >= 64)
     {
-      log_error("CBMC goto-binary: input number is too large");
+      log_error("CBMC goto-binary: malformed varint (too many bytes)");
       abort();
     }
 
     unsigned byte = static_cast<unsigned char>(in.get());
-    res |= (byte & 0x7f) << shift_distance;
+    res |= static_cast<uint64_t>(byte & 0x7f) << shift_distance;
     shift_distance += 7;
+
+    if (res > UINT32_MAX)
+    {
+      log_error("CBMC goto-binary: input number {} exceeds 32 bits", res);
+      abort();
+    }
+
     if ((byte & 0x80) == 0)
       break;
   }
 
-  return res;
+  return static_cast<unsigned>(res);
 }
 
 std::string cbmc_irep_readert::read_string()
@@ -125,7 +141,7 @@ bool parse_cbmc_goto(
   for (unsigned char &b : hdr)
     b = static_cast<unsigned char>(in.get());
 
-  if (hdr[0] != 0x7f || hdr[1] != 'G' || hdr[2] != 'B' || hdr[3] != 'F')
+  if (!is_cbmc_goto_magic(hdr))
   {
     log_error("`{}' is not a CBMC goto-binary", filename);
     return true;

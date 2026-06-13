@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_binary_reader.h>
+#include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
@@ -2140,6 +2141,12 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning(
+          "--cprover is deprecated and has no effect; ESBMC additions are now "
+          "linked automatically for CBMC goto-binaries (disable with "
+          "--no-cprover-additions)");
+
       // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
       // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
       // automatically, before reading the binaries so that goto_convert only
@@ -2148,6 +2155,16 @@ bool esbmc_parseoptionst::create_goto_program(
       {
         log_status(
           "CBMC goto-binary detected: linking ESBMC additions automatically");
+        // The synthesised __ESBMC_main still wraps the boilerplate entry, not
+        // the CBMC harness (__CPROVER__start). Until entry-point bridging lands
+        // (roadmap §4.2), a real binary may verify an essentially empty program
+        // and report a spurious SUCCESSFUL. Warn loudly so the verdict is not
+        // trusted blindly.
+        log_warning(
+          "CBMC goto-binary support is experimental: the entry point is not "
+          "yet bridged to the CBMC harness (__CPROVER__start), so results may "
+          "be unsound. Select the entry explicitly with --function and treat a "
+          "SUCCESSFUL verdict with caution.");
         if (synthesize_cprover_additions(options, goto_functions))
           return true;
       }
@@ -2232,9 +2249,7 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
     std::ifstream in(arg, std::ios::in | std::ios::binary);
     unsigned char hdr[4] = {0, 0, 0, 0};
     in.read(reinterpret_cast<char *>(hdr), sizeof(hdr));
-    if (
-      in.gcount() >= 4 && hdr[0] == 0x7f && hdr[1] == 'G' && hdr[2] == 'B' &&
-      hdr[3] == 'F')
+    if (in.gcount() >= 4 && is_cbmc_goto_magic(hdr))
       return true;
   }
   return false;

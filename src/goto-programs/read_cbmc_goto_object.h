@@ -9,6 +9,10 @@
 class contextt;
 class goto_functionst;
 
+/// True if the 4-byte header is the CBMC goto-binary magic (0x7f 'G' 'B' 'F').
+/// ESBMC's own goto-binary format starts with 'G' 'B' 'F' (no leading 0x7f).
+bool is_cbmc_goto_magic(const unsigned char header[4]);
+
 /// Low-level reader for the CBMC goto-binary format (version 6).
 ///
 /// Mirrors \ref irep_serializationt but uses CBMC's 7-bit varint word encoding

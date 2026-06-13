@@ -34,9 +34,8 @@ bool goto_binary_reader::read_goto_binary(
   in.clear();
   in.seekg(0, std::ios::beg);
 
-  if (
-    got >= 4 && static_cast<unsigned char>(hdr[0]) == 0x7f && hdr[1] == 'G' &&
-    hdr[2] == 'B' && hdr[3] == 'F')
+  const unsigned char *uhdr = reinterpret_cast<const unsigned char *>(hdr);
+  if (got >= 4 && is_cbmc_goto_magic(uhdr))
     return read_cbmc_goto_object(in, path, context, dest);
 
   return read_bin_goto_object(in, path, context, dest);
