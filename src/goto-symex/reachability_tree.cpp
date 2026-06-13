@@ -89,7 +89,7 @@ static void collect_write_targets(
       sn.find("c:pthread_lib") != std::string::npos ||
       sn.find("c:@__ESBMC_pthread_thread") != std::string::npos)
       return;
-    if (s->static_lifetime || s->type.is_dynamic_set())
+    if (s->static_lifetime || s->get_type().is_dynamic_set())
       out.insert(name);
     return;
   }
