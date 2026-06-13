@@ -164,6 +164,66 @@ TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
   require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
 }
 
+TEST_CASE(
+  "migrate coerces mismatched ternary branches to the result type",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: the C `assert` macro lowers to a discarded statement-level
+  // ternary `cond ? 0 : __assert_fail()` whose result type is void (empty) and
+  // whose branch types differ from it (int and void). if2t requires both
+  // branches to share the result type, so the forward migration must coerce the
+  // divergent branch -- otherwise the if2t constructor's type invariant trips.
+  // Under --irep2-bodies the whole body is migrated before goto_convert lowers
+  // the ternary, so this shape reaches migrate_expr directly.
+  use_test_ns();
+  typet voidt = migrate_type_back(get_empty_type());
+  typet boolt = migrate_type_back(get_bool_type());
+  typet intt = migrate_type_back(get_int_type(32));
+
+  exprt tern("if", voidt);
+  tern.copy_to_operands(
+    from_integer(1, boolt), // cond
+    from_integer(0, intt),  // true: int, differs from the void result type
+    from_integer(0, intt)); // false: int, differs from the void result type
+
+  expr2tc m;
+  migrate_expr(tern, m);
+  REQUIRE(is_if2t(m));
+  // The if2t and both arms share the (void) result type id.
+  const if2t &i = to_if2t(m);
+  REQUIRE(i.type->type_id == i.true_value->type->type_id);
+  REQUIRE(i.type->type_id == i.false_value->type->type_id);
+}
+
+TEST_CASE(
+  "migrate flattens a single-decl labeled decl-block",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: `lbl: char *s = p;` is legacy label(decl-block(decl)). The
+  // decl-block must NOT migrate to a code_block -- code_block back-migrates to
+  // code("block"), whose scope boundary makes convert_block emit a premature
+  // DEAD for the declared variable right after its init (killing it before its
+  // uses). A decl-block introduces no scope (convert_decl_block), so a
+  // single-decl labeled decl-block flattens to the bare decl: the label's body
+  // round-trips as a code_decl, deferring the DEAD to the enclosing scope.
+  use_test_ns();
+  typet ct = migrate_type_back(get_int_type(32));
+
+  codet decl("decl");
+  decl.copy_to_operands(symbol_exprt("x", ct), from_integer(7, ct));
+  codet declblock("decl-block");
+  declblock.copy_to_operands(decl);
+  codet label("label");
+  label.set("label", "lbl");
+  label.copy_to_operands(declblock);
+
+  expr2tc m;
+  migrate_expr(label, m);
+  REQUIRE(is_code_label2t(m));
+  // The labeled body is the bare decl, not a scope-introducing block.
+  REQUIRE(is_code_decl2t(to_code_label2t(m).code));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
@@ -352,6 +412,30 @@ TEST_CASE(
   REQUIRE(is_sideeffect_assign2t(mc));
   REQUIRE(to_sideeffect_assign2t(mc).location.get_file() == "contract.sol");
   REQUIRE(migrate_expr_back(mc).location().get_file() == "contract.sol");
+
+  // code_assert: its location becomes the ASSERT instruction location, which
+  // gates --assertion-coverage instrumentation (filename-pooled) and the
+  // coverage assert-count -- a dropped location yields "Total Asserts: 0".
+  codet assert_code("assert");
+  assert_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assert_code.location() = loc;
+  expr2tc ma;
+  migrate_expr(assert_code, ma);
+  REQUIRE(is_code_assert2t(ma));
+  REQUIRE(to_code_assert2t(ma).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(ma).location().get_file() == "contract.sol");
+
+  // code_assume: same, lowers to an ASSUME instruction.
+  codet assume_code("assume");
+  assume_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assume_code.location() = loc;
+  expr2tc mu;
+  migrate_expr(assume_code, mu);
+  REQUIRE(is_code_assume2t(mu));
+  REQUIRE(to_code_assume2t(mu).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
 }
 
 TEST_CASE(

@@ -477,6 +477,20 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
 
   exprt expr = code.op0();
 
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
+  // source location from a side_effect_exprt: sideeffect2t carries no location
+  // field, unlike the enclosing code_expression statement (whose location does
+  // survive). remove_function_call copies expr.location() into the lowered call,
+  // so for the function_call side effect that backs the void builtins
+  // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
+  // loop-invariant / requires / ensures contracts) this yields a location-less
+  // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
+  // counter ignore it ("Total Asserts: 0", spurious SUCCESSFUL). Restore the
+  // statement location onto the side effect when the round-trip has dropped it;
+  // a no-op on the legacy path (the side effect keeps its own location there).
+  if (expr.id() == "sideeffect" && expr.location().get_file().empty())
+    expr.location() = code.location();
+
   // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
   // nested side_effect_exprt("cpp-throw") to its code form codet("cpp-throw"):
   // migrate_expr_back has no way to know the throw sat in expression position

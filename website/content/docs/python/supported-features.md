@@ -7,11 +7,11 @@ This page is a reference of all Python language constructs, data structures, and
 
 ## Basic Constructs
 
-- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`, `for ... else` (the `else` clause runs when the loop completes without `break`)
+- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`, `for ... else` and `while ... else` (the `else` clause runs when the loop completes without `break`; both are lowered via a did-not-break flag)
 - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`, `**`
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
-- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`).
+- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`), and may be **nested** (`(a, b), c = ((1, 2), 3)`, including over a runtime right-hand side such as a for-loop element or function return: `for (u, v), w in items:`).
 - **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](./limitations#walrus-operator)).
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
@@ -45,6 +45,9 @@ This page is a reference of all Python language constructs, data structures, and
 - **Self-referential instance attributes**: When an attribute set in `__init__` from a `param=None`-defaulted parameter (e.g. `self.successor = successor`) is populated at construction time (`Node(2, a)`), its field type is recovered by unifying the matching positional constructor argument across module-level `ClassName(...)` calls — enabling linked-list / tree patterns and multi-level attribute chains such as `c.successor.successor`. This also works when the class is imported from another module (`from node import Node`): the attribute types are inferred across the module boundary, so a nested read like `node.successor.value` on an imported-class instance resolves.
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
+- **Explicit base-class `__init__`**: unbound parent-constructor calls of the form `Base.__init__(self, ...)` (the pre-`super()` idiom) are dispatched to the base constructor with `self` bound correctly
+- **`@property` getters**: reading a `@property`-decorated attribute (`obj.area`) invokes the decorated getter method rather than looking up a struct field; inherited properties resolve through the base class
+- **Classes as first-class values**: a class name passed as a bare value (`register(Twist)`) — the class object itself, not an instance — is modelled as an opaque placeholder for inert uses (storing/forwarding the class), while normal construction through the name (`Twist()`) is unaffected
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
 
 ## String Formatting and Literals
@@ -74,6 +77,8 @@ This page is a reference of all Python language constructs, data structures, and
 - `count(x)`: Return the number of occurrences of a value
 - `index(x)`: Return the position of the first occurrence of a value
 - `in` operator: Membership testing (`2 in [1, 2, 3]`)
+- `del l[i]`: Remove the element at a constant index
+- **Slice assignment**: `l[i:j] = src` and the extended form `l[i:j:k] = src`, including grow/shrink replacement (step 1), step > 1 (CPython requires matching lengths), and negative step (`l[::-1] = src`)
 - `+` operator: List concatenation (`[1,2] + [3,4]`)
 - **Repetition**: `lst * n` with both literal and variable lists
 - **Nested lists**: Method calls on subscripted elements (e.g., `nested[i].append(v)`)
@@ -111,6 +116,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Empty set**: `set()` (note: `{}` creates an empty dict, not a set)
 - **From iterable**: `set(list)`, `set(str)`, `set(d.keys())`, `set(d.values())`
 - **Operators**: `-` (difference), `&` (intersection), `|` (union)
+- **Methods**: `issubset(other)`, `issuperset(other)`, `symmetric_difference(other)`, `update(other)`. Subset/superset relations are evaluated directly over the operand lists (a set-materialization bypass), so `set(iterable).issuperset(...)` works without first building the set.
 - **Membership**: `x in s`, `x not in s`
 - **Equality**: `s1 == s2`, `s1 != s2` (order-independent)
 - **`len()`** built-in
@@ -123,6 +129,8 @@ This page is a reference of all Python language constructs, data structures, and
 - Constant-index access with bounds checking: `t[0]`, `t[2]`
 - Generic annotation (`t: tuple`) and parameterized annotation (`-> tuple[int, int]`)
 - Equality comparison: `t1 == (1, 2, 3)`
+- Ordering comparison (`<`, `<=`, `>`, `>=`): element-wise **lexicographic**, matching CPython (`(1, 2) < (1, 3)`)
+- `tuple(...)` constructor: `tuple(t)` returns the tuple unchanged; `tuple(list)` (a literal, variable, or list-returning call such as `sorted(...)`) builds a shallow copy of the list
 - `len()` built-in
 - `isinstance(obj, tuple)` type checking
 
@@ -142,6 +150,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **`popitem()`**: Remove and return last inserted `(key, value)` pair; raises `KeyError` if empty
 - **Nested dicts**: `dict[int, dict[int, int]]`
 - **`Optional[T]` values**: `dict[str, Optional[T]]` storage and retrieval
+- **Dict comprehensions**: `{k: v for ...}` is lowered to an empty dict plus a population loop. Supported iterables include `range(...)` (constant or symbolic bound), a list of tuples, and `d.items()` with a `(key, value)` tuple target (`{k: v + 1 for k, v in d.items()}`), with optional `if` filters. Subsequent key lookups return the populated values rather than raising `KeyError`.
 
 ## Complex Numbers
 

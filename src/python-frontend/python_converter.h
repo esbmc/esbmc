@@ -125,7 +125,7 @@ public:
     return string_handler_;
   }
 
-  tuple_handler &get_tuple_handler()
+  tuple_handler &get_tuple_handler() const
   {
     return *tuple_handler_;
   }
