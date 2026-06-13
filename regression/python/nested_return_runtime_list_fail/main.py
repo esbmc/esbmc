@@ -5,7 +5,9 @@
 #
 # A small input string and unwind bound keep the counterexample search (which
 # is markedly more expensive than the positive variant) well under the CI time
-# cap while still exercising the nested-return list inference.
+# cap while still fully unwinding the str.split() model, so the refuted
+# property is the list comparison below (decided) rather than a truncated
+# loop's unwinding assertion.
 
 
 def f(txt: str, c: bool):

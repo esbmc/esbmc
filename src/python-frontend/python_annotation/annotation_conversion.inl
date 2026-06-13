@@ -962,6 +962,29 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
       return "float";
   }
 
+  // Python numeric-tower promotion: an arithmetic operation with a complex
+  // operand yields complex (e.g. `3 + 4j`). The LHS-driven inference below only
+  // detects a complex LHS (so `4j + 3` already works); a complex RHS would
+  // otherwise be ignored and the result mis-typed as the LHS's int/float,
+  // breaking later `.real`/`.imag` access on the assigned variable.
+  {
+    const Json &rhs =
+      stmt.contains("value") ? stmt["value"]["right"] : stmt["right"];
+    auto operand_is_complex = [&](const Json &n) -> bool {
+      if (!n.is_object() || !n.contains("_type"))
+        return false;
+      if (n["_type"] == "Constant")
+        return get_type_from_constant(n) == "complex";
+      // complex(...) constructor call
+      return n["_type"] == "Call" && n.contains("func") &&
+             n["func"].is_object() && n["func"].contains("_type") &&
+             n["func"]["_type"] == "Name" && n["func"].contains("id") &&
+             n["func"]["id"] == "complex";
+    };
+    if (operand_is_complex(lhs) || operand_is_complex(rhs))
+      return "complex";
+  }
+
   if (lhs["_type"] == "BinOp")
     type = get_type_from_binary_expr(lhs, body);
   else if (lhs["_type"] == "List")
@@ -2797,6 +2820,26 @@ void python_annotation<Json>::collect_return_types(
         {
           // Function not found, continue with normal inference
         }
+      }
+
+      // Method calls that always return a list (e.g. `s.split()`). These have
+      // an Attribute func, so the Name-call branch above misses them, and
+      // get_argument_type cannot type the result when the receiver is an
+      // unannotated parameter -- it returns "". Dropping the list branch lets a
+      // sibling scalar return (e.g. `return len(s)`) annotate the whole
+      // function as that scalar, which mistypes the list path and makes its
+      // call result const-fold to a bogus size-1 list. Recording "list" here
+      // means a mixed list+scalar body collects {list, scalar}, which
+      // infer_from_return_statements leaves unannotated (distinct bases) so the
+      // converter's per-RETURN inference types each path correctly.
+      if (
+        return_val["_type"] == "Call" && return_val.contains("func") &&
+        return_val["func"]["_type"] == "Attribute" &&
+        return_val["func"].contains("attr") &&
+        get_string_method_return_type(return_val["func"]["attr"]) == "list")
+      {
+        types.insert("list");
+        continue;
       }
 
       // Reuse get_argument_type to infer the return value type

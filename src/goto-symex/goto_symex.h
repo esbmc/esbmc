@@ -508,6 +508,21 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);

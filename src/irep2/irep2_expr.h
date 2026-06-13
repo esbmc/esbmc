@@ -280,12 +280,27 @@ class constant_int2t : public expr2t
 public:
   BigInt value;
 
+  /** Element type T of a folded `sizeof(T)` operand (the C `#c_sizeof_type`
+   *  attribute); nil for an ordinary integer constant. Not reflected: it rides
+   *  with the constant so the malloc/alloca allocated type survives the
+   *  --irep2-bodies body round-trip (esbmc/esbmc#4715) — clang folds
+   *  `malloc(sizeof(T))` to a bare size_t constant whose only record of T is
+   *  this attribute, and `get_alloc_type` reads it back to type the dynamic
+   *  object. Excluded from cmp/crc/hash (kept out of `fields`) so plain integer
+   *  constants stay identical and constant sharing is unaffected. */
+  type2tc sizeof_type;
+  static constexpr std::size_t excluded_field_bytes = sizeof(type2tc);
+
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
+   *  @param sizeof_t Element type of a folded sizeof(T) operand; nil otherwise
    */
-  constant_int2t(const type2tc &type, const BigInt &input)
-    : expr2t(type, constant_int_id), value(input)
+  constant_int2t(
+    const type2tc &type,
+    const BigInt &input,
+    const type2tc &sizeof_t = type2tc())
+    : expr2t(type, constant_int_id), value(input), sizeof_type(sizeof_t)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -2062,13 +2077,24 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count: travels with the loop statement so the
+  // --irep2-bodies round-trip preserves the per-loop unwind bound that
+  // goto_convert later stamps onto the loop's GOTO instruction. Not
+  // reflected, so it stays out of value identity (like `location`).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_while2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_while_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_while_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_while2t(const code_while2t &ref) = default;
@@ -2084,13 +2110,21 @@ public:
   expr2tc cond;
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_dowhile2t(
     const expr2tc &c,
     const expr2tc &b,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_dowhile_id), cond(c), body(b), location(loc)
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
+    : expr2t(get_empty_type(), code_dowhile_id),
+      cond(c),
+      body(b),
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_dowhile2t(const code_dowhile2t &ref) = default;
@@ -2110,20 +2144,25 @@ public:
   expr2tc iter; // nil when absent
   expr2tc body;
   locationt location; // not reflected (see note above)
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // `#pragma unroll N` count (see code_while2t).
+  unsigned pragma_unroll_count;
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(locationt) + sizeof(unsigned);
 
   code_for2t(
     const expr2tc &i,
     const expr2tc &c,
     const expr2tc &it,
     const expr2tc &b,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    unsigned pragma = 0)
     : expr2t(get_empty_type(), code_for_id),
       init(i),
       cond(c),
       iter(it),
       body(b),
-      location(loc)
+      location(loc),
+      pragma_unroll_count(pragma)
   {
   }
   code_for2t(const code_for2t &ref) = default;

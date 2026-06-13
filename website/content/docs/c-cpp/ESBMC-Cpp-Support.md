@@ -35,6 +35,37 @@ ESBMC v7 supports the following C++ features:
 - (TODO) Exception handling:
    * [x] try-catch, throw
 
+# Recently added language and library support
+
+The following features have been added since the support summary above and
+are each covered by passing regression tests (under `regression/esbmc-cpp*`).
+The standard given is the one the test exercises (`--std`).
+
+**C++11**
+- Inheriting constructors — `using Base::Base;`, including multi-base and chained forms (`regression/esbmc-cpp11/constructors/UsingConstructor*`)
+
+**C++17**
+- Structured bindings — `auto [a, b] = …`, including binding by reference (`regression/esbmc-cpp17/cpp/github_4377_structured_binding*`)
+
+**C++20**
+- Concepts and `requires` clauses (`github_4190_concept_combo`)
+- Three-way comparison `<=>` and the `<compare>` operational model, including pointer and side-effecting operands (`github_4377_spaceship*`, `github_4377_compare`)
+- Class template argument deduction (CTAD) (`github_4377_ctad`)
+- Parenthesized aggregate initialization (`github_4377_paren_init*`)
+- `using enum` declarations (`regression/esbmc-cpp/bug_fixes/github_4195*`)
+- `char8_t` (`github_4377_char8`)
+- Library: `std::span` (`github_4190_span`, `github_4248_span_bit`), `std::optional` (`github_4245_optional_*`), `<chrono>` durations (`github_4245_chrono_*`, `github_4264_chrono_max_*`), `std::source_location` (`github_4377_source_location`)
+
+**C++23**
+- Explicit object parameter ("deducing `this`"), including mutating receivers (`github_4377_deducing_this*`)
+- `static operator()` — static call operator, with the implicit object argument skipped (`github_4377_static_call`)
+- Library: `std::expected` (`github_4377_expected`)
+
+**Exceptions and destructors**
+- `noexcept` / `throw()` exception specifications are lowered under `--lower-exceptions` (`regression/esbmc-cpp/try_catch/lower-exceptions_noexcept_*`, `exception_spec_noexcept_*`)
+- `dynamic_cast<T&>` throws `std::bad_cast` on a failed reference cast
+- Virtual base destructor and member/base destructor-chain synthesis fixes
+
 # Features WIP:
 - Fixing our OMs for STL libraries
    * See guidelines: https://github.com/esbmc/esbmc/wiki/Guidelines-for-Fixing-Operational-Models-(OM)-in-ESBMC
@@ -72,6 +103,12 @@ egrep "VERIFICATION FAILED|VERIFICATION SUCCESSFUL" * -rn | rev | cut -d ':' -f 
 ```
 
 # Summary of Pass Rate in Each Test Suite: 
+
+> **Note:** the figures below are a historical snapshot from June 2024 and are
+> retained for reference only. Pass rates have since improved (see *Recently
+> added language and library support* above); for the current state, run the
+> `esbmc-cpp*` regression suites or consult the CI results.
+
 | Test Suite | Pass Rate | Date | Remarks |
 | --- | --- | --- | --- |
 | `cpp` | 333/376, 88.56% | 24/06/2024 | Last run: [result link](https://github.com/esbmc/esbmc/actions/runs/9636043814)|
