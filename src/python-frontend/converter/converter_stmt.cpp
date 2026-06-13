@@ -96,6 +96,24 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
+  // Case 0: assigning a migrated class pointer (`Class*`) into a by-value
+  // class lvalue (`Class`). After the object-model migration a class
+  // parameter/return is a pointer, but a struct field declared with the class
+  // type is still by-value (e.g. `self.value: Tile`). Dereference the pointer
+  // so the field receives the pointee struct rather than the address; without
+  // this the GOTO carries a `struct = pointer` assignment that crashes SMT
+  // encoding. Guarded by pointee/lvalue struct identity so genuine pointer
+  // fields are untouched.
+  if (rhs_type.is_pointer())
+  {
+    const typet lhs_follow = ns.follow(lhs_type);
+    if (lhs_follow.is_struct() && ns.follow(rhs_type.subtype()) == lhs_follow)
+    {
+      rhs = dereference_exprt(rhs, lhs_type);
+      return;
+    }
+  }
+
   // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
     lhs_type.is_floatbv() && rhs.is_constant() &&
