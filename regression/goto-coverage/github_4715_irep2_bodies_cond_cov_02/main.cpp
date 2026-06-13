@@ -1,6 +1,11 @@
 #include <set>
-#include <cassert>
 
+// __ESBMC_assert (a built-in intrinsic) is used instead of the libc assert
+// macro on purpose: assert lowers to a discarded `cond ? 0 : __assert_fail()`
+// ternary that injects two extra coverage conditions unrelated to this test's
+// subject, inflating the condition counts below. The intrinsic keeps the
+// size check without that noise.
+//
 // Condition coverage over a std::set whose insert() OM contains an internal
 // function-call side effect. Under --irep2-bodies the body round-trip used to
 // leave that side effect unlifted with a nil sub-field; it reached the SMT
@@ -19,6 +24,6 @@ int main()
   if (r2.second)
     s.insert(15);
 
-  assert(s.size() == 2);
+  __ESBMC_assert(s.size() == 2, "set holds two distinct elements");
   return 0;
 }
