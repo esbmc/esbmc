@@ -1,0 +1,2770 @@
+{
+  "benchmark_info": {
+    "source": "MathWorks spec (public)",
+    "ld_file": "benchmarks/tank_level_control/tank_level_control.ld",
+    "n_sequences": 50,
+    "n_scans": 10,
+    "random_seed": 42
+  },
+  "inputs": [
+    "AUTO_MODE",
+    "HIGH_SWITCH",
+    "LOW_SWITCH"
+  ],
+  "outputs": [
+    "PUMP",
+    "VALVE"
+  ],
+  "sequences": [
+    {
+      "seq_id": 0,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 1,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 2,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 3,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 4,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 5,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 6,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 7,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 8,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 9,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 10,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 11,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 12,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 13,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 14,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 15,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 16,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 17,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 18,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 19,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 20,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 21,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 22,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 23,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 24,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 25,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 26,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 27,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 28,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 29,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 30,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 31,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 32,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 33,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 34,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 35,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 36,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 37,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 38,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 39,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 40,
+      "scans": [
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 41,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 42,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 43,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 44,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 45,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 46,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 47,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 48,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 49,
+      "scans": [
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 1,
+          "HIGH_SWITCH": 0,
+          "LOW_SWITCH": 1
+        },
+        {
+          "AUTO_MODE": 0,
+          "HIGH_SWITCH": 1,
+          "LOW_SWITCH": 0
+        }
+      ]
+    }
+  ]
+}
