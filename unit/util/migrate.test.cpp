@@ -165,6 +165,37 @@ TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
 }
 
 TEST_CASE(
+  "migrate coerces mismatched ternary branches to the result type",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: the C `assert` macro lowers to a discarded statement-level
+  // ternary `cond ? 0 : __assert_fail()` whose result type is void (empty) and
+  // whose branch types differ from it (int and void). if2t requires both
+  // branches to share the result type, so the forward migration must coerce the
+  // divergent branch -- otherwise the if2t constructor's type invariant trips.
+  // Under --irep2-bodies the whole body is migrated before goto_convert lowers
+  // the ternary, so this shape reaches migrate_expr directly.
+  use_test_ns();
+  typet voidt = migrate_type_back(get_empty_type());
+  typet boolt = migrate_type_back(get_bool_type());
+  typet intt = migrate_type_back(get_int_type(32));
+
+  exprt tern("if", voidt);
+  tern.copy_to_operands(
+    from_integer(1, boolt), // cond
+    from_integer(0, intt),  // true: int, differs from the void result type
+    from_integer(0, intt)); // false: int, differs from the void result type
+
+  expr2tc m;
+  migrate_expr(tern, m);
+  REQUIRE(is_if2t(m));
+  // The if2t and both arms share the (void) result type id.
+  const if2t &i = to_if2t(m);
+  REQUIRE(i.type->type_id == i.true_value->type->type_id);
+  REQUIRE(i.type->type_id == i.false_value->type->type_id);
+}
+
+TEST_CASE(
   "migrate flattens a single-decl labeled decl-block",
   "[migrate][v4-cf]")
 {
