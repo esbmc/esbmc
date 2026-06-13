@@ -812,10 +812,15 @@ const struct group_opt_templ all_cmd_options[] = {
   {"IREP2 migration (esbmc/esbmc#4715)",
    {{"irep2-bodies",
      NULL,
-     "V.4.2: route goto_convert through the IREP2 body round-trip "
-     "(migrate legacy codet → code_*2t → codet) to validate losslessness. "
-     "Flag off (default) ⇒ byte-identical to the legacy path. "
-     "Gate for Phase V.4.3 (Python converter flip)."}}},
+     "Route goto_convert through the IREP2 body round-trip "
+     "(migrate legacy codet → code_*2t → codet). On by default since the "
+     "full-corpus verdict-parity sweep (all frontends, dual-solver) is clean; "
+     "this flag is retained for explicit opt-in and is a no-op when set."},
+    {"no-irep2-bodies",
+     NULL,
+     "Opt back to the legacy (pre-IREP2) goto_convert body path "
+     "(byte-identical to the historical behaviour). Escape hatch for the "
+     "V.4.4 default flip; will be removed once the legacy seam is deleted."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},
