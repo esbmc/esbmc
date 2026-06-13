@@ -513,6 +513,7 @@ extern int __ESBMC_rounding_mode;
 void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
 void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
 void *__ESBMC_memchr(const void *, int, __SIZE_TYPE__);
+int __ESBMC_memcmp(const void *, const void *, __SIZE_TYPE__);
 
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
