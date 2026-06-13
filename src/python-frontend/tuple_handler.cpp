@@ -558,6 +558,18 @@ typet tuple_handler::get_tuple_type_from_annotation(
       element_types.push_back(elem_type);
     }
   }
+  else
+  {
+    // Single element type: tuple[int]. The slice is the lone element node
+    // (a bare Name or nested subscript), not an elts list. Without this the
+    // tuple would get zero components — the opaque struct the callers of this
+    // function are specifically avoiding.
+    if (slice.contains("id") && slice["id"].is_string())
+      element_types.push_back(
+        type_handler_.get_typet(slice["id"].get<std::string>()));
+    else
+      element_types.push_back(type_handler_.get_typet(slice));
+  }
 
   return create_tuple_struct_type(element_types);
 }

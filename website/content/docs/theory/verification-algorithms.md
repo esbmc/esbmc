@@ -3,7 +3,7 @@ title: Verification Algorithms
 weight: 20
 ---
 
-ESBMC implements several incremental verification strategies on top of its
+ESBMC [1] implements several incremental verification strategies on top of its
 symbolic execution engine. This page explains how each works; for the practical
 flags and when to use them, see the [Usage](/docs/usage) guide.
 
@@ -16,8 +16,8 @@ esbmc file.c --unwind K
 Plain bounded model checking is the foundation the strategies below build on.
 ESBMC symbolically executes the program, unrolling each loop at most *K* times,
 encodes the resulting [SSA program and safety properties as a single SMT
-formula](/docs/theory/smt-formula-generation), and asks the solver whether any
-property can be violated. A satisfiable formula yields a counterexample; an
+formula](/docs/theory/smt-formula-generation) [2], and asks the solver whether
+any property can be violated. A satisfiable formula yields a counterexample; an
 unsatisfiable one means no property is violated *within the bound K*.
 
 Because a fixed bound can cut a loop short, ESBMC adds an **unwinding assertion**
@@ -79,9 +79,10 @@ As with falsification, the increment granularity is configurable via
 esbmc file.c --k-induction
 ```
 
-The original *k*-induction algorithm by Sheeran et al. [1] proved safety
+The original *k*-induction algorithm by Sheeran et al. [3] proved safety
 properties in hardware verification; it was later refined by Donaldson et al.
-[2] for general C programs. ESBMC combines both approaches:
+[4] for general C programs. ESBMC combines both approaches, with an algorithm
+tailored to handling loops in C [5]:
 
 ```
 ¬B(k)         → program contains a bug
@@ -111,8 +112,20 @@ unsatisfiable), or exhausts the time or memory limit.
 
 ## References
 
-[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
+[1] Mikhail Y. R. Gadelha, Felipe R. Monteiro, Jeremy Morse, Lucas C. Cordeiro,
+Bernd Fischer, Denis A. Nicole: *ESBMC 5.0: an industrial-strength C model
+checker.* ASE 2018: 888–891. [doi:10.1145/3238147.3240481](https://doi.org/10.1145/3238147.3240481)
+
+[2] Lucas C. Cordeiro, Bernd Fischer, João Marques-Silva: *SMT-Based Bounded
+Model Checking for Embedded ANSI-C Software.* IEEE Trans. Software Eng.
+38(4):957–974, 2012. [doi:10.1109/TSE.2011.59](https://doi.org/10.1109/TSE.2011.59)
+
+[3] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
 Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
 
-[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
+[4] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
 *Software Verification Using k-Induction.* SAS 2011: 351–368
+
+[5] Mikhail Y. R. Gadelha, Hussama Ibrahim Ismail, Lucas C. Cordeiro: *Handling
+loops in bounded model checking of C programs via k-induction.* Int. J. Softw.
+Tools Technol. Transf. 19(1):97–114, 2017. [doi:10.1007/s10009-015-0407-9](https://doi.org/10.1007/s10009-015-0407-9)
