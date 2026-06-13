@@ -271,10 +271,89 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+bool goto_symext::symex_uninterpreted_function(
+  const code_function_call2t &call,
+  const irep_idt &identifier)
+{
+  // CBMC treats every function named "__CPROVER_uninterpreted_*" as an
+  // uninterpreted function: its value is an arbitrary but *fixed* function
+  // of its arguments (functional congruence). Any concrete body, including its
+  // side effects, is deliberately discarded. The mangled identifier looks like
+  // "c:@F@__CPROVER_uninterpreted_equals"; the C-level name (used only for the
+  // prefix test) is the suffix after the last '@'.
+  const std::string &mangled = identifier.as_string();
+  std::string name = mangled.substr(mangled.rfind('@') + 1);
+  if (!has_prefix(name, "__CPROVER_uninterpreted_"))
+    return false;
+
+  // A void uninterpreted function has no observable result to constrain; the
+  // body is still skipped so it stays uninterpreted.
+  if (is_nil_expr(call.ret))
+    return true;
+
+  // Read and rename the arguments to their current SSA terms.
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  // A fresh nondeterministic result: the function is otherwise unconstrained.
+  unsigned int &nondet_count = get_nondet_counter();
+  expr2tc result =
+    symbol2tc(call.ret->type, "nondet$symex::" + i2string(nondet_count++));
+
+  // Ackermannise congruence: for every earlier call to the same function with
+  // the same arity, assume (args equal) => (results equal). This adds only a
+  // valid property of any function, so it prunes no behaviour (sound), unlike
+  // forcing the result non-zero (see closed PR #5283).
+  // Key on the full mangled identifier so two genuinely distinct symbols that
+  // share a C-level name are never tied together by congruence.
+  std::vector<std::pair<std::vector<expr2tc>, expr2tc>> &history =
+    uninterpreted_fn_history[mangled];
+  for (const auto &prev : history)
+  {
+    if (prev.first.size() != arguments.size())
+      continue;
+
+    expr2tc args_equal = gen_true_expr();
+    for (std::size_t i = 0; i < arguments.size(); ++i)
+    {
+      // Only relate arguments of identical type; a signature mismatch cannot
+      // be the same call site, so skip the whole pairing defensively.
+      if (prev.first[i]->type != arguments[i]->type)
+      {
+        args_equal = expr2tc();
+        break;
+      }
+      args_equal = and2tc(args_equal, equality2tc(arguments[i], prev.first[i]));
+    }
+    if (is_nil_expr(args_equal))
+      continue;
+
+    assume(implies2tc(args_equal, equality2tc(result, prev.second)));
+  }
+
+  history.emplace_back(arguments, result);
+
+  symex_assign(code_assign2tc(call.ret, result));
+  return true;
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+
+  // Intercept "__CPROVER_uninterpreted_*" calls before inlining any body.
+  if (
+    cprover_uninterpreted_functions &&
+    symex_uninterpreted_function(call, identifier))
+  {
+    cur_state->source.pc++;
+    return;
+  }
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =

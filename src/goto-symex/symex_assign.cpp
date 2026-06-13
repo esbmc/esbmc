@@ -46,7 +46,9 @@ goto_symext::goto_symext(
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     inductive_step(options.get_bool_option("inductive-step")),
-    validate_witness(options.get_bool_option("validate-violation-witness"))
+    validate_witness(options.get_bool_option("validate-violation-witness")),
+    cprover_uninterpreted_functions(
+      options.get_bool_option("cprover-uninterpreted-functions"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -203,6 +205,8 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   stack_limit = sym.stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
+  cprover_uninterpreted_functions = sym.cprover_uninterpreted_functions;
+  uninterpreted_fn_history = sym.uninterpreted_fn_history;
   witness_target_line = sym.witness_target_line;
 
   // Art ptr is shared

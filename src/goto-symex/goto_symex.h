@@ -386,6 +386,20 @@ protected:
   virtual void symex_function_call_code(const expr2tc &call);
 
   /**
+   *  Model a call to a "__CPROVER_uninterpreted_*" function as a genuine
+   *  uninterpreted function: assign the return a fresh nondeterministic value
+   *  and emit congruence constraints (equal arguments imply equal results)
+   *  against every earlier call to the same function. The concrete body, if
+   *  present, is deliberately ignored (CBMC semantics). Returns true when the
+   *  call was handled here (caller must then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
+
+  /**
    *  Discover whether recursion bound has been exceeded.
    *  @see get_unwind
    *  @param identifier Name of function to consider recursion of.
@@ -1245,6 +1259,19 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
+  /** Cached from --cprover-uninterpreted-functions: when set, calls to
+   *  functions whose name begins "__CPROVER_uninterpreted_" are modelled as
+   *  genuine uninterpreted functions (any concrete body is ignored) with
+   *  functional congruence enforced by Ackermannisation. */
+  bool cprover_uninterpreted_functions;
+  /** History of uninterpreted-function calls, keyed by mangled function name.
+   *  Each entry records the (renamed) argument SSA terms and the fresh result
+   *  symbol of a call, so later calls to the same function can be tied to it by
+   *  a congruence constraint: equal arguments imply equal results. */
+  std::unordered_map<
+    std::string,
+    std::vector<std::pair<std::vector<expr2tc>, expr2tc>>>
+    uninterpreted_fn_history;
   /** Pre-interned target waypoint line; empty when no target is present. */
   irep_idt witness_target_line;
   /** Set of dereference state records; this field is used as a mailbox between
