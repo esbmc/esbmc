@@ -987,6 +987,24 @@ exprt python_list::get()
   return build_symbol(list_symbol);
 }
 
+exprt python_list::build_list_from_exprs(const std::vector<exprt> &elems)
+{
+  symbolt &list_symbol = create_list();
+  const std::string &list_id = list_symbol.id.as_string();
+
+  for (const exprt &elem : elems)
+  {
+    // build_push_list_call materializes the value into a temp symbol, derives
+    // the element type-id from its type, and copies it into the list storage.
+    exprt push_call = build_push_list_call(list_symbol, list_value_, elem);
+    converter_.add_instruction(push_call);
+    list_type_map[list_id].push_back(
+      std::make_pair(std::string(), elem.type()));
+  }
+
+  return build_symbol(list_symbol);
+}
+
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
