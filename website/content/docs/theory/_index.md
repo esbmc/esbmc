@@ -14,7 +14,7 @@ for SMT solvers, and the data structures it is built on.
   {{< card link="/docs/theory/concurrency" title="Concurrency and Context-Bounded MC" subtitle="Thread interleavings, context bounding, partial-order reduction, and data-race / deadlock detection." >}}
   {{< card link="/docs/theory/interval-analysis" title="Interval Analysis" subtitle="Abstract interpretation that infers variable ranges and injects them as assumptions before SMT solving." >}}
   {{< card link="/docs/theory/function-contracts" title="Function Contracts" subtitle="Modular assume-guarantee verification with requires / ensures / assigns and loop contracts." >}}
-  {{< card link="/docs/theory/counterexample-guided-abstract-refinement" title="Counterexample-Guided Abstraction Refinement" subtitle="Integer vs. bit-vector encodings and how ESBMC refines the abstraction." >}}
+  {{< card link="/docs/theory/counterexample-guided-abstract-refinement" title="Integer vs. Bit-Vector Encoding" subtitle="The --ir integer encoding versus default bit-vectors, and a manual refinement workflow." >}}
   {{< card link="/docs/theory/smt-formula-generation" title="SMT Formula Generation" subtitle="How symbolic execution turns a program into SSA and then into an SMT formula." >}}
   {{< card link="/docs/theory/ltl" title="Linear Temporal Logic" subtitle="LTL property checking via Büchi automata over finite prefixes." >}}
   {{< card link="/docs/theory/irep2" title="IRep2" subtitle="ESBMC's typed, reference-counted, copy-on-write internal representation." >}}
