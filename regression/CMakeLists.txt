@@ -32,6 +32,9 @@ set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
+option(ENABLE_SANITIZER_CI
+    "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
+
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -324,7 +327,11 @@ foreach(regression IN LISTS REGRESSIONS)
     else()
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
-    if(CORE_REGRESSION_ONLY)
+    # ENABLE_SANITIZER_CI mirrors CORE_REGRESSION_ONLY but is keyed on the
+    # sanitizer workflow rather than benchmark bring-up. Sanitizer-instrumented
+    # builds run 3-5x slower; restricting to CORE keeps each leg of the matrix
+    # inside the workflow's 90-minute budget.
+    if(CORE_REGRESSION_ONLY OR ENABLE_SANITIZER_CI)
       set(MODES CORE)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
