@@ -98,6 +98,17 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
   return compute_pointer_offset(addrof.ptr_obj);
 }
 
+// Read the `#pragma unroll N` count off a loop codet. The clang C frontend
+// stores it as a string irep attribute; goto_convert later turns it into the
+// loop instruction's pragma_unroll_count. Migrating it onto the IREP2 loop
+// kind lets the --irep2-bodies round-trip preserve the per-loop unwind bound
+// (0 = no pragma).
+static unsigned get_pragma_unroll(const exprt &expr)
+{
+  const irep_idt &p = expr.get("#pragma_unroll");
+  return p.empty() ? 0 : std::stoul(p.as_string());
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -2316,7 +2327,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc cond, body;
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), body);
-    new_expr_ref = code_while2tc(cond, body, expr.location());
+    new_expr_ref =
+      code_while2tc(cond, body, expr.location(), get_pragma_unroll(expr));
     return;
   }
 
@@ -2325,7 +2337,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc cond, body;
     migrate_expr(expr.op0(), cond);
     migrate_expr(expr.op1(), body);
-    new_expr_ref = code_dowhile2tc(cond, body, expr.location());
+    new_expr_ref =
+      code_dowhile2tc(cond, body, expr.location(), get_pragma_unroll(expr));
     return;
   }
 
@@ -2352,7 +2365,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), cond);
     migrate_expr(expr.op2(), iter);
     migrate_expr(expr.op3(), body);
-    new_expr_ref = code_for2tc(init, cond, iter, body, expr.location());
+    new_expr_ref = code_for2tc(
+      init, cond, iter, body, expr.location(), get_pragma_unroll(expr));
     return;
   }
 
@@ -4051,6 +4065,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.op1() = migrate_expr_back(ref2.body);
     if (ref2.location.is_not_nil())
       codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
     return codeexpr;
   }
   case expr2t::code_dowhile_id:
@@ -4063,6 +4079,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.op1() = migrate_expr_back(ref2.body);
     if (ref2.location.is_not_nil())
       codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
     return codeexpr;
   }
   case expr2t::code_for_id:
@@ -4077,6 +4095,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.op3() = migrate_expr_back(ref2.body);
     if (ref2.location.is_not_nil())
       codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
     return codeexpr;
   }
   case expr2t::code_switch_id:
