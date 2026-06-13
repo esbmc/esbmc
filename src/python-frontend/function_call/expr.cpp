@@ -3235,8 +3235,9 @@ exprt function_call_expr::handle_general_function_call()
           // cheap. Symbolic tuple lists fall through (still unsupported).
           std::function<bool(const exprt &, BigInt &)> eval_const_int =
             [&](const exprt &e, BigInt &out) -> bool {
-            if (e.is_constant() && (e.type().is_signedbv() ||
-                                    e.type().is_unsignedbv() || e.is_boolean()))
+            if (
+              e.is_constant() && (e.type().is_signedbv() ||
+                                  e.type().is_unsignedbv() || e.is_boolean()))
             {
               out = binary2integer(
                 to_constant_expr(e).value().c_str(), e.type().is_signedbv());
@@ -3281,7 +3282,8 @@ exprt function_call_expr::handle_general_function_call()
             exprt val = elem_sym ? elem_sym->get_value() : exprt();
             while (val.is_symbol())
             {
-              const symbolt *s = converter_.find_symbol(val.identifier().as_string());
+              const symbolt *s =
+                converter_.find_symbol(val.identifier().as_string());
               if (!s)
                 break;
               val = s->get_value();
