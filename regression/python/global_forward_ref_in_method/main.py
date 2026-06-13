@@ -1,6 +1,7 @@
 # A method writes a module global declared later in the file. The global must be
 # pre-registered so the method's `global` write resolves to the same symbol.
 class Setter:
+
     def apply(self) -> None:
         global shared
         shared = 42

@@ -428,9 +428,8 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt get_block(
-    const nlohmann::json &ast_block,
-    bool is_function_body = false);
+  exprt
+  get_block(const nlohmann::json &ast_block, bool is_function_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 

@@ -2,6 +2,7 @@
 # allocate the instance as that class (not a void pointer) and the variable
 # holds it.
 class Box:
+
     def __init__(self, v: int) -> None:
         self.v = v
 

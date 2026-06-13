@@ -1,4 +1,5 @@
 class Setter:
+
     def apply(self) -> None:
         global shared
         shared = 42

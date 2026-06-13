@@ -177,7 +177,7 @@ void python_class_builder::get_members(
       const auto &val = n["value"];
       const bool simple_default =
         val.is_object() && (val.value("_type", "") == "Constant" ||
-                             val.value("_type", "") == "Name");
+                            val.value("_type", "") == "Name");
       if (
         !st.has_component(attr_name) && !has_ud_base && simple_default &&
         pc_.methods().count("__init__") == 0 &&

@@ -1105,7 +1105,8 @@ void goto_symext::run_intrinsic(
   // size-1 dynamic object.
   if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
   {
-    assert(is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    assert(
+      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
     const expr2tc &lhs = func_call.ret;
     const type2tc base = to_pointer_type(lhs->type).subtype;
     const guard2tc &guard = cur_state->guard;
@@ -1125,7 +1126,8 @@ void goto_symext::run_intrinsic(
       typet t = ns.follow(migrate_type_back(base));
       t.dynamic(true);
       t.set(
-        "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+        "alignment",
+        constant_exprt(config.ansi_c.max_alignment(), size_type()));
       symbol.set_type(std::move(t));
     }
     new_context.add(symbol);

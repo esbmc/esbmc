@@ -1,4 +1,5 @@
 class Temp:
+
     def __init__(self, celsius: int):
         self.celsius = celsius
 
