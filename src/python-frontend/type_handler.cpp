@@ -784,7 +784,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
       elem["value"]["id"].is_string() &&
       (elem["value"]["id"] == "Tuple" || elem["value"]["id"] == "tuple") &&
       elem.contains("slice"))
-      return converter_.get_tuple_handler().get_tuple_type_from_annotation(elem);
+      return converter_.get_tuple_handler().get_tuple_type_from_annotation(
+        elem);
 
     // Recursive delegation for wrapper node
     if (elem.contains("value"))
