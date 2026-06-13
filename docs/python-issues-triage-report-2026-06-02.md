@@ -227,3 +227,79 @@ useful for any program using `reversed()` in a value context.
 No further isolated, sound point fix is available on current master without the §5
 architectural work (flow-sensitive class tracking, tuple-unpack inference, any-typing,
 string/tuple-equality soundness). The §5 priority order stands.
+
+---
+
+## 8. 2026-06-13 re-validation & symex argument-binding crash→diagnostic fix
+
+Independent re-run of **all 46 KNOWNBUG python/quixbugs/humaneval tests** against `master`
+(commit `01c632ad0a`, ESBMC 8.3.0, Z3 + Bitwuzla), each with its own `test.desc` flags,
+after the merges that landed since §7 (notably `#5356`/`#5353`/`#5347` `list[Tuple[...]]`
+element resolution, `#5336`/`#5324` dict-comprehension tuple targets, `#5333` `@property`,
+`#5328` explicit base `__init__`, and `#5329` *class-as-first-class-value* which already
+flipped §7's `rover` (#4775) to CORE). **Zero KNOWNBUG→CORE flips** — the §3 classification
+still holds. No test now produces its expected verdict, and a scripted "does it match the
+expected regex?" pass found no candidates.
+
+### 8a. New isolated, soundly-fixable defect found & fixed
+**SIGABRT/core dump in `goto_symext::argument_assignments` when an unresolved object element
+is passed by reference to a struct-typed parameter.** Since §7, QuixBugs `depth_first_search`
+moved *past* the `__ESBMC_get_object_size` diagnostic (it now reaches recursion unwinding,
+likely via `#5317`'s function-pointer-target filtering) and aborts at
+`src/goto-symex/symex_function.cpp:183` with
+`function call: argument "...search_from@node" type mismatch: got pointer, expected struct`
+— **a crash with a core dump**, not a clean error.
+
+Root cause: the comprehension `search_from(nextnode) for nextnode in node.successors`
+iterates an **untyped** list (`Node.__init__(..., successors=[])`). Its element type is not
+resolved to the `Node` struct, so the iteration variable is lowered to `void *`
+(`DECL void * ESBMC_gen_0_nextnode` in the GOTO). The recursive call then binds a `void *`
+actual to the `Node`-struct formal `node`. The existing Python pass-by-reference handling
+(pointer-actual → struct-formal) dereferences the pointer **iff** its subtype equals the
+formal struct; here the subtype is empty/`void`, so the guarded `!base_type_eq(...)` branch
+fired `abort()`.
+
+**Fix:** in that branch, replace `log_error(...); abort();` with
+`throw std::string(...)` carrying a clean diagnostic
+(`got pointer to <t>, expected <struct> (unresolved object element type passed by
+reference)`), which `bmc.cpp`'s `catch (std::string &)` already turns into a clean `ERROR:`
+→ `P_ERROR` → `VERIFICATION UNKNOWN`. The change is confined to the Python-object
+pointer→struct branch (gated on `is_pointer_type(rhs) && is_struct_type(formal)`, a state
+well-formed C/C++ GOTO does not reach); the sibling general-mismatch `abort()` in the `else`
+is deliberately left intact, since a non-Python type mismatch there signals a genuine
+internal invariant violation that should fail fast. New regression pair
+`regression/python/github_4782_unresolved_obj_arg{,_ok}` — the unresolved case yields the
+clean diagnostic + `UNKNOWN` (no crash); the `_ok` companion (resolved element type) still
+verifies `SUCCESSFUL` via the pointer→struct deref path, guarding that valid behaviour.
+
+Verification: the minimal reproducer aborts (exit 134, core dump) on the pre-patch binary and
+exits cleanly post-patch; dual-solver agreement (Z3 + Bitwuzla) on both new tests; clang-format
+clean; **66/66 sibling `class*`/`github_4117*`/object/attr/method python tests pass** (no
+regressions); code-reviewed (0 critical/major/minor). The patch changes a single-statement
+body (`abort()` → `throw`) inside an existing branch — it neither adds nor removes a branch —
+so it is the Mode-C-exempt tier; the dual-solver agreement requirement is nonetheless
+discharged.
+
+Like #5042/#4796/§6a/§7a, this **removes a crash but does not flip a KNOWNBUG verdict**:
+`depth_first_search` still bottoms out in the unresolved list-of-objects element-type
+inference gap (§3b #4117/#3067 family, the same area the recent `list[Tuple[...]]` work
+addresses for tuples) and reports an honest `UNKNOWN` instead of a core dump. This is the
+§5-item-5 robustness work, shipped. It also hardens *every* frontend path that passes an
+unresolvable pointer to a struct parameter against core-dumping.
+
+### 8b. Everything else: unchanged disposition
+Re-confirmed failure modes on today's master: perf/timeout — now including
+`topological_ordering(_fail)` (no longer a §3b segfault: a merge since §3 turned it into a
+§3c deep-unwind timeout) plus `breadth_first_search(_fail)`, `knapsack(_fail)`,
+`reverse_linked_list`, `shortest_path_lengths`, `next_permutation(_fail)`, and
+`humaneval_33/39/90/158` (three of these — `next_permutation_fail`,
+`breadth_first_search_fail`, `humaneval_86` — exhaust the heap and trip a glibc `sysmalloc`
+abort under deep unwinding, an OOM artefact of the policy-banned perf blowup, not an isolated
+bug); clean "unsupported feature" errors (tuple-unpack for `minimum_spanning_tree` /
+`powerset` / `shortest_path_length`; DictComp tuple targets for `shortest_paths`; mixed-type
+`sorted()` (humaneval_123), non-constant tuple slice (humaneval_148), `hashlib` (humaneval_162,
+infeasible); Thread-subclass MVP for `concurrency_fail`; `**`/dict-dispatch arg-arity for
+`rpn_eval(_fail)`); and the wrong-verdict soundness clusters (`detect_cycle`, `wrap`,
+`github_4117_function_internal`, humaneval `FAILED` cluster). `bitcount_fail` remains the §3d
+questionable expectation (`UNKNOWN` on a non-terminating buggy variant). No further isolated,
+sound point fix is available without the §5 architectural work; the §5 priority order stands.
