@@ -812,15 +812,10 @@ const struct group_opt_templ all_cmd_options[] = {
   {"IREP2 migration (esbmc/esbmc#4715)",
    {{"irep2-bodies",
      NULL,
-     "Route goto_convert through the IREP2 body round-trip "
-     "(migrate legacy codet → code_*2t → codet). On by default since the "
-     "full-corpus verdict-parity sweep (all frontends, dual-solver) is clean; "
-     "this flag is retained for explicit opt-in and is a no-op when set."},
-    {"no-irep2-bodies",
-     NULL,
-     "Opt back to the legacy (pre-IREP2) goto_convert body path "
-     "(byte-identical to the historical behaviour). Escape hatch for the "
-     "V.4.4 default flip; will be removed once the legacy seam is deleted."}}},
+     "Deprecated no-op (accepted for backward compatibility). goto_convert "
+     "always lowers function bodies through the IREP2 round-trip "
+     "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
+     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},
