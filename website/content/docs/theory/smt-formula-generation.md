@@ -52,12 +52,12 @@ esbmc file.c --z3 --smt-formula-only --output formula.smt2
 # Bitwuzla native format
 esbmc file.c --bitwuzla --smt-formula-only --output formula.smt2
 
-# Similarly: --boolector, --yices, --mathsat, --cvc4
+# Similarly: --boolector, --yices, --mathsat, --cvc4, --cvc5
 ```
 
 The `--smtlib` output is the most portable option — it follows the SMT-LIB v2
-standard and is accepted by all compliant solvers, including CVC5, even though
-ESBMC does not yet have a built-in CVC5 backend.
+standard and is accepted by any compliant solver, including external tools for
+which ESBMC has no built-in backend.
 
 ## About Formula Size
 
