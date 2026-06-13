@@ -9,6 +9,7 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -225,6 +226,67 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
     target, total_claims, remaining_claims, simplified_claims);
 }
 
+static void substitute_result(expr2tc &e, const expr2tc &ret_val)
+{
+  if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
+  {
+    e = ret_val;
+    return;
+  }
+  if (is_constant_int2t(e))
+  {
+    if (
+      is_unsignedbv_type(ret_val->type) &&
+      to_constant_int2t(e).value.is_negative())
+      log_warning(
+        "witness: function_return constraint compares signed constant {} "
+        "against unsigned return type; constraint may be trivially false",
+        integer2string(to_constant_int2t(e).value));
+    e = from_integer(to_constant_int2t(e).value, ret_val->type);
+    return;
+  }
+  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+}
+
+void goto_symext::symex_witness_function_return(
+  expr2tc ret_val,
+  const irep_idt &call_line)
+{
+  if (cur_state->cur_seg >= cur_state->witness_segs.size())
+    return;
+
+  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+  for (const waypoint &wp : seg)
+  {
+    if (wp.type != waypoint::function_return)
+      continue;
+    if (!wp.parsed_cond.valid)
+      continue;
+    if (wp.line_id != call_line)
+      continue;
+
+    cur_state->rename(ret_val);
+
+    expr2tc constraint = wp.parsed_cond.expr;
+    substitute_result(constraint, ret_val);
+
+    log_progress(
+      "Applying {} function_return constraint at line {}: {}",
+      wp.action == waypoint::avoid ? "avoid" : "follow",
+      call_line,
+      wp.value);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(constraint));
+    else
+    {
+      assume(constraint);
+      cur_state->advance_witness_position();
+    }
+    return;
+  }
+}
+
 void goto_symext::symex_step(reachability_treet &art)
 {
   assert(!cur_state->call_stack.empty());
@@ -253,23 +315,7 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -282,9 +328,16 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(tmp);
     volatile_check(tmp);
 
+    // Lower Python predicates (isnone/isinstance/hasattr) *before* dereference:
+    // a short-circuited `a is None or a.b is None` dereferences `a.b` under the
+    // guard `not isnone(a)`, and dereference records the NULL-pointer safety
+    // assertion immediately. If the isnone is still live it leaks into that
+    // assertion's condition and reaches the SMT backend unlowered (no convert
+    // rule for isnone), aborting. dereference never introduces any of these
+    // predicates, so lowering first is strictly safe.
+    simplify_python_builtins(tmp);
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
-    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -321,41 +374,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false())
-    {
-      code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
-      symex_assign(code_assign2tc(std::move(deref_code)));
-    }
+      symex_assign(instruction.code);
 
     cur_state->source.pc++;
     break;
@@ -478,41 +497,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-    symex_catch();
-    break;
-
-  case THROW:
-    if (!cur_state->guard.is_false())
-    {
-      if (symex_throw())
-        cur_state->source.pc++;
-    }
-    else
-    {
-      cur_state->source.pc++;
-    }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
-    break;
-
+  // THROW / CATCH / THROW_DECL / THROW_DECL_END are rewritten into ordinary
+  // guarded control flow by remove_exceptions before symex (issue #5075), so
+  // they never reach here; an exception-using program the pass cannot lower is
+  // reported as unsupported. Any such instruction surviving to symex is a bug,
+  // caught by the default abort below.
   default:
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
@@ -702,6 +691,24 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_memcpy")
   {
     intrinsic_memcpy(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memchr")
+  {
+    intrinsic_memchr(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memcmp")
+  {
+    intrinsic_memcmp(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memmove")
+  {
+    intrinsic_memmove(art, func_call);
     return;
   }
 
@@ -1122,12 +1129,6 @@ void goto_symext::run_intrinsic(
 
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
-
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
-  {
-    symex_throw_bad_cast();
-    return;
-  }
 
   if (symname == "c:@F@__ESBMC_witness_assume")
   {

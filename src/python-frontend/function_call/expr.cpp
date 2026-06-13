@@ -83,6 +83,22 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// Struct member access base.field : t (V.3). `base` must be a struct/union/
+// complex value (member2t's source precondition); the callers here pass a
+// tuple or complex struct whose component is named `name`.
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(base.type()))
+    return member_exprt(base, name, t);
+  expr2tc base2;
+  migrate_expr(base, base2);
+  exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+  // migrate_type does not round-trip #cpp_type; restore the exact member type
+  // so legacy member_exprt(base, name, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
+}
 } // namespace
 
 namespace
@@ -179,13 +195,31 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 
 void function_call_expr::get_function_type()
 {
-  if (type_handler_.is_constructor_call(call_))
+  const auto &func_node = call_["func"];
+
+  // An explicit `Base.__init__(self, ...)` call invokes the named base class's
+  // constructor with self passed explicitly; it is not an object construction.
+  // Let it fall through to the ClassMethod classification (is_class(caller)
+  // below) so no fresh self object is allocated -- the builder resolves it to
+  // the class's renamed constructor (@C@Base@F@Base) and the explicit self is
+  // the receiver. Without this it would be classified Constructor and the
+  // constructor would write to a throwaway $ctor_self$ temp.
+  const bool is_explicit_class_init =
+    func_node.contains("_type") && func_node["_type"] == "Attribute" &&
+    func_node.contains("attr") && func_node["attr"] == "__init__" &&
+    func_node.contains("value") && func_node["value"].is_object() &&
+    func_node["value"].contains("_type") &&
+    func_node["value"]["_type"] == "Name" &&
+    func_node["value"].contains("id") &&
+    json_utils::is_class(
+      func_node["value"]["id"].get<std::string>(), converter_.ast());
+
+  if (!is_explicit_class_init && type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
     return;
   }
 
-  const auto &func_node = call_["func"];
   if (
     !func_node.contains("_type") || !func_node["_type"].is_string() ||
     func_node["_type"] != "Attribute")
@@ -468,6 +502,37 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   auto arg = call_["args"][0];
+
+  // tuple(iterable): model the result as a shallow copy of the underlying
+  // list (CPython copy semantics: later mutations of the source list must
+  // not show through the tuple; element references are shared, not deep-
+  // copied). ==, len(), subscript and iteration then route through the
+  // existing list machinery. The generic constructor tail below would
+  // instead relabel the expression with get_typet("tuple") — an empty type —
+  // and every comparison over the result silently lowers to the nondet-bool
+  // fallback in get_binary_operator_expr (#4807).
+  if (func_name == "tuple")
+  {
+    if (call_["args"].size() > 1)
+      throw std::runtime_error("TypeError: tuple expected at most 1 argument");
+    exprt expr = converter_.get_expr(arg);
+    const typet &et = expr.type();
+    if (converter_.get_tuple_handler().is_tuple_type(et))
+      return expr; // returned unchanged — CPython tuple(t) also returns t
+    const namespacet ns(converter_.symbol_table());
+    const typet list_type = type_handler_.get_list_type(); // PyListObject *
+    if (
+      et == list_type ||
+      (et.is_pointer() && list_type.is_pointer() &&
+       ns.follow(et.subtype()) == ns.follow(list_type.subtype())))
+    {
+      // Covers list literals, variables, and list-returning calls.
+      python_list list_handler(converter_, call_);
+      return list_handler.build_shallow_copy_call(expr, call_);
+    }
+    throw std::runtime_error(
+      "tuple() is only supported over list and tuple arguments");
+  }
 
   // bytes(...) constructor. The generic constructor path below relabels the
   // argument expression's type as the bytes array type without converting the
@@ -882,7 +947,9 @@ exprt function_call_expr::build_constant_from_arg() const
       // pointer. Treat it as the documented list[int] default so str() lowers
       // through the integer model instead of aborting the whole run; the loop
       // body is dead for the empty list, mirroring the arithmetic coercion in
-      // get_binary_operator_expr.
+      // get_binary_operator_expr. Other unresolved pointers (e.g. an
+      // unannotated void* parameter) fall through to the sound nondet-string
+      // fallback below rather than being guessed as int.
       if (vt == type_handler_.get_list_type())
         return converter_.get_string_handler().convert_to_string(
           build_typecast(value_expr, type_handler_.get_typet("int", 0)));
@@ -1457,7 +1524,7 @@ exprt function_call_expr::handle_tuple_method() const
     exprt total = gen_zero(result_type);
     for (const auto &comp : components)
     {
-      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+      exprt member = build_member(receiver, comp.get_name(), comp.type());
       exprt eq = equality_exprt(member, elem);
       if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
       sel.type() = result_type;
@@ -1477,7 +1544,7 @@ exprt function_call_expr::handle_tuple_method() const
   exprt any_match = gen_boolean(false);
   for (const auto &comp : components)
   {
-    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+    exprt member = build_member(receiver, comp.get_name(), comp.type());
     exprt eq = equality_exprt(member, elem);
     any_match = or_exprt(any_match, eq);
   }
@@ -1493,7 +1560,7 @@ exprt function_call_expr::handle_tuple_method() const
   for (size_t k = n - 1; k-- > 0;)
   {
     exprt member =
-      member_exprt(receiver, components[k].get_name(), components[k].type());
+      build_member(receiver, components[k].get_name(), components[k].type());
     exprt eq = equality_exprt(member, elem);
     if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
     sel.type() = result_type;
@@ -1851,9 +1918,19 @@ bool function_call_expr::is_set_method_call() const
   const std::string &method_name = function_id_.get_function();
   if (
     method_name != "add" && method_name != "discard" &&
-    method_name != "issubset" && method_name != "update" &&
-    method_name != "symmetric_difference")
+    method_name != "issubset" && method_name != "issuperset" &&
+    method_name != "update" && method_name != "symmetric_difference")
     return false;
+
+  // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
+  // sets by construction. Decide from the AST: resolving a Call receiver
+  // through get_object_list_symbol() would emit the set-construction IR as a
+  // side-effect, and discriminators must stay pure.
+  const auto &func_value = call_["func"]["value"];
+  if (func_value["_type"] == "Call")
+    return func_value["func"].contains("id") &&
+           (func_value["func"]["id"] == "set" ||
+            func_value["func"]["id"] == "frozenset");
 
   std::string dummy;
   const symbolt *sym = get_object_list_symbol(dummy);
@@ -1867,6 +1944,31 @@ exprt function_call_expr::handle_set_method() const
 
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
+  // which cannot change a subset/superset verdict. Use the iterable directly
+  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
+  // inside a loop would otherwise rebuild the set (one push plus one
+  // containment scan per element) on every iteration (#4805).
+  if (method_name == "issubset" || method_name == "issuperset")
+  {
+    const auto &receiver = call_["func"]["value"];
+    if (
+      receiver["_type"] == "Call" && receiver["func"].contains("id") &&
+      (receiver["func"]["id"] == "set" ||
+       receiver["func"]["id"] == "frozenset") &&
+      receiver["args"].size() == 1)
+    {
+      exprt iterable = converter_.get_expr(receiver["args"][0]);
+      if (iterable.type() == type_handler_.get_list_type())
+      {
+        exprt other = converter_.get_expr(args[0]);
+        python_set set_helper(converter_, call_);
+        return set_helper.build_set_relation_call(
+          iterable, other, call_, method_name);
+      }
+    }
+  }
 
   std::string set_display_name;
   const symbolt *set_symbol = get_object_list_symbol(set_display_name);
@@ -1883,7 +1985,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / update / symmetric_difference take another set/iterable.
+  // issubset / issuperset / update / symmetric_difference take another
+  // set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
@@ -2458,8 +2561,8 @@ function_call_expr::get_dispatch_table()
        model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
-       exprt zr = member_exprt(z, "real", double_type());
-       exprt zi = member_exprt(z, "imag", double_type());
+       exprt zr = build_member(z, "real", double_type());
+       exprt zi = build_member(z, "imag", double_type());
 
        exprt imag_result;
        if (func_name == "asin")
@@ -3124,6 +3227,151 @@ exprt function_call_expr::handle_general_function_call()
             python_list sorted_list_expr(converter_, sorted_list);
             return sorted_list_expr.get();
           }
+
+          // Concrete tuple path: a literal list of constant integer tuples
+          // (e.g. sorted([(3,1),(1,2)])). The runtime tuple-sort model retypes
+          // elements as int; sort here at convert time and rebuild a list of
+          // tuple literals so the element type is preserved and verification is
+          // cheap. Symbolic tuple lists fall through (still unsupported).
+          std::function<bool(const exprt &, BigInt &)> eval_const_int =
+            [&](const exprt &e, BigInt &out) -> bool {
+            if (
+              e.is_constant() && (e.type().is_signedbv() ||
+                                  e.type().is_unsignedbv() || e.is_boolean()))
+            {
+              out = binary2integer(
+                to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+              return true;
+            }
+            if (e.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(e.identifier().as_string());
+              return s && eval_const_int(s->get_value(), out);
+            }
+            // A negative literal reaches here as unary-minus over a constant
+            // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+            // as a typecast. Fold both.
+            if (e.id() == "unary-" && e.operands().size() == 1)
+            {
+              if (!eval_const_int(e.op0(), out))
+                return false;
+              out = -out;
+              return true;
+            }
+            if (e.id() == "typecast" && e.operands().size() == 1)
+              return eval_const_int(e.op0(), out);
+            return false;
+          };
+
+          struct sortable_tuple
+          {
+            std::vector<BigInt> key;
+            size_t pos;
+          };
+          std::vector<sortable_tuple> telems;
+          bool all_constant_tuples = true;
+          size_t arity = 0;
+
+          for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
+          {
+            const std::string elem_id =
+              python_list::get_list_element_id(list_id, i);
+            const symbolt *elem_sym =
+              elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+            exprt val = elem_sym ? elem_sym->get_value() : exprt();
+            while (val.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(val.identifier().as_string());
+              if (!s)
+                break;
+              val = s->get_value();
+            }
+            if (
+              !elem_sym ||
+              !converter_.get_tuple_handler().is_tuple_type(
+                elem_sym->get_type()) ||
+              val.id() != "struct" || val.operands().empty())
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            if (i == 0)
+              arity = val.operands().size();
+            else if (val.operands().size() != arity)
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            std::vector<BigInt> key;
+            for (const auto &comp : val.operands())
+            {
+              BigInt v;
+              if (!eval_const_int(comp, v))
+              {
+                all_constant_tuples = false;
+                break;
+              }
+              key.push_back(v);
+            }
+            if (!all_constant_tuples)
+              break;
+            telems.push_back({std::move(key), i});
+          }
+
+          if (all_constant_tuples && !telems.empty())
+          {
+            std::stable_sort(
+              telems.begin(),
+              telems.end(),
+              [](const sortable_tuple &a, const sortable_tuple &b) {
+                if (a.key == b.key)
+                  return a.pos < b.pos;
+                return a.key < b.key; // lexicographic on the component vector
+              });
+            if (fast_path_reverse)
+              std::reverse(telems.begin(), telems.end());
+
+            nlohmann::json sorted_list;
+            sorted_list["_type"] = "List";
+            sorted_list["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, sorted_list);
+            for (const auto &te : telems)
+            {
+              nlohmann::json tup;
+              tup["_type"] = "Tuple";
+              tup["elts"] = nlohmann::json::array();
+              converter_.copy_location_fields_from_decl(call_, tup);
+              for (const BigInt &v : te.key)
+              {
+                // Mirror the parser's literal shape: a negative integer is
+                // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
+                // negative Constant nested in a tuple takes a slow conversion
+                // path, so emit the UnaryOp form for negatives.
+                nlohmann::json cst;
+                cst["_type"] = "Constant";
+                cst["value"] = (v < 0 ? -v : v).to_int64();
+                cst["kind"] = nullptr;
+                converter_.copy_location_fields_from_decl(call_, cst);
+                if (v < 0)
+                {
+                  nlohmann::json neg;
+                  neg["_type"] = "UnaryOp";
+                  neg["op"] = {{"_type", "USub"}};
+                  neg["operand"] = cst;
+                  converter_.copy_location_fields_from_decl(call_, neg);
+                  tup["elts"].push_back(neg);
+                }
+                else
+                  tup["elts"].push_back(cst);
+              }
+              sorted_list["elts"].push_back(tup);
+            }
+
+            python_list sorted_list_expr(converter_, sorted_list);
+            return sorted_list_expr.get();
+          }
         }
       }
     }
@@ -3152,8 +3400,9 @@ exprt function_call_expr::handle_general_function_call()
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
-  const bool is_sorted_min_max =
-    func_name == "min" || func_name == "max" || func_name == "sorted";
+  const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
+                                 func_name == "sorted" ||
+                                 func_name == "reversed";
 
   // min(iter, default=...) / max(iter, default=...) route to *_default
   // variants that fall back to the supplied default when iter is empty

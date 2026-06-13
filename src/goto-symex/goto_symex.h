@@ -8,7 +8,6 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <stack>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/options.h>
@@ -212,6 +211,8 @@ protected:
    *  @param code return statement.
    */
   void symex_return(const expr2tc &code);
+  void
+  symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
 
   /**
    *  Interpret an OTHER instruction.
@@ -507,6 +508,56 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
+   *  resolving to concrete primitive objects, build the lexicographic
+   *  comparison result as a single nested-ite expression over the n byte
+   *  reads (no loop, no unwinding) and assign it to the call's return.
+   *  Falls back to the C __memcmp_impl loop otherwise. */
+  void intrinsic_memcmp(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
+   *  primitive object with a constant offset, validating that an
+   *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
+   *  loop) on any miss. */
+  bool memcmp_resolve_operand(
+    const expr2tc &ptr,
+    unsigned long number_of_bytes,
+    expr2tc &object,
+    uint64_t &offset,
+    uint64_t &avail_bytes);
+
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
+
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
@@ -546,50 +597,6 @@ protected:
   void simplify_python_builtins(expr2tc &expr);
 
   void volatile_check(expr2tc &expr);
-
-  /* Check if thrown_type in Python inherits from catch_type */
-  bool is_python_exception_subtype(
-    const irep_idt &thrown_type,
-    const irep_idt &catch_type);
-
-  /** Walk back up stack frame looking for exception handler. */
-  bool symex_throw();
-
-  /** Core throw dispatch: match throw_code against stack_catch and jump.
-   *  Called by symex_throw() and symex_throw_bad_cast(). */
-  bool symex_throw_dispatch(const expr2tc &throw_code);
-
-  /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
-   *  namespace and dispatch the exception through the normal throw path. */
-  bool symex_throw_bad_cast();
-
-  /** Register exception handler on stack. */
-  void symex_catch();
-
-  /** Register throw handler on stack. */
-  void symex_throw_decl();
-
-  /** Update throw target. */
-  void update_throw_target(
-    goto_symex_statet::exceptiont *except [[maybe_unused]],
-    goto_programt::const_targett target,
-    const expr2tc &code,
-    bool is_ellipsis = false);
-
-  /** Check if we can rethrow an exception:
-   *  if we can then update the target.
-   *  if we can't then gives a error.
-   */
-  bool handle_rethrow(
-    const expr2tc &operand,
-    const goto_programt::instructiont &instruction);
-
-  /** Check if we can throw an exception:
-   *  if we can't then gives a error.
-   */
-  int handle_throw_decl(
-    goto_symex_statet::exceptiont *frame,
-    const irep_idt &id);
 
   /**
    *  Finalize the result of a realloc operation.
@@ -1194,33 +1201,6 @@ protected:
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
-
-  /* Exception Handling.
-   * This will stack the try-catch blocks, so we always know which catch
-   * we should jump.
-   */
-  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
-
-  /** Stack of try-catch blocks. */
-  stack_catcht stack_catch;
-
-  /** Pointer to last thrown exception. */
-  goto_programt::instructiont *last_throw;
-
-  /** Backing storage for last_throw when the throw originates from the
-   *  __ESBMC_throw_bad_cast intrinsic rather than a real THROW instruction. */
-  goto_programt::instructiont bad_cast_throw;
-
-  /** Map of currently active exception targets, i.e. instructions where an
-   *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; values are the symbols that the
-   *  thrown piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
-
-  /** Flag to indicate if we are go into the unexpected flow. */
-  bool inside_unexpected;
-  /** Store the unexpected function end */
-  irep_idt unexpected_end;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

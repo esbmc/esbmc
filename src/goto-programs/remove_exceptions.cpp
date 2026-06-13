@@ -16,7 +16,6 @@
 namespace
 {
 const irep_idt ellipsis_id = "ellipsis";
-const irep_idt noexcept_id = "noexcept";
 
 bool is_pointer_catch(const irep_idt &type)
 {
@@ -52,10 +51,10 @@ struct sitet
 };
 
 /// Lowers throw/catch to guarded control flow over the exception-state
-/// globals (issue #5075). P1 scope: per-function, all-or-nothing, intra-
-/// procedural, reference catches, dtor-free, with correct nested-try
-/// propagation (a throw is matched against its enclosing try chain from the
-/// innermost outward). Functions outside the subset are left for symex.
+/// globals (issue #5075). Whole-program, all-or-nothing, with correct
+/// nested-try propagation (a throw is matched against its enclosing try chain
+/// from the innermost outward). This is the only exception path; a program
+/// outside the supported subset is reported as unsupported.
 class exception_loweringt
 {
 public:
@@ -79,15 +78,20 @@ public:
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
-    // symbol), and detect concurrency. The exception state is one global tuple,
-    // not per-thread, so the lowered dispatch is unsound for concurrent programs
-    // (one thread could observe, catch, or clear another thread's in-flight
-    // exception). Until the state is modeled per thread, leave concurrent
-    // programs to the imperative path.
+    // symbol), and detect concurrency.
+    bool concurrent = false;
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
         continue;
+      // A dynamic exception specification's allowed types must each have an id
+      // so the epilogue membership test (spec_guard) can reference them. The
+      // specification is now function metadata, not a THROW_DECL instruction.
+      if (
+        fn.second.exception_spec.kind ==
+        exception_specificationt::kindt::dynamic)
+        for (const irep_idt &ty : fn.second.exception_spec.allowed_types)
+          registry.register_chain({ty});
       for (const auto &ins : fn.second.body.instructions)
       {
         if (ins.type == THROW)
@@ -96,15 +100,6 @@ public:
           if (!is_nil_expr(t.operand))
             registry.register_chain(t.exception_list);
         }
-        else if (ins.type == THROW_DECL)
-        {
-          // A dynamic exception specification's allowed types must each have an
-          // id so the epilogue can test the in-flight exception's membership.
-          for (const irep_idt &ty :
-               to_code_cpp_throw_decl2t(ins.code).exception_list)
-            if (ty != noexcept_id)
-              registry.register_chain({ty});
-        }
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
@@ -112,36 +107,48 @@ public:
             is_symbol2t(c.function) &&
             id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
               std::string::npos)
-            // concurrent program — not yet modelled
-            return report_fallback(
-              goto_functions, "a concurrent program (pthread_create)");
+            concurrent = true;
         }
       }
     }
 
-    // Whole-program, all-or-nothing: lowered and imperative dispatch cannot
-    // interoperate across a call, so unless every participating function is in
-    // the supported subset we leave the entire program to symex.
+    // The exception state is one global tuple, not per-thread, so the lowered
+    // dispatch is unsound for a concurrent program that throws or catches across
+    // threads (one thread could observe, catch, or clear another thread's
+    // in-flight exception); such a program is reported as unsupported. A program
+    // that only *declares* exception specifications (a THROW_DECL such as the
+    // library `what() const throw()`, with no reachable throw or catch) puts no
+    // exception in flight, so the lowering — which simply strips the inert
+    // THROW_DECL — stays sound and must still run (symex no longer handles a
+    // surviving THROW_DECL). Only bail when there is a real throw or catch.
+    if (concurrent && program_throws_or_catches(goto_functions))
+      return report_unsupported(
+        goto_functions, "a concurrent program (pthread_create)");
+
+    // Whole-program, all-or-nothing: every participating function must be in
+    // the supported subset, otherwise the program is reported as unsupported
+    // (there is no longer a partial-lowering or imperative-dispatch fallback).
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available && !program_supported(fn.second.body))
-        return report_fallback(goto_functions, unsupported_reason_, fn.first);
+        return report_unsupported(
+          goto_functions, unsupported_reason_, fn.first);
 
     // The uncaught-exception check is anchored at the program entry's epilogue.
     // __ESBMC_main is the universal whole-program entry (it runs static init,
     // then calls main / python_user_main), so an escaping exception always
     // reaches it. Without it (e.g. --function isolated verification) an uncaught
-    // exception could be silently accepted, so fall back to the imperative path.
+    // exception could be silently accepted, so report it as unsupported.
     bool has_entry = false;
     for (const auto &fn : goto_functions.function_map)
       if (fn.first == "__ESBMC_main")
         has_entry = true;
     if (!has_entry)
-      return report_fallback(
+      return report_unsupported(
         goto_functions, "no whole-program entry (--function verification)");
 
     for (auto &fn : goto_functions.function_map)
       if (fn.second.body_available)
-        lower_ip(fn.second.body, fn.first);
+        lower_ip(fn.second, fn.first);
 
     // The globals are created after the frontend builds __ESBMC_main's static
     // initialisation, so seed them at entry; otherwise symex does not track the
@@ -153,41 +160,62 @@ public:
       init_globals(entry->second.body);
   }
 
-  /// True if any function still has an exception construct to lower.
+  /// True if any function still has an exception construct to lower (a throw, a
+  /// catch, or a dynamic exception specification). Drives the whole-pass no-op
+  /// gate: a surviving THROW_DECL must still be lowered, so it counts here.
   static bool program_uses_exceptions(const goto_functionst &gf)
   {
     for (const auto &fn : gf.function_map)
       if (fn.second.body_available)
+      {
+        // A restrictive specification (noexcept / throw(...)) gets epilogue
+        // enforcement, so the pass must run when one is present. (lower_ip
+        // still no-ops on a body that cannot reach the epilogue with an
+        // exception in flight — no throws, calls or catches.)
+        if (fn.second.exception_spec.is_restrictive())
+          return true;
         for (const auto &ins : fn.second.body.instructions)
-          if (ins.type == THROW || ins.type == CATCH || ins.type == THROW_DECL)
+          if (ins.type == THROW || ins.type == CATCH)
+            return true;
+      }
+    return false;
+  }
+
+  /// True if the program actually throws or catches — real exception flow that
+  /// uses the global exception state — as opposed to merely declaring an
+  /// exception specification (a THROW_DECL). Used to decide whether a concurrent
+  /// program is genuinely unsound to lower.
+  static bool program_throws_or_catches(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH)
             return true;
     return false;
   }
 
-  /// Report that the pass declined to lower a program that uses exceptions, so
-  /// the residual dependence on the imperative path is visible rather than
-  /// silent. Today the imperative path takes over; once it is removed (P4) this
-  /// diagnostic is what keeps that deletion non-breaking — an unsupported
-  /// program is reported, not miscompiled. Programs with no exception construct
-  /// are silent (the pass is a no-op for them).
-  void report_fallback(
+  /// The pass cannot lower this program. Lowering is the only exception path
+  /// (the legacy imperative path was removed once the lowered subset covered
+  /// the corpus, #5075), so an exception-using program the pass declines is
+  /// reported as a hard error rather than silently miscompiled. A program with
+  /// no exception construct is silent: the pass is a no-op for it, so a
+  /// decline that does not touch exceptions (e.g. a concurrent but
+  /// exception-free program) returns without complaint.
+  void report_unsupported(
     const goto_functionst &gf,
     const std::string &why,
     const irep_idt &fn = irep_idt())
   {
     if (!program_uses_exceptions(gf))
       return;
-    if (fn.empty())
-      log_warning(
-        "--lower-exceptions: cannot lower {}; falling back to the imperative "
-        "exception path",
-        why);
-    else
-      log_warning(
-        "--lower-exceptions: cannot lower {} in '{}'; falling back to the "
-        "imperative exception path",
-        why,
-        id2string(fn));
+    // Throw the ESBMC fatal-error idiom (a std::string caught by
+    // process_goto_program), which logs the message and stops verification
+    // cleanly — rather than abort()/SIGABRT, which reads as an internal crash.
+    std::string msg = "exception lowering: cannot lower " + why;
+    if (!fn.empty())
+      msg += " in '" + id2string(fn) + "'";
+    throw msg;
   }
 
   void init_globals(goto_programt &body)
@@ -252,10 +280,11 @@ private:
 
   /// THROW code for a synthesized std::bad_cast (operand + exception_list =
   /// dynamic type and its bases), or nil if the <typeinfo> model's class is not
-  /// in the symbol table. Mirrors goto_symext::symex_throw_bad_cast; the tag is
-  /// elaborated ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on
-  /// older, so try both. Built once and reused across call sites (a single
-  /// exception is in flight at a time).
+  /// in the symbol table. (This is the lowered replacement for the former
+  /// goto_symext::symex_throw_bad_cast synthesis.) The tag is elaborated
+  /// ("class std::bad_cast") on newer Clang/LLVM, un-elaborated on older, so
+  /// try both. Built once and reused across call sites (a single exception is
+  /// in flight at a time).
   expr2tc build_bad_cast_throw()
   {
     const symbolt *sym = ns.lookup("tag-std::bad_cast");
@@ -283,15 +312,18 @@ private:
   }
 
   /// Replace each __ESBMC_throw_bad_cast() call — the bodyless intrinsic a
-  /// failing dynamic_cast<T&> lowers to — with the equivalent THROW, so the rest
-  /// of the pass lowers it like any other throw. If std::bad_cast is
-  /// unresolvable the calls are left in place and program_supported's bad_cast
-  /// guard makes the program fall back to the imperative path.
+  /// failing dynamic_cast<T&> lowers to — so the rest of the pass never sees the
+  /// call. The frontend guards it with the cast-failed condition
+  /// (`if (!vptr_matches) __ESBMC_throw_bad_cast();`), so the replacement
+  /// inherits that guard. When std::bad_cast is resolvable it becomes the
+  /// equivalent THROW (lowered like any other throw, so a surrounding handler
+  /// can catch it). When it is not (no <typeinfo>), there is no exception object
+  /// to throw, so it becomes an ASSERT(false): a failing reference cast with no
+  /// RTTI model is std::terminate, hence a verification error at that point — a
+  /// cast that always succeeds leaves the assertion unreachable.
   void lower_bad_cast_calls(goto_functionst &goto_functions)
   {
     expr2tc bad_cast_throw = build_bad_cast_throw();
-    if (is_nil_expr(bad_cast_throw))
-      return;
 
     for (auto &fn : goto_functions.function_map)
     {
@@ -303,12 +335,21 @@ private:
           continue;
         const code_function_call2t &c = to_code_function_call2t(ins.code);
         if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
+          !is_symbol2t(c.function) ||
+          to_symbol2t(c.function).thename != "c:@F@__ESBMC_throw_bad_cast")
+          continue;
+
+        if (!is_nil_expr(bad_cast_throw))
         {
           // make_throw() preserves location/function (clear() leaves them).
           ins.make_throw();
           ins.code = bad_cast_throw;
+        }
+        else
+        {
+          ins.make_assertion(gen_false_expr());
+          ins.location.property("assertion");
+          ins.location.comment("dynamic_cast<T&> failed: std::bad_cast");
         }
       }
     }
@@ -361,7 +402,7 @@ private:
   /// of registered objects or rethrows, balanced CATCH push/pop nesting)?
   /// Read-only.
   /// Set when program_supported declines, naming the construct for the
-  /// fallback diagnostic (report_fallback).
+  /// unsupported-program diagnostic (report_unsupported).
   std::string unsupported_reason_;
 
   bool unsupported(const char *why)
@@ -376,9 +417,9 @@ private:
     int depth = 0;
     for (auto it = body.instructions.begin(); it != end; ++it)
     {
-      // Both no-throw specs (noexcept / throw()) and dynamic exception
-      // specifications (throw(T...)) are enforced at the function epilogue
-      // (see lower_ip), so a THROW_DECL never forces fallback.
+      // Exception specifications (noexcept / throw(T...) / throw()) are function
+      // metadata enforced at the epilogue (see lower_ip), so they never force
+      // fallback here; this scan only rejects unsupported catch/throw shapes.
       if (it->type == CATCH && !it->targets.empty())
       {
         const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
@@ -426,20 +467,9 @@ private:
           !registry.is_registered(t.exception_list.front()))
           return unsupported("a throw of an unsupported type");
       }
-      else if (it->type == FUNCTION_CALL)
-      {
-        // __ESBMC_throw_bad_cast is a bodyless intrinsic that symex turns into a
-        // std::bad_cast throw using the imperative stack_catch — which is empty
-        // once the surrounding catch is lowered, so the throw would be reported
-        // uncaught. The lowering cannot see this hidden throw to wire it, so
-        // leave such a program (dynamic_cast<T&>) to the imperative path.
-        const code_function_call2t &c = to_code_function_call2t(it->code);
-        if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == "c:@F@__ESBMC_throw_bad_cast")
-          return unsupported(
-            "a failing dynamic_cast<T&> whose std::bad_cast is unavailable");
-      }
+      // A __ESBMC_throw_bad_cast() call cannot reach here: lower_bad_cast_calls
+      // (run before this check) rewrites every such call to a THROW or an
+      // ASSERT(false), so a failing dynamic_cast<T&> is always lowered.
     }
     // depth > 0 means some try's empty-CATCH pop was pruned by remove_unreachable
     // (its body cannot complete normally). Such unclosed pushes are accepted:
@@ -597,8 +627,9 @@ private:
     return region == -1 ? epilogue : regions[region].dispatch;
   }
 
-  void lower_ip(goto_programt &body, const irep_idt &fn_id)
+  void lower_ip(goto_functiont &function, const irep_idt &fn_id)
   {
+    goto_programt &body = function.body;
     rebalance_removed_pops(body);
     insert_elided_skip_gotos(body);
 
@@ -606,27 +637,10 @@ private:
     std::vector<sitet> throws, calls;
     collect(body, regions, throws, calls);
 
-    // Throw-spec markers are consumed here; once the throws are lowered the
-    // imperative throw-decl machinery has nothing to act on. Record the
-    // function's exception specification (if any) in the same pass: `has_spec`
-    // is set by any THROW_DECL, and `spec_types` collects its allowed types
-    // (empty for a no-throw spec — noexcept / throw()).
-    bool has_spec = false;
-    std::vector<irep_idt> spec_types;
-    for (auto &ins : body.instructions)
-    {
-      if (ins.type == THROW_DECL)
-      {
-        has_spec = true;
-        for (const irep_idt &ty :
-             to_code_cpp_throw_decl2t(ins.code).exception_list)
-          if (ty != noexcept_id)
-            spec_types.push_back(ty);
-        ins.make_skip();
-      }
-      else if (ins.type == THROW_DECL_END)
-        ins.make_skip();
-    }
+    // The function's exception specification is now metadata on the function
+    // (replacing the old THROW_DECL instructions): non_throwing for noexcept,
+    // dynamic for throw(T...) / throw() with `allowed_types` the listed types.
+    const exception_specificationt &spec = function.exception_spec;
 
     if (regions.empty() && throws.empty() && calls.empty())
       return;
@@ -652,37 +666,32 @@ private:
       r.pop->make_skip();
     }
 
-    // An exception in flight at the epilogue is a hard failure in two cases:
-    //  - main / __ESBMC_main: it is uncaught (escapes the program → terminate);
-    //    __ESBMC_main also covers static-init throws from global constructors.
-    //  - an exception specification is violated: the escaping exception's type
-    //    is not permitted by the function's `throw(...)` / noexcept declaration
-    //    ([except.spec]). A no-throw spec permits nothing, so any escape fails;
-    //    a dynamic spec permits its listed types (and their subtypes). This
-    //    mirrors the imperative path, which reports an escaping out-of-spec
-    //    throw as "not allowed by declaration" (unexpected()/handler dispatch is
-    //    not modelled on either path). A locally-caught throw clears `thrown`,
-    //    so the check fires only on a genuine escape.
-    const bool is_entry =
-      id2string(fn_id).rfind("c:@F@main#", 0) == 0 || fn_id == "__ESBMC_main";
-    if (is_entry || has_spec)
+    // Enforce the function's exception specification at the epilogue, where an
+    // exception still in flight is about to escape. A locally-caught throw
+    // clears `thrown`, so this fires only on a genuine escape.
+    //  - main / __ESBMC_main: any escape is uncaught (covers static-init throws
+    //    from global constructors) → assert(thrown == false).
+    //  - noexcept: an escape calls std::terminate ([except.spec]) →
+    //    assert(thrown == false).
+    //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
+    //    re-checked (build_dynamic_spec_check), matching the imperative path
+    //    (which models the unexpected-handler dispatch and its recovery).
+    const bool is_entry = fn_id == "c:@F@main" ||
+                          id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
+                          fn_id == "__ESBMC_main";
+
+    if (spec.kind == exception_specificationt::kindt::dynamic)
+      build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
+    else if (
+      is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
     {
-      // The assertion is `!thrown || in_spec`; for an uncaught (entry) or
-      // no-throw boundary `in_spec` is empty, leaving the original `!thrown`.
-      expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
-      expr2tc in_spec = is_entry ? expr2tc() : spec_guard(spec_types);
       auto a = body.insert(std::next(epilogue));
-      a->make_assertion(
-        is_nil_expr(in_spec) ? not_thrown : or2tc(not_thrown, in_spec));
+      a->make_assertion(equality2tc(thrown, gen_false_expr()));
       a->location = epilogue->location;
       a->function = epilogue->function;
       a->location.property("exception");
-      // A no-throw spec (empty allowed set) keeps the distinct "noexcept"
-      // wording; a dynamic spec reports a specification violation.
       a->location.comment(
-        is_entry             ? "uncaught exception"
-        : spec_types.empty() ? "noexcept specification violated"
-                             : "exception specification violated");
+        is_entry ? "uncaught exception" : "noexcept specification violated");
     }
 
     body.update();
@@ -806,6 +815,93 @@ private:
         disj = is_nil_expr(disj) ? eq : or2tc(disj, eq);
       }
     return disj;
+  }
+
+  /// A call to the installed std::unexpected handler — the set_unexpected
+  /// builtin records it as __ESBMC_unexpected — or nil when none is installed.
+  expr2tc make_unexpected_call()
+  {
+    const symbolt *h = ns.lookup("c:@F@__ESBMC_unexpected");
+    if (!h)
+      return expr2tc();
+    code_function_callt fc;
+    fc.function() = h->get_value();
+    expr2tc call;
+    migrate_expr(fc, call);
+    return call;
+  }
+
+  /// Enforce a dynamic exception specification throw(allowed...) (including the
+  /// empty throw()) at the epilogue. When an exception the spec does not permit
+  /// is propagating out, run the std::unexpected handler and re-check: a handler
+  /// that rethrows a permitted type lets it propagate; anything else (handler
+  /// returns, rethrows a disallowed type, or no handler installed) is a
+  /// violation. Mirrors the imperative goto_symext path: one handler call, no
+  /// std::bad_exception substitution.
+  void build_dynamic_spec_check(
+    goto_programt &body,
+    goto_programt::targett epilogue,
+    const std::vector<irep_idt> &allowed,
+    bool is_entry)
+  {
+    const locationt loc = epilogue->location;
+    const irep_idt fn = epilogue->function;
+    auto last = std::next(epilogue); // END_FUNCTION
+
+    auto ins = [&](goto_programt::targett pos) {
+      auto n = body.insert(pos);
+      n->location = loc;
+      n->function = fn;
+      return n;
+    };
+    auto not_thrown = [&]() { return equality2tc(thrown, gen_false_expr()); };
+    // spec_guard returns nil for the empty spec throw() (nothing permitted).
+    auto permitted = [&]() {
+      expr2tc g = spec_guard(allowed);
+      return is_nil_expr(g) ? gen_false_expr() : g;
+    };
+
+    // Where a permitted (or absent) exception continues. For an entry function
+    // any escape is uncaught, so route there to an uncaught assertion instead
+    // of returning it to a (non-existent) caller.
+    goto_programt::targett ret = last;
+    if (is_entry)
+    {
+      ret = ins(last);
+      ret->make_assertion(not_thrown());
+      ret->location.property("exception");
+      ret->location.comment("uncaught exception");
+    }
+
+    // The violation point.
+    auto fail = ins(ret);
+    fail->make_assertion(gen_false_expr());
+    fail->location.property("exception");
+    fail->location.comment("exception specification violated");
+
+    // No exception in flight -> done.
+    ins(fail)->make_goto(ret, not_thrown());
+    // Permitted by the specification -> let it propagate.
+    ins(fail)->make_goto(ret, permitted());
+
+    // Disallowed: run the unexpected handler (if any) and re-check.
+    expr2tc call = make_unexpected_call();
+    if (!is_nil_expr(call))
+    {
+      // Clear `thrown` so the handler runs with no exception in flight; keep
+      // typeid/value so a bare `throw;` in the handler rethrows the original.
+      auto clear = ins(fail);
+      clear->make_assignment();
+      clear->code = code_assign2tc(thrown, gen_false_expr());
+
+      ins(fail)->make_function_call(call);
+
+      // Handler returned without throwing -> the specification is violated.
+      ins(fail)->make_goto(fail, not_thrown());
+      // Handler rethrew a permitted type -> let it propagate.
+      ins(fail)->make_goto(ret, permitted());
+    }
+    // Fall through to fail.
   }
 
   /// Replace a throw with: arm the globals (or, for a rethrow, just re-raise

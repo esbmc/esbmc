@@ -23,6 +23,20 @@ jobs:
       build-flags: ${{ matrix.flags }}
       testing: false
 
+  build-linux-arm64:
+    name: Homebrew compatibility check (Linux ARM64, LLVM 22)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install LLVM 22
+        run: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y llvm-22 clang-22 libclang-22-dev libclang-cpp22-dev
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b RelWithDebInfo -S OFF -c 22 -e OFF
+
   build-info:
     uses: ./.github/workflows/build-info.yml
 

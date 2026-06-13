@@ -36,7 +36,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
 {
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel, eps_abs;
+  smt_astt eps_rel = nullptr, eps_abs = nullptr;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = get_double_eps_rel();       // 2^-53
@@ -51,6 +51,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
   else
   {
     assert(!"apply_ieee754_rne_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -98,7 +99,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   // name prefix: ra_lo_aw:: / ra_hi_aw:: to match the RNA single-step path.
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel, eps_abs;
+  smt_astt eps_rel = nullptr, eps_abs = nullptr;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel = get_double_eps_rel();       // 2^-53
@@ -113,6 +114,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   else
   {
     assert(!"apply_ieee754_rna_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -162,7 +164,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
   //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir, eps_abs;
+  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = get_double_eps_up(); // 2^-52
@@ -177,6 +179,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
   else
   {
     assert(!"apply_ieee754_rup_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -222,7 +225,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
   //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir, eps_abs;
+  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = get_double_eps_up(); // 2^-52
@@ -237,6 +240,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
   else
   {
     assert(!"apply_ieee754_rdn_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -293,7 +297,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
   //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
   const auto double_spec = ieee_float_spect::double_precision();
   const auto single_spec = ieee_float_spect::single_precision();
-  smt_astt eps_rel_dir, eps_abs;
+  smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
   if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
   {
     eps_rel_dir = get_double_eps_up(); // 2^-52
@@ -308,6 +312,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
   else
   {
     assert(!"apply_ieee754_rtz_enclosure: unsupported FP format");
+    abort();
   }
 
   smt_sortt rs = mk_real_sort();
@@ -462,7 +467,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
       //
       // TODO: extend to non-standard FP formats beyond single and double.
 
-      smt_astt eps_rel, eps_abs;
+      smt_astt eps_rel = nullptr, eps_abs = nullptr;
       if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // TODO: theorem-driven bounds for non-standard formats are not yet
@@ -556,7 +561,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
       //   ROUND_TO_PLUS_INF; the bound shape is the mirror image.
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel_dir, eps_abs;
+      smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
       if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
@@ -606,7 +611,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
       //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel_dir, eps_abs;
+      smt_astt eps_rel_dir = nullptr, eps_abs = nullptr;
       if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
@@ -670,7 +675,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // This is expected and correct -- the bound is identical.
 
       smt_sortt rs = mk_real_sort();
-      smt_astt eps_rel, eps_abs;
+      smt_astt eps_rel = nullptr, eps_abs = nullptr;
       if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.

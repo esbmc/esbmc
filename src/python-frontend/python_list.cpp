@@ -63,7 +63,11 @@ exprt build_typecast(const exprt &from, const typet &t)
     return typecast_exprt(from, t);
   expr2tc from2;
   migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // so legacy typecast_exprt(from, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
 }
 
 // address_of2t's sources here are lvalues (symbols/members/indices), never a
@@ -134,6 +138,34 @@ exprt build_call_expr(
   }
   return migrate_expr_back(side_effect_function_call2tc(
     migrate_type(return_type), symbol_expr2tc(fn), args2));
+}
+
+// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
+// a pointer to a PyObject struct, so the dereferenced struct is the resolved
+// member source and member2t's source precondition holds.
+exprt build_deref_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
+
+// Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
+// dereference_exprt(t) + op0=ptr form, which sets the result type to `t`
+// directly). Back-migrated once (V.3).
+exprt build_dereference(const exprt &ptr, const typet &t)
+{
+  expr2tc ptr2;
+  migrate_expr(ptr, ptr2);
+  exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
+  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // so legacy dereference_exprt(t)+op0=ptr is reproduced faithfully.
+  result.type() = t;
+  return result;
 }
 } // namespace
 
@@ -621,7 +653,7 @@ exprt python_list::build_push_list_call(
         signedbv_typet(config.ansi_c.long_int_width),
         exprt());
 
-      typecast_exprt bool_cast(
+      exprt bool_cast = build_typecast(
         build_symbol(*elem_info.elem_symbol),
         signedbv_typet(config.ansi_c.long_int_width));
 
@@ -1945,6 +1977,123 @@ exprt python_list::handle_range_slice(
   }
 
   return build_symbol(sliced_list);
+}
+
+void python_list::handle_slice_assignment(
+  const exprt &list_expr,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &value_node)
+{
+  // The step is restricted to a constant integer literal (or absent) for
+  // now; the model receives it as a runtime value and branches on it at
+  // solve time, so this could be lifted, but a symbolic step is untested.
+  // Mirrors the literal-only step extraction in handle_range_slice, but
+  // rejects a non-constant step instead of silently slicing with step 1.
+  long long step_val = 1;
+  if (slice_node.contains("step") && !slice_node["step"].is_null())
+  {
+    const auto &step_node = slice_node["step"];
+    if (
+      step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub" &&
+      step_node["operand"]["_type"] == "Constant" &&
+      step_node["operand"]["value"].is_number_integer())
+      step_val = -(long long)step_node["operand"]["value"].get<std::int64_t>();
+    else if (
+      step_node["_type"] == "Constant" &&
+      step_node["value"].is_number_integer())
+      step_val = step_node["value"].get<std::int64_t>();
+    else
+      throw std::runtime_error(
+        "List slice assignment requires a constant integer step");
+  }
+
+  const locationt location = converter_.get_location_from_decl(slice_node);
+
+  // Evaluate the right-hand side; materialize a call (e.g. sorted(...)) into
+  // a temporary so its result can be passed to the model by address. get_expr
+  // returns calls as code_function_callt, which must be emitted as an
+  // instruction with the temporary as its lhs — embedding it as a decl
+  // operand would leak a side effect into the GOTO program.
+  exprt rhs = converter_.get_expr(value_node);
+  if (rhs.is_function_call())
+  {
+    code_function_callt &fcall = static_cast<code_function_callt &>(rhs);
+    if (!fcall.function().type().is_code())
+      throw std::runtime_error(
+        "Unsupported callable on list slice assignment right-hand side");
+    const typet ret_type = to_code_type(fcall.function().type()).return_type();
+    symbolt &tmp = converter_.create_tmp_symbol(
+      value_node, "$slice_assign_rhs$", ret_type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    fcall.lhs() = build_symbol(tmp);
+    converter_.add_instruction(fcall);
+    rhs = build_symbol(tmp);
+  }
+  else if (rhs.id() == "sideeffect")
+  {
+    symbolt &tmp = converter_.create_tmp_symbol(
+      value_node, "$slice_assign_rhs$", rhs.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.copy_to_operands(rhs);
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    rhs = build_symbol(tmp);
+  }
+
+  const namespacet ns(converter_.symbol_table());
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const typet resolved_list_type = ns.follow(list_type);
+  const typet rhs_type = ns.follow(rhs.type());
+  const bool rhs_is_list =
+    rhs_type == resolved_list_type ||
+    (rhs_type.is_pointer() &&
+     ns.follow(rhs_type.subtype()) == resolved_list_type);
+  if (!rhs_is_list)
+    throw std::runtime_error(
+      "List slice assignment requires a list right-hand side");
+
+  const typet i64 = signedbv_typet(64);
+  auto bound_expr = [&](const char *name, bool &present) -> exprt {
+    present = slice_node.contains(name) && !slice_node[name].is_null();
+    if (!present)
+      return from_integer(0, i64);
+    exprt e = converter_.get_expr(slice_node[name]);
+    e = remove_function_calls_recursive(e, slice_node);
+    return build_typecast(e, i64);
+  };
+  bool has_lower = false, has_upper = false;
+  exprt lower = bound_expr("lower", has_lower);
+  exprt upper = bound_expr("upper", has_upper);
+
+  const symbolt *fn =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_slice_assign");
+  if (!fn)
+    throw std::runtime_error(
+      "__ESBMC_list_slice_assign not found in symbol table");
+
+  // Same nested-list type id as the slice-read path: lets the model keep
+  // nested-list records shared instead of byte-copying them (#5102).
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(list_type)),
+    config.ansi_c.address_width));
+
+  exprt call = build_call_expr(
+    *fn,
+    bool_type(),
+    {list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr),
+     lower,
+     from_integer(has_lower ? 1 : 0, int_type()),
+     upper,
+     from_integer(has_upper ? 1 : 0, int_type()),
+     from_integer(step_val, i64),
+     rhs.type().is_pointer() ? rhs : build_address_of(rhs),
+     list_type_id});
+  call.location() = location;
+  converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
 exprt python_list::handle_index_access(
@@ -3273,7 +3422,7 @@ exprt python_list::create_vla(
   // Materialise the count (which may be a compound expression such as m + 1)
   // into an int symbol to use as the loop bound.
   exprt bound_value =
-    (count.type() == int_type()) ? count : typecast_exprt(count, int_type());
+    (count.type() == int_type()) ? count : build_typecast(count, int_type());
   symbolt &bound = converter_.create_tmp_symbol(
     element, "$list_rep_count$", int_type(), exprt());
   code_declt bound_decl(build_symbol(bound));
@@ -3333,7 +3482,7 @@ exprt python_list::list_repetition(
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
 
-  auto is_integer_type = [](const typet &type) {
+  [[maybe_unused]] auto is_integer_type = [](const typet &type) {
     return type.is_signedbv() || type.is_unsignedbv();
   };
 
@@ -4333,16 +4482,9 @@ exprt python_list::extract_pyobject_value(
   // (real-sorted in --ir mode), so the array read gives the correct real value.
   if (elem_type.is_floatbv())
   {
-    // Helper: build deref(pyobject_expr)->field for a given field/type.
-    auto member_of =
-      [&](const char *field, const typet &ftype) -> member_exprt {
-      member_exprt m(pyobject_expr, field, ftype);
-      exprt &base = m.struct_op();
-      exprt deref("dereference");
-      deref.type() = base.type().subtype();
-      deref.move_to_operands(base);
-      base.swap(deref);
-      return m;
+    // Helper: build (*pyobject_expr).field for a given field/type.
+    auto member_of = [&](const char *field, const typet &ftype) -> exprt {
+      return build_deref_member(pyobject_expr, field, ftype);
     };
 
     // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
@@ -4351,7 +4493,7 @@ exprt python_list::extract_pyobject_value(
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
 
     // Build __ESBMC_float_buf[item->float_idx]
-    member_exprt float_idx_member = member_of("float_idx", size_type());
+    exprt float_idx_member = member_of("float_idx", size_type());
     exprt float_val =
       build_index(build_symbol(*fbuf_sym), float_idx_member, elem_type);
 
@@ -4368,13 +4510,11 @@ exprt python_list::extract_pyobject_value(
       converter_.get_type_handler().type_to_string(elem_type));
 
     // (double)*(long long *)item->value
-    member_exprt value_member =
-      member_of("value", pointer_typet(empty_typet()));
-    typecast_exprt as_int_ptr(
-      value_member, pointer_typet(long_long_int_type()));
-    dereference_exprt int_val(long_long_int_type());
-    int_val.op0() = as_int_ptr;
-    typecast_exprt int_as_float(int_val, elem_type);
+    exprt value_member = member_of("value", pointer_typet(empty_typet()));
+    exprt as_int_ptr =
+      build_typecast(value_member, pointer_typet(long_long_int_type()));
+    exprt int_val = build_dereference(as_int_ptr, long_long_int_type());
+    exprt int_as_float = build_typecast(int_val, elem_type);
 
     // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
     equality_exprt is_float(
@@ -4383,17 +4523,9 @@ exprt python_list::extract_pyobject_value(
     return if_exprt(is_float, float_val, int_as_float);
   }
 
-  // Extract value from PyObject: pyobject_expr->value
-  member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
-
-  // Dereference the PyObject* to access its members
-  {
-    exprt &base = obj_value.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
+  // Extract value from PyObject: (*pyobject_expr).value
+  exprt obj_value =
+    build_deref_member(pyobject_expr, "value", pointer_typet(empty_typet()));
 
   // For array types, return pointer to element type instead of pointer to array
   // The dereference system doesn't support array types as target types
@@ -4401,8 +4533,7 @@ exprt python_list::extract_pyobject_value(
   {
     const array_typet &arr_type = to_array_type(elem_type);
     // Cast to pointer to element type (e.g., char* instead of char[2]*)
-    typecast_exprt tc(obj_value, pointer_typet(arr_type.subtype()));
-    return tc;
+    return build_typecast(obj_value, pointer_typet(arr_type.subtype()));
   }
 
   // For char* strings and None (_Bool*), the void* already contains the pointer value
@@ -4412,16 +4543,13 @@ exprt python_list::extract_pyobject_value(
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
     // String and None case: cast void* directly to the pointer type (no dereference needed)
-    typecast_exprt tc(obj_value, elem_type);
-    return tc;
+    return build_typecast(obj_value, elem_type);
   }
   else
   {
     // All other types: cast void* to pointer-to-type, then dereference
-    typecast_exprt tc(obj_value, pointer_typet(elem_type));
-    dereference_exprt deref(elem_type);
-    deref.op0() = tc;
-    return deref;
+    exprt tc = build_typecast(obj_value, pointer_typet(elem_type));
+    return build_dereference(tc, elem_type);
   }
 }
 
@@ -4886,6 +5014,77 @@ exprt python_list::build_copy_list_call(
   copy_type_map_entries(list.id.as_string(), copied_list.id.as_string());
 
   return build_symbol(copied_list);
+}
+
+exprt python_list::build_shallow_copy_call(
+  const exprt &src_list,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+  const typet list_type = converter_.get_type_handler().get_list_type();
+
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow");
+  if (!copy_func)
+    throw std::runtime_error(
+      "__ESBMC_list_copy_shallow not found in symbol table");
+
+  // Materialize a list-returning call into a temporary so it can be passed
+  // to the model by value (same pattern as handle_slice_assignment's RHS).
+  exprt src = src_list;
+  if (src.is_function_call())
+  {
+    code_function_callt &fcall = static_cast<code_function_callt &>(src);
+    if (!fcall.function().type().is_code())
+      throw std::runtime_error(
+        "build_shallow_copy_call: unsupported callable source");
+    const typet ret_type = to_code_type(fcall.function().type()).return_type();
+    symbolt &tmp =
+      converter_.create_tmp_symbol(element, "$tuple_src$", ret_type, exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    fcall.lhs() = build_symbol(tmp);
+    converter_.add_instruction(fcall);
+    src = build_symbol(tmp);
+  }
+  else if (src.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(element, "$tuple_src$", src.type(), exprt());
+    code_declt decl(build_symbol(tmp));
+    decl.copy_to_operands(src);
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    src = build_symbol(tmp);
+  }
+
+  symbolt &copied =
+    converter_.create_tmp_symbol(element, "$tuple_copy$", list_type, exprt());
+  code_declt copied_decl(build_symbol(copied));
+  copied_decl.location() = location;
+  converter_.add_instruction(copied_decl);
+
+  // Same nested-list type id as the other shallow-sharing paths (#5102).
+  constant_exprt list_type_id(size_type());
+  list_type_id.set_value(integer2binary(
+    std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(list_type)),
+    config.ansi_c.address_width));
+
+  code_function_callt copy_call;
+  copy_call.function() = build_symbol(*copy_func);
+  copy_call.arguments().push_back(src);
+  copy_call.arguments().push_back(list_type_id);
+  copy_call.lhs() = build_symbol(copied);
+  copy_call.type() = list_type;
+  copy_call.location() = location;
+  converter_.add_instruction(copy_call);
+
+  if (src.is_symbol())
+    copy_type_map_entries(src.identifier().as_string(), copied.id.as_string());
+
+  return build_symbol(copied);
 }
 
 exprt python_list::build_set_membership_call(

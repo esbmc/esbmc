@@ -63,6 +63,19 @@ exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
   return member_exprt(base, name, t);
 }
 
+exprt build_typecast(const exprt &from, const typet &t)
+{
+  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
+    return typecast_exprt(from, t);
+  expr2tc from2;
+  migrate_expr(from, from2);
+  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
+  // migrate_type does not round-trip #cpp_type; restore the exact target type
+  // so legacy typecast_exprt(from, t) is reproduced faithfully.
+  result.type() = t;
+  return result;
+}
+
 // Expression-context call `callee(args...)` returning return_type, where the
 // callee is an already-built function expression (here a by-name symbol_exprt
 // carrying a code_typet). Falls back to the legacy node for a dyn-sized-array
@@ -605,7 +618,19 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (th.is_constructor_call(call_))
   {
-    class_name = func_name;
+    // An explicit `Base.__init__(self, ...)` call names the receiver class and
+    // passes self explicitly. is_constructor_call() flags any `.__init__`, but
+    // here the constructor is the named class's own, stored under the class
+    // name (@C@Base@F@Base), not the literal "__init__". Resolve both the class
+    // and the (renamed) function to the receiver so the symbol is found; a
+    // direct `Base()` call keeps func_name as the class name already.
+    if (func_name == "__init__" && json_utils::is_class(obj_name, ast))
+    {
+      class_name = obj_name;
+      func_name = obj_name;
+    }
+    else
+      class_name = func_name;
   }
   else if (is_member_function_call)
   {
@@ -826,7 +851,7 @@ exprt function_call_builder::build() const
 
     exprt condition = converter_.get_expr(call_["args"][0]);
     if (!condition.type().is_bool())
-      condition = typecast_exprt(condition, bool_type());
+      condition = build_typecast(condition, bool_type());
 
     // Create code_assume statement
     codet assume_code("assume");
@@ -847,7 +872,7 @@ exprt function_call_builder::build() const
 
     exprt condition = converter_.get_expr(args[0]);
     if (!condition.type().is_bool())
-      condition = typecast_exprt(condition, bool_type());
+      condition = build_typecast(condition, bool_type());
 
     code_assertt assert_code(condition);
     assert_code.location() = converter_.get_location_from_decl(call_);
@@ -983,7 +1008,7 @@ exprt function_call_builder::build() const
       if (arg.type().is_code())
         arg = build_address_of(arg);
       if (arg.type() != param_type)
-        arg = typecast_exprt(arg, param_type);
+        arg = build_typecast(arg, param_type);
 
       code_function_callt call;
       call.function() = symbol_exprt(symbol_id, fn_type);
@@ -1037,7 +1062,7 @@ exprt function_call_builder::build() const
           throw std::runtime_error(func_name + " takes exactly one argument");
         exprt arg = converter_.get_expr(call_["args"][0]);
         if (arg.type() != uint_type())
-          arg = typecast_exprt(arg, uint_type());
+          arg = build_typecast(arg, uint_type());
         call.arguments().push_back(arg);
       }
       else if (!call_["args"].empty())

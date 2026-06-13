@@ -30,7 +30,10 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Fallback for larger/unusual sizes
+  // Fallback for larger/unusual sizes. A word-wise compare loop here would
+  // unwind --unwind times on every symbolic-size comparison, with no benefit
+  // to any converging test (large-struct compares only occur in tests that
+  // stay KNOWNBUG on the symbolic-list scalability wall, #5121).
   return memcmp(a, b, size) == 0;
 }
 
@@ -96,8 +99,16 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths for scalars and small tuple keys.
-  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
+  // Branch-free 8-byte-aligned fast paths for the common small sizes. These
+  // avoid memcpy's per-byte loop, which blows up incremental-bmc (size unwind
+  // iterations per copied element) and, under a tight --unwind, trips the copy
+  // loop's unwinding assertion (dict_tuple_key copies a 3-int tuple key at
+  // --unwind 3, #4805). Larger payloads fall through to memcpy: a word-wise
+  // loop here would unwind --unwind times on every call where size is symbolic
+  // (e.g. the list_slice_assign snapshot loop), on top of memcpy's own loop,
+  // pushing list-slice-assign past the CI per-test cap for no benefit to any
+  // converging test (large-struct copies only appear in tests that stay
+  // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -845,6 +856,151 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
   }
 
   return copied;
+}
+
+// Shallow copy with __ESBMC_list_push_shallow's sharing rules: scalar
+// elements get independent buffers, pointer-payload elements (nested
+// lists/dicts/None) keep their pointer record — i.e. Python's shallow-copy
+// semantics, unlike __ESBMC_list_copy whose generic byte-copy drops stored
+// pointers (#5102). Used for tuple(list) and list slice self-assignment.
+PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
+{
+  __ESBMC_assert(l != NULL, "list_copy_shallow: list is null");
+  PyListObject *copied = __ESBMC_list_create();
+  size_t i = 0;
+  while (i < l->size)
+  {
+    __ESBMC_list_push_shallow(copied, &l->items[i], list_type_id);
+    i++;
+  }
+  return copied;
+}
+
+// Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing
+// rules: pointer-payload elements (nested lists/dicts/None, size == 0 or
+// type_id == list_type_id) keep their pointer record; scalars get an
+// independent byte-copy so two slots never alias one buffer.
+static void
+__ESBMC_list_store_elem(PyObject *slot, const PyObject *o, size_t list_type_id)
+{
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    *slot = *o;
+    return;
+  }
+  slot->value = __ESBMC_copy_value(o->value, o->size, o->type_id, 0, NULL, 0);
+  slot->float_idx = o->float_idx;
+  slot->type_id = o->type_id;
+  slot->size = o->size;
+}
+
+// CPython slice assignment: l[lower:upper:step] = src.
+// has_lower/has_upper distinguish an absent bound from an explicit one;
+// present bounds follow slice.indices(len(l)) normalization (negative bounds
+// add len, then clamp). step == 1 may resize the list (replace [start, stop)
+// with all of src); any other step requires len(src) == slice length, as in
+// CPython, which raises ValueError otherwise (modelled as a failing assert,
+// like the step-zero case).
+bool __ESBMC_list_slice_assign(
+  PyListObject *l,
+  int64_t lower,
+  int has_lower,
+  int64_t upper,
+  int has_upper,
+  int64_t step,
+  const PyListObject *src,
+  size_t list_type_id)
+{
+  __ESBMC_assert(
+    l != NULL && src != NULL, "list_slice_assign: list or source is null");
+  __ESBMC_assert(step != 0, "ValueError: slice step cannot be zero");
+
+  int64_t size = (int64_t)l->size;
+  int64_t lo_clamp = (step < 0) ? -1 : 0;
+  int64_t hi_clamp = (step < 0) ? size - 1 : size;
+
+  int64_t start;
+  if (has_lower)
+  {
+    start = (lower < 0) ? lower + size : lower;
+    if (start < lo_clamp)
+      start = lo_clamp;
+    if (start > hi_clamp)
+      start = hi_clamp;
+  }
+  else
+    start = (step < 0) ? size - 1 : 0;
+
+  int64_t stop;
+  if (has_upper)
+  {
+    stop = (upper < 0) ? upper + size : upper;
+    if (stop < lo_clamp)
+      stop = lo_clamp;
+    if (stop > hi_clamp)
+      stop = hi_clamp;
+  }
+  else
+    stop = (step < 0) ? -1 : size;
+
+  int64_t slicelen;
+  if (step < 0)
+    slicelen = (stop < start) ? (start - stop - 1) / (-step) + 1 : 0;
+  else
+    slicelen = (start < stop) ? (stop - start - 1) / step + 1 : 0;
+
+  int64_t srclen = (int64_t)src->size;
+
+  // Self-assignment (l[1:] = l): snapshot src before mutating l, with the
+  // same sharing rules as the writes below (see __ESBMC_list_copy_shallow).
+  if (src == l)
+    src = __ESBMC_list_copy_shallow(l, list_type_id);
+
+  if (step == 1)
+  {
+    if (srclen < slicelen)
+    {
+      // Shrink: shift the tail left to close the gap.
+      int64_t to = start + srclen;
+      int64_t from = start + slicelen;
+      while (from < size)
+        l->items[to++] = l->items[from++];
+    }
+    else if (srclen > slicelen)
+    {
+      // Grow: shift the tail right, last element first.
+      int64_t shift = srclen - slicelen;
+      int64_t i = size - 1;
+      while (i >= start + slicelen)
+      {
+        l->items[i + shift] = l->items[i];
+        i--;
+      }
+    }
+    l->size = (size_t)(size + srclen - slicelen);
+  }
+  else
+    __ESBMC_assert(
+      srclen == slicelen,
+      "ValueError: attempt to assign sequence of different size to extended "
+      "slice");
+
+  // For step != 1 a length mismatch has already failed the assert above;
+  // still bound the writes by the slice so no slot outside it is touched.
+  int64_t writelen = srclen;
+  if (step != 1 && slicelen < writelen)
+    writelen = slicelen;
+
+  int64_t k = 0;
+  int64_t idx = start;
+  while (k < writelen)
+  {
+    __ESBMC_list_store_elem(&l->items[idx], &src->items[k], list_type_id);
+    idx += step;
+    k++;
+  }
+
+  return true;
 }
 
 bool __ESBMC_list_remove(

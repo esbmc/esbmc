@@ -260,7 +260,7 @@ void python_exception_handler::get_raise_statement(
 
   // Bare 'raise' (Raise.exc is null) re-raises the active exception.
   // Lower it to a cpp-throw with no operand and an empty exception_list;
-  // goto_symext::handle_rethrow replays last_throw at symex time.
+  // remove_exceptions re-raises from the global exception state (#5075).
   if (element["exc"].is_null())
   {
     side_effect_exprt side("cpp-throw", empty_typet());
@@ -368,10 +368,19 @@ void python_exception_handler::get_raise_statement(
     {
       code_function_callt call =
         to_code_function_call(converter_.convert_expression_to_code(raise));
-      side_effect_expr_function_callt tmp;
-      tmp.function() = call.function();
-      tmp.arguments() = call.arguments();
-      tmp.type() = type;
+      // V.3: build the expression-context call in IREP2, back-migrating once.
+      expr2tc fn2;
+      migrate_expr(call.function(), fn2);
+      std::vector<expr2tc> args2;
+      args2.reserve(call.arguments().size());
+      for (const exprt &a : call.arguments())
+      {
+        expr2tc a2;
+        migrate_expr(a, a2);
+        args2.push_back(std::move(a2));
+      }
+      exprt tmp = migrate_expr_back(
+        side_effect_function_call2tc(migrate_type(type), fn2, args2));
       tmp.location() = location;
       raise = tmp;
     }
@@ -455,7 +464,7 @@ void python_exception_handler::get_except_handler_statement(
   {
     // Bare 'except:' (no exception type) catches everything.
     // Mark the catch block type as ellipsis so that adjust_catch
-    // produces the "ellipsis" exception_id, which symex_catch treats
+    // produces the "ellipsis" exception_id, which remove_exceptions lowers
     // as a catch-all handler.
     catch_block.type().set("ellipsis", true);
   }

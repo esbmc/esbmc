@@ -49,6 +49,19 @@ public:
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
+  /**
+   * @brief Lower a list slice assignment l[lower:upper:step] = value to a
+   * __ESBMC_list_slice_assign model call. The step must be a constant literal
+   * (or absent); the value must evaluate to a list.
+   * @param list_expr  Expression for the target list (value or pointer)
+   * @param slice_node The Slice AST node holding lower/upper/step
+   * @param value_node The AST node of the assigned (right-hand side) value
+   */
+  void handle_slice_assignment(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &value_node);
+
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -264,6 +277,18 @@ public:
    */
   exprt
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
+
+  /**
+   * @brief Emit a __ESBMC_list_copy_shallow call producing a shallow copy of
+   * src_list (Python copy semantics: scalar elements get independent buffers,
+   * nested containers stay shared). Used by tuple(list), which must snapshot
+   * the source so later list mutations do not show through the tuple.
+   * @param src_list List-typed expression (symbol or list-returning call)
+   * @param element  AST node used for location info and temp naming
+   * @return Symbol expression of the copied list
+   */
+  exprt
+  build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
 
   /**
    * @brief Build a list remove operation (removes first matching element).

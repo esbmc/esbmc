@@ -275,10 +275,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_catch(code, dest);
   else if (statement == "cpp-throw")
     convert_throw(code, dest);
-  else if (statement == "throw_decl")
-    convert_throw_decl(code, dest);
-  else if (statement == "throw_decl_end")
-    convert_throw_decl_end(code, dest);
   else if (statement == "dead")
     copy(code, DEAD, dest);
   else
@@ -293,42 +289,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     dest.instructions.back().code = expr2tc();
     dest.instructions.back().location = code.location();
   }
-}
-
-void goto_convertt::convert_throw_decl_end(
-  const exprt &expr,
-  goto_programt &dest)
-{
-  // add the THROW_DECL_END instruction to 'dest'
-  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
-  goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
-  throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
-  throw_decl_end_instruction->location = expr.location();
-}
-
-void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
-{
-  // add the THROW_DECL instruction to 'dest'
-  goto_programt::targett throw_decl_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("throw-decl");
-  c.location() = expr.location();
-
-  // the THROW_DECL instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
-
-  throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->location = expr.location();
-  migrate_expr(c, throw_decl_instruction->code);
 }
 
 /// The automatic object a destructor-stack entry cleans up: the symbol of a
@@ -353,8 +313,20 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
-void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
+  // The thrown operand may still carry side effects — most importantly a
+  // `temporary_object` that constructs the thrown value — when convert_throw is
+  // reached through the code-statement path (a codet("cpp-throw"), as produced
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
+  // in remove_sideeffects, which lowers operands before dispatching here. Lower
+  // them now so the thrown value is a plain symbol, matching the legacy flag-off
+  // GOTO; otherwise the constructor never runs and the handler reads an
+  // unconstructed object. A no-op when the operand is already side-effect-free.
+  exprt expr = expr_in;
+  Forall_operands (it, expr)
+    remove_sideeffects(*it, dest);
+
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
   // construction order ([except.ctor]). throw_stack_size is the destructor-stack
@@ -504,6 +476,33 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
 
   exprt expr = code.op0();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
+  // source location from a side_effect_exprt: sideeffect2t carries no location
+  // field, unlike the enclosing code_expression statement (whose location does
+  // survive). remove_function_call copies expr.location() into the lowered call,
+  // so for the function_call side effect that backs the void builtins
+  // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
+  // loop-invariant / requires / ensures contracts) this yields a location-less
+  // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
+  // counter ignore it ("Total Asserts: 0", spurious SUCCESSFUL). Restore the
+  // statement location onto the side effect when the round-trip has dropped it;
+  // a no-op on the legacy path (the side effect keeps its own location there).
+  if (expr.id() == "sideeffect" && expr.location().get_file().empty())
+    expr.location() = code.location();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+  // nested side_effect_exprt("cpp-throw") to its code form codet("cpp-throw"):
+  // migrate_expr_back has no way to know the throw sat in expression position
+  // (block statements need is_code(), so the back-arm cannot universally emit
+  // the side-effect form). A code operand here is therefore a statement that
+  // must be converted as such; otherwise remove_sideeffects below does not
+  // recognize it as a side effect and the throw is silently dropped.
+  if (expr.is_code())
+  {
+    convert(to_code(expr), dest);
+    return;
+  }
 
   if (expr.id() == "if")
   {
@@ -1452,6 +1451,19 @@ void goto_convertt::convert_return(
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
+    // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+    // sideeffect_exprt("cpp-throw") that appears as the return value to its
+    // code form codet("cpp-throw"). A throw has void type and cannot be used
+    // as a return value; convert it as a statement and return early (the throw
+    // is unconditional, so no RETURN instruction is needed).
+    // Mirrors the same guard in convert_expression (line ~475).
+    if (
+      new_code.return_value().is_code() &&
+      to_code(new_code.return_value()).get_statement() == "cpp-throw")
+    {
+      convert(to_code(new_code.return_value()), dest);
+      return;
+    }
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);

@@ -1093,7 +1093,9 @@ void goto_convertt::do_function_call_symbol(
   else if (
     base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
     base_name == "sprintf" || base_name == "snprintf" ||
-    base_name == "vfprintf")
+    base_name == "vfprintf" || base_name == "vprintf" ||
+    base_name == "vsprintf" || base_name == "vsnprintf" ||
+    base_name == "asprintf" || base_name == "vasprintf")
   {
     do_printf(lhs, function, arguments, dest, base_name);
   }
@@ -1186,10 +1188,33 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("#location") = function.cmt_location();
     new_function.add("sizeof") = arguments.front();
 
+    // The allocated element type is recovered from the size argument's
+    // `#c_sizeof_type` (i.e. the T of a `sizeof(T)` call). That attribute is
+    // dropped when a folded sizeof constant round-trips through IREP2 under
+    // --irep2-bodies, leaving a nil subtype that lowers to `new void` and
+    // crashes the scalar zero-initializer. When it is absent, fall back to a
+    // single zero-initialised unsigned integer spanning the requested bytes:
+    // operator new(n) allocates n raw bytes, so a later typed read sees zero,
+    // matching the c_sizeof_type-present path.
+    typet sizeof_type =
+      static_cast<const typet &>(arguments.front().c_sizeof_type());
+    if (sizeof_type.is_nil())
+    {
+      const unsigned char_width = config.ansi_c.char_width;
+      BigInt nbytes(1);
+      if (arguments.front().is_constant())
+        nbytes = binary2integer(arguments.front().value().as_string(), false);
+      // Fall back to a single byte for a non-constant or pathological size:
+      // 1 byte avoids the crash, and capping the byte count keeps the derived
+      // bitvector width from overflowing unsignedbv_typet's 32-bit width.
+      if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
+        nbytes = 1;
+      sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
+    }
+
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(
-      static_cast<const typet &>(arguments.front().c_sizeof_type()));
+    new_function.type() = pointer_typet(sizeof_type);
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);

@@ -82,6 +82,45 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// True when `method_name` is a method decorated with @property in `class_name`
+// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
+// getter. A same-named non-property method in a derived class shadows a base
+// property (Python MRO), so a match that is not @property stops the search.
+static bool is_property_method(
+  const nlohmann::json &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const nlohmann::json cls = json_utils::find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+  {
+    if (
+      stmt.value("_type", std::string()) != "FunctionDef" ||
+      stmt.value("name", std::string()) != method_name)
+      continue;
+    if (stmt.contains("decorator_list"))
+      for (const auto &dec : stmt["decorator_list"])
+        if (
+          dec.value("_type", std::string()) == "Name" &&
+          dec.value("id", std::string()) == "property")
+          return true;
+    return false; // method exists but is not a property: shadows any base
+  }
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") &&
+        is_property_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
+}
+
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -536,15 +575,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
               throw std::runtime_error(
                 "__ESBMC_list_size not found for list shape access");
 
-            side_effect_expr_function_callt size_call;
-            size_call.function() = symbol_expr(*size_func);
-            size_call.type() = size_type();
-            if (base_expr.type().is_pointer())
-              size_call.arguments().push_back(base_expr);
-            else
-              size_call.arguments().push_back(address_of_exprt(base_expr));
-
-            exprt list_len = typecast_exprt(size_call, int_type());
+            // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
+            expr2tc base2;
+            migrate_expr(
+              base_expr.type().is_pointer() ? base_expr
+                                            : address_of_exprt(base_expr),
+              base2);
+            expr2tc size_call = side_effect_function_call2tc(
+              migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+            exprt list_len = migrate_expr_back(
+              typecast2tc(migrate_type(int_type()), size_call));
             return build_shape_tuple_expr(*this, {list_len});
           }
         }
@@ -658,8 +698,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             bp.empty() ? flow_class_map_.end() : flow_class_map_.find(bp);
           if (it != flow_class_map_.end())
           {
-            exprt cast = typecast_exprt(
-              base_expr, gen_pointer_type(symbol_typet("tag-" + it->second)));
+            // (tag-Cls*)base_expr, built in IREP2 (V.3).
+            const typet cast_t =
+              gen_pointer_type(symbol_typet("tag-" + it->second));
+            expr2tc base2;
+            migrate_expr(base_expr, base2);
+            exprt cast =
+              migrate_expr_back(typecast2tc(migrate_type(cast_t), base2));
+            cast.type() = cast_t; // restore #cpp_type that migrate_type drops
             resolved = resolve_member_on_base(cast, attr_name);
           }
         }
@@ -801,6 +847,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = symbol_expr(*func_symbol);
             break;
           }
+
+          // A bare class name used as a value, e.g. `register(SomeClass)` or
+          // `create_publisher(topic, Twist)` -- passing the class object itself
+          // as an argument. Python classes are first-class objects, but ESBMC
+          // has no first-class type value, so model it as an opaque nondet
+          // placeholder. Inert uses (storing or forwarding the class) then
+          // convert instead of aborting; constructing through such a forwarded
+          // value is not modelled.
+          if (is_class(var_name, *ast_json))
+          {
+            expr = side_effect_expr_nondett(any_type());
+            expr.location() = get_location_from_decl(element);
+            break;
+          }
         }
         locationt location = get_location_from_decl(element);
         std::ostringstream error_msg;
@@ -895,13 +955,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             throw std::runtime_error(
               "__ESBMC_list_size not found for list shape access");
 
-          side_effect_expr_function_callt size_call;
-          size_call.function() = symbol_expr(*size_func);
-          size_call.type() = size_type();
-          size_call.arguments().push_back(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr));
-
-          exprt list_len = typecast_exprt(size_call, int_type());
+          // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
+          expr2tc base2;
+          migrate_expr(
+            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          expr2tc size_call = side_effect_function_call2tc(
+            migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
+          exprt list_len =
+            migrate_expr_back(typecast2tc(migrate_type(int_type()), size_call));
           expr = build_shape_tuple_expr(*this, {list_len});
           break;
         }
@@ -954,10 +1015,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class*
+        // Create a typecast from char* to target_class* in IREP2 (V.3).
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
-        exprt casted_expr = typecast_exprt(expr, target_ptr_type);
+        expr2tc expr2;
+        migrate_expr(expr, expr2);
+        exprt casted_expr =
+          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
+        casted_expr.type() = target_ptr_type;
 
         // Dereference to get the object
         exprt deref_expr("dereference", target_class_symbol->get_type());
@@ -1060,7 +1125,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!(base_type.is_struct() || base_type.is_union() ||
               points_to_struct))
-          base = typecast_exprt(base, gen_pointer_type(class_type));
+        {
+          // (class_type*)base, built in IREP2 (V.3).
+          const typet bt = gen_pointer_type(class_type);
+          expr2tc base2;
+          migrate_expr(base, base2);
+          base = migrate_expr_back(typecast2tc(migrate_type(bt), base2));
+          base.type() = bt; // restore #cpp_type that migrate_type drops
+        }
 
         if (base.type().is_pointer())
         {
@@ -1169,6 +1241,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
             expr = build_member_expr_from_class(attr_type);
+          }
+          else if (is_property_method(
+                     (*ast_json)["body"],
+                     extract_class_name_from_tag(obj_type_name),
+                     attr_name))
+          {
+            // Reading a @property: invoke its getter. Rewrite `obj.attr` to a
+            // call `obj.attr()` and convert that, reusing the method-call
+            // machinery (the @property decorator is otherwise ignored, so the
+            // getter is a plain self-method returning the value).
+            nlohmann::json call_node;
+            call_node["_type"] = "Call";
+            call_node["func"] = element;
+            call_node["args"] = nlohmann::json::array();
+            call_node["keywords"] = nlohmann::json::array();
+            copy_location_fields_from_decl(element, call_node);
+            expr = get_expr(call_node);
           }
           else
           {
@@ -1441,7 +1530,13 @@ static exprt make_slice_struct_expr(
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
-      value = typecast_exprt(value, field_type);
+    {
+      // (field_type)value, built in IREP2 (V.3).
+      expr2tc v2;
+      migrate_expr(value, v2);
+      value = migrate_expr_back(typecast2tc(migrate_type(field_type), v2));
+      value.type() = field_type; // restore #cpp_type that migrate_type drops
+    }
     return value;
   };
 

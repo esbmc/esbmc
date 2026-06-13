@@ -32,8 +32,6 @@ goto_symext::goto_symext(
     goto_functions(_goto_functions),
     target(std::move(_target)),
     cur_state(nullptr),
-    last_throw(nullptr),
-    inside_unexpected(false),
     no_return_value_opt(options.get_bool_option("no-return-value-opt")),
     stack_limit(atol(options.get_option("stack-limit").c_str())),
     depth_limit(atol(options.get_option("depth").c_str())),
@@ -159,21 +157,13 @@ goto_symext::goto_symext(
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
-
-  symbolt sym;
-  sym.id = "symex_throw::thrown_obj";
-  sym.name = "thrown_obj";
-  // Type left deliberately undefined. XXX, is this wise?
-  new_context.move(sym);
 }
 
 goto_symext::goto_symext(const goto_symext &sym)
   : options(sym.options),
     ns(sym.ns),
     new_context(sym.new_context),
-    goto_functions(sym.goto_functions),
-    last_throw(nullptr),
-    inside_unexpected(false)
+    goto_functions(sym.goto_functions)
 {
   *this = sym;
 }
@@ -537,6 +527,20 @@ void goto_symext::symex_assign(
 
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+
+  if (validate_witness && is_symbol2t(original_lhs))
+  {
+    const std::string nm = to_symbol2t(original_lhs).thename.as_string();
+    if (nm.find("$tmp::return_value$_") != std::string::npos)
+    {
+      irep_idt call_line;
+      if (cur_state->source.pc->is_return())
+        call_line = cur_state->top().calling_location.pc->location.get_line();
+      else
+        call_line = cur_state->source.pc->location.get_line();
+      symex_witness_function_return(original_lhs, call_line);
+    }
+  }
 
   // Restore the value-set entry to the pre-havoc set, replacing the
   // {unknown} the symex assignment just wrote. The next dereference

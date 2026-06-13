@@ -1,6 +1,7 @@
 #include "goto-programs/goto_binary_reader.h"
 #include "irep2/irep2_expr.h"
 #include <util/c_types.h>
+#include <util/std_code.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
@@ -95,6 +96,17 @@ static expr2tc fixup_containerof_in_sizeof(const expr2tc &_expr)
 
   const address_of2t &addrof = to_address_of2t(expr);
   return compute_pointer_offset(addrof.ptr_obj);
+}
+
+// Read the `#pragma unroll N` count off a loop codet. The clang C frontend
+// stores it as a string irep attribute; goto_convert later turns it into the
+// loop instruction's pragma_unroll_count. Migrating it onto the IREP2 loop
+// kind lets the --irep2-bodies round-trip preserve the per-loop unwind bound
+// (0 = no pragma).
+static unsigned get_pragma_unroll(const exprt &expr)
+{
+  const irep_idt &p = expr.get("#pragma_unroll");
+  return p.empty() ? 0 : std::stoul(p.as_string());
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -743,7 +755,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    new_expr_ref = constant_int2tc(type, val);
+    // Preserve the `#c_sizeof_type` of a folded sizeof(T) constant (clang stores
+    // the element type T here, e.g. for malloc(sizeof(T))). constant_int2t has
+    // no irept named-subs, so without this the type is lost on the
+    // --irep2-bodies round-trip and the allocated object degrades to char
+    // (esbmc/esbmc#4715).
+    type2tc sizeof_type;
+    const irept &szt = expr.c_sizeof_type();
+    if (szt.is_not_nil())
+      sizeof_type = migrate_type(static_cast<const typet &>(szt));
+
+    new_expr_ref = constant_int2tc(type, val, sizeof_type);
     return;
   }
 
@@ -1827,19 +1849,68 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "sideeffect")
   {
+    // Assignment side-effects: "assign", "assign+", "assign-", etc.
+    // Emitted by the Clang C frontend for assignment expressions used as
+    // statements (x = y) and compound-assignment operators (x += y, ...).
+    // These have exactly two operands: lhs and rhs.
+    const irep_idt &stmt = expr.statement();
+    if (
+      stmt == "assign" || stmt == "assign+" || stmt == "assign-" ||
+      stmt == "assign*" || stmt == "assign_div" || stmt == "assign_mod" ||
+      stmt == "assign_shl" || stmt == "assign_shr" || stmt == "assign_ashr" ||
+      stmt == "assign_lshr" || stmt == "assign_bitand" ||
+      stmt == "assign_bitxor" || stmt == "assign_bitor")
+    {
+      assert(expr.operands().size() == 2);
+      expr2tc lhs, rhs;
+      migrate_expr(expr.op0(), lhs);
+      migrate_expr(expr.op1(), rhs);
+      new_expr_ref = sideeffect_assign2tc(
+        migrate_type(expr.type()), stmt, lhs, rhs, expr.location());
+      return;
+    }
+
     expr2tc operand, thesize;
     std::vector<expr2tc> args;
     if (
       expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
-      expr.statement() != "cpp_new[]")
+      expr.statement() != "cpp_new[]" && expr.statement() != "cpp-throw" &&
+      expr.statement() != "temporary_object")
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
-      // These hide the size in a real size field,
-      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
+    {
+      // cpp_new[] hides the array size in a size field. The frontend stores it
+      // under "size" (size_irep); the conversion pipeline later mirrors it into
+      // "#size" (cmt_size). Under --irep2-bodies the body is migrated before
+      // that mirroring runs, so "#size" is still empty — read "size" in that
+      // case, otherwise the whole size operand is silently dropped.
+      const exprt &sz = expr.cmt_size().is_not_nil()
+                          ? static_cast<const exprt &>(expr.cmt_size())
+                          : static_cast<const exprt &>(expr.size_irep());
+      migrate_expr(sz, thesize);
+
+      // The new-expression's initializer lives in the "initializer" sub, not
+      // in the operands. Carry it through `arguments` so the round-trip back
+      // to side_effect_exprt re-attaches it; otherwise the object is left
+      // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
+      if (expr.initializer().is_not_nil())
+      {
+        expr2tc init;
+        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+        args.push_back(init);
+      }
+    }
     else if (
-      expr.statement() != "nondet" && expr.statement() != "function_call")
-      // For everything other than nondet,
+      expr.statement() == "malloc" || expr.statement() == "realloc" ||
+      expr.statement() == "alloca" || expr.statement() == "va_arg")
+      // Only the allocation side-effects carry a "#size" (cpp_new is handled
+      // above). The other non-allocation forms (increment/decrement,
+      // statement_expression, gcc_conditional, cpp_delete, ...) leave "#size"
+      // empty; reading it would migrate an empty exprt and abort. This surfaces
+      // under --irep2-bodies when a side-effect appears in a type's size
+      // expression (e.g. the VLA dimension `b[++a]`), migrated before
+      // goto_convert lowers it. `thesize` stays nil there, which is correct.
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
     type2tc cmt_type =
@@ -1882,8 +1953,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      new_expr_ref =
-        code_printf2tc(args, printf_kind_from_name(expr.base_name()));
+      new_expr_ref = code_printf2tc(
+        args, printf_kind_from_name(expr.base_name()), expr.location());
       return;
     }
     else if (expr.statement() == "printf2")
@@ -1913,7 +1984,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "postdecrement")
     {
-      t = sideeffect2t::allockind::predecrement;
+      t = sideeffect2t::allockind::postdecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "old_snapshot")
@@ -1927,6 +1998,68 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       // __ESBMC_assigns() in function contracts
       t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
+    }
+    else if (expr.statement() == "statement_expression")
+      t = sideeffect2t::allockind::statement_expression;
+    else if (expr.statement() == "gcc_conditional_expression")
+    {
+      // GNU `a ?: b`: op0 is the condition (already migrated into `operand`
+      // above), op1 is the false-branch expression. Carry op1 in `arguments`
+      // so goto_convert's remove_gcc_conditional_expression sees both after
+      // the round-trip.
+      t = sideeffect2t::allockind::gcc_conditional_expression;
+      expr2tc else_op;
+      migrate_expr(expr.op1(), else_op);
+      args.push_back(else_op);
+    }
+    else if (
+      expr.statement() == "cpp_delete" || expr.statement() == "cpp_delete[]")
+    {
+      // C++ `delete`/`delete[]` in expression position (side_effect form).
+      // op0 (the pointer) is already migrated into `operand` above. The C++
+      // adjust phase attaches a `destructor` call (a code_function_call with a
+      // `new_object` placeholder); carry it through `arguments` so the
+      // round-trip back to side_effect_exprt lets remove_cpp_delete re-emit it.
+      t = expr.statement() == "cpp_delete"
+            ? sideeffect2t::allockind::cpp_delete
+            : sideeffect2t::allockind::cpp_delete_array;
+      const exprt &destructor =
+        static_cast<const exprt &>(expr.find("destructor"));
+      if (destructor.is_not_nil())
+      {
+        expr2tc d;
+        migrate_expr(destructor, d);
+        args.push_back(d);
+      }
+    }
+    else if (expr.statement() == "temporary_object")
+    {
+      t = sideeffect2t::allockind::temporary_object;
+      if (expr.operands().size() == 1)
+        migrate_expr(expr.op0(), operand);
+      else if (expr.initializer().is_not_nil())
+      {
+        expr2tc init;
+        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+        args.push_back(init);
+      }
+    }
+    else if (expr.statement() == "cpp-throw")
+    {
+      // Python/C++ throw expression: side_effect_exprt("cpp-throw").
+      // Maps to code_cpp_throw2tc (same IREP2 kind as the code-level throw),
+      // since both ultimately call convert_throw with identical data.
+      const irept::subt &exceptions_thrown =
+        expr.find("exception_list").get_sub();
+      std::vector<irep_idt> expr_list;
+      for (const auto &e_it : exceptions_thrown)
+        expr_list.push_back(e_it.id());
+      expr2tc cpp_throw_operand;
+      if (expr.operands().size() == 1)
+        migrate_expr(expr.op0(), cpp_throw_operand);
+      new_expr_ref =
+        code_cpp_throw2tc(cpp_throw_operand, expr_list, expr.location());
+      return;
     }
     else
     {
@@ -1943,17 +2076,27 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    new_expr_ref = code_assign2tc(op0, op1);
+    new_expr_ref = code_assign2tc(op0, op1, expr.location());
     return;
   }
 
   if (expr.id() == irept::id_code && expr.statement() == "decl")
   {
     assert(expr.op0().id() == "symbol");
-    irep_idt sym_name;
     type2tc thetype = migrate_type(expr.op0().type());
-    sym_name = expr.op0().identifier();
-    new_expr_ref = code_decl2tc(thetype, sym_name);
+    irep_idt sym_name = expr.op0().identifier();
+    if (expr.operands().size() == 1)
+    {
+      new_expr_ref =
+        code_decl2tc(thetype, sym_name, expr2tc(), expr.location());
+      return;
+    }
+    // 2-operand form: declaration with initializer. Preserve as code_decl2tc
+    // with the init field so that migrate_expr_back can reconstruct the 2-op
+    // codet and goto_convert places DEAD at the right scope boundary.
+    expr2tc rhs;
+    migrate_expr(expr.op1(), rhs);
+    new_expr_ref = code_decl2tc(thetype, sym_name, rhs, expr.location());
     return;
   }
 
@@ -1963,7 +2106,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     irep_idt sym_name;
     type2tc thetype = migrate_type(expr.op0().type());
     sym_name = expr.op0().identifier();
-    new_expr_ref = code_dead2tc(thetype, sym_name);
+    new_expr_ref = code_dead2tc(thetype, sym_name, expr.location());
     return;
   }
 
@@ -1979,7 +2122,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    new_expr_ref = code_printf2tc(ops, printf_kind_from_name(expr.base_name()));
+    new_expr_ref = code_printf2tc(
+      ops, printf_kind_from_name(expr.base_name()), expr.location());
     return;
   }
 
@@ -1988,7 +2132,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_expression2tc(theop);
+    new_expr_ref = code_expression2tc(theop, expr.location());
     return;
   }
 
@@ -1999,7 +2143,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), theop);
     else
       assert(expr.operands().size() == 0);
-    new_expr_ref = code_return2tc(theop);
+    new_expr_ref = code_return2tc(theop, expr.location());
     return;
   }
 
@@ -2008,7 +2152,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_free2tc(theop);
+    new_expr_ref = code_free2tc(theop, expr.location());
     return;
   }
 
@@ -2017,7 +2161,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_cpp_del_array2tc(theop);
+    new_expr_ref = code_cpp_del_array2tc(theop, expr.location());
     return;
   }
 
@@ -2026,7 +2170,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
-    new_expr_ref = code_cpp_delete2tc(theop);
+    new_expr_ref = code_cpp_delete2tc(theop, expr.location());
     return;
   }
 
@@ -2054,7 +2198,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       args.push_back(tmp);
     }
 
-    new_expr_ref = code_function_call2tc(op0, op1, args);
+    new_expr_ref = code_function_call2tc(op0, op1, args, expr.location());
     return;
   }
 
@@ -2068,13 +2212,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "code" && expr.statement() == "skip")
   {
-    new_expr_ref = code_skip2tc(get_empty_type());
+    new_expr_ref = code_skip2tc(get_empty_type(), expr.location());
     return;
   }
 
   if (expr.id() == "code" && expr.statement() == "goto")
   {
-    new_expr_ref = code_goto2tc(expr.get("destination"));
+    new_expr_ref = code_goto2tc(expr.get("destination"), expr.location());
     return;
   }
 
@@ -2091,7 +2235,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     type = migrate_type(expr.type());
     const irep_idt &str = expr.op0().value();
-    new_expr_ref = code_asm2tc(type, str);
+    new_expr_ref = code_asm2tc(type, str, expr.location());
     return;
   }
 
@@ -2117,20 +2261,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       operand = expr2tc();
     }
 
-    new_expr_ref = code_cpp_throw2tc(operand, expr_list);
-    return;
-  }
-
-  if (expr.id() == "code" && expr.statement() == "throw-decl")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &exceptions_thrown = expr.find("throw_list").get_sub();
-    for (const auto &e_it : exceptions_thrown)
-    {
-      expr_list.push_back(e_it.id());
-    }
-
-    new_expr_ref = code_cpp_throw_decl2tc(expr_list);
+    new_expr_ref = code_cpp_throw2tc(operand, expr_list, expr.location());
     return;
   }
 
@@ -2147,31 +2278,197 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     ops.reserve(expr.operands().size());
     for (const auto &op : expr.operands())
     {
+      // Flatten decl-block children into this block so the back-migrated
+      // code_block contains code_decl2tc items directly. This prevents an
+      // extra code_block layer that would cause convert_block to emit DEAD
+      // immediately after the initializer assignment instead of at scope end.
+      if (op.id() == irept::id_code && op.statement() == "decl-block")
+      {
+        for (const auto &decl_op : op.operands())
+        {
+          expr2tc o;
+          migrate_expr(decl_op, o);
+          ops.push_back(o);
+        }
+      }
+      else
+      {
+        expr2tc o;
+        migrate_expr(op, o);
+        ops.push_back(o);
+      }
+    }
+    new_expr_ref = code_block2tc(ops, expr.location());
+    return;
+  }
+
+  // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Forward arms
+  // for the legacy structured codet statements; nil sub-operands (an absent
+  // else / for-init / for-cond / for-iter) migrate to a null expr2tc and back,
+  // so the round-trip is exact. V.4.1: the legacy node's source location is
+  // carried into the (non-reflected) code_*2t::location field and restored on
+  // the way back, so a future IREP2-native goto_convert can stamp instructions.
+  if (expr.id() == "code" && expr.statement() == "ifthenelse")
+  {
+    expr2tc cond, then_case, else_case;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), then_case);
+    // The Clang C frontend only adds an else operand when an else branch
+    // exists; op2() on a 2-operand node is UB. Check via the count.
+    if (expr.operands().size() >= 3 && expr.operands()[2].is_not_nil())
+      migrate_expr(expr.op2(), else_case);
+    new_expr_ref =
+      code_ifthenelse2tc(cond, then_case, else_case, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "while")
+  {
+    expr2tc cond, body;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref =
+      code_while2tc(cond, body, expr.location(), get_pragma_unroll(expr));
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "dowhile")
+  {
+    expr2tc cond, body;
+    migrate_expr(expr.op0(), cond);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref =
+      code_dowhile2tc(cond, body, expr.location(), get_pragma_unroll(expr));
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "assert")
+  {
+    expr2tc guard;
+    migrate_expr(expr.op0(), guard);
+    new_expr_ref = code_assert2tc(guard, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "assume")
+  {
+    expr2tc guard;
+    migrate_expr(expr.op0(), guard);
+    new_expr_ref = code_assume2tc(guard, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "for")
+  {
+    expr2tc init, cond, iter, body;
+    migrate_expr(expr.op0(), init);
+    migrate_expr(expr.op1(), cond);
+    migrate_expr(expr.op2(), iter);
+    migrate_expr(expr.op3(), body);
+    new_expr_ref = code_for2tc(
+      init, cond, iter, body, expr.location(), get_pragma_unroll(expr));
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "switch")
+  {
+    expr2tc value, body;
+    migrate_expr(expr.op0(), value);
+    migrate_expr(expr.op1(), body);
+    new_expr_ref = code_switch2tc(value, body, expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "break")
+  {
+    new_expr_ref = code_break2tc(expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "continue")
+  {
+    new_expr_ref = code_continue2tc(expr.location());
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "label")
+  {
+    expr2tc code;
+    migrate_expr(expr.op0(), code);
+    new_expr_ref = code_label2tc(expr.get("label"), code, expr.location());
+    return;
+  }
+
+  // decl-block: a compound-declaration block (e.g. "int x, y;" in C99
+  // for-init). When the enclosing code("block") is migrated, decl-block
+  // children are flattened inline (see the block arm above). This arm handles
+  // decl-block appearing outside a block context (e.g. as a for-init); migrate
+  // each decl and wrap in a code_block2t that back-migrates as code("block").
+  // goto_convert treats "block" and "decl-block" identically for for-init, so
+  // the extra scope boundary is harmless there.
+  if (expr.id() == "code" && expr.statement() == "decl-block")
+  {
+    std::vector<expr2tc> ops;
+    for (const auto &op : expr.operands())
+    {
       expr2tc o;
       migrate_expr(op, o);
       ops.push_back(o);
     }
-    new_expr_ref = code_block2tc(ops);
+    new_expr_ref = code_block2tc(ops, expr.location());
+    return;
+  }
+
+  // switch_case: one case/default arm inside a switch body.
+  if (expr.id() == "code" && expr.statement() == "switch_case")
+  {
+    const auto &sc = to_code_switch_case(to_code(expr));
+    expr2tc case_op, body;
+    if (!sc.is_default())
+      migrate_expr(sc.case_op(), case_op);
+    migrate_expr(sc.code(), body);
+    new_expr_ref =
+      code_switch_case2tc(sc.is_default(), case_op, body, expr.location());
     return;
   }
 
   if (expr.id() == "code" && expr.statement() == "cpp-catch")
   {
+    // A cpp-catch node is one of two things:
+    //  - the source-level try/catch statement, whose operands[0] is the try
+    //    block and operands[1..N] the catch-handler blocks (each carrying its
+    //    catchable-type id in the "exception_id" attribute set by adjust_catch);
+    //  - the post-goto-convert CATCH-push/pop marker, built directly by
+    //    convert_catch with only a catchable-type list and no operands.
+    // Carry the operands and per-handler ids so the source form survives the
+    // --irep2-bodies round-trip; convert_catch reads them back. The marker form
+    // simply has no operands. The legacy top-level "exception_list" attribute
+    // belongs to the throw-decl family and is not set on a catch, so the id
+    // list is derived from the per-handler "exception_id" attributes.
     std::vector<irep_idt> expr_list;
-    const irept::subt &exceptions = expr.find("exception_list").get_sub();
-    for (const auto &e_it : exceptions)
-      expr_list.push_back(e_it.id());
-    new_expr_ref = code_cpp_catch2tc(expr_list);
-    return;
-  }
-
-  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
-  {
-    std::vector<irep_idt> expr_list;
-    const irept::subt &throw_list = expr.find("throw_list").get_sub();
-    for (const auto &e_it : throw_list)
-      expr_list.push_back(e_it.id());
-    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
+    std::vector<expr2tc> ops;
+    const codet::operandst &operands = expr.operands();
+    if (operands.empty())
+    {
+      // Marker form: the catchable-type list rides the top-level attribute.
+      const irept::subt &exceptions = expr.find("exception_list").get_sub();
+      for (const auto &e_it : exceptions)
+        expr_list.push_back(e_it.id());
+    }
+    else
+    {
+      // Source form: operands[0] is the try block, operands[1..N] the handler
+      // blocks, each carrying its id in the "exception_id" attribute.
+      for (std::size_t i = 0; i < operands.size(); i++)
+      {
+        expr2tc op;
+        migrate_expr(operands[i], op);
+        ops.push_back(op);
+        if (i != 0)
+          expr_list.push_back(operands[i].get("exception_id"));
+      }
+    }
+    new_expr_ref = code_cpp_catch2tc(expr_list, ops, expr.location());
     return;
   }
 
@@ -2362,6 +2659,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // FUTURE: call __ESBMC_r_ok
     true_exprt t;
     migrate_expr(t, new_expr_ref);
+    return;
+  }
+
+  if (expr.id() == "new_object")
+  {
+    // C++ constructor "this" placeholder: typed, no operands. Appears inside
+    // temporary_object initializers; replaced by replace_new_object before
+    // goto_convert processes the body.
+    new_expr_ref = new_object2tc(migrate_type(expr.type()));
     return;
   }
   // TRANSCODER END
@@ -2580,6 +2886,10 @@ exprt migrate_expr_back(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
+    // Restore the folded sizeof(T) element type so malloc/alloca lowering can
+    // recover the allocated object's type (esbmc/esbmc#4715).
+    if (!is_nil_type(ref2.sizeof_type))
+      theexpr.c_sizeof_type(migrate_type_back(ref2.sizeof_type));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
@@ -3356,6 +3666,42 @@ exprt migrate_expr_back(const expr2tc &ref)
     {
       ; // Do nothing
     }
+    else if (ref2.kind == sideeffect2t::allockind::temporary_object)
+    {
+      // initializer-form (operands empty, initializer carries body) vs
+      // 1-op form (single direct operand). Back-migration preserves the
+      // invariant: arguments[0] → theexpr.initializer(), operand → copy_to_operands().
+      if (!ref2.arguments.empty())
+        theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+      else if (!is_nil_expr(ref2.operand))
+        theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    }
+    else if (ref2.kind == sideeffect2t::allockind::gcc_conditional_expression)
+    {
+      // op0 = condition (in `operand`), op1 = false-branch (in arguments[0]).
+      theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+      if (!ref2.arguments.empty())
+        theexpr.copy_to_operands(migrate_expr_back(ref2.arguments[0]));
+    }
+    else if (
+      ref2.kind == sideeffect2t::allockind::cpp_delete ||
+      ref2.kind == sideeffect2t::allockind::cpp_delete_array)
+    {
+      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any.
+      // remove_cpp_delete asserts exactly one operand and reads "destructor".
+      theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+      if (!ref2.arguments.empty())
+        theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
+    }
+    else if (
+      ref2.kind == sideeffect2t::allockind::cpp_new ||
+      ref2.kind == sideeffect2t::allockind::cpp_new_arr)
+    {
+      // cpp_new has no operands in source form (size lives in the size field,
+      // handled below; the initializer, if any, is carried in arguments[0]).
+      if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
+        theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+    }
     else
     {
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3364,6 +3710,16 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
+
+    // For cpp_new[] also restore the "size" field the frontend uses. Under
+    // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
+    // which reads "size" and re-mirrors it into "#size"; writing only "#size"
+    // would leave "size" empty and the array size would be lost downstream.
+    if (
+      (ref2.kind == sideeffect2t::allockind::cpp_new ||
+       ref2.kind == sideeffect2t::allockind::cpp_new_arr) &&
+      size.is_not_nil())
+      theexpr.size(size);
 
     switch (ref2.kind)
     {
@@ -3409,6 +3765,21 @@ exprt migrate_expr_back(const expr2tc &ref)
     case sideeffect2t::allockind::assigns_target:
       theexpr.statement("assigns_target");
       break;
+    case sideeffect2t::allockind::statement_expression:
+      theexpr.statement("statement_expression");
+      break;
+    case sideeffect2t::allockind::temporary_object:
+      theexpr.statement("temporary_object");
+      break;
+    case sideeffect2t::allockind::gcc_conditional_expression:
+      theexpr.statement("gcc_conditional_expression");
+      break;
+    case sideeffect2t::allockind::cpp_delete:
+      theexpr.statement("cpp_delete");
+      break;
+    case sideeffect2t::allockind::cpp_delete_array:
+      theexpr.statement("cpp_delete[]");
+      break;
     default:
 
       log_error("Unexpected side effect type when back-converting");
@@ -3425,6 +3796,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt op0 = migrate_expr_back(ref2.target);
     exprt op1 = migrate_expr_back(ref2.source);
     codeexpr.copy_to_operands(op0, op1);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_decl_id:
@@ -3435,6 +3808,10 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
+    if (!is_nil_expr(ref2.init))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.init));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_dead_id:
@@ -3445,6 +3822,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref2.type);
     exprt symbol = symbol_exprt(ref2.value, thetype);
     codeexpr.copy_to_operands(symbol);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_printf_id:
@@ -3475,8 +3854,25 @@ exprt migrate_expr_back(const expr2tc &ref)
     case printf_kindt::SNPRINTF:
       bs_name = "snprintf";
       break;
+    case printf_kindt::VPRINTF:
+      bs_name = "vprintf";
+      break;
+    case printf_kindt::VSPRINTF:
+      bs_name = "vsprintf";
+      break;
+    case printf_kindt::VSNPRINTF:
+      bs_name = "vsnprintf";
+      break;
+    case printf_kindt::ASPRINTF:
+      bs_name = "asprintf";
+      break;
+    case printf_kindt::VASPRINTF:
+      bs_name = "vasprintf";
+      break;
     }
     codeexpr.base_name(bs_name);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_expression_id:
@@ -3486,6 +3882,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("expression"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_return_id:
@@ -3495,12 +3893,17 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("return"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_skip_id:
   {
+    const code_skip2t &ref2 = to_code_skip2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement("skip");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_free_id:
@@ -3510,6 +3913,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("free"));
     exprt op0 = migrate_expr_back(ref2.operand);
     codeexpr.copy_to_operands(op0);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::object_descriptor_id:
@@ -3534,6 +3939,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt &args = codeexpr.op2();
     for (auto const &it : ref2.operands)
       args.operands().push_back(migrate_expr_back(it));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_comma_id:
@@ -3557,6 +3964,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("goto"));
     codeexpr.set("destination", ref2.target);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_asm_id:
@@ -3568,6 +3977,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     // no purpose.
     codeexpr.operands().resize(1);
     codeexpr.op0() = exprt("string-constant");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_del_array_id:
@@ -3575,6 +3986,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_cpp_del_array2t &ref2 = to_code_cpp_del_array2t(ref);
     exprt codeexpr("cpp_delete[]", typet());
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_delete_id:
@@ -3582,18 +3995,29 @@ exprt migrate_expr_back(const expr2tc &ref)
     const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
     exprt codeexpr("cpp_delete", typet());
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::code_cpp_throw_id:
   {
+    // Back-migrate to codet("cpp-throw") so that (a) is_code() is true for
+    // goto_convert_block's non-code-operand guard, and (b) the dedicated
+    // forward arm at "code" + "cpp-throw" (not the sideeffect arm) relifts
+    // this back to code_cpp_throw2tc. Both sideeffect and code forms of
+    // cpp-throw produce identical GOTO instructions via convert_throw.
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
-    exprt codeexpr("cpp-throw");
+    exprt codeexpr("code");
+    codeexpr.statement("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
     for (auto const &it : ref2.exception_list)
       exceptions_thrown.emplace_back(it);
 
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (!is_nil_expr(ref2.operand))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
@@ -3609,7 +4033,157 @@ exprt migrate_expr_back(const expr2tc &ref)
     block.statement("block");
     for (auto const &op : ref2.operands)
       block.copy_to_operands(migrate_expr_back(op));
+    if (ref2.location.is_not_nil())
+      block.location() = ref2.location;
     return block;
+  }
+  // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Reproduce the
+  // legacy structured codet operand layout (std_code.h) so the forward arm
+  // above reads each sub-part back from the same slot.
+  case expr2t::code_ifthenelse_id:
+  {
+    const code_ifthenelse2t &ref2 = to_code_ifthenelse2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("ifthenelse");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.cond));
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.then_case));
+    // Mirror the Clang frontend: only add op2 when there is an else branch.
+    // goto_convert checks op2().is_not_nil(), not the operand count.
+    if (!is_nil_expr(ref2.else_case))
+      codeexpr.copy_to_operands(migrate_expr_back(ref2.else_case));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_while_id:
+  {
+    const code_while2t &ref2 = to_code_while2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("while");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.cond);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
+    return codeexpr;
+  }
+  case expr2t::code_dowhile_id:
+  {
+    const code_dowhile2t &ref2 = to_code_dowhile2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("dowhile");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.cond);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
+    return codeexpr;
+  }
+  case expr2t::code_for_id:
+  {
+    const code_for2t &ref2 = to_code_for2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("for");
+    codeexpr.operands().resize(4);
+    codeexpr.op0() = migrate_expr_back(ref2.init);
+    codeexpr.op1() = migrate_expr_back(ref2.cond);
+    codeexpr.op2() = migrate_expr_back(ref2.iter);
+    codeexpr.op3() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    if (ref2.pragma_unroll_count > 0)
+      codeexpr.set("#pragma_unroll", std::to_string(ref2.pragma_unroll_count));
+    return codeexpr;
+  }
+  case expr2t::code_switch_id:
+  {
+    const code_switch2t &ref2 = to_code_switch2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("switch");
+    codeexpr.operands().resize(2);
+    codeexpr.op0() = migrate_expr_back(ref2.value);
+    codeexpr.op1() = migrate_expr_back(ref2.body);
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_break_id:
+  {
+    const code_break2t &ref2 = to_code_break2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("break");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_continue_id:
+  {
+    const code_continue2t &ref2 = to_code_continue2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("continue");
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_label_id:
+  {
+    const code_label2t &ref2 = to_code_label2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("label");
+    codeexpr.set("label", ref2.label);
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.code));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_switch_case_id:
+  {
+    const code_switch_case2t &ref2 = to_code_switch_case2t(ref);
+    code_switch_caset sc;
+    if (ref2.is_default)
+      sc.set_default(true);
+    else
+      sc.op0() = migrate_expr_back(ref2.case_op);
+    sc.op1() = migrate_expr_back(ref2.code);
+    if (ref2.location.is_not_nil())
+      sc.location() = ref2.location;
+    return sc;
+  }
+  case expr2t::code_assert_id:
+  {
+    const code_assert2t &ref2 = to_code_assert2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("assert");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.guard));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::code_assume_id:
+  {
+    const code_assume2t &ref2 = to_code_assume2t(ref);
+    exprt codeexpr("code", typet("code"));
+    codeexpr.statement("assume");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.guard));
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
+    return codeexpr;
+  }
+  case expr2t::sideeffect_assign_id:
+  {
+    const sideeffect_assign2t &ref2 = to_sideeffect_assign2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt theexpr("sideeffect", thetype);
+    theexpr.statement(ref2.op);
+    theexpr.copy_to_operands(
+      migrate_expr_back(ref2.lhs), migrate_expr_back(ref2.rhs));
+    if (ref2.location.is_not_nil())
+      theexpr.location() = ref2.location;
+    return theexpr;
   }
   case expr2t::code_cpp_catch_id:
   {
@@ -3619,26 +4193,26 @@ exprt migrate_expr_back(const expr2tc &ref)
     irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
     for (auto const &it : ref2.exception_list)
       exceptions.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_id:
-  {
-    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw-decl");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
-    return codeexpr;
-  }
-  case expr2t::code_cpp_throw_decl_end_id:
-  {
-    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
-    exprt codeexpr("code");
-    codeexpr.statement("throw_decl_end");
-    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
-    for (auto const &it : ref2.exception_list)
-      throw_list.emplace_back(it);
+    // Source-level try/catch: restore the try/handler operands and re-attach
+    // each handler's "exception_id" (operands[1..N] parallel exception_list) so
+    // convert_catch can rebuild the CATCH targets. The marker form has no
+    // operands and falls straight through. The forward arm guarantees one id
+    // per handler, i.e. operands == try-block + N handlers == exception_list+1.
+    assert(
+      ref2.operands.empty() ||
+      ref2.operands.size() == ref2.exception_list.size() + 1);
+    for (std::size_t i = 0; i < ref2.operands.size(); i++)
+    {
+      exprt op = migrate_expr_back(ref2.operands[i]);
+      // The assert above is elided under -DNDEBUG (release builds), so this
+      // bounds check is the actual guard against an out-of-range read when the
+      // parallel-array invariant is somehow violated.
+      if (i != 0 && i - 1 < ref2.exception_list.size())
+        op.set("exception_id", ref2.exception_list[i - 1]);
+      codeexpr.copy_to_operands(op);
+    }
+    if (ref2.location.is_not_nil())
+      codeexpr.location() = ref2.location;
     return codeexpr;
   }
   case expr2t::pointer_capability_id:
@@ -3750,6 +4324,8 @@ exprt migrate_expr_back(const expr2tc &ref)
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
     return back;
   }
+  case expr2t::new_object_id:
+    return exprt("new_object", migrate_type_back(ref->type));
   default:
 
     log_error("Unrecognized expr in migrate_expr_back");

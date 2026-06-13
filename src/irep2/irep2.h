@@ -1075,18 +1075,42 @@ constexpr std::size_t count_derived_field_entries(std::index_sequence<Is...>)
     ... + std::size_t{0});
 }
 
+// A kind may *intentionally* hold a member that is excluded from
+// cmp/crc/hash/tostring — i.e. deliberately not listed in `fields`. Such a
+// kind declares `static constexpr std::size_t excluded_field_bytes = ...;`
+// giving the byte size of those excluded members, so `fields_cover_class`
+// stops counting them as "missed". The only current use is the non-reflected
+// `locationt location` on the V.4 structured-CF code kinds (esbmc/esbmc#4715):
+// source location must travel with the statement for goto_convert, but must
+// not enter value identity (matching how a goto instructiont stores its
+// locationt separately from its IREP2 code). Kinds without the member get 0.
+template <class K, class = void>
+struct kind_excluded_field_bytes
+{
+  static constexpr std::size_t value = 0;
+};
+template <class K>
+struct kind_excluded_field_bytes<
+  K,
+  std::void_t<decltype(K::excluded_field_bytes)>>
+{
+  static constexpr std::size_t value = K::excluded_field_bytes;
+};
+
 // `fields_cover_class<K>()` — the sum of derived-class field sizes in
-// K::fields must equal `sizeof(K) - sizeof(base)`, modulo at most
-// `alignof(K) - 1` bytes of trailing padding. Catches missed-member-in-tuple
-// at compile time for any kind where the missed member is at least one byte
-// larger than the existing trailing padding (which covers every realistic
-// case — irep2 nodes use pointer-sized fields almost exclusively).
+// K::fields must equal `sizeof(K) - sizeof(base)` (minus any declared
+// `excluded_field_bytes`), modulo at most `alignof(K) - 1` bytes of trailing
+// padding. Catches missed-member-in-tuple at compile time for any kind where
+// the missed member is at least one byte larger than the existing trailing
+// padding (which covers every realistic case — irep2 nodes use pointer-sized
+// fields almost exclusively).
 template <class K>
 constexpr bool fields_cover_class()
 {
   using fields_t = std::remove_cv_t<decltype(K::fields)>;
-  constexpr std::size_t derived_storage =
-    sizeof(K) - sizeof(typename K::base_type);
+  constexpr std::size_t derived_storage = sizeof(K) -
+                                          sizeof(typename K::base_type) -
+                                          kind_excluded_field_bytes<K>::value;
   constexpr std::size_t covered = sum_derived_field_sizes<K>(
     std::make_index_sequence<std::tuple_size_v<fields_t>>{});
   return derived_storage - covered < alignof(K);

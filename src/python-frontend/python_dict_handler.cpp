@@ -20,6 +20,16 @@
 
 namespace
 {
+// True when `node` is a call to the built-in range(): range(stop),
+// range(start, stop), or range(start, stop, step).
+bool is_range_call(const nlohmann::json &node)
+{
+  return node.contains("_type") && node["_type"] == "Call" &&
+         node.contains("func") && node["func"].contains("_type") &&
+         node["func"]["_type"] == "Name" && node["func"].contains("id") &&
+         node["func"]["id"] == "range" && node.contains("args");
+}
+
 // V.3: IREP2 member access (exact round-trip of member_exprt;
 // behaviour-preserving -- migrate_expr already lowers the legacy node through
 // this same path downstream). Back-migrated for the legacy adjust/goto-convert
@@ -369,6 +379,32 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   empty_dict["values"] = nlohmann::json::array();
   create_dict_from_literal(empty_dict, build_symbol(dict_sym));
 
+  // A dict comprehension over range(...) with a non-constant bound, e.g.
+  // {k: v for i in range(n)}. Materialising range(n) into a backing list only
+  // sets the list size and leaves its elements nondeterministic (see #5222 /
+  // python_list::handle_symbolic_range), so reading them back as the
+  // comprehension target produced wrong keys. Iterate via a counter whose
+  // value IS the range element instead, mirroring the for-loop-over-range
+  // counter lowering that list comprehensions already use. Constant ranges keep
+  // the existing concrete-materialisation path (which works), and ranges with
+  // an explicit step fall through too (the step direction would change the
+  // loop condition).
+  if (target["_type"] == "Name" && is_range_call(iter))
+  {
+    const auto &range_args = iter["args"];
+    auto is_const_int_arg = [](const nlohmann::json &arg) {
+      if (arg.contains("_type") && arg["_type"] == "Constant")
+        return true;
+      return arg.contains("_type") && arg["_type"] == "UnaryOp" &&
+             arg.contains("operand") && arg["operand"].contains("_type") &&
+             arg["operand"]["_type"] == "Constant";
+    };
+    const bool all_const =
+      std::all_of(range_args.begin(), range_args.end(), is_const_int_arg);
+    if ((range_args.size() == 1 || range_args.size() == 2) && !all_const)
+      return build_range_dict_comprehension(element, generator, dict_sym);
+  }
+
   exprt iterable_expr = converter_.get_expr(iter);
   // If the iterable comes from a call such as range(...), store it first so
   // the loop can reuse the same list on each iteration
@@ -397,10 +433,30 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     iterable_expr = build_symbol(tmp_var_symbol);
   }
 
-  if (target["_type"] != "Name")
+  // A tuple target (`{k: v for a, b in pairs}`) iterates a list of tuples and
+  // unpacks each element into the component names. Hold the element in a temp
+  // of the tuple's struct type and let tuple_handler::handle_tuple_unpacking
+  // emit the per-component assignments (the same path `a, b = t` uses), so the
+  // key/value expressions see the unpacked names.
+  const bool is_tuple_target = (target["_type"] == "Tuple");
+  typet tuple_elem_type;
+  if (is_tuple_target)
+  {
+    if (!iterable_expr.is_symbol())
+      throw std::runtime_error(
+        "DictComp tuple target requires a named list of tuples");
+    tuple_elem_type =
+      converter_.name_space().follow(python_list::get_list_element_type(
+        iterable_expr.identifier().as_string(), 0));
+    if (!converter_.get_tuple_handler().is_tuple_type(tuple_elem_type))
+      throw std::runtime_error(
+        "DictComp tuple target requires iterating a list of tuples");
+  }
+  else if (target["_type"] != "Name")
     throw std::runtime_error("Only simple targets are supported in DictComp");
 
-  std::string loop_var_name = target["id"].get<std::string>();
+  std::string loop_var_name =
+    is_tuple_target ? "$dictcomp_tuple$" : target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
   loop_var_sid.set_object(loop_var_name);
 
@@ -413,7 +469,12 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // cannot be determined, so no currently-working case regresses.
   typet loop_var_type = any_type();
   bool mixed_numeric = false;
-  if (
+  if (is_tuple_target)
+  {
+    // The temp holds the element tuple; component reads come from unpacking.
+    loop_var_type = tuple_elem_type;
+  }
+  else if (
     iter.contains("_type") && iter["_type"] == "Call" &&
     iter.contains("func") && iter["func"].contains("_type") &&
     iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
@@ -508,6 +569,15 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
+  // For a tuple target, unpack the element tuple held in the temp into the
+  // component names (a, b) so the key/value expressions can reference them.
+  if (is_tuple_target)
+  {
+    exprt tuple_value = build_symbol(*loop_var);
+    converter_.get_tuple_handler().handle_tuple_unpacking(
+      element, target, tuple_value, loop_body);
+  }
+
   // Keep current_block redirected to loop_body across the whole pair build:
   // get_expr, contains(), get_list_element_info() and other helpers used by
   // handle_dict_subscript_assign emit DECL/ASSIGN side effects via
@@ -567,6 +637,136 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
 
   exprt loop_condition("<", bool_type());
   loop_condition.copy_to_operands(build_symbol(index_var), length_expr);
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return build_symbol(dict_sym);
+}
+
+exprt python_dict_handler::build_range_dict_comprehension(
+  const nlohmann::json &element,
+  const nlohmann::json &generator,
+  symbolt &dict_sym)
+{
+  locationt location = converter_.get_location_from_decl(element);
+  const auto &target = generator["target"];
+  const auto &iter = generator["iter"];
+  const auto &range_args = iter["args"];
+  const typet idx_type = long_long_int_type();
+
+  // The comprehension target is the loop counter: its value IS the range
+  // element, so the key/value expressions read it directly.
+  std::string loop_var_name = target["id"].get<std::string>();
+  symbol_id loop_var_sid = converter_.create_symbol_id();
+  loop_var_sid.set_object(loop_var_name);
+  symbolt loop_var_symbol = converter_.create_symbol(
+    location.get_file().as_string(),
+    loop_var_name,
+    loop_var_sid.to_string(),
+    location,
+    idx_type);
+  loop_var_symbol.lvalue = true;
+  loop_var_symbol.file_local = true;
+  loop_var_symbol.is_extern = false;
+  symbolt *loop_var =
+    converter_.symbol_table().move_symbol_to_context(loop_var_symbol);
+
+  // range(stop) -> start 0; range(start, stop) -> explicit start. Step is 1
+  // here (callers route explicit-step ranges to the materialisation path).
+  exprt start_expr;
+  exprt stop_arg;
+  if (range_args.size() == 1)
+  {
+    start_expr = gen_zero(idx_type);
+    stop_arg = converter_.get_expr(range_args[0]);
+  }
+  else
+  {
+    start_expr = converter_.get_expr(range_args[0]);
+    stop_arg = converter_.get_expr(range_args[1]);
+  }
+  start_expr = build_typecast(start_expr, idx_type);
+  stop_arg = build_typecast(stop_arg, idx_type);
+
+  // Freeze the loop-invariant stop bound in a temporary.
+  symbolt &stop_var = converter_.create_tmp_symbol(
+    element, "$dictcomp_stop$", idx_type, gen_zero(idx_type));
+  code_declt stop_decl(build_symbol(stop_var));
+  stop_decl.location() = location;
+  converter_.add_instruction(stop_decl);
+  code_assignt stop_init(build_symbol(stop_var), stop_arg);
+  stop_init.location() = location;
+  converter_.add_instruction(stop_init);
+
+  // loop_var = start
+  code_declt loop_decl(build_symbol(*loop_var));
+  loop_decl.location() = location;
+  converter_.add_instruction(loop_decl);
+  code_assignt loop_init(build_symbol(*loop_var), start_expr);
+  loop_init.location() = location;
+  converter_.add_instruction(loop_init);
+
+  // Build the loop body with current_block redirected to it (see the matching
+  // comment in get_dict_comprehension): key/value temporaries and the
+  // subscript-assign side effects must land inside the loop.
+  code_blockt loop_body;
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+  exprt key_expr = converter_.get_expr(element["key"]);
+  exprt value_expr = converter_.get_expr(element["value"]);
+
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    build_symbol(dict_sym),
+    key_expr,
+    value_expr,
+    location,
+    element,
+    pair_block);
+  converter_.current_block = saved_block;
+
+  if (generator.contains("ifs") && !generator["ifs"].empty())
+  {
+    exprt combined_condition = gen_boolean(true);
+    for (const auto &if_clause : generator["ifs"])
+    {
+      exprt if_expr = converter_.get_expr(if_clause);
+      if (combined_condition.is_true())
+        combined_condition = if_expr;
+      else
+      {
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined_condition, if_expr);
+        combined_condition = and_expr;
+      }
+    }
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(combined_condition, pair_block);
+    if_stmt.location() = location;
+    loop_body.copy_to_operands(if_stmt);
+  }
+  else
+  {
+    loop_body.copy_to_operands(pair_block);
+  }
+
+  // loop_var = loop_var + 1
+  exprt increment("+", idx_type);
+  increment.copy_to_operands(build_symbol(*loop_var), gen_one(idx_type));
+  code_assignt loop_inc(build_symbol(*loop_var), increment);
+  loop_inc.location() = location;
+  loop_body.copy_to_operands(loop_inc);
+
+  // while (loop_var < stop)
+  exprt loop_condition("<", bool_type());
+  loop_condition.copy_to_operands(
+    build_symbol(*loop_var), build_symbol(stop_var));
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -1495,6 +1695,42 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
         return type_handler_.get_list_type();
       if (kind == "Dict")
         return get_dict_struct_type();
+    }
+
+    // Dict comprehension `d = {k: v for ...}`: the variable carries no
+    // annotation and its AST value is a DictComp, so the Dict-literal peek
+    // above does not fire. Infer the subscript value type from the
+    // comprehension's value expression. Without this the read falls through
+    // to the char* default and returns the raw PyObject value pointer rather
+    // than the stored scalar — a wrong verdict on `d[k]` reads, e.g. inside a
+    // function body where no target type flows in (#5222).
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "DictComp" &&
+      var_decl["value"].contains("value") &&
+      var_decl["value"]["value"].is_object())
+    {
+      const auto &val_node = var_decl["value"]["value"];
+      const std::string val_kind = val_node.value("_type", std::string());
+      if (val_kind == "List")
+        return type_handler_.get_list_type();
+      if (val_kind == "Dict" || val_kind == "DictComp")
+        return get_dict_struct_type();
+      // Scalar literal value: classify exactly as the value is stored by the
+      // comprehension (Python int -> int, float -> float, bool -> bool). Only
+      // numeric/boolean literal constants are inferred; string, bytes and any
+      // other value expression are left to the existing path, which already
+      // resolves them to the char* default (unchanged behaviour).
+      if (val_kind == "Constant" && val_node.contains("value"))
+      {
+        const auto &lit = val_node["value"];
+        if (lit.is_boolean())
+          return bool_type();
+        if (lit.is_number_integer() || lit.is_number_unsigned())
+          return type_handler_.get_typet("int", 0);
+        if (lit.is_number_float())
+          return type_handler_.get_typet("float", 0);
+      }
     }
     // Empty literal `d = {}`:
     // scan the enclosing function's top-level statements and pick the most

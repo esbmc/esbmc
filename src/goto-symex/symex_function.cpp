@@ -412,6 +412,49 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
+// True if a function of type `candidate` may be called through a function
+// pointer whose declared pointed-to type is `declared_type`. Mirrors CBMC's
+// remove_function_pointers signature check, adapted to ESBMC's representation
+// in which an unprototyped `void (*)()` is indistinguishable from a prototyped
+// `void (*)(void)` (both carry no arguments and no ellipsis). Such pointers are
+// treated as matching any target, preserving ESBMC's permissive K&R dispatch
+// (regression/esbmc/function_deref_{2,3,4}). Return types are intentionally not
+// compared, to avoid pruning the common void*/typed-pointer casts.
+static bool function_is_type_compatible(
+  const code_type2t &declared_type,
+  const code_type2t &candidate,
+  const namespacet &ns)
+{
+  // An unprototyped (`void (*)()`) or variadic pointer does not pin the
+  // argument count, so any target is admissible.
+  if (declared_type.arguments.empty() || declared_type.ellipsis)
+    return true;
+
+  // A variadic or unprototyped target accepts the declared arguments.
+  if (candidate.arguments.empty() || candidate.ellipsis)
+    return true;
+
+  // Both have fixed arity: the counts must match (the #5296 case rejects a
+  // 1-argument pointer against a 2-argument target here).
+  if (candidate.arguments.size() != declared_type.arguments.size())
+    return false;
+
+  // Each declared parameter must match the target's, allowing the same
+  // number<->pointer interchange the call site performs in
+  // argument_assignments.
+  for (std::size_t i = 0; i < declared_type.arguments.size(); ++i)
+  {
+    const type2tc &a = declared_type.arguments[i];
+    const type2tc &b = candidate.arguments[i];
+    if (base_type_eq(a, b, ns))
+      continue;
+    if (!((is_number_type(a) || is_pointer_type(a)) &&
+          (is_number_type(b) || is_pointer_type(b))))
+      return false;
+  }
+  return true;
+}
+
 static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
@@ -509,6 +552,39 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   }
 
   std::list<std::pair<guard2tc, expr2tc>> l = get_function_list(func_ptr);
+
+  // Drop candidates whose signature is incompatible with the declared
+  // function-pointer type (#5296). An over-approximated value-set can list
+  // address-taken functions of unrelated arity; dispatching a call to such a
+  // wrong-arity target silently nondet-fills the missing arguments
+  // (argument_assignments), which the solver can turn into a spurious
+  // VERIFICATION FAILED. The declared signature is the function operand's type:
+  // a code type for the usual dereferenced-pointer call, or a pointer-to-code
+  // when the operand is the bare pointer. If the filter would remove every
+  // candidate, keep the full list so a frontend type quirk on the real target
+  // can never silently skip the call.
+  const type2tc &func_type = is_pointer_type(call.function->type)
+                               ? to_pointer_type(call.function->type).subtype
+                               : call.function->type;
+  if (is_code_type(func_type))
+  {
+    const code_type2t &declared_type = to_code_type(func_type);
+    std::list<std::pair<guard2tc, expr2tc>> compatible;
+    for (auto &it : l)
+      if (
+        !is_code_type(it.second->type) ||
+        function_is_type_compatible(
+          declared_type, to_code_type(it.second->type), ns))
+        compatible.push_back(it);
+      else
+        log_debug(
+          "function-pointer",
+          "dropping incompatible call target '{}'",
+          to_symbol2t(it.second).thename.as_string());
+
+    if (!compatible.empty())
+      l = std::move(compatible);
+  }
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
@@ -640,7 +716,7 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false() && stack_catch.empty())
+  if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming

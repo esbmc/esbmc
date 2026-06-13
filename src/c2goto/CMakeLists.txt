@@ -14,7 +14,7 @@ target_include_directories(c2goto
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
     )
 target_link_libraries(c2goto
-  clangcfrontend langapi c2gotoheaders
+  clangcfrontend clangcppfrontend langapi c2gotoheaders
   filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
@@ -149,6 +149,11 @@ function(mangle_clib output)
     set(c2goto_solidity_files "")
   endif()
 
+  # Extract C++ operational models (esbmc/esbmc#5298). These are compiled by
+  # the C++ frontend inside c2goto and serialized into the embedded clib.
+  file(GLOB_RECURSE c2goto_cpp_files CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/cpp/*.cpp")
+
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set(in_f "${${in_f}}")
@@ -170,6 +175,10 @@ function(mangle_clib output)
       list(APPEND inputs_c ${c2goto_python_files})
     endif()
 
+    # C++ operational models (esbmc/esbmc#5298): compiled by the C++ frontend
+    # registered in c2goto and serialized into the clib alongside the C models.
+    list(APPEND inputs_c ${c2goto_cpp_files})
+
     # Solidity models are built as a separate goto binary (sol64.goto),
     # NOT mixed into clib64, for faster runtime loading.
 
@@ -183,7 +192,7 @@ function(mangle_clib output)
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${run_c2goto}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files} ${c2goto_cpp_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
@@ -244,10 +253,10 @@ function(mangle_clib output)
     # This is loaded at runtime instead of the full clib64.goto for performance.
     set(sol64_goto "${CMAKE_CURRENT_BINARY_DIR}/sol64.goto")
     set(sol64_c "${CMAKE_CURRENT_BINARY_DIR}/sol64.c")
-    if(APPLE)
-      # Apple Clang does not support _BitInt > 128, so c2goto cannot compile
-      # solidity_types.h on macOS. Emit an empty stub so the link succeeds;
-      # runtime verification of Solidity contracts is unavailable on macOS.
+    if(APPLE OR (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64"))
+      # Clang's ARM backend does not support _BitInt > 128, so c2goto cannot
+      # compile solidity_types.h on ARM64 (macOS or Linux). Emit an empty stub
+      # so the link succeeds; runtime Solidity verification is unavailable on ARM64.
       file(WRITE ${sol64_c}
         "/* Auto-generated stub: sol64 unavailable on macOS (_BitInt>128). */\n"
         "#include <stdint.h>\n"

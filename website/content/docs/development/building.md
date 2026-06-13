@@ -309,6 +309,12 @@ cmake -GNinja -Bbuild -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=path-to-ibex
 ```
 {{% /details %}}
 
+## API documentation
+
+Add `-DBUILD_DOC=On` to the configure step to build the Doxygen API reference
+alongside ESBMC (requires `doxygen` and `graphviz`). See the
+[API Reference](/docs/development/api-reference) guide for details.
+
 ## Building with all solvers
 
 ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,

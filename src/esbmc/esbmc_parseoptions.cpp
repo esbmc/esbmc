@@ -2408,12 +2408,12 @@ bool esbmc_parseoptionst::process_goto_program(
       algorithm->run(goto_functions);
     }
 
-    // Lower throw/catch to symbolic guarded control flow (#5075), on by default.
-    // Run before inlining so per-call-site exception propagation is still
-    // explicit. --no-lower-exceptions selects the legacy imperative path; a
-    // program the pass cannot lower still falls back to it with a warning.
-    if (!cmdline.isset("no-lower-exceptions"))
-      remove_exceptions(goto_functions, context, ns);
+    // Lower throw/catch to symbolic guarded control flow (#5075). Run before
+    // inlining so per-call-site exception propagation is still explicit. This
+    // is now the only exception path: a program the pass cannot lower is
+    // reported as an error rather than silently miscompiled (the legacy
+    // imperative path in symex was removed once the lowered subset covered it).
+    remove_exceptions(goto_functions, context, ns);
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -2506,13 +2506,27 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
+    // goto_k_induction returns true when a loop writes an array element
+    // through a pointer, which the inductive-step havoc cannot soundly
+    // generalise. Disable the inductive step in that case so its UNSAT is
+    // not reported as proof (#5224); base case and forward condition run.
+    auto disable_is_if_unsound = [&](bool unsound) {
+      if (unsound)
+      {
+        log_warning(
+          "k-induction does not support loops that write array elements "
+          "through a pointer yet. Disabling inductive step");
+        options.set_option("disable-inductive-step", true);
+      }
+    };
+
     if (cmdline.isset("loop-invariant"))
     {
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      goto_k_induction(goto_functions);
+      disable_is_if_unsound(goto_k_induction(goto_functions, ns));
     }
     else
     {
@@ -2522,7 +2536,7 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        goto_k_induction(goto_functions);
+        disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (cmdline.isset("loop-invariant-check"))
       {
@@ -2570,7 +2584,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options);
+        goto_termination(goto_functions, options, ns);
     }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran
@@ -3400,8 +3414,6 @@ void esbmc_parseoptionst::print_ileave_points(
       case DEAD:
       case THROW:
       case CATCH:
-      case THROW_DECL:
-      case THROW_DECL_END:
       case LOOP_INVARIANT:
         break;
       }

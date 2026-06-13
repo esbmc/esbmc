@@ -21,6 +21,7 @@ class PreprocessorStateMixin:
         self.function_return_annotations = {}
         self.class_attr_annotations = {}
         self.instance_class_map = {}
+        self.attr_list_element_classes = {}
         self.decimal_imported = False
         self.decimal_module_imported = False
         self.decimal_class_alias = None

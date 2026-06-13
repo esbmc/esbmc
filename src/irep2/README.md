@@ -368,13 +368,22 @@ statement   ::= "code_block"         «empty» "(" { statement } ")"
               | "code_expression"    «empty» "(" expr ")"
               | "code_comma"         «type»  "(" expr "," expr ")"
               | "code_asm"           «type»  string-lit
+              | structured-statement
               | cpp-statement
+structured-statement                                       ; V.4, see note below
+            ::= "code_ifthenelse"  «empty» "(" expr "," statement ","
+                                            statement-or-nil ")"  ; cond, then, else
+              | "code_while"       «empty» "(" expr "," statement ")"  ; cond, body
+              | "code_for"         «empty» "(" expr-or-nil "," expr-or-nil ","
+                                            expr-or-nil "," statement ")" ; init,cond,iter,body
+              | "code_switch"      «empty» "(" expr "," statement ")"  ; value, body
+              | "code_break"       «empty»
+              | "code_continue"    «empty»
+              | "code_label"       «empty» name statement              ; label, body
 cpp-statement ::= "code_cpp_delete"         «empty» "(" expr ")"
                 | "code_cpp_del_array"      «empty» "(" expr ")"
                 | "code_cpp_throw"          «empty» "(" expr "," "[" { name } "]" ")"
-                | "code_cpp_catch"          «empty» "(" "[" { name } "]" ")"
-                | "code_cpp_throw_decl"     «empty» "(" "[" { name } "]" ")"
-                | "code_cpp_throw_decl_end" «empty» "(" "[" { name } "]" ")"
+                | "code_cpp_catch"          «empty» "(" "[" { name } "]" "," "[" { expr } "]" ")"
 ```
 
 Leaf terminals:
@@ -403,6 +412,16 @@ Notes:
   and live inside GOTO programs. Conditional branches are encoded on the
   GOTO *instruction*, not as an expression, so only the unconditional
   `code_goto` appears here.
+- **Structured-statement kinds are dead-but-tested (V.4,
+  esbmc/esbmc#4715).** `code_ifthenelse` / `code_while` / `code_for` /
+  `code_switch` / `code_break` / `code_continue` / `code_label` mirror the
+  legacy structured `codet` statements so a frontend can build IREP2
+  bodies and `goto_convert` can consume them, removing the per-instruction
+  back-migration at the body seam (wall W1). They are **not yet built by
+  any pipeline path** — the converter still emits legacy structured
+  `codet`, which `goto_convert` lowers to flat `code_goto` + instruction
+  guards. Only the migrate round-trip tests exercise them today; they
+  become live in the `goto_convert` wiring phase.
 
 ## Examples
 
@@ -771,6 +790,22 @@ ordinary expression tree. Their type is `empty` unless noted.
 | `code_comma` | C comma operator — evaluate left, then right; result is right. |
 | `code_asm` | Inline assembly (the string is preserved; semantics are usually opaque). |
 
+### Structured control-flow statements (V.4, dead-but-tested)
+
+These mirror the legacy structured `codet` statements so a frontend can emit
+IREP2 bodies; they are not yet built by any pipeline path (see the
+*Structured-statement kinds* note above).
+
+| Kind | Description |
+|------|-------------|
+| `code_ifthenelse` | `if (cond) then_case [else else_case]`. `else_case` is nil when absent. |
+| `code_while` | `while (cond) body`. |
+| `code_for` | `for (init; cond; iter) body`. `init`/`cond`/`iter` are each nil when absent. |
+| `code_switch` | `switch (value) body`. |
+| `code_break` | `break;`. |
+| `code_continue` | `continue;`. |
+| `code_label` | A labelled statement: `label: code`. |
+
 ### C++ exception / delete statements
 
 | Kind | Description |
@@ -778,9 +813,7 @@ ordinary expression tree. Their type is `empty` unless noted.
 | `code_cpp_delete` | C++ `delete expr;`. |
 | `code_cpp_del_array` | C++ `delete[] expr;`. |
 | `code_cpp_throw` | `throw expr;` with a list of types being thrown. |
-| `code_cpp_catch` | `catch (...)` clause with a list of catchable types. |
-| `code_cpp_throw_decl` | Function-level `throw(...)` declaration (start marker). |
-| `code_cpp_throw_decl_end` | Matching end marker for `code_cpp_throw_decl`. |
+| `code_cpp_catch` | `try`/`catch`: a list of catchable types plus, for the source-level form, the try block and per-type handler blocks as operands (empty on the post-goto-convert CATCH marker). |
 
 ## Gotchas
 

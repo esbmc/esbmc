@@ -130,3 +130,100 @@ a design-level blocker, a policy-banned timeout, a questionable test expectation
 #4796 — a crash whose only sound fix is the architectural work in §5 (masking it in shared
 backend code would degrade ESBMC's bug-detection for all frontends). No further isolated,
 sound PR is available without that architectural work.
+
+---
+
+## 6. 2026-06-10 re-validation & fix
+
+Independent re-run of **all 47 KNOWNBUG python/quixbugs/humaneval/python-intensive tests**
+against `master` as of commit `9d13245e4e` (ESBMC 8.3.0, Z3 + Bitwuzla), with each test's
+own `test.desc` flags. **None now produce their expected verdict** — no zero-risk
+KNOWNBUG→CORE flip is available; the design-level classifications in §3 still hold after the
+8 days of fixes that closed the *separately-tracked* issues (#5085/#5096/#5110/#5114 string
+soundness, #5102–#5129 matmul/FP, #5015 flow-sensitive class tracking, #5274 None-handle
+width, …).
+
+### 6a. New isolated, soundly-fixable defect found & fixed
+**SMT-backend abort on a short-circuited `is None` before an attribute dereference.**
+
+A guard such as `a is None or a.b is None` (QuixBugs `detect_cycle`, `depth_first_search`,
+`topological_ordering`; and `reverse_linked_list`) dereferences `a.b` under the short-circuit
+guard `not isnone(a)`. The short-circuit lowers to a GOTO branch
+`IF !(ISNONE(cur, 0) || ISNONE(cur->nxt, 0))`, so the attribute deref lives **inside the GOTO
+guard**. In the GOTO case of `symex_step` (`symex_main.cpp`), `dereference()` ran **before**
+`simplify_python_builtins()`, so the NULL-pointer dereference-safety assertion was recorded —
+guarded by the short-circuit `not isnone(cur)` — with the still-live `isnone` in its
+condition. That `isnone` then reached `smt_convt::convert_ast`, which has no rule for it, and
+`abort()`ed (`ERROR: Couldn't convert expression in unrecognised format`; SIGABRT / core
+dump).
+
+**Fix:** in the GOTO case, lower Python predicates *before* dereferencing the guard.
+`simplify_python_builtins` is a pure no-op on non-Python expressions (no
+`isnone`/`isinstance`/`hasattr` exist in C/C++ IR), and `dereference` never introduces an
+`isnone`, so the reorder is strictly safe and has **zero effect on non-Python frontends**.
+New regression pair `github_4784_isnone_short_circuit{,_fail}`.
+
+The other two symex sites that interleave `dereference()` with `simplify_python_builtins()` —
+the ASSERT case (`symex_main.cpp`, via `claim`) and assignment RHS (`symex_assign.cpp`) — host
+the *same* `ISNONE(p, 0) || ISNONE(p->attr, 0)` pattern when the short-circuit appears in an
+`assert`/assignment over a pointer owner. They were re-tested with the unchanged ordering and
+do **not** hit the SMT-convert abort (they reach `Converting` and yield a real verdict), so the
+fix is confined to the GOTO site that actually leaks the predicate — no speculative reorder is
+added where it changes nothing.
+
+This **removes the crash** but, like #5042/#4796, **does not flip the KNOWNBUG verdicts**: the
+affected tests still hit the *pre-existing* unsound `isnone(<struct-ptr>, None) → false`
+lowering ("a `Node` pointer is never `None`"), which now surfaces as a spurious NULL-deref
+(`VERIFICATION FAILED`) instead of an abort. Closing those tests still needs the §5 object /
+Optional-model rework (#4653/#3067). This is the §5-item-5 robustness work, shipped.
+
+### 6b. Everything else: unchanged disposition
+Re-confirmed failure modes (today's master): perf/timeout (breadth_first_search, knapsack,
+flatten_fail, reverse_linked_list, shortest_path_lengths, humaneval_39/90/93/158 — §3c,
+policy-banned); clean "unsupported feature" errors (list-slice-assign for next_permutation /
+humaneval_33; tuple-unpack for minimum_spanning_tree / powerset / shortest_path_length;
+DictComp tuple targets for shortest_paths; mixed-type `sorted()` / non-const tuple slice for
+humaneval — §3b feature gaps); and wrong-verdict soundness clusters (§3b). Each remains a
+design-level blocker or a substantial sound feature, not an isolated point fix.
+
+---
+
+## 7. 2026-06-11 re-validation & reversed() fix
+
+Independent re-run of **all 47 KNOWNBUG python/quixbugs/humaneval tests** against `master`
+(commit `71d0d97983`, ESBMC 8.3.0, Bitwuzla), each with its own `test.desc` flags, after the
+merges that landed since §6 (`#5302` list slice-assign, `#5307` tuple-as-shallow-copy, `#5268`
+k-induction phase 2). **Zero KNOWNBUG→CORE flips** — the §3 classification still holds. Every
+crash/error reproduced is already documented: the `__ESBMC_get_object_size` diagnostic
+(`depth_first_search`, by design since #5042), `rover`'s `Variable 'Twist' is not defined`
+(#4775 class/import resolution), and `wrap` (its `--z3` pin is a local Bitwuzla-only artefact;
+under Bitwuzla it is the §3b wrong-verdict, not a crash).
+
+### 7a. New isolated, soundly-fixable defect found & fixed
+**`reversed()` was unmodelled, blocking list-slice-assignment RHS.** `#5302` advanced
+QuixBugs `next_permutation` from a slice-assign feature gap to a fresh narrow error,
+`List slice assignment requires a list right-hand side`, on
+`next_perm[i+1:] = reversed(next_perm[i+1:])`: `reversed()` had no operational model and its
+`builtin_functions()` entry mapped to the invalid type tag `"reversed"` (vs `sorted` →
+`"list"`), so even a bare `r = reversed(xs)` assignment raised
+`NameError: name 'reversed' is not defined` during the annotation pass.
+
+**Fix** (commit `8504e4f64d`): add `reversed`/`reversed_float`/`reversed_str` operational
+models returning a freshly reversed list (mirroring `sorted`); wire `reversed` into the
+element-type monomorph dispatch in `function_call/expr.cpp`; correct the `builtin_functions()`
+tag to `"list"` and drop `reversed` from the `iterable_builtins` self-mapping set. Modelling
+`reversed()` as an eager list is sound in every context ESBMC routes through the model (slice
+assignment, `list(reversed(...))`); `for`/`range` iteration is rewritten earlier in the
+preprocessor and is unaffected (existing `reversed1`/`reversed_loop` unchanged). New regression
+pair `regression/python/reversed_builtin{,_fail}`; CPython sanity + 53 sibling
+reversed/sorted/slice/list tests green; code-reviewed (0 critical/major).
+
+Like #5042/#4796/§6a, this **does not flip a KNOWNBUG verdict**: with `reversed()` modelled,
+`next_permutation` now does genuine BMC and hits the unwinding wall (policy-banned timeout,
+§3c) instead of erroring — an honest perf bound, not a feature gap. The fix is independently
+useful for any program using `reversed()` in a value context.
+
+### 7b. Everything else: unchanged disposition
+No further isolated, sound point fix is available on current master without the §5
+architectural work (flow-sensitive class tracking, tuple-unpack inference, any-typing,
+string/tuple-equality soundness). The §5 priority order stands.

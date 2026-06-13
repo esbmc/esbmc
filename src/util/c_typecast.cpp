@@ -919,8 +919,9 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
         // CBMC simplify_typecast is retired in Phase 2.2). dest is
         // typecast(const, type); typecast2t::do_simplify applies the cast
         // (int->int with truncation, int->bool, enum casts) identically to the
-        // legacy path. #c_sizeof_type, which migrate does not carry into IREP2,
-        // is restored just below.
+        // legacy path. The fold builds a fresh constant, which drops
+        // #c_sizeof_type (migrate now preserves it on a constant round-trip, but
+        // the simplifier does not), so it is restored just below.
         expr2tc d2;
         migrate_expr(dest, d2);
         simplify(d2);

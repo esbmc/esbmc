@@ -122,6 +122,18 @@ const struct group_opt_templ all_cmd_options[] = {
       "Set maximum nesting depth for Python list comparison (default is 4)"},
    }},
 #endif
+#ifdef ENABLE_LD_FRONTEND
+  {"LD frontend",
+   {{"ld-props",
+     boost::program_options::value<std::string>()->value_name("file"),
+     "YAML safety-property specification for IEC 61131-3 Ladder Diagram "
+     "(.ld) programs"},
+    {"ld-fault-injection",
+     NULL,
+     "Plant known semantic errors in the Ladder Diagram (negate contact "
+     "polarities, degrade Set/Reset coils to plain output coils) to validate "
+     "that the property checks detect them"}}},
+#endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
    {{"sol",
@@ -381,16 +393,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
     {"slice-assumes", NULL, "Remove unused assume statements"},
-    {"extended-try-analysis",
-     NULL,
-     "Skip backward stack search for C++ throw targets"},
-    {"lower-exceptions",
-     NULL,
-     "Lower throw/catch to symbolic guarded control flow (default; #5075)"},
-    {"no-lower-exceptions",
-     NULL,
-     "Use the legacy imperative exception handling instead of symbolic "
-     "lowering (#5075)"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
@@ -811,6 +813,13 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Interactively choose thread scheduling at interleaving points"},
    }},
+  {"IREP2 migration (esbmc/esbmc#4715)",
+   {{"irep2-bodies",
+     NULL,
+     "V.4.2: route goto_convert through the IREP2 body round-trip "
+     "(migrate legacy codet → code_*2t → codet) to validate losslessness. "
+     "Flag off (default) ⇒ byte-identical to the legacy path. "
+     "Gate for Phase V.4.3 (Python converter flip)."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

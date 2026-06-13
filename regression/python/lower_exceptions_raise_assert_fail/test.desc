@@ -1,5 +1,5 @@
 CORE
 main.py
---unwind 1 --lower-exceptions
+--unwind 1
 
 ^VERIFICATION FAILED$

@@ -1479,9 +1479,27 @@ and the Solidity frontend stays legacy by design.
 
 # Part IV — Python frontend → IREP2 (forward plan)
 
-> **Status: in flight — Phases 4.0, 4.1 and 4.3 have landed; 4.4–4.6
-> remain.** Parts I–III are closed records (Part III concluded at the
-> attribute-encapsulation milestone and *re-validated B1* for Solidity).
+> **Status: PAUSED at the frontend seam (2026-06-09).** Phases 4.0–4.3
+> landed; Phase 4.4/4.5 (expression construction → `expr2tc`) was carried
+> as far as the frontend-only scope soundly allows — many converter
+> construction sites now build IREP2 internally — and is **deliberately
+> stopped here**, for the reason §16.1's go/stop already anticipated and
+> §18 below records in full: **every converter-stage construction is an
+> `irept`→`expr2tc`→`irept` round-trip.** The IREP2 node is built, then
+> `migrate_expr_back`'d at the statement/return/symbol boundary because the
+> consumers stay legacy — function bodies are legacy `codet` that
+> `goto_convert` reads (W1/P1), and the symbol table receives legacy. The
+> byte-identical legacy IR that flows downstream is *why* every step was
+> verdict-preserving. Net IR change through the pipeline: **zero**. The
+> round-trips are eliminated only by **Part V Phase V.4** (IREP2 bodies +
+> IREP2-aware `goto_convert`) and the symbol flip (V.6) — shared,
+> repo-wide work, not frontend-scoped. Active work has therefore moved to
+> **Phase V.4** (§V.2). See §18 for the pause record and census.
+>
+> *(Historical status, pre-pause: in flight — Phases 4.0, 4.1 and 4.3 had
+> landed; 4.4–4.6 remained.)* Parts I–III are closed records (Part III
+> concluded at the attribute-encapsulation milestone and *re-validated B1*
+> for Solidity).
 > This part is the *execution record + forward plan* for a second frontend
 > — Python — that again deliberately reopens boundary B1 ("Frontend → goto
 > input", *Deferred indefinitely* in Part I) **for the Python frontend
@@ -2931,6 +2949,85 @@ larger than Part IV's frontend-only scope:
 grep -n 'migrate_expr' src/util/migrate.cpp | head        # recursive; no resolved-type guard
 ```
 
+## 18. Pause record — why Part IV stops, and the round-trip it cannot remove
+
+> **Status: PAUSED 2026-06-09 by an explicit go/stop decision.** Recorded
+> in the §15.1 / §16.1 honesty spirit: a verification plan that keeps
+> producing commits with **zero net pipeline effect** is churn, and saying
+> so plainly is part of the contract.
+
+### The observation that triggered the pause
+
+Every Phase 4.4/V.3 converter helper has the shape:
+
+```cpp
+exprt build_X(const exprt &legacy_in /*…*/)
+{
+  expr2tc in2;  migrate_expr(legacy_in, in2);          // irept  -> expr2tc
+  return migrate_expr_back(X2tc(/*…*/, in2));          // expr2tc -> irept
+}
+```
+
+Legacy in, legacy out. The `expr2tc` exists only inside the call. The IR
+that reaches `clang_cpp_adjust`, `goto_convert`, and symex is
+**byte-identical legacy `irept`** — which is exactly why every commit was
+verdict- and matched-text-preserving. **Net IREP2 in the verified
+pipeline: zero.** Even the plan's "correct" form (build a whole subtree,
+back-migrate *once* at its root, §7.2.3) is still a round-trip; it only
+minimizes the *count* of `migrate_*` calls, not the round-trip itself.
+
+### Why it is structurally forced (the consumers are legacy)
+
+The converter's output is consumed by stages that are still legacy, so
+anything built in IREP2 must be lowered back before it crosses the seam:
+
+- **Function bodies are legacy `codet` (W1/P1).** `convert_function`
+  reads `to_code(symbol.get_value())` (`goto_convert_functions.cpp:129`)
+  and `goto_convertt::convert` dispatches on `code.get_statement()`
+  strings (`goto_convert.cpp:220`), migrating each expression operand to
+  `expr2tc` **per-instruction** as it builds the goto program. IREP2 has
+  no structured-CF code kinds, so the frontend cannot hand it an IREP2
+  body.
+- **The symbol table receives legacy.** `create_symbol` →
+  `set_type(typet)`; `grep -rn 'set_value(.*2tc' src/python-frontend` → 0.
+
+So the back-migration is not removable by any amount of frontend work.
+
+### What did land (Phase 4.4/V.3), and its honest value
+
+The converter now builds a large share of its expression construction in
+IREP2 internally, behind per-file `build_*` helper suites
+(`function_call/expr.cpp`, `builtins.cpp`, `complex_handler.cpp`,
+`python_math.cpp`, `numpy_call_expr.cpp`, the OM handlers, etc.), each
+lowering with one `migrate_expr_back` at the subtree root. The merged
+PRs span #5041/#5045 (file-1 truthiness) through the V.3 series
+(#5235–#5263). **Value delivered:** (a) compile-time-typed construction
+inside the converter — a mis-built node fails to compile, not at symex;
+(b) the legacy-builder call sites are pre-positioned so that, once V.4
+makes bodies IREP2 and V.6 flips the symbol writes, the back-migrate at
+each subtree root is the *only* thing left to delete. **Value not
+delivered:** any change to the verified IR, or any reduction in
+round-trips. That awaits V.4/V.6.
+
+### Census at the pause
+
+`src/python-frontend`: **4907** legacy IR mentions, **245** IREP2
+(`*2tc`) — up from 31 at the prior reconcile and ~6 pre-4.3. The IREP2
+surface grew *inside* the converter while the seam back-migrates, so
+external bytes are unchanged. `set_type(2tc)`/`set_value(2tc)` at the
+symbol-write boundary: still **0** (W1/F-P1 intact).
+
+### The decision
+
+Part IV is **paused, not abandoned**. The frontend-scoped,
+behaviour-preserving target it set ("IREP2-internal where the
+resolved-type/CF invariants allow, legacy at the seam") is essentially
+reached for the clean construction surface. Continuing to migrate the
+residual one-off sites would add round-trips for no pipeline benefit.
+The real next step is **Part V Phase V.4** — give IREP2 the structured
+control-flow code kinds and teach `goto_convert` to consume IREP2 bodies,
+so the body-seam back-migration disappears. Active work moves there.
+
 # Part V — Python frontend → **100 % IREP2** (the deep-pin program)
 
 > **Status: forward plan / costed path — not started, and deliberately
@@ -3322,6 +3419,128 @@ body round-trips as IREP2 through goto-convert with **byte-identical GOTO
 output**; **all** frontends still pass. *The biggest, riskiest phase — it
 changes every frontend's body lowering; stage behind a feature flag and migrate
 frontends one at a time.*
+
+#### V.4 grounding — the current legacy-body seam (read-only investigation, 2026-06-09)
+
+The body is consumed legacy, **per-instruction**, never migrated whole:
+
+- **Entry:** `goto_convert_functionst::convert_function`
+  (`goto_convert_functions.cpp:97-201`): line 117 migrates the *function
+  type* (`migrate_symbol_type`), line 129 extracts the body as legacy
+  `const codet &code = to_code(symbol.get_value())`, line 152 dispatches
+  `goto_convert_rec(code, f.body)`. The body itself is **not** migrated.
+- **Dispatch:** `goto_convertt::convert(const codet&, goto_programt&)`
+  (`goto_convert.cpp:220-296`) switches on `code.get_statement()` (string
+  ids) to ~30 handlers. The structured-CF entries are: `"ifthenelse"` →
+  `convert_ifthenelse` (1712), `"while"` → `convert_while` (1182),
+  `"dowhile"` → `convert_dowhile`, `"for"` → `convert_for` (1082),
+  `"switch"` → `convert_switch` (1343), `"switch_case"` →
+  `convert_switch_case`, `"break"` → `convert_break` (1426), `"continue"`
+  → `convert_continue` (1497), `"label"` → `convert_label` (140),
+  `"block"` → `convert_block`.
+- **Where legacy becomes IREP2:** each handler reads the legacy sub-parts
+  (`to_code_ifthenelse(c).cond()/then_case()/else_case()`,
+  `to_code_while(c).cond()/body()`, `code_fort::init/cond/iter/body`,
+  `code_switcht::value/body`, `code_labelt::get_label/code`) and calls
+  `migrate_expr` on the **expression** operands at instruction-build time
+  (e.g. guards at 1151/1407/1798, return at 1480). So migration is
+  scattered across the handlers, not a single pre-pass.
+
+→ **Consequence for V.4:** the body-seam can flip in either of two shapes
+— (i) make the converter emit IREP2 bodies and rewrite each
+`convert_*` handler to read the `code_*2t` fields directly (drops the
+per-handler `migrate_expr`), or (ii) keep the handlers but add an
+IREP2→legacy `migrate_expr_back` shim at the entry so the converter can
+emit IREP2 while goto_convert stays legacy internally. (i) is the real
+win (removes W1); (ii) is a thinner intermediate that still pays one
+round-trip. Decide per the byte-identical-GOTO gate.
+
+#### V.4 commit sequence (dead-but-tested first — the V-track pattern)
+
+Ordered lowest-risk first; one reviewable commit each; gate every commit
+on the full unit suite + `regression/{python,esbmc,esbmc-cpp,floats}`
+verdict parity, dual-solver, asserts build (§V.5).
+
+1. **V.4.0 — code-kind infrastructure, dead-but-tested.** **LANDED
+   [#5265](https://github.com/esbmc/esbmc/pull/5265).** Add the 7
+   structured-CF kinds to `expr_kinds.inc` + `irep_typedefs(...)` +
+   class defs in `irep2_expr.h` + `field_names` in `irep2_expr.cpp`; add
+   `migrate_expr` (forward, legacy `code_*t` → `code_*2t`) and
+   `migrate_expr_back` arms in `migrate.cpp`; add round-trip unit tests
+   (`unit/util/migrate.test.cpp`: `migrate_expr_back(migrate_expr(c))==c`
+   per kind). **No pipeline wiring** — nothing builds these yet, so the
+   commit is behaviour-inert by construction (mirrors Part I V1 #4737 and
+   Phase 4.2 #4997). Recipe per kind: see the §18-adjacent memo; each is
+   ~1 line manifest + 1 line typedef + ~12-line class + 1 line names + 2
+   migrate arms + 1 test. `num_type_fields = 6` accommodates `code_for2t`
+   (init/cond/iter/body). The hand-written expr-id switches all carry a
+   `default:`, so the additions do not break `-Werror`.
+2. **V.4.1 — source location carriage, dead-but-tested.** **LANDED
+   [#5266](https://github.com/esbmc/esbmc/pull/5266).** Give the 7
+   structured-CF kinds a `locationt location` member (non-reflected —
+   outside the `fields` tuple and excluded from cmp/crc/hash via
+   `K::excluded_field_bytes`). `migrate_expr` copies `code.location()`
+   into the field; `migrate_expr_back` restores it. Adds a round-trip
+   test asserting the location survives (it is outside `operator==`, so
+   the existing `==` round-trip cannot catch a drop). Prerequisite for
+   V.4.2: `goto_convert` reads `code.location()` at ~15 sites; without
+   this, IREP2 bodies would lose source locations in the goto output.
+3. **V.4.2 — flag + IREP2-side `goto_convert` entry.** **LANDED (#5277)**
+   `--irep2-bodies` (default off) routes `convert_function` through
+   an IREP2 body round-trip: `migrate_expr` the legacy body to
+   `code_*2t`, then `migrate_expr_back` to `codet`, then process through
+   the existing `goto_convert_rec` handlers. Flag off ⇒ byte-identical to
+   today. New migrate arms: `sideeffect_assign2t` (covers all 13 assign/
+   compound-assign variants), `code_switch_case2t`, 2-op `code_decl`,
+   `decl-block`. Fixed a latent UB in `ifthenelse` migration (2-operand
+   form from Clang C frontend). Regression tests
+   `github_4715_irep2_bodies_01{,_fail}` gate on `--irep2-bodies`.
+4. **V.4.3 — one frontend at a time.** **LANDED (all frontends).**
+   - **Python** (#5281, commit `45a024710c`): added `code_dowhile2t`,
+     `code_assert2t`, `code_assume2t` IREP2 kinds; `sideeffect("cpp-throw")`
+     forward/back migration; tests `github_4715_irep2_bodies_py_01{,_fail}`.
+   - **C** (#5282, commit `8deb03d108`): extended `code_decl2t` with optional
+     `init` field; 2-op `code_decl(sym, init)` preserved directly (was
+     incorrectly split into `code_block` causing premature DEAD);
+     `code("decl-block")` children flattened inline (prevents spurious extra
+     scope boundary); `sideeffect("statement_expression")` (GNU `{ }` /
+     `assert()` macro) added to `sideeffect_allockind` with forward/back arms;
+     tests `github_4715_irep2_bodies_c_01{,_fail}`.
+   - **C++** (#5284) and **Jimple + Solidity** (#5286) followed, each its own
+     commit; CUDA rides the C/clang-c path.
+   - **Exception round-trip fixes (post-flip).** A verdict-parity sweep over
+     the flag found two exception-handling defects that the per-frontend
+     `_01` tests missed — both **flag-only**, the legacy (flag-off) path is
+     unaffected:
+     1. *throw dropped → false `SUCCESSFUL`.* A `side_effect_exprt("cpp-throw")`
+        nested in a `code_expression` round-trips to the code form
+        `codet("cpp-throw")`; `convert_expression`'s `remove_sideeffects`
+        recognizes only the side-effect form, so the throw became an inert
+        `OTHER`. Affected **every** frontend that throws (Python `raise`/builtin
+        TypeErrors, C++ `throw`). Fix: `convert_expression` dispatches a
+        code-valued operand via `convert(to_code(...))` (goto_convert.cpp).
+     2. *try/catch → SIGSEGV.* `code_cpp_catch2t` stored only `exception_list`
+        and **no operand storage**, so the forward migrate dropped the try/
+        handler blocks and `convert_catch` read `op0()` on an empty operand
+        list. Fix: added `std::vector<expr2tc> operands` to the kind; forward/
+        back migration carry the operands and re-attach each handler's
+        `exception_id` from the parallel `exception_list`; the post-goto-convert
+        CATCH marker (no operands) is preserved by disambiguating on
+        `operands.empty()` (irep2_expr.{h,cpp}, migrate.cpp).
+     Gated dual-solver (Z3 + Bitwuzla) with the asserts cross-check live; tests
+     `github_4715_irep2_bodies_{py,cpp}_exc_01{,_fail}`.
+5. **V.4.4 — remove the legacy path** once all frontends are flipped and the
+   flag is the only path; delete `to_code(symbol.get_value())` seam. **Gated
+   on full verdict parity** — the exception fixes above were the first parity
+   blockers found; before flipping the default, run the deterministic
+   verdict-equivalence sweep (§V.5) flag-on across **all** frontends, since
+   the per-frontend `_01` smoke tests do not exercise every body construct.
+
+**Risk/scope:** V.4.0 and V.4.1 are small and safe (infra only). V.4.2+
+touch the shared goto pipeline → gate on `esbmc-cpp` and a
+Solidity/CUDA stratum, not only `python` (RV3), and require
+byte-identical GOTO (RV4). Stage behind the flag; never flip two
+frontends in one commit.
 
 ### Phase V.5 — IREP2-native counterexample printer (removes W4)
 Part II Phase 2.7: an IREP2 C/C++ printer so traces / `test.desc`-matched text

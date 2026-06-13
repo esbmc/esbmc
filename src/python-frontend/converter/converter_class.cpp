@@ -70,13 +70,13 @@ exprt python_converter::make_enum_member_struct_expr(
   // name component: char* pointer to the first element of the name string
   exprt str_expr = symbol_expr(*str_sym);
   exprt zero_idx = from_integer(0, index_type());
-  // V.3: IREP2 index access (exact round-trip of index_exprt); str_sym is a
-  // static char-array symbol, so the source is array-typed.
+  // V.3: build &str_sym[0] entirely in IREP2, back-migrating once. str_sym is
+  // a static char-array symbol, so the index source is array-typed.
   expr2tc se2, zi2;
   migrate_expr(str_expr, se2);
   migrate_expr(zero_idx, zi2);
-  exprt name_ptr = address_of_exprt(migrate_expr_back(
-    index2tc(migrate_type(str_expr.type().subtype()), se2, zi2)));
+  expr2tc idx2 = index2tc(migrate_type(str_expr.type().subtype()), se2, zi2);
+  exprt name_ptr = migrate_expr_back(address_of2tc(idx2->type, idx2));
   name_ptr.type() = gen_pointer_type(char_type());
   struct_val.operands().push_back(name_ptr);
 

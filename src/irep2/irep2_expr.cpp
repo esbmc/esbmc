@@ -386,6 +386,16 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
     return printf_kindt::VFPRINTF;
   if (name == "snprintf")
     return printf_kindt::SNPRINTF;
+  if (name == "vprintf")
+    return printf_kindt::VPRINTF;
+  if (name == "vsprintf")
+    return printf_kindt::VSPRINTF;
+  if (name == "vsnprintf")
+    return printf_kindt::VSNPRINTF;
+  if (name == "asprintf")
+    return printf_kindt::ASPRINTF;
+  if (name == "vasprintf")
+    return printf_kindt::VASPRINTF;
   assert(0 && "Unrecognized printf-family base_name");
   abort();
 }
@@ -461,7 +471,7 @@ namespace
 // starts with `&expr2t::type` for cmp/crc/hash purposes but whose
 // constructor synthesises the type from operands and rejects a leading
 // `type2tc` (e.g. and/or/xor/implies/isinstance/hasattr/isnone,
-// signbit/popcount, code_cpp_throw_decl[_end]). Treating those as
+// signbit/popcount). Treating those as
 // supported would silently fail to instantiate at the make_irep call
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
@@ -818,7 +828,7 @@ std::string code_block2t::field_names[esbmct::num_type_fields] =
 std::string code_assign2t::field_names[esbmct::num_type_fields] =
   {"target", "source", "", "", ""};
 std::string code_decl2t::field_names[esbmct::num_type_fields] =
-  {"value", "", "", "", ""};
+  {"value", "init", "", "", ""};
 std::string code_dead2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_printf2t::field_names[esbmct::num_type_fields] =
@@ -829,6 +839,8 @@ std::string code_return2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_skip2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
+std::string new_object2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
 std::string code_free2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_goto2t::field_names[esbmct::num_type_fields] =
@@ -837,6 +849,30 @@ std::string object_descriptor2t::field_names[esbmct::num_type_fields] =
   {"object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names[esbmct::num_type_fields] =
   {"return_sym", "function", "operands", "", ""};
+std::string code_ifthenelse2t::field_names[esbmct::num_type_fields] =
+  {"cond", "then_case", "else_case", "", ""};
+std::string code_while2t::field_names[esbmct::num_type_fields] =
+  {"cond", "body", "", "", ""};
+std::string code_dowhile2t::field_names[esbmct::num_type_fields] =
+  {"cond", "body", "", "", ""};
+std::string code_for2t::field_names[esbmct::num_type_fields] =
+  {"init", "cond", "iter", "body", ""};
+std::string code_switch2t::field_names[esbmct::num_type_fields] =
+  {"value", "body", "", "", ""};
+std::string code_break2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_continue2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string code_label2t::field_names[esbmct::num_type_fields] =
+  {"label", "code", "", "", ""};
+std::string code_switch_case2t::field_names[esbmct::num_type_fields] =
+  {"is_default", "case_op", "code", "", ""};
+std::string code_assert2t::field_names[esbmct::num_type_fields] =
+  {"guard", "", "", "", ""};
+std::string code_assume2t::field_names[esbmct::num_type_fields] =
+  {"guard", "", "", "", ""};
+std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
+  {"op", "lhs", "rhs", "", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =
@@ -848,13 +884,9 @@ std::string code_cpp_del_array2t::field_names[esbmct::num_type_fields] =
 std::string code_cpp_delete2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
+  {"exception_list", "operands", "", "", ""};
 std::string code_cpp_throw2t::field_names[esbmct::num_type_fields] =
   {"operand", "exception_list", "", "", ""};
-std::string code_cpp_throw_decl2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
-std::string code_cpp_throw_decl_end2t::field_names[esbmct::num_type_fields] =
-  {"exception_list", "", "", "", ""};
 std::string isinf2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string isnormal2t::field_names[esbmct::num_type_fields] =

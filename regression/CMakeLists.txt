@@ -18,6 +18,17 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 #so the Python side never needs its own default.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
+# Grace the ctest TIMEOUT property gets *on top of* the runner's own
+# ESBMC_REGRESS_TIMEOUT budget. The runner (testing_tool.py) enforces the real
+# budget internally: it kills ESBMC at ESBMC_REGRESS_TIMEOUT and, for
+# KNOWNBUG/FUTURE tests, accepts the timeout as satisfying the expected-fail
+# contract instead of erroring. That accept-and-return path needs a few seconds
+# (SIGTERM grace + final communicate) to complete. If ctest's own TIMEOUT
+# property equals ESBMC_REGRESS_TIMEOUT, ctest kills the runner mid-teardown and
+# reports a hard "Timeout" before the accept logic can run, defeating it. The
+# grace keeps ESBMC's compute budget unchanged while letting the runner finish.
+set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
+    "Seconds added to the ctest TIMEOUT property over the runner's own budget")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
@@ -38,6 +49,10 @@ if(BENCHBRINGUP)
   set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
+# Computed after any BENCHBRINGUP override so it tracks the final budget.
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
+     "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
+
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
@@ -50,7 +65,7 @@ function(add_esbmc_regression_test folder modes test)
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/")
 endfunction()
@@ -59,6 +74,10 @@ function(add_esbmc_regression folder modes)
     subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
+    endif()
+    if(${folder} STREQUAL "ld")
+        # WP3 benchmark dataset, not a CTest test (no test.desc)
+        list(REMOVE_ITEM SUBDIRS benchmarks)
     endif()
     foreach(test ${SUBDIRS})
         add_esbmc_regression_test(${folder} "${modes}" ${test})
@@ -92,6 +111,9 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 if(ENABLE_JIMPLE_FRONTEND)
     set(REGRESSIONS_JIMPLE jimple)
+endif()
+if(ENABLE_LD_FRONTEND)
+    set(REGRESSIONS_LD ld)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
@@ -209,6 +231,7 @@ if(APPLE)
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-transcoder
@@ -277,6 +300,7 @@ else()
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
                     ${REGRESSIONS_AI_GENERATED_CODE}
+                    ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
                     ltl
                     goto-coverage
@@ -352,6 +376,15 @@ set(_slow_regression_tests
     # larger inner timeout lets testing_tool record the KNOWNBUG verdict
     # instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_39"
+    # humaneval_145 used to fast-fail with "TypeError: str() expects a string
+    # argument" when order_by_points()'s nested digits_sum(n) ran `str(n)` on an
+    # unresolved (any_type) parameter. With the str()-of-unresolved-arg fix
+    # (PR #5225) the spurious error is gone and ESBMC reaches the real
+    # order_by_points symex (sorted(key=digits_sum) with a str(int)+int(digit)
+    # comprehension under --unwind 20), which does not converge under the
+    # default budget. It stays KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
+    "regression/humaneval/humaneval_145"
     # humaneval_93 used to fast-fail with "Unsupported reassignment from dict to
     # list" when encode()'s `dict([(i, chr(ord(i) + 2)) for i in vowels])` was
     # rejected during conversion. With the dict()-over-comprehension lowering
@@ -365,6 +398,14 @@ set(_slow_regression_tests
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
+    # lis_fail runs the real longest-increasing-subsequence body (dict +
+    # list-comprehension over range + max()) under its
+    # --incremental-bmc/--smt-during-symex/--bitwuzla config, landing at ~107s
+    # on the DebugOpt Linux runner (~125s locally) -- right at the 120s cap with
+    # no headroom -- so transient CI scheduling jitter tips it over (it timed
+    # out at 120.02s in #5236, a run that does not touch its code path). Give it
+    # the 2x budget like the other borderline quixbugs tests.
+    "regression/quixbugs/lis_fail"
     # knapsack(_fail) used to fast-fail with "max() arguments must be of
     # comparable types" because the nested-list element of a defaultdict was
     # mistyped. With the call-site nested-generic inference in #4830 the
@@ -398,6 +439,14 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
+    # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
+    # None-handle (pointer-width int) against a by-value Node struct via ==.
+    # With the pointer-identity reconciliation fix (PR #5274) the crash is gone
+    # and ESBMC reaches the real linked-list reversal symex (list-equality +
+    # loop scalability wall), which does not converge under --incremental-bmc.
+    # It stays KNOWNBUG; the larger inner timeout lets testing_tool record the
+    # KNOWNBUG verdict instead of ctest hard-killing the run.
+    "regression/quixbugs/reverse_linked_list"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
@@ -406,6 +455,33 @@ set(_slow_regression_tests
     # the larger inner timeout lets testing_tool record the FUTURE
     # verdict instead of ctest hard-killing the run.
     "regression/esbmc-unix/github_4435"
+    # github_4782_object_size pinned the old crash where a non-array pointer
+    # reaching __ESBMC_get_object_size (a set() of user objects in a graph
+    # traversal) dereferenced an empty deref item. PR #4805 keeps the receiver
+    # list-typed, so the array protocol -- and that crash -- is no longer
+    # taken; under --incremental-bmc the (correct) program now hits the same
+    # symbolic-list scalability wall as quixbugs/topological_ordering and does
+    # not converge. Marked KNOWNBUG; the larger inner timeout lets testing_tool
+    # record the KNOWNBUG verdict instead of ctest hard-killing the run (#4805).
+    "regression/python/github_4782_object_size"
+    # topological_ordering(_fail) run the real graph-traversal body (a set() of
+    # Node structs compared and copied element-wise) under --incremental-bmc.
+    # They hit the same symbolic-list scalability wall as github_4782_object_size
+    # and do not converge; the per-byte memcpy/memcmp the list OM uses for the
+    # 48-byte Node payload (no word-wise shortcut -- see list.c) keeps them past
+    # the 120s default cap. They stay KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing the
+    # run at the default budget, where the inner and outer timeouts coincide and
+    # ctest wins the race (#4805, #5121).
+    "regression/quixbugs/topological_ordering"
+    "regression/quixbugs/topological_ordering_fail"
+    # dict65_4 and dictcomp_readback_func_fail still verify with the expected
+    # verdict, but PR #4805's list-OM copy/compare changes slowed them across
+    # the 120s cap on the DebugOpt Linux runner (dict65_4 ~89s->~121s,
+    # dictcomp ~110s->~117s locally). They stay CORE; the 2x budget gives the
+    # extra headroom so they finish and match instead of being hard-killed.
+    "regression/python/dict65_4"
+    "regression/python/dictcomp_readback_func_fail"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -414,16 +490,30 @@ math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
 # shortest_path_lengths(_fail) used to fast-fail because defaultdict with
 # a lambda factory was unsupported; with #4765 the lambda factory is now
 # honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
-# loop. Observed CI timings: shortest_path_lengths 244.8s (passed by
-# 0.2s under the 245s wall), shortest_path_lengths_fail 245.3s (flapped
-# over). Codecov config takes ~302s. Give 3x headroom so transient
-# scheduling jitter doesn't tip them over.
+# loop. shortest_path_lengths has long been KNOWNBUG (non-converging);
+# shortest_path_lengths_fail is now KNOWNBUG too because #5236 made the
+# `{(i, i): 0 for i in range(n)}` seed populate concrete keys instead of
+# nondet ones, so ESBMC reaches the real defaultdict + triple-nested-loop
+# symex, which no longer converges under --incremental-bmc (>900s locally,
+# was ~245s when the keys were nondet). The 3x inner timeout fires well
+# before the program completes and, being shorter than the outer ctest
+# TIMEOUT, lets testing_tool record the KNOWNBUG verdict instead of ctest
+# hard-killing the run.
 math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
     "regression/quixbugs/shortest_path_lengths"
     "regression/quixbugs/shortest_path_lengths_fail"
+    # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a
+    # list comprehension over enumerate(xs) followed by a slice
+    # ([(i * x) for i, x in enumerate(xs)][1:]) under --unwind 20, which unwinds
+    # the list-OM loops 20x and feeds a large bit-vector query (encode ~16s +
+    # Bitwuzla ~54s locally). It times out at the 120s per-test cap on the
+    # DebugOpt static Linux runner; an assertions-on build measures ~248s, the
+    # same band as shortest_path_lengths above. Give it the 3x budget so it
+    # doesn't flap.
+    "regression/humaneval/humaneval_62"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

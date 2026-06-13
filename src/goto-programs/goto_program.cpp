@@ -186,29 +186,6 @@ void goto_programt::instructiont::output_instruction(
         << "\n";
     break;
 
-  case THROW_DECL:
-    out << "THROW_DECL (";
-
-    {
-      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(code);
-
-      for (unsigned int i = 0; i < ref.exception_list.size(); ++i)
-      {
-        if (i)
-          out << ", ";
-        out << ref.exception_list[i];
-      }
-      out << ")";
-    }
-
-    out << "\n";
-    break;
-
-  case THROW_DECL_END:
-    out << "THROW_DECL_END";
-    out << "\n";
-    break;
-
   case LOOP_INVARIANT:
   {
     out << "LOOP_INVARIANT";
@@ -488,12 +465,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
     break;
   case CATCH:
     out << "CATCH";
-    break;
-  case THROW_DECL:
-    out << "THROW_DECL";
-    break;
-  case THROW_DECL_END:
-    out << "THROW_DECL_END";
     break;
   default:
     assert(!"Unknown instruction type");

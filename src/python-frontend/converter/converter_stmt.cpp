@@ -473,19 +473,35 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        // Prevent type change from scalar (int/float/bool) to string/array
-        // when a prior declaration exists with the scalar type, as this
-        // creates a type inconsistency in the GOTO program.
-        bool is_incompatible =
-          rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
-          !lhs_symbol->get_type().is_pointer() &&
-          !lhs_symbol->get_type().id().empty() &&
-          !lhs_symbol->get_type().is_nil() &&
-          lhs_symbol->get_type() != type_handler_.get_list_type();
-        if (!is_incompatible)
+        // An RHS typed any_type() (void*) means "type unknown" — e.g. an
+        // instance attribute of a class the scanner could not resolve — not
+        // "the object is a void*". Demoting a list-annotated LHS to void*
+        // makes the for-loop lowering fall back to the array protocol (raw
+        // __ESBMC_get_object_size + pointer indexing), which aborts symex on
+        // the PyListObj struct (#4805). Keep the annotated list type and
+        // cast the RHS instead.
+        if (
+          lhs.type() == type_handler_.get_list_type() &&
+          rhs.type() == any_type())
         {
-          lhs_symbol->set_type(rhs.type());
-          lhs.type() = rhs.type();
+          rhs = typecast_exprt(rhs, lhs.type());
+        }
+        else
+        {
+          // Prevent type change from scalar (int/float/bool) to string/array
+          // when a prior declaration exists with the scalar type, as this
+          // creates a type inconsistency in the GOTO program.
+          bool is_incompatible =
+            rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
+            !lhs_symbol->get_type().is_pointer() &&
+            !lhs_symbol->get_type().id().empty() &&
+            !lhs_symbol->get_type().is_nil() &&
+            lhs_symbol->get_type() != type_handler_.get_list_type();
+          if (!is_incompatible)
+          {
+            lhs_symbol->set_type(rhs.type());
+            lhs.type() = rhs.type();
+          }
         }
       }
     }
@@ -1176,12 +1192,20 @@ void python_converter::handle_function_call_rhs(
   }
   else
   {
+    // The callee may not be in the symbol table yet when the called
+    // function is defined later in the module than its call site (a forward
+    // reference, e.g. `def f(): w = make()` with `make` defined afterwards).
+    // The block below only propagates instance-attribute type hints from the
+    // callee's return object to the LHS; it does not affect the GOTO call
+    // itself, which is built from the function identifier elsewhere. When the
+    // callee symbol is not available yet, skip the best-effort copy instead of
+    // aborting.
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<const code_typet &>(func_symbol->get_type())
-           .return_type()
-           .is_empty())
+    if (
+      func_symbol && !static_cast<const code_typet &>(func_symbol->get_type())
+                        .return_type()
+                        .is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -1601,19 +1625,40 @@ void python_converter::get_var_assign(
       return;
     }
 
-    // List slice assignment (a[i:j] = ...) is not modelled. Falling through to
-    // the generic store evaluates get_expr(a[i:j]) — a *copy* of the slice —
-    // and assigns into that temporary, leaving the original list unchanged. A
-    // later read then sees stale values, so ESBMC would report a buggy program
-    // as SUCCESSFUL (silent unsoundness). Reject it explicitly instead. Object
-    // slice __setitem__ is handled above; tuples raise TypeError above; dict
-    // subscripts are handled by handle_subscript_assignment_check earlier.
+    // List slice assignment (a[i:j:k] = ...) is lowered to the
+    // __ESBMC_list_slice_assign model, which mutates the target list in
+    // place with CPython semantics. Falling through to the generic store
+    // instead would evaluate get_expr(a[i:j]) — a *copy* of the slice — and
+    // assign into that temporary, leaving the original list unchanged; a
+    // later read then sees stale values, so ESBMC would report a buggy
+    // program as SUCCESSFUL (silent unsoundness). Reject non-list containers
+    // (e.g. strings) explicitly instead. Object slice __setitem__ is handled
+    // above; tuples raise TypeError above; dict subscripts are handled by
+    // handle_subscript_assignment_check earlier.
     if (
       target.contains("slice") && target["slice"].is_object() &&
       target["slice"].value("_type", "") == "Slice")
     {
+      const namespacet ns(symbol_table_);
+      const typet resolved_container = ns.follow(container_type);
+      const typet resolved_list = ns.follow(type_handler_.get_list_type());
+      const bool container_is_list =
+        resolved_container == resolved_list ||
+        (resolved_container.is_pointer() &&
+         ns.follow(resolved_container.subtype()) == resolved_list);
+
+      if (
+        container_is_list && ast_node.contains("value") &&
+        !ast_node["value"].is_null())
+      {
+        python_list list_handler(*this, target);
+        list_handler.handle_slice_assignment(
+          container_expr, target["slice"], ast_node["value"]);
+        return;
+      }
+
       throw std::runtime_error(
-        "List slice assignment (a[i:j] = ...) is not supported");
+        "Slice assignment is only supported on list targets");
     }
   }
 

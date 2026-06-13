@@ -57,6 +57,16 @@ exprt np_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// index_exprt(arr, idx, t): arr is an array-typed numpy result (the 2D row/
+// element access below), a permitted index2t source.
+exprt np_index(const exprt &arr, const exprt &idx, const typet &t)
+{
+  expr2tc arr2, idx2;
+  migrate_expr(arr, arr2);
+  migrate_expr(idx, idx2);
+  return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
+}
 } // namespace
 
 struct numeric_value
@@ -2053,12 +2063,12 @@ exprt numpy_call_expr::create_expr_from_call()
         }
         else
         {
-          exprt row0 = index_exprt(
+          exprt row0 = np_index(
             *converter_.current_lhs,
             from_integer(0, size_type()),
             converter_.current_lhs->type().subtype());
           exprt elem00 =
-            index_exprt(row0, from_integer(0, size_type()), base_type);
+            np_index(row0, from_integer(0, size_type()), base_type);
           result_ptr = np_address_of(elem00);
         }
         args.push_back(np_typecast(result_ptr, flat_ptr_type));
