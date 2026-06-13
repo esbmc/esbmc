@@ -4,7 +4,7 @@ weight: 30
 ---
 
 Interval analysis is an [abstract interpretation](https://en.wikipedia.org/wiki/Abstract_interpretation)
-ESBMC can run *before* SMT solving. It infers a conservative range for each
+ESBMC can run *before* SMT solving [1]. It infers a conservative range for each
 integer and floating-point variable at each program point and injects those
 ranges back into the program as assumptions, shrinking the state space the
 solver has to explore.
@@ -60,3 +60,11 @@ only forward-propagating ranges, it *contracts* variable domains against the
 assertion condition at the GOTO level (using interval contractors), tightening
 the values that could violate a property. It targets the assertions directly,
 whereas `--interval-analysis` strengthens the whole program.
+
+## References
+
+[1] Rafael Sá Menezes, Mohannad Aldughaim, Bruno Farias, Xianzhiyu Li, Edoardo
+Manino, Fedor Shmarov, Kunjian Song, Franz Brauße, Mikhail R. Gadelha, Norbert
+Tihanyi, Konstantin Korovin, Lucas C. Cordeiro: *ESBMC v7.4: Harnessing the
+Power of Intervals (Competition Contribution).* TACAS 2024, LNCS 14572: 376–380.
+[doi:10.1007/978-3-031-57256-2_24](https://doi.org/10.1007/978-3-031-57256-2_24)

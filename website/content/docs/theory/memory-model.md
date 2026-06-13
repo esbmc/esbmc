@@ -5,7 +5,7 @@ weight: 15
 
 ESBMC verifies pointer-manipulating programs by giving every pointer a precise
 symbolic meaning and checking each dereference against the state of the memory
-it refers to. This page explains how pointers are modelled and which safety
+it refers to [1]. This page explains how pointers are modelled and which safety
 properties ESBMC derives from that model.
 
 ## Pointers as object + offset
@@ -75,3 +75,10 @@ ESBMC models the lifetimes of all dynamically allocated objects, a large part of
 a generated [SMT formula](/docs/theory/smt-formula-generation) is pointer-safety
 bookkeeping rather than program arithmetic — see *About Formula Size* on the SMT
 page.
+
+## References
+
+[1] Lucas C. Cordeiro, Bernd Fischer, João Marques-Silva: *SMT-Based Bounded
+Model Checking for Embedded ANSI-C Software.* IEEE Trans. Software Eng.
+38(4):957–974, 2012. The paper describes ESBMC's SMT encoding of pointers,
+arrays, structures, and unions. [doi:10.1109/TSE.2011.59](https://doi.org/10.1109/TSE.2011.59)

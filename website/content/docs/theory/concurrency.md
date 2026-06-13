@@ -5,7 +5,7 @@ weight: 25
 
 The "CB" in ESBMC stands for **context-bounded**: when verifying multi-threaded
 programs, ESBMC explores thread interleavings up to a bounded number of context
-switches. This page explains how concurrent programs are modelled and which
+switches [1]. This page explains how concurrent programs are modelled and which
 properties are checked.
 
 ## Interleavings as symbolic schedules
@@ -84,3 +84,9 @@ semantics within the explored schedules: a counterexample ESBMC reports is a
 real interleaving. A clean result, however, is relative to the chosen context
 bound — increasing `--context-bound` (or removing it) explores deeper schedules
 at higher cost.
+
+## References
+
+[1] Lucas C. Cordeiro, Bernd Fischer: *Verifying multi-threaded software using
+SMT-based context-bounded model checking.* ICSE 2011: 331–340.
+[doi:10.1145/1985793.1985839](https://doi.org/10.1145/1985793.1985839)
