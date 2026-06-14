@@ -5,6 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -1146,9 +1147,10 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // struct, because smt_convt::get's member-id case skips the tuple
 // re-query when the result is struct-typed. When `value` isn't the
 // matching constant_* for an aggregate type, we re-resolve it via
-// get_by_ast on the converted root expression — that path goes
-// through the AST-based tuple_get which recurses through nested
-// tuple-selects and produces fully materialised leaves. This keeps
+// get_by_ast on the root expression — that AST-based path goes through
+// the tuple_get / get_array machinery which recurses through nested
+// tuple-selects and produces fully materialised leaves, and (unlike
+// get_by_type) accepts a non-symbol root such as a member access. This keeps
 // the multi-witness blocking clause sound: make_blocking_expr builds
 // equalities against value_expr, so any unresolved subterm there
 // would block nothing.
@@ -1163,8 +1165,7 @@ static expr2tc zero_fill_aggregate(
     const struct_type2t &st = to_struct_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_struct2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     const constant_struct2t *cs = (effective && is_constant_struct2t(effective))
                                     ? &to_constant_struct2t(effective)
                                     : nullptr;
@@ -1214,8 +1215,7 @@ static expr2tc zero_fill_aggregate(
     const array_type2t &at = to_array_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_array2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
@@ -1264,7 +1264,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())

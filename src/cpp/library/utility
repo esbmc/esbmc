@@ -30,8 +30,8 @@ struct remove_extent<T[]>
 {
   typedef T type;
 };
-template <class T, size_t N>
-struct remove_extent<T[N]>
+template <class T, size_t _Np>
+struct remove_extent<T[_Np]>
 {
   typedef T type;
 };

@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_
 
 #include <cstdio>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
 
@@ -20,7 +20,9 @@ public:
   void dump() const override;
 };
 
-class boolector_convt : public smt_convt, public array_iface, public fp_convt
+class boolector_convt : public smt_solver_baset,
+                        public array_iface,
+                        public fp_convt
 {
 public:
   boolector_convt(const namespacet &ns, const optionst &options);
@@ -28,7 +30,7 @@ public:
 
   void push_ctx() override;
   void pop_ctx() override;
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;

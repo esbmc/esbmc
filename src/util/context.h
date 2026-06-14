@@ -25,7 +25,7 @@
  * former hand-synced trio (unordered_map + vector<symbolt*> + multimap), which
  * leaked base-name entries on erase, did an O(n) scan to erase from the order
  * vector, and stored raw symbolt* into the map (a documented use-after-free
- * hazard on erase). Same pattern already used by smt_convt::smt_cache.
+ * hazard on erase). Same pattern already used by smt_solver_baset::smt_cache.
  *
  * There is no base-name index: the only base-name lookup is the one-shot
  * entry-point search (find `main`) done once per run, served by a linear scan
