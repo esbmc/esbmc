@@ -386,9 +386,8 @@ protected:
   virtual void symex_function_call_code(const expr2tc &call);
 
   /**
-   *  Model a call to a "__ESBMC_uninterpreted_*" function (always) or a
-   *  "__CPROVER_uninterpreted_*" function (under --cprover-uninterpreted-
-   *  functions) as a genuine uninterpreted function: assign the return a fresh
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return a fresh
    *  nondeterministic value and emit congruence constraints (equal arguments
    *  imply equal results) against every earlier call to the same function. The
    *  concrete body, if present, is deliberately ignored (CBMC semantics).
@@ -1261,11 +1260,6 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Cached from --cprover-uninterpreted-functions: when set, calls to
-   *  functions whose name begins "__CPROVER_uninterpreted_" are modelled as
-   *  genuine uninterpreted functions (any concrete body is ignored) with
-   *  functional congruence enforced by Ackermannisation. */
-  bool cprover_uninterpreted_functions;
   /** History of uninterpreted-function calls, keyed by mangled function name.
    *  Each entry records the (renamed) argument SSA terms and the fresh result
    *  symbol of a call, so later calls to the same function can be tied to it by

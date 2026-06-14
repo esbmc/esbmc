@@ -1,4 +1,4 @@
 CORE
 main.c
---cprover-uninterpreted-functions --incremental-bmc
+--incremental-bmc
 ^VERIFICATION FAILED$

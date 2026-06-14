@@ -283,17 +283,25 @@ bool goto_symext::symex_uninterpreted_function(
   // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
   // (used only for the prefix test) is the suffix after the last '@'.
   //
-  // The native prefix is always recognised, like every other __ESBMC_*
-  // intrinsic. The CBMC alias is opt-in (--cprover-uninterpreted-functions):
-  // existing code may ship a real body for a __CPROVER_uninterpreted_* function
-  // and we must not silently discard it.
+  // Both prefixes are always recognised: the "__CPROVER_uninterpreted_" alias
+  // maps onto the native semantics, matching CBMC (which likewise ignores any
+  // body). Both namespaces are reserved, so no legitimate program relies on
+  // such a body executing.
   const std::string &mangled = identifier.as_string();
   std::string name = mangled.substr(mangled.rfind('@') + 1);
   if (
     !has_prefix(name, "__ESBMC_uninterpreted_") &&
-    !(cprover_uninterpreted_functions &&
-      has_prefix(name, "__CPROVER_uninterpreted_")))
+    !has_prefix(name, "__CPROVER_uninterpreted_"))
     return false;
+
+  // On a dead branch the call is still "handled" (its body stays uninterpreted),
+  // but it must contribute no fresh result or congruence history: those would be
+  // vacuous here yet pollute every later live call to the same function. This
+  // matters because the native prefix reaches us via run_intrinsic, which runs
+  // even under a false guard, and a function-pointer call can reach the CPROVER
+  // path the same way.
+  if (cur_state->guard.is_false())
+    return true;
 
   // A void uninterpreted function has no observable result to constrain; the
   // body is still skipped so it stays uninterpreted.

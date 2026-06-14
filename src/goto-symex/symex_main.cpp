@@ -600,12 +600,7 @@ void goto_symext::run_intrinsic(
   // counter, so symex_uninterpreted_function must not (and does not) touch it.
   if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
   {
-    // Unlike the threading intrinsics, an uninterpreted function is pure value
-    // modelling with no cross-thread obligation, so a dead branch must not
-    // contribute a fresh result or congruence history (the CPROVER alias is
-    // already short-circuited on a false guard before symex_function_call_code).
-    if (!cur_state->guard.is_false())
-      symex_uninterpreted_function(func_call, symname);
+    symex_uninterpreted_function(func_call, symname);
     return;
   }
 

@@ -549,10 +549,6 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
-    {"cprover-uninterpreted-functions",
-     NULL,
-     "Model __CPROVER_uninterpreted_* calls as uninterpreted functions "
-     "(ignore any body, enforce functional congruence)"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
