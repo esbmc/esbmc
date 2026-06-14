@@ -392,6 +392,14 @@ protected:
   // not allocate its own vptr.
   bool has_primary_base_vptr(const struct_typet &type);
 
+  // Primary base (first polymorphic base subobject) class id, or empty.
+  irep_idt primary_base_id(const struct_typet &type);
+
+  // Make the most-derived class' own vtable extend its primary base's view
+  // (type + variable, in lock step) so the shared vtable pointer resolves both
+  // inherited and own virtual methods.
+  void merge_primary_base_vtable(const struct_typet &type);
+
   // Build an lvalue access to the vtable pointer named vptr_name on the object
   // lvalue, navigating into base subobjects when the vptr is shared from a
   // (possibly nested) primary base. Returns false on success.

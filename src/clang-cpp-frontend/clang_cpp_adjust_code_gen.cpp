@@ -120,7 +120,7 @@ void clang_cpp_adjust::gen_vptr_init_code(
   exprt lhs_expr = gen_vptr_init_lhs(comp, access_path, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
+  exprt rhs_expr = gen_vptr_init_rhs(comp, access_path, ctor_type);
 
   // now push them to the assignment statement code
   new_code.operands().push_back(lhs_expr);
@@ -172,6 +172,7 @@ exprt clang_cpp_adjust::gen_vptr_init_lhs(
 
 exprt clang_cpp_adjust::gen_vptr_init_rhs(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   const code_typet &ctor_type)
 {
   /*
@@ -180,21 +181,71 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
    *  this->vptr = &<vtable_struct_variable>
    */
 
-  exprt rhs_code;
+  const std::string derived = ctor_type.get("#member_name").as_string();
 
-  // get the corresponding vtable variable symbol
-  std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.get("#member_name").as_string();
+  // Default: the vtable variable for this vptr's class in the most-derived
+  // object (e.g. virtual_table::tag-Base@tag-Derived).
+  std::string vtable_var_id =
+    comp.type().subtype().identifier().as_string() + "@" + derived;
+
+  // Itanium primary-base sharing: the vptr physically at offset 0 is the
+  // primary base subobject's and carries the most-derived class' MERGED
+  // vtable (primary view as a prefix + D's own). Detect that vptr — its access
+  // path enters only the primary (first) base subobject at each level — and
+  // retarget it to the merged vtable variable virtual_table::tag-D::merged@tag-D
+  // that merge_primary_base_vtable built as the prefix-compatible superset.
+  bool retargeted = false;
+  if (is_primary_chain(derived, access_path))
+  {
+    const std::string merged_id =
+      "virtual_table::" + derived + "::merged@" + derived;
+    if (context.find_symbol(merged_id) != nullptr)
+    {
+      vtable_var_id = merged_id;
+      retargeted = true;
+    }
+  }
+
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 
-  // get the operand for address_of expr as in `&<vtable_struct_variable>`
   exprt vtable_var =
     symbol_exprt(vtable_var_symb->id, vtable_var_symb->get_type());
   vtable_var.name(vtable_var_symb->name);
+  exprt addr = address_of_exprt(vtable_var);
 
-  // now we can get the address_of expr for "&<vtable_struct_variable>"
-  rhs_code = address_of_exprt(vtable_var);
+  // The vptr slot is statically typed pointer(vtable_type::Base); the merged
+  // table has its own (prefix-compatible) type, so cast the address to the
+  // slot's pointer type. Reads index by name and stay valid via the prefix.
+  if (retargeted)
+    addr = typecast_exprt(addr, comp.type());
+  return addr;
+}
 
-  return rhs_code;
+// Is access_path the primary (offset-0) base chain of class `derived` (its
+// tag-prefixed id)? Such a vptr is the one physically shared at offset 0.
+bool clang_cpp_adjust::is_primary_chain(
+  const std::string &derived,
+  const std::vector<struct_typet::componentt> &access_path)
+{
+  if (access_path.empty())
+    return false;
+  irep_idt cur = derived; // already tag-prefixed class id
+  for (const auto &step : access_path)
+  {
+    const symbolt *s = context.find_symbol(cur);
+    if (!s || s->get_type().id() != "struct")
+      return false;
+    irep_idt first_base;
+    for (const auto &c : to_struct_type(s->get_type()).components())
+      if (c.get_bool("#is_base_subobject"))
+      {
+        first_base = c.type().identifier();
+        break;
+      }
+    if (step.type().identifier() != first_base)
+      return false;
+    cur = first_base;
+  }
+  return true;
 }

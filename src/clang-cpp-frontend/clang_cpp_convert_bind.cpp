@@ -154,10 +154,11 @@ bool clang_cpp_convertert::build_vptr_member_access(
       return false;
   }
 
-  // Under primary-base sharing the class has a single vtable pointer at
-  // offset 0 carrying the primary base's name; a derived-class virtual call
-  // (whose name differs) resolves to that same slot. Fall back to the first
-  // vptr component, keeping the caller's expected vtable-pointer type.
+  // Under primary-base sharing the class has a single vtable pointer at offset
+  // 0 carrying the primary base's name; a derived-class virtual call (whose
+  // name differs) resolves to that same slot. Fall back to the first vptr
+  // component. The caller supplies the read type (the most-derived merged
+  // vtable type when one exists), so the by-name index resolves correctly.
   for (const auto &c : st.components())
     if (c.get_bool("is_vtptr"))
     {
@@ -184,16 +185,35 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   std::string vtable_ptr_name = base_class_id + "::" + vtable_ptr_suffix;
   pointer_typet member_type(vtable_type);
 
+  // Under Itanium primary-base sharing the shared vtable pointer (offset 0)
+  // points at the receiver's most-derived MERGED vtable, which holds every
+  // reachable slot under its original fully-qualified name. When the static
+  // receiver type has such a merged vtable, read the pointer as that merged
+  // type so the by-name index (using the method's own fully-qualified slot
+  // name) resolves both inherited and own methods through the one shared slot.
+  pointer_typet read_type = member_type;
+  {
+    const typet &recv = ns.follow(base_deref.type());
+    if (recv.id() == "struct")
+    {
+      const irep_idt merged_id = vtable_type_prefix +
+                                 to_struct_type(recv).tag().as_string() +
+                                 "::merged";
+      if (context.find_symbol(merged_id) != nullptr)
+        read_type = pointer_typet(symbol_typet(merged_id));
+    }
+  }
+
   // The vtable pointer may be a direct member or, under primary-base sharing,
   // nested inside a base subobject. Navigate to it.
   exprt deref_member;
   if (build_vptr_member_access(
-        base_deref, vtable_ptr_name, member_type, deref_member))
+        base_deref, vtable_ptr_name, read_type, deref_member))
     // Fall back to a direct access (preserves prior behaviour if not found).
-    deref_member = member_exprt(base_deref, vtable_ptr_name, member_type);
+    deref_member = member_exprt(base_deref, vtable_ptr_name, read_type);
 
   // we've got the deref type and member. Now we are ready to make the deref new_expr
-  new_expr = dereference_exprt(deref_member, member_type);
+  new_expr = dereference_exprt(deref_member, read_type);
 }
 
 bool clang_cpp_convertert::get_vft_binding_expr_function(

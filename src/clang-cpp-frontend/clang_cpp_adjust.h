@@ -111,7 +111,14 @@ public:
     const code_typet &ctor_type);
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
+    const std::vector<struct_typet::componentt> &access_path,
     const code_typet &ctor_type);
+
+  // Is access_path the primary (offset-0) base chain of class `derived` (its
+  // tag-prefixed id)? Such a vptr is the one physically shared at offset 0.
+  bool is_primary_chain(
+    const std::string &derived,
+    const std::vector<struct_typet::componentt> &access_path);
 
   /**
    * ancillary methods to support the expr/code adjustments above
