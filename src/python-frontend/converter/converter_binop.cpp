@@ -546,7 +546,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs.type().is_pointer() != rhs.type().is_pointer())
   {
     exprt &struct_side = lhs.type().is_pointer() ? rhs : lhs;
-    const exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
+    exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
     auto class_tag = [&](const typet &t) -> irep_idt {
       typet r = t;
       if (r.id() == "symbol")
@@ -555,7 +555,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
-      struct_side = gen_address_of(struct_side);
+    {
+      // struct_side is a by-value instance of the same class as *ptr_side.
+      // Normally take its address so both compare as references (github #4116).
+      // But a constant-struct rvalue — e.g. an Enum member like `Color.RED`,
+      // which has no storage — cannot be addressed: gen_address_of would emit
+      // address-of-constant, which the SMT backend rejects ("Unrecognized
+      // address_of operand"). Dereference the pointer instead and compare the
+      // two structs by value, the correct semantics for Enum singletons
+      // (github_3642).
+      if (struct_side.is_constant() || struct_side.id() == "struct")
+        ptr_side = dereference_exprt(ptr_side, ptr_side.type());
+      else
+        struct_side = gen_address_of(struct_side);
+    }
   }
 
   // Python reference-identity when one operand is a by-value class instance and
@@ -589,21 +602,35 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
              !tuple_handler_->is_tuple_type(r);
     };
 
+    // A class *reference*: a pointer to a user-defined class struct. Under the
+    // object-model migration (#3067/#4773) instances are heap pointers, so the
+    // non-handle side of `instance == None-handle` is `Class*`, not a by-value
+    // struct.
+    auto is_user_class_ptr = [&](const typet &t) {
+      return t.is_pointer() && is_user_class_struct(t.subtype());
+    };
+
     const bool lhs_handle = is_object_handle(lhs.type());
     const bool rhs_handle = is_object_handle(rhs.type());
     if (lhs_handle != rhs_handle)
     {
       exprt &struct_side = lhs_handle ? rhs : lhs;
       exprt &handle_side = lhs_handle ? lhs : rhs;
-      if (is_user_class_struct(struct_side.type()))
+      const bool side_is_struct = is_user_class_struct(struct_side.type());
+      const bool side_is_ptr = is_user_class_ptr(struct_side.type());
+      if (side_is_struct || side_is_ptr)
       {
-        // Compare as pointers, not integers: take the struct's address and
-        // reinterpret the integer handle as a pointer to the same class, so
-        // ESBMC's object/offset pointer model decides identity. Casting both
-        // to the integer handle instead would lose the distinct-object
-        // guarantee and spuriously satisfy `a != b` for distinct instances.
-        typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
-        struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
+        // Compare as pointers, not integers: reinterpret the integer handle as
+        // a pointer to the same class so ESBMC's object/offset pointer model
+        // decides identity. Casting both to the integer handle instead would
+        // lose the distinct-object guarantee and spuriously satisfy `a != b`
+        // for distinct instances. A by-value instance needs its address taken;
+        // a class reference is already a pointer.
+        typet ptr_t = side_is_ptr
+                        ? struct_side.type()
+                        : gen_pointer_type(ns.follow(struct_side.type()));
+        if (side_is_struct)
+          struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
         handle_side = typecast_exprt(handle_side, ptr_t);
       }
     }

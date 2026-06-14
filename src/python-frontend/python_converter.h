@@ -294,6 +294,13 @@ private:
 
   void preregister_global_variables(const nlohmann::json &ast_body);
 
+  /// None/Optional redesign (step A/B): if `annotation` is a nullable reference
+  /// to a user class — `Optional[Class]` or `Class | None` — return the user
+  /// class name; else "". Callers form `Class*` and build the class on demand
+  /// (so its struct symbol is complete, not a null/incomplete stub) per plan
+  /// section 10.
+  std::string annotated_optional_class(const nlohmann::json &annotation) const;
+
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
@@ -386,6 +393,16 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+  // True iff `t` denotes a user-defined Python class struct — either the struct
+  // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to whether
+  // the struct has been built yet). Excludes the list/dict/object model structs.
+  bool is_user_class_struct_type(const typet &t);
+
+  // True iff `t` is a pointer to a user-defined class struct (a migrated
+  // `Class*` instance). Used to gate the object-model migration's
+  // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
+  bool is_user_class_pointer(const typet &t);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -427,7 +444,8 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt get_block(const nlohmann::json &ast_block);
+  exprt
+  get_block(const nlohmann::json &ast_block, bool is_function_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
@@ -1104,11 +1122,20 @@ private:
 
   /// Nesting depth of get_block() invocations. The module/imported-module body
   /// is depth 1; every nested body (function, if/while/for, try/except) is
-  /// deeper because those bodies are converted through get_block() too. Gates
-  /// straight-line retyping to depth 1 only: a retype inside any nested or
-  /// conditionally-executed body cannot be modelled by a single static type,
-  /// so it is left to the existing fallback instead of being renamed.
+  /// deeper because those bodies are converted through get_block() too.
   unsigned block_nesting_ = 0;
+
+  /// How many of the enclosing get_block() frames are genuine function/method
+  /// bodies (bumped only when get_block is called for a function body). The
+  /// "unconditional spine" — the module body plus the chain of function bodies
+  /// containing the current statement — is exactly the frames where straight-
+  /// line retyping (#4770/#4774) is sound: there is no control-flow join that
+  /// could leave the runtime type ambiguous. That spine is precisely
+  /// block_nesting_ == function_body_depth_ + 1 (the +1 is the module body);
+  /// any if/while/for/try body adds a block_nesting_ frame WITHOUT a
+  /// function_body_depth_ frame, so the equality fails and retyping is refused.
+  /// Fail-safe: an unrecognised block kind is treated as conditional.
+  unsigned function_body_depth_ = 0;
 
   function_call_cache function_call_cache_;
 

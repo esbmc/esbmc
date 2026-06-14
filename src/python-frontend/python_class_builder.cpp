@@ -2,7 +2,9 @@
 #include <symbol_id.h>
 #include <json_utils.h>
 #include <python_class_builder.h>
+#include <python-frontend/converter/converter_internal.h>
 #include <type_utils.h>
+#include <util/std_expr.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
 #include <util/python_types.h>
@@ -69,7 +71,10 @@ bool python_class_builder::get_bases(struct_typet &st)
 
 /* Converts methods and annotated class-level attributes (AnnAssign)
  * into ESBMC symbols. Recursively processes referenced classes. */
-void python_class_builder::get_members(struct_typet &st, codet &out)
+void python_class_builder::get_members(
+  struct_typet &st,
+  codet &out,
+  bool has_ud_base)
 {
   std::string saved_class_name = conv_.current_class_name_;
   if (conv_.current_class_name_.empty())
@@ -145,12 +150,43 @@ void python_class_builder::get_members(struct_typet &st, codet &out)
       }
       conv_.get_var_assign(n, out);
 
+      const std::string attr_name = n["target"]["id"].get<std::string>();
       symbol_id sid = conv_.create_symbol_id();
-      sid.set_object(n["target"]["id"].get<std::string>());
+      sid.set_object(attr_name);
       auto *sym = conv_.symbol_table_.find_symbol(sid.to_string());
       if (!sym)
         throw std::runtime_error("Class attribute not found");
       sym->static_lifetime = true;
+
+      // Also expose the annotated class variable as a per-instance struct
+      // component (Enum members stay class-level), so that reads and writes
+      // through an instance — including a migrated `Class*` parameter — resolve
+      // to the instance member rather than the shared class-level symbol.
+      // Without the component, `obj.attr` on a pointer parameter dereferences
+      // nothing (the read binds the class-level symbol) and `obj.attr += x`
+      // aborts in the symex dereference layer on an empty pointee type.
+      //
+      // Add the component only when gen_ctor will default-initialise it from
+      // the class variable's value — i.e. the exact condition under which it
+      // emits a body: no user `__init__` (count is own-class only, hence also
+      // exclude a user base, whose `__init__`/fields gen_ctor likewise skips)
+      // and a simple constant/name default (a call-valued default cannot be
+      // hoisted into the ctor body here). Otherwise the component would be left
+      // nondet. Enum members stay class-level. Class variables also set as
+      // `self.attr` in a method already get a component via add_self_attrs.
+      const auto &val = n["value"];
+      const bool simple_default =
+        val.is_object() && (val.value("_type", "") == "Constant" ||
+                            val.value("_type", "") == "Name");
+      if (
+        !st.has_component(attr_name) && !has_ud_base && simple_default &&
+        pc_.methods().count("__init__") == 0 &&
+        !python_frontend::is_enum_class(conv_.current_class_name_, conv_.ast()))
+      {
+        struct_typet::componentt comp = python_frontend::build_component(
+          conv_.current_class_name_, attr_name, sym->get_type());
+        st.components().push_back(comp);
+      }
     }
   }
   conv_.current_class_name_ = saved_class_name;
@@ -177,11 +213,6 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
   code_typet f;
   f.return_type() = none_type();
 
-  code_typet::argumentt self;
-  self.type() = gen_pointer_type(st);
-  self.cmt_base_name("self");
-  f.arguments().push_back(self);
-
   locationt loc = conv_.get_location_from_decl(cls_);
   std::string mod = loc.get_file().as_string();
 
@@ -190,9 +221,59 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
   sid.set_class(conv_.current_class_name_);
   sid.set_function(conv_.current_class_name_);
 
+  // Self parameter, with an explicit identifier so the body below can bind to
+  // it (mirrors register_function_argument's `<func-id>@self` convention).
+  const std::string self_id = sid.to_string() + "@self";
+  code_typet::argumentt self;
+  self.type() = gen_pointer_type(st);
+  self.cmt_base_name("self");
+  self.cmt_identifier(self_id);
+  self.identifier(self_id);
+  f.arguments().push_back(self);
+
+  symbolt self_sym =
+    conv_.create_symbol(mod, "self", self_id, loc, self.type());
+  self_sym.lvalue = true;
+  self_sym.is_parameter = true;
+  self_sym.file_local = true;
+  conv_.symbol_table_.add(self_sym);
+
+  // Default-initialise each annotated class variable that carries a value, so a
+  // freshly constructed instance observes the class default through its struct
+  // component (e.g. `self->value = 0` for `class C: value: int = 0`). Without
+  // this, a read of the component on a never-written instance — notably through
+  // a `Class*` parameter — would observe an uninitialised (nondet) field.
+  code_blockt body;
+  const std::string saved_func = conv_.current_func_name_;
+  conv_.current_func_name_ = conv_.current_class_name_;
+  for (const auto &n : cls_.at("body"))
+  {
+    if (
+      n.value("_type", "") != "AnnAssign" || !n.contains("value") ||
+      n["value"].is_null() || !n.contains("target") ||
+      !n["target"].contains("id"))
+      continue;
+    const std::string attr = n["target"]["id"].get<std::string>();
+    if (!st.has_component(attr))
+      continue;
+
+    const typet &comp_type = st.get_component(attr).type();
+    dereference_exprt deref(symbol_expr(self_sym), st);
+    member_exprt member(deref, attr, comp_type);
+
+    exprt value = conv_.get_expr(n["value"]);
+    if (value.type() != comp_type)
+      value.make_typecast(comp_type);
+
+    code_assignt assign(member, value);
+    assign.location() = loc;
+    body.copy_to_operands(assign);
+  }
+  conv_.current_func_name_ = saved_func;
+
   symbolt ctor = conv_.create_symbol(
     mod, conv_.current_class_name_, sid.to_string(), loc, f);
-  ctor.set_value(code_blockt());
+  ctor.set_value(body);
   ctor.lvalue = true;
 
   conv_.symbol_table_.add(ctor);
@@ -263,7 +344,7 @@ void python_class_builder::build(codet &out)
   sym->set_type(st);
 
   // Add methods, class attributes, and default constructor
-  get_members(st, out);
+  get_members(st, out, has_ud_base);
   gen_ctor(has_ud_base, st);
 
   // Finalize type and clear context
