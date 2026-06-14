@@ -1,0 +1,4272 @@
+{
+  "benchmark_info": {
+    "source": "CONTROLLINO-PLC (MIT, 2024)",
+    "ld_file": "benchmarks/water_control/water_control.ld",
+    "n_sequences": 50,
+    "n_scans": 10,
+    "random_seed": 42
+  },
+  "inputs": [
+    "Pool_Low_Level_Sensor",
+    "Tank_High_Level_Sensor",
+    "Tank_Low_Level_Sensor",
+    "Automatic_Manual_Switch",
+    "Stop_Button",
+    "Start_Button"
+  ],
+  "outputs": [
+    "Water_Pump"
+  ],
+  "sequences": [
+    {
+      "seq_id": 0,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 1,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 2,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 3,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 4,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 5,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 6,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 7,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 8,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 9,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 10,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 11,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 12,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 13,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 14,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 15,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 16,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 17,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 18,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 19,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 20,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 21,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 22,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 23,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 24,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 25,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 26,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 27,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 28,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 29,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 30,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 31,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 32,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 33,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 34,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 35,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 36,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 37,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 38,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 39,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 40,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 41,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 42,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 43,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 44,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 45,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 46,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 47,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 48,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 49,
+      "scans": [
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 1,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 1,
+          "Start_Button": 1
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 0,
+          "Tank_High_Level_Sensor": 0,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 1,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        },
+        {
+          "Pool_Low_Level_Sensor": 1,
+          "Tank_High_Level_Sensor": 1,
+          "Tank_Low_Level_Sensor": 0,
+          "Automatic_Manual_Switch": 0,
+          "Stop_Button": 0,
+          "Start_Button": 0
+        }
+      ]
+    }
+  ]
+}

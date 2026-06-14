@@ -1,0 +1,2776 @@
+{
+  "benchmark_info": {
+    "source": "Our work",
+    "ld_file": "benchmarks/traffic_light/traffic_light_safe.ld",
+    "n_sequences": 50,
+    "n_scans": 10,
+    "random_seed": 42
+  },
+  "inputs": [
+    "Enable",
+    "Emergency_Vehicle",
+    "Ped_Request"
+  ],
+  "outputs": [
+    "NS_Green",
+    "NS_Yellow",
+    "NS_Red",
+    "EW_Green",
+    "EW_Yellow",
+    "EW_Red",
+    "Ped_NS_Walk",
+    "Ped_EW_Walk"
+  ],
+  "sequences": [
+    {
+      "seq_id": 0,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 1,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 2,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 3,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 4,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 5,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 6,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 7,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 8,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 9,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 10,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 11,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 12,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 13,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 14,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 15,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 16,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 17,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 18,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 19,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 20,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 21,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 22,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 23,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 24,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 25,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 26,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 27,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 28,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 29,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 30,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 31,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 32,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 33,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 34,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 35,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 36,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 37,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 38,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 39,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 40,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 41,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 42,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 43,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 44,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 45,
+      "scans": [
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 46,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 47,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    },
+    {
+      "seq_id": 48,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        }
+      ]
+    },
+    {
+      "seq_id": 49,
+      "scans": [
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 0,
+          "Ped_Request": 0
+        },
+        {
+          "Enable": 1,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        },
+        {
+          "Enable": 0,
+          "Emergency_Vehicle": 1,
+          "Ped_Request": 1
+        }
+      ]
+    }
+  ]
+}
