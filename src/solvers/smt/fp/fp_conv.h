@@ -7,7 +7,7 @@
 class fp_convt
 {
 public:
-  explicit fp_convt(smt_convt *_ctx);
+  explicit fp_convt(smt_solver_baset *_ctx);
   virtual ~fp_convt() = default;
 
   /** Create a floating point bitvector
@@ -220,7 +220,7 @@ public:
   virtual smt_astt mk_from_fp_to_bv(smt_astt op);
 
 private:
-  smt_convt *ctx;
+  smt_solver_baset *ctx;
 
   void unpack(
     smt_astt &src,

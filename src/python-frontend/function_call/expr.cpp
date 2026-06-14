@@ -3227,6 +3227,246 @@ exprt function_call_expr::handle_general_function_call()
             python_list sorted_list_expr(converter_, sorted_list);
             return sorted_list_expr.get();
           }
+
+          // Concrete tuple path: a literal list of constant integer tuples
+          // (e.g. sorted([(3,1),(1,2)])). The runtime tuple-sort model retypes
+          // elements as int; sort here at convert time and rebuild a list of
+          // tuple literals so the element type is preserved and verification is
+          // cheap. Symbolic tuple lists fall through (still unsupported).
+          std::function<bool(const exprt &, BigInt &)> eval_const_int =
+            [&](const exprt &e, BigInt &out) -> bool {
+            if (
+              e.is_constant() && (e.type().is_signedbv() ||
+                                  e.type().is_unsignedbv() || e.is_boolean()))
+            {
+              out = binary2integer(
+                to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+              return true;
+            }
+            if (e.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(e.identifier().as_string());
+              return s && eval_const_int(s->get_value(), out);
+            }
+            // A negative literal reaches here as unary-minus over a constant
+            // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+            // as a typecast. Fold both.
+            if (e.id() == "unary-" && e.operands().size() == 1)
+            {
+              if (!eval_const_int(e.op0(), out))
+                return false;
+              out = -out;
+              return true;
+            }
+            if (e.id() == "typecast" && e.operands().size() == 1)
+              return eval_const_int(e.op0(), out);
+            return false;
+          };
+
+          struct sortable_tuple
+          {
+            std::vector<BigInt> key;
+            size_t pos;
+          };
+          std::vector<sortable_tuple> telems;
+          bool all_constant_tuples = true;
+          size_t arity = 0;
+
+          for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
+          {
+            const std::string elem_id =
+              python_list::get_list_element_id(list_id, i);
+            const symbolt *elem_sym =
+              elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+            exprt val = elem_sym ? elem_sym->get_value() : exprt();
+            while (val.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(val.identifier().as_string());
+              if (!s)
+                break;
+              val = s->get_value();
+            }
+            if (
+              !elem_sym ||
+              !converter_.get_tuple_handler().is_tuple_type(
+                elem_sym->get_type()) ||
+              val.id() != "struct" || val.operands().empty())
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            if (i == 0)
+              arity = val.operands().size();
+            else if (val.operands().size() != arity)
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            std::vector<BigInt> key;
+            for (const auto &comp : val.operands())
+            {
+              BigInt v;
+              if (!eval_const_int(comp, v))
+              {
+                all_constant_tuples = false;
+                break;
+              }
+              key.push_back(v);
+            }
+            if (!all_constant_tuples)
+              break;
+            telems.push_back({std::move(key), i});
+          }
+
+          if (all_constant_tuples && !telems.empty())
+          {
+            std::stable_sort(
+              telems.begin(),
+              telems.end(),
+              [](const sortable_tuple &a, const sortable_tuple &b) {
+                if (a.key == b.key)
+                  return a.pos < b.pos;
+                return a.key < b.key; // lexicographic on the component vector
+              });
+            if (fast_path_reverse)
+              std::reverse(telems.begin(), telems.end());
+
+            nlohmann::json sorted_list;
+            sorted_list["_type"] = "List";
+            sorted_list["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, sorted_list);
+            for (const auto &te : telems)
+            {
+              nlohmann::json tup;
+              tup["_type"] = "Tuple";
+              tup["elts"] = nlohmann::json::array();
+              converter_.copy_location_fields_from_decl(call_, tup);
+              for (const BigInt &v : te.key)
+              {
+                // Mirror the parser's literal shape: a negative integer is
+                // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
+                // negative Constant nested in a tuple takes a slow conversion
+                // path, so emit the UnaryOp form for negatives.
+                nlohmann::json cst;
+                cst["_type"] = "Constant";
+                cst["value"] = (v < 0 ? -v : v).to_int64();
+                cst["kind"] = nullptr;
+                converter_.copy_location_fields_from_decl(call_, cst);
+                if (v < 0)
+                {
+                  nlohmann::json neg;
+                  neg["_type"] = "UnaryOp";
+                  neg["op"] = {{"_type", "USub"}};
+                  neg["operand"] = cst;
+                  converter_.copy_location_fields_from_decl(call_, neg);
+                  tup["elts"].push_back(neg);
+                }
+                else
+                  tup["elts"].push_back(cst);
+              }
+              sorted_list["elts"].push_back(tup);
+            }
+
+            python_list sorted_list_expr(converter_, sorted_list);
+            return sorted_list_expr.get();
+          }
+
+          // Symbolic tuple path: a list of tuples whose components may be
+          // symbolic (e.g. sorted([(a, b), (b, a)])). The runtime sort model
+          // compares the tuple storage as reinterpreted integers — not
+          // Python's lexicographic order — and retypes the result elements as
+          // int. Instead emit a convert-time oblivious sorting network
+          // (selection sort) that compares tuples lexicographically and
+          // selects elements with ite, producing a correctly ordered list
+          // whose elements keep their tuple type. Bounded to a small length to
+          // keep the ite trees manageable.
+          if (map_size <= 16)
+          {
+            std::vector<exprt> vals;
+            vals.reserve(map_size);
+            bool all_tuples = true;
+            typet tuple_type;
+            for (size_t i = 0; i < map_size; ++i)
+            {
+              const std::string elem_id =
+                python_list::get_list_element_id(list_id, i);
+              const symbolt *elem_sym =
+                elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+              if (
+                !elem_sym || !converter_.get_tuple_handler().is_tuple_type(
+                               elem_sym->get_type()))
+              {
+                all_tuples = false;
+                break;
+              }
+              // Heterogeneous tuples (different arity/component types) are left
+              // to the model; a homogeneous list is the sortable case.
+              if (i == 0)
+                tuple_type = elem_sym->get_type();
+              else if (elem_sym->get_type() != tuple_type)
+              {
+                all_tuples = false;
+                break;
+              }
+              vals.push_back(build_symbol(*elem_sym));
+            }
+
+            if (all_tuples && vals.size() == map_size && map_size > 0)
+            {
+              const locationt loc = converter_.get_location_from_decl(call_);
+              // Materialize a value into a fresh temp symbol so later
+              // comparisons reference the symbol rather than a nested ite tree.
+              // exprt has value semantics (no subexpression sharing), so
+              // threading raw ite trees through the network would blow up
+              // exponentially in the number of compare-exchanges.
+              auto materialize = [&](const exprt &value) -> exprt {
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$sort_tmp$", value.type(), value);
+                code_declt decl(build_symbol(tmp));
+                decl.copy_to_operands(value);
+                decl.location() = loc;
+                converter_.add_instruction(decl);
+                return build_symbol(tmp);
+              };
+
+              // Each compare-exchange puts the smaller (or larger, when
+              // reverse=True) tuple at the earlier slot. This selection-sort
+              // network is not stable, but stability is moot here: the
+              // comparison is over the whole tuple, so two elements that
+              // compare equal are bit-identical and reordering them is
+              // unobservable. (Do not reuse this network for a partial-key
+              // sort, where ties would be distinguishable.)
+              const std::string cmp_op = fast_path_reverse ? "Gt" : "Lt";
+              bool network_ok = true;
+              for (size_t i = 0; i < vals.size() && network_ok; ++i)
+              {
+                for (size_t j = i + 1; j < vals.size(); ++j)
+                {
+                  exprt a = vals[j];
+                  exprt b = vals[i];
+                  exprt cond =
+                    converter_.handle_tuple_operations(cmp_op, a, b, call_);
+                  if (cond.is_nil() || !cond.type().is_bool())
+                  {
+                    network_ok = false; // non-orderable components
+                    break;
+                  }
+                  exprt old_i = vals[i];
+                  exprt old_j = vals[j];
+                  vals[i] = materialize(if_exprt(cond, old_j, old_i));
+                  vals[j] = materialize(if_exprt(cond, old_i, old_j));
+                }
+              }
+
+              if (network_ok)
+              {
+                python_list result(converter_, call_);
+                return result.build_list_from_exprs(vals);
+              }
+            }
+          }
         }
       }
     }

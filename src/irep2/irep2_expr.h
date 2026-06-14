@@ -626,7 +626,7 @@ public:
   {
     /* At some point in the past, symbols named "NULL" and "0" were equivalent.
      * The symbol called "0" should no longer be created for uniformity reasons.
-     * Confirm that here, since support for it has been removed from smt_convt.
+     * Confirm that here, since support for it has been removed from smt_solver_baset.
      * No other reason to disallow "0" as a symbol. */
     assert(init != "0");
   }

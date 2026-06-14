@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
 #include <list>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <string>
 #ifndef _WIN32
 #  include <unistd.h>
@@ -18,8 +18,8 @@
  *  'HACKS' function represents some kind of special case, according to where
  *  it is encountered; the same for 'INVALID'.
  *
- *  @see smt_convt::convert_terminal
- *  @see smt_convt::convert_ast
+ *  @see smt_solver_baset::convert_terminal
+ *  @see smt_solver_baset::convert_ast
  */
 enum smt_func_kind
 {
@@ -154,7 +154,7 @@ public:
 class smtlib_smt_ast : public smt_ast
 {
 public:
-  smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
+  smtlib_smt_ast(smt_solver_baset *ctx, const smt_sort *s, smt_func_kind k)
     : smt_ast(ctx, s), kind(k)
   {
   }
@@ -172,13 +172,15 @@ public:
   std::vector<smt_astt> args;
 };
 
-class smtlib_convt : public smt_convt, public array_iface, public fp_convt
+class smtlib_convt : public smt_solver_baset,
+                     public array_iface,
+                     public fp_convt
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
   ~smtlib_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;

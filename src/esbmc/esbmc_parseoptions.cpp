@@ -19,6 +19,7 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/goto_symex.h>
+#include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -1300,10 +1301,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1311,7 +1312,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_SATISFIABLE)
+      if (res == P_SATISFIABLE)
       {
         r.k = k_step;
 
@@ -1407,10 +1408,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_status("Checking forward condition, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1421,7 +1422,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_UNSATISFIABLE)
+      if (res == P_UNSATISFIABLE)
       {
         r.k = k_step;
 
@@ -1476,10 +1477,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_status("Checking inductive step, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1490,7 +1491,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_UNSATISFIABLE)
+      if (res == P_UNSATISFIABLE)
       {
         r.k = k_step;
 
@@ -1829,14 +1830,14 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     return tvt(tvt::TV_FALSE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     log_result("\nBug found (k = {:d})", k_step);
     return tvt(tvt::TV_TRUE);
 
@@ -1893,14 +1894,14 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 
   switch (res)
   {
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     log_result(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",
@@ -1951,7 +1952,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  int res = do_bmc(bmc);
+  smt_resultt res = static_cast<smt_resultt>(do_bmc(bmc));
 
   // Symex may flip `disable-inductive-step` mid-run when it encounters
   // a construct the IS cannot soundly handle (recursion, threads,
@@ -1963,14 +1964,14 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
 
   switch (res)
   {
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     log_result(
       "\nSolution found by the inductive step "
       "(k = {:d})",
@@ -2002,7 +2003,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res;
+  smt_resultt res;
   try
   {
     res = bmc.start_bmc();
@@ -2014,7 +2015,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
     // also checks `disable-inductive-step` to suppress any verdict.
     log_status("Inductive step aborted: {}", e.reason);
-    res = smt_convt::P_ERROR;
+    res = P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC

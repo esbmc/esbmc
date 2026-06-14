@@ -2,25 +2,27 @@
 #define _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 
 #include <mathsat.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/fp/fp_conv.h>
 
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-  mathsat_smt_ast(smt_convt *ctx, msat_term _t, const smt_sort *_s);
+  mathsat_smt_ast(smt_solver_baset *ctx, msat_term _t, const smt_sort *_s);
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;
 };
 
-class mathsat_convt : public smt_convt, public array_iface, public fp_convt
+class mathsat_convt : public smt_solver_baset,
+                      public array_iface,
+                      public fp_convt
 {
 public:
   mathsat_convt(const namespacet &ns, const optionst &options);
   ~mathsat_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;

@@ -9,7 +9,7 @@ static void error_handler(Z3_context c, Z3_error_code e)
   abort();
 }
 
-smt_convt *create_new_z3_solver(
+smt_solver_baset *create_new_z3_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -46,7 +46,7 @@ smt_convt *create_new_z3_solver(
 }
 
 z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options),
+  : smt_solver_baset(_ns, _options),
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
@@ -71,17 +71,17 @@ z3_convt::~z3_convt()
 
 void z3_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   solver.push();
 }
 
 void z3_convt::pop_ctx()
 {
   solver.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt z3_convt::dec_solve()
+smt_resultt z3_convt::dec_solve()
 {
   pre_solve();
 
@@ -91,9 +91,9 @@ smt_convt::resultt z3_convt::dec_solve()
     return P_SATISFIABLE;
 
   if (result == z3::unsat)
-    return smt_convt::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
-  return smt_convt::P_ERROR;
+  return P_ERROR;
 }
 
 void z3_convt::assert_ast(smt_astt a)
@@ -1021,7 +1021,7 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 }
 
 smt_astt z3_smt_ast::update(
-  smt_convt *conv,
+  smt_solver_baset *conv,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -1037,7 +1037,7 @@ smt_astt z3_smt_ast::update(
   return z3_conv->new_ast(z3_conv->mk_tuple_update(a, idx, updateval->a), sort);
 }
 
-smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
+smt_astt z3_smt_ast::project(smt_solver_baset *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 

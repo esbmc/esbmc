@@ -274,6 +274,23 @@ protected:
    */
   virtual void assertion(const expr2tc &assertion, const std::string &msg);
 
+  /// Lift `var == const` from an assume into the level2 constant
+  /// propagator so subsequent renames of `var` substitute the constant
+  /// directly. Called from symex_assume() after the assumption has been
+  /// recorded into the SSA target, so the constraint itself is preserved
+  /// and the lift only affects future renames.
+  ///
+  /// Peels outer typecasts (the C frontend wraps the equality as
+  /// (bool)(int)(x == k) for __VERIFIER_assume-style intrinsics), matches
+  /// `symbol == const` or `const == symbol`, and writes the constant into
+  /// the level2 entry for the symbol via cur_state->assignment.
+  ///
+  /// Skips IEEE-754 zero constants: +0.0 and -0.0 compare equal under
+  /// IEEE equality but have distinct bit patterns, so propagating either
+  /// would silently fold signbit-sensitive code (1.0/x, copysign, bit
+  /// reinterpretation) and mask real bugs.
+  void propagate_assume_equality(const expr2tc &the_assumption);
+
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
@@ -522,6 +539,41 @@ protected:
   void intrinsic_memchr(
     reachability_treet &art,
     const code_function_call2t &func_call);
+
+  /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
+   *  resolving to concrete primitive objects, build the lexicographic
+   *  comparison result as a single nested-ite expression over the n byte
+   *  reads (no loop, no unwinding) and assign it to the call's return.
+   *  Falls back to the C __memcmp_impl loop otherwise. */
+  void intrinsic_memcmp(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
+   *  primitive object with a constant offset, validating that an
+   *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
+   *  loop) on any miss. */
+  bool memcmp_resolve_operand(
+    const expr2tc &ptr,
+    unsigned long number_of_bytes,
+    expr2tc &object,
+    uint64_t &offset,
+    uint64_t &avail_bytes);
+
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
 
   // Function to call a symname function, in case where were not able to optimize it
   void
