@@ -482,6 +482,7 @@ set(_slow_regression_tests
     # extra headroom so they finish and match instead of being hard-killed.
     "regression/python/dict65_4"
     "regression/python/dictcomp_readback_func_fail"
+    "regression/python/list-slice-step-reverse"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
