@@ -86,8 +86,7 @@ static void collect_write_targets(
       sn == "c:@__ESBMC_is_dynamic" ||
       sn == "c:@__ESBMC_blocked_threads_count" ||
       sn == "c:@__ESBMC_rounding_mode" ||
-      sn.find("c:pthread_lib") != std::string::npos ||
-      sn.find("c:@__ESBMC_pthread_thread") != std::string::npos)
+      sn.find("c:pthread_lib") != std::string::npos)
       return;
     if (s->static_lifetime || s->get_type().is_dynamic_set())
       out.insert(name);
