@@ -31,7 +31,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
-      return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
+      return mk_not(mk_and(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
     else if (int_encoding)
     {
@@ -170,7 +170,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc is_minus_one = equality2tc(minus_one, side2);
 
       // Return overflow condition for signed division
-      return convert_ast(and2tc(is_minus_one, is_min_int));
+      return mk_and(convert_ast(is_minus_one), convert_ast(is_min_int));
     }
 
     // Detect unsigned integer overflow for division and modulus
@@ -183,7 +183,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     expr2tc is_overflow = greaterthan2tc(side1, max_unsigned);
 
     // Return overflow condition for unsigned division/modulus
-    return convert_ast(or2tc(is_div_by_zero, is_overflow));
+    return mk_or(convert_ast(is_div_by_zero), convert_ast(is_overflow));
   }
 
   case expr2t::shl_id:
