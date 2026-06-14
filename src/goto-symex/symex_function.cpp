@@ -275,15 +275,24 @@ bool goto_symext::symex_uninterpreted_function(
   const code_function_call2t &call,
   const irep_idt &identifier)
 {
-  // CBMC treats every function named "__CPROVER_uninterpreted_*" as an
-  // uninterpreted function: its value is an arbitrary but *fixed* function
-  // of its arguments (functional congruence). Any concrete body, including its
-  // side effects, is deliberately discarded. The mangled identifier looks like
-  // "c:@F@__CPROVER_uninterpreted_equals"; the C-level name (used only for the
-  // prefix test) is the suffix after the last '@'.
+  // A function whose name begins "__ESBMC_uninterpreted_" (ESBMC's native
+  // namespace) or "__CPROVER_uninterpreted_" (CBMC compatibility) is modelled
+  // as an uninterpreted function: its value is an arbitrary but *fixed*
+  // function of its arguments (functional congruence). Any concrete body,
+  // including its side effects, is deliberately discarded. The mangled
+  // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
+  // (used only for the prefix test) is the suffix after the last '@'.
+  //
+  // The native prefix is always recognised, like every other __ESBMC_*
+  // intrinsic. The CBMC alias is opt-in (--cprover-uninterpreted-functions):
+  // existing code may ship a real body for a __CPROVER_uninterpreted_* function
+  // and we must not silently discard it.
   const std::string &mangled = identifier.as_string();
   std::string name = mangled.substr(mangled.rfind('@') + 1);
-  if (!has_prefix(name, "__CPROVER_uninterpreted_"))
+  if (
+    !has_prefix(name, "__ESBMC_uninterpreted_") &&
+    !(cprover_uninterpreted_functions &&
+      has_prefix(name, "__CPROVER_uninterpreted_")))
     return false;
 
   // A void uninterpreted function has no observable result to constrain; the
@@ -346,10 +355,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
 
-  // Intercept "__CPROVER_uninterpreted_*" calls before inlining any body.
-  if (
-    cprover_uninterpreted_functions &&
-    symex_uninterpreted_function(call, identifier))
+  // Intercept "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*" calls
+  // before inlining any body.
+  if (symex_uninterpreted_function(call, identifier))
   {
     cur_state->source.pc++;
     return;

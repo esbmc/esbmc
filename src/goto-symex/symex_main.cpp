@@ -592,6 +592,23 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
+  // "__ESBMC_uninterpreted_*" is the native spelling of an uninterpreted
+  // function (the "__CPROVER_uninterpreted_*" alias is handled later, in
+  // symex_function_call_code, since it is not __ESBMC-prefixed). All __ESBMC_*
+  // calls are routed here before body inlining, so the native prefix must be
+  // intercepted in run_intrinsic. The caller has already advanced the program
+  // counter, so symex_uninterpreted_function must not (and does not) touch it.
+  if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
+  {
+    // Unlike the threading intrinsics, an uninterpreted function is pure value
+    // modelling with no cross-thread obligation, so a dead branch must not
+    // contribute a fresh result or congruence history (the CPROVER alias is
+    // already short-circuited on a false guard before symex_function_call_code).
+    if (!cur_state->guard.is_false())
+      symex_uninterpreted_function(func_call, symname);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);

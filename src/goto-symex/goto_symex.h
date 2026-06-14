@@ -386,12 +386,14 @@ protected:
   virtual void symex_function_call_code(const expr2tc &call);
 
   /**
-   *  Model a call to a "__CPROVER_uninterpreted_*" function as a genuine
-   *  uninterpreted function: assign the return a fresh nondeterministic value
-   *  and emit congruence constraints (equal arguments imply equal results)
-   *  against every earlier call to the same function. The concrete body, if
-   *  present, is deliberately ignored (CBMC semantics). Returns true when the
-   *  call was handled here (caller must then advance the program counter).
+   *  Model a call to a "__ESBMC_uninterpreted_*" function (always) or a
+   *  "__CPROVER_uninterpreted_*" function (under --cprover-uninterpreted-
+   *  functions) as a genuine uninterpreted function: assign the return a fresh
+   *  nondeterministic value and emit congruence constraints (equal arguments
+   *  imply equal results) against every earlier call to the same function. The
+   *  concrete body, if present, is deliberately ignored (CBMC semantics).
+   *  Returns true when the call was handled here (caller must then advance the
+   *  program counter).
    *  @param call The function-call code being executed.
    *  @param identifier The (mangled) callee symbol name.
    */
