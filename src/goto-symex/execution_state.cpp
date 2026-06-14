@@ -1093,16 +1093,34 @@ bool execution_statet::has_cswitch_point_occured() const
     return false;
   };
 
-  auto any_non_sync = [&](const std::set<expr2tc> &s) {
+  // Accesses to the per-thread bookkeeping arrays __ESBMC_pthread_thread_*
+  // (ended / running / detach / key — the flags the pthread library uses to
+  // track each thread's lifecycle) likewise feed MPOR dependency tracking, but
+  // on their own must not force a context switch: a thread that only consults
+  // another thread's lifecycle state hasn't observed or mutated user-visible
+  // shared state, so interleaving there only widens the DFS without exposing
+  // new behaviours.
+  auto is_thread_bookkeeping = [](const expr2tc &e) {
+    if (!is_symbol2t(e))
+      return false;
+    return to_symbol2t(e).thename.as_string().find(
+             "__ESBMC_pthread_thread") != std::string::npos;
+  };
+
+  auto forces_cswitch = [&](const expr2tc &e) {
+    return !is_pthread_sync_type(e->type) && !is_thread_bookkeeping(e);
+  };
+
+  auto any_cswitch = [&](const std::set<expr2tc> &s) {
     for (const auto &e : s)
-      if (!is_pthread_sync_type(e->type))
+      if (forces_cswitch(e))
         return true;
     return false;
   };
 
   if (
-    any_non_sync(thread_last_reads[active_thread]) ||
-    any_non_sync(thread_last_writes[active_thread]))
+    any_cswitch(thread_last_reads[active_thread]) ||
+    any_cswitch(thread_last_writes[active_thread]))
     return true;
   return false;
 }

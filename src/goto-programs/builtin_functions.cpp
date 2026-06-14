@@ -235,7 +235,6 @@ void goto_convertt::do_atomic_begin(
   // via the intrinsic function __ESBMC_yield();
   if (
     function.location().function() != "pthread_create" &&
-    function.location().function() != "pthread_join_noswitch" &&
     function.location().function() != "pthread_trampoline" &&
     !config.options.get_bool_option("data-races-check-only"))
   {
