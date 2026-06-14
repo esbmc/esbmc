@@ -210,6 +210,31 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   return context.find_symbol(vt_name);
 }
 
+// Does this class type already contain a polymorphic base subobject at
+// offset 0 (a #is_base_subobject component whose base class carries a vtable
+// pointer)? Under the Itanium ABI such a class shares that primary base's
+// vtable pointer instead of allocating its own at offset 0.
+bool clang_cpp_convertert::has_primary_base_vptr(const struct_typet &type)
+{
+  for (const auto &c : type.components())
+  {
+    if (!c.get_bool("#is_base_subobject"))
+      continue;
+    // Only a base laid out at offset 0 can be the primary base. Bases are
+    // emitted in ascending offset order, with at most a leading $pad before
+    // the first; the primary base, if any, is the first base component.
+    const symbolt *base_symb = context.find_symbol(c.type().identifier());
+    if (!base_symb)
+      return false;
+    const struct_typet &bt = to_struct_type(base_symb->get_type());
+    for (const auto &bc : bt.components())
+      if (bc.get_bool("is_vtptr"))
+        return true;
+    return false; // first base subobject is non-polymorphic
+  }
+  return false;
+}
+
 void clang_cpp_convertert::add_vptr(struct_typet &type)
 {
   /*
@@ -218,6 +243,16 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
    *
    * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
    */
+
+  // Itanium primary-base sharing: if a polymorphic base already provides a
+  // vtable pointer at offset 0, the derived class reuses it rather than adding
+  // its own. Adding a second vptr would push every base subobject past the
+  // offset Clang reports (getBaseClassOffset), corrupting MI layout.
+  if (has_primary_base_vptr(type))
+  {
+    has_vptr_component = true;
+    return;
+  }
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
   // add a virtual-table pointer
@@ -229,8 +264,12 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.pretty_name(type.tag().as_string() + vtable_ptr_suffix);
   component.set("is_vtptr", true);
   component.set("access", "public");
-  // add to the class' type
-  type.components().push_back(component);
+  // The Itanium ABI places the vtable pointer at offset 0 of the object, so
+  // insert it as the first component rather than appending it. This keeps
+  // ESBMC's byte layout consistent with the offsets Clang reports (e.g.
+  // getBaseClassOffset), which the multiple-inheritance base-subobject layout
+  // relies on.
+  type.components().insert(type.components().begin(), component);
 
   has_vptr_component = true;
 }

@@ -120,6 +120,53 @@ bool clang_cpp_convertert::get_vft_binding_expr_base(
   return false;
 }
 
+// Build an lvalue member access for the vtable pointer named @p vptr_name on
+// the object lvalue @p object. Under Itanium primary-base sharing the vptr may
+// not be a direct member of @p object's class: it lives in a (possibly nested)
+// base subobject. Navigate into the base-subobject chain until the vptr is
+// found. Returns false on success.
+bool clang_cpp_convertert::build_vptr_member_access(
+  const exprt &object,
+  const irep_idt &vptr_name,
+  const typet &vptr_member_type,
+  exprt &result)
+{
+  const typet &t = ns.follow(object.type());
+  if (t.id() != "struct")
+    return true;
+  const struct_typet &st = to_struct_type(t);
+
+  // Direct vptr member with the exact name?
+  for (const auto &c : st.components())
+    if (c.get_name() == vptr_name)
+    {
+      result = member_exprt(object, vptr_name, vptr_member_type);
+      return false;
+    }
+
+  // Recurse into base subobjects (the shared vptr lives in the primary base).
+  for (const auto &c : st.components())
+  {
+    if (!c.get_bool("#is_base_subobject"))
+      continue;
+    exprt sub = member_exprt(object, c.get_name(), c.type());
+    if (!build_vptr_member_access(sub, vptr_name, vptr_member_type, result))
+      return false;
+  }
+
+  // Under primary-base sharing the class has a single vtable pointer at
+  // offset 0 carrying the primary base's name; a derived-class virtual call
+  // (whose name differs) resolves to that same slot. Fall back to the first
+  // vptr component, keeping the caller's expected vtable-pointer type.
+  for (const auto &c : st.components())
+    if (c.get_bool("is_vtptr"))
+    {
+      result = member_exprt(object, c.get_name(), vptr_member_type);
+      return false;
+    }
+  return true;
+}
+
 void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   const clang::MemberExpr &member,
   exprt &new_expr,
@@ -136,7 +183,14 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
 
   std::string vtable_ptr_name = base_class_id + "::" + vtable_ptr_suffix;
   pointer_typet member_type(vtable_type);
-  member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
+
+  // The vtable pointer may be a direct member or, under primary-base sharing,
+  // nested inside a base subobject. Navigate to it.
+  exprt deref_member;
+  if (build_vptr_member_access(
+        base_deref, vtable_ptr_name, member_type, deref_member))
+    // Fall back to a direct access (preserves prior behaviour if not found).
+    deref_member = member_exprt(base_deref, vtable_ptr_name, member_type);
 
   // we've got the deref type and member. Now we are ready to make the deref new_expr
   new_expr = dereference_exprt(deref_member, member_type);

@@ -386,6 +386,20 @@ protected:
    * This is done the first time we encounter a virtual method in a class
    */
   void add_vptr(struct_typet &type);
+
+  // True if the class already has a polymorphic base subobject at offset 0
+  // whose vtable pointer it shares (Itanium primary-base sharing), so it must
+  // not allocate its own vptr.
+  bool has_primary_base_vptr(const struct_typet &type);
+
+  // Build an lvalue access to the vtable pointer named vptr_name on the object
+  // lvalue, navigating into base subobjects when the vptr is shared from a
+  // (possibly nested) primary base. Returns false on success.
+  bool build_vptr_member_access(
+    const exprt &object,
+    const irep_idt &vptr_name,
+    const typet &vptr_member_type,
+    exprt &result);
   /*
    * Add an entry to the virtual table type
    *
