@@ -94,8 +94,9 @@ static void collect_write_targets(
     return;
   }
 
-  e->foreach_operand([&](const expr2tc &sub)
-                     { collect_write_targets(sub, ns, out, indirect_write); });
+  e->foreach_operand([&](const expr2tc &sub) {
+    collect_write_targets(sub, ns, out, indirect_write);
+  });
 }
 
 void reachability_treet::scan_program_writes()
@@ -295,8 +296,9 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  auto is_thread_schedulable = [&](int tid)
-  { return check_thread_viable(tid, true) && dfs_explore_thread(tid); };
+  auto is_thread_schedulable = [&](int tid) {
+    return check_thread_viable(tid, true) && dfs_explore_thread(tid);
+  };
 
   signed int tid = 0, user_tid = 0;
 
