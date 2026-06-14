@@ -209,17 +209,16 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 
+  (void)retargeted;
   exprt vtable_var =
     symbol_exprt(vtable_var_symb->id, vtable_var_symb->get_type());
   vtable_var.name(vtable_var_symb->name);
-  exprt addr = address_of_exprt(vtable_var);
-
-  // The vptr slot is statically typed pointer(vtable_type::Base); the merged
-  // table has its own (prefix-compatible) type, so cast the address to the
-  // slot's pointer type. Reads index by name and stay valid via the prefix.
-  if (retargeted)
-    addr = typecast_exprt(addr, comp.type());
-  return addr;
+  // Store the address with the merged vtable's own pointer type (no cast to the
+  // slot's declared pointer(vtable_type::Base) type): dispatch reads the shared
+  // slot as the merged type, and a Base*-typed read stays valid by prefix
+  // compatibility. A cast here would pin the stored static type to the base
+  // view and hide the merged slots from the SMT-level member offset.
+  return address_of_exprt(vtable_var);
 }
 
 // Is access_path the primary (offset-0) base chain of class `derived` (its
