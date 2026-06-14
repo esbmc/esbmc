@@ -514,6 +514,11 @@ set(_very_slow_regression_tests
     # same band as shortest_path_lengths above. Give it the 3x budget so it
     # doesn't flap.
     "regression/humaneval/humaneval_62"
+    # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound (reverse
+    # slicing under --unwind 7 --smt-symex-guard --bitwuzla). It is ~70s locally
+    # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
+    # fires, so 2x has no guaranteed headroom; give it the 3x budget.
+    "regression/python/list-slice-step-reverse"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
