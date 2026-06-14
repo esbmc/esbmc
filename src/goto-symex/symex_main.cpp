@@ -1178,6 +1178,18 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  // Not a recognised intrinsic. If the operational-model library provides a
+  // real body for this __ESBMC-prefixed symbol (e.g. __ESBMC_run_unexpected),
+  // execute it as an ordinary call rather than treating it as an intrinsic.
+  auto func_it = goto_functions.function_map.find(symname);
+  if (
+    func_it != goto_functions.function_map.end() &&
+    func_it->second.body_available)
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"

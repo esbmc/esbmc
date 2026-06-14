@@ -38,6 +38,7 @@ struct regiont
   std::vector<handlert> handlers;
   goto_programt::targett push;
   goto_programt::targett pop;
+  goto_programt::targett after_try;
   int parent;                      // enclosing region index, or -1
   goto_programt::targett dispatch; // landing pad throws/calls branch to
 };
@@ -64,7 +65,9 @@ public:
       registry(ns),
       thrown(mk_global(exception_globals::thrown_id)),
       type_id(mk_global(exception_globals::typeid_id)),
-      value(mk_global(exception_globals::value_id))
+      value(mk_global(exception_globals::value_id)),
+      uncaught_count(mk_global(exception_globals::uncaught_count_id)),
+      terminate_reason(mk_global(exception_globals::terminate_reason_id))
   {
   }
 
@@ -74,12 +77,40 @@ public:
     // every later step (may-throw, registry, dispatch) treats them uniformly.
     lower_bad_cast_calls(goto_functions);
 
+    // The handled-exception stack (push/pop_handled, rethrow_current) only
+    // matters for std::current_exception — it is what lets current_exception()
+    // observe the exception being handled across nested catches. A program that
+    // never captures the current exception does not need it, and instrumenting
+    // every handler with OM calls would inflate path length for no benefit (and
+    // is unsound to even link on a frontend without the C++ exception OM, e.g.
+    // Python). So enable the helpers only when the handled stack is actually
+    // needed — the program references __ESBMC_current_exception_raw or contains
+    // a bare `throw;` — and their bodies are linked; otherwise the lowering uses
+    // its inline re-raise fallback, and a plain throw/catch program (no
+    // current_exception, no re-raise) pays no handled-stack overhead.
+    if (
+      program_calls(goto_functions, "c:@F@__ESBMC_current_exception_raw") ||
+      program_has_bare_throw(goto_functions))
+      for (const char *id :
+           {exception_globals::push_handled_id,
+            exception_globals::pop_handled_id,
+            exception_globals::rethrow_current_id})
+      {
+        auto it = goto_functions.function_map.find(id);
+        if (
+          it != goto_functions.function_map.end() && it->second.body_available)
+          available_helpers_.insert(id);
+      }
+
+    track_uncaught_ = program_reads_uncaught(goto_functions);
+
     may_throw = compute_may_throw(goto_functions);
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
-    // symbol), and detect concurrency.
-    bool concurrent = false;
+    // symbol). Concurrency is sound here: the exception-state globals are
+    // thread-local (see create_exception_state_symbols), so each thread raises,
+    // catches and clears its own in-flight exception independently.
     for (const auto &fn : goto_functions.function_map)
     {
       if (!fn.second.body_available)
@@ -103,27 +134,42 @@ public:
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
-          if (
-            is_symbol2t(c.function) &&
-            id2string(to_symbol2t(c.function).thename).find("pthread_create") !=
-              std::string::npos)
-            concurrent = true;
+          if (is_symbol2t(c.function))
+            direct_call_targets.insert(to_symbol2t(c.function).thename);
+          collect_thread_entry(c);
         }
       }
     }
 
-    // The exception state is one global tuple, not per-thread, so the lowered
-    // dispatch is unsound for a concurrent program that throws or catches across
-    // threads (one thread could observe, catch, or clear another thread's
-    // in-flight exception); such a program is reported as unsupported. A program
-    // that only *declares* exception specifications (a THROW_DECL such as the
-    // library `what() const throw()`, with no reachable throw or catch) puts no
-    // exception in flight, so the lowering — which simply strips the inert
-    // THROW_DECL — stays sound and must still run (symex no longer handles a
-    // surviving THROW_DECL). Only bail when there is a real throw or catch.
-    if (concurrent && program_throws_or_catches(goto_functions))
-      return report_unsupported(
-        goto_functions, "a concurrent program (pthread_create)");
+    // A thread start routine that is also called directly (by name), or one
+    // reached through a computed pointer, cannot get a sound per-function
+    // uncaught-escape check (see the member comments): is_entry is a per-
+    // function property, but the terminate-on-escape is only correct on the
+    // thread-entry edge. Such a program is declined as unsupported (there is no
+    // longer an imperative fallback — #5244 removed it), which avoids a missed
+    // std::terminate (unresolved routine) or a spurious one (direct call).
+    // Declining is sound: it never validates a buggy program. Residual gap
+    // (sound, never a missed bug): a routine that is a clean &worker thread
+    // entry but is *also* invoked through an indirect call elsewhere keeps
+    // is_entry on that path too, so an exception the indirect caller would
+    // catch is over-reported as a terminate. That needs call-site-sensitive
+    // enforcement at the pthread trampoline, which is blocked until thread-local
+    // state propagates across its indirect call.
+    // Only decline when an exception can actually escape a thread. A concurrent
+    // program that declares a noexcept spec but never throws or catches puts no
+    // exception in flight, so the thread-entry uncaught-escape check is moot and
+    // the program stays lowerable (lower_ip no-ops its exception-free bodies).
+    if (program_throws_or_catches(goto_functions))
+    {
+      if (thread_entry_unresolved)
+        return report_unsupported(
+          goto_functions, "a thread with an unresolved start routine");
+      for (const irep_idt &e : thread_entries)
+        if (direct_call_targets.count(e))
+          return report_unsupported(
+            goto_functions,
+            "a thread start routine that is also called directly");
+    }
 
     // Whole-program, all-or-nothing: every participating function must be in
     // the supported subset, otherwise the program is reported as unsupported
@@ -181,17 +227,89 @@ public:
     return false;
   }
 
-  /// True if the program actually throws or catches — real exception flow that
-  /// uses the global exception state — as opposed to merely declaring an
-  /// exception specification (a THROW_DECL). Used to decide whether a concurrent
-  /// program is genuinely unsound to lower.
-  static bool program_throws_or_catches(const goto_functionst &gf)
+  /// True if a function belongs to a linked operational model / library rather
+  /// than user code. The C++ exception OM (library/cpp/exception.cpp) itself
+  /// uses throw/catch (std::terminate's try/catch, the rethrow helpers); linking
+  /// it pulls those constructs into every program's context, but they are not
+  /// *user* exception flow, so they must not count when deciding whether a
+  /// concurrent program can escape an exception out of a thread.
+  bool is_library_function(const irep_idt &name) const
+  {
+    const symbolt *s = ns.lookup(name);
+    if (!s)
+      return false;
+    const std::string file = s->location.file().as_string();
+    // OM/library models live under the extracted-headers temp dir at runtime
+    // ("-headers-") and under c2goto/library/ when built in-tree.
+    return file.find("-headers-") != std::string::npos ||
+           file.find("c2goto/library/") != std::string::npos;
+  }
+
+  /// True if *user* code contains a real throw or catch — i.e. a user exception
+  /// can actually be put in flight (as opposed to merely declaring a noexcept /
+  /// throw(...) spec, which program_uses_exceptions also counts, or the linked
+  /// OM's own internal try/catch). The thread-entry decline below only matters
+  /// when a user exception can escape a thread, so it is gated on this: a
+  /// concurrent program that only declares a noexcept function, or only links
+  /// the OM, but never itself throws/catches, stays lowerable.
+  bool program_throws_or_catches(const goto_functionst &gf) const
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available && !is_library_function(fn.first))
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == THROW || ins.type == CATCH)
+            return true;
+    return false;
+  }
+
+  /// True if any function directly calls the named function symbol.
+  static bool program_calls(const goto_functionst &gf, const irep_idt &callee)
   {
     for (const auto &fn : gf.function_map)
       if (fn.second.body_available)
         for (const auto &ins : fn.second.body.instructions)
-          if (ins.type == THROW || ins.type == CATCH)
+          if (ins.type == FUNCTION_CALL)
+          {
+            const code_function_call2t &c = to_code_function_call2t(ins.code);
+            if (
+              is_symbol2t(c.function) &&
+              to_symbol2t(c.function).thename == callee)
+              return true;
+          }
+    return false;
+  }
+
+  /// True if any function contains a bare `throw;` (a THROW with no operand),
+  /// which re-raises the exception being handled and so needs the handled stack.
+  static bool program_has_bare_throw(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (
+            ins.type == THROW &&
+            is_nil_expr(to_code_cpp_throw2t(ins.code).operand))
             return true;
+    return false;
+  }
+
+  /// True if any function calls std::uncaught_exception or uncaught_exceptions
+  /// (matched by name to stay robust to overload mangling) — the only readers of
+  /// the uncaught count, so the count is maintained only when one is present.
+  static bool program_reads_uncaught(const goto_functionst &gf)
+  {
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+          if (ins.type == FUNCTION_CALL)
+          {
+            const code_function_call2t &c = to_code_function_call2t(ins.code);
+            if (
+              is_symbol2t(c.function) &&
+              id2string(to_symbol2t(c.function).thename)
+                  .find("uncaught_exception") != std::string::npos)
+              return true;
+          }
     return false;
   }
 
@@ -236,6 +354,7 @@ public:
     seed(thrown);
     seed(type_id);
     seed(value);
+    seed(terminate_reason);
     body.update();
   }
 
@@ -243,8 +362,27 @@ private:
   contextt &context;
   const namespacet &ns;
   exception_typeidt registry;
-  expr2tc thrown, type_id, value;
+  expr2tc thrown, type_id, value, uncaught_count, terminate_reason;
   std::set<irep_idt> may_throw;
+  // Handled-stack OM helpers whose body is linked (set in run()); a call is
+  // emitted only for these, else the lowering uses its inline fallback.
+  std::set<irep_idt> available_helpers_;
+  // Whether to maintain $esbmc_exc_uncaught_count (set in run()): only when the
+  // program reads it via std::uncaught_exception(s); otherwise the ++/-- at
+  // throws and handlers is pure overhead, so it is skipped (pay-per-use).
+  bool track_uncaught_ = false;
+  // Functions passed as the start routine to pthread_create: each is a thread
+  // entry, so an exception escaping it is uncaught for that thread (terminate).
+  std::set<irep_idt> thread_entries;
+  // Symbols that appear as a direct (by-name) call target anywhere. A thread
+  // entry that is *also* called directly cannot be marked is_entry soundly (the
+  // terminate at its epilogue would wrongly fire on the direct-call path), so
+  // such a program is declined; this records the candidates for that check.
+  std::set<irep_idt> direct_call_targets;
+  // A pthread_create whose start routine is a computed/unresolved pointer: its
+  // thread cannot get the uncaught-escape check, so decline rather than miss
+  // it silently.
+  bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
 
   expr2tc mk_global(const char *id)
@@ -252,6 +390,63 @@ private:
     const symbolt *s = ns.lookup(irep_idt(id));
     assert(s && "exception-state globals must be created before lowering");
     return symbol2tc(migrate_type(s->get_type()), s->id);
+  }
+
+  /// Assignment code stepping the per-thread uncaught-exception count: +1 at a
+  /// throw/rethrow (the exception becomes uncaught) and -1 when a handler is
+  /// entered (it stops being uncaught). Backs std::uncaught_exception(s),
+  /// [except.uncaught].
+  expr2tc adjust_uncaught(int delta)
+  {
+    const type2tc &t = uncaught_count->type;
+    expr2tc one = constant_int2tc(t, BigInt(1));
+    expr2tc rhs = delta > 0 ? add2tc(t, uncaught_count, one)
+                            : sub2tc(t, uncaught_count, one);
+    return code_assign2tc(uncaught_count, rhs);
+  }
+
+  expr2tc make_c_helper_call(const irep_idt &id)
+  {
+    // Only emit the call when the helper's body is actually linked (see
+    // available_helpers_); otherwise the caller falls back to inline lowering.
+    if (!available_helpers_.count(id))
+      return expr2tc();
+    const symbolt *h = ns.lookup(id);
+    if (!h)
+      return expr2tc();
+    code_function_callt fc;
+    fc.function() = symbol_exprt(h->id, h->get_type());
+    expr2tc call;
+    migrate_expr(fc, call);
+    return call;
+  }
+
+  /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
+  /// as a thread entry, so lower_ip enforces the uncaught-escape terminate at
+  /// that function's epilogue. The argument is `&worker`, possibly under
+  /// typecasts; peel them to the underlying function symbol. A computed
+  /// (unresolvable) routine sets thread_entry_unresolved so run() declines the
+  /// program rather than silently miss its uncaught-escape check.
+  void collect_thread_entry(const code_function_call2t &call)
+  {
+    if (
+      !is_symbol2t(call.function) ||
+      id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
+        std::string::npos ||
+      call.operands.size() < 3)
+      return;
+
+    expr2tc rtn = call.operands[2];
+    while (is_typecast2t(rtn))
+      rtn = to_typecast2t(rtn).from;
+    if (is_address_of2t(rtn))
+      rtn = to_address_of2t(rtn).ptr_obj;
+    // Only a direct &function resolves to a code-typed symbol; a function-
+    // pointer variable (is_symbol2t but pointer-typed) is a computed routine.
+    if (is_symbol2t(rtn) && is_code_type(rtn->type))
+      thread_entries.insert(to_symbol2t(rtn).thename);
+    else
+      thread_entry_unresolved = true;
   }
 
   /// A fresh static-lifetime slot to hold a copy of a thrown object, so it
@@ -272,6 +467,7 @@ private:
     sym.lvalue = true;
     sym.static_lifetime = true;
     sym.file_local = false;
+    sym.is_thread_local = true;
     context.move_symbol_to_context(sym);
     return symbol2tc(obj_type, irep_idt(id));
   }
@@ -373,7 +569,15 @@ private:
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
           if (is_symbol2t(c.function))
-            callees[fn.first].insert(to_symbol2t(c.function).thename);
+          {
+            const irep_idt callee = to_symbol2t(c.function).thename;
+            if (
+              id2string(callee).find("__ESBMC_rethrow_exception_raw") !=
+              std::string::npos)
+              may.insert(fn.first);
+            else
+              callees[fn.first].insert(callee);
+          }
           else
             may.insert(fn.first); // indirect call: callee may throw
         }
@@ -589,6 +793,10 @@ private:
         else
         {
           regions[open.back()].pop = it;
+          auto skip = std::next(it);
+          assert(skip != body.instructions.end() && skip->type == GOTO);
+          assert(!skip->targets.empty());
+          regions[open.back()].after_try = *skip->targets.begin();
           open.pop_back();
         }
         break;
@@ -654,6 +862,7 @@ private:
         h.landing = make_landing(body, h);
 
     build_dispatch(body, regions, epilogue);
+    build_handled_stack(body, regions);
 
     for (const sitet &s : throws)
       wire_throw(body, s.insn, target_for(regions, s.region, epilogue));
@@ -670,29 +879,36 @@ private:
     // exception still in flight is about to escape. A locally-caught throw
     // clears `thrown`, so this fires only on a genuine escape.
     //  - main / __ESBMC_main: any escape is uncaught (covers static-init throws
-    //    from global constructors) → assert(thrown == false).
-    //  - noexcept: an escape calls std::terminate ([except.spec]) →
-    //    assert(thrown == false).
+    //    from global constructors) → std::terminate.
+    //  - a thread start routine (passed to pthread_create): an exception
+    //    escaping it is uncaught for that thread → std::terminate
+    //    ([except.terminate]). Checked at the routine's own epilogue, where it
+    //    set `thrown`, rather than relying on cross-frame propagation out
+    //    through the pthread trampoline.
+    //  - noexcept: an escape calls std::terminate ([except.spec]).
     //  - throw(T...) / throw(): a disallowed escape runs std::unexpected and is
     //    re-checked (build_dynamic_spec_check), matching the imperative path
     //    (which models the unexpected-handler dispatch and its recovery).
-    const bool is_entry = fn_id == "c:@F@main" ||
-                          id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
-                          fn_id == "__ESBMC_main";
+    // A locally-caught throw clears `thrown`, so these fire only on a genuine
+    // escape (terminate iff an exception is still in flight). Match `main` by
+    // its bare id too (extern "C"/clang-c entry), mirroring
+    // goto_convert_functions.cpp.
+    const bool is_entry =
+      fn_id == "c:@F@main" || id2string(fn_id).rfind("c:@F@main#", 0) == 0 ||
+      fn_id == "__ESBMC_main" || thread_entries.count(fn_id);
 
     if (spec.kind == exception_specificationt::kindt::dynamic)
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
     else if (
       is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
-    {
-      auto a = body.insert(std::next(epilogue));
-      a->make_assertion(equality2tc(thrown, gen_false_expr()));
-      a->location = epilogue->location;
-      a->function = epilogue->function;
-      a->location.property("exception");
-      a->location.comment(
-        is_entry ? "uncaught exception" : "noexcept specification violated");
-    }
+      emit_terminate(
+        body,
+        std::next(epilogue),
+        equality2tc(thrown, gen_false_expr()),
+        epilogue->location,
+        epilogue->function,
+        is_entry ? exception_globals::terminate_reason_uncaught
+                 : exception_globals::terminate_reason_noexcept);
 
     body.update();
   }
@@ -768,6 +984,11 @@ private:
     landing->location = h.target->location;
     landing->function = h.target->function;
 
+    // The handler body begins after the catch marker, plus the parameter binding
+    // for a typed catch. The decrement of the uncaught count goes there, so it
+    // happens once the exception has entered its handler ([except.uncaught]) and
+    // after the catch-parameter is bound (§5.5).
+    auto before_body = h.target;
     if (h.type != ellipsis_id)
     {
       auto bind = std::next(h.target);
@@ -783,8 +1004,45 @@ private:
           : dereference2tc(
               var->type, typecast2tc(pointer_type2tc(var->type), value));
       bind->code = code_assign2tc(var, src);
+      before_body = bind;
+    }
+
+    auto insert_after = before_body;
+    if (track_uncaught_)
+    {
+      auto dec = body.insert(std::next(insert_after));
+      dec->make_assignment();
+      dec->code = adjust_uncaught(-1);
+      dec->location = h.target->location;
+      dec->function = h.target->function;
+      insert_after = dec;
+    }
+
+    expr2tc push = make_c_helper_call(exception_globals::push_handled_id);
+    if (!is_nil_expr(push))
+    {
+      auto p = body.insert(std::next(insert_after));
+      p->make_function_call(push);
+      p->location = h.target->location;
+      p->function = h.target->function;
     }
     return landing;
+  }
+
+  void
+  build_handled_stack(goto_programt &body, const std::vector<regiont> &regions)
+  {
+    expr2tc pop = make_c_helper_call(exception_globals::pop_handled_id);
+    if (is_nil_expr(pop))
+      return;
+
+    for (const regiont &r : regions)
+    {
+      auto p = body.insert(r.after_try);
+      p->make_function_call(pop);
+      p->location = r.after_try->location;
+      p->function = r.after_try->function;
+    }
   }
 
   /// `typeid in { id(T) : T <: catch_type }`.
@@ -831,6 +1089,76 @@ private:
     return call;
   }
 
+  /// A call to the std::terminate() operational model, or nil when it is not
+  /// linked into the program. The OM loads current_terminate_handler (honouring
+  /// std::set_terminate), calls it, and asserts on return/throw; its default
+  /// handler asserts "terminate called after throwing an exception". The OM is
+  /// only present when the program references the exception library — which it
+  /// must to install a custom handler — so its absence means the default
+  /// (assert) behaviour, which emit_terminate falls back to.
+  /// Emit a lowering-synthesized terminate point just before @p before. These
+  /// (noexcept/throw-spec violation, uncaught exception at the program entry,
+  /// bare throw with no active exception) are verification errors in ESBMC's
+  /// model, so they are asserted directly — NOT routed through the OM
+  /// std::terminate() — and reported as FAILED. Routing through the OM would let
+  /// a custom std::set_terminate handler that ends the path (e.g. abort(),
+  /// modeled as assume(0)) silently swallow the violation, a false negative. A
+  /// user-written std::terminate() call is an ordinary function call into the OM
+  /// and is unaffected. @p skip_cond is the condition under which execution
+  /// continues past the point without terminating (nil = always terminate); the
+  /// assertion is assert(skip_cond), or assert(false) when skip_cond is nil. @p
+  /// reason selects the diagnostic comment. Returns the inserted instruction so
+  /// callers can target it with a goto.
+  goto_programt::targett emit_terminate(
+    goto_programt &body,
+    goto_programt::targett before,
+    const expr2tc &skip_cond,
+    const locationt &loc,
+    const irep_idt &fn,
+    exception_globals::terminate_reasont reason)
+  {
+    auto setmeta = [&](goto_programt::targett n) {
+      n->location = loc;
+      n->function = fn;
+    };
+
+    // A lowering-synthesized terminate point (a noexcept/throw-spec violation or
+    // an uncaught exception at the program entry) is a verification error in
+    // ESBMC's model regardless of any installed std::set_terminate handler
+    // ([except.terminate]: reaching std::terminate is abnormal termination, and
+    // a handler that returns is itself undefined). Assert the violation directly
+    // so it is reported as FAILED — routing it through the OM std::terminate()
+    // would let a custom handler that ends the path (e.g. abort(), modeled as
+    // assume(0)) silently swallow the violation, a false negative. A *user*
+    // `std::terminate()` call is an ordinary function call into the OM and is
+    // unaffected by this path; only the dynamic-spec/noexcept/uncaught checks
+    // synthesized here use emit_terminate.
+    auto first = body.insert(before);
+    first->make_assertion(
+      is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
+    setmeta(first);
+    first->location.property("exception");
+    switch (reason)
+    {
+    case exception_globals::terminate_reason_uncaught:
+      first->location.comment("uncaught exception");
+      break;
+    case exception_globals::terminate_reason_noexcept:
+      first->location.comment("noexcept specification violated");
+      break;
+    case exception_globals::terminate_reason_exception_spec:
+      first->location.comment("exception specification violated");
+      break;
+    case exception_globals::terminate_reason_no_active:
+      first->location.comment("throw with no active exception");
+      break;
+    default:
+      first->location.comment("terminate called after throwing an exception");
+      break;
+    }
+    return first;
+  }
+
   /// Enforce a dynamic exception specification throw(allowed...) (including the
   /// empty throw()) at the epilogue. When an exception the spec does not permit
   /// is propagating out, run the std::unexpected handler and re-check: a handler
@@ -866,18 +1194,23 @@ private:
     // of returning it to a (non-existent) caller.
     goto_programt::targett ret = last;
     if (is_entry)
-    {
-      ret = ins(last);
-      ret->make_assertion(not_thrown());
-      ret->location.property("exception");
-      ret->location.comment("uncaught exception");
-    }
+      ret = emit_terminate(
+        body,
+        last,
+        not_thrown(),
+        loc,
+        fn,
+        exception_globals::terminate_reason_uncaught);
 
-    // The violation point.
-    auto fail = ins(ret);
-    fail->make_assertion(gen_false_expr());
-    fail->location.property("exception");
-    fail->location.comment("exception specification violated");
+    // The violation point: always terminate (reached only on a genuine
+    // disallowed escape, including the handler returning without throwing).
+    auto fail = emit_terminate(
+      body,
+      ret,
+      expr2tc(),
+      loc,
+      fn,
+      exception_globals::terminate_reason_exception_spec);
 
     // No exception in flight -> done.
     ins(fail)->make_goto(ret, not_thrown());
@@ -898,6 +1231,19 @@ private:
 
       // Handler returned without throwing -> the specification is violated.
       ins(fail)->make_goto(fail, not_thrown());
+
+      // Past the guard above the handler must have thrown, so wire_throw has
+      // already counted its throw as a fresh uncaught exception. That throw
+      // *replaces* the original in-flight exception ([except.unexpected]), so
+      // drop the original's contribution to the per-thread uncaught count —
+      // exactly one exception is uncaught after the replacement, not two.
+      if (track_uncaught_)
+      {
+        auto a_cnt = ins(fail);
+        a_cnt->make_assignment();
+        a_cnt->code = adjust_uncaught(-1);
+      }
+
       // Handler rethrew a permitted type -> let it propagate.
       ins(fail)->make_goto(ret, permitted());
     }
@@ -915,9 +1261,6 @@ private:
     const locationt loc = thr->location;
     const irep_idt fn = thr->function;
 
-    thr->make_assignment();
-    thr->code = code_assign2tc(thrown, gen_true_expr());
-
     auto pos = std::next(thr);
     auto add = [&]() {
       auto n = body.insert(pos);
@@ -926,9 +1269,48 @@ private:
       return n;
     };
 
-    // A rethrow (`throw;`) re-raises the current exception: the typeid/value
-    // globals already hold it (clear-on-catch only reset `thrown`).
-    if (!is_nil_expr(throw_ref.operand))
+    // A bare `throw;` re-raises the exception currently being handled. When the
+    // handled-stack OM is linked (C/C++), the helper re-raises from that stack
+    // and calls std::terminate if none is being handled ([except.throw]/9).
+    if (is_nil_expr(throw_ref.operand))
+    {
+      expr2tc call = make_c_helper_call(exception_globals::rethrow_current_id);
+      if (!is_nil_expr(call))
+      {
+        thr->make_function_call(call);
+        add()->make_goto(dest);
+        return;
+      }
+      // Fallback without the handled-stack OM (e.g. Python): re-raise inline
+      // from the globals — typeid/value still hold the active exception
+      // (clear-on-catch reset only `thrown`); with none in flight, terminate.
+      thr->make_skip();
+      auto reraise = add();
+      reraise->make_assignment();
+      reraise->code = code_assign2tc(thrown, gen_true_expr());
+      if (track_uncaught_)
+      {
+        auto a_cnt = add();
+        a_cnt->make_assignment();
+        a_cnt->code = adjust_uncaught(+1);
+      }
+      add()->make_goto(dest);
+      expr2tc has_exc =
+        notequal2tc(type_id, constant_int2tc(type_id->type, BigInt(0)));
+      emit_terminate(
+        body,
+        reraise,
+        has_exc,
+        loc,
+        fn,
+        exception_globals::terminate_reason_no_active);
+      return;
+    }
+
+    thr->make_assignment();
+    thr->code = code_assign2tc(thrown, gen_true_expr());
+
+    // A real throw arms the globals from the thrown object.
     {
       const unsigned tid = registry.id_of(throw_ref.exception_list.front());
       auto a_tid = add();
@@ -948,6 +1330,14 @@ private:
       a_val->make_assignment();
       expr2tc addr = address_of2tc(storage->type, storage);
       a_val->code = code_assign2tc(value, typecast2tc(value->type, addr));
+    }
+
+    // The new exception is now uncaught until it reaches its handler.
+    if (track_uncaught_)
+    {
+      auto a_cnt = add();
+      a_cnt->make_assignment();
+      a_cnt->code = adjust_uncaught(+1);
     }
 
     add()->make_goto(dest);
