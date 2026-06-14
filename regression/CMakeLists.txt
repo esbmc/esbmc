@@ -482,6 +482,16 @@ set(_slow_regression_tests
     # extra headroom so they finish and match instead of being hard-killed.
     "regression/python/dict65_4"
     "regression/python/dictcomp_readback_func_fail"
+    # math_log-rec1 and multi_dimensional_array_1-success are THOROUGH
+    # --boolector tests that still verify SUCCESSFUL with the expected verdict,
+    # but making --irep2-bodies the default (V.4.4) adds the goto-convert
+    # round-trip's overhead, tipping these already-borderline tests across the
+    # 120s cap on the DebugOpt Linux runner (both hit ~120s in #5366 CI; locally
+    # ~47s / ~114s with Bitwuzla, verdict-identical with --no-irep2-bodies). The
+    # 2x budget restores headroom; the W1 round-trip removal will later reclaim
+    # the overhead.
+    "regression/esbmc/math_log-rec1"
+    "regression/esbmc/multi_dimensional_array_1-success"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
