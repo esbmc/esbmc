@@ -1,6 +1,6 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
-smt_astt smt_convt::overflow_arith(const expr2tc &expr)
+smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
   const expr2tc &side1 = *overflow.operand->get_sub_expr(0);
@@ -297,7 +297,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   return nullptr;
 }
 
-smt_astt smt_convt::overflow_cast(const expr2tc &expr)
+smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
 {
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int src_width = ocast.operand->type->get_width();
@@ -330,7 +330,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   return convert_ast(overflow_check);
 }
 
-smt_astt smt_convt::overflow_neg(const expr2tc &expr)
+smt_astt smt_solver_baset::overflow_neg(const expr2tc &expr)
 {
   // Extract operand
   const overflow_neg2t &neg = to_overflow_neg2t(expr);

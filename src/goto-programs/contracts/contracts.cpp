@@ -3032,6 +3032,32 @@ expr2tc code_contractst::fix_comparison_types(
             get_type_id(*ret_val->type));
         }
       }
+      // Case 3: return_value is an integer compared with an integer operand of
+      // a different width — e.g. an `int` return value against a `long`
+      // constant that does not fit in `int`. remove_incorrect_casts above
+      // stripped the usual-arithmetic-conversion cast Clang inserted, leaving a
+      // width mismatch the SMT backend rejects (mk_bvsgt requires equal operand
+      // widths). Re-apply the conversion by widening the narrower side to the
+      // wider integer type. Issue #5312.
+      else if (side1_is_retval || side2_is_retval)
+      {
+        auto is_int = [](const type2tc &t) {
+          return is_signedbv_type(t) || is_unsignedbv_type(t);
+        };
+        if (
+          is_int((*side1)->type) && is_int((*side2)->type) &&
+          (*side1)->type->get_width() != (*side2)->type->get_width())
+        {
+          if ((*side1)->type->get_width() < (*side2)->type->get_width())
+            *side1 = typecast2tc((*side2)->type, *side1);
+          else
+            *side2 = typecast2tc((*side1)->type, *side2);
+          log_debug(
+            "contracts",
+            "Fixed integer comparison: widened return_value comparison to "
+            "matching width");
+        }
+      }
     }
 
     return new_expr;

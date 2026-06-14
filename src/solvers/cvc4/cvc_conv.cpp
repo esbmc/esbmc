@@ -4,7 +4,7 @@
 
 #define new_ast new_solver_ast<cvc_smt_ast>
 
-smt_convt *create_new_cvc_solver(
+smt_solver_baset *create_new_cvc_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -18,7 +18,7 @@ smt_convt *create_new_cvc_solver(
 }
 
 cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(false, false),
     fp_convt(this),
     to_bv_counter(0),
@@ -31,7 +31,7 @@ cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
   smt.setOption("produce-assertions", true);
 }
 
-smt_convt::resultt cvc_convt::dec_solve()
+smt_resultt cvc_convt::dec_solve()
 {
   pre_solve();
 
@@ -1255,12 +1255,12 @@ void cvc_smt_ast::dump() const
 
 void cvc_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   smt.push();
 }
 
 void cvc_convt::pop_ctx()
 {
   smt.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }

@@ -973,6 +973,20 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), true_val);
     migrate_expr(expr.op2(), false_val);
 
+    // A legacy ternary used as a discarded statement -- notably the C `assert`
+    // idiom `cond ? 0 : __assert_fail()` -- carries a void (empty) result type
+    // with branch types that differ from it and from each other. if2t requires
+    // both branches to share the result type's kind, so coerce any branch whose
+    // type id diverges. The conditional's value is discarded, so the cast is
+    // semantics-preserving and the round-trip stays equivalent. Well-typed
+    // ternaries already have matching branch types, so no cast is added on the
+    // common path. Matching on type_id (not full structural type) keeps this to
+    // exactly the cases the if2t invariant rejects.
+    if (true_val->type->type_id != type->type_id)
+      true_val = typecast2tc(type, true_val);
+    if (false_val->type->type_id != type->type_id)
+      false_val = typecast2tc(type, false_val);
+
     new_expr_ref = if2tc(type, cond, true_val, false_val);
     return;
   }
@@ -2393,8 +2407,26 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "code" && expr.statement() == "label")
   {
+    // A label whose body is a single-declaration decl-block (e.g. the C++ OM's
+    // `__ESBMC_HIDE: char *s = ...;`) must not gain a scope boundary on the
+    // round-trip. code("decl-block") forward-migrates to code_block2t, which
+    // back-migrates to code("block"); convert_block then unwinds the decl's
+    // destructor at the block end -- a premature DEAD that kills the variable
+    // before its later uses (esbmc/esbmc#4715). convert_decl_block introduces
+    // no such scope, so flatten the single-decl labeled decl-block to the bare
+    // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
+    // the enclosing scope, matching the legacy path. A label labels exactly one
+    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case has
+    // no flat label(decl) form and is left on the standalone decl-block arm
+    // below -- it is not exercised by the operational models this fix targets.
+    const exprt &body = expr.op0();
+    const exprt &labelled =
+      (body.id() == "code" && body.statement() == "decl-block" &&
+       body.operands().size() == 1)
+        ? body.op0()
+        : body;
     expr2tc code;
-    migrate_expr(expr.op0(), code);
+    migrate_expr(labelled, code);
     new_expr_ref = code_label2tc(expr.get("label"), code, expr.location());
     return;
   }

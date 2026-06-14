@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
@@ -57,8 +57,10 @@
  * slower approach works.
  */
 
-smt_astt
-tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt tuple_sym_smt_ast::ite(
+  smt_solver_baset *ctx,
+  smt_astt cond,
+  smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
@@ -90,7 +92,7 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt tuple_sym_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -101,7 +103,7 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   const std::vector<type2tc> &members =
     struct_union_members(sort->get_tuple_type());
 
-  smt_convt::ast_vec eqs;
+  smt_solver_baset::ast_vec eqs;
   eqs.reserve(members.size());
 
   // Iterate through each field and encode an equality.
@@ -117,12 +119,12 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 smt_astt tuple_sym_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
-  smt_convt::ast_vec eqs;
+  smt_solver_baset::ast_vec eqs;
   assert(
     is_nil_expr(idx_expr) &&
     "Can't apply non-constant index update to "
@@ -161,14 +163,15 @@ smt_astt tuple_sym_smt_ast::update(
 }
 
 smt_astt tuple_sym_smt_ast::select(
-  smt_convt *ctx [[maybe_unused]],
+  smt_solver_baset *ctx [[maybe_unused]],
   const expr2tc &idx [[maybe_unused]]) const
 {
   log_error("Select operation applied to tuple");
   abort();
 }
 
-smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt
+tuple_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
   // have to open up the (tuple symbol) a, tack on the field name to the end

@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
@@ -769,6 +770,23 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   // Handle nested value object
   if (elem.is_object())
   {
+    // Tuple annotation subscript: Tuple[int, str] / tuple[int, str]. Build the
+    // concrete tuple struct (matching the tag-tuple_* type a tuple literal
+    // produces) so a list element annotated list[Tuple[...]] resolves to real
+    // components. This must precede the wrapper-node unwrap below: a Subscript
+    // node also carries a "value" key (the subscripted name), so the unwrap
+    // would otherwise recurse into the bare "Tuple" name and resolve it to the
+    // opaque 0-member "Tuple" symbol type — which crashes the SMT
+    // cast-to-struct path when a function returns such an element.
+    if (
+      elem["_type"] == "Subscript" && elem.contains("value") &&
+      elem["value"].is_object() && elem["value"].contains("id") &&
+      elem["value"]["id"].is_string() &&
+      (elem["value"]["id"] == "Tuple" || elem["value"]["id"] == "tuple") &&
+      elem.contains("slice"))
+      return converter_.get_tuple_handler().get_tuple_type_from_annotation(
+        elem);
+
     // Recursive delegation for wrapper node
     if (elem.contains("value"))
       return get_typet(elem["value"]);

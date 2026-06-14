@@ -88,6 +88,22 @@ public:
     return *ast_json;
   }
   exprt get_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Handles tuple `+`/`*` operators and lexicographic ordering.
+   *
+   * Concatenation builds a new tuple struct; repetition with a constant int
+   * builds an n-fold repeat; `Lt`/`LtE`/`Gt`/`GtE` lower to element-wise
+   * lexicographic comparisons. Returns nil_exprt for non-tuple operands or
+   * unsupported variants. Public so the sorted()/reversed() lowering can reuse
+   * the comparator for a convert-time sorting network over tuples.
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   std::string get_op(const std::string &op, const typet &type) const;
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -125,7 +141,7 @@ public:
     return string_handler_;
   }
 
-  tuple_handler &get_tuple_handler()
+  tuple_handler &get_tuple_handler() const
   {
     return *tuple_handler_;
   }
@@ -871,20 +887,6 @@ private:
     exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right,
-    const nlohmann::json &element);
-
-  /**
-   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
-   *
-   * Concatenation builds a new tuple struct whose components are the
-   * concatenation of the operand tuples; repetition with a constant int
-   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
-   * unsupported variants (e.g. variable repeat count).
-   */
-  exprt handle_tuple_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
     const nlohmann::json &element);
 
   /**
