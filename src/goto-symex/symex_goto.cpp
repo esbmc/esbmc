@@ -150,7 +150,11 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         // Integer-valued waypoint: switch-case selector.
         bool case_matches = false;
         for (const auto &id : instruction.switch_case_ids)
-          if (id == wp.value) { case_matches = true; break; }
+          if (id == wp.value)
+          {
+            case_matches = true;
+            break;
+          }
 
         if (is_avoid)
         {
