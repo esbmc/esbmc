@@ -1,13 +1,18 @@
 #ifndef _ESBMC_SOLVERS_SOLVE_H_
 #define _ESBMC_SOLVERS_SOLVE_H_
 
-#include <solvers/smt/smt_conv.h>
 #include <string>
 #include <util/config.h>
 #include <util/namespace.h>
 #include <util/message.h>
 
-typedef smt_convt *(solver_creator)(
+class array_iface;
+class fp_convt;
+class smt_convt;
+class smt_solver_baset;
+class tuple_iface;
+
+typedef smt_solver_baset *(solver_creator)(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,

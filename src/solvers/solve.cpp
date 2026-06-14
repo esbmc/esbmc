@@ -3,6 +3,8 @@
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
@@ -184,7 +186,7 @@ smt_convt *create_solver(
   fp_convt *fp_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
+  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
@@ -221,5 +223,5 @@ smt_convt *create_solver(
     ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
-  return ctx;
+  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
 }

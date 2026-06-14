@@ -1,5 +1,5 @@
 #include "irep2/irep2_expr.h"
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
@@ -9,26 +9,26 @@
 // Floating-point specific SMT conversion code extracted from smt_conv.cpp.
 // Keep this file focused on IEEE754 constants/semantics and FP predicates.
 
-smt_astt smt_convt::get_zero_real()
+smt_astt smt_solver_baset::get_zero_real()
 {
   // Returns SMT representation of zero (0.0)
   return mk_smt_real("0");
 }
 
-smt_astt smt_convt::get_double_min_normal()
+smt_astt smt_solver_baset::get_double_min_normal()
 {
   // IEEE 754 double precision minimum normal positive value (2^-1022)
   return mk_smt_real("2.2250738585072014e-308");
 }
 
-smt_astt smt_convt::get_double_min_subnormal()
+smt_astt smt_solver_baset::get_double_min_subnormal()
 {
   // IEEE 754 double precision minimum positive subnormal value (2^-1074)
   // Rounded UP at the last digit to ensure the enclosure is conservative.
   return mk_smt_real("4.9406564584124655e-324");
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
+std::pair<smt_astt, smt_astt> smt_solver_baset::apply_ieee754_rne_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -87,7 +87,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
   return {ra_lo, ra_hi};
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
+std::pair<smt_astt, smt_astt> smt_solver_baset::apply_ieee754_rna_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -150,7 +150,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   return {ra_lo, ra_hi};
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
+std::pair<smt_astt, smt_astt> smt_solver_baset::apply_ieee754_rup_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -211,7 +211,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
   return {ra_lo, ra_hi};
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
+std::pair<smt_astt, smt_astt> smt_solver_baset::apply_ieee754_rdn_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -272,7 +272,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
   return {ra_lo, ra_hi};
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
+std::pair<smt_astt, smt_astt> smt_solver_baset::apply_ieee754_rtz_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -373,7 +373,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
   return {ra_lo, ra_hi};
 }
 
-smt_astt smt_convt::apply_ieee754_semantics(
+smt_astt smt_solver_baset::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
   smt_astt operand_zero_check,
@@ -825,7 +825,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
   }
 }
 
-smt_astt smt_convt::get_double_max_normal()
+smt_astt smt_solver_baset::get_double_max_normal()
 {
   // IEEE 754 double: (2^53-1)*2^971 (exact rational, no rounding)
   static const std::string val =
@@ -833,19 +833,19 @@ smt_astt smt_convt::get_double_max_normal()
   return mk_smt_real(val);
 }
 
-smt_astt smt_convt::get_single_min_normal()
+smt_astt smt_solver_baset::get_single_min_normal()
 {
   // IEEE 754 single precision minimum normal positive value (2^-126)
   return mk_smt_real("1.1754943508222875e-38");
 }
 
-smt_astt smt_convt::get_single_min_subnormal()
+smt_astt smt_solver_baset::get_single_min_subnormal()
 {
   // IEEE 754 single precision minimum positive subnormal value (2^-149)
   return mk_smt_real("1.4012984643248171e-45");
 }
 
-smt_astt smt_convt::get_single_max_normal()
+smt_astt smt_solver_baset::get_single_max_normal()
 {
   // IEEE 754 single: (2^24-1)*2^104 (exact rational, no rounding)
   static const std::string val =
@@ -853,7 +853,7 @@ smt_astt smt_convt::get_single_max_normal()
   return mk_smt_real(val);
 }
 
-smt_astt smt_convt::get_double_inf_sentinel()
+smt_astt smt_solver_baset::get_double_inf_sentinel()
 {
   // One above double max_normal: used to represent ±∞ in integer encoding.
   // This value satisfies |x| > max_normal, so isinf/isfinite predicates fire.
@@ -862,7 +862,7 @@ smt_astt smt_convt::get_double_inf_sentinel()
   return mk_smt_real(val);
 }
 
-smt_astt smt_convt::get_single_inf_sentinel()
+smt_astt smt_solver_baset::get_single_inf_sentinel()
 {
   // One above single max_normal: used to represent ±∞ in integer encoding.
   static const std::string val =
@@ -870,7 +870,7 @@ smt_astt smt_convt::get_single_inf_sentinel()
   return mk_smt_real(val);
 }
 
-smt_astt smt_convt::get_double_eps_rel()
+smt_astt smt_solver_baset::get_double_eps_rel()
 {
   // Relative error bound for IEEE 754 double under round-to-nearest:
   // half machine epsilon = 2^-53; rounded UP at the last digit to ensure
@@ -878,14 +878,14 @@ smt_astt smt_convt::get_double_eps_rel()
   return mk_smt_real("1.1102230246251566e-16");
 }
 
-smt_astt smt_convt::get_single_eps_rel()
+smt_astt smt_solver_baset::get_single_eps_rel()
 {
   // Relative error bound for IEEE 754 single under round-to-nearest:
   // half machine epsilon = 2^-24
   return mk_smt_real("5.960464477539063e-08");
 }
 
-smt_astt smt_convt::get_double_eps_up()
+smt_astt smt_solver_baset::get_double_eps_up()
 {
   // B_dir relative error bound for IEEE 754 double under round-toward-+inf:
   // eps_rel_dir = 2^-52 (the full machine epsilon for double, DBL_EPSILON).
@@ -893,7 +893,7 @@ smt_astt smt_convt::get_double_eps_up()
   return mk_smt_real("2.2204460492503131e-16");
 }
 
-smt_astt smt_convt::get_single_eps_up()
+smt_astt smt_solver_baset::get_single_eps_up()
 {
   // B_dir relative error bound for IEEE 754 single under round-toward-+inf:
   // eps_rel_dir = 2^-23 (the full machine epsilon for single, FLT_EPSILON).
@@ -901,7 +901,7 @@ smt_astt smt_convt::get_single_eps_up()
   return mk_smt_real("1.1920928955078125e-07");
 }
 
-smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_is_nan(const expr2tc &expr)
 {
   const isnan2t &isnan = to_isnan2t(expr);
 
@@ -915,7 +915,8 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
 
 // Returns the max-normal SMT real for single/double floatbv, or nullptr for
 // any other format (caller must handle the unsupported case explicitly).
-static smt_astt get_max_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+static smt_astt
+get_max_normal(smt_solver_baset &conv, const floatbv_type2t &fbv_type)
 {
   const auto single_spec = ieee_float_spect::single_precision();
   const auto double_spec = ieee_float_spect::double_precision();
@@ -927,7 +928,8 @@ static smt_astt get_max_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
 }
 
 // Returns the min-normal SMT real for single/double floatbv, or nullptr.
-static smt_astt get_min_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+static smt_astt
+get_min_normal(smt_solver_baset &conv, const floatbv_type2t &fbv_type)
 {
   const auto single_spec = ieee_float_spect::single_precision();
   const auto double_spec = ieee_float_spect::double_precision();
@@ -938,7 +940,7 @@ static smt_astt get_min_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
   return nullptr;
 }
 
-smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_is_inf(const expr2tc &expr)
 {
   const isinf2t &isinf = to_isinf2t(expr);
 
@@ -970,7 +972,7 @@ smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
   return fp_api->mk_smt_fpbv_is_inf(operand);
 }
 
-smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_is_normal(const expr2tc &expr)
 {
   const isnormal2t &isnormal = to_isnormal2t(expr);
 
@@ -1010,7 +1012,7 @@ smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
   return fp_api->mk_smt_fpbv_is_normal(operand);
 }
 
-smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_is_finite(const expr2tc &expr)
 {
   const isfinite2t &isfinite = to_isfinite2t(expr);
 
@@ -1047,7 +1049,7 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   return mk_not(or_op);
 }
 
-smt_astt smt_convt::convert_signbit(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
 {
   const signbit2t &signbit = to_signbit2t(expr);
 
@@ -1077,7 +1079,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
     convert_ast(gen_zero(signbit.type)));
 }
 
-smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_rounding_mode(const expr2tc &expr)
 {
   // We don't actually care about rounding mode when in integer/real mode, as
   // it is discarded when encoding it in SMT
