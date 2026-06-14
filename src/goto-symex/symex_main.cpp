@@ -19,6 +19,7 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
+#include <util/message.h>
 
 #include <vector>
 
@@ -293,6 +294,28 @@ void goto_symext::symex_witness_function_return(
   const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
   for (const waypoint &wp : seg)
   {
+    // function_enter for nondet calls: these bypass the real FUNCTION_CALL
+    // path in symex_step and never reach the normal function_enter check.
+    if (wp.type == waypoint::function_enter)
+    {
+      if (wp.line_id.empty() || wp.line_id != call_line)
+      {
+        continue;
+      }
+      if (wp.action == waypoint::avoid)
+      {
+        // Skip the subsequent ASSIGN (lhs = return_value$_) so the caller
+        // variable is not bound to this nondet result, mirroring pc++/return
+        // for real FUNCTION_CALL avoid in symex_step. Avoid does not advance
+        // the segment; the follow in the same segment remains the trigger.
+        cur_state->source.pc++;
+        return;
+      }
+
+      cur_state->advance_witness_position();
+      return;
+    }
+
     if (wp.type != waypoint::function_return)
       continue;
     if (!wp.parsed_cond.valid)
