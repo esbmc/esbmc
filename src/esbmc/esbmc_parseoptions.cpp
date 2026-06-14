@@ -30,6 +30,7 @@ extern "C"
 #include <limits>
 #include <util/expr_util.h>
 #include <iostream>
+#include <fstream>
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
@@ -45,6 +46,7 @@ extern "C"
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_binary_reader.h>
+#include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
@@ -2142,8 +2144,32 @@ bool esbmc_parseoptionst::create_goto_program(
     {
       if (cmdline.isset("cprover"))
         log_warning(
-          "Be sure you are manually linking with the cprover libraries. This "
-          "will be automated in the future.");
+          "--cprover is deprecated and has no effect; ESBMC additions are now "
+          "linked automatically for CBMC goto-binaries (disable with "
+          "--no-cprover-additions)");
+
+      // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
+      // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
+      // automatically, before reading the binaries so that goto_convert only
+      // ever runs over the boilerplate and never clobbers the loaded bodies.
+      if (has_cbmc_binary_input() && !cmdline.isset("no-cprover-additions"))
+      {
+        log_status(
+          "CBMC goto-binary detected: linking ESBMC additions automatically");
+        // The synthesised __ESBMC_main still wraps the boilerplate entry, not
+        // the CBMC harness (__CPROVER__start). Until entry-point bridging lands
+        // (roadmap §4.2), a real binary may verify an essentially empty program
+        // and report a spurious SUCCESSFUL. Warn loudly so the verdict is not
+        // trusted blindly.
+        log_warning(
+          "CBMC goto-binary support is experimental: the entry point is not "
+          "yet bridged to the CBMC harness (__CPROVER__start), so results may "
+          "be unsound. Select the entry explicitly with --function and treat a "
+          "SUCCESSFUL verdict with caution.");
+        if (synthesize_cprover_additions(options, goto_functions))
+          return true;
+      }
+
       if (read_goto_binary(goto_functions))
         return true;
 
@@ -2213,6 +2239,54 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   }
 
   return false;
+}
+
+// True if any --binary input is a CBMC goto-binary. CBMC's format starts with
+// the magic 0x7f 'G' 'B' 'F'; ESBMC's own format starts with 'G' 'B' 'F'.
+bool esbmc_parseoptionst::has_cbmc_binary_input()
+{
+  for (const auto &arg : cmdline.args)
+  {
+    std::ifstream in(arg, std::ios::in | std::ios::binary);
+    unsigned char hdr[4] = {0, 0, 0, 0};
+    in.read(reinterpret_cast<char *>(hdr), sizeof(hdr));
+    if (in.gcount() >= 4 && is_cbmc_goto_magic(hdr))
+      return true;
+  }
+  return false;
+}
+
+// Compile a boilerplate translation unit through the normal C-frontend pipeline
+// to obtain ESBMC's "additions": typecheck() pulls in the C library via
+// add_cprover_library, final() builds the __ESBMC_main entry wrapper, and
+// goto_convert() turns them into goto bodies. This is exactly the prebuilt
+// library.goto that one otherwise links manually. We run it before reading the
+// CBMC binary so goto_convert only ever sees the boilerplate's symbols.
+bool esbmc_parseoptionst::synthesize_cprover_additions(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  file_operations::tmp_file tf =
+    file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
+  static const char boilerplate[] =
+    "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
+    "int main(void) { return 0; }\n";
+  if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
+  {
+    log_error("could not write boilerplate for CPROVER additions");
+    return true;
+  }
+
+  // Point the command line at the boilerplate for this one compile, then
+  // restore it for the subsequent binary read.
+  cmdlinet::argst saved_args = cmdline.args;
+  cmdline.args = {tf.path()};
+  bool failed = parse_goto_program(options, goto_functions);
+  cmdline.args = saved_args;
+
+  if (failed)
+    log_error("failed to synthesize ESBMC additions for CBMC goto-binary");
+  return failed;
 }
 
 // This method creates a GOTO program by parsing the input program files.
