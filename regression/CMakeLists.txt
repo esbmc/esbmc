@@ -482,13 +482,6 @@ set(_slow_regression_tests
     # extra headroom so they finish and match instead of being hard-killed.
     "regression/python/dict65_4"
     "regression/python/dictcomp_readback_func_fail"
-    # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound: reverse
-    # slicing (xs[::-1] and friends) under --unwind 7 --smt-symex-guard
-    # --bitwuzla spends ~64-75s in symex alone (solver time is ~0), landing at
-    # ~70s locally and over the 120s cap on slower CI runners. It is not a
-    # regression -- master (esbmc1) measures the same ~68s symex on the identical
-    # command -- so give it the 2x budget like the other borderline SUCCESSFUL
-    # tests rather than hard-killing it on transient CI slowness.
     "regression/python/list-slice-step-reverse"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
