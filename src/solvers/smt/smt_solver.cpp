@@ -409,6 +409,18 @@ static bool walks_operands(const expr2tc &expr)
 
 smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
 {
+  // Fast path: a hit returns without building a worklist. convert_ast_node
+  // re-enters convert_ast for every operand/sub-expression it converts, and on
+  // the warmed post-order path those re-entrant calls are guaranteed hits;
+  // checking the cache up front keeps them O(1) instead of paying a worklist
+  // allocation per call.
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cachet::const_iterator hit = smt_cache.find(expr);
+    if (hit != smt_cache.end())
+      return hit->ast;
+  }
+
   // Warm the cache bottom-up with an explicit-stack post-order walk so that
   // the per-node body (convert_ast_node) never has to recurse through a long
   // chain of operands. This keeps deeply left-nested associative expressions
