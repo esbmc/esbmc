@@ -11,6 +11,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
@@ -27,6 +28,7 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include <util/arith_tools.h>
 #include <util/exception_specification.h>
 #include <util/string_constant.h>
 
@@ -436,7 +438,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       base_map bases;
       if (get_base_map(*cxxrd, bases))
         return true;
-      get_base_components_methods(bases, type);
+      get_base_components_methods(bases, *cxxrd, type);
     }
   }
 
@@ -2481,7 +2483,15 @@ bool clang_cpp_convertert::get_base_map(
   base_map &map)
 {
   /*
-   * This function gets all the base classes from which we need to get the components/methods
+   * Collect the DIRECT base classes of cxxrd, in declaration order. Each
+   * direct base becomes one nested base-subobject component in the derived
+   * class (see get_base_components_methods); a base nests its own bases
+   * recursively, so we must NOT flatten indirect bases here. Direct-only
+   * nesting is what lets a non-virtual diamond hold two distinct subobjects
+   * of a shared base (e.g. D : B, C with B : A and C : A has two A's).
+   *
+   * A class cannot list the same direct base twice, so no de-duplication is
+   * needed at this level.
    */
   for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
@@ -2492,61 +2502,106 @@ bool clang_cpp_convertert::get_base_map(
     if (get_struct_union_class(base_cxxrd))
       return true;
 
-    // recursively get more bases for this `base`
-    if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      if (get_base_map(base_cxxrd, map))
-        return true;
-
     // get base class id
     std::string class_id, class_name;
     get_decl_name(base_cxxrd, class_name, class_id);
 
-    // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
-      continue;
-
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
+    map.emplace_back(class_id, &base_cxxrd);
   }
 
   return false;
 }
 
+// Component name of the nested subobject for direct base `base_class_id`
+// (e.g. "tag-struct C"). Distinct from any user field name, so two bases with
+// a same-named member (or two subobjects of a shared base in a non-virtual
+// diamond) stay independent.
+std::string
+clang_cpp_convertert::base_subobject_name(const std::string &base_class_id)
+{
+  return base_class_id + "::@base";
+}
+
 void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
+  const clang::CXXRecordDecl &derived,
   struct_union_typet &type)
 {
-  irept::subt &base_ids = type.add("bases").get_sub();
+  // Each direct base is laid out as ONE nested subobject component, placed at
+  // its Itanium offset within the derived object (computed by Clang). Padding
+  // members fill the gap so the positional member-offset model
+  // (member_offset_bits sums preceding member sizes) reproduces the ABI
+  // offset. Methods are pulled in flat (they are not positional).
+  const clang::ASTRecordLayout &layout =
+    ASTContext->getASTRecordLayout(&derived);
+
+  // Order direct bases by ascending Itanium offset.
+  struct base_entryt
+  {
+    uint64_t offset;
+    std::string class_id;
+    const clang::CXXRecordDecl *decl;
+  };
+  std::vector<base_entryt> ordered;
   for (const auto &base : map)
   {
-    std::string class_id = base.first;
+    uint64_t off = layout.getBaseClassOffset(base.second).getQuantity();
+    ordered.push_back({off, base.first, base.second});
+  }
+  std::sort(
+    ordered.begin(),
+    ordered.end(),
+    [](const base_entryt &a, const base_entryt &b) {
+      return a.offset < b.offset;
+    });
 
-    // get base class symbol
-    symbolt *s = context.find_symbol(class_id);
+  irept::subt &base_ids = type.add("bases").get_sub();
+  struct_typet &stype = to_struct_type(type);
+  unsigned pad_counter = 0;
+  uint64_t cur_offset = 0;
+
+  for (const auto &be : ordered)
+  {
+    symbolt *s = context.find_symbol(be.class_id);
     assert(s);
     base_ids.emplace_back(s->id);
 
-    const struct_typet &base_type = to_struct_type(s->get_type());
-
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
+    // Insert padding so the subobject lands at its Itanium byte offset.
+    if (be.offset > cur_offset)
     {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
+      const std::size_t pad_bytes = be.offset - cur_offset;
+      typet pad_type =
+        array_typet(unsigned_char_type(), from_integer(pad_bytes, size_type()));
+      struct_typet::componentt pad(
+        "$pad$base$" + std::to_string(pad_counter++), "", pad_type);
+      pad.set_is_padding(true);
+      stype.components().push_back(pad);
+      cur_offset = be.offset;
     }
 
-    // pull methods in
+    // The nested base subobject component: a single member whose type is the
+    // base class's struct, referenced by its symbol (tag) id.
+    struct_typet::componentt base_comp(
+      base_subobject_name(be.class_id),
+      base_subobject_name(be.class_id),
+      symbol_typet(be.class_id));
+    base_comp.set("from_base", true);
+    base_comp.set("#is_base_subobject", true);
+    base_comp.set("#base_class_id", be.class_id);
+    stype.components().push_back(base_comp);
+
+    // Advance the running offset past this subobject (Itanium dsize/size).
+    cur_offset +=
+      ASTContext->getASTRecordLayout(be.decl).getSize().getQuantity();
+
+    // pull methods in (flat; methods are resolved by name, not position)
+    const struct_typet &base_type = to_struct_type(s->get_type());
     const struct_typet::componentst &methods = base_type.methods();
     for (auto method : methods)
     {
-      // TODO: tweak access specifier
       method.set("from_base", true);
       if (!is_duplicate_method(method, type))
-        to_struct_type(type).methods().push_back(method);
+        stype.methods().push_back(method);
     }
   }
 }

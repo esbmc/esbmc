@@ -732,6 +732,17 @@ void goto_symext::symex_free(const expr2tc &expr)
       if (item.auto_deallocd)
         allocad.push_back(item);
 
+    // C++ `delete` may be applied to a pointer to a base-class subobject that
+    // sits at a non-zero offset within the complete (most-derived) object —
+    // e.g. `Base2 *o = new Derived(); delete o;` where the Base2 subobject is
+    // not at offset 0. This is well-defined (the deleting destructor adjusts
+    // to the complete object via offset-to-top); the whole allocation is
+    // freed regardless of which subobject pointer is held. So the strict
+    // zero-offset requirement only applies to raw free(): a non-zero offset
+    // into a malloc'd block (free(p + k)) is still a real bug.
+    const bool is_cpp_delete =
+      is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr);
+
     for (auto const &item : internal_deref_items)
     {
       guard2tc g = cur_state->guard;
@@ -741,7 +752,11 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      if (options.get_bool_option("conv-assert-to-assume"))
+      if (is_cpp_delete)
+      {
+        // Subobject pointers are allowed; the allocation base is freed below.
+      }
+      else if (options.get_bool_option("conv-assert-to-assume"))
         assume(eq);
       else
         claim(eq, "Operand of free must have zero pointer offset");

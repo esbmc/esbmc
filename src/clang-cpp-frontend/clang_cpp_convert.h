@@ -273,7 +273,10 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  // Direct base classes in declaration order: (class_id, base decl). Order
+  // matters for nested base-subobject layout, so this is a vector, not a map.
+  using base_map =
+    std::vector<std::pair<std::string, const clang::CXXRecordDecl *>>;
   /*
    * Recursively get the bases for this derived class.
    *
@@ -312,7 +315,13 @@ protected:
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  void get_base_components_methods(
+    base_map &map,
+    const clang::CXXRecordDecl &derived,
+    struct_union_typet &type);
+
+  // Component name of the nested subobject for a direct base class.
+  static std::string base_subobject_name(const std::string &base_class_id);
 
   /*
    * Methods for virtual tables and virtual pointers

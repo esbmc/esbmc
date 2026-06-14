@@ -3723,6 +3723,59 @@ void clang_c_convertert::rewrite_builtin_ref(
   }
 }
 
+bool clang_c_convertert::build_base_subobject_access(
+  const clang::CastExpr &cast,
+  exprt &expr,
+  const typet &dest_type)
+{
+  // Determine whether the operand is a pointer/reference value or an object
+  // lvalue, and find the starting (derived) record type.
+  clang::QualType src_qt = cast.getSubExpr()->getType();
+  const bool via_pointer = src_qt->isPointerType() || src_qt->isReferenceType();
+  clang::QualType cur_qt = via_pointer ? src_qt->getPointeeType() : src_qt;
+
+  // Work on an lvalue of the current (derived) object. For a pointer operand
+  // we dereference; reference operands are already lvalues in ESBMC's IR.
+  exprt lval = expr;
+  if (src_qt->isPointerType())
+    lval = dereference_exprt(expr, expr.type().subtype());
+
+  for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
+  {
+    const clang::CXXBaseSpecifier *spec = *it;
+    const clang::CXXRecordDecl *base_decl =
+      spec->getType()->getAsCXXRecordDecl();
+    if (spec->isVirtual() || !base_decl)
+    {
+      // Virtual bases live at dynamic offsets; not modelled by nested
+      // subobjects. Fall back to a plain typecast (legacy behaviour).
+      if (cast.getCastKind() == clang::CK_DerivedToBase)
+        gen_typecast(ns, expr, dest_type);
+      return false;
+    }
+
+    std::string base_name, base_id;
+    get_decl_name(*base_decl, base_name, base_id);
+
+    // Step into the nested base-subobject member of this hop.
+    typet base_struct_type = symbol_typet(base_id);
+    lval = member_exprt(lval, base_id + "::@base", base_struct_type);
+
+    cur_qt = spec->getType();
+  }
+
+  if (via_pointer)
+    expr = address_of_exprt(lval);
+  else
+    expr = lval;
+
+  // Carry the reference flag for reference targets.
+  if (dest_type.get_bool("#reference"))
+    expr.type().set("#reference", true);
+
+  return false;
+}
+
 bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr &cast,
   exprt &new_expr)
@@ -3745,101 +3798,18 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
   {
-    // For multiple inheritance, the base class sub-object may reside at a
-    // non-zero byte offset within the derived object. Compute the total
-    // offset by following the cast path through the class hierarchy, then
-    // adjust the pointer by that many bytes so that virtual dispatch via
-    // the base vtable uses the correct vtable pointer.
-    clang::QualType cur_qt = cast.getSubExpr()->getType();
-    if (cur_qt->isPointerType() || cur_qt->isReferenceType())
-      cur_qt = cur_qt->getPointeeType();
-
-    uint64_t total_offset = 0;
-    bool adjust = true;
-    for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
-    {
-      const clang::CXXBaseSpecifier *spec = *it;
-      if (spec->isVirtual())
-      {
-        // Virtual base offsets are dynamic; skip static adjustment.
-        adjust = false;
-        break;
-      }
-      const clang::CXXRecordDecl *cur_decl = cur_qt->getAsCXXRecordDecl();
-      const clang::CXXRecordDecl *base_decl =
-        spec->getType()->getAsCXXRecordDecl();
-      if (!cur_decl || !base_decl)
-      {
-        adjust = false;
-        break;
-      }
-      total_offset += ASTContext->getASTRecordLayout(cur_decl)
-                        .getBaseClassOffset(base_decl)
-                        .getQuantity();
-      cur_qt = spec->getType();
-    }
-
-    // Apply the byte-offset adjustment only when this cast is the implicit
-    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
-    // grandparent is CXXMemberCallExpr). This covers:
-    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
-    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
-    // and excludes:
-    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
-    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
-    //     ESBMC uses named field access for inherited members, so adding a
-    //     byte offset here would corrupt the symbolic model.
-    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
-    //     Must remain unadjusted for ESBMC's delete model.
+    // Derived-to-base conversion. Base subobjects are laid out as nested
+    // members (see get_base_components_methods), so the conversion is a chain
+    // of member accesses into the base subobject — NOT a typecast that would
+    // alias the derived object at offset 0. This is what makes a read through
+    // a reference/pointer to a non-first base (or to a shared base in a
+    // non-virtual diamond) hit the correct subobject.
     //
-    // The check walks through transparent wrapper expressions (casts, parens)
-    // to handle cases like 'static_cast<B8*>(ptr)->eval()'.
-    bool is_method_receiver = false;
-    for (const clang::Stmt *node = &cast;;)
-    {
-      auto parents = ASTContext->getParents(*node);
-      if (parents.empty())
-        break;
-      const auto &parent = *parents.begin();
-      if (const auto *me = parent.get<clang::MemberExpr>())
-      {
-        auto grandparents = ASTContext->getParents(*me);
-        if (
-          !grandparents.empty() &&
-          grandparents.begin()->get<clang::CXXMemberCallExpr>())
-          is_method_receiver = true;
-        break;
-      }
-      const clang::Stmt *ps = parent.get<clang::Stmt>();
-      if (
-        !ps ||
-        !(llvm::isa<clang::CastExpr>(ps) || llvm::isa<clang::ParenExpr>(ps)))
-        break;
-      node = ps;
-    }
-
-    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
-    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
-    // when we actually applied a byte-offset adjustment below.
-    bool do_typecast = (cast.getCastKind() == clang::CK_DerivedToBase);
-    if (
-      adjust && total_offset > 0 && is_method_receiver &&
-      expr.type().is_pointer())
-    {
-      // Cast to char*, add byte offset, then cast to the target pointer type.
-      // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
-      // pointer arithmetic IR convention.
-      typet char_ptr = pointer_typet(char_type());
-      gen_typecast(ns, expr, char_ptr);
-      plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
-      adjusted.type() = char_ptr;
-      expr = adjusted;
-      do_typecast = true;
-    }
-
-    if (do_typecast)
-      gen_typecast(ns, expr, type);
-
+    // Walk the clang base path, stepping into one nested base-subobject
+    // member per hop. For a pointer/reference operand we dereference, step in,
+    // then take the address again; for an object lvalue we step in directly.
+    if (build_base_subobject_access(cast, expr, type))
+      return true;
     break;
   }
 

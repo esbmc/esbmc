@@ -53,25 +53,54 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   exprt value = symbol.get_value();
   code_blockt &ctor_body = to_code_block(to_code(value));
 
-  // iterate over the `components` and initialize each virtual pointers
-  for (const auto &comp : components)
-  {
-    if (!comp.get_bool("is_vtptr"))
-      continue;
-
-    side_effect_exprt new_code("assign");
-    gen_vptr_init_code(comp, new_code, ctor_type);
-    codet code_expr("expression");
-    code_expr.move_to_operands(new_code);
-    ctor_body.operands().push_back(code_expr);
-  }
+  // Initialize every vptr reachable from this class: the class' own vptr(s)
+  // plus the vptr of each nested base subobject. Base subobjects are nested
+  // members now (#is_base_subobject), so a base vptr lives at
+  // `this->base::@base...->vptr`; we carry an access path so the LHS member
+  // chain steps into the right subobject. RHS still points at the derived's
+  // (thunk) vtable for that class, so dispatch through the base sees the
+  // most-derived override.
+  gen_vptr_inits_for_components(components, {}, ctor_body, ctor_type);
 
   value.need_vptr_init(false);
   symbol.set_value(std::move(value));
 }
 
+void clang_cpp_adjust::gen_vptr_inits_for_components(
+  const struct_typet::componentst &components,
+  const std::vector<struct_typet::componentt> &access_path,
+  code_blockt &ctor_body,
+  const code_typet &ctor_type)
+{
+  for (const auto &comp : components)
+  {
+    if (comp.get_bool("is_vtptr"))
+    {
+      side_effect_exprt new_code("assign");
+      gen_vptr_init_code(comp, access_path, new_code, ctor_type);
+      codet code_expr("expression");
+      code_expr.move_to_operands(new_code);
+      ctor_body.operands().push_back(code_expr);
+    }
+    else if (comp.get_bool("#is_base_subobject"))
+    {
+      // Recurse into the nested base subobject, extending the access path.
+      const symbolt *base_symb =
+        namespacet(context).lookup(comp.type().identifier());
+      assert(base_symb);
+      const struct_typet::componentst &base_components =
+        to_struct_type(base_symb->get_type()).components();
+      std::vector<struct_typet::componentt> nested = access_path;
+      nested.push_back(comp);
+      gen_vptr_inits_for_components(
+        base_components, nested, ctor_body, ctor_type);
+    }
+  }
+}
+
 void clang_cpp_adjust::gen_vptr_init_code(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   side_effect_exprt &new_code,
   const code_typet &ctor_type)
 {
@@ -79,6 +108,8 @@ void clang_cpp_adjust::gen_vptr_init_code(
    * Generate the statement to assign each vptr the corresponding
    * vtable address, e.g.:
    *  this->vptr = &<vtable_struct_var_name>
+   * For a base subobject vptr the LHS steps through the subobject chain in
+   * access_path: this->base::@base...->vptr.
    */
 
   // 1. set the type
@@ -86,7 +117,7 @@ void clang_cpp_adjust::gen_vptr_init_code(
   new_code.type() = comp.type();
 
   // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr = gen_vptr_init_lhs(comp, ctor_type);
+  exprt lhs_expr = gen_vptr_init_lhs(comp, access_path, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
   exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
@@ -98,15 +129,16 @@ void clang_cpp_adjust::gen_vptr_init_code(
 
 exprt clang_cpp_adjust::gen_vptr_init_lhs(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   const code_typet &ctor_type)
 {
   /*
    * Generate the LHS expression for virtual pointer initialization,
    * as in:
    *  this->vptr = &<vtable_struct_variable>
+   * or, for a base subobject vptr:
+   *  this->base::@base...->vptr = &<vtable_struct_variable>
    */
-
-  exprt lhs_code;
 
   // get the `this` argument symbol
   const symbolt *this_symb = namespacet(context).lookup(
@@ -122,9 +154,18 @@ exprt clang_cpp_adjust::gen_vptr_init_lhs(
   this_deref.operands().resize(0);
   this_deref.operands().push_back(deref_operand);
 
-  // now we can get the member expr for "this->vptr"
-  lhs_code = member_exprt(comp.name(), comp.type());
-  lhs_code.operands().push_back(this_deref);
+  // step into each nested base subobject along the access path
+  exprt base_expr = this_deref;
+  for (const auto &step : access_path)
+  {
+    exprt step_member = member_exprt(step.name(), step.type());
+    step_member.operands().push_back(base_expr);
+    base_expr = step_member;
+  }
+
+  // now we can get the member expr for "...->vptr"
+  exprt lhs_code = member_exprt(comp.name(), comp.type());
+  lhs_code.operands().push_back(base_expr);
 
   return lhs_code;
 }
