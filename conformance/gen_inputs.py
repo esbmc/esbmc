@@ -76,7 +76,8 @@ N_SCANS     = 10
 
 def generate_input(var_names, constraints=None, max_tries=1000):
     for _ in range(max_tries):
-        inp = {v: random.choice([0, 1]) for v in var_names}
+        # Test-input generation only; not security- or cryptography-sensitive.
+        inp = {v: random.choice([0, 1]) for v in var_names}  # nosec B311
         if not constraints or all(c(inp) for c in constraints):
             return inp
     return {v: 0 for v in var_names}

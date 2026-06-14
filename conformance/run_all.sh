@@ -14,7 +14,7 @@ GOTO_OUTPUTS="$SCRIPT_DIR/esbmc_goto_outputs"
 REPORT="$SCRIPT_DIR/conformance_report.json"
 
 # Colours
-RED='\033[0;31m'; GREEN='\033[0;32m'; AMBER='\033[0;33m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 
 echo ""
 echo "=== P4a Conformance Testing — Full Reproduction ==="
@@ -258,5 +258,5 @@ echo ""
 echo -e "${GREEN}=== Reproduction successful ===${NC}"
 echo ""
 echo "  Results saved to: conformance/conformance_report.json"
-echo "  Paste the LaTeX rows above into Table~\ref{tab:conformance}"
+printf '%s\n' "  Paste the LaTeX rows above into Table~\ref{tab:conformance}"
 echo ""

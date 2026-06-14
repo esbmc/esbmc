@@ -8,7 +8,8 @@ revealing what the LD program computes for those inputs.
 """
 
 import json
-import subprocess
+# Invokes the trusted ESBMC binary via a fixed argv list, never a shell.
+import subprocess  # nosec B404
 import re
 import argparse
 import tempfile
@@ -59,7 +60,8 @@ def run_esbmc(ld_file: str, props_file: str, timeout: int = 15) -> str:
     cmd = [ESBMC_BIN, ld_file, "--ld-props", props_file,
            "--incremental-bmc", "--no-slice"]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
+        # cmd is a fixed argv list (no shell); ESBMC path is operator-supplied.
+        r = subprocess.run(cmd, capture_output=True, text=True,  # nosec B603
                            timeout=timeout, check=False)
         return r.stdout + r.stderr
     except subprocess.TimeoutExpired:

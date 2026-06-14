@@ -22,7 +22,8 @@ Usage:
 """
 
 import json
-import subprocess
+# Invokes the trusted ESBMC binary via a fixed argv list, never a shell.
+import subprocess  # nosec B404
 import re
 import argparse
 from pathlib import Path
@@ -51,7 +52,8 @@ SKIPPED = {
 
 def get_goto_ir(esbmc_bin: str, ld_file: str, props_file: str) -> str:
     """Extract the GOTO IR text using --goto-functions-only."""
-    r = subprocess.run(
+    # Fixed argv list (no shell); esbmc_bin is the operator-supplied binary path.
+    r = subprocess.run(  # nosec B603
         [esbmc_bin, ld_file, "--ld-props", props_file, "--goto-functions-only"],
         capture_output=True, text=True, check=False
     )
@@ -135,8 +137,11 @@ def eval_expr(expr: str, state: dict) -> int:
     expr = re.sub(r'^\s*1\s+and\s+', '', expr)
 
     try:
-        # Sandboxed evaluation of a boolean expression with no builtins.
-        return int(bool(eval(expr, {"__builtins__": {}}, {})))  # pylint: disable=eval-used
+        # Sandboxed evaluation of a boolean expression with no builtins. The
+        # input is GOTO-IR text reduced to digits and and/or/not/comparison
+        # tokens, so ast.literal_eval cannot parse it; eval with an empty
+        # builtins namespace is the contained alternative. nosec B307
+        return int(bool(eval(expr, {"__builtins__": {}}, {})))  # pylint: disable=eval-used  # nosec B307
     except Exception:
         return 0
 
