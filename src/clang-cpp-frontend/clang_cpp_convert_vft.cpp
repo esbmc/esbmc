@@ -979,12 +979,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
       else
       {
         // For T* the result must point to the T sub-object inside D:
-        //   result = src + (off(T inside D) - off(S inside D))
-        // When both offsets are zero (single inheritance with S and T
-        // at the start of D) the structural typecast is exact.
-        // Otherwise a per-D byte adjustment is required, which we
-        // don't compute yet — refuse the cast instead of silently
-        // emitting a pointer into the wrong sub-object.
+        //   result = (char*)src - off(S inside D) + off(T inside D)
+        // i.e. step from the S sub-object back to the complete D object,
+        // then forward to the T sub-object. Both offsets are static within
+        // the runtime type D. Virtual bases (no static offset) are refused.
         auto off_S = offset_of_subobject(*ASTContext, D, S);
         auto off_T = offset_of_subobject(*ASTContext, D, T);
         if (!off_S || !off_T)
@@ -995,15 +993,16 @@ bool clang_cpp_convertert::build_dynamic_cast(
             D->getNameAsString());
           abort();
         }
-        if (*off_S != 0 || *off_T != 0)
-        {
-          log_error(
-            "dynamic_cast: multiple inheritance with non-zero base "
-            "offset in `{}` is not supported",
-            D->getNameAsString());
-          abort();
-        }
+        typet char_ptr = pointer_typet(char_type());
         exprt adj = src_pointer;
+        gen_typecast(ns, adj, char_ptr);
+        const int64_t delta =
+          static_cast<int64_t>(*off_T) - static_cast<int64_t>(*off_S);
+        if (delta != 0)
+        {
+          adj = plus_exprt(adj, from_integer(delta, index_type()));
+          adj.type() = char_ptr;
+        }
         gen_typecast(ns, adj, target_type);
         result = adj;
       }
