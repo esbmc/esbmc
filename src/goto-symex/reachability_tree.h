@@ -345,9 +345,17 @@ protected:
    *  all threads. */
   std::unordered_set<irep_idt, irep_id_hash> ever_written_globals;
 
-  /** Conservative fallback flag. If the static scan sees a write through a
-   *  pointer we cannot resolve, every global must be treated as potentially
-   *  written and the optimisation silently disables itself. */
+  /** Globals whose address is taken anywhere in the program (including the
+   *  global initialisers in __ESBMC_main). ESBMC normalises every array/
+   *  function decay into an explicit address_of, so a global that never
+   *  appears under an address_of can never enter any pointer's value set and
+   *  therefore can never be the target of a write through a pointer. */
+  std::unordered_set<irep_idt, irep_id_hash> address_taken_globals;
+
+  /** Set when the static scan sees a write through a pointer it cannot
+   *  resolve. On its own this no longer disables the optimisation globally:
+   *  an unresolved write can only land on a global whose address escaped, so
+   *  may_be_written() gates this flag on address_taken_globals. */
   bool any_indirect_write = false;
 
   /** Master switch; wired to --no-cswitch-on-readonly-globals. */
@@ -359,13 +367,17 @@ protected:
 
 public:
   /** True if `name` may be written by some thread somewhere in the program.
-   *  When the optimisation is disabled, or the static scan was inconclusive
-   *  (any indirect write seen), this conservatively returns true. */
+   *  Conservatively returns true when the optimisation is disabled. */
   bool may_be_written(const irep_idt &name) const
   {
-    if (!readonly_global_opt || any_indirect_write)
+    if (!readonly_global_opt)
       return true;
-    return ever_written_globals.count(name) != 0;
+    // A direct, named write somewhere in the program.
+    if (ever_written_globals.count(name) != 0)
+      return true;
+    // A write through an unresolved pointer can only target a global whose
+    // address has escaped; a never-address-taken global stays read-only.
+    return any_indirect_write && address_taken_globals.count(name) != 0;
   }
 
 protected:

@@ -42,10 +42,33 @@ reachability_treet::reachability_treet(
   scan_program_writes();
 }
 
+/* White-list of ESBMC internal symbols, mirrors get_expr_globals(). */
+static bool is_internal_global_name(const std::string &sn)
+{
+  return sn == "c:@__ESBMC_alloc" || sn == "c:@__ESBMC_alloc_size" ||
+         sn == "c:@__ESBMC_is_dynamic" ||
+         sn == "c:@__ESBMC_blocked_threads_count" ||
+         sn == "c:@__ESBMC_rounding_mode" ||
+         sn.find("c:pthread_lib") != std::string::npos;
+}
+
+/* Insert `name` into `out` if it names a storage-bearing user global. */
+static void add_if_global(
+  const irep_idt &name,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  const symbolt *s = ns.lookup(name);
+  if (!s || is_internal_global_name(name.as_string()))
+    return;
+  if (s->static_lifetime || s->get_type().is_dynamic_set())
+    out.insert(name);
+}
+
 /* Walk expression e; any symbol2t that refers to a storage-bearing global is
- * inserted into `out`. A dereference seen as a (sub-)target is treated
- * conservatively by flipping indirect_write, which disables the optimisation
- * program-wide. */
+ * inserted into `out`. A dereference seen as a (sub-)target flips
+ * indirect_write: we cannot name the writee, so every address-taken global
+ * must thereafter be treated as possibly written (see may_be_written). */
 static void collect_write_targets(
   const expr2tc &e,
   const namespacet &ns,
@@ -57,8 +80,6 @@ static void collect_write_targets(
 
   if (is_dereference2t(e))
   {
-    // Without a flow-sensitive points-to set we cannot name the writee.
-    // Mark the optimisation as unsafe and bail.
     indirect_write = true;
     return;
   }
@@ -74,27 +95,49 @@ static void collect_write_targets(
       to_typecast2t(e).from, ns, out, indirect_write);
 
   if (is_symbol2t(e))
-  {
-    const irep_idt &name = to_symbol2t(e).thename;
-    const symbolt *s = ns.lookup(name);
-    if (!s)
-      return;
-    const std::string sn = name.as_string();
-    // White-list of ESBMC internal symbols, mirrors get_expr_globals().
-    if (
-      sn == "c:@__ESBMC_alloc" || sn == "c:@__ESBMC_alloc_size" ||
-      sn == "c:@__ESBMC_is_dynamic" ||
-      sn == "c:@__ESBMC_blocked_threads_count" ||
-      sn == "c:@__ESBMC_rounding_mode" ||
-      sn.find("c:pthread_lib") != std::string::npos)
-      return;
-    if (s->static_lifetime || s->get_type().is_dynamic_set())
-      out.insert(name);
-    return;
-  }
+    return add_if_global(to_symbol2t(e).thename, ns, out);
 
   e->foreach_operand([&](const expr2tc &sub) {
     collect_write_targets(sub, ns, out, indirect_write);
+  });
+}
+
+/* Descend an lvalue to the named global it denotes, stopping at a dereference
+ * (the address of `*p` exposes no statically-named global). */
+static void collect_object_globals(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(e) || is_dereference2t(e))
+    return;
+  if (is_index2t(e))
+    return collect_object_globals(to_index2t(e).source_value, ns, out);
+  if (is_member2t(e))
+    return collect_object_globals(to_member2t(e).source_value, ns, out);
+  if (is_typecast2t(e))
+    return collect_object_globals(to_typecast2t(e).from, ns, out);
+  if (is_symbol2t(e))
+    add_if_global(to_symbol2t(e).thename, ns, out);
+}
+
+/* Walk e; for every address_of(obj) sub-expression record the named global
+ * whose address escapes. ESBMC lowers all array/function decay into an
+ * explicit address_of, so this captures every way a global can enter a
+ * pointer's value set. */
+static void collect_address_taken(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_address_of2t(e))
+    collect_object_globals(to_address_of2t(e).ptr_obj, ns, out);
+
+  e->foreach_operand([&](const expr2tc &sub) {
+    collect_address_taken(sub, ns, out);
   });
 }
 
@@ -131,6 +174,20 @@ void reachability_treet::scan_program_writes()
         // Writes via pointer arguments are picked up when the callee body is
         // scanned (every function body participates in this loop).
       }
+    }
+  }
+
+  // Second pass: record every global whose address is taken anywhere in the
+  // program, scanning all functions — including __ESBMC_main, where file-scope
+  // initialisers such as `int *gp = &g;` live. Only an address-taken global
+  // can be the target of a write through an unresolved pointer, so this lets
+  // never-address-taken globals stay optimisable even when any_indirect_write.
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      collect_address_taken(ins.code, ns, address_taken_globals);
+      collect_address_taken(ins.guard, ns, address_taken_globals);
     }
   }
 }
