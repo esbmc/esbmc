@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.cpp
 --compact-trace
 ^  b = \{ \.x=2 \}$
