@@ -251,11 +251,10 @@ std::string yaml_parser::build_violation_witness_source(
   const std::string &original_path,
   const std::vector<waypoint> &waypoints)
 {
-  // Inject before the source line: assumption waypoints are evaluated at the
-  // sequence point immediately before the pointed statement (per witness 2.0
-  // spec). The referenced variables must already be in scope at that point.
-  // A second #line directive after the injection restores the original line
-  // number so that subsequent source lines keep their correct mapping.
+  // Inject assumption waypoints on the same physical line as the pointed
+  // statement. This preserves physical line numbers for all subsequent lines,
+  // so both ESBMC_SVCOMP builds (physical line numbers) and regular builds
+  // (logical line numbers via #line) see the correct line for each waypoint.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
@@ -285,18 +284,14 @@ std::string yaml_parser::build_violation_witness_source(
     {
       for (const waypoint *wp : it->second)
       {
-        const std::string &expr = wp->value;
         log_progress(
           "Injecting {} assumption at line {}: {}",
           wp->action == waypoint::avoid ? "avoid" : "follow",
           line_num,
-          expr);
-        out << "#line " << line_num << " \"" << original_path << "\"\n";
+          wp->value);
         out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
-            << expr << "));\n";
+            << wp->value << ")); ";
       }
-      // Restore the line number so the original source line keeps its mapping.
-      out << "#line " << line_num << " \"" << original_path << "\"\n";
     }
 
     out << line_text << "\n";
