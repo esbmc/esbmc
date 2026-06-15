@@ -2434,6 +2434,36 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
+  // Under the nested base-subobject layout, the base is placed at its Itanium
+  // offset inside the derived object, not at offset 0. A plain pointer
+  // reinterpret would point the base ctor at the wrong bytes for any non-first
+  // (non-zero-offset) base. Instead pass the address of the matching
+  // `<base>::@base` subobject member: &((*this).<base>::@base). This applies the
+  // correct offset positionally. Fall back to a plain typecast if no matching
+  // subobject component is found (e.g. virtual bases not modelled this way).
+  const irep_idt base_class_id = base_ctor_this_type.subtype().identifier();
+  const symbolt *derived_symb =
+    context.find_symbol(implicit_this_symb.type().subtype().identifier());
+  if (derived_symb && derived_symb->get_type().id() == "struct")
+  {
+    for (const auto &comp :
+         to_struct_type(derived_symb->get_type()).components())
+    {
+      if (
+        comp.get_bool("#is_base_subobject") &&
+        comp.get("#base_class_id") == base_class_id)
+      {
+        dereference_exprt deref_this(
+          implicit_this_symb, implicit_this_symb.type().subtype());
+        member_exprt base_member(deref_this, comp.name(), comp.type());
+        exprt addr = address_of_exprt(base_member);
+        addr.type() = base_ctor_this_type;
+        call.arguments().push_back(addr);
+        return;
+      }
+    }
+  }
+
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);

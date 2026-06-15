@@ -185,35 +185,66 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   std::string vtable_ptr_name = base_class_id + "::" + vtable_ptr_suffix;
   pointer_typet member_type(vtable_type);
 
+  // The vtable pointer may be a direct member or, under primary-base sharing,
+  // nested inside a base subobject. Navigate to it, loading the field with its
+  // DECLARED pointer type (pointer(vtable_type::Base)) — the SMT member
+  // projection keys on the source field's declared type, so the load must use
+  // it, not a substituted merged type.
+  exprt deref_member;
+  if (build_vptr_member_access(
+        base_deref, vtable_ptr_name, member_type, deref_member))
+    // Fall back to a direct access (preserves prior behaviour if not found).
+    deref_member = member_exprt(base_deref, vtable_ptr_name, member_type);
+
   // Under Itanium primary-base sharing the shared vtable pointer (offset 0)
   // points at the receiver's most-derived MERGED vtable, which holds every
-  // reachable slot under its original fully-qualified name. When the static
-  // receiver type has such a merged vtable, read the pointer as that merged
-  // type so the by-name index (using the method's own fully-qualified slot
-  // name) resolves both inherited and own methods through the one shared slot.
-  pointer_typet read_type = member_type;
+  // reachable slot under its original fully-qualified name. After loading the
+  // base-typed vptr field, reinterpret it as a pointer to the merged vtable
+  // type so the subsequent slot projection (using the method's own
+  // fully-qualified slot name) resolves both inherited and own methods. A
+  // Base*-typed read stays valid by prefix compatibility.
+  //
+  // The merged table lives ONLY in the receiver's primary (offset-0) base
+  // vptr — the physical slot build_vptr_member_access lands on for the primary
+  // base view, the receiver's own new virtuals (no separate vptr), or any name
+  // not matching a non-primary base. A NON-primary polymorphic base subobject
+  // keeps its own (thunk) vptr, whose declared base type is already exact, so
+  // there we must NOT substitute the merged type. Substitute merged unless
+  // base_class_id names such a non-primary base subobject of the receiver.
+  pointer_typet deref_type = member_type;
+  exprt vptr_value = deref_member;
   {
     const typet &recv = ns.follow(base_deref.type());
     if (recv.id() == "struct")
     {
-      const irep_idt merged_id = vtable_type_prefix +
-                                 to_struct_type(recv).tag().as_string() +
-                                 "::merged";
-      if (context.find_symbol(merged_id) != nullptr)
-        read_type = pointer_typet(symbol_typet(merged_id));
+      const struct_typet &recv_st = to_struct_type(recv);
+      const irep_idt primary = primary_base_id(recv_st);
+      bool reads_nonprimary_base_vptr = false;
+      if (!primary.empty() && base_class_id != primary.as_string())
+        for (const auto &c : recv_st.components())
+          if (
+            c.get_bool("#is_base_subobject") &&
+            c.type().identifier() == base_class_id)
+          {
+            reads_nonprimary_base_vptr = true;
+            break;
+          }
+
+      if (!primary.empty() && !reads_nonprimary_base_vptr)
+      {
+        const irep_idt merged_id = vtable_type_prefix + tag_prefix +
+                                   recv_st.tag().as_string() + "::merged";
+        if (context.find_symbol(merged_id) != nullptr)
+        {
+          deref_type = pointer_typet(symbol_typet(merged_id));
+          vptr_value = typecast_exprt(deref_member, deref_type);
+        }
+      }
     }
   }
 
-  // The vtable pointer may be a direct member or, under primary-base sharing,
-  // nested inside a base subobject. Navigate to it.
-  exprt deref_member;
-  if (build_vptr_member_access(
-        base_deref, vtable_ptr_name, read_type, deref_member))
-    // Fall back to a direct access (preserves prior behaviour if not found).
-    deref_member = member_exprt(base_deref, vtable_ptr_name, read_type);
-
   // we've got the deref type and member. Now we are ready to make the deref new_expr
-  new_expr = dereference_exprt(deref_member, read_type);
+  new_expr = dereference_exprt(vptr_value, deref_type);
 }
 
 bool clang_cpp_convertert::get_vft_binding_expr_function(

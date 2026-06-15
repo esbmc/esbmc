@@ -140,19 +140,17 @@ exprt clang_cpp_adjust::gen_vptr_init_lhs(
    *  this->base::@base...->vptr = &<vtable_struct_variable>
    */
 
-  // get the `this` argument symbol
-  const symbolt *this_symb = namespacet(context).lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
-  assert(this_symb);
-
-  // prepare dereference operand
-  exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
-
-  // get the reference symbol
-  dereference_exprt this_deref(deref_operand.type());
-  this_deref.operands().resize(0);
-  this_deref.operands().push_back(deref_operand);
+  // Build `*this` from the constructor's `this` argument using its declared
+  // pointer type (matching the copy-ctor adjuster). Reconstructing it from the
+  // class struct type instead would give the dereference the wrong static type
+  // and make the nested base-subobject member chain mis-select (e.g. resolve
+  // to a whole `<base>::@base` struct instead of the scalar vtable pointer).
+  // dereference_exprt(op, tp) sets its result type to tp.subtype(), so pass the
+  // `this` argument's pointer type: the deref then has the pointee struct type.
+  const auto &this_argument = ctor_type.arguments().at(0);
+  dereference_exprt this_deref(
+    symbol_exprt(this_argument.cmt_identifier(), this_argument.type()),
+    this_argument.type());
 
   // step into each nested base subobject along the access path
   exprt base_expr = this_deref;

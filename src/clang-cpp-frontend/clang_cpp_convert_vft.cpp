@@ -1134,17 +1134,20 @@ bool clang_cpp_convertert::build_dynamic_cast(
       std::string D_id, D_name;
       get_decl_name(*D, D_name, D_id);
       // The runtime vtable pointer of a D object equals what the ctor stored:
-      // for a D that shares its primary base's vptr (Itanium), offset-0 holds
-      // the MERGED vtable virtual_table::D@D (a prefix-compatible superset of
-      // the base view); otherwise it holds virtual_table::<vptr_class_id>@D.
-      // Compare against the address actually stored so the runtime-type test
-      // matches. The pointer is still typed as the source vptr's type, which
-      // is valid by prefix compatibility.
+      // we read the vptr of vptr_class_id, the class on S's primary chain that
+      // owns the vptr. For a D that shares its primary base's vptr (Itanium),
+      // the offset-0 vptr — and ONLY that one — holds the MERGED vtable
+      // virtual_table::D::merged@D (a prefix-compatible superset of the base
+      // view). The merged table is stored only in D's primary (offset-0) base
+      // vptr, so substitute it only when vptr_class_id IS D's primary base;
+      // any non-primary base's vptr still holds its own thunk table
+      // virtual_table::<vptr_class_id>@D. Compare against the address actually
+      // stored so the runtime-type test matches.
       std::string vt_var_id = vtable_type_prefix + vptr_class_id + "@" + D_id;
       const symbolt *d_symb = context.find_symbol(D_id);
       if (
         d_symb && d_symb->get_type().id() == "struct" &&
-        has_primary_base_vptr(to_struct_type(d_symb->get_type())))
+        primary_base_id(to_struct_type(d_symb->get_type())) == vptr_class_id)
       {
         const std::string merged_id =
           vtable_type_prefix + D_id + "::merged@" + D_id;
