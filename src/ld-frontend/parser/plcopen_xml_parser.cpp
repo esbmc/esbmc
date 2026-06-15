@@ -244,8 +244,6 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
   }
   return rung;
 }
-
-
 // -----------------------------------------------------------------------
 // Graphical LD (tc6_0201) resolver
 // -----------------------------------------------------------------------
