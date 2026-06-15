@@ -346,60 +346,60 @@ static bool parse_graphical_ld(
 
   std::function<void(int, int, std::vector<int> &, std::set<int> &)> dfs =
     [&](int cur, int target, std::vector<int> &path, std::set<int> &visited) {
-    if (cur == target)
-    {
-      // Emit one RungNode for this path.
-      // path contains nodes from leftRail up to (not including) target.
-      // We append target here so the coil is included.
-      RungNode rung;
-      rung.id  = "g" + std::to_string(rung_counter++);
-      rung.loc = {source_file, 0, 0};
-
-      // Emit contacts from the path
-      for (int nid : path)
+      if (cur == target)
       {
-        const GNode &g = nodes.at(nid);
-        if (g.tag != "contact")
-          continue;
-        RungElement elem;
-        elem.loc = {source_file, 0, 0};
-        elem.kind = RungElementKind::Contact;
-        elem.contact.kind =
-          g.negated ? ContactKind::NormallyClosed : ContactKind::NormallyOpen;
-        elem.contact.variable = g.var;
-        elem.contact.loc      = elem.loc;
-        rung.elements.push_back(elem);
+        // Emit one RungNode for this path.
+        // path contains nodes from leftRail up to (not including) target.
+        // We append target here so the coil is included.
+        RungNode rung;
+        rung.id = "g" + std::to_string(rung_counter++);
+        rung.loc = {source_file, 0, 0};
+
+        // Emit contacts from the path
+        for (int nid : path)
+        {
+          const GNode &g = nodes.at(nid);
+          if (g.tag != "contact")
+            continue;
+          RungElement elem;
+          elem.loc = {source_file, 0, 0};
+          elem.kind = RungElementKind::Contact;
+          elem.contact.kind =
+            g.negated ? ContactKind::NormallyClosed : ContactKind::NormallyOpen;
+          elem.contact.variable = g.var;
+          elem.contact.loc = elem.loc;
+          rung.elements.push_back(elem);
+        }
+
+        // Emit the coil (target node)
+        {
+          const GNode &g = nodes.at(target);
+          RungElement elem;
+          elem.loc = {source_file, 0, 0};
+          elem.kind = RungElementKind::Coil;
+          if (g.storage == "set")
+            elem.coil.kind = CoilKind::Set;
+          else if (g.storage == "reset")
+            elem.coil.kind = CoilKind::Reset;
+          else
+            elem.coil.kind = CoilKind::Output;
+          elem.coil.variable = g.var;
+          elem.coil.loc = elem.loc;
+          rung.elements.push_back(elem);
+        }
+
+        if (!rung.elements.empty())
+          net.rungs.push_back(rung);
+        return;
       }
 
-      // Emit the coil (target node)
-      {
-        const GNode &g = nodes.at(target);
-        RungElement elem;
-        elem.loc = {source_file, 0, 0};
-        elem.kind = RungElementKind::Coil;
-        if (g.storage == "set")
-          elem.coil.kind = CoilKind::Set;
-        else if (g.storage == "reset")
-          elem.coil.kind = CoilKind::Reset;
-        else
-          elem.coil.kind = CoilKind::Output;
-        elem.coil.variable = g.var;
-        elem.coil.loc      = elem.loc;
-        rung.elements.push_back(elem);
-      }
+      if (visited.count(cur))
+        return;
+      visited.insert(cur);
+      path.push_back(cur);
 
-      if (!rung.elements.empty())
-        net.rungs.push_back(rung);
-      return;
-    }
-
-    if (visited.count(cur))
-      return;
-    visited.insert(cur);
-    path.push_back(cur);
-
-    for (int nxt : nodes.at(cur).feeds)
-      dfs(nxt, target, path, visited);
+      for (int nxt : nodes.at(cur).feeds)
+        dfs(nxt, target, path, visited);
 
       path.pop_back();
       visited.erase(cur);
