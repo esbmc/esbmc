@@ -158,7 +158,6 @@ std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
           {
             wp_cache.target = wp;
             wp_cache.has_target = true;
-            continue;
           }
           wp.segment_idx = seg_idx;
           wp_cache.waypoints.push_back(std::move(wp));

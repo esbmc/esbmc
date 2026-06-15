@@ -127,17 +127,27 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
-  if (
-    validate_witness && !witness_target_line.empty() &&
-    !has_prefix(msg, "unwinding assertion loop"))
+  if (validate_witness && !has_prefix(msg, "unwinding assertion loop"))
   {
-    const bool line_ok =
-      cur_state->source.pc->location.get_line() == witness_target_line;
-    const bool seg_ok = cur_state->cur_seg >= cur_state->witness_segs.size();
-    if (!line_ok || !seg_ok || cur_state->witness_target_reached)
+    const size_t seg = cur_state->cur_seg;
+    const waypoint *target_wp = nullptr;
+    if (seg < cur_state->witness_segs.size())
+      for (const auto &wp : cur_state->witness_segs[seg])
+        if (wp.type == waypoint::target)
+        {
+          target_wp = &wp;
+          break;
+        }
+
+    if (!target_wp ||
+        cur_state->source.pc->location.get_line() != target_wp->line_id ||
+        cur_state->witness_target_reached)
       new_expr = gen_true_expr();
     else
+    {
+      cur_state->advance_witness_position();
       cur_state->witness_target_reached = true;
+    }
   }
 
   // add assertion to the target equation
@@ -294,20 +304,12 @@ void goto_symext::symex_witness_function_return(
   const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
   for (const waypoint &wp : seg)
   {
-    // function_enter for nondet calls: these bypass the real FUNCTION_CALL
-    // path in symex_step and never reach the normal function_enter check.
     if (wp.type == waypoint::function_enter)
     {
       if (wp.line_id.empty() || wp.line_id != call_line)
-      {
         continue;
-      }
       if (wp.action == waypoint::avoid)
       {
-        // Skip the subsequent ASSIGN (lhs = return_value$_) so the caller
-        // variable is not bound to this nondet result, mirroring pc++/return
-        // for real FUNCTION_CALL avoid in symex_step. Avoid does not advance
-        // the segment; the follow in the same segment remains the trigger.
         cur_state->source.pc++;
         return;
       }
@@ -328,11 +330,6 @@ void goto_symext::symex_witness_function_return(
     expr2tc constraint = wp.parsed_cond.expr;
     substitute_result(constraint, ret_val);
 
-    log_progress(
-      "Applying {} function_return constraint at line {}: {}",
-      wp.action == waypoint::avoid ? "avoid" : "follow",
-      call_line,
-      wp.value);
     if (wp.action == waypoint::avoid)
       assume(not2tc(constraint));
     else
