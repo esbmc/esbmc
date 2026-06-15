@@ -5,10 +5,10 @@ import re
 import argparse
 from pathlib import Path
 
-import defusedxml.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
 
 NS = "http://www.plcopen.org/xml/tc6_0201"
-ET.register_namespace = getattr(ET, "register_namespace", lambda *a: None)
+DefusedET.register_namespace = getattr(ET, "register_namespace", lambda *a: None)
 
 
 def tag(name):
@@ -134,8 +134,8 @@ def convert(xml_path, verbose=False):
     """Convert graphical PLCopen XML to rung expressions."""
     content = strip_xsi(Path(xml_path).read_text(encoding="utf-8", errors="ignore"))
     try:
-        root = ET.fromstring(content)
-    except ET.ParseError as exc:
+        root = DefusedET.fromstring(content)
+    except DefusedET.ParseError as exc:
         print(f"ERROR: {exc}")
         return {}
     result = {}
