@@ -387,12 +387,13 @@ protected:
 
   /**
    *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
-   *  function as a genuine uninterpreted function: assign the return a fresh
-   *  nondeterministic value and emit congruence constraints (equal arguments
-   *  imply equal results) against every earlier call to the same function. The
-   *  concrete body, if present, is deliberately ignored (CBMC semantics).
-   *  Returns true when the call was handled here (caller must then advance the
-   *  program counter).
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
    *  @param call The function-call code being executed.
    *  @param identifier The (mangled) callee symbol name.
    */
@@ -1260,14 +1261,6 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** History of uninterpreted-function calls, keyed by mangled function name.
-   *  Each entry records the (renamed) argument SSA terms and the fresh result
-   *  symbol of a call, so later calls to the same function can be tied to it by
-   *  a congruence constraint: equal arguments imply equal results. */
-  std::unordered_map<
-    std::string,
-    std::vector<std::pair<std::vector<expr2tc>, expr2tc>>>
-    uninterpreted_fn_history;
   /** Pre-interned target waypoint line; empty when no target is present. */
   irep_idt witness_target_line;
   /** Set of dereference state records; this field is used as a mailbox between

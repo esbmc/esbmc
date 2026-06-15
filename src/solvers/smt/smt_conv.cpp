@@ -238,6 +238,20 @@ void smt_convt::pop_ctx()
   // before the push is going to disappear.
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
+
+  // Drop Ackermann-fallback history recorded at this level; pop_ctx is about to
+  // delete the asts those entries point at (see below), so they must not be
+  // referenced by a later application of the same function.
+  for (auto it = uf_ackermann_history.begin();
+       it != uf_ackermann_history.end();)
+  {
+    auto &entries = it->second;
+    std::erase_if(entries, [this](const uf_ackermann_entry &e) {
+      return e.level >= ctx_level;
+    });
+    it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
+  }
+
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
@@ -1929,6 +1943,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     a = mk_quantifier(
       is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(expanded));
+    break;
+  }
+  case expr2t::uninterpreted_func_id:
+  {
+    const uninterpreted_func2t &uf = to_uninterpreted_func2t(expr);
+    // 'args' already holds the converted arguments (the default operand loop
+    // above). The solver declares one function symbol per name and applies it
+    // here, so functional congruence is enforced natively.
+    a = mk_smt_uninterpreted_function(
+      uf.function_name.as_string(), args, convert_sort(uf.type));
     break;
   }
   default:
@@ -4404,6 +4428,44 @@ smt_astt smt_convt::mk_eq(smt_astt a, smt_astt b)
 smt_astt smt_convt::mk_neq(smt_astt a, smt_astt b)
 {
   return mk_not(mk_eq(a, b));
+}
+
+smt_astt smt_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // Fallback for backends without native uninterpreted-function support: mint a
+  // fresh result and Ackermannise functional congruence against every earlier
+  // application of the same function. This asserts only a valid property of any
+  // function (equal arguments imply an equal result), so it prunes no
+  // behaviour. Solvers that expose UFs override this and never reach here.
+  smt_astt result = mk_smt_symbol(
+    "__esbmc_uf_ackermann::" + name + "$" +
+      std::to_string(uf_ackermann_counter++),
+    rangesort);
+
+  auto &history = uf_ackermann_history[name];
+  for (const auto &prev : history)
+  {
+    // Only relate applications of equal arity; a different arity cannot be the
+    // same function signature. Argument sorts are assumed consistent across
+    // applications of one name (a single C declaration), as is required for the
+    // native path too.
+    if (prev.args.size() != args.size())
+      continue;
+
+    // Build (a0 == p0) && (a1 == p1) && ...; an empty argument list leaves the
+    // guard tautological, so two nullary applications are simply made equal.
+    smt_astt args_equal = mk_smt_bool(true);
+    for (std::size_t i = 0; i < args.size(); ++i)
+      args_equal = mk_and(args_equal, mk_eq(args[i], prev.args[i]));
+
+    assert_ast(mk_implies(args_equal, mk_eq(result, prev.result)));
+  }
+
+  history.push_back({args, result, ctx_level});
+  return result;
 }
 
 smt_astt smt_convt::mk_store(smt_astt a, smt_astt b, smt_astt c)

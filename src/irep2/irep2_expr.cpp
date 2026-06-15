@@ -841,6 +841,8 @@ std::string code_skip2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
 std::string new_object2t::field_names[esbmct::num_type_fields] =
   {"", "", "", "", ""};
+std::string uninterpreted_func2t::field_names[esbmct::num_type_fields] =
+  {"function_name", "arguments", "", "", ""};
 std::string code_free2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_goto2t::field_names[esbmct::num_type_fields] =

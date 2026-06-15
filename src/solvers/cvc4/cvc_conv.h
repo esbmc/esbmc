@@ -138,6 +138,10 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
@@ -156,6 +160,10 @@ public:
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;
   CVC4::SymbolTable sym_tab;
+
+  /** Uninterpreted-function variables, keyed by name, so every application
+   *  shares one declaration and the solver enforces functional congruence. */
+  std::unordered_map<std::string, CVC4::Expr> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */

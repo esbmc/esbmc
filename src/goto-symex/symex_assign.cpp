@@ -203,7 +203,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   stack_limit = sym.stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
-  uninterpreted_fn_history = sym.uninterpreted_fn_history;
   witness_target_line = sym.witness_target_line;
 
   // Art ptr is shared

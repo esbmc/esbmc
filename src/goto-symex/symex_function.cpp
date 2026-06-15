@@ -316,43 +316,14 @@ bool goto_symext::symex_uninterpreted_function(
     do_simplify(argument);
   }
 
-  // A fresh nondeterministic result: the function is otherwise unconstrained.
-  unsigned int &nondet_count = get_nondet_counter();
-  expr2tc result =
-    symbol2tc(call.ret->type, "nondet$symex::" + i2string(nondet_count++));
-
-  // Ackermannise congruence: for every earlier call to the same function with
-  // the same arity, assume (args equal) => (results equal). This adds only a
-  // valid property of any function, so it prunes no behaviour (sound), unlike
-  // forcing the result non-zero (see closed PR #5283).
-  // Key on the full mangled identifier so two genuinely distinct symbols that
-  // share a C-level name are never tied together by congruence.
-  std::vector<std::pair<std::vector<expr2tc>, expr2tc>> &history =
-    uninterpreted_fn_history[mangled];
-  for (const auto &prev : history)
-  {
-    if (prev.first.size() != arguments.size())
-      continue;
-
-    expr2tc args_equal = gen_true_expr();
-    for (std::size_t i = 0; i < arguments.size(); ++i)
-    {
-      // Only relate arguments of identical type; a signature mismatch cannot
-      // be the same call site, so skip the whole pairing defensively.
-      if (prev.first[i]->type != arguments[i]->type)
-      {
-        args_equal = expr2tc();
-        break;
-      }
-      args_equal = and2tc(args_equal, equality2tc(arguments[i], prev.first[i]));
-    }
-    if (is_nil_expr(args_equal))
-      continue;
-
-    assume(implies2tc(args_equal, equality2tc(result, prev.second)));
-  }
-
-  history.emplace_back(arguments, result);
+  // Emit an uninterpreted-function application and assign it to the return.
+  // Functional congruence (equal arguments imply an equal result) is enforced
+  // downstream by the SMT backend's native uninterpreted-function support
+  // (with a generic Ackermannisation fallback for solvers that lack it), so no
+  // congruence history is tracked here. Key the function on the full mangled
+  // identifier so two genuinely distinct symbols that share a C-level name are
+  // never tied together by congruence.
+  expr2tc result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
 
   symex_assign(code_assign2tc(call.ret, result));
   return true;

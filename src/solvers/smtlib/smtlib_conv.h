@@ -114,6 +114,11 @@ enum smt_func_kind
 
   SMT_FUNC_BV2FLOAT,
   SMT_FUNC_FLOAT2BV,
+
+  // Uninterpreted-function application. Unlike the other non-terminals it is
+  // printed as its own `symname` rather than a fixed operator from
+  // smt_func_name_table, and may carry any arity.
+  SMT_FUNC_UF,
 };
 
 struct sexpr
@@ -243,6 +248,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -351,6 +360,13 @@ public:
     symbol_tablet;
 
   symbol_tablet symbol_table;
+
+  /** Uninterpreted functions already emitted via (declare-fun ...), mapped to
+   *  the context level at which they were declared, so each function symbol is
+   *  declared to the solver exactly once per scope and every application shares
+   *  it (giving native functional congruence). Entries are pruned on the
+   *  matching pop, when (pop 1) removes their declaration from the solver. */
+  std::unordered_map<std::string, unsigned int> declared_ufs;
 
   static const std::string temp_prefix;
 

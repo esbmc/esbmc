@@ -549,6 +549,51 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
+smt_astt boolector_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function. boolector_uf mints a fresh function on every
+  // call, so it is cached and reused across applications; sharing one
+  // declaration is what makes the solver enforce congruence.
+  auto it = uf_decls.find(name);
+  BoolectorNode *fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<BoolectorSort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<BoolectorSort>(arg->sort)->s);
+
+    BoolectorSort fun_sort = boolector_fun_sort(
+      btor,
+      domain.data(),
+      domain.size(),
+      to_solver_smt_sort<BoolectorSort>(rangesort)->s);
+    fun = boolector_uf(btor, fun_sort, name.c_str());
+    uf_decls.emplace(name, fun);
+  }
+
+  // boolector_apply takes the argument nodes (without the function) plus the
+  // function node separately.
+  std::vector<BoolectorNode *> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<btor_smt_ast>(arg)->a);
+
+  return new_ast(
+    boolector_apply(btor, apply_args.data(), apply_args.size(), fun),
+    rangesort);
+}
+
 smt_astt
 boolector_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {

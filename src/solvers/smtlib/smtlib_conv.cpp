@@ -110,6 +110,7 @@ static const std::array smt_func_name_table = {
 
   "bv2fp_cast",             /* SMT_FUNC_BV2FLOAT, */
   "fp2bv_cast",             /* SMT_FUNC_FLOAT2BV, */
+  "uf_func_id",             /* SMT_FUNC_UF (printed via symname instead) */
 };
 // clang-format on
 
@@ -397,6 +398,19 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
+/* Render an arbitrary identifier as an SMT-LIB quoted symbol (|...|). ESBMC's
+ * mangled names contain characters (':', '@', '$', ...) that are not legal in a
+ * simple symbol, so every symbol is quoted. Per SMT-LIB 2.6 a quoted symbol may
+ * not contain '|' or '\', so escape (in order): / -> //, \ -> /b, | -> /p. */
+static std::string quote_smtlib_symbol(const std::string &name)
+{
+  std::string replaced = name;
+  replaced = std::regex_replace(replaced, std::regex("/"), "//");
+  replaced = std::regex_replace(replaced, std::regex("\\\\"), "/b");
+  replaced = std::regex_replace(replaced, std::regex("\\|"), "/p");
+  return "|" + replaced + "|";
+}
+
 /* TODO: misnomer, it does not emit anything */
 unsigned int smtlib_convt::emit_terminal_ast(
   const smtlib_smt_ast *ast,
@@ -443,22 +457,7 @@ unsigned int smtlib_convt::emit_terminal_ast(
     return 0;
   case SMT_FUNC_SYMBOL:
   {
-    /* from smt-lib 2.6:
-     * A quoted symbol is any sequence of whitespace characters and printable
-     * characters that starts and ends with | and does not contain | or \ */
-
-    /* All symbols to be emitted as quoted symbols (braced within |'s),
-     * therefore replace (in order):
-     *   / -> //
-     *   \ -> /b
-     *   | -> /p
-     */
-    std::string replaced = ast->symname;
-    replaced = std::regex_replace(replaced, std::regex("/"), "//");
-    replaced = std::regex_replace(replaced, std::regex("\\\\"), "/b");
-    replaced = std::regex_replace(replaced, std::regex("\\|"), "/p");
-
-    ss << "|" << replaced << "|";
+    ss << quote_smtlib_symbol(ast->symname);
     output = ss.str();
     return 0;
   }
@@ -474,6 +473,43 @@ unsigned int smtlib_convt::emit_ast(
   std::unordered_map<const smtlib_smt_ast *, std::string> &temp_symbols) const
 {
   unsigned int brace_level = 0;
+
+  // Uninterpreted-function application: printed as its own symname and may have
+  // any arity, so it bypasses the fixed 4-operand generic path below.
+  if (ast->kind == SMT_FUNC_UF)
+  {
+    if (auto it = temp_symbols.find(ast); it != temp_symbols.end())
+    {
+      output = it->second;
+      return 0;
+    }
+
+    std::string tempname = "?x" + std::to_string(temp_symbols.size());
+    temp_symbols.emplace(ast, tempname);
+
+    std::vector<std::string> uf_args(ast->args.size());
+    for (std::size_t i = 0; i < ast->args.size(); i++)
+      brace_level += emit_ast(
+        static_cast<const smtlib_smt_ast *>(ast->args[i]),
+        uf_args[i],
+        temp_symbols);
+
+    // A nullary application is just the declared constant; an n-ary one is
+    // "(name arg0 arg1 ...)".
+    if (ast->args.empty())
+      emit("(let ((%s %s))\n", tempname.c_str(), ast->symname.c_str());
+    else
+    {
+      emit("(let ((%s (%s", tempname.c_str(), ast->symname.c_str());
+      for (const std::string &arg : uf_args)
+        emit(" %s", arg.c_str());
+      emit("%s", ")))\n");
+    }
+
+    output = tempname;
+    return brace_level + 1;
+  }
+
   assert(ast->args.size() <= 4);
   std::string args[4];
 
@@ -891,6 +927,40 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   emit_terminal_ast(a, output);
   emit("(declare-fun %s () %s)\n", output.c_str(), sort_to_string(s).c_str());
 
+  return a;
+}
+
+smt_astt smtlib_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // Declare the function symbol to the solver once; every application of the
+  // same name then shares it, so the solver enforces functional congruence
+  // natively.
+  // ESBMC's mangled names are not legal SMT-LIB simple symbols, so quote the
+  // name and use the identical quoted form for both the declaration and every
+  // application.
+  std::string qname = quote_smtlib_symbol(name);
+
+  if (declared_ufs.emplace(name, ctx_level).second)
+  {
+    std::string domain;
+    for (smt_astt arg : args)
+    {
+      domain += sort_to_string(arg->sort);
+      domain += ' ';
+    }
+    emit(
+      "(declare-fun %s (%s) %s)\n",
+      qname.c_str(),
+      domain.c_str(),
+      sort_to_string(rangesort).c_str());
+  }
+
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, rangesort, SMT_FUNC_UF);
+  a->symname = qname;
+  a->args = args;
   return a;
 }
 
@@ -1450,6 +1520,11 @@ void smtlib_convt::pop_ctx()
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
   syms_numindex.erase(ctx_level);
+
+  // (pop 1) removed any function declared at this level, so forget it too; a
+  // later application will then re-emit its (declare-fun ...).
+  std::erase_if(
+    declared_ufs, [this](const auto &kv) { return kv.second >= ctx_level; });
 
   smt_convt::pop_ctx();
 }

@@ -146,3 +146,8 @@ IREP2_EXPR(sideeffect_assign,     "sideeffect_assign")
 // Appears in temporary_object initializers; replaced by replace_new_object
 // before goto_convert processes the body.
 IREP2_EXPR(new_object,            "new_object")
+// Uninterpreted-function application. Created during symbolic execution to
+// model a call to a "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*"
+// function, and consumed only at SMT conversion time, where the solver's
+// native uninterpreted-function support enforces functional congruence.
+IREP2_EXPR(uninterpreted_func,    "uninterpreted_func")

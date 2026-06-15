@@ -78,6 +78,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -110,6 +114,12 @@ public:
   Btor *btor;
 
   symtabt symtable;
+
+  /** Uninterpreted-function declarations, keyed by name. boolector_uf mints a
+   *  fresh function on each call, so it is cached and reused across
+   *  applications; sharing one declaration gives native functional
+   *  congruence. */
+  std::unordered_map<std::string, BoolectorNode *> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_ */
