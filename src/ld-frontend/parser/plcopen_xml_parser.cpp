@@ -263,10 +263,10 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
 
 struct GNode
 {
-  std::string tag;      // "contact", "coil", "leftPowerRail", "block", ...
-  std::string var;      // variable name (contacts and coils)
-  bool negated = false; // normally-closed contact
-  std::string storage;  // "set", "reset", or "" for normal coil
+  std::string tag;        // "contact", "coil", "leftPowerRail", "block", ...
+  std::string var;        // variable name (contacts and coils)
+  bool negated = false;   // normally-closed contact
+  std::string storage;    // "set", "reset", or "" for normal coil
   std::vector<int> feeds; // forward edges (this node feeds these localIds)
 };
 
@@ -278,8 +278,8 @@ static bool parse_graphical_ld(
   // Step 1: collect all top-level elements and detect graphical format.
   // A graphical LD body has <contact>, <coil>, <leftPowerRail> as direct
   // children; a textual LD body has <rung> children.
-  bool has_rung       = false;
-  bool has_graphical  = false;
+  bool has_rung = false;
+  bool has_graphical = false;
   for (auto child : ld_body.children())
   {
     std::string t = child.name();
@@ -312,8 +312,10 @@ static bool parse_graphical_ld(
     std::string storage_attr = child.attribute("storage").as_string("");
     if (storage_attr.empty())
     {
-      if (t == "SetCoil")   storage_attr = "set";
-      if (t == "ResetCoil") storage_attr = "reset";
+      if (t == "SetCoil")
+        storage_attr = "set";
+      if (t == "ResetCoil")
+        storage_attr = "reset";
     }
     g.storage = storage_attr;
     // Back-edges: <connection refLocalId="X"/> means X feeds this node
@@ -343,8 +345,7 @@ static bool parse_graphical_ld(
   int rung_counter = 0;
 
   std::function<void(int, int, std::vector<int> &, std::set<int> &)> dfs =
-    [&](int cur, int target, std::vector<int> &path, std::set<int> &visited)
-  {
+    [&](int cur, int target, std::vector<int> &path, std::set<int> &visited) {
     if (cur == target)
     {
       // Emit one RungNode for this path.
@@ -400,29 +401,30 @@ static bool parse_graphical_ld(
     for (int nxt : nodes.at(cur).feeds)
       dfs(nxt, target, path, visited);
 
-    path.pop_back();
-    visited.erase(cur);
-  };
+      path.pop_back();
+      visited.erase(cur);
+    };
 
   // Find all left rails
   std::vector<int> left_rails;
   for (auto &[lid, g] : nodes)
-    if (g.tag == "leftPowerRail") left_rails.push_back(lid);
+    if (g.tag == "leftPowerRail")
+      left_rails.push_back(lid);
 
   // Collect coils in rightPowerRail order (defines scan execution order).
   // The rightPowerRail's <connectionPointIn> children list the coils in order.
   std::vector<int> coils;
-  std::set<int>    coils_seen;
+  std::set<int> coils_seen;
   for (auto rpr : ld_body.children("rightPowerRail"))
   {
     for (auto cpi : rpr.select_nodes(".//connection"))
     {
       int cid = cpi.node().attribute("refLocalId").as_int(-1);
-      if (cid >= 0 && nodes.count(cid) &&
-          (nodes.at(cid).tag == "coil" ||
-           nodes.at(cid).tag == "SetCoil" ||
-           nodes.at(cid).tag == "ResetCoil") &&
-          !coils_seen.count(cid))
+      if (
+        cid >= 0 && nodes.count(cid) &&
+        (nodes.at(cid).tag == "coil" || nodes.at(cid).tag == "SetCoil" ||
+         nodes.at(cid).tag == "ResetCoil") &&
+        !coils_seen.count(cid))
       {
         coils.push_back(cid);
         coils_seen.insert(cid);
@@ -431,15 +433,16 @@ static bool parse_graphical_ld(
   }
   // Add any coils not connected to rightPowerRail
   for (auto &[lid, g] : nodes)
-    if ((g.tag == "coil" || g.tag == "SetCoil" || g.tag == "ResetCoil")
-        && !coils_seen.count(lid))
+    if (
+      (g.tag == "coil" || g.tag == "SetCoil" || g.tag == "ResetCoil") &&
+      !coils_seen.count(lid))
       coils.push_back(lid);
 
   for (int rail : left_rails)
     for (int coil : coils)
     {
       std::vector<int> path;
-      std::set<int>    visited;
+      std::set<int> visited;
       // Start from each node that the rail feeds
       for (int nxt : nodes.at(rail).feeds)
         dfs(nxt, coil, path, visited);
