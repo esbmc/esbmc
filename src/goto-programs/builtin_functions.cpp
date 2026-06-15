@@ -64,17 +64,47 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
+// Recover the measured type T from a sizeof(T) node, peeling any surrounding
+// typecast. Returns a nil type if `src` is not (a cast of) a sizeof node
+// (esbmc/esbmc#5337). T rides as the type of the node's first (type_exprt)
+// operand; a second operand may carry the byte-size value.
+static typet sizeof_measured_type(const exprt &src)
+{
+  const exprt *e = &src;
+  while (e->id() == "typecast" && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() == "sizeof" && !e->operands().empty())
+    return e->op0().type();
+  return static_cast<const typet &>(get_nil_irep());
+}
+
 static void get_alloc_type_rec(
   const exprt &src,
   typet &type,
   exprt &size,
   bool is_mul = false)
 {
-  const irept &sizeof_type = src.c_sizeof_type();
+  // Peel a typecast only when looking for the element TYPE (outside a
+  // multiplication): the sizeof node is no longer pre-folded to a constant, so
+  // a top-level `(size_t)sizeof(T)` cast must be seen through (esbmc/esbmc#5337).
+  // Inside `n * sizeof(T)`, the cast on the count operand reconciles its width
+  // with the product and must be preserved — peeling it would make the rebuilt
+  // product mix operand widths.
+  if (!is_mul && src.id() == "typecast" && src.operands().size() == 1)
+  {
+    get_alloc_type_rec(src.op0(), type, size, is_mul);
+    return;
+  }
 
-  // If sizeof_type is valid and we are not in a multiplication context
-  if (!sizeof_type.is_nil() && !is_mul)
-    type = static_cast<const typet &>(sizeof_type);
+  // sizeof(T) outside a multiplication sets the allocated element type T
+  // (carried as the operand's type). Inside `n * sizeof(T)` the product is
+  // treated as a raw byte count and the allocated type stays char, matching
+  // the historical behaviour.
+  if (src.id() == "sizeof" && !is_mul)
+  {
+    assert(!src.operands().empty());
+    type = src.op0().type();
+  }
   else if (src.id() == "*")
   {
     // Mark as multiplication context and recurse
@@ -1188,16 +1218,13 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("#location") = function.cmt_location();
     new_function.add("sizeof") = arguments.front();
 
-    // The allocated element type is recovered from the size argument's
-    // `#c_sizeof_type` (i.e. the T of a `sizeof(T)` call). That attribute is
-    // dropped when a folded sizeof constant round-trips through IREP2 under
-    // --irep2-bodies, leaving a nil subtype that lowers to `new void` and
-    // crashes the scalar zero-initializer. When it is absent, fall back to a
-    // single zero-initialised unsigned integer spanning the requested bytes:
-    // operator new(n) allocates n raw bytes, so a later typed read sees zero,
-    // matching the c_sizeof_type-present path.
-    typet sizeof_type =
-      static_cast<const typet &>(arguments.front().c_sizeof_type());
+    // The allocated element type is the T of a `sizeof(T)` size argument,
+    // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
+    // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
+    // fall back to a single zero-initialised unsigned integer spanning the
+    // requested bytes: operator new(n) allocates n raw bytes, so a later typed
+    // read sees zero, matching the sizeof-present path.
+    typet sizeof_type = sizeof_measured_type(arguments.front());
     if (sizeof_type.is_nil())
     {
       const unsigned char_width = config.ansi_c.char_width;

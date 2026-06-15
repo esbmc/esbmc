@@ -147,11 +147,10 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     expr.size(new_size);
   }
 
-  // Set sizeof and cmt_sizeof_type
-  exprt size_of = c_sizeof(expr.type().subtype(), ns);
-  size_of.set("#c_sizeof_type", expr.type().subtype());
-
-  expr.set("sizeof", size_of);
+  // Note: the cpp_new allocation size flows via size_irep() (the array count)
+  // and the allocated type via type().subtype(); the old "sizeof" named-sub
+  // (a c_sizeof fold tagged with the legacy sizeof-type attribute) was never
+  // read, so it is no longer produced (esbmc/esbmc#5337).
 }
 
 void clang_cpp_adjust::adjust_member(member_exprt &expr)
