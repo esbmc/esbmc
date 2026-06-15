@@ -139,9 +139,10 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
           break;
         }
 
-    if (!target_wp ||
-        cur_state->source.pc->location.get_line() != target_wp->line_id ||
-        cur_state->witness_target_reached)
+    if (
+      !target_wp ||
+      cur_state->source.pc->location.get_line() != target_wp->line_id ||
+      cur_state->witness_target_reached)
       new_expr = gen_true_expr();
     else
     {
