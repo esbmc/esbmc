@@ -183,8 +183,19 @@ void python_class_builder::get_members(
         pc_.methods().count("__init__") == 0 &&
         !python_frontend::is_enum_class(conv_.current_class_name_, conv_.ast()))
       {
+        // A string default is a char array at the class-level symbol, but the
+        // frontend represents string values as `char*` (a pointer to the
+        // literal). Type the component as `char*` to match, so gen_ctor's
+        // `self->attr = "..."` stores the pointer get_expr yields rather than
+        // forcing a whole-array assignment through the instance pointer — which
+        // a heap-migrated `Class*` instance cannot dereference (aborts with
+        // "Can't construct rvalue reference to array type" — mopsa/
+        // object_in_condition).
+        typet comp_type = sym->get_type();
+        if (type_utils::is_string_type(comp_type))
+          comp_type = gen_pointer_type(char_type());
         struct_typet::componentt comp = python_frontend::build_component(
-          conv_.current_class_name_, attr_name, sym->get_type());
+          conv_.current_class_name_, attr_name, comp_type);
         st.components().push_back(comp);
       }
     }
