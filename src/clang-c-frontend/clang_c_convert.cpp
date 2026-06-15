@@ -1963,30 +1963,12 @@ bool clang_c_convertert::get_base_flattened_inits(
   for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
   {
     const clang::Expr *e = init.getInit(j);
-    const clang::Type *etype = e->getType().getCanonicalType().getTypePtr();
-    bool is_base =
-      llvm::any_of(cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
-        return base.getType().getCanonicalType().getTypePtr() == etype;
-      });
-    if (is_base)
-    {
-      if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(e))
-      {
-        if (get_base_flattened_inits(*nested, flat))
-          return true;
-        continue;
-      }
-      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): convert
-      // once and expand each field as a member_exprt so types stay aligned.
-      exprt base_expr;
-      if (get_expr(*e, base_expr))
-        return true;
-      for (const auto &field :
-           to_struct_type(ns.follow(base_expr.type())).components())
-        if (!field.get_is_unnamed_bitfield())
-          flat.push_back(member_exprt(base_expr, field.name(), field.type()));
-      continue;
-    }
+    // Each base sub-object is now ONE nested `<base>::@base` component (a struct
+    // value), so a base initializer (CXXConstructExpr or nested InitListExpr)
+    // converts to a single struct-typed entry — we no longer flatten its fields
+    // into the derived's component list. get_expr on either form yields the
+    // base struct value directly; pushing it whole keeps it positionally
+    // aligned with the @base component.
     exprt val;
     if (get_expr(*e, val))
       return true;
