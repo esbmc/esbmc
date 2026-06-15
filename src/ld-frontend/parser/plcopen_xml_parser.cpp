@@ -573,5 +573,32 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     ast.networks.push_back(std::move(net));
   }
 
+  // Heuristic I/O inference for graphical LD programs without hardware
+  // addresses (%IX/%QX). Variables that appear only as contacts across all
+  // networks are treated as inputs; variables that appear only as coils are
+  // treated as outputs. This covers tutorial and simulation programs that
+  // declare all variables as <localVars> without address attributes.
+  {
+    std::set<std::string> contact_vars, coil_vars;
+    for (const auto &net : ast.networks)
+      for (const auto &rung : net.rungs)
+        for (const auto &elem : rung.elements)
+        {
+          if (elem.kind == RungElementKind::Contact)
+            contact_vars.insert(elem.contact.variable);
+          if (elem.kind == RungElementKind::Coil)
+            coil_vars.insert(elem.coil.variable);
+        }
+    for (auto &v : ast.variables)
+    {
+      if (v.is_input || v.is_output)
+        continue;
+      if (contact_vars.count(v.name) && !coil_vars.count(v.name))
+        v.is_input = true;
+      else if (coil_vars.count(v.name) && !contact_vars.count(v.name))
+        v.is_output = true;
+    }
+  }
+
   return ast;
 }
