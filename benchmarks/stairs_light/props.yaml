@@ -1,0 +1,19 @@
+properties:
+
+  # P1: Light must not be on when PIR sensor is inactive AND buttons state is off
+  - id: P1
+    kind: invariant
+    expression: "!stairs_light || stairs_pir_sensor || lights_buttons_state"
+    description: "Light must not be on without PIR detection or button activation"
+
+  # P2: Button toggle consistency — SET and RESET are mutually exclusive per scan
+  - id: P2
+    kind: invariant
+    expression: "!(lights_buttons_state && control_button_up && control_button_down)"
+    description: "Simultaneous button presses must not leave state undefined"
+
+  # P3: Light follows button state when PIR is inactive
+  - id: P3
+    kind: invariant
+    expression: "!lights_buttons_state || stairs_light"
+    description: "When button state is active, light must be on"

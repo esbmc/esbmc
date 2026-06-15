@@ -1,0 +1,51 @@
+properties:
+
+  # P1: Door must never open while motor is running
+  # Critical: door opening during movement = fatal accident
+  - id: P1
+    kind: mutual_exclusion
+    variables: [Door_Open, Motor_Running]
+    description: "Door must never open while motor is running"
+
+  # P2: Motor Up and Motor Down must never run simultaneously
+  # Critical: simultaneous activation destroys the motor
+  - id: P2
+    kind: mutual_exclusion
+    variables: [Motor_Up, Motor_Down]
+    description: "Motor_Up and Motor_Down must never activate simultaneously"
+
+  # P3: Emergency stop must halt both motors immediately
+  - id: P3
+    kind: invariant
+    expression: "!Emergency_Stop || !Motor_Up"
+    description: "Emergency stop must disable Motor_Up"
+
+  # P4: Emergency stop must halt downward motor
+  - id: P4
+    kind: invariant
+    expression: "!Emergency_Stop || !Motor_Down"
+    description: "Emergency stop must disable Motor_Down"
+
+  # P5: Door must not open during emergency
+  - id: P5
+    kind: invariant
+    expression: "!Emergency_Stop || !Door_Open"
+    description: "Door must not open during emergency stop"
+
+  # P6: Motor must not run when door is open
+  - id: P6
+    kind: invariant
+    expression: "!Door_Open || !Motor_Up"
+    description: "Motor_Up must not run while door is open"
+
+  # P7: Motor Down must not run when door is open
+  - id: P7
+    kind: invariant
+    expression: "!Door_Open || !Motor_Down"
+    description: "Motor_Down must not run while door is open"
+
+  # P8: Overload must stop the motor
+  - id: P8
+    kind: invariant
+    expression: "!Overload || !Motor_Up"
+    description: "Overload condition must disable Motor_Up"
