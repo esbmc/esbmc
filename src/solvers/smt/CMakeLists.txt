@@ -9,6 +9,8 @@ add_library(smt
   smt_conv.cpp
   # IEEE754 constants/semantics and FP predicates extracted from smt_conv.cpp
   smt_fp_conv.cpp
+  # Integer-encoding IEEE 754 path (--int-encoding --ir-ieee)
+  fp/ir_ieee_conv.cpp
   smt_memspace.cpp
   smt_overflow.cpp
   smt_bitcast.cpp
