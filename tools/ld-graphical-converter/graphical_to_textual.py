@@ -8,7 +8,7 @@ from pathlib import Path
 import defusedxml.ElementTree as DefusedET
 
 NS = "http://www.plcopen.org/xml/tc6_0201"
-DefusedET.register_namespace = getattr(ET, "register_namespace", lambda *a: None)
+DefusedET.register_namespace = getattr(DefusedET, "register_namespace", lambda *a: None)
 
 
 def tag(name):
