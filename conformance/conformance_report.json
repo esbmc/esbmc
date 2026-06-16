@@ -1,0 +1,50 @@
+{
+  "tool": "SAFE-LD P4a Conformance",
+  "esbmc_binary": "/Users/pierredantas/esbmc/build/src/esbmc/esbmc",
+  "seed": 42,
+  "n_sequences": 50,
+  "n_scans": 10,
+  "grand_total_scans": 2000,
+  "grand_total_violations": 0,
+  "all_pass": true,
+  "results": [
+    {
+      "benchmark": "traffic_light_safe",
+      "scans": 500,
+      "divergences": 0,
+      "status": "PASS"
+    },
+    {
+      "benchmark": "bottle_filling_safe",
+      "scans": 500,
+      "divergences": 0,
+      "status": "PASS"
+    },
+    {
+      "benchmark": "elevator_safe",
+      "scans": 500,
+      "divergences": 0,
+      "status": "PASS"
+    },
+    {
+      "benchmark": "tank_level_safe",
+      "scans": 500,
+      "divergences": 0,
+      "status": "PASS"
+    },
+    {
+      "benchmark": "water_control",
+      "scans": null,
+      "divergences": null,
+      "status": "SKIP",
+      "reason": "graphical tc6_0201 \u2014 rung logic not yet converted"
+    },
+    {
+      "benchmark": "stairs_light",
+      "scans": null,
+      "divergences": null,
+      "status": "SKIP",
+      "reason": "graphical tc6_0201 \u2014 rung logic not yet converted"
+    }
+  ]
+}

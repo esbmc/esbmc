@@ -1,0 +1,2108 @@
+{
+  "benchmark": "stairs_light",
+  "source": "CONTROLLINO-PLC (MIT, 2024)",
+  "n_sequences": 50,
+  "n_scans": 10,
+  "outputs": [
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 0,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      }
+    ],
+    [
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 0
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      },
+      {
+        "stairs_light": 1,
+        "lights_buttons_state": 1
+      }
+    ]
+  ]
+}

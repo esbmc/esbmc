@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_Z3_Z3_CONV_H
 #define _ESBMC_SOLVERS_Z3_Z3_CONV_H
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <z3++.h>
 #include <fstream>
 
@@ -12,19 +12,19 @@ public:
   ~z3_smt_ast() override = default;
 
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
     const expr2tc &idx_expr) const override;
 
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   void dump() const override;
 };
 
-/* Be sure to not make smt_convt a *virtual* base class: our dtor ~z3_convt()
+/* Be sure to not make smt_solver_baset a *virtual* base class: our dtor ~z3_convt()
  * erases all smt_asts early. */
-class z3_convt : public smt_convt,
+class z3_convt : public smt_solver_baset,
                  public tuple_iface,
                  public array_iface,
                  public fp_convt
@@ -36,7 +36,7 @@ public:
 public:
   void push_ctx() override;
   void pop_ctx() override;
-  smt_convt::resultt dec_solve() override;
+  smt_resultt dec_solve() override;
 
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

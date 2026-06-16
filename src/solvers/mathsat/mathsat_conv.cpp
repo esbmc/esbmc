@@ -36,7 +36,7 @@ void mathsat_convt::check_msat_error(msat_term &r) const
   }
 }
 
-smt_convt *create_new_mathsat_solver(
+smt_solver_baset *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -50,7 +50,7 @@ smt_convt *create_new_mathsat_solver(
 }
 
 mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(false, false),
     fp_convt(this),
     use_fp_api(false)
@@ -67,14 +67,14 @@ mathsat_convt::~mathsat_convt()
 
 void mathsat_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   msat_push_backtrack_point(env);
 }
 
 void mathsat_convt::pop_ctx()
 {
   msat_pop_backtrack_point(env);
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 void mathsat_convt::assert_ast(smt_astt a)
@@ -83,7 +83,7 @@ void mathsat_convt::assert_ast(smt_astt a)
   msat_assert_formula(env, mast->a);
 }
 
-smt_convt::resultt mathsat_convt::dec_solve()
+smt_resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
@@ -94,7 +94,7 @@ smt_convt::resultt mathsat_convt::dec_solve()
   if (r == MSAT_UNSAT)
     return P_UNSATISFIABLE;
 
-  return smt_convt::P_ERROR;
+  return P_ERROR;
 }
 
 bool mathsat_convt::get_bool(smt_astt a)
@@ -924,7 +924,7 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 }
 
 mathsat_smt_ast::mathsat_smt_ast(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   msat_term _t,
   const smt_sort *_s)
   : solver_smt_ast<msat_term>(ctx, _t, _s)

@@ -2088,7 +2088,7 @@ bool is_unsat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
   std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
-  return solver->dec_solve() == smt_convt::P_UNSATISFIABLE;
+  return solver->dec_solve() == P_UNSATISFIABLE;
 }
 
 /// Derive a candidate difference measure m and its guard-implied lower

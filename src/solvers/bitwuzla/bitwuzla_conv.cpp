@@ -10,7 +10,7 @@ void bitwuzla_error_handler(const char *msg)
   abort();
 }
 
-smt_convt *create_new_bitwuzla_solver(
+smt_solver_baset *create_new_bitwuzla_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -24,7 +24,7 @@ smt_convt *create_new_bitwuzla_solver(
 }
 
 bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
+  : smt_solver_baset(ns, options), array_iface(true, true), fp_convt(this)
 {
   if (options.get_bool_option("int-encoding"))
   {
@@ -50,7 +50,7 @@ bitwuzla_convt::~bitwuzla_convt()
 
 void bitwuzla_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   bitwuzla_push(bitw, 1);
 }
 
@@ -60,10 +60,10 @@ void bitwuzla_convt::pop_ctx()
   symtab_levels.erase(ctx_level);
 
   bitwuzla_pop(bitw, 1);
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt bitwuzla_convt::dec_solve()
+smt_resultt bitwuzla_convt::dec_solve()
 {
   pre_solve();
 
@@ -810,7 +810,7 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
   }
   else
   {
-    return smt_convt::overflow_arith(expr);
+    return smt_solver_baset::overflow_arith(expr);
   }
 
   const smt_sort *s = boolean_sort;

@@ -1,0 +1,71 @@
+{
+  "benchmark": "water_control",
+  "n_sequences": 2,
+  "n_scans": 10,
+  "outputs": [
+    [
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      }
+    ],
+    [
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      },
+      {
+        "Water_Pump": 0
+      }
+    ]
+  ]
+}

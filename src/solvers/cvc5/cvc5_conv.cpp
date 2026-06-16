@@ -5,7 +5,7 @@
 
 #define new_ast new_solver_ast<cvc5_smt_ast>
 
-smt_convt *create_new_cvc5_solver(
+smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -19,7 +19,7 @@ smt_convt *create_new_cvc5_solver(
 }
 
 cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(true, true),
     fp_convt(this),
     to_bv_counter(0),
@@ -30,7 +30,7 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   slv.setOption("produce-assertions", "true");
 }
 
-smt_convt::resultt cvc5_convt::dec_solve()
+smt_resultt cvc5_convt::dec_solve()
 {
   pre_solve();
 
@@ -1298,7 +1298,7 @@ smt_sortt cvc5_convt::mk_fpbv_rm_sort()
 
 void cvc5_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   slv.push();
 }
 
@@ -1308,7 +1308,7 @@ void cvc5_convt::pop_ctx()
   symtab_levels.erase(ctx_level);
 
   slv.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 std::string cvc5_convt::dump_smt()
