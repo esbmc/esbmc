@@ -154,7 +154,7 @@ void goto_convertt::remove_sideeffects(
   goto_programt &dest,
   bool result_is_used)
 {
-  if (!has_sideeffect(expr))
+  if (!has_sideeffect(expr) && !expr.get_bool("witness_ternary"))
     return;
 
   if (expr.is_and() || expr.is_or())
@@ -230,7 +230,8 @@ void goto_convertt::remove_sideeffects(
     // possibly done now
     if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
-      !has_sideeffect(to_if_expr(expr).false_case()))
+      !has_sideeffect(to_if_expr(expr).false_case()) &&
+      !expr.get_bool("witness_ternary"))
       return;
 
     // copy expression
@@ -1173,6 +1174,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
   {
     codet assignment("assign");
     assignment.reserve_operands(2);
+    new_symbol.set_value(expr.op0());
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(expr.op0());
     assignment.location() = expr.location();
@@ -1193,7 +1195,9 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
     dest.destructive_append(tmp_program);
   }
 
+  const locationt loc = expr.location();
   expr = symbol_expr(new_symbol);
+  expr.location() = loc;
 }
 
 void goto_convertt::remove_statement_expression(
