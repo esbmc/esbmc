@@ -1,7 +1,6 @@
 #ifndef SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 #define SOLVERS_SMT_FP_IR_IEEE_CONV_H_
 
-#include <util/message.h>
 #include <solvers/smt/smt_ast.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>

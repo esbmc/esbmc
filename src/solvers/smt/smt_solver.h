@@ -1,12 +1,11 @@
 #ifndef _ESBMC_PROP_SMT_SMT_SOLVER_H_
 #define _ESBMC_PROP_SMT_SMT_SOLVER_H_
 
-class ir_ieee_convt;
-
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
@@ -89,6 +88,7 @@ class ir_ieee_convt;
 
 // Forward dec.
 class fp_convt;
+class ir_ieee_convt;
 class smt_solver_baset;
 class ra_apit;
 
@@ -997,7 +997,7 @@ public:
   array_iface *array_api;
   fp_convt *fp_api;
   ra_apit *ra_api;
-  ir_ieee_convt *ir_ieee_api;
+  std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.

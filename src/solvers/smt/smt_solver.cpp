@@ -83,7 +83,7 @@ smt_solver_baset::smt_solver_baset(
   array_api = nullptr;
   fp_api = nullptr;
   ra_api = nullptr;
-  ir_ieee_api = new ir_ieee_convt(this);
+  ir_ieee_api = std::make_unique<ir_ieee_convt>(this);
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -125,10 +125,7 @@ smt_solver_baset::smt_solver_baset(
   ptr_foo_inited = false;
 }
 
-smt_solver_baset::~smt_solver_baset()
-{
-  delete ir_ieee_api;
-}
+smt_solver_baset::~smt_solver_baset() = default;
 
 void smt_solver_baset::set_tuple_iface(tuple_iface *iface)
 {
