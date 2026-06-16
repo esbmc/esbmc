@@ -22,6 +22,7 @@
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
+#include <util/type_byte_size.h>
 #include <string>
 #include <functional>
 
@@ -453,40 +454,28 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       elem_symbol.get_type().is_struct()
         ? elem_symbol.get_type()
         : converter_.name_space().follow(elem_symbol.get_type());
-    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
-    // Sum the widths of all components to get the true struct size in bytes.
-    size_t total_size = 0;
-    for (const auto &comp : struct_type.components())
+    // Measure the struct by its true byte size via the canonical computation.
+    // A hand-rolled component sum mistakes array- and struct-typed components
+    // (e.g. a tuple key of strings, whose elements are char[N]) for pointers,
+    // over-reporting the size and tripping an out-of-bounds copy in
+    // __ESBMC_copy_value. A struct member that is a dynamically- or
+    // infinitely-sized array has no static size; type_byte_size throws there,
+    // so fall back to pointer width as the legacy summation did.
+    BigInt total_size;
+    try
     {
-      const typet &ct = comp.type();
-      if (ct.id() == "symbol")
-      {
-        // Nested struct/class component: recurse via namespace follow
-        const typet &followed = converter_.name_space().follow(ct);
-        if (followed.is_struct())
-        {
-          for (const auto &sc : to_struct_union_type(followed).components())
-          {
-            if (!sc.type().width().empty())
-              total_size +=
-                std::stoull(sc.type().width().as_string(), nullptr, 10) / 8;
-            else
-              total_size += config.ansi_c.pointer_width() / 8;
-          }
-        }
-        else
-          total_size += config.ansi_c.pointer_width() / 8;
-      }
-      else if (!ct.width().empty())
-        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
-      else
-        total_size += config.ansi_c.pointer_width() / 8;
+      total_size =
+        type_byte_size(migrate_type(resolved), &converter_.name_space());
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      total_size = config.ansi_c.pointer_width() / 8;
     }
     if (total_size == 0)
       total_size = config.ansi_c.pointer_width() / 8;
 
-    elem_size = from_integer(BigInt(total_size), size_type());
+    elem_size = from_integer(total_size, size_type());
   }
   // For non-char, non-bool pointer types (e.g., Optional[T] stored as T*):
   // pointer_typet has no width() attribute, so we must use pointer_width here
