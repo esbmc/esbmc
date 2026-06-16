@@ -3538,7 +3538,7 @@ exprt python_list::compare(
 exprt python_list::create_vla(
   const nlohmann::json &element,
   const exprt &count,
-  const exprt &list_elem)
+  const std::vector<exprt> &list_elems)
 {
   locationt location = converter_.get_location_from_decl(element);
 
@@ -3566,13 +3566,14 @@ exprt python_list::create_vla(
   counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
-  // while (counter < bound) { result.push(list_elem); counter += 1; }
+  // while (counter < bound) { push each elem in order; counter += 1; }
   exprt cond("<", bool_type());
   cond.operands().push_back(build_symbol(counter));
   cond.operands().push_back(build_symbol(bound));
 
   code_blockt then;
-  then.copy_to_operands(build_push_list_call(result, element, list_elem));
+  for (const auto &list_elem : list_elems)
+    then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
   exprt incr("+", int_type());
   incr.copy_to_operands(build_symbol(counter));
@@ -3585,9 +3586,10 @@ exprt python_list::create_vla(
   while_cod.copy_to_operands(cond, then);
   converter_.add_instruction(while_cod);
 
-  // Record the element type so downstream indexing resolves it.
-  list_type_map[result.id.as_string()].push_back(
-    std::make_pair(std::string(), list_elem.type()));
+  // Record one type-map entry per source element for index-based type lookups.
+  auto &result_types = list_type_map[result.id.as_string()];
+  for (const auto &list_elem : list_elems)
+    result_types.push_back(std::make_pair(std::string(), list_elem.type()));
 
   return build_symbol(result);
 }
@@ -3757,13 +3759,52 @@ exprt python_list::list_repetition(
     return build_symbol(*elem_sym);
   };
 
+  // Get all element expressions from list_type_map for a variable list.
+  auto elems_from_type_map =
+    [&](const std::string &src_id) -> std::vector<exprt> {
+    std::vector<exprt> elems;
+    auto it = list_type_map.find(src_id);
+    if (it == list_type_map.end() || it->second.empty())
+      return elems;
+    for (const auto &entry : it->second)
+    {
+      if (entry.first.empty())
+        return {};
+      symbolt *elem_sym = converter_.find_symbol(entry.first);
+      if (!elem_sym)
+        return {};
+      elems.push_back(build_symbol(*elem_sym));
+    }
+    return elems;
+  };
+
+  // Collect source elements for the VLA path: literal `elts`,
+  // or the variable list's type map, falling back to a single `fallback` element
+  // if neither yields anything.
+  auto collect_vla_elems = [&](
+                             const nlohmann::json &node,
+                             const exprt &list_operand,
+                             const exprt &fallback) -> std::vector<exprt> {
+    std::vector<exprt> elems;
+    if (node.contains("elts") && node["elts"].is_array())
+    {
+      for (const auto &elt : node["elts"])
+        elems.push_back(converter_.get_expr(elt));
+    }
+    else
+      elems = elems_from_type_map(list_operand.identifier().as_string());
+    if (elems.empty())
+      elems.push_back(fallback);
+    return elems;
+  };
+
   // Count on the lhs (e.g.: 3 * [1] or n * lst). The list operand is the rhs.
   if (lhs.type() != list_type)
   {
-    // List element comes from the rhs operand
-    if (right_node.contains("elts"))
-      list_elem = converter_.get_expr(right_node["elts"][0]);
-    else
+    // For literal `elts`, defer the elts[0] extraction to the constant-count branch
+    // the VLA path re-extracts every element via collect_vla_elems.
+    const bool from_elts = right_node.contains("elts");
+    if (!from_elts)
     {
       // rhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(rhs.identifier().as_string());
@@ -3774,23 +3815,24 @@ exprt python_list::list_repetition(
 
     if (lhs.is_constant())
     {
+      if (from_elts)
+        list_elem = converter_.get_expr(right_node["elts"][0]);
       assert(is_integer_type(lhs.type()));
       list_size = binary2integer(lhs.value().c_str(), true);
     }
     else
     {
       // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
-      return create_vla(list_value_, lhs, list_elem);
+      return create_vla(
+        list_value_, lhs, collect_vla_elems(right_node, rhs, list_elem));
     }
   }
 
   // Count on the rhs (e.g.: [1] * 3 or lst * n). The list operand is the lhs.
   if (rhs.type() != list_type)
   {
-    // List element comes from the lhs operand
-    if (left_node.contains("elts"))
-      list_elem = converter_.get_expr(left_node["elts"][0]);
-    else
+    const bool from_elts = left_node.contains("elts");
+    if (!from_elts)
     {
       // lhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(lhs.identifier().as_string());
@@ -3801,13 +3843,16 @@ exprt python_list::list_repetition(
 
     if (rhs.is_constant())
     {
+      if (from_elts)
+        list_elem = converter_.get_expr(left_node["elts"][0]);
       assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
     }
     else
     {
       // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
-      return create_vla(list_value_, rhs, list_elem);
+      return create_vla(
+        list_value_, rhs, collect_vla_elems(left_node, lhs, list_elem));
     }
   }
 
