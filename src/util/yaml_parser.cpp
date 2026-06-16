@@ -94,6 +94,8 @@ void intern_location(waypoint &wp)
 {
   if (wp.line != c_nonset)
     wp.line_id = irep_idt(integer2string(wp.line));
+  if (wp.column != c_nonset)
+    wp.column_id = irep_idt(integer2string(wp.column));
   wp.function_id = irep_idt(wp.function);
 }
 
@@ -209,6 +211,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
       wp.file = loc["file_name"].as<std::string>();
     if (loc["line"])
       wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["column"])
+      wp.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
     if (loc["function"])
       wp.function = loc["function"].as<std::string>();
   }
@@ -289,8 +293,10 @@ std::string yaml_parser::build_violation_witness_source(
           wp->action == waypoint::avoid ? "avoid" : "follow",
           line_num,
           wp->value);
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
         out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
-            << wp->value << ")); ";
+            << wp->value << "));\n";
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
       }
     }
 

@@ -136,7 +136,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       const bool is_avoid = (wp.action == waypoint::avoid);
       const bool loc_matches =
         !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-        (wp.function_id.empty() || wp.function_id == loc.get_function());
+        (wp.column_id.empty() || wp.column_id == loc.get_column());
 
       if (!loc_matches)
       {
