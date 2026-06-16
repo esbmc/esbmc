@@ -316,14 +316,47 @@ bool goto_symext::symex_uninterpreted_function(
     do_simplify(argument);
   }
 
-  // Emit an uninterpreted-function application and assign it to the return.
-  // Functional congruence (equal arguments imply an equal result) is enforced
-  // downstream by the SMT backend's native uninterpreted-function support
-  // (with a generic Ackermannisation fallback for solvers that lack it), so no
-  // congruence history is tracked here. Key the function on the full mangled
-  // identifier so two genuinely distinct symbols that share a C-level name are
-  // never tied together by congruence.
-  expr2tc result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+  // A native uninterpreted-function symbol can only be declared over scalar
+  // (number/bool) argument and result sorts. A pointer or aggregate operand
+  // lowers to a tuple sort, which mk_smt_uninterpreted_function cannot encode
+  // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
+  // harnesses hit this with a `const void *` hasher/equals argument). When any
+  // argument or the result is non-scalar, fall back to a fresh nondeterministic
+  // result. This is a sound over-approximation: it drops only the functional-
+  // congruence constraint (equal arguments need no longer imply an equal
+  // result), never adding behaviour, and the body is still discarded.
+  bool uf_encodable = is_number_type(call.ret->type);
+  for (const expr2tc &argument : arguments)
+    uf_encodable = uf_encodable && is_number_type(argument->type);
+
+  expr2tc result;
+  if (uf_encodable)
+  {
+    // Emit an uninterpreted-function application and assign it to the return.
+    // Functional congruence (equal arguments imply an equal result) is enforced
+    // downstream by the SMT backend's native uninterpreted-function support
+    // (with a generic Ackermannisation fallback for solvers that lack it), so
+    // no congruence history is tracked here. Key the function on the full
+    // mangled identifier so two genuinely distinct symbols that share a C-level
+    // name are never tied together by congruence.
+    result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+  }
+  else
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has a non-scalar signature; modelling its "
+      "result as unconstrained nondet (no functional congruence)",
+      name);
+    result = sideeffect2tc(
+      call.ret->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(result);
+  }
 
   symex_assign(code_assign2tc(call.ret, result));
   return true;
