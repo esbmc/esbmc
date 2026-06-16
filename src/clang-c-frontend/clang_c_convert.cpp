@@ -2553,6 +2553,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
 
+    if (config.options.get_bool_option("validate-violation-witness"))
+    {
+      clang::PresumedLoc qLoc;
+      get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
+      if (!qLoc.isInvalid())
+      {
+        std::string function_name;
+        if (current_functionDecl)
+          function_name = get_decl_name(*current_functionDecl);
+        set_location(qLoc, function_name, if_expr.op0().location());
+        if_expr.set("witness_ternary", true);
+      }
+    }
+
     new_expr = if_expr;
     break;
   }
