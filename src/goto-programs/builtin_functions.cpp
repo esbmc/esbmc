@@ -84,28 +84,24 @@ static void get_alloc_type_rec(
   exprt &size,
   bool is_mul = false)
 {
-  // Peel a typecast only when looking for the element TYPE (outside a
-  // multiplication): the sizeof node is no longer pre-folded to a constant, so
-  // a top-level `(size_t)sizeof(T)` cast must be seen through (esbmc/esbmc#5337).
-  // Inside `n * sizeof(T)`, the cast on the count operand reconciles its width
-  // with the product and must be preserved — peeling it would make the rebuilt
-  // product mix operand widths.
-  if (!is_mul && src.id() == "typecast" && src.operands().size() == 1)
+  // A (possibly typecast-wrapped) sizeof(T) outside a multiplication sets the
+  // allocated element type T. The typecast is peeled only in service of
+  // reaching the sizeof — a cast around a non-sizeof size operand (e.g. the
+  // (size_t)(-4) of malloc(-4)) is left intact, so its size_t reconciliation
+  // survives into `size`. Inside `n * sizeof(T)` the product is treated as a
+  // raw byte count and the allocated type stays char, matching the historical
+  // behaviour (esbmc/esbmc#5337).
+  if (!is_mul)
   {
-    get_alloc_type_rec(src.op0(), type, size, is_mul);
-    return;
+    typet measured = sizeof_measured_type(src);
+    if (measured.is_not_nil())
+    {
+      type = measured;
+      return;
+    }
   }
 
-  // sizeof(T) outside a multiplication sets the allocated element type T
-  // (carried as the operand's type). Inside `n * sizeof(T)` the product is
-  // treated as a raw byte count and the allocated type stays char, matching
-  // the historical behaviour.
-  if (src.id() == "sizeof" && !is_mul)
-  {
-    assert(!src.operands().empty());
-    type = src.op0().type();
-  }
-  else if (src.id() == "*")
+  if (src.id() == "*")
   {
     // Mark as multiplication context and recurse
     for (const auto &operand : src.operands())
