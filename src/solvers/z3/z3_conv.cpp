@@ -977,6 +977,28 @@ smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     z3_ctx.constant(name.c_str(), to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
+smt_astt z3_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // Declare-or-reuse the function symbol: Z3 interns function declarations by
+  // (name, domain, range), so every application of the same name resolves to
+  // the same decl and the solver enforces functional congruence natively.
+  z3::sort_vector domain(z3_ctx);
+  z3::expr_vector z3_args(z3_ctx);
+  for (smt_astt arg : args)
+  {
+    const z3::expr &e = to_solver_smt_ast<z3_smt_ast>(arg)->a;
+    domain.push_back(e.get_sort());
+    z3_args.push_back(e);
+  }
+
+  z3::func_decl decl = z3_ctx.function(
+    name.c_str(), domain, to_solver_smt_sort<z3::sort>(rangesort)->s);
+  return new_ast(decl(z3_args), rangesort);
+}
+
 smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 {
   if (is_array_type(type))

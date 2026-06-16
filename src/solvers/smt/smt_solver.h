@@ -497,6 +497,25 @@ public:
    *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) = 0;
 
+  /** Apply an uninterpreted function. Declares (or reuses) a solver function
+   *  symbol named @p name whose domain is the sorts of @p args and whose range
+   *  is @p rangesort, then applies it to @p args. Every application sharing
+   *  @p name resolves to the same declaration, so the solver enforces
+   *  functional congruence (equal arguments imply an equal result) natively.
+   *
+   *  The default implementation Ackermannises the application (a fresh symbol
+   *  plus congruence assumptions against earlier applications of the same name)
+   *  for backends without native uninterpreted-function support. Solvers that
+   *  expose UFs override this to declare and apply them directly.
+   *  @param name Stable (mangled) name of the function symbol.
+   *  @param args The already-converted argument asts.
+   *  @param rangesort The sort of the function's result.
+   *  @return The ast denoting name(args). */
+  virtual smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort);
+
   /** Create an 'extract' func app. Since we can't currently
    *  encode integer constants as function arguments without serious faff,
    *  this can't be performed via the medium of mk_func_app. Hence, this api
@@ -945,6 +964,26 @@ public:
 
   /** Counter for generating unique bound-variable names in quantifiers. */
   size_t quantifier_counter = 0;
+
+  /** One recorded uninterpreted-function application in the Ackermannisation
+   *  fallback: the argument asts, the fresh result ast, and the context level
+   *  at which it was created (so it can be pruned on the matching pop, since
+   *  pop_ctx deletes the asts made since the push). */
+  struct uf_ackermann_entry
+  {
+    std::vector<smt_astt> args;
+    smt_astt result;
+    unsigned int level;
+  };
+  /** Per-name history of uninterpreted-function applications, used only by the
+   *  Ackermannisation fallback in the base mk_smt_uninterpreted_function (for
+   *  backends without native UF support). A later application of the same name
+   *  is tied to each earlier one by an (args equal => results equal)
+   *  assumption. */
+  std::unordered_map<std::string, std::vector<uf_ackermann_entry>>
+    uf_ackermann_history;
+  /** Counter for the fresh result symbols minted by the Ackermann fallback. */
+  size_t uf_ackermann_counter = 0;
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
