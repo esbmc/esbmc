@@ -4,6 +4,7 @@
 #include <solvers/smt/smt_sort.h>
 
 #include <irep2/irep2_expr.h>
+#include <util/message.h>
 
 class smt_solver_baset;
 
