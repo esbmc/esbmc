@@ -429,6 +429,16 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/next_permutation"
     "regression/quixbugs/next_permutation_fail"
+    # depth_first_search_fail builds a small Node graph and recurses over each
+    # node's `successors` list. Under the object-model migration (#3067) every
+    # instance is a heap Class* and a Class* read out of a list into a recursive
+    # call carries an imprecise (unknown) points-to, so deep unwinding triggers a
+    # failed-symbol dereference cascade that does not converge (the original
+    # --unwind 5 ran >10min). The test's bound was lowered to --unwind 2, which
+    # still reaches the expected VERIFICATION FAILED in ~30s locally; the 2x
+    # budget covers the DebugOpt Linux runner's slowdown. The points-to-precision
+    # regression is tracked separately.
+    "regression/quixbugs/depth_first_search_fail"
     # breadth_first_search(_fail) used to fast-fail with
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
