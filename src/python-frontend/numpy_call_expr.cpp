@@ -2292,20 +2292,6 @@ exprt numpy_call_expr::get()
       auto lhs = extract_value(call_["args"][0]);
       auto rhs = extract_value(call_["args"][1]);
 
-      nlohmann::json result;
-      if (lhs.is_int && rhs.is_int)
-      {
-        result =
-          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
-      }
-      else
-      {
-        result =
-          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
-      }
-
-      exprt expr = converter_.get_expr(result);
-
       auto compute_scalar_result =
         [&](double left, double right, double &out) -> bool {
         if (function == "add")
@@ -2335,8 +2321,64 @@ exprt numpy_call_expr::get()
           out = std::pow(left, right);
           return true;
         }
+        if (function == "copysign")
+        {
+          out = std::copysign(left, right);
+          return true;
+        }
+        if (function == "fmax")
+        {
+          out = std::fmax(left, right);
+          return true;
+        }
+        if (function == "fmin")
+        {
+          out = std::fmin(left, right);
+          return true;
+        }
         return false;
       };
+
+      // copysign/fmax/fmin have no operator_map() entry and no handler,
+      // so the BinOp path below crashes migrate_expr.
+      // Fold the scalar-constant case here.
+      // Symbolic and array operands are unsupported.
+      if (function == "copysign" || function == "fmax" || function == "fmin")
+      {
+        double folded = 0.0;
+        if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
+          throw std::runtime_error(
+            "compute_scalar_result missing branch for " + function);
+
+        // Mirror the dtype-override branch below:
+        // only restamp current_lhs when the user explicitly requested a dtype.
+        typet t = cached_double_type();
+        if (get_dtype_size() && converter_.current_lhs)
+        {
+          t = get_typet_from_dtype();
+          if (!t.is_floatbv())
+            t = cached_double_type();
+          converter_.current_lhs->type() = t;
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        exprt folded_expr = from_double(folded, t);
+        folded_expr.cformat(std::to_string(folded));
+        return folded_expr;
+      }
+
+      nlohmann::json result;
+      if (lhs.is_int && rhs.is_int)
+      {
+        result =
+          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
+      }
+      else
+      {
+        result =
+          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
+      }
+
+      exprt expr = converter_.get_expr(result);
 
       auto dtype_size = get_dtype_size();
       if (dtype_size && converter_.current_lhs)
