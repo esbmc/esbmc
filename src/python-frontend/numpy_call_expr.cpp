@@ -1440,6 +1440,19 @@ exprt numpy_call_expr::create_expr_from_call()
           "TypeError: numpy.linalg.det requires a square 2D matrix");
       }
 
+      for (const auto &row : matrix)
+      {
+        for (const auto &value : row)
+        {
+          if (value.is_complex)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.linalg.det currently supports only constant "
+              "2D numeric arrays");
+          }
+        }
+      }
+
       if (n == 2)
         return converter_.get_expr(to_json_constant(determinant_2x2(matrix)));
       if (n == 3)
@@ -2200,10 +2213,30 @@ exprt numpy_call_expr::create_expr_from_call()
               int_type());
           };
 
+        auto build_array_type =
+          [&](const std::vector<std::size_t> &shape, const typet &elem_type) {
+            if (shape.empty())
+              return elem_type;
+
+            typet array_type = elem_type;
+            for (auto it = shape.rbegin(); it != shape.rend(); ++it)
+              array_type = type_handler_.build_array(array_type, *it);
+            return array_type;
+          };
+
+        typet lhs_scalar_type =
+          get_array_scalar_type(type_handler_.get_typet(lhs["elts"]));
+        typet rhs_scalar_type =
+          get_array_scalar_type(type_handler_.get_typet(rhs["elts"]));
+        const bool is_float =
+          lhs_scalar_type.is_floatbv() || rhs_scalar_type.is_floatbv();
+
         const nlohmann::json &reference =
           lhs_shape.size() >= rhs_shape.size() ? lhs : rhs;
-        typet size = type_handler_.get_typet(reference["elts"]);
-        typet t = converter_.get_static_array(reference, size).type();
+        typet t = is_float
+                    ? build_array_type(result_shape, double_type())
+                    : converter_.get_static_array(reference, type_handler_.get_typet(reference["elts"])).type();
+        function_id_.set_function(operation + (is_float ? "_double" : ""));
 
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
@@ -2211,6 +2244,13 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         auto &args = call.arguments();
+        typet flat_ptr_type =
+          pointer_typet(is_float ? double_type() : long_long_int_type());
+        if (args.size() >= 2)
+        {
+          args[0] = typecast_exprt(args[0], flat_ptr_type);
+          args[1] = typecast_exprt(args[1], flat_ptr_type);
+        }
         args.push_back(np_address_of(*converter_.current_lhs));
         args.push_back(as_dim(lhs_shape, 0));
         args.push_back(as_dim(lhs_shape, 1));
