@@ -2539,11 +2539,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt then;
-    if (get_expr(*ternary_if.getTrueExpr(), then))
+    if (get_expr(*ternary_if.getTrueExpr()->IgnoreParens(), then))
       return true;
 
     exprt else_expr;
-    if (get_expr(*ternary_if.getFalseExpr(), else_expr))
+    if (get_expr(*ternary_if.getFalseExpr()->IgnoreParens(), else_expr))
       return true;
 
     typet t;
@@ -2552,6 +2552,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     exprt if_expr("if", t);
     if_expr.copy_to_operands(cond, then, else_expr);
+
+    // Record the column of the ? token on the expression location so that
+    // goto_sideeffects can propagate it to the IF instruction when lowering
+    // this ternary for branching waypoints.
+    clang::PresumedLoc qLoc;
+    get_presumed_location(ternary_if.getQuestionLoc(), qLoc);
+    if (!qLoc.isInvalid())
+      location.set_column(qLoc.getColumn());
 
     new_expr = if_expr;
     break;
@@ -4782,7 +4790,8 @@ void clang_c_convertert::get_presumed_location(
   /* Do not use #line directives, because the GraphML witness format appearently
    * wants to use the physical line in the pre-processed .i file; at least
    * CPAchecker and UAutomizer do. */
-  use_line_directives = false;
+  if (!config.options.get_bool_option("validate-violation-witness"))
+    use_line_directives = false;
 #endif
   PLoc = sm->getPresumedLoc(FileLoc, use_line_directives);
 }

@@ -94,6 +94,8 @@ void intern_location(waypoint &wp)
 {
   if (wp.line != c_nonset)
     wp.line_id = irep_idt(integer2string(wp.line));
+  if (wp.column != c_nonset)
+    wp.column_id = irep_idt(integer2string(wp.column));
   wp.function_id = irep_idt(wp.function);
 }
 
@@ -158,7 +160,6 @@ std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
           {
             wp_cache.target = wp;
             wp_cache.has_target = true;
-            continue;
           }
           wp.segment_idx = seg_idx;
           wp_cache.waypoints.push_back(std::move(wp));
@@ -210,6 +211,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
       wp.file = loc["file_name"].as<std::string>();
     if (loc["line"])
       wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["column"])
+      wp.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
     if (loc["function"])
       wp.function = loc["function"].as<std::string>();
   }
@@ -252,7 +255,10 @@ std::string yaml_parser::build_violation_witness_source(
   const std::string &original_path,
   const std::vector<waypoint> &waypoints)
 {
-  // Inject after the source line so declarations are in scope.
+  // Inject assumption waypoints on the same physical line as the pointed
+  // statement. This preserves physical line numbers for all subsequent lines,
+  // so both ESBMC_SVCOMP builds (physical line numbers) and regular builds
+  // (logical line numbers via #line) see the correct line for each waypoint.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
@@ -276,24 +282,25 @@ std::string yaml_parser::build_violation_witness_source(
   while (std::getline(in, line_text))
   {
     ++line_num;
-    out << line_text << "\n";
 
     auto it = by_line.find(line_num);
     if (it != by_line.end())
     {
       for (const waypoint *wp : it->second)
       {
-        const std::string &expr = wp->value;
         log_progress(
           "Injecting {} assumption at line {}: {}",
           wp->action == waypoint::avoid ? "avoid" : "follow",
           line_num,
-          expr);
+          wp->value);
         out << "#line " << line_num << " \"" << original_path << "\"\n";
         out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
-            << expr << "));\n";
+            << wp->value << "));\n";
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
       }
     }
+
+    out << line_text << "\n";
   }
 
   return out.str();
