@@ -790,22 +790,28 @@ public:
   expr2tc cond;
   expr2tc true_value;
   expr2tc false_value;
+  locationt
+    location; // not reflected: carries the ? position for witness branching
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   /** Primary constructor
    *  @param type Type this expression evaluates to.
    *  @param cond Condition to evaulate which side of ternary operator is used.
    *  @param trueval Value to use if cond evaluates to true.
    *  @param falseval Value to use if cond evaluates to false.
+   *  @param loc Source location of the ? token (optional).
    */
   if2t(
     const type2tc &type,
     const expr2tc &cond_,
     const expr2tc &trueval,
-    const expr2tc &falseval)
+    const expr2tc &falseval,
+    const locationt &loc = locationt())
     : expr2t(type, if_id),
       cond(cond_),
       true_value(trueval),
-      false_value(falseval)
+      false_value(falseval),
+      location(loc)
   {
     assert(type->type_id == trueval->type->type_id);
     assert(type->type_id == falseval->type->type_id);

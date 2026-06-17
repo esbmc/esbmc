@@ -987,7 +987,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (false_val->type->type_id != type->type_id)
       false_val = typecast2tc(type, false_val);
 
-    new_expr_ref = if2tc(type, cond, true_val, false_val);
+    new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
   }
 
@@ -3070,6 +3070,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       migrate_expr_back(ref2.true_value),
       migrate_expr_back(ref2.false_value));
     theif.type() = thetype;
+    if (ref2.location.is_not_nil())
+      theif.location() = ref2.location;
     return theif;
   }
   case expr2t::equality_id:
