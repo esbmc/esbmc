@@ -190,6 +190,38 @@ static scalar_value make_complex_scalar(double real, double imag)
   return out;
 }
 
+static bool try_extract_scalar_binary(
+  const nlohmann::json &node,
+  scalar_value &out)
+{
+  if (
+    !node.is_object() || !node.contains("_type") || node["_type"] != "BinOp" ||
+    !node.contains("op") || !node["op"].is_object() ||
+    !node["op"].contains("_type") || !node.contains("left") ||
+    !node.contains("right"))
+  {
+    return false;
+  }
+
+  const std::string op_type = node["op"]["_type"];
+  if (op_type != "Add" && op_type != "Sub")
+    return false;
+
+  scalar_value left;
+  scalar_value right;
+  if (
+    !try_extract_scalar_constant(node["left"], left) ||
+    !try_extract_scalar_constant(node["right"], right))
+  {
+    return false;
+  }
+
+  out.is_complex = left.is_complex || right.is_complex;
+  out.value = op_type == "Add" ? left.value + right.value
+                                : left.value - right.value;
+  return true;
+}
+
 static bool is_complex_annotated_constant(const nlohmann::json &node)
 {
   if (!node.is_object())
@@ -205,11 +237,16 @@ try_extract_scalar_constant(const nlohmann::json &node, scalar_value &out)
     return false;
 
   const std::string type = node["_type"];
-  if (type != "Constant" && type != "UnaryOp")
+  if (type != "Constant" && type != "UnaryOp" && type != "BinOp")
     return false;
 
   try
   {
+    if (type == "BinOp")
+    {
+      if (try_extract_scalar_binary(node, out))
+        return true;
+    }
     if (type == "UnaryOp")
     {
       if (!node.contains("operand") || !node["operand"].is_object())
@@ -526,6 +563,27 @@ enum class scalar_kind
 
 static scalar_kind get_scalar_kind(const nlohmann::json &node)
 {
+  if (
+    node.contains("_type") && node["_type"] == "BinOp" &&
+    node.contains("left") && node["left"].is_object())
+  {
+    const scalar_kind left_kind = get_scalar_kind(node["left"]);
+    const scalar_kind right_kind =
+      node.contains("right") && node["right"].is_object()
+        ? get_scalar_kind(node["right"])
+        : scalar_kind::int_like;
+
+    if (
+      left_kind == scalar_kind::complex_like ||
+      right_kind == scalar_kind::complex_like)
+      return scalar_kind::complex_like;
+    if (
+      left_kind == scalar_kind::float_like ||
+      right_kind == scalar_kind::float_like)
+      return scalar_kind::float_like;
+    return scalar_kind::int_like;
+  }
+
   if (
     node.contains("_type") && node["_type"] == "UnaryOp" &&
     node.contains("operand") && node["operand"].is_object())
@@ -856,6 +914,14 @@ static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
   }
 
   return {};
+}
+
+static typet get_array_scalar_type(const typet &array_type)
+{
+  typet scalar_type = array_type;
+  while (scalar_type.is_array())
+    scalar_type = scalar_type.subtype();
+  return scalar_type;
 }
 
 static numeric_value extract_value(const nlohmann::json &arg)
