@@ -560,6 +560,53 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
   smt_astt intermediate = ctx->mk_mul(val1, val2);
   smt_astt real_result = ctx->mk_add(intermediate, val3);
   const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+  const expr2tc &rounding_mode = to_ieee_fma2t(expr).rounding_mode;
+
+  if (
+    ctx->options.get_bool_option("ir-ieee") &&
+    is_known_rounding_mode(rounding_mode) && is_single_or_double(fbv_type))
+  {
+    ra_interval_t iv1 = get_interval(val1);
+    ra_interval_t iv2 = get_interval(val2);
+    ra_interval_t iv3 = get_interval(val3);
+
+    // Multiplication hull: min/max over the four endpoint products of x and y.
+    smt_astt p1 = ctx->mk_mul(iv1.lo, iv2.lo);
+    smt_astt p2 = ctx->mk_mul(iv1.lo, iv2.hi);
+    smt_astt p3 = ctx->mk_mul(iv1.hi, iv2.lo);
+    smt_astt p4 = ctx->mk_mul(iv1.hi, iv2.hi);
+    smt_astt mul_lo = ctx->mk_ite(
+      ctx->mk_le(p1, p2),
+      ctx->mk_ite(
+        ctx->mk_le(p1, p3),
+        ctx->mk_ite(ctx->mk_le(p1, p4), p1, p4),
+        ctx->mk_ite(ctx->mk_le(p3, p4), p3, p4)),
+      ctx->mk_ite(
+        ctx->mk_le(p2, p3),
+        ctx->mk_ite(ctx->mk_le(p2, p4), p2, p4),
+        ctx->mk_ite(ctx->mk_le(p3, p4), p3, p4)));
+    smt_astt mul_hi = ctx->mk_ite(
+      ctx->mk_le(p2, p1),
+      ctx->mk_ite(
+        ctx->mk_le(p3, p1),
+        ctx->mk_ite(ctx->mk_le(p4, p1), p1, p4),
+        ctx->mk_ite(ctx->mk_le(p4, p3), p3, p4)),
+      ctx->mk_ite(
+        ctx->mk_le(p3, p2),
+        ctx->mk_ite(ctx->mk_le(p4, p2), p2, p4),
+        ctx->mk_ite(ctx->mk_le(p4, p3), p3, p4)));
+
+    // Fused add: extend the multiplication hull by the z interval.
+    // r = x*y + z is a single rounding, so the enclosure is applied once.
+    smt_astt lo_r = ctx->mk_add(mul_lo, iv3.lo);
+    smt_astt hi_r = ctx->mk_add(mul_hi, iv3.hi);
+
+    auto bounds =
+      apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
+    store_interval(real_result, bounds.first, bounds.second);
+    return real_result;
+  }
+
   return ctx->apply_ieee754_semantics(
-    real_result, fbv_type, nullptr, to_ieee_fma2t(expr).rounding_mode);
+    real_result, fbv_type, nullptr, rounding_mode);
 }
