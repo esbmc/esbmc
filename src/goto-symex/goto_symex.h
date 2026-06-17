@@ -403,6 +403,22 @@ protected:
   virtual void symex_function_call_code(const expr2tc &call);
 
   /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
+
+  /**
    *  Discover whether recursion bound has been exceeded.
    *  @see get_unwind
    *  @param identifier Name of function to consider recursion of.
@@ -1262,8 +1278,7 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Pre-interned target waypoint line; empty when no target is present. */
-  irep_idt witness_target_line;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */

@@ -788,6 +788,41 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return new_ast(t, s);
 }
 
+smt_astt mathsat_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already declares one by name, so repeated uses share it (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare the function by name (MathSAT interns declarations, so every
+  // application shares it and the solver enforces congruence natively).
+  std::vector<msat_type> domain;
+  domain.reserve(args.size());
+  for (smt_astt arg : args)
+    domain.push_back(to_solver_smt_sort<msat_type>(arg->sort)->s);
+
+  msat_type fun_type = msat_get_function_type(
+    env,
+    domain.data(),
+    domain.size(),
+    to_solver_smt_sort<msat_type>(rangesort)->s);
+  msat_decl d = msat_declare_function(env, name.c_str(), fun_type);
+  assert(!MSAT_ERROR_DECL(d) && "Invalid uninterpreted-function declaration");
+
+  std::vector<msat_term> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<mathsat_smt_ast>(arg)->a);
+
+  msat_term t = msat_make_uf(env, d, apply_args.data());
+  check_msat_error(t);
+  return new_ast(t, rangesort);
+}
+
 smt_astt
 mathsat_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {

@@ -9,9 +9,9 @@
       configuration: "svcomp24"
     task:
       input_files:
-        - "./example-safe.c"
+        - "main.c"
       input_file_hashes:
-        "./example-safe.c": "e4df7cba34fe4fa16d918ca55a18e2cd11e6621f7a6cba9ad071ea9670c26365"
+        "main.c": "e4df7cba34fe4fa16d918ca55a18e2cd11e6621f7a6cba9ad071ea9670c26365"
       specification: "G ! call(reach_error())"
       data_model: "ILP32"
       language: "C"
@@ -19,7 +19,7 @@
   - invariant:
       type: loop_invariant
       location:
-        file_name: "./example-safe.c"
+        file_name: "main.c"
         line: 10
         column: 3
         function: main

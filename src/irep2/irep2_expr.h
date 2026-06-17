@@ -240,6 +240,7 @@ irep_typedefs(hasattr);
 irep_typedefs(isnone);
 irep_typedefs(new_object);
 irep_typedefs(sizeof);
+irep_typedefs(uninterpreted_func);
 
 class exists2t : public expr2t
 {
@@ -775,22 +776,28 @@ public:
   expr2tc cond;
   expr2tc true_value;
   expr2tc false_value;
+  locationt
+    location; // not reflected: carries the ? position for witness branching
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   /** Primary constructor
    *  @param type Type this expression evaluates to.
    *  @param cond Condition to evaulate which side of ternary operator is used.
    *  @param trueval Value to use if cond evaluates to true.
    *  @param falseval Value to use if cond evaluates to false.
+   *  @param loc Source location of the ? token (optional).
    */
   if2t(
     const type2tc &type,
     const expr2tc &cond_,
     const expr2tc &trueval,
-    const expr2tc &falseval)
+    const expr2tc &falseval,
+    const locationt &loc = locationt())
     : expr2t(type, if_id),
       cond(cond_),
       true_value(trueval),
-      false_value(falseval)
+      false_value(falseval),
+      location(loc)
   {
     assert(type->type_id == trueval->type->type_id);
     assert(type->type_id == falseval->type->type_id);
@@ -1926,6 +1933,41 @@ public:
 
   expr2tc do_simplify() const override;
   static constexpr auto fields = std::make_tuple(&expr2t::type);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Uninterpreted-function application.
+ *  Models a call to a "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*"
+ *  function as a genuine uninterpreted function: its value is an arbitrary but
+ *  *fixed* function of its arguments. Created during symbolic execution (the
+ *  concrete body, if any, is discarded) and consumed only at SMT conversion
+ *  time. The backend declares one solver function symbol per @ref
+ *  function_name and applies it to the converted arguments, so functional
+ *  congruence (equal arguments imply an equal result) is enforced natively by
+ *  the solver rather than by hand-rolled Ackermannisation in symex.
+ */
+class uninterpreted_func2t : public expr2t
+{
+public:
+  /** Mangled callee name; the stable key under which the solver declares the
+   *  function symbol, so every application of the same callee shares one decl
+   *  and is tied together by congruence. */
+  irep_idt function_name;
+  std::vector<expr2tc> arguments;
+
+  uninterpreted_func2t(
+    const type2tc &type,
+    const irep_idt &name,
+    const std::vector<expr2tc> &args)
+    : expr2t(type, uninterpreted_func_id), function_name(name), arguments(args)
+  {
+  }
+  uninterpreted_func2t(const uninterpreted_func2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &uninterpreted_func2t::function_name,
+    &uninterpreted_func2t::arguments);
   static std::string field_names[esbmct::num_type_fields];
 };
 

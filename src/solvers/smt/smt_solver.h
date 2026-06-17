@@ -5,6 +5,7 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
+#include <memory>
 #include <mutex>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
@@ -87,6 +88,7 @@
 
 // Forward dec.
 class fp_convt;
+class ir_ieee_convt;
 class smt_solver_baset;
 class ra_apit;
 
@@ -151,7 +153,7 @@ public:
    *  @param _options Provide all the needed parameters to configure the solver. */
   smt_solver_baset(const namespacet &_ns, const optionst &_options);
 
-  virtual ~smt_solver_baset() = default;
+  virtual ~smt_solver_baset();
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because
@@ -494,6 +496,25 @@ public:
    *  @param s The sort of the symbol we're creating.
    *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) = 0;
+
+  /** Apply an uninterpreted function. Declares (or reuses) a solver function
+   *  symbol named @p name whose domain is the sorts of @p args and whose range
+   *  is @p rangesort, then applies it to @p args. Every application sharing
+   *  @p name resolves to the same declaration, so the solver enforces
+   *  functional congruence (equal arguments imply an equal result) natively.
+   *
+   *  The default implementation Ackermannises the application (a fresh symbol
+   *  plus congruence assumptions against earlier applications of the same name)
+   *  for backends without native uninterpreted-function support. Solvers that
+   *  expose UFs override this to declare and apply them directly.
+   *  @param name Stable (mangled) name of the function symbol.
+   *  @param args The already-converted argument asts.
+   *  @param rangesort The sort of the function's result.
+   *  @return The ast denoting name(args). */
+  virtual smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort);
 
   /** Create an 'extract' func app. Since we can't currently
    *  encode integer constants as function arguments without serious faff,
@@ -929,9 +950,6 @@ public:
   bool int_encoding;
   /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
   bool ir_ieee;
-  /** Tracks symbols that have already received ir-ieee integer range assertions,
-   *  preventing duplicate assertions for the same SSA variable. */
-  std::unordered_set<std::string> ir_ieee_ranged_syms;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
@@ -946,6 +964,26 @@ public:
 
   /** Counter for generating unique bound-variable names in quantifiers. */
   size_t quantifier_counter = 0;
+
+  /** One recorded uninterpreted-function application in the Ackermannisation
+   *  fallback: the argument asts, the fresh result ast, and the context level
+   *  at which it was created (so it can be pruned on the matching pop, since
+   *  pop_ctx deletes the asts made since the push). */
+  struct uf_ackermann_entry
+  {
+    std::vector<smt_astt> args;
+    smt_astt result;
+    unsigned int level;
+  };
+  /** Per-name history of uninterpreted-function applications, used only by the
+   *  Ackermannisation fallback in the base mk_smt_uninterpreted_function (for
+   *  backends without native UF support). A later application of the same name
+   *  is tied to each earlier one by an (args equal => results equal)
+   *  assumption. */
+  std::unordered_map<std::string, std::vector<uf_ackermann_entry>>
+    uf_ackermann_history;
+  /** Counter for the fresh result symbols minted by the Ackermann fallback. */
+  size_t uf_ackermann_counter = 0;
 
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
@@ -998,6 +1036,7 @@ public:
   array_iface *array_api;
   fp_convt *fp_api;
   ra_apit *ra_api;
+  std::unique_ptr<ir_ieee_convt> ir_ieee_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
@@ -1008,115 +1047,6 @@ private:
     const BigInt &numerator,
     const BigInt &denominator);
 
-  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ieee).
-   *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
-   *  SMT symbols are stored here, keyed on the exact real_result AST pointer
-   *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
-   *  ieee_add calls look up each operand; missing entries fall back to a point
-   *  interval {side, side} which reproduces the single-step formula exactly.
-   *
-   *  Map lifetime: safe in standard BMC (no push_ctx during formula build).
-   *  In runtime_encoded_equationt (incremental), pop_ctx() deletes ASTs for
-   *  the popped level; stale entries may linger but are never looked up in
-   *  practice because SSA renaming gives distinct pointers per step.
-   *  TODO: clear entries for the popped ctx_level in a follow-up PR. */
-  struct ra_interval_t
-  {
-    smt_astt lo;
-    smt_astt hi;
-  };
-  std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
-
-  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ieee only).
-   *  Called from ieee_add_id after verifying RNE mode + known format.
-   *  Inputs:
-   *    real_result  exact symbolic real for this addition (mk_add(side1,side2))
-   *    lo_r         lower endpoint of the result interval (iv1.lo + iv2.lo)
-   *    hi_r         upper endpoint of the result interval (iv1.hi + iv2.hi)
-   *    fbv_type     FP type; caller guarantees double or single precision
-   *  Behavior:
-   *    Creates fresh ra_lo::N / ra_hi::N Real symbols.
-   *    Pins ra_lo to lo_r - B_near^-(lo_r) via bidirectional inequalities.
-   *    Pins ra_hi to hi_r + B_near^+(hi_r) via bidirectional inequalities.
-   *    Asserts containment: ra_lo <= real_result <= ra_hi, ra_lo <= ra_hi.
-   *    Point-interval fallback (lo_r == hi_r == real_result) produces a
-   *    formula structurally equivalent to the single-step RNE path.
-   *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
-    smt_astt real_result,
-    smt_astt lo_r,
-    smt_astt hi_r,
-    const floatbv_type2t &fbv_type);
-
-  /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
-   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
-   *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
-   *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
-   *  unit roundoff as ROUND_TO_EVEN.
-   *  Inputs / behavior / returns: identical to the RNE helper above,
-   *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
-   *  the RNA single-step naming convention. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
-    smt_astt real_result,
-    smt_astt lo_r,
-    smt_astt hi_r,
-    const floatbv_type2t &fbv_type);
-
-  /** Interval-lifted RUP enclosure helper for ieee_sub (--ir-ieee only).
-   *  EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
-   *  fl_RUP(r) >= r always (directed mode rounds up), so the lower bound is
-   *  exact: ra_lo is pinned to lo_r with no B_dir adjustment.
-   *  The upper bound adds B_dir at the upper endpoint:
-   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
-   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
-   *  Fresh symbols named ra_lo_up::N / ra_hi_up::N to match the single-step
-   *  RUP naming convention in apply_ieee754_semantics. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rup_enclosure(
-    smt_astt real_result,
-    smt_astt lo_r,
-    smt_astt hi_r,
-    const floatbv_type2t &fbv_type);
-
-  /** Interval-lifted RDN enclosure helper for ieee_sub (--ir-ieee only).
-   *  EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
-   *  fl_RDN(r) <= r always (directed mode rounds down), so the upper bound is
-   *  exact: ra_hi is pinned to hi_r with no B_dir adjustment.
-   *  The lower bound subtracts B_dir at the lower endpoint:
-   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
-   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
-   *  Fresh symbols named ra_lo_dn::N / ra_hi_dn::N to match the single-step
-   *  RDN naming convention in apply_ieee754_semantics. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rdn_enclosure(
-    smt_astt real_result,
-    smt_astt lo_r,
-    smt_astt hi_r,
-    const floatbv_type2t &fbv_type);
-
-  /** Interval-lifted RTZ enclosure helper for ieee_sub (--ir-ieee only).
-   *  RTZ (truncation toward zero) is sign-dependent: it rounds down for
-   *  non-negative inputs and rounds up for non-positive inputs.
-   *  The enclosure has three cases based on the sign of [LR, UR]:
-   *
-   *  1. LR >= 0 (hull entirely non-negative): fl_RTZ acts like RDN
-   *     EbRTZ = [LR - B_dir(LR), UR]    (exact upper bound)
-   *
-   *  2. UR <= 0 (hull entirely non-positive): fl_RTZ acts like RUP
-   *     EbRTZ = [LR, UR + B_dir(UR)]    (exact lower bound)
-   *
-   *  3. LR < 0 < UR (hull crosses zero): sign of actual result is unknown,
-   *     conservative symmetric bound:
-   *     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
-   *     EbRTZ = [LR - B_dir_max, UR + B_dir_max]
-   *
-   *  B_dir(r) = eps_rel_dir * |r| + eps_abs
-   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
-   *  Fresh symbols named ra_lo_tz::N / ra_hi_tz::N to match the single-step
-   *  RTZ naming convention in apply_ieee754_semantics. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rtz_enclosure(
-    smt_astt real_result,
-    smt_astt lo_r,
-    smt_astt hi_r,
-    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */

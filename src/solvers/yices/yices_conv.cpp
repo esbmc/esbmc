@@ -693,6 +693,41 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
   return new_ast(term, s);
 }
 
+smt_astt yices_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function term by name (Yices interns named terms), so
+  // every application shares it and the solver enforces congruence natively.
+  term_t fun = yices_get_term_by_name(name.c_str());
+  if (fun == NULL_TERM)
+  {
+    std::vector<type_t> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<type_t>(arg->sort)->s);
+
+    type_t fun_type = yices_function_type(
+      domain.size(), domain.data(), to_solver_smt_sort<type_t>(rangesort)->s);
+    fun = yices_new_uninterpreted_term(fun_type);
+    yices_set_term_name(fun, name.c_str());
+  }
+
+  std::vector<term_t> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<yices_smt_ast>(arg)->a);
+
+  return new_ast(
+    yices_application(fun, apply_args.size(), apply_args.data()), rangesort);
+}
+
 smt_astt yices_convt::mk_array_symbol(
   const std::string &name,
   smt_sortt s,

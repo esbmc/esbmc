@@ -1404,7 +1404,16 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     goto_programt::targett x = tmp_cases.add_instruction();
     x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
-    x->location = case_ops.front().find_location();
+    x->location = code.location();
+    if (
+      options.get_bool_option("validate-violation-witness") ||
+      options.get_option("witness-output-yaml") != "")
+      for (const auto &op : case_ops)
+      {
+        BigInt val;
+        if (!to_integer(op, val))
+          x->switch_case_ids.push_back(integer2string(val));
+      }
   }
 
   {
@@ -1595,7 +1604,10 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // do guarded assertions directly
+  // Disabled under --validate-violation-witness: the folding eliminates the
+  // conditional GOTO that witness branching waypoints need to steer the path.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     true_case.instructions.size() == 1 &&
     true_case.instructions.back().is_assert() &&
     is_false(true_case.instructions.back().guard) &&
@@ -1616,7 +1628,9 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // similarly, do guarded assertions directly
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     false_case.instructions.size() == 1 &&
     false_case.instructions.back().is_assert() &&
     is_false(false_case.instructions.back().guard) &&
@@ -1638,7 +1652,9 @@ void goto_convertt::generate_ifthenelse(
 
   // a special case for C libraries that use
   // (void)((cond) || (assert(0),0))
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     is_empty(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&

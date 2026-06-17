@@ -1,0 +1,94 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: 894b666d-e6d7-4547-87de-1a6ac3c97ac8
+    creation_time: "2024-04-29T13:13:07+02:00"
+    producer:
+      name: "Paulina"
+      version: "thesis"
+    task:
+      input_files:
+      - "functions.c"
+      input_file_hashes:
+        functions.c: 2dc9cde827db914367d2e6304c8935a81dbb218d50448125781346c65452a2e3
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 9"
+          format: "acsl_expression"
+        location:
+          file_name: "functions.c"
+          line: 48
+          column: 35
+  - segment:
+    - waypoint:
+        type: "function_enter"
+        action: "follow"
+        location:
+          file_name: "functions.c"
+          line: 50
+          column: 18
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 9"
+          format: "acsl_expression"
+        location:
+          file_name: "functions.c"
+          line: 17
+          column: 35
+  - segment:
+    - waypoint:
+        type: "function_enter"
+        action: "follow"
+        location:
+          file_name: "functions.c"
+          line: 23
+          column: 25
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 10"
+          format: "acsl_expression"
+        location:
+          file_name: "functions.c"
+          line: 29
+          column: 35
+  - segment:
+    - waypoint:
+        type: "function_enter"
+        action: "follow"
+        location:
+          file_name: "functions.c"
+          line: 35
+          column: 25
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 9"
+          format: "acsl_expression"
+        location:
+          file_name: "functions.c"
+          line: 41
+          column: 35
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "functions.c"
+          line: 43
+          column: 9
+

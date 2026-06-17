@@ -80,6 +80,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -114,6 +118,11 @@ public:
   BitwuzlaTermManager *bitw_term_manager;
 
   symtabt symtable;
+
+  /** Uninterpreted-function declarations, keyed by name. Bitwuzla mints a fresh
+   *  constant on each bitwuzla_mk_const, so the function term is cached here and
+   *  reused across applications, giving native functional congruence. */
+  std::unordered_map<std::string, BitwuzlaTerm> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_ */

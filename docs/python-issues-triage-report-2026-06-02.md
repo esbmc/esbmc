@@ -227,3 +227,61 @@ useful for any program using `reversed()` in a value context.
 No further isolated, sound point fix is available on current master without the §5
 architectural work (flow-sensitive class tracking, tuple-unpack inference, any-typing,
 string/tuple-equality soundness). The §5 priority order stands.
+
+---
+
+## 8. 2026-06-16 re-validation — signatures shifted, no new isolated fix
+
+Independent re-run of **all 46 KNOWNBUG python/quixbugs/humaneval tests** against current
+`master` (tip `bd2e4a7d79`), each with its own `test.desc` flags, after the **63 commits**
+that landed since §7. That set includes the largest Python push of any inter-sweep window —
+`#5329` (model a class used as a first-class value; flip `rover` to CORE), `#5324`/`#5336`
+(tuple targets / `d.items()` in dict comprehensions), `#5333` (`@property` getters),
+`#5338`/`#5347`/`#5353`/`#5356` (lexicographic tuple ordering, sort literal/symbolic lists of
+tuples, resolve `list[Tuple[...]]` element type), `#5306` (`issuperset` lowering), `#5319`
+(forward-ref class returns), `#5331`/`#5332` (while-else, complex inference).
+
+**Result: zero KNOWNBUG→CORE flips.** Every test still misses its expected verdict; the §3
+classification holds. A pass that checks each KNOWNBUG test against its expected regex flagged
+**no** candidate (the test harness `sys.exit(77)`s any KNOWNBUG that matches — none did).
+
+### 8a. The Python push shifted error signatures *deeper into the same clusters*
+The class/tuple/dict-comprehension work did not open a new isolated point fix; it advanced
+several tests from one design-cluster failure to a *later* one in the same cluster:
+
+| Test | §7 failure mode | Today's failure mode | Still bottoms out in |
+|---|---|---|---|
+| `depth_first_search` | `ABORT`→diagnostic `__ESBMC_get_object_size: …non-array object` (#5042) | `ERROR: function call: argument "…@search_from@node" type mismatch: got pointer, expected struct` | object pointer-vs-value model (#3067): the nested `search_from`'s param is typed as a `Node` struct by value, but `startnode`/`nextnode` arrive as pointers |
+| `github_4782_object_size` | fast clean diagnostic (`…non-array object`) | BMC **timeout** — the set/graph is now modelled far enough that it no longer reaches the non-array `object_size` guard, and instead hits the unwinding wall | object/set model (#3067) → §3c perf |
+| `shortest_paths(_fail)` | `ERROR: Only simple targets are supported in DictComp` | `ERROR: DictComp tuple target requires iterating a list of tuples` (after `#5324`) | dict-key-tuple modelling + any-typed param (`{v: … for u, v in weight_by_edge}` iterates a **dict**'s tuple keys, and `weight_by_edge` is an unannotated parameter — #2848) |
+
+The `depth_first_search` and `github_4782_object_size` cases are the *same* DFS-over-graph
+program (set membership + nested closure + generator expression); both are #3067 object-model
+work, not isolated bugs. `shortest_paths` needs dict-comprehension iteration over a dict's
+tuple keys plus `.items()` tuple unpacking, `min`, and dict `==` — the §3b dict/tuple-equality
+cluster, gated additionally by any-typing on the parameter.
+
+### 8b. Everything else: unchanged disposition
+Re-confirmed failure modes on today's master: perf/timeout (§3c, policy-banned) for
+`breadth_first_search(_fail)`, `knapsack(_fail)`, `next_permutation(_fail)`,
+`reverse_linked_list`, `shortest_path_lengths(_fail)`, `topological_ordering(_fail)`, and
+humaneval_37/86/90/93/158; clean "unsupported feature" errors for the tuple-unpack gaps
+(`minimum_spanning_tree` "Cannot unpack signedbv", `powerset` "Cannot unpack pointer",
+`shortest_path_length` "Cannot unpack empty"), mixed-type `sorted()` (humaneval_123) and
+non-constant tuple slice (humaneval_148); wrong-verdict soundness clusters (humaneval_1/1-1/
+67/91/95/145, `detect_cycle`, `wrap`, `bare_raise_nested`, `github_4117_function_internal`);
+`concurrency_fail` (threading MVP); `bitcount_fail` UNKNOWN (§3d); humaneval_162 `hashlib`
+(infeasible). Each remains a design-level blocker, a policy-banned timeout, a substantial
+sound feature, or a questionable test expectation — not an isolated point fix.
+
+**Build note.** This sweep ran a Z3-only `esbmc`. The four `--bitwuzla`-pinned tests
+(humaneval_39, `flatten_fail`, `rpn_eval`, `rpn_eval_fail`) were re-run under `--z3` and
+reproduce the §3c perf/timeout disposition; the solver pin does not change their
+classification.
+
+**Bottom line.** §7b's conclusion is reaffirmed five days and 63 commits later: no new
+isolated, soundly-fixable point fix is available on current `master` without the §5
+architectural work. The recent class/tuple/dict-comprehension landings are real progress on
+the §5 roadmap (they move tests *through* the cluster), but the remaining KNOWNBUGs are still
+gated on flow-sensitive class tracking, the object/pointer-vs-value model, tuple-unpack
+inference, any-typing, and string/tuple-equality soundness. The §5 priority order stands.

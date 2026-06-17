@@ -414,14 +414,14 @@ public:
 private:
   friend class python_dict_handler;
 
-  // Repeat `list_elem` a runtime number of times (`count` may be any integer
-  // expression: a constant, a symbol like `n`, or a compound like `m + 1`).
-  // Builds a fresh list, so a literal source's pre-populated element is not
-  // reused (avoids an off-by-one).
+  // Repeat the elements in `list_elems` `count` times at runtime (`count` may
+  // be any integer expression: a constant, a symbol like `n`, or a compound
+  // like `m + 1`). Each iteration pushes every element in order. Builds a
+  // fresh list so a literal source's element is not reused (avoids off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
     const exprt &count,
-    const exprt &list_elem);
+    const std::vector<exprt> &list_elems);
 
   exprt build_list_at_call(
     const exprt &list,

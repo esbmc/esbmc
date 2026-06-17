@@ -271,10 +271,76 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+bool goto_symext::symex_uninterpreted_function(
+  const code_function_call2t &call,
+  const irep_idt &identifier)
+{
+  // A function whose name begins "__ESBMC_uninterpreted_" (ESBMC's native
+  // namespace) or "__CPROVER_uninterpreted_" (CBMC compatibility) is modelled
+  // as an uninterpreted function: its value is an arbitrary but *fixed*
+  // function of its arguments (functional congruence). Any concrete body,
+  // including its side effects, is deliberately discarded. The mangled
+  // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
+  // (used only for the prefix test) is the suffix after the last '@'.
+  //
+  // Both prefixes are always recognised: the "__CPROVER_uninterpreted_" alias
+  // maps onto the native semantics, matching CBMC (which likewise ignores any
+  // body). Both namespaces are reserved, so no legitimate program relies on
+  // such a body executing.
+  const std::string &mangled = identifier.as_string();
+  std::string name = mangled.substr(mangled.rfind('@') + 1);
+  if (
+    !has_prefix(name, "__ESBMC_uninterpreted_") &&
+    !has_prefix(name, "__CPROVER_uninterpreted_"))
+    return false;
+
+  // On a dead branch the call is still "handled" (its body stays uninterpreted),
+  // but it must contribute no fresh result or congruence history: those would be
+  // vacuous here yet pollute every later live call to the same function. This
+  // matters because the native prefix reaches us via run_intrinsic, which runs
+  // even under a false guard, and a function-pointer call can reach the CPROVER
+  // path the same way.
+  if (cur_state->guard.is_false())
+    return true;
+
+  // A void uninterpreted function has no observable result to constrain; the
+  // body is still skipped so it stays uninterpreted.
+  if (is_nil_expr(call.ret))
+    return true;
+
+  // Read and rename the arguments to their current SSA terms.
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  // Emit an uninterpreted-function application and assign it to the return.
+  // Functional congruence (equal arguments imply an equal result) is enforced
+  // downstream by the SMT backend's native uninterpreted-function support
+  // (with a generic Ackermannisation fallback for solvers that lack it), so no
+  // congruence history is tracked here. Key the function on the full mangled
+  // identifier so two genuinely distinct symbols that share a C-level name are
+  // never tied together by congruence.
+  expr2tc result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+
+  symex_assign(code_assign2tc(call.ret, result));
+  return true;
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+
+  // Intercept "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*" calls
+  // before inlining any body.
+  if (symex_uninterpreted_function(call, identifier))
+  {
+    cur_state->source.pc++;
+    return;
+  }
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =

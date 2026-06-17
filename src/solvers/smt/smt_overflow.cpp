@@ -31,7 +31,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
-      return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
+      return mk_not(mk_and(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
     else if (int_encoding)
     {
@@ -68,8 +68,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         expr2tc neg_underflow = and2tc(both_neg, underflow);
 
         // If either overflow or underflow occurs, return true
-        expr2tc overflow_check = or2tc(pos_overflow, neg_underflow);
-        return convert_ast(overflow_check);
+        return mk_or(convert_ast(pos_overflow), convert_ast(neg_underflow));
       }
       else
       {
@@ -88,9 +87,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     // Just ensure the result is >= both operands.
     expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
     expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
-    expr2tc res = and2tc(ge1, ge2);
-    expr2tc inv = not2tc(res);
-    return convert_ast(inv);
+    return mk_not(mk_and(convert_ast(ge1), convert_ast(ge2)));
   }
 
   case expr2t::sub_id:
@@ -133,25 +130,23 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         expr2tc overflow_check = or2tc(overflow, underflow);
 
         // Combine overflow conditions
-        expr2tc full_overflow_check = or2tc(
-          or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow),
-          overflow_check);
-
-        return convert_ast(full_overflow_check);
+        return mk_or(
+          mk_or(
+            convert_ast(pos_minus_neg_overflow),
+            convert_ast(neg_minus_pos_overflow)),
+          convert_ast(overflow_check));
       }
 
       // Combine overflow conditions
-      expr2tc overflow_detected =
-        or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow);
-
-      return convert_ast(overflow_detected);
+      return mk_or(
+        convert_ast(pos_minus_neg_overflow),
+        convert_ast(neg_minus_pos_overflow));
     }
 
     // Just ensure the result is <= the first operand.
     expr2tc sub = sub2tc(side1->type, side1, side2);
     expr2tc le = lessthanequal2tc(sub, side1);
-    expr2tc inv = not2tc(le);
-    return convert_ast(inv);
+    return mk_not(convert_ast(le));
   }
 
   case expr2t::div_id:
@@ -170,7 +165,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc is_minus_one = equality2tc(minus_one, side2);
 
       // Return overflow condition for signed division
-      return convert_ast(and2tc(is_minus_one, is_min_int));
+      return mk_and(convert_ast(is_minus_one), convert_ast(is_min_int));
     }
 
     // Detect unsigned integer overflow for division and modulus
@@ -183,7 +178,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
     expr2tc is_overflow = greaterthan2tc(side1, max_unsigned);
 
     // Return overflow condition for unsigned division/modulus
-    return convert_ast(or2tc(is_div_by_zero, is_overflow));
+    return mk_or(convert_ast(is_div_by_zero), convert_ast(is_overflow));
   }
 
   case expr2t::shl_id:

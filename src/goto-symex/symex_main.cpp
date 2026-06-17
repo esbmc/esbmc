@@ -19,6 +19,7 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
+#include <util/message.h>
 
 #include <vector>
 
@@ -126,11 +127,29 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
-  if (
-    validate_witness && !witness_target_line.empty() &&
-    !has_prefix(msg, "unwinding assertion loop") &&
-    cur_state->source.pc->location.get_line() != witness_target_line)
-    new_expr = gen_true_expr();
+  if (validate_witness && !has_prefix(msg, "unwinding assertion loop"))
+  {
+    const size_t seg = cur_state->cur_seg;
+    const waypoint *target_wp = nullptr;
+    if (seg < cur_state->witness_segs.size())
+      for (const auto &wp : cur_state->witness_segs[seg])
+        if (wp.type == waypoint::target)
+        {
+          target_wp = &wp;
+          break;
+        }
+
+    if (
+      !target_wp ||
+      cur_state->source.pc->location.get_line() != target_wp->line_id ||
+      cur_state->witness_target_reached)
+      new_expr = gen_true_expr();
+    else
+    {
+      cur_state->advance_witness_position();
+      cur_state->witness_target_reached = true;
+    }
+  }
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -286,6 +305,20 @@ void goto_symext::symex_witness_function_return(
   const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
   for (const waypoint &wp : seg)
   {
+    if (wp.type == waypoint::function_enter)
+    {
+      if (wp.line_id.empty() || wp.line_id != call_line)
+        continue;
+      if (wp.action == waypoint::avoid)
+      {
+        cur_state->source.pc++;
+        return;
+      }
+
+      cur_state->advance_witness_position();
+      return;
+    }
+
     if (wp.type != waypoint::function_return)
       continue;
     if (!wp.parsed_cond.valid)
@@ -297,12 +330,6 @@ void goto_symext::symex_witness_function_return(
 
     expr2tc constraint = wp.parsed_cond.expr;
     substitute_result(constraint, ret_val);
-
-    log_progress(
-      "Applying {} function_return constraint at line {}: {}",
-      wp.action == waypoint::avoid ? "avoid" : "follow",
-      call_line,
-      wp.value);
 
     if (wp.action == waypoint::avoid)
       assume(not2tc(constraint));
@@ -596,6 +623,18 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
+  // "__ESBMC_uninterpreted_*" is the native spelling of an uninterpreted
+  // function (the "__CPROVER_uninterpreted_*" alias is handled later, in
+  // symex_function_call_code, since it is not __ESBMC-prefixed). All __ESBMC_*
+  // calls are routed here before body inlining, so the native prefix must be
+  // intercepted in run_intrinsic. The caller has already advanced the program
+  // counter, so symex_uninterpreted_function must not (and does not) touch it.
+  if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
+  {
+    symex_uninterpreted_function(func_call, symname);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
