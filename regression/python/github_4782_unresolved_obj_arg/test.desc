@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: function call: argument .* type mismatch: got pointer to .*, expected struct \(unresolved object element type passed by reference\)$
+^VERIFICATION UNKNOWN$
