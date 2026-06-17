@@ -285,3 +285,56 @@ architectural work. The recent class/tuple/dict-comprehension landings are real 
 the §5 roadmap (they move tests *through* the cluster), but the remaining KNOWNBUGs are still
 gated on flow-sensitive class tracking, the object/pointer-vs-value model, tuple-unpack
 inference, any-typing, and string/tuple-equality soundness. The §5 priority order stands.
+
+---
+
+## 9. 2026-06-17 re-validation — one-day window, no flips, no signature shift
+
+Independent re-run of **all 46 KNOWNBUG python/quixbugs/humaneval tests** against current
+`master` (tip `74da7c0400`), each with its own `test.desc` flags. Only **4 functional commits**
+landed since §8's tip `bd2e4a7d79`: `#5381` (multi-element list repetition `[a,b]*n` with a
+runtime count), `#5382` (don't model non-scalar uninterpreted functions as native SMT UFs —
+fixes an `smt_sort.h:220` abort on pointer/aggregate UF args), `#5384` (fma interval lifting),
+and `#5368` (witness 2.1 branching waypoints). `#5383` was the §8 report itself.
+
+**Result: zero KNOWNBUG→CORE flips.** The full set was driven through `ctest` (which exits
+non-zero on any KNOWNBUG that now matches its expected regex): `100% tests passed, 0 tests
+failed out of 46` — every test still misses its expected verdict. The §3 classification holds.
+
+### 9a. None of the four commits touches a Python KNOWNBUG path
+The two Python-relevant commits were checked against the actual test set rather than assumed:
+
+- **`#5381` (multi-element `[a,b]*n`)** — a scan of all 46 KNOWNBUG sources for multi-element
+  list-repetition shows **no** test uses it (the only `*`-with-list hit, humaneval_145
+  `n[0] * neg`, is a scalar multiply). So the fix cannot shift any KNOWNBUG signature.
+- **`#5382` (non-scalar UF abort)** — targets C/SV-COMP harnesses that declare pointer/aggregate
+  `__ESBMC_uninterpreted_*` callbacks (the `aws-c-common` hash-table reproducer, #5145/#5287).
+  No Python KNOWNBUG routes a pointer/aggregate through an uninterpreted function, so it is
+  out of scope here. (Distinct from the separately-tracked cmath-intensive `smt_sort.h:123`
+  crash, which is pre-existing and unrelated.)
+
+### 9b. The §8 signature-shifted tests re-confirmed identical
+The three tests §8 called out as having moved deeper into their clusters reproduce **the same
+signatures** today:
+
+| Test | Today's signature (tip `74da7c0400`) | Bottoms out in |
+|---|---|---|
+| `depth_first_search` | `ERROR: function call: argument "…@search_from@node" type mismatch: got pointer, expected struct` (SIGABRT) | object pointer-vs-value model (#3067) |
+| `github_4782_object_size` | BMC **timeout** (no longer reaches the non-array `object_size` guard) | object/set model (#3067) → §3c perf |
+| `shortest_paths` | `ERROR: DictComp tuple target requires iterating a list of tuples` (after `#5324`) | dict-key-tuple modelling + any-typing (#2848/#3067) |
+
+### 9c. Everything else: unchanged disposition
+Re-confirmed on today's master: perf/timeout (§3c, policy-banned) for `breadth_first_search(_fail)`,
+`knapsack(_fail)`, `next_permutation(_fail)`, `reverse_linked_list`, `shortest_path_lengths(_fail)`,
+`flatten_fail`, `topological_ordering(_fail)`, humaneval_33/37/90/93/158 — several of these
+genuinely ran 240–360 s against their own TIMEOUT property, i.e. the honest unwinding wall;
+clean "unsupported feature" errors for the tuple-unpack gaps and mixed-type `sorted()` /
+non-constant tuple slice; wrong-verdict soundness clusters; `concurrency_fail` (threading MVP);
+`bitcount_fail` UNKNOWN (§3d); humaneval_162 `hashlib` (infeasible). Each remains a design-level
+blocker, a policy-banned timeout, a substantial sound feature, or a questionable test
+expectation — not an isolated point fix.
+
+**Bottom line.** One day and four functional commits after §8, the conclusion is reaffirmed:
+no new isolated, soundly-fixable point fix is available on current `master` without the §5
+architectural work. The two Python-touching landings (`#5381`, `#5382`) do not intersect the
+open KNOWNBUG set. The §5 priority order stands.
