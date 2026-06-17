@@ -945,7 +945,45 @@ SV-COMP memsafety set in this environment. Same research-grade class as #5145 (c
 #4432, #5138. Keep #5400 open as a soundness tracker with this RCA; do not ship an unvalidated
 heuristic.
 
-### 11.6 Pass-7 running report
+### 11.6 #5138 deep-dive — `comm_3args_ok` valid-memsafety false alarm (reproduced + root-caused)
+
+Pass 4 (§8.4) deferred #5138 as needing an `ESBMC_SVCOMP` build. Done this pass: built ESBMC with
+`-DESBMC_SVCOMP=On` (the `__ESBMC_SVCOMP` macro is a compile-time CMake option baked into the OM at
+`clang_c_language.cpp:249`, **not** a user `-D` flag) and **reproduced the exact issue**:
+`dereference failure: forgotten memory: dynamic_21_array` at `exit` (`stdlib.c:64`),
+`VERIFICATION FAILED` / `Bug found (k = 11)` / `FALSE_MEMTRACK`. (On a non-`ESBMC_SVCOMP` build a
+*different* artefact fires first — `io.c:113 fclose: invalid pointer freed`, the `fclose`→`free`
+of the static stdout object that the SV-COMP OM path skips — which is why the issue is invisible to a
+normal local build.)
+
+**Root cause (repro + `memcleanup` debug).** Same subsystem as #5400 — `add_memory_leak_checks`
+(`src/goto-symex/symex_main.cpp:1292`) under `--no-reachable-memory-leak` — but the **opposite horn**
+of the value-set imprecision dilemma. The leak VCC is `alloc_guard ∧ ¬reachable_from_globals(obj)`,
+where `reachable_from_globals` is a BFS over the value-set seeded from all global symbols. On this
+benchmark the BFS **under-approximates**: the `memcleanup-skip` histogram for one base-case pass shows
+only **21 targets followed** against **210 `unknown` value-set targets skipped** (plus 399 null, 525
+constant-string, 84 code, 21 invalid — all correctly ignored). The skip of `unknown` is a *deliberate*
+choice (`symex_main.cpp:1502-1515`: "Treating 'unknown' as could-point-anywhere generates too many
+false positives... We ignore it"). Consequence: the globally-reachable set collapses to a single
+object (`globals point to: c:5138.c@slotvec0_226539`), so any still-live dynamic object reached only
+through an `unknown`-valued global pointer — here `dynamic_21` — is judged unreachable and reported as
+a forgotten-memory leak, even though the program never lost it. Ground truth is `true`, so this is a
+**false alarm** (precision/incompleteness), not a soundness bug.
+
+**Relation to #5400.** Both are the value-set-based reachability in `add_memory_leak_checks` failing to
+capture the exit-time heap precisely. #5400 *retains a stale edge* (over-approx ⇒ misses a real leak,
+unsound); #5138 *drops a live edge* by skipping `unknown` (under-approx ⇒ false alarm). The
+`unknown`-skip at 1502-1515 is the explicit knob that trades one for the other — treating `unknown` as
+"reachable" instead would suppress #5138's false alarms but deepen the #5400 class of misses. A
+minimal `global → malloc → reachable-at-exit` program is handled **correctly** (SUCCESSFUL), so the
+trigger needs the coreutils structure where the value-set loses precision on a specific assignment
+path (the slotvec/quotearg machinery).
+
+**Disposition.** Research-grade — a sound fix needs precise exit-time heap reachability (or a sound,
+non-explosive treatment of `unknown` targets), the same value-set-precision project as #5400 / #5145.
+No localized fix; keep #5138 open as a precision tracker.
+
+### 11.7 Pass-7 running report
 
 **Analysed.** All eight #5393–#5400 (reproduced locally where the host allows; #5396–#5399 are x86
 parse blockers).
@@ -958,8 +996,10 @@ Sound, code-reviewed, two regression tests, 49/49 calloc regressions pass.
 
 **Skipped / deferred and why.** #5400 — soundness (missed leak); value-set weak-update through global
 pointer arrays defeats `--no-reachable-memory-leak` suppression; research-grade, no sound localized
-fix. #5393/#5394 — aws-hash pointer-read-consistency cluster (#5287/#5369 RCA). #5396–#5399 — x86-only
-inline asm parse blockers.
+fix. #5138 — reproduced on an `ESBMC_SVCOMP` build and root-caused (§11.6): the mirror false-alarm of
+#5400 (value-set BFS skips `unknown` targets ⇒ drops a live edge); research-grade. #5393/#5394 —
+aws-hash pointer-read-consistency cluster (#5287/#5369 RCA). #5396–#5399 — x86-only inline asm parse
+blockers.
 
 **Remaining work (priority order, updated 2026-06-17).**
 1. **#5400** — strong-update-precise value-set for heap fields through global pointer arrays, or a
@@ -968,6 +1008,7 @@ inline asm parse blockers.
 2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
 3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
 4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
-5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
-6. **#5138** — reachable-memleak precision (`ESBMC_SVCOMP` build).
+5. **#5138** — root-caused (§11.6): mirror of #5400; needs a sound treatment of `unknown` value-set
+   targets in the `--no-reachable-memory-leak` BFS. Pair with the #5400 reachability work.
+6. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
 7. **x86 host triage** for #5396–#5399; close-outs #1470/#4427 pending CI.
