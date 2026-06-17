@@ -154,7 +154,10 @@ void goto_convertt::remove_sideeffects(
   goto_programt &dest,
   bool result_is_used)
 {
-  if (!has_sideeffect(expr) && !expr.get_bool("witness_ternary"))
+  // Always enter for ternary (if_exprt) so that --validate-violation-witness
+  // can lower sideeffect-free ternaries to IF/GOTO with the ? column recorded
+  // on expr.location(), enabling column-accurate branching waypoint matching.
+  if (!has_sideeffect(expr) && expr.id() != "if")
     return;
 
   if (expr.is_and() || expr.is_or())
@@ -224,23 +227,26 @@ void goto_convertt::remove_sideeffects(
 
   if (expr.id() == "if")
   {
-    // first clean condition
+    // first clean condition sideeffects
     remove_sideeffects(expr.op0(), dest);
 
-    // possibly done now
+    // If neither branch has a sideeffect and we are not validating a violation
+    // witness, the ternary can stay as an if_exprt — no lowering needed.
+    // Under --validate-violation-witness we always lower so that the resulting
+    // IF instruction carries the ? column from expr.location(), which symex_goto
+    // uses for column-accurate branching waypoint matching.
     if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
       !has_sideeffect(to_if_expr(expr).false_case()) &&
-      !expr.get_bool("witness_ternary"))
+      !options.get_bool_option("validate-violation-witness"))
       return;
 
-    // copy expression
     if_exprt if_expr = to_if_expr(expr);
 
     if (!if_expr.cond().is_boolean())
       throw "first argument of `if' must be boolean, but got ";
 
-    const locationt location = expr.op0().location();
+    const locationt location = expr.location();
 
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
@@ -252,7 +258,6 @@ void goto_convertt::remove_sideeffects(
     {
       symbolt &new_symbol = new_tmp_symbol(expr.type());
 
-      // declare this symbol first
       code_declt decl(symbol_expr(new_symbol));
       decl.location() = location;
       convert_decl(decl, dest);
@@ -269,12 +274,10 @@ void goto_convertt::remove_sideeffects(
       assignment_false.location() = location;
       convert(assignment_false, tmp_false);
 
-      // overwrites expr
       expr = symbol_expr(new_symbol);
     }
     else
     {
-      // preserve the expressions for possible later checks
       if (if_expr.true_case().is_not_nil())
       {
         code_expressiont code_expression(if_expr.true_case());
@@ -290,9 +293,7 @@ void goto_convertt::remove_sideeffects(
       expr = nil_exprt();
     }
 
-    // generate guard for argument side-effects
     generate_ifthenelse(if_expr.cond(), tmp_true, tmp_false, location, dest);
-
     return;
   }
 
