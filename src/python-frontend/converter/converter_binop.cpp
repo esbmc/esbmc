@@ -663,16 +663,22 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           return e;
         };
 
-        side_effect_expr_function_callt strcmp_call;
-        strcmp_call.function() = symbol_expr(*strcmp_symbol);
-        strcmp_call.arguments() = {as_char_ptr(lhs), as_char_ptr(rhs)};
-        strcmp_call.location() = get_location_from_decl(element);
-        strcmp_call.type() = int_type();
+        // V.3: build `strcmp(a, b) op 0` (op is Eq/NotEq) in IREP2, back
+        // -migrating once. Exact round-trip of the legacy side-effect strcmp
+        // call compared against zero via equality/notequal.
+        expr2tc lhs2, rhs2;
+        migrate_expr(as_char_ptr(lhs), lhs2);
+        migrate_expr(as_char_ptr(rhs), rhs2);
+        expr2tc strcmp_call2 = side_effect_function_call2tc(
+          migrate_type(int_type()), symbol_expr2tc(*strcmp_symbol), {lhs2, rhs2});
+        expr2tc zero2 = gen_zero(migrate_type(int_type()));
+        expr2tc cmp2 = (op == "Eq") ? equality2tc(strcmp_call2, zero2)
+                                    : notequal2tc(strcmp_call2, zero2);
 
-        exprt result(
-          python_frontend::map_operator(op, bool_type()), bool_type());
-        result.copy_to_operands(strcmp_call, gen_zero(int_type()));
-        result.location() = get_location_from_decl(element);
+        exprt result = migrate_expr_back(cmp2);
+        const locationt loc = get_location_from_decl(element);
+        result.location() = loc;
+        result.op0().location() = loc; // re-attach the strcmp call location
         return result;
       }
     }
