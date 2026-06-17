@@ -1,7 +1,7 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-17 (Pass 6 — reconcile with master after the #5278/#5279/#5233/#5317/#5364
-closures; re-validate the still-open 15; see §10)
+**Last updated:** 2026-06-17 (Pass 7 — triage new batch #5393–#5400; fix #5395 calloc zero-size,
+root-cause #5400 missed-leak soundness bug; see §11. Pass 6 reconcile in §10)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `74da7c0400` (Pass 6, aarch64
@@ -828,3 +828,146 @@ re-diagnosed — closed by #5278/#5279.
 5. **#5138** — reachable-memleak / `forgotten-memory` precision (reproduce under an `ESBMC_SVCOMP` build).
 6. **Close-outs pending CI:** #1470 and #4427 (recommend close after an x86 witness/CI confirm);
    witness end-to-end validation for #1471/#1492/#4611 once a CPAchecker loop is available.
+
+---
+
+## 11. Pass 7 — new batch #5393–#5400 (2026-06-17)
+
+A fresh batch of eight `SV-COMP` issues was filed on 2026-06-17 (all from the
+[SV-COMP 26 benchexec run](https://github.com/esbmc/esbmc/actions), commit `ee2c67bf32`). This pass
+triages them on the same-day master `74da7c0400` (ESBMC 8.3.0, aarch64 macOS). Benchmarks were
+fetched read-only from the public sv-benchmarks GitLab and treated as untrusted input. **One sound
+localized fix was produced (#5395); one soundness bug was reproduced and root-caused (#5400).**
+
+### 11.1 New-batch landscape
+
+| # | Benchmark | Property | Disposition | PR |
+|---|---|---|---|---|
+| 5393 | aws-c-common `aws_hash_table_init_bounded_harness` | unreach-call | aws-hash memory-model cluster → #5145/#5287 (§11.3) | no |
+| 5394 | aws-c-common `aws_hash_table_init_unbounded_harness` | unreach-call | same cluster (§11.3) | no |
+| 5395 | ldv-regression `rule57_ebda_blast` | unreach-call | **FIXED** — `calloc(_, 0)` ignored `--force-malloc-success` (§11.2) | new |
+| 5396 | ldv-linux-3.14-races `nsc-ircc.ko.cil` | no-overflow | x86-only inline asm; aarch64 parse blocker (§11.4) | no |
+| 5397 | ldv-linux-3.14-races `nsc-ircc.ko.cil` | valid-memsafety | same file, x86 parse blocker (§11.4) | no |
+| 5398 | ldv-linux-3.14-races `cafe_ccic.ko.cil-1` | valid-memsafety | x86 LDV driver (§11.4) | no |
+| 5399 | ldv-linux-3.14-races `cafe_ccic.ko.cil-2` | valid-memsafety | x86 LDV driver (§11.4) | no |
+| 5400 | goblint-regression `09-regions_12-arraycollapse_rc` | valid-memsafety (memtrack) | **SOUNDNESS** — missed leak; value-set weak-update through a global pointer array (§11.5) | no (research-grade) |
+
+### 11.2 #5395 — `rule57_ebda_blast` unreach-call false alarm: FIXED
+
+**Status: FIXED. Sound localized OM fix + two regression tests.**
+
+**Reproduced** (repro) at the BMC base case (`k = 1`, plain `--incremental-bmc` and `--k-induction`
+agree, so it is a real path in ESBMC's model, not a k-induction artefact). The 139-line benchmark
+asserts `used_tmp_slot==0 ⇒ freed_tmp_slot`. The only failing path returns from `ebda_rsrc_controller`
+in the window where `freed_tmp_slot=0` and `used_tmp_slot=0`, reached when
+`ibmphp_find_same_bus_num()` returns NULL.
+
+**Root cause (source + trace).** That function does `return kzalloc(sizeof(struct bus_info), 0)`, i.e.
+`calloc(1, sizeof(struct bus_info))`. `struct bus_info {}` is **empty ⇒ sizeof == 0**, so the call is
+`calloc(1, 0)`. The `calloc` operational model (`src/c2goto/library/stdlib.c`), after PR #5269 added
+`if (!nmemb || !size) return NULL;` for overflow handling, returned NULL **unconditionally** for a
+zero-byte request — ignoring `--force-malloc-success`. A direct `malloc(0)` honours that option (the
+symex layer at `memory_alloc.cpp:618-642`), so `calloc(n, 0)` was inconsistent with `malloc(0)`: the
+trace shows `bus_info_ptr1 = NULL` despite `--force-malloc-success`, driving the error path and the
+false alarm.
+
+**Fix.** Route the zero-byte case to `malloc(0)` instead of returning NULL
+(`return NULL` → `return malloc(0)`; the guard condition is unchanged, so the later
+`__ESBMC_assume(nmemb <= SIZE_MAX / size)` overflow prune from #5269 is still protected from
+div-by-zero). Zero-size `calloc` now mirrors `malloc(0)`: non-null under `--force-malloc-success`,
+NULL under `--malloc-zero-is-null`. This is C-standard-conformant (C17 §7.22.3: `calloc(_, 0)` is
+implementation-defined NULL-or-unique-pointer, exactly like `malloc(0)`), and the benchmark's
+ground-truth `true` confirms the non-null intent.
+
+**Validation.** `#5395` benchmark with the issue's exact flags → `VERIFICATION SUCCESSFUL`. The three
+`github_4433` calloc-overflow regressions (#5269) still pass; all 49 calloc-using regression tests
+pass. Two new tests: `regression/esbmc-unix/github_5395_calloc_empty_struct` (empty-struct zero-size
+under `--force-malloc-success` ⇒ SUCCESSFUL) and `.../github_5395_calloc_zero_is_null_fail`
+(`calloc(1,0)` under `--malloc-zero-is-null` ⇒ NULL ⇒ FAILED, pinning the option boundary). The change
+is a single-statement-body change (condition unchanged) — Mode-C exempt per the triviality bar.
+
+### 11.3 #5393 / #5394 — aws-c-common hash-table *init* harnesses: aws-hash cluster
+
+Both are CBMC proof harnesses from `c/aws-c-common`, siblings of the `aws_hash_table_create_harness`
+(#5145/#5287). They share the same byte-addressed `bounded_malloc`'d-state + `__CPROVER_uninterpreted_*`
+modelling that the multi-day #5287 RCA decomposed into the compound pointer-read-consistency
+limitation (§10.2). The UF half is now modelled (#5364/#5382); the residual is the same memory-model
+project tracked by the closed #5287/#5369 RCA and `PLAN_5287_option_b.md`. No separate PR — folded into
+the aws-hash cluster.
+
+### 11.4 #5396–#5399 — ldv-linux-3.14-races drivers: x86 parse blockers
+
+`nsc-ircc.ko.cil` (#5396/#5397) and `cafe_ccic.ko.cil-{1,2}` (#5398/#5399) are full Linux-3.14 kernel
+driver CIL amalgamations containing **x86-only inline asm** (`"=a"`/`"a"` register constraints, `outb`,
+paravirt `call *%cN`), which the aarch64 macOS clang frontend rejects at parse time
+(`invalid output constraint '=a' in asm`). Same host-blocker / research-grade LDV-driver class as
+#4439/#4427/#5142. Need an x86 Linux host to triage.
+
+### 11.5 #5400 — `arraycollapse_rc` valid-memtrack: SOUNDNESS bug (missed leak), root-caused
+
+**Status: SOUNDNESS bug (incorrect `true`) reproduced and root-caused. Research-grade — no sound
+localized fix; same value-set-precision class as #5145/#4432/#5138.**
+
+This is the most serious category: ESBMC reports `VERIFICATION SUCCESSFUL` on a benchmark whose ground
+truth is `false(valid-memtrack)` — a **missed memory leak**. Reproduced (repro) with the issue's exact
+flags on master `74da7c0400`.
+
+**The leak is real.** In `main`, `p = new(3)` is inserted into `slot[j]` then `slot[k]`; the second
+`list_add` overwrites `p->next`, **orphaning** the node that was `slot[j]`'s previous head (a `new(2)`
+node) whenever `j != k`. That orphan is unreachable at exit = a `valid-memtrack` violation, which
+`--no-reachable-memory-leak` is supposed to catch (it suppresses only *reachable* memory).
+
+**Root cause (source + trace + reducer).** The bug is sequential (a minimal single-threaded reducer
+reproduces it; the pthread thread is irrelevant) and survives concrete indices. Reduced to: a global
+pointer **array** `slot[10]` where one node is orphaned via pointer reassignment while the others stay
+reachable. The discriminator:
+
+| reducer | `--no-reachable-memory-leak` | verdict |
+|---|---|---|
+| global pointer **array** `slot[10]` | on (SV-COMP config) | SUCCESSFUL ❌ (misses leak) |
+| global pointer **array** `slot[10]` | off | FAILED ✓ |
+| **scalar** globals `slot0`/`slot1` | on | FAILED ✓ |
+
+`add_memory_leak_checks` (`symex_main.cpp:1292`) builds the leak VCC as
+`alloc_guard ∧ ¬reachable_from_globals(obj)`, where `reachable_from_globals` is a BFS over the
+value-set. The `memcleanup` debug log shows the BFS marks **all** dynamic objects reachable, including
+the orphan: storing `d1.next` (reached through the global array `slot[]`) is a **weak value-set
+update** that retains the stale target `{d2, d5}` instead of strong-updating to `{d5}`, so the orphan
+`d2` keeps a spurious incoming edge and the leak VCC is killed. The scalar-global version
+strong-updates and correctly drops `d2`. A may-points-to over-approximation cannot soundly *suppress*
+leaks; doing so is what makes `--no-reachable-memory-leak` miss this one. (The code already documents
+array reachability in a negated context as a known-incomplete "workaround" at `symex_main.cpp:1448-1472`.)
+
+**Why no PR.** A sound fix requires either a strong-update-precise value-set for heap fields reached
+through global arrays, or a must-reachable (under-approximation) for the suppression — both are
+value-set/pointer-analysis changes with broad blast radius that cannot be validated against the full
+SV-COMP memsafety set in this environment. Same research-grade class as #5145 (closed #5369 RCA),
+#4432, #5138. Keep #5400 open as a soundness tracker with this RCA; do not ship an unvalidated
+heuristic.
+
+### 11.6 Pass-7 running report
+
+**Analysed.** All eight #5393–#5400 (reproduced locally where the host allows; #5396–#5399 are x86
+parse blockers).
+
+**PRs opened.** One: `[om] calloc: route zero-size request to malloc(0), not NULL` — Fixes **#5395**.
+Sound, code-reviewed, two regression tests, 49/49 calloc regressions pass.
+
+**Duplicated work avoided.** #5393/#5394 not re-diagnosed — same aws-hash memory-model cluster as
+#5145/#5287 (UF half already merged via #5364/#5382). #5396–#5399 not re-fixed — x86 host blocker.
+
+**Skipped / deferred and why.** #5400 — soundness (missed leak); value-set weak-update through global
+pointer arrays defeats `--no-reachable-memory-leak` suppression; research-grade, no sound localized
+fix. #5393/#5394 — aws-hash pointer-read-consistency cluster (#5287/#5369 RCA). #5396–#5399 — x86-only
+inline asm parse blockers.
+
+**Remaining work (priority order, updated 2026-06-17).**
+1. **#5400** — strong-update-precise value-set for heap fields through global pointer arrays, or a
+   must-reachable suppression for `--no-reachable-memory-leak` (the `symex_main.cpp:1448-1472`
+   workaround). Soundness; highest severity.
+2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5138** — reachable-memleak precision (`ESBMC_SVCOMP` build).
+7. **x86 host triage** for #5396–#5399; close-outs #1470/#4427 pending CI.
