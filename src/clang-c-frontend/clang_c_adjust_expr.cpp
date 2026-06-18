@@ -655,36 +655,32 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
 void clang_c_adjust::adjust_sizeof(exprt &expr)
 {
-  typet type;
-  if (expr.operands().size() == 0)
+  // op0 is a type_exprt carrying the measured type T; op1, when present, is
+  // clang's authoritative byte-size value. Adjust T in place and, for the VLA
+  // case where clang could not evaluate the size, compute the byte-size
+  // expression here with a namespace (esbmc/esbmc#5337).
+  if (expr.operands().empty())
   {
-    type = static_cast<const typet &>(expr.c_sizeof_type());
-    adjust_type(type);
+    log_error("sizeof node is missing its type-carrying operand");
+    abort();
   }
-  else if (expr.operands().size() == 1)
+
+  typet measured = expr.op0().type();
+  adjust_type(measured);
+  expr.op0().type() = measured;
+
+  if (expr.operands().size() == 1)
   {
-    type.swap(expr.op0().type());
-    adjust_type(type);
+    exprt value = c_sizeof(measured, ns);
+    if (value.is_nil())
+    {
+      log_error("type has no size, {}", measured.name());
+      abort();
+    }
+    expr.copy_to_operands(value);
   }
   else
-  {
-    log_error(
-      "sizeof operator expects zero or one operand, "
-      "but got{}",
-      expr.operands().size());
-    abort();
-  }
-
-  exprt new_expr = c_sizeof(type, ns);
-
-  if (new_expr.is_nil())
-  {
-    log_error("type has no size, {}", type.name());
-    abort();
-  }
-
-  new_expr.swap(expr);
-  expr.c_sizeof_type(type);
+    adjust_expr(expr.op1());
 }
 
 void clang_c_adjust::adjust_type(typet &type)

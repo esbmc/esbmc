@@ -498,6 +498,13 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (cache_result != smt_cache.end())
       return (cache_result->ast);
   }
+
+  // A sizeof(T) node lowers to its eagerly-computed byte-size value. do_simplify
+  // normally folds it away, but under --no-simplify it survives to here, so
+  // lower it explicitly rather than hitting the unrecognised-format abort
+  // (esbmc/esbmc#5337).
+  if (is_sizeof2t(expr))
+    return convert_ast(to_sizeof2t(expr).value);
   /* Vectors!
    *
    * Here we need special attention for Vectors, because of the way

@@ -538,7 +538,6 @@ const irep_idt irept::a_flavor = irep_idt("flavor");
 const irep_idt irept::a_cmt_active = irep_idt("#active");
 const irep_idt irept::a_code = irep_idt("code");
 const irep_idt irept::a_component = irep_idt("component");
-const irep_idt irept::a_c_sizeof_type = irep_idt("#c_sizeof_type");
 const irep_idt irept::a_end_location = irep_idt("#end_location");
 const irep_idt irept::a_guard = irep_idt("guard");
 const irep_idt irept::a_label = irep_idt("label");

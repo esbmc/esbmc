@@ -919,3 +919,5 @@ std::string hasattr2t::field_names[esbmct::num_type_fields] =
   {"value", "attr", "", "", ""};
 std::string isnone2t::field_names[esbmct::num_type_fields] =
   {"lhs", "rhs", "", "", ""};
+std::string sizeof2t::field_names[esbmct::num_type_fields] =
+  {"value", "sizeof_type", "", "", ""};
