@@ -670,7 +670,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         migrate_expr(as_char_ptr(lhs), lhs2);
         migrate_expr(as_char_ptr(rhs), rhs2);
         expr2tc strcmp_call2 = side_effect_function_call2tc(
-          migrate_type(int_type()), symbol_expr2tc(*strcmp_symbol), {lhs2, rhs2});
+          migrate_type(int_type()),
+          symbol_expr2tc(*strcmp_symbol),
+          {lhs2, rhs2});
         expr2tc zero2 = gen_zero(migrate_type(int_type()));
         expr2tc cmp2 = (op == "Eq") ? equality2tc(strcmp_call2, zero2)
                                     : notequal2tc(strcmp_call2, zero2);
