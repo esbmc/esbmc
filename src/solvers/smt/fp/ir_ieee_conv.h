@@ -70,6 +70,27 @@ public:
   /** Integer-encoding path for ieee_fma (fused multiply-add). */
   smt_astt encode_ieee_fma(const expr2tc &expr);
 
+  /** Record that the SMT AST t may be NaN; nan_pred is a boolean SMT term
+   *  that is true iff t holds a NaN value (e.g. not(operand >= 0) for
+   *  sqrt with a negative operand). */
+  void store_nan_pred(smt_astt t, smt_astt nan_pred);
+
+  /** Return the stored NaN predicate for t, or nullptr if none is known. */
+  smt_astt get_nan_pred(smt_astt t) const;
+
+  /** Propagate a NaN predicate from rhs to lhs after an SSA assignment.
+   *  Called from smt_solver_baset::convert_assign alongside
+   *  propagate_interval. */
+  void propagate_nan_pred(smt_astt lhs, smt_astt rhs);
+
+  /** Wrap a comparison result with IEEE NaN semantics.
+   *  If either operand has a known NaN predicate, returns
+   *    ite(nan_pred, is_neq, cmp)
+   *  so that ordered comparisons (is_neq=false) evaluate to false when
+   *  either operand is NaN, and != (is_neq=true) evaluates to true.
+   *  Returns cmp unchanged when no NaN predicate is known. */
+  smt_astt apply_nan_cmp(smt_astt cmp, smt_astt a, smt_astt b, bool is_neq);
+
   /** Interval-lifted RNE enclosure helper.
    *  Input: exact real result and pre-computed interval endpoints [lo_r, hi_r].
    *  Returns {ra_lo, ra_hi} for storage in the interval map. */
@@ -114,6 +135,11 @@ private:
    *  Keyed by pointer identity (SSA variables are hash-consed in smt_cache).
    *  Missing entries fall back to the point interval {t, t}. */
   std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
+
+  /** Map from AST pointer to its NaN predicate (a boolean SMT term that is
+   *  true iff the value is NaN).  Only populated for sqrt results where
+   *  the operand may be negative. */
+  std::unordered_map<const smt_ast *, smt_astt> ir_ieee_nan_map;
 
   /** Set of symbol names that have already received integer range assertions,
    *  preventing duplicate constraints for the same SSA variable. */
