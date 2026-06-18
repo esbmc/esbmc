@@ -53,6 +53,35 @@ void ir_ieee_convt::store_interval(smt_astt t, smt_astt lo, smt_astt hi)
   ir_ra_interval_map[t] = {lo, hi};
 }
 
+void ir_ieee_convt::store_nan_pred(smt_astt t, smt_astt nan_pred)
+{
+  ir_ieee_nan_map[t] = nan_pred;
+}
+
+smt_astt ir_ieee_convt::get_nan_pred(smt_astt t) const
+{
+  auto it = ir_ieee_nan_map.find(t);
+  return it != ir_ieee_nan_map.end() ? it->second : nullptr;
+}
+
+void ir_ieee_convt::propagate_nan_pred(smt_astt lhs, smt_astt rhs)
+{
+  auto it = ir_ieee_nan_map.find(rhs);
+  if (it != ir_ieee_nan_map.end())
+    ir_ieee_nan_map[lhs] = it->second;
+}
+
+smt_astt
+ir_ieee_convt::apply_nan_cmp(smt_astt cmp, smt_astt a, smt_astt b, bool is_neq)
+{
+  smt_astt na = get_nan_pred(a);
+  smt_astt nb = get_nan_pred(b);
+  if (!na && !nb)
+    return cmp;
+  smt_astt either_nan = (na && nb) ? ctx->mk_or(na, nb) : (na ? na : nb);
+  return ctx->mk_ite(either_nan, ctx->mk_smt_bool(is_neq), cmp);
+}
+
 std::pair<smt_astt, smt_astt> ir_ieee_convt::apply_ieee754_rne_enclosure(
   smt_astt real_result,
   smt_astt lo_r,

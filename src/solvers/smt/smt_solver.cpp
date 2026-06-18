@@ -380,6 +380,7 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   // that get_interval() lookups on the LHS variable find the stored interval
   // for compositional lifting.
   ir_ieee_api->propagate_interval(side1, side2);
+  ir_ieee_api->propagate_nan_pred(side1, side2);
 
   return side2;
 }
@@ -861,9 +862,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       // This ensures that for negative operands the enclosure constraints on
       // sqrt_pos do not propagate to the observable result.
       //
-      // Limitation: NaN non-reflexivity (NaN != NaN in IEEE 754) is not
-      // modelled.  Under --ir-ieee, sqrt(x < 0) returns an unconstrained real,
-      // not a NaN sentinel.
+      // Under --ir-ieee, a NaN predicate  not(operand >= 0)  is stored for
+      // the result so that floating-point comparisons involving this value
+      // can apply IEEE 754 NaN comparison semantics (ordered comparisons
+      // return false; != returns true).
       smt_sortt rs = mk_real_sort();
       smt_astt zero = mk_smt_real("0.0");
       smt_astt op_nonneg = mk_le(zero, operand);
@@ -951,6 +953,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
           apply_ieee754_semantics(sqrt_pos, fbv_type, nullptr, rounding_mode);
         a = mk_ite(op_nonneg, pos_result, sqrt_nan);
       }
+      if (ir_ieee)
+        ir_ieee_api->store_nan_pred(a, mk_not(op_nonneg));
     }
     else
     {
@@ -1224,6 +1228,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
       a = args[0]->eq(this, args[1]);
+    if (
+      ir_ieee && int_encoding && is_floatbv_type(eq.side_1) &&
+      is_floatbv_type(eq.side_2))
+      a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
     break;
   }
   case expr2t::notequal_id:
@@ -1240,6 +1248,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else
       a = args[0]->eq(this, args[1]);
     a = mk_not(a);
+    if (
+      ir_ieee && int_encoding && is_floatbv_type(neq.side_1) &&
+      is_floatbv_type(neq.side_2))
+      a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], true);
     break;
   }
   case expr2t::shl_id:
@@ -1381,6 +1393,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (int_encoding)
     {
       a = mk_lt(args[0], args[1]);
+      if (ir_ieee && is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
+        a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
     }
     else if (is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
     {
@@ -1412,6 +1426,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (int_encoding)
     {
       a = mk_le(args[0], args[1]);
+      if (ir_ieee && is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
+        a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
     }
     else if (is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
     {
@@ -1443,6 +1459,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (int_encoding)
     {
       a = mk_gt(args[0], args[1]);
+      if (ir_ieee && is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
+        a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
     }
     else if (is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
     {
@@ -1474,6 +1492,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (int_encoding)
     {
       a = mk_ge(args[0], args[1]);
+      if (ir_ieee && is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
+        a = ir_ieee_api->apply_nan_cmp(a, args[0], args[1], false);
     }
     else if (is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
     {
