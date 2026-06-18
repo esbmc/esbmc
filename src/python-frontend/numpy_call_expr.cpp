@@ -190,9 +190,8 @@ static scalar_value make_complex_scalar(double real, double imag)
   return out;
 }
 
-static bool try_extract_scalar_binary(
-  const nlohmann::json &node,
-  scalar_value &out)
+static bool
+try_extract_scalar_binary(const nlohmann::json &node, scalar_value &out)
 {
   if (
     !node.is_object() || !node.contains("_type") || node["_type"] != "BinOp" ||
@@ -217,8 +216,8 @@ static bool try_extract_scalar_binary(
   }
 
   out.is_complex = left.is_complex || right.is_complex;
-  out.value = op_type == "Add" ? left.value + right.value
-                                : left.value - right.value;
+  out.value =
+    op_type == "Add" ? left.value + right.value : left.value - right.value;
   return true;
 }
 
@@ -1338,7 +1337,8 @@ T get_constant_value(const nlohmann::json &node)
   // node["value"].get<T>() below would raise an opaque nlohmann type_error.
   // Surface the curated overflow diagnostic instead so the user sees the
   // same message they get from get_literal.
-  auto reject_bigint = [](const nlohmann::json &c) {
+  auto reject_bigint = [](const nlohmann::json &c)
+  {
     if (c.contains("_bigint"))
       throw python_int_overflow_excp(
         "Python int overflow: literal " + c["_bigint"].get<std::string>() +
@@ -1382,7 +1382,8 @@ exprt numpy_call_expr::create_expr_from_call()
   nlohmann::json expr;
 
   // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var) {
+  auto resolve_var = [this](nlohmann::json &var)
+  {
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
@@ -2202,27 +2203,29 @@ exprt numpy_call_expr::create_expr_from_call()
         }
 
         auto as_dim =
-          [](const std::vector<std::size_t> &shape, std::size_t axis) {
-            if (shape.empty())
-              return from_integer(1, int_type());
-            if (shape.size() == 1)
-              return from_integer(
-                axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          [](const std::vector<std::size_t> &shape, std::size_t axis)
+        {
+          if (shape.empty())
+            return from_integer(1, int_type());
+          if (shape.size() == 1)
             return from_integer(
-              static_cast<int>(axis < shape.size() ? shape[axis] : 1),
-              int_type());
-          };
+              axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          return from_integer(
+            static_cast<int>(axis < shape.size() ? shape[axis] : 1),
+            int_type());
+        };
 
         auto build_array_type =
-          [&](const std::vector<std::size_t> &shape, const typet &elem_type) {
-            if (shape.empty())
-              return elem_type;
+          [&](const std::vector<std::size_t> &shape, const typet &elem_type)
+        {
+          if (shape.empty())
+            return elem_type;
 
-            typet array_type = elem_type;
-            for (auto it = shape.rbegin(); it != shape.rend(); ++it)
-              array_type = type_handler_.build_array(array_type, *it);
-            return array_type;
-          };
+          typet array_type = elem_type;
+          for (auto it = shape.rbegin(); it != shape.rend(); ++it)
+            array_type = type_handler_.build_array(array_type, *it);
+          return array_type;
+        };
 
         typet lhs_scalar_type =
           get_array_scalar_type(type_handler_.get_typet(lhs["elts"]));
@@ -2235,7 +2238,10 @@ exprt numpy_call_expr::create_expr_from_call()
           lhs_shape.size() >= rhs_shape.size() ? lhs : rhs;
         typet t = is_float
                     ? build_array_type(result_shape, double_type())
-                    : converter_.get_static_array(reference, type_handler_.get_typet(reference["elts"])).type();
+                    : converter_
+                        .get_static_array(
+                          reference, type_handler_.get_typet(reference["elts"]))
+                        .type();
         function_id_.set_function(operation + (is_float ? "_double" : ""));
 
         converter_.current_lhs->type() = t;
@@ -2244,7 +2250,7 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         auto &args = call.arguments();
-        typet flat_ptr_type =
+        const typet flat_ptr_type =
           pointer_typet(is_float ? double_type() : long_long_int_type());
         if (args.size() >= 2)
         {
@@ -2374,7 +2380,8 @@ exprt numpy_call_expr::get()
       // pointer). handle_fmod is scalar-only and would otherwise mis-fold
       // them or crash the FP backend.
       const typet list_type = type_handler_.get_list_type();
-      auto is_container = [&list_type](const exprt &e) {
+      auto is_container = [&list_type](const exprt &e)
+      {
         return e.type().is_array() || e.type() == list_type ||
                (e.type().is_pointer() && e.type().subtype() == list_type);
       };
@@ -2384,7 +2391,8 @@ exprt numpy_call_expr::get()
       return converter_.get_math_handler().handle_fmod(lhs, rhs, call_);
     }
 
-    auto is_scalar_node = [](const nlohmann::json &node) {
+    auto is_scalar_node = [](const nlohmann::json &node)
+    {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
     };
@@ -2399,7 +2407,8 @@ exprt numpy_call_expr::get()
       auto rhs = extract_value(call_["args"][1]);
 
       auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool {
+        [&](double left, double right, double &out) -> bool
+      {
         if (function == "add")
         {
           out = left + right;
