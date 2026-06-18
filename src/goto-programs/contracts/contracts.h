@@ -42,6 +42,7 @@
 #include <goto-programs/frame_enforcer.h>
 #include <util/context.h>
 #include <util/namespace.h>
+#include <map>
 #include <set>
 #include <string>
 
@@ -384,13 +385,18 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param is_fresh_sizes Maps each __ESBMC_is_fresh pointer symbol to its
+  ///        byte-size expression, so the array-element witness index is bounded
+  ///        by the real allocation (size/sizeof(elem)) rather than the default
+  ///        ARRAY_ALLOC_ELEMS used for validity-assumption allocations.
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
     const std::vector<expr2tc> &assigns_targets,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, expr2tc> &is_fresh_sizes);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
