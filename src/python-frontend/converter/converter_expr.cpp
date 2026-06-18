@@ -956,8 +956,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
           // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
           expr2tc base2;
-          migrate_expr(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          migrate_expr(expr, base2);
+          if (!is_pointer_type(base2->type))
+            base2 = address_of2tc(base2->type, base2);
           expr2tc size_call = side_effect_function_call2tc(
             migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
           exprt list_len =
