@@ -601,9 +601,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         // ESBMC's object/offset pointer model decides identity. Casting both
         // to the integer handle instead would lose the distinct-object
         // guarantee and spuriously satisfy `a != b` for distinct instances.
+        // V.3: built in IREP2 — exact round-trip of the legacy
+        // gen_address_of + typecast_exprt (migrate's typecast defaults the
+        // same rounding-mode symbol the 2-arg typecast2tc uses).
         typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
-        struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
-        handle_side = typecast_exprt(handle_side, ptr_t);
+        const type2tc ptr_t2 = migrate_type(ptr_t);
+        expr2tc ss2;
+        migrate_expr(struct_side, ss2);
+        struct_side =
+          migrate_expr_back(typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        expr2tc hs2;
+        migrate_expr(handle_side, hs2);
+        handle_side = migrate_expr_back(typecast2tc(ptr_t2, hs2));
       }
     }
   }
