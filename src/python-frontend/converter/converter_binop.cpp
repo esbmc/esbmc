@@ -53,12 +53,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           "__ESBMC_list_size not found for list condition check");
 
       // Build len(x) != 0 in IREP2, back-migrating once (V.3).
-      expr2tc arg2, zero2;
-      if (value_expr.type().is_pointer())
-        migrate_expr(value_expr, arg2);
-      else
-        migrate_expr(address_of_exprt(value_expr), arg2);
-      migrate_expr(gen_zero(size_type()), zero2);
+      expr2tc arg2;
+      migrate_expr(value_expr, arg2);
+      if (!is_pointer_type(arg2->type))
+        arg2 = address_of2tc(arg2->type, arg2);
+      expr2tc zero2 = gen_zero(migrate_type(size_type()));
 
       expr2tc size_call2 = side_effect_function_call2tc(
         migrate_type(size_type()), symbol_expr2tc(*size_func), {arg2});
