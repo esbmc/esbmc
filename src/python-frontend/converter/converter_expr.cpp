@@ -1133,16 +1133,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           base.type() = bt; // restore #cpp_type that migrate_type drops
         }
 
-        if (base.type().is_pointer())
-        {
-          exprt deref("dereference");
-          deref.type() = base.type().subtype();
-          deref.move_to_operands(base);
-          base = std::move(deref);
-        }
-
+        // V.3: dereference (when base is a pointer) and member access built in
+        // IREP2; exact round-trip of the legacy dereference + member_exprt.
         expr2tc b2;
         migrate_expr(base, b2);
+        if (base.type().is_pointer())
+          b2 = dereference2tc(migrate_type(base.type().subtype()), b2);
         return migrate_expr_back(
           member2tc(migrate_type(clean_type), b2, attr_name));
       };
