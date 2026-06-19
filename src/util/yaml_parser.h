@@ -10,14 +10,20 @@ class yaml_parser
 public:
   static std::vector<invariant> read_invariants(const std::string &path);
   /// Returns a mutable reference into the shared parse cache for @p path.
-  /// Callers may modify waypoints in place (e.g. fill parsed_cond); those
-  /// changes persist for the lifetime of the process because the cache is a
-  /// static local.  Do not store the reference across calls that pass a
-  /// different path — that invalidates the reference.
+  /// Callers may modify waypoints in place (e.g. fill parsed_cond); changes
+  /// persist for the lifetime of the process.  Do not store the reference
+  /// across calls that pass a different witness path.
   static std::vector<waypoint> &get_waypoints(const std::string &path);
   /// Returns true and sets @p out to the target waypoint if the witness has
   /// one; otherwise returns false.  Triggers parsing if not yet cached.
   static bool get_target_waypoint(const std::string &path, waypoint &out);
+
+  /// Fills in missing column numbers for waypoints that need it by scanning
+  /// the source file at @p src_path.  Idempotent: already-filled waypoints
+  /// are skipped.
+  static void fill_columns(
+    const std::string &src_path,
+    std::vector<waypoint> &waypoints);
 
   // Reads the source file at `source_path` and returns a new source string
   // with witness intrinsic calls inserted before each annotated line.

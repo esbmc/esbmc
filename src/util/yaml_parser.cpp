@@ -1,6 +1,5 @@
 #include <yaml_parser.h>
 #include <fstream>
-#include <regex>
 #include <unordered_map>
 #include <sstream>
 #include <util/message.h>
@@ -109,6 +108,42 @@ struct
   bool has_target = false;
 } wp_cache;
 
+// Returns the 1-based column of the first '?' outside string/char literals and
+// // line comments, or 0 if none exists.
+size_t first_ternary_col_in_line(const std::string &text)
+{
+  enum class S { Code, Str, Chr } state = S::Code;
+  for (size_t i = 0; i < text.size(); ++i)
+  {
+    char c = text[i];
+    switch (state)
+    {
+    case S::Code:
+      if (c == '/' && i + 1 < text.size() && text[i + 1] == '/')
+        return 0;
+      if (c == '"')
+        state = S::Str;
+      else if (c == '\'')
+        state = S::Chr;
+      else if (c == '?')
+        return i + 1;
+      break;
+    case S::Str:
+      if (c == '\\')
+        ++i;
+      else if (c == '"')
+        state = S::Code;
+      break;
+    case S::Chr:
+      if (c == '\\')
+        ++i;
+      else if (c == '\'')
+        state = S::Code;
+      break;
+    }
+  }
+  return 0;
+}
 } // namespace
 
 std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
@@ -179,11 +214,57 @@ std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
 
 bool yaml_parser::get_target_waypoint(const std::string &path, waypoint &out)
 {
-  get_waypoints(path); // ensures cache is populated
+  get_waypoints(path);
   if (!wp_cache.has_target)
     return false;
   out = wp_cache.target;
   return true;
+}
+
+void yaml_parser::fill_columns(
+  const std::string &src_path,
+  std::vector<waypoint> &waypoints)
+{
+  std::vector<waypoint *> pending;
+  for (auto &wp : waypoints)
+  {
+    if (
+      wp.type == waypoint::branching && wp.action != waypoint::avoid &&
+      wp.column == c_nonset && wp.line != c_nonset && wp.line > 0)
+      pending.push_back(&wp);
+  }
+  if (pending.empty())
+    return;
+
+  std::ifstream in(src_path);
+  if (!in)
+    return;
+
+  std::sort(pending.begin(), pending.end(), [](const waypoint *a, const waypoint *b) {
+    return a->line < b->line;
+  });
+
+  size_t cur_line = 0;
+  size_t pi = 0;
+  std::string line_text;
+  while (pi < pending.size() && std::getline(in, line_text))
+  {
+    ++cur_line;
+    if (static_cast<size_t>(pending[pi]->line.to_int64()) != cur_line)
+      continue;
+
+    size_t col = first_ternary_col_in_line(line_text);
+    while (pi < pending.size() &&
+           static_cast<size_t>(pending[pi]->line.to_int64()) == cur_line)
+    {
+      waypoint &wp = *pending[pi++];
+      if (col != 0)
+      {
+        wp.column = BigInt(static_cast<long long>(col));
+        wp.column_id = irep_idt(integer2string(wp.column));
+      }
+    }
+  }
 }
 
 waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
