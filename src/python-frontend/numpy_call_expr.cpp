@@ -2635,6 +2635,7 @@ exprt numpy_call_expr::create_expr_from_call()
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
+  const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
   // Create array from numpy.array()
   if (function == "array")
@@ -2889,62 +2890,99 @@ exprt numpy_call_expr::get()
         for (auto &operand : expr.operands())
           operand.type() = expr.type();
 
-        double left = to_double(lhs);
-        double right = to_double(rhs);
-        double scalar_result = 0.0;
-
-        if (compute_scalar_result(left, right, scalar_result))
+        if (allow_numpy_fold)
         {
-          std::string dtype = get_dtype();
-          double final_value = scalar_result;
-
-          if (dtype.find("int") != std::string::npos)
+          const std::string dtype = get_dtype();
+          const bool is_integer_dtype = dtype.find("int") != std::string::npos;
+          if (function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
           {
-            const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-            const int64_t rounded_value =
-              static_cast<int64_t>(std::llround(final_value));
-            const uint64_t mask = dtype_size >= 64
-                                    ? std::numeric_limits<uint64_t>::max()
-                                    : ((uint64_t{1} << dtype_size) - 1);
-            const uint64_t wrapped_bits =
-              static_cast<uint64_t>(rounded_value) & mask;
+            BigInt exact_power;
+            if (try_exact_integer_power(
+                  lhs.int_value, rhs.int_value, exact_power))
+            {
+              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+              const BigInt min_val =
+                is_unsigned ? BigInt(0) : -BigInt::power2(dtype_size - 1);
+              const BigInt max_val = is_unsigned
+                                       ? BigInt::power2(dtype_size) - 1
+                                       : BigInt::power2(dtype_size - 1) - 1;
+              if (exact_power < min_val || exact_power > max_val)
+              {
+                log_warning(
+                  "{}:{}: Integer overflow detected in {}() call. Consider "
+                  "using a larger integer type.",
+                  converter_.current_python_file,
+                  call_["end_lineno"].get<int>(),
+                  function_id_.get_function());
+                emit_numpy_overflow_assertion(converter_, call_, function_id_);
+              }
 
-            int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
-            if (
-              !is_unsigned && dtype_size < 64 &&
-              ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
-            {
-              wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
-            }
+              BigInt wrapped = exact_power;
+              const BigInt modulus = BigInt::power2(dtype_size);
+              wrapped = wrapped % modulus;
+              if (wrapped < 0)
+                wrapped += modulus;
+              if (!is_unsigned && wrapped >= BigInt::power2(dtype_size - 1))
+                wrapped -= modulus;
 
-            if (rounded_value != wrapped_signed)
-            {
-              log_warning(
-                "{}:{}: Integer overflow detected in {}() call. Consider using "
-                "a larger integer type.",
-                converter_.current_python_file,
-                call_["end_lineno"].get<int>(),
-                function_id_.get_function());
-              emit_numpy_overflow_assertion(converter_, call_, function_id_);
-            }
-
-            if (is_unsigned)
-            {
-              exprt folded = from_integer(BigInt(wrapped_bits), t);
-              folded.cformat(std::to_string(wrapped_bits));
-              return folded;
-            }
-            else
-            {
-              exprt folded = from_integer(BigInt(wrapped_signed), t);
-              folded.cformat(std::to_string(wrapped_signed));
+              exprt folded = from_integer(wrapped, t);
+              folded.cformat(integer2string(wrapped));
               return folded;
             }
           }
-          else
+
+          double left = to_double(lhs);
+          double right = to_double(rhs);
+          double scalar_result = 0.0;
+
+          if (compute_scalar_result(left, right, scalar_result))
           {
-            exprt folded = from_double(final_value, t);
-            folded.cformat(std::to_string(final_value));
+            if (is_integer_dtype)
+            {
+              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+              const int64_t rounded_value =
+                static_cast<int64_t>(std::llround(scalar_result));
+              const uint64_t mask = dtype_size >= 64
+                                      ? std::numeric_limits<uint64_t>::max()
+                                      : ((uint64_t{1} << dtype_size) - 1);
+              const uint64_t wrapped_bits =
+                static_cast<uint64_t>(rounded_value) & mask;
+
+              int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
+              if (
+                !is_unsigned && dtype_size < 64 &&
+                ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
+              {
+                wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
+              }
+
+              if (rounded_value != wrapped_signed)
+              {
+                log_warning(
+                  "{}:{}: Integer overflow detected in {}() call. Consider "
+                  "using a larger integer type.",
+                  converter_.current_python_file,
+                  call_["end_lineno"].get<int>(),
+                  function_id_.get_function());
+                emit_numpy_overflow_assertion(converter_, call_, function_id_);
+              }
+
+              if (is_unsigned)
+              {
+                exprt folded = from_integer(BigInt(wrapped_bits), t);
+                folded.cformat(std::to_string(wrapped_bits));
+                return folded;
+              }
+              else
+              {
+                exprt folded = from_integer(BigInt(wrapped_signed), t);
+                folded.cformat(std::to_string(wrapped_signed));
+                return folded;
+              }
+            }
+
+            exprt folded = from_double(scalar_result, t);
+            folded.cformat(std::to_string(scalar_result));
             return folded;
           }
         }
