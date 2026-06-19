@@ -835,7 +835,7 @@ static bool try_extract_numeric_2d_list(
 static bool is_supported_numpy_unary_math(const std::string &function)
 {
   return function == "sin" || function == "cos" || function == "exp" ||
-         function == "sqrt" || function == "arctan";
+         function == "sqrt" || function == "arctan" || function == "arccos";
 }
 
 static double apply_numpy_unary_math(const std::string &function, double value)
@@ -850,6 +850,14 @@ static double apply_numpy_unary_math(const std::string &function, double value)
     return std::sqrt(value);
   if (function == "arctan")
     return std::atan(value);
+  if (function == "floor")
+    return std::floor(value);
+  if (function == "fabs")
+    return std::fabs(value);
+  if (function == "trunc")
+    return std::trunc(value);
+  if (function == "arccos")
+    return std::acos(value);
 
   throw std::runtime_error("Unsupported Numpy unary function: " + function);
 }
@@ -1558,6 +1566,63 @@ exprt numpy_call_expr::create_expr_from_call()
     else if (arg_type == "List")
     {
       const std::string &operation = function_id_.get_function();
+      if (
+        operation == "floor" || operation == "fabs" ||
+        operation == "trunc")
+      {
+        exprt folded = fold_numpy_unary_constant_list(
+          converter_, operation, call_["args"][0]);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+
+      if (operation == "arccos")
+      {
+        try
+        {
+          exprt folded = fold_numpy_unary_constant_list(
+            converter_, operation, call_["args"][0]);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = folded.type();
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return folded;
+        }
+        catch (const std::runtime_error &)
+        {
+        }
+
+        const auto &list_arg = call_["args"][0];
+        if (
+          list_arg.contains("elts") && list_arg["elts"].is_array() &&
+          !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
+          list_arg["elts"][0].contains("_type") &&
+          list_arg["elts"][0]["_type"] == "List")
+        {
+          throw std::runtime_error(
+            "Unsupported operation: numpy.arccos on runtime 2D arrays");
+        }
+
+        function_id_.set_function("__arccos_array");
+
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = type_handler_.get_list_type(list_arg);
+
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        call.arguments().push_back(np_address_of(*converter_.current_lhs));
+        exprt array_size = from_integer(list_arg["elts"].size(), int_type());
+        call.arguments().push_back(array_size);
+        return call;
+      }
+
       if (is_supported_numpy_unary_math(operation))
       {
         exprt folded = fold_numpy_unary_constant_list(
@@ -1572,9 +1637,26 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (operation == "transpose")
       {
+        const auto &list_arg = call_["args"][0];
+        if (
+          list_arg.contains("elts") && list_arg["elts"].is_array() &&
+          (list_arg["elts"].empty() ||
+           !(
+             list_arg["elts"][0].is_object() &&
+             list_arg["elts"][0].contains("_type") &&
+             list_arg["elts"][0]["_type"] == "List")))
+        {
+          exprt folded = converter_.get_expr(list_arg);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = folded.type();
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return folded;
+        }
+
         // Constant-fold transpose for fully constant 2D numeric lists.
         // This avoids forcing integer-only backend transpose for float literals.
-        const auto &list_arg = call_["args"][0];
         if (
           list_arg.contains("elts") && !list_arg["elts"].empty() &&
           list_arg["elts"][0].is_object() &&
@@ -1664,12 +1746,169 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       auto arg = call_["args"][0];
       resolve_var(arg);
+      const std::string &function = function_id_.get_function();
+
+      if (function == "transpose")
+      {
+        exprt arg_expr = converter_.get_expr(arg);
+        typet t = arg_expr.type();
+        if (t.is_pointer() && t.subtype().is_array())
+          t = t.subtype();
+
+        if (t.is_array() && t.subtype().is_array())
+        {
+          std::vector<int> shape = type_handler_.get_array_type_shape(t);
+          if (shape.size() != 2)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.transpose currently supports up to 2D arrays");
+          }
+
+          typet base_type = t.subtype().subtype();
+          const bool is_float = base_type.is_floatbv();
+          function_id_.set_function(is_float ? "transpose_double" : "transpose");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+
+          typet result_row_type =
+            type_handler_.build_array(base_type, shape[0]);
+          typet result_type =
+            type_handler_.build_array(result_row_type, shape[1]);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = result_type;
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+
+          auto &args = call.arguments();
+          typet flat_ptr_type =
+            pointer_typet(is_float ? base_type : long_long_int_type());
+          if (!args.empty())
+            args[0] = np_typecast(args[0], flat_ptr_type);
+
+          exprt row0 = np_index(
+            *converter_.current_lhs,
+            from_integer(0, size_type()),
+            result_type.subtype());
+          exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+          args.push_back(from_integer(shape[0], int_type()));
+          args.push_back(from_integer(shape[1], int_type()));
+          return call;
+        }
+
+        if (t.is_array())
+        {
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = t;
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return arg_expr;
+        }
+      }
+
       nlohmann::json list_arg = unwrap_list_like_node(arg);
 
       // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
       if (!list_arg.is_null() && list_arg.is_object())
       {
-        const std::string &function = function_id_.get_function();
+        if (function == "arccos")
+        {
+          try
+          {
+            exprt folded =
+              fold_numpy_unary_constant_list(converter_, function, list_arg);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
+          }
+          catch (const std::runtime_error &)
+          {
+          }
+
+          if (list_arg.contains("elts") && list_arg["elts"].is_array() &&
+              !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
+              list_arg["elts"][0].contains("_type") &&
+              list_arg["elts"][0]["_type"] == "List")
+          {
+            throw std::runtime_error(
+              "Unsupported operation: numpy.arccos on runtime 2D arrays");
+          }
+
+          function_id_.set_function("__arccos_array");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+          typet t = type_handler_.get_list_type(list_arg);
+
+          converter_.current_lhs->type() = t;
+          converter_.update_symbol(*converter_.current_lhs);
+
+          call.arguments().push_back(np_address_of(*converter_.current_lhs));
+          exprt array_size = from_integer(list_arg["elts"].size(), int_type());
+          call.arguments().push_back(array_size);
+          return call;
+        }
+
+        if (function == "transpose")
+        {
+          typet t = type_handler_.get_list_type(list_arg);
+          if (!t.subtype().is_array())
+          {
+            exprt folded = converter_.get_expr(list_arg);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
+          }
+
+          std::vector<int> shape = type_handler_.get_array_type_shape(t);
+          if (shape.size() != 2)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.transpose currently supports up to 2D arrays");
+          }
+
+          typet base_type = t.subtype().subtype();
+          const bool is_float = base_type.is_floatbv();
+
+          function_id_.set_function(is_float ? "transpose_double" : "transpose");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+
+          typet result_row_type = type_handler_.build_array(base_type, shape[0]);
+          typet result_type = type_handler_.build_array(result_row_type, shape[1]);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = result_type;
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+
+          auto &args = call.arguments();
+          typet flat_ptr_type =
+            pointer_typet(is_float ? base_type : long_long_int_type());
+          if (!args.empty())
+            args[0] = np_typecast(args[0], flat_ptr_type);
+
+          exprt row0 = np_index(
+            *converter_.current_lhs,
+            from_integer(0, size_type()),
+            result_type.subtype());
+          exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+          args.push_back(from_integer(shape[0], int_type()));
+          args.push_back(from_integer(shape[1], int_type()));
+          return call;
+        }
+
         if (is_supported_numpy_unary_math(function))
         {
           exprt folded =
