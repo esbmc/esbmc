@@ -263,12 +263,13 @@ void yaml_parser::fill_columns(
     while (pi < pending.size() &&
            static_cast<size_t>(pending[pi]->line.to_int64()) == cur_line)
     {
-      waypoint &wp = *pending[pi++];
       if (col != 0)
       {
+        waypoint &wp = *pending[pi];
         wp.column = BigInt(static_cast<long long>(col));
         wp.column_id = irep_idt(integer2string(wp.column));
       }
+      ++pi;
     }
   }
 }
