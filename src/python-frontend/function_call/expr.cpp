@@ -1544,16 +1544,18 @@ exprt function_call_expr::handle_tuple_method() const
   if (components.empty())
     throw std::runtime_error("tuple.index() on empty tuple");
 
-  // Build "any matched" guard so we can assert the element is present.
-  typet result_type = int_type();
-  exprt any_match = gen_boolean(false);
+  // Build "any matched" guard so we can assert the element is present (V.3).
+  const type2tc result_type = migrate_type(int_type());
+  expr2tc elem2;
+  migrate_expr(elem, elem2);
+  expr2tc any_match = gen_false_expr();
   for (const auto &comp : components)
   {
-    exprt member = build_member(receiver, comp.get_name(), comp.type());
-    exprt eq = equality_exprt(member, elem);
-    any_match = or_exprt(any_match, eq);
+    expr2tc member2;
+    migrate_expr(build_member(receiver, comp.get_name(), comp.type()), member2);
+    any_match = or2tc(any_match, equality2tc(member2, elem2));
   }
-  code_assertt found_assert(any_match);
+  code_assertt found_assert(migrate_expr_back(any_match));
   found_assert.location() = converter_.get_location_from_decl(call_);
   found_assert.location().comment("ValueError: tuple.index(x): x not in tuple");
   converter_.add_instruction(found_assert);
@@ -1561,17 +1563,20 @@ exprt function_call_expr::handle_tuple_method() const
   // Build chain right-to-left: result_(n-1) is index n-1, falling back to
   // earlier matches as we walk backwards. Net effect: leftmost match wins.
   size_t n = components.size();
-  exprt result = from_integer(BigInt(n - 1), result_type);
+  expr2tc result = from_integer(BigInt(n - 1), result_type);
   for (size_t k = n - 1; k-- > 0;)
   {
-    exprt member =
-      build_member(receiver, components[k].get_name(), components[k].type());
-    exprt eq = equality_exprt(member, elem);
-    if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
-    sel.type() = result_type;
-    result = sel;
+    expr2tc member2;
+    migrate_expr(
+      build_member(receiver, components[k].get_name(), components[k].type()),
+      member2);
+    result = if2tc(
+      result_type,
+      equality2tc(member2, elem2),
+      from_integer(BigInt(k), result_type),
+      result);
   }
-  return result;
+  return migrate_expr_back(result);
 }
 
 bool function_call_expr::is_dict_method_call() const
