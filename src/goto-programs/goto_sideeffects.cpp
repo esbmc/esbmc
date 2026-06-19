@@ -5,6 +5,7 @@
 #include <util/i2string.h>
 #include <util/message.h>
 #include <util/message/format.h>
+#include <util/migrate.h>
 #include <util/rename.h>
 #include <util/std_expr.h>
 
@@ -592,6 +593,23 @@ void goto_convertt::remove_sideeffects(
       abort();
     }
   }
+}
+
+// IREP2 dual-API seam (W1, esbmc/esbmc#4715): an expr2tc overload of
+// remove_sideeffects that delegates to the legacy exprt path — migrate to
+// legacy, run the unchanged legacy side-effect removal (which emits the hoisted
+// instructions into dest), then migrate the cleaned result back. Behaviour is
+// identical by construction. This is the dead-but-tested seam the future
+// IREP2-native goto-convert handlers call; the legacy body is ported to native
+// expr2tc in a later phase behind this same signature.
+void goto_convertt::remove_sideeffects(
+  expr2tc &expr,
+  goto_programt &dest,
+  bool result_is_used)
+{
+  exprt legacy = migrate_expr_back(expr);
+  remove_sideeffects(legacy, dest, result_is_used);
+  migrate_expr(legacy, expr);
 }
 
 void goto_convertt::remove_assignment(

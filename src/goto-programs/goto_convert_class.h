@@ -57,6 +57,13 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
+  // IREP2 dual-API seam (W1, esbmc/esbmc#4715): delegates to the legacy
+  // exprt overload above; behaviour-identical by construction.
+  void remove_sideeffects(
+    expr2tc &expr,
+    goto_programt &dest,
+    bool result_is_used = true);
+
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
   bool rewrite_vla_decl(typet &var_type, goto_programt &dest);
