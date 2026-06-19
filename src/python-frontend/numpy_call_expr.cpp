@@ -1566,9 +1566,7 @@ exprt numpy_call_expr::create_expr_from_call()
     else if (arg_type == "List")
     {
       const std::string &operation = function_id_.get_function();
-      if (
-        operation == "floor" || operation == "fabs" ||
-        operation == "trunc")
+      if (operation == "floor" || operation == "fabs" || operation == "trunc")
       {
         exprt folded = fold_numpy_unary_constant_list(
           converter_, operation, call_["args"][0]);
@@ -1641,8 +1639,7 @@ exprt numpy_call_expr::create_expr_from_call()
         if (
           list_arg.contains("elts") && list_arg["elts"].is_array() &&
           (list_arg["elts"].empty() ||
-           !(
-             list_arg["elts"][0].is_object() &&
+           !(list_arg["elts"][0].is_object() &&
              list_arg["elts"][0].contains("_type") &&
              list_arg["elts"][0]["_type"] == "List")))
         {
@@ -1766,7 +1763,8 @@ exprt numpy_call_expr::create_expr_from_call()
 
           typet base_type = t.subtype().subtype();
           const bool is_float = base_type.is_floatbv();
-          function_id_.set_function(is_float ? "transpose_double" : "transpose");
+          function_id_.set_function(
+            is_float ? "transpose_double" : "transpose");
 
           code_function_callt call =
             to_code_function_call(to_code(function_call_expr::get()));
@@ -1791,7 +1789,8 @@ exprt numpy_call_expr::create_expr_from_call()
             *converter_.current_lhs,
             from_integer(0, size_type()),
             result_type.subtype());
-          exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+          exprt elem00 =
+            np_index(row0, from_integer(0, size_type()), base_type);
           args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
           args.push_back(from_integer(shape[0], int_type()));
           args.push_back(from_integer(shape[1], int_type()));
@@ -1831,10 +1830,11 @@ exprt numpy_call_expr::create_expr_from_call()
           {
           }
 
-          if (list_arg.contains("elts") && list_arg["elts"].is_array() &&
-              !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
-              list_arg["elts"][0].contains("_type") &&
-              list_arg["elts"][0]["_type"] == "List")
+          if (
+            list_arg.contains("elts") && list_arg["elts"].is_array() &&
+            !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
+            list_arg["elts"][0].contains("_type") &&
+            list_arg["elts"][0]["_type"] == "List")
           {
             throw std::runtime_error(
               "Unsupported operation: numpy.arccos on runtime 2D arrays");
@@ -1879,13 +1879,16 @@ exprt numpy_call_expr::create_expr_from_call()
           typet base_type = t.subtype().subtype();
           const bool is_float = base_type.is_floatbv();
 
-          function_id_.set_function(is_float ? "transpose_double" : "transpose");
+          function_id_.set_function(
+            is_float ? "transpose_double" : "transpose");
 
           code_function_callt call =
             to_code_function_call(to_code(function_call_expr::get()));
 
-          typet result_row_type = type_handler_.build_array(base_type, shape[0]);
-          typet result_type = type_handler_.build_array(result_row_type, shape[1]);
+          typet result_row_type =
+            type_handler_.build_array(base_type, shape[0]);
+          typet result_type =
+            type_handler_.build_array(result_row_type, shape[1]);
           if (converter_.current_lhs)
           {
             converter_.current_lhs->type() = result_type;
@@ -1902,7 +1905,8 @@ exprt numpy_call_expr::create_expr_from_call()
             *converter_.current_lhs,
             from_integer(0, size_type()),
             result_type.subtype());
-          exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+          exprt elem00 =
+            np_index(row0, from_integer(0, size_type()), base_type);
           args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
           args.push_back(from_integer(shape[0], int_type()));
           args.push_back(from_integer(shape[1], int_type()));
@@ -2701,8 +2705,7 @@ exprt numpy_call_expr::get()
       std::vector<std::size_t> lhs_shape;
       std::vector<std::size_t> rhs_shape;
       if (
-        get_literal_shape(lhs, lhs_shape) &&
-        get_literal_shape(rhs, rhs_shape))
+        get_literal_shape(lhs, lhs_shape) && get_literal_shape(rhs, rhs_shape))
       {
         std::vector<std::size_t> result_shape;
         if (
