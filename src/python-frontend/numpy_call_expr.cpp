@@ -664,6 +664,12 @@ static bool apply_numpy_binary_to_scalars(
     }
     else if (function == "power")
       folded = std::pow(left, right);
+    else if (function == "fmod")
+    {
+      if (right == 0.0)
+        return false;
+      folded = std::fmod(left, right);
+    }
     else
       return false;
 
@@ -2445,29 +2451,61 @@ exprt numpy_call_expr::get()
   if (is_math_function())
   {
     // np.fmod(x, y) on scalars has the same semantics as math.fmod / C fmod, so
-    // delegate to the shared math handler, which constant-folds when both
-    // operands are concrete and otherwise emits the libm fmod call. This covers
-    // symbolic scalar operands (e.g. a function parameter), which the
-    // broadcasting machinery below does not handle. Array operands (fmod is a
-    // broadcasting ufunc) are not supported here — they are rejected with a
-    // clear diagnostic rather than mis-folded to a scalar.
+    // delegate to the shared math handler when the operands are not foldable
+    // literal lists. For list-backed 1D/2D inputs, fold here with the same
+    // broadcasting helper used by the other binary NumPy ops.
     if (function == "fmod" && call_["args"].size() == 2)
     {
-      exprt lhs = converter_.get_expr(call_["args"][0]);
-      exprt rhs = converter_.get_expr(call_["args"][1]);
-      // Reject container operands: static numpy arrays (array typet) and
-      // dynamic Python lists (the __ESBMC_PyListObj model, by value or by
-      // pointer). handle_fmod is scalar-only and would otherwise mis-fold
-      // them or crash the FP backend.
+      auto lhs = call_["args"][0];
+      auto rhs = call_["args"][1];
+
+      std::vector<std::size_t> lhs_shape;
+      std::vector<std::size_t> rhs_shape;
+      if (
+        get_literal_shape(lhs, lhs_shape) &&
+        get_literal_shape(rhs, rhs_shape))
+      {
+        std::vector<std::size_t> result_shape;
+        if (
+          compute_broadcast_shape(lhs_shape, rhs_shape, result_shape) &&
+          result_shape.size() <= 2)
+        {
+          nlohmann::json folded;
+          std::vector<std::size_t> indices;
+          if (build_broadcast_literal_result(
+                function,
+                lhs,
+                lhs_shape,
+                rhs,
+                rhs_shape,
+                result_shape,
+                indices,
+                0,
+                folded))
+          {
+            exprt result_expr = converter_.get_expr(folded);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = result_expr.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return result_expr;
+          }
+        }
+      }
+
+      exprt lhs_expr = converter_.get_expr(lhs);
+      exprt rhs_expr = converter_.get_expr(rhs);
       const typet list_type = type_handler_.get_list_type();
       auto is_container = [&list_type](const exprt &e) {
         return e.type().is_array() || e.type() == list_type ||
                (e.type().is_pointer() && e.type().subtype() == list_type);
       };
-      if (is_container(lhs) || is_container(rhs))
+      if (is_container(lhs_expr) || is_container(rhs_expr))
         throw std::runtime_error(
           "Unsupported operation: numpy.fmod on array operands");
-      return converter_.get_math_handler().handle_fmod(lhs, rhs, call_);
+      return converter_.get_math_handler().handle_fmod(
+        lhs_expr, rhs_expr, call_);
     }
 
     auto is_scalar_node = [](const nlohmann::json &node) {
