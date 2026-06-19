@@ -74,6 +74,9 @@ protected:
     goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
+  // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
+  // sideeffect2t node, mirroring the legacy exprt overload above.
+  bool has_sideeffect(const expr2tc &expr);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to

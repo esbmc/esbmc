@@ -150,6 +150,25 @@ bool goto_convertt::has_sideeffect(const exprt &expr)
   return false;
 }
 
+bool goto_convertt::has_sideeffect(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call, malloc,
+  // ++/--, …) OR sideeffect_assign2t (assignment / compound-assignment used as
+  // an expression); the legacy has_sideeffect treats both as side effects.
+  if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &op) {
+    if (!found && has_sideeffect(op))
+      found = true;
+  });
+  return found;
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -596,17 +615,23 @@ void goto_convertt::remove_sideeffects(
 }
 
 // IREP2 dual-API seam (W1, esbmc/esbmc#4715): an expr2tc overload of
-// remove_sideeffects that delegates to the legacy exprt path — migrate to
-// legacy, run the unchanged legacy side-effect removal (which emits the hoisted
-// instructions into dest), then migrate the cleaned result back. Behaviour is
-// identical by construction. This is the dead-but-tested seam the future
-// IREP2-native goto-convert handlers call; the legacy body is ported to native
-// expr2tc in a later phase behind this same signature.
+// remove_sideeffects. The side-effect-free common case is handled natively (no
+// migration round-trip — mirroring the first line of the legacy overload). A
+// side-effect-bearing or ternary expression is delegated to the legacy exprt
+// path for now (migrate out, run the unchanged legacy removal, migrate back),
+// which is behaviour-identical by construction; the per-kind hoisting is ported
+// to native expr2tc in a later phase behind this same signature.
 void goto_convertt::remove_sideeffects(
   expr2tc &expr,
   goto_programt &dest,
   bool result_is_used)
 {
+  // Native fast path: nil, or a side-effect-free non-ternary expression, needs
+  // no hoisting. The legacy overload always enters for a ternary (if2t) so that
+  // --validate-violation-witness can lower it; preserve that by delegating.
+  if (is_nil_expr(expr) || (!has_sideeffect(expr) && !is_if2t(expr)))
+    return;
+
   exprt legacy = migrate_expr_back(expr);
   remove_sideeffects(legacy, dest, result_is_used);
   migrate_expr(legacy, expr);
