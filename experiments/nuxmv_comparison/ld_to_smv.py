@@ -213,100 +213,98 @@ class SMVGen:
         for name, iec in self.p.outputs.items():
             if name not in self.coil_driven:
                 state_vars[name] = smv_type(iec)
-        for iname, t in self.timers.items():
+        for _, t in self.timers.items():
             et = t['et_var']
             if et not in state_vars:
                 state_vars[et] = SMV_INT
         return state_vars
 
-    def _process_blocks(self, rung, latest, defines, coil_normal_define, timer_et_nexts):
+    def _process_blocks(self, rung, cond):
+        """Process function blocks in a rung; mutates self._bld_* state."""
         for tname, iname, params in rung.blocks:
-            in_raw = params.get('IN', 'FALSE')
-            pt_raw = params.get('PT', '0')
-            in_v = latest.get(in_raw, in_raw)
-            pt_v = latest.get(pt_raw, pt_raw)
+            in_v = self._bld_latest.get(params.get('IN', 'FALSE'), params.get('IN', 'FALSE'))
+            pt_v = self._bld_latest.get(params.get('PT', '0'), params.get('PT', '0'))
             et_v = params.get('ET', f'__{iname}_et')
             q_p  = params.get('Q',  f'__{iname}_q')
             if tname == 'TON':
                 et_expr = (f'case\n  {in_v} & {et_v} < 32767 : {et_v} + 1;\n'
                            f'  !({in_v}) : 0;\n  TRUE : {et_v};\nesac')
-                timer_et_nexts[et_v] = et_expr
+                self._bld_et_nexts[et_v] = et_expr
                 q_dname = f'__ton_{iname}_q_v'
-                defines.append((q_dname, f'{et_v} >= {pt_v}'))
-                latest[q_p] = q_dname
+                self._bld_defines.append((q_dname, f'{et_v} >= {pt_v}'))
+                self._bld_latest[q_p] = q_dname
                 if q_p in self.all_vars:
-                    coil_normal_define[q_p] = q_dname
+                    self._bld_coil_normal[q_p] = q_dname
             elif tname == 'TOF':
                 et_expr = (f'case\n  !({in_v}) & {et_v} < 32767 : {et_v} + 1;\n'
                            f'  {in_v} : 0;\n  TRUE : {et_v};\nesac')
-                timer_et_nexts[et_v] = et_expr
+                self._bld_et_nexts[et_v] = et_expr
                 q_dname = f'__tof_{iname}_q_v'
-                defines.append((q_dname, f'{in_v} | ({et_v} < {pt_v})'))
-                latest[q_p] = q_dname
+                self._bld_defines.append((q_dname, f'{in_v} | ({et_v} < {pt_v})'))
+                self._bld_latest[q_p] = q_dname
                 if q_p in self.all_vars:
-                    coil_normal_define[q_p] = q_dname
+                    self._bld_coil_normal[q_p] = q_dname
 
-    def _merge_sr_coils(self, latest, defines, coil_normal_define, coil_set_conds, coil_reset_conds):
-        for var in set(coil_set_conds) | set(coil_reset_conds):
-            sc   = coil_set_conds.get(var, [])
-            rc   = coil_reset_conds.get(var, [])
-            se   = ' | '.join(f'({c})' for c in sc) or 'FALSE'
-            re_  = ' | '.join(f'({c})' for c in rc) or 'FALSE'
+    def _merge_sr_coils(self):
+        """Merge set/reset coil conditions; mutates self._bld_* state."""
+        for var in set(self._bld_sr_set) | set(self._bld_sr_reset):
+            sc    = self._bld_sr_set.get(var, [])
+            rc    = self._bld_sr_reset.get(var, [])
+            se    = ' | '.join(f'({c})' for c in sc) or 'FALSE'
+            re_   = ' | '.join(f'({c})' for c in rc) or 'FALSE'
             dname = f'__sr_{var}_v'
-            prev  = latest.get(var, var)
-            expr  = (f'case\n  {se} : TRUE;\n  {re_} : FALSE;\n  TRUE : {prev};\nesac')
-            defines.append((dname, expr))
-            latest[var] = dname
-            coil_normal_define[var] = dname
+            prev  = self._bld_latest.get(var, var)
+            expr  = f'case\n  {se} : TRUE;\n  {re_} : FALSE;\n  TRUE : {prev};\nesac'
+            self._bld_defines.append((dname, expr))
+            self._bld_latest[var] = dname
+            self._bld_coil_normal[var] = dname
 
     def _build_define_chain(self):
-        latest = {v: v for v in self.all_vars}
-        for iname, t in self.timers.items():
-            latest[t['et_var']] = t['et_var']
-        defines = []
-        coil_normal_define = {}
-        coil_set_conds = defaultdict(list)
-        coil_reset_conds = defaultdict(list)
-        timer_et_nexts = {}
+        self._bld_latest = {v: v for v in self.all_vars}
+        for _, t in self.timers.items():
+            self._bld_latest[t['et_var']] = t['et_var']
+        self._bld_defines = []
+        self._bld_coil_normal = {}
+        self._bld_sr_set = defaultdict(list)
+        self._bld_sr_reset = defaultdict(list)
+        self._bld_et_nexts = {}
         for ridx, rung in enumerate(self.p.rungs):
             cond_parts = []
             for var, neg in rung.contacts:
-                v = latest.get(var, var)
+                v = self._bld_latest.get(var, var)
                 cond_parts.append(f'!({v})' if neg else v)
             cond = ' & '.join(cond_parts) if cond_parts else 'TRUE'
             for var, storage in rung.coils:
                 dname = f'__r{ridx}_{var}'
                 if storage == 'normal':
-                    defines.append((dname, cond))
-                    latest[var] = dname
-                    coil_normal_define[var] = dname
+                    self._bld_defines.append((dname, cond))
+                    self._bld_latest[var] = dname
+                    self._bld_coil_normal[var] = dname
                 elif storage == 'set':
-                    coil_set_conds[var].append(cond)
+                    self._bld_sr_set[var].append(cond)
                 elif storage == 'reset':
-                    coil_reset_conds[var].append(cond)
-            self._process_blocks(rung, latest, defines, coil_normal_define, timer_et_nexts)
-        self._merge_sr_coils(latest, defines, coil_normal_define, coil_set_conds, coil_reset_conds)
-        return latest, defines, coil_normal_define, timer_et_nexts
+                    self._bld_sr_reset[var].append(cond)
+            self._process_blocks(rung, cond)
+        self._merge_sr_coils()
 
-    def _build_next_assigns(self, coil_normal_define, timer_et_nexts, state_vars):
-        p = self.p
+    def _build_next_assigns(self, state_vars):
         next_assigns = []
-        for name, iec in sorted(p.inputs.items()):
+        for name, iec in sorted(self.p.inputs.items()):
             next_assigns.append(f'init({name}) := {smv_init(iec)};')
-        for name, iec in sorted(p.inputs.items()):
+        for name, iec in sorted(self.p.inputs.items()):
             if is_bool_type(iec):
                 next_assigns.append(f'next({name}) := {{TRUE, FALSE}};')
             else:
                 next_assigns.append(f'next({name}) := 0 .. 32767;')
-        for name, iec in sorted(p.locals.items()):
+        for name, iec in sorted(self.p.locals.items()):
             if name not in self.coil_driven:
                 next_assigns.append(f'init({name}) := {smv_init(iec)};')
                 next_assigns.append(f'next({name}) := {name};')
-        for name, iec in sorted(p.outputs.items()):
+        for name, iec in sorted(self.p.outputs.items()):
             if name not in self.coil_driven:
                 next_assigns.append(f'init({name}) := {smv_init(iec)};')
                 next_assigns.append(f'next({name}) := {name};')
-        for et_var, et_expr in sorted(timer_et_nexts.items()):
+        for et_var, et_expr in sorted(self._bld_et_nexts.items()):
             next_assigns.append(f'init({et_var}) := 0;')
             et_lines = et_expr.split('\n')
             next_assigns.append(f'next({et_var}) :=')
@@ -314,8 +312,8 @@ class SMVGen:
                 next_assigns.append(f'  {line}')
             next_assigns[-1] += ';'
         for var in sorted(self.coil_driven):
-            if var in coil_normal_define:
-                dname = coil_normal_define[var]
+            if var in self._bld_coil_normal:
+                dname = self._bld_coil_normal[var]
                 iec = self.all_vars.get(var, 'BOOL')
                 if var not in state_vars:
                     state_vars[var] = smv_type(iec)
@@ -323,7 +321,7 @@ class SMVGen:
                 next_assigns.append(f'next({var}) := {dname};')
         return next_assigns
 
-    def _build_invarspecs(self, latest):
+    def _build_invarspecs(self):
         invarspecs = []
         for prop in self.props:
             kind    = prop.get('kind', '')
@@ -332,14 +330,14 @@ class SMVGen:
             comment = f'{pid}: {desc}'
             if kind == 'mutual_exclusion':
                 vs   = prop['variables']
-                v0   = latest.get(vs[0], vs[0])
-                v1   = latest.get(vs[1], vs[1])
+                v0   = self._bld_latest.get(vs[0], vs[0])
+                v1   = self._bld_latest.get(vs[1], vs[1])
                 spec = f'INVARSPEC !({v0} & {v1});'
             elif kind == 'invariant':
-                expr = self._xlat(prop['expression'], latest)
+                expr = self._xlat(prop['expression'], self._bld_latest)
                 spec = f'INVARSPEC {expr};'
             elif kind == 'absence':
-                expr = self._xlat(prop['expression'], latest)
+                expr = self._xlat(prop['expression'], self._bld_latest)
                 spec = f'INVARSPEC !({expr});'
             else:
                 comment += f' [{kind} — skipped in NuXmv comparison]'
@@ -350,10 +348,10 @@ class SMVGen:
 
     def _build_model(self):
         state_vars = self._collect_state_vars()
-        latest, defines, coil_normal_define, timer_et_nexts = self._build_define_chain()
-        next_assigns = self._build_next_assigns(coil_normal_define, timer_et_nexts, state_vars)
-        invarspecs = self._build_invarspecs(latest)
-        return state_vars, defines, next_assigns, invarspecs
+        self._build_define_chain()
+        next_assigns = self._build_next_assigns(state_vars)
+        invarspecs = self._build_invarspecs()
+        return state_vars, self._bld_defines, next_assigns, invarspecs
 
     def _xlat(self, expr, latest):
         expr = expr.replace('&&', '&').replace('||', '|')
