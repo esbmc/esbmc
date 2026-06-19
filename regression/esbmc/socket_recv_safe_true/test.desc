@@ -1,4 +1,4 @@
 CORE
 main.c
---bounds-check
+--unwind 17
 ^VERIFICATION SUCCESSFUL$

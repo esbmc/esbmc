@@ -488,6 +488,16 @@ __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
 
+// macOS/BSD expose errno as (*__error()); model it like __errno_location so
+// that errno-setting models work under the Apple/BSD sysroot too.
+#if defined(__APPLE__) || defined(__FreeBSD__)
+int *__error(void)
+{
+__ESBMC_HIDE:;
+  return &__esbmc_errno;
+}
+#endif
+
 int pipe(int pipefd[2])
 {
 __ESBMC_HIDE:;

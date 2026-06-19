@@ -6,8 +6,12 @@
 
 __ESBMC_C_CPP_BEGIN
 
-#ifndef _SSIZE_T_DEFINED
+/* Guard against the typedef the C library headers expose under their own
+ * macro (glibc uses __ssize_t_defined) so including <sys/types.h> or
+ * <unistd.h> alongside this header does not trigger a redefinition. */
+#if !defined(_SSIZE_T_DEFINED) && !defined(__ssize_t_defined)
 #define _SSIZE_T_DEFINED
+#define __ssize_t_defined
 typedef long ssize_t;
 #endif
 
@@ -103,6 +107,5 @@ int    getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int    getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 
 int    shutdown(int sockfd, int how);
-int    close(int fd);
 
 __ESBMC_C_CPP_END

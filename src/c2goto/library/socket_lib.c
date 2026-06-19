@@ -25,12 +25,14 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 
 /* ESBMC built-in non-deterministic value generators */
-extern int     __VERIFIER_nondet_int(void);
-extern short   __VERIFIER_nondet_short(void);
-extern size_t  __VERIFIER_nondet_size_t(void);
-extern uint8_t __VERIFIER_nondet_uchar(void);
+extern int           __VERIFIER_nondet_int(void);
+extern short         __VERIFIER_nondet_short(void);
+extern size_t        __VERIFIER_nondet_size_t(void);
+extern uint8_t       __VERIFIER_nondet_uchar(void);
+extern unsigned long __VERIFIER_nondet_ulong(void);
 
 /* ============================================================
  *  socket()
@@ -190,7 +192,7 @@ __ESBMC_HIDE:;
         return -1;
     }
 
-    __ESBMC_assume(result >= 0 && (size_t)result <= len);
+    __ESBMC_assume((size_t)result <= len);
     return result;
 }
 
@@ -254,7 +256,7 @@ __ESBMC_HIDE:;
         return -1;
     }
 
-    __ESBMC_assume(result >= 0 && (size_t)result <= len);
+    __ESBMC_assume((size_t)result <= len);
     return result;
 }
 
@@ -356,8 +358,21 @@ __ESBMC_HIDE:;
 /* ============================================================
  *  select()
  *  Returns the number of ready fds (>= 0), or -1 on error.
- *  Modifies readfds/writefds/exceptfds non-deterministically.
+ *  Havocs the ready-sets so a caller cannot assume an fd it set
+ *  is ready: every fd_set word is overwritten with a
+ *  non-deterministic value, making subsequent FD_ISSET queries
+ *  non-deterministic rather than echoing the caller's own bits.
  * ============================================================ */
+static void __esbmc_fd_set_havoc(fd_set *set)
+{
+__ESBMC_HIDE:;
+    if (set == (void *)0)
+        return;
+    for (unsigned long i = 0;
+         i < sizeof(set->fds_bits) / sizeof(set->fds_bits[0]); i++)
+        set->fds_bits[i] = __VERIFIER_nondet_ulong();
+}
+
 int select(int nfds, fd_set *readfds, fd_set *writefds,
            fd_set *exceptfds, struct timeval *timeout)
 {
@@ -370,7 +385,11 @@ __ESBMC_HIDE:;
     }
 
     /* Constrain to valid range */
-    __ESBMC_assume(result >= 0 && result <= nfds);
+    __ESBMC_assume(result <= nfds);
+
+    __esbmc_fd_set_havoc(readfds);
+    __esbmc_fd_set_havoc(writefds);
+    __esbmc_fd_set_havoc(exceptfds);
 
     return result;
 }
@@ -393,45 +412,26 @@ __ESBMC_HIDE:;
         return -1;
     }
 
-    __ESBMC_assume(result >= 0 && (unsigned long)result <= nfds);
+    __ESBMC_assume((unsigned long)result <= nfds);
 
     /* Fill revents with non-deterministic values constrained to
-     * the requested events plus error flags */
+     * the requested events plus error flags (POLLERR/POLLHUP/POLLNVAL
+     * can be reported regardless of what the caller requested) */
     for (unsigned long i = 0; i < nfds; i++) {
-        fds[i].revents = __VERIFIER_nondet_short();
+        fds[i].revents = __VERIFIER_nondet_short() &
+            (fds[i].events | POLLERR | POLLHUP | POLLNVAL);
     }
 
     return result;
 }
 
 /* ============================================================
- *  Byte-order conversion functions (htons, htonl, ntohs, ntohl)
- *  These are modeled as identity functions for verification
- *  purposes, since ESBMC does not distinguish byte order.
+ *  Byte-order conversion functions (htons/htonl/ntohs/ntohl) are
+ *  intentionally NOT modeled here: library/inet.c already provides
+ *  endianness-correct models using __ESBMC_is_little_endian() and
+ *  __builtin_bswap*. Defining identity versions here would collide
+ *  with those symbols and silently drop byte-order semantics.
  * ============================================================ */
-uint16_t htons(uint16_t hostshort)
-{
-__ESBMC_HIDE:;
-    return hostshort;
-}
-
-uint32_t htonl(uint32_t hostlong)
-{
-__ESBMC_HIDE:;
-    return hostlong;
-}
-
-uint16_t ntohs(uint16_t netshort)
-{
-__ESBMC_HIDE:;
-    return netshort;
-}
-
-uint32_t ntohl(uint32_t netlong)
-{
-__ESBMC_HIDE:;
-    return netlong;
-}
 
 /* ============================================================
  *  inet_addr() — parse dotted-quad IPv4 string
@@ -464,7 +464,7 @@ __ESBMC_HIDE:;
 
     if (result == 1) {
         /* Fill dst with non-deterministic address bytes */
-        int size = (af == 2 /* AF_INET */) ? 4 : 16;
+        int size = (af == AF_INET) ? 4 : 16;
         for (int i = 0; i < size; i++) {
             ((uint8_t *)dst)[i] = __VERIFIER_nondet_uchar();
         }
