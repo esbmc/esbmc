@@ -30,10 +30,15 @@ typedef struct {
     (((fd_set *)(set))->fds_bits[(fd) / (8 * sizeof(unsigned long))] \
         & (1UL << ((fd) % (8 * sizeof(unsigned long)))))
 
+/* Guard with the same macro glibc uses (bits/types/struct_timeval.h) so we
+ * do not clash when <sys/time.h> defines timeval and then includes us. */
+#ifndef __timeval_defined
+#define __timeval_defined 1
 struct timeval {
     long tv_sec;
     long tv_usec;
 };
+#endif
 
 int select(int nfds, fd_set *readfds, fd_set *writefds,
            fd_set *exceptfds, struct timeval *timeout);

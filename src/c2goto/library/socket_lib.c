@@ -28,10 +28,10 @@
 #include <sys/select.h>
 
 /* ESBMC built-in non-deterministic value generators */
-extern int           __VERIFIER_nondet_int(void);
-extern short         __VERIFIER_nondet_short(void);
-extern size_t        __VERIFIER_nondet_size_t(void);
-extern uint8_t       __VERIFIER_nondet_uchar(void);
+extern int __VERIFIER_nondet_int(void);
+extern short __VERIFIER_nondet_short(void);
+extern size_t __VERIFIER_nondet_size_t(void);
+extern uint8_t __VERIFIER_nondet_uchar(void);
 extern unsigned long __VERIFIER_nondet_ulong(void);
 
 /* ============================================================
@@ -42,16 +42,17 @@ extern unsigned long __VERIFIER_nondet_ulong(void);
 int socket(int domain, int type, int protocol)
 {
 __ESBMC_HIDE:;
-    int fd = __VERIFIER_nondet_int();
+  int fd = __VERIFIER_nondet_int();
 
-    if (fd < 0) {
-        errno = EACCES;
-        return -1;
-    }
+  if (fd < 0)
+  {
+    errno = EACCES;
+    return -1;
+  }
 
-    /* Constrain to a realistic range of file descriptors */
-    __ESBMC_assume(fd >= 3 && fd < 1024);
-    return fd;
+  /* Constrain to a realistic range of file descriptors */
+  __ESBMC_assume(fd >= 3 && fd < 1024);
+  return fd;
 }
 
 /* ============================================================
@@ -61,15 +62,15 @@ __ESBMC_HIDE:;
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(addr != (void *)0,
-        "bind: addr must not be NULL");
+  __ESBMC_assert(addr != (void *)0, "bind: addr must not be NULL");
 
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = EADDRINUSE;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = EADDRINUSE;
+    return -1;
+  }
+  return 0;
 }
 
 /* ============================================================
@@ -79,12 +80,13 @@ __ESBMC_HIDE:;
 int listen(int sockfd, int backlog)
 {
 __ESBMC_HIDE:;
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = EADDRINUSE;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = EADDRINUSE;
+    return -1;
+  }
+  return 0;
 }
 
 /* ============================================================
@@ -95,28 +97,32 @@ __ESBMC_HIDE:;
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
 __ESBMC_HIDE:;
-    int fd = __VERIFIER_nondet_int();
+  int fd = __VERIFIER_nondet_int();
 
-    if (fd < 0) {
-        errno = EAGAIN;
-        return -1;
+  if (fd < 0)
+  {
+    errno = EAGAIN;
+    return -1;
+  }
+
+  __ESBMC_assume(fd >= 3 && fd < 1024);
+
+  /* If the caller wants the peer address, fill with non-deterministic data */
+  if (addr != (void *)0 && addrlen != (void *)0)
+  {
+    socklen_t max = *addrlen;
+    if (max > sizeof(struct sockaddr))
+    {
+      max = sizeof(struct sockaddr);
     }
-
-    __ESBMC_assume(fd >= 3 && fd < 1024);
-
-    /* If the caller wants the peer address, fill with non-deterministic data */
-    if (addr != (void *)0 && addrlen != (void *)0) {
-        socklen_t max = *addrlen;
-        if (max > sizeof(struct sockaddr)) {
-            max = sizeof(struct sockaddr);
-        }
-        for (socklen_t i = 0; i < max; i++) {
-            ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
-        }
-        *addrlen = max;
+    for (socklen_t i = 0; i < max; i++)
+    {
+      ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
     }
+    *addrlen = max;
+  }
 
-    return fd;
+  return fd;
 }
 
 /* ============================================================
@@ -126,15 +132,15 @@ __ESBMC_HIDE:;
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(addr != (void *)0,
-        "connect: addr must not be NULL");
+  __ESBMC_assert(addr != (void *)0, "connect: addr must not be NULL");
 
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = ECONNREFUSED;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ECONNREFUSED;
+    return -1;
+  }
+  return 0;
 }
 
 /* ============================================================
@@ -148,31 +154,33 @@ __ESBMC_HIDE:;
 ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(buf != (void *)0,
-        "recv: buf must not be NULL");
+  __ESBMC_assert(buf != (void *)0, "recv: buf must not be NULL");
 
-    ssize_t result = (ssize_t)__VERIFIER_nondet_int();
+  ssize_t result = (ssize_t)__VERIFIER_nondet_int();
 
-    /* Error case */
-    if (result < 0) {
-        errno = ECONNRESET;
-        return -1;
-    }
+  /* Error case */
+  if (result < 0)
+  {
+    errno = ECONNRESET;
+    return -1;
+  }
 
-    /* Connection closed */
-    if (result == 0) {
-        return 0;
-    }
+  /* Connection closed */
+  if (result == 0)
+  {
+    return 0;
+  }
 
-    /* Constrain received bytes to [1, len] */
-    __ESBMC_assume(result >= 1 && (size_t)result <= len);
+  /* Constrain received bytes to [1, len] */
+  __ESBMC_assume(result >= 1 && (size_t)result <= len);
 
-    /* Fill buffer with non-deterministic (attacker-controlled) bytes */
-    for (ssize_t i = 0; i < result; i++) {
-        ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
-    }
+  /* Fill buffer with non-deterministic (attacker-controlled) bytes */
+  for (ssize_t i = 0; i < result; i++)
+  {
+    ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
+  }
 
-    return result;
+  return result;
 }
 
 /* ============================================================
@@ -182,110 +190,135 @@ __ESBMC_HIDE:;
 ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(buf != (void *)0,
-        "send: buf must not be NULL");
+  __ESBMC_assert(buf != (void *)0, "send: buf must not be NULL");
 
-    ssize_t result = (ssize_t)__VERIFIER_nondet_int();
+  ssize_t result = (ssize_t)__VERIFIER_nondet_int();
 
-    if (result < 0) {
-        errno = EPIPE;
-        return -1;
-    }
+  if (result < 0)
+  {
+    errno = EPIPE;
+    return -1;
+  }
 
-    __ESBMC_assume((size_t)result <= len);
-    return result;
+  __ESBMC_assume((size_t)result <= len);
+  return result;
 }
 
 /* ============================================================
  *  recvfrom()
  *  Like recv(), but also fills src_addr if non-NULL.
  * ============================================================ */
-ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
-                 struct sockaddr *src_addr, socklen_t *addrlen)
+ssize_t recvfrom(
+  int sockfd,
+  void *buf,
+  size_t len,
+  int flags,
+  struct sockaddr *src_addr,
+  socklen_t *addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(buf != (void *)0,
-        "recvfrom: buf must not be NULL");
+  __ESBMC_assert(buf != (void *)0, "recvfrom: buf must not be NULL");
 
-    ssize_t result = (ssize_t)__VERIFIER_nondet_int();
+  ssize_t result = (ssize_t)__VERIFIER_nondet_int();
 
-    if (result < 0) {
-        errno = ECONNRESET;
-        return -1;
+  if (result < 0)
+  {
+    errno = ECONNRESET;
+    return -1;
+  }
+
+  if (result == 0)
+  {
+    return 0;
+  }
+
+  __ESBMC_assume(result >= 1 && (size_t)result <= len);
+
+  for (ssize_t i = 0; i < result; i++)
+  {
+    ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
+  }
+
+  if (src_addr != (void *)0 && addrlen != (void *)0)
+  {
+    socklen_t max = *addrlen;
+    if (max > sizeof(struct sockaddr))
+    {
+      max = sizeof(struct sockaddr);
     }
-
-    if (result == 0) {
-        return 0;
+    for (socklen_t i = 0; i < max; i++)
+    {
+      ((uint8_t *)src_addr)[i] = __VERIFIER_nondet_uchar();
     }
+    *addrlen = max;
+  }
 
-    __ESBMC_assume(result >= 1 && (size_t)result <= len);
-
-    for (ssize_t i = 0; i < result; i++) {
-        ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
-    }
-
-    if (src_addr != (void *)0 && addrlen != (void *)0) {
-        socklen_t max = *addrlen;
-        if (max > sizeof(struct sockaddr)) {
-            max = sizeof(struct sockaddr);
-        }
-        for (socklen_t i = 0; i < max; i++) {
-            ((uint8_t *)src_addr)[i] = __VERIFIER_nondet_uchar();
-        }
-        *addrlen = max;
-    }
-
-    return result;
+  return result;
 }
 
 /* ============================================================
  *  sendto()
  *  Like send(), with a destination address.
  * ============================================================ */
-ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
-               const struct sockaddr *dest_addr, socklen_t addrlen)
+ssize_t sendto(
+  int sockfd,
+  const void *buf,
+  size_t len,
+  int flags,
+  const struct sockaddr *dest_addr,
+  socklen_t addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(buf != (void *)0,
-        "sendto: buf must not be NULL");
+  __ESBMC_assert(buf != (void *)0, "sendto: buf must not be NULL");
 
-    ssize_t result = (ssize_t)__VERIFIER_nondet_int();
+  ssize_t result = (ssize_t)__VERIFIER_nondet_int();
 
-    if (result < 0) {
-        errno = EPIPE;
-        return -1;
-    }
+  if (result < 0)
+  {
+    errno = EPIPE;
+    return -1;
+  }
 
-    __ESBMC_assume((size_t)result <= len);
-    return result;
+  __ESBMC_assume((size_t)result <= len);
+  return result;
 }
 
 /* ============================================================
  *  setsockopt() / getsockopt()
  *  Non-deterministic success/failure.
  * ============================================================ */
-int setsockopt(int sockfd, int level, int optname,
-               const void *optval, socklen_t optlen)
+int setsockopt(
+  int sockfd,
+  int level,
+  int optname,
+  const void *optval,
+  socklen_t optlen)
 {
 __ESBMC_HIDE:;
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = ENOPROTOOPT;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ENOPROTOOPT;
+    return -1;
+  }
+  return 0;
 }
 
-int getsockopt(int sockfd, int level, int optname,
-               void *optval, socklen_t *optlen)
+int getsockopt(
+  int sockfd,
+  int level,
+  int optname,
+  void *optval,
+  socklen_t *optlen)
 {
 __ESBMC_HIDE:;
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = ENOPROTOOPT;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ENOPROTOOPT;
+    return -1;
+  }
+  return 0;
 }
 
 /* ============================================================
@@ -294,51 +327,53 @@ __ESBMC_HIDE:;
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(addr != (void *)0,
-        "getsockname: addr must not be NULL");
-    __ESBMC_assert(addrlen != (void *)0,
-        "getsockname: addrlen must not be NULL");
+  __ESBMC_assert(addr != (void *)0, "getsockname: addr must not be NULL");
+  __ESBMC_assert(addrlen != (void *)0, "getsockname: addrlen must not be NULL");
 
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = EBADF;
-        return -1;
-    }
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = EBADF;
+    return -1;
+  }
 
-    socklen_t max = *addrlen;
-    if (max > sizeof(struct sockaddr)) {
-        max = sizeof(struct sockaddr);
-    }
-    for (socklen_t i = 0; i < max; i++) {
-        ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
-    }
-    *addrlen = max;
-    return 0;
+  socklen_t max = *addrlen;
+  if (max > sizeof(struct sockaddr))
+  {
+    max = sizeof(struct sockaddr);
+  }
+  for (socklen_t i = 0; i < max; i++)
+  {
+    ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
+  }
+  *addrlen = max;
+  return 0;
 }
 
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(addr != (void *)0,
-        "getpeername: addr must not be NULL");
-    __ESBMC_assert(addrlen != (void *)0,
-        "getpeername: addrlen must not be NULL");
+  __ESBMC_assert(addr != (void *)0, "getpeername: addr must not be NULL");
+  __ESBMC_assert(addrlen != (void *)0, "getpeername: addrlen must not be NULL");
 
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = ENOTCONN;
-        return -1;
-    }
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ENOTCONN;
+    return -1;
+  }
 
-    socklen_t max = *addrlen;
-    if (max > sizeof(struct sockaddr)) {
-        max = sizeof(struct sockaddr);
-    }
-    for (socklen_t i = 0; i < max; i++) {
-        ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
-    }
-    *addrlen = max;
-    return 0;
+  socklen_t max = *addrlen;
+  if (max > sizeof(struct sockaddr))
+  {
+    max = sizeof(struct sockaddr);
+  }
+  for (socklen_t i = 0; i < max; i++)
+  {
+    ((uint8_t *)addr)[i] = __VERIFIER_nondet_uchar();
+  }
+  *addrlen = max;
+  return 0;
 }
 
 /* ============================================================
@@ -347,12 +382,13 @@ __ESBMC_HIDE:;
 int shutdown(int sockfd, int how)
 {
 __ESBMC_HIDE:;
-    int result = __VERIFIER_nondet_int();
-    if (result != 0) {
-        errno = ENOTCONN;
-        return -1;
-    }
-    return 0;
+  int result = __VERIFIER_nondet_int();
+  if (result != 0)
+  {
+    errno = ENOTCONN;
+    return -1;
+  }
+  return 0;
 }
 
 /* ============================================================
@@ -366,32 +402,38 @@ __ESBMC_HIDE:;
 static void __esbmc_fd_set_havoc(fd_set *set)
 {
 __ESBMC_HIDE:;
-    if (set == (void *)0)
-        return;
-    for (unsigned long i = 0;
-         i < sizeof(set->fds_bits) / sizeof(set->fds_bits[0]); i++)
-        set->fds_bits[i] = __VERIFIER_nondet_ulong();
+  if (set == (void *)0)
+    return;
+  for (unsigned long i = 0;
+       i < sizeof(set->fds_bits) / sizeof(set->fds_bits[0]);
+       i++)
+    set->fds_bits[i] = __VERIFIER_nondet_ulong();
 }
 
-int select(int nfds, fd_set *readfds, fd_set *writefds,
-           fd_set *exceptfds, struct timeval *timeout)
+int select(
+  int nfds,
+  fd_set *readfds,
+  fd_set *writefds,
+  fd_set *exceptfds,
+  struct timeval *timeout)
 {
 __ESBMC_HIDE:;
-    int result = __VERIFIER_nondet_int();
+  int result = __VERIFIER_nondet_int();
 
-    if (result < 0) {
-        errno = EINTR;
-        return -1;
-    }
+  if (result < 0)
+  {
+    errno = EINTR;
+    return -1;
+  }
 
-    /* Constrain to valid range */
-    __ESBMC_assume(result <= nfds);
+  /* Constrain to valid range */
+  __ESBMC_assume(result <= nfds);
 
-    __esbmc_fd_set_havoc(readfds);
-    __esbmc_fd_set_havoc(writefds);
-    __esbmc_fd_set_havoc(exceptfds);
+  __esbmc_fd_set_havoc(readfds);
+  __esbmc_fd_set_havoc(writefds);
+  __esbmc_fd_set_havoc(exceptfds);
 
-    return result;
+  return result;
 }
 
 /* ============================================================
@@ -402,27 +444,29 @@ __ESBMC_HIDE:;
 int poll(struct pollfd *fds, unsigned long nfds, int timeout)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(fds != (void *)0 || nfds == 0,
-        "poll: fds must not be NULL when nfds > 0");
+  __ESBMC_assert(
+    fds != (void *)0 || nfds == 0, "poll: fds must not be NULL when nfds > 0");
 
-    int result = __VERIFIER_nondet_int();
+  int result = __VERIFIER_nondet_int();
 
-    if (result < 0) {
-        errno = EINTR;
-        return -1;
-    }
+  if (result < 0)
+  {
+    errno = EINTR;
+    return -1;
+  }
 
-    __ESBMC_assume((unsigned long)result <= nfds);
+  __ESBMC_assume((unsigned long)result <= nfds);
 
-    /* Fill revents with non-deterministic values constrained to
+  /* Fill revents with non-deterministic values constrained to
      * the requested events plus error flags (POLLERR/POLLHUP/POLLNVAL
      * can be reported regardless of what the caller requested) */
-    for (unsigned long i = 0; i < nfds; i++) {
-        fds[i].revents = __VERIFIER_nondet_short() &
-            (fds[i].events | POLLERR | POLLHUP | POLLNVAL);
-    }
+  for (unsigned long i = 0; i < nfds; i++)
+  {
+    fds[i].revents = __VERIFIER_nondet_short() &
+                     (fds[i].events | POLLERR | POLLHUP | POLLNVAL);
+  }
 
-    return result;
+  return result;
 }
 
 /* ============================================================
@@ -440,11 +484,10 @@ __ESBMC_HIDE:;
 uint32_t inet_addr(const char *cp)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(cp != (void *)0,
-        "inet_addr: cp must not be NULL");
+  __ESBMC_assert(cp != (void *)0, "inet_addr: cp must not be NULL");
 
-    uint32_t result = (uint32_t)__VERIFIER_nondet_int();
-    return result;
+  uint32_t result = (uint32_t)__VERIFIER_nondet_int();
+  return result;
 }
 
 /* ============================================================
@@ -454,21 +497,21 @@ __ESBMC_HIDE:;
 int inet_pton(int af, const char *src, void *dst)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assert(src != (void *)0,
-        "inet_pton: src must not be NULL");
-    __ESBMC_assert(dst != (void *)0,
-        "inet_pton: dst must not be NULL");
+  __ESBMC_assert(src != (void *)0, "inet_pton: src must not be NULL");
+  __ESBMC_assert(dst != (void *)0, "inet_pton: dst must not be NULL");
 
-    int result = __VERIFIER_nondet_int();
-    __ESBMC_assume(result >= -1 && result <= 1);
+  int result = __VERIFIER_nondet_int();
+  __ESBMC_assume(result >= -1 && result <= 1);
 
-    if (result == 1) {
-        /* Fill dst with non-deterministic address bytes */
-        int size = (af == AF_INET) ? 4 : 16;
-        for (int i = 0; i < size; i++) {
-            ((uint8_t *)dst)[i] = __VERIFIER_nondet_uchar();
-        }
+  if (result == 1)
+  {
+    /* Fill dst with non-deterministic address bytes */
+    int size = (af == AF_INET) ? 4 : 16;
+    for (int i = 0; i < size; i++)
+    {
+      ((uint8_t *)dst)[i] = __VERIFIER_nondet_uchar();
     }
+  }
 
-    return result;
+  return result;
 }
