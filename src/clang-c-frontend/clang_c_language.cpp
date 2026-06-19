@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <util/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
+#include <clang-c-frontend/clang_c_lexer.h>
 #include <util/yaml_parser.h>
 
 #include <ac_config.h>
@@ -338,7 +339,26 @@ bool clang_c_languaget::parse(const std::string &path)
   else if (config.options.get_bool_option("validate-violation-witness"))
   {
     const std::string witness_path = config.options.get_option("witness");
-    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    auto &waypoints = yaml_parser::get_waypoints(witness_path);
+    clang_c_lexert lexer;
+    for (auto &wp : waypoints)
+    {
+      if (wp.format != "ext_c_expression" && wp.format != "acsl_expression")
+        continue;
+      expr2tc e = lexer.parse_expr(wp.value);
+      if (e)
+      {
+        wp.parsed_cond.expr = e;
+        wp.parsed_cond.valid = true;
+      }
+      else
+      {
+        log_error(
+          "witness: could not parse constraint '{}'; witness is invalid",
+          wp.value);
+        abort();
+      }
+    }
     std::string content =
       yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
     if (!content.empty())
@@ -370,7 +390,7 @@ bool clang_c_languaget::parse(const std::string &path)
     return true;
 
   if (!AST)
-    AST = move(newAST);
+    AST = std::move(newAST);
   else
     mergeASTs(newAST, AST);
 
@@ -403,18 +423,25 @@ void clang_c_languaget::set_language_version()
     config.language.c_std = c_stdt::c89;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &)
+bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   set_language_version();
-  clang_c_convertert converter(context, AST, "C");
+
+  // Convert + adjust this translation unit in an isolated context, then
+  // merge the fully-adjusted symbols into the shared context via c_link.
+  // This keeps each TU's convert/adjust from re-walking and re-adjusting
+  // symbols contributed by other frontends/TUs sharing `context` (#5309).
+  contextt new_context;
+
+  clang_c_convertert converter(new_context, AST, "C");
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(context);
+  clang_c_adjust adjuster(new_context);
   if (adjuster.adjust())
     return true;
 
-  return false;
+  return c_link(context, new_context, module);
 }
 
 void clang_c_languaget::show_parse(std::ostream &)
@@ -484,8 +511,11 @@ _Bool __ESBMC_is_little_endian();
 extern int __ESBMC_rounding_mode;
 
 void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
-      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
-      
+void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+void *__ESBMC_memmove(void *, const void *, __SIZE_TYPE__);
+void *__ESBMC_memchr(const void *, int, __SIZE_TYPE__);
+int __ESBMC_memcmp(const void *, const void *, __SIZE_TYPE__);
+
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);

@@ -683,17 +683,27 @@ public:
     return buf[i];
   }
 
+  // Unlike operator[] (where an out-of-range index is undefined behaviour),
+  // vector::at must throw std::out_of_range when n is not a valid index
+  // ([sequence.reqmts]/[vector.access]). Modelling it as an assertion was
+  // wrong: a program that catches the out_of_range would wrongly verify as a
+  // property violation. size_type is signed here, so a negative index is also
+  // out of range.
+  // The thrown object's message is implementation-defined, so throw the
+  // message-less out_of_range: it avoids constructing a std::string from a
+  // literal (which the string model resolves via an unwinding-sensitive
+  // strlen), while a catch(out_of_range&) / catch(exception&) still matches.
   const_reference at(size_type n) const
   {
-    assert(0 <= n);
-    assert(n < _size);
+    if (n < 0 || n >= _size)
+      throw std::out_of_range();
     assert(_size <= VECTOR_CAPACITY);
     return buf[n];
   }
   reference at(size_type n)
   {
-    assert(0 <= n);
-    assert(n < _size);
+    if (n < 0 || n >= _size)
+      throw std::out_of_range();
     assert(_size <= VECTOR_CAPACITY);
     return buf[n];
   }

@@ -30,7 +30,10 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Fallback for larger/unusual sizes
+  // Fallback for larger/unusual sizes. A word-wise compare loop here would
+  // unwind --unwind times on every symbolic-size comparison, with no benefit
+  // to any converging test (large-struct compares only occur in tests that
+  // stay KNOWNBUG on the symbolic-list scalability wall, #5121).
   return memcmp(a, b, size) == 0;
 }
 
@@ -96,8 +99,16 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths for scalars and small tuple keys.
-  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
+  // Branch-free 8-byte-aligned fast paths for the common small sizes. These
+  // avoid memcpy's per-byte loop, which blows up incremental-bmc (size unwind
+  // iterations per copied element) and, under a tight --unwind, trips the copy
+  // loop's unwinding assertion (dict_tuple_key copies a 3-int tuple key at
+  // --unwind 3, #4805). Larger payloads fall through to memcpy: a word-wise
+  // loop here would unwind --unwind times on every call where size is symbolic
+  // (e.g. the list_slice_assign snapshot loop), on top of memcpy's own loop,
+  // pushing list-slice-assign past the CI per-test cap for no benefit to any
+  // converging test (large-struct copies only appear in tests that stay
+  // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -190,10 +201,17 @@ bool __ESBMC_list_push_object(
 // assignment (l[i] = x) writes through the element's value pointer in place, so
 // two lists sharing a scalar buffer would alias. Scalars therefore keep the
 // independent byte-copy via __ESBMC_list_push_object.
-bool __ESBMC_list_push_shallow(
+// Size-aware core: elem_size is the statically-known scalar element byte size
+// (0 if unknown). When known, the scalar copy goes straight to __ESBMC_list_push
+// with the constant size, so __ESBMC_copy_value takes its branch-free fast path
+// instead of the symbolic o->size memcpy loop. elem_size == 0 reproduces the
+// original behaviour exactly (copy o->size bytes), so a missing size is never
+// wrong.
+static bool __ESBMC_list_push_shallow_sz(
   PyListObject *l,
   PyObject *o,
-  size_t list_type_id)
+  size_t list_type_id,
+  size_t elem_size)
 {
   assert(l != NULL);
   assert(o != NULL);
@@ -203,7 +221,17 @@ bool __ESBMC_list_push_shallow(
     l->size++;
     return true;
   }
+  if (elem_size != 0)
+    return __ESBMC_list_push(l, o->value, o->type_id, elem_size, 0, 0);
   return __ESBMC_list_push_object(l, o, 0, 0);
+}
+
+bool __ESBMC_list_push_shallow(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id)
+{
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -224,7 +252,8 @@ bool __ESBMC_list_eq(
   const PyListObject *l2,
   size_t list_type_id,
   size_t max_depth,
-  size_t float_type_id)
+  size_t float_type_id,
+  size_t elem_size)
 {
   // Quick checks
   if (!l1 || !l2)
@@ -355,8 +384,13 @@ bool __ESBMC_list_eq(
     }
     else
     {
-      // Primitive comparison - use optimized version (no memcmp loop)
-      if (!__ESBMC_values_equal(a->value, b->value, a->size))
+      // Primitive comparison - use optimized version (no memcmp loop).
+      // Prefer the statically-known element size from the frontend so
+      // __ESBMC_values_equal takes its branch-free fast path instead of the
+      // symbolic-index field read a->size (which forces memcmp's per-byte loop
+      // to unwind per element). Falls back to a->size when elem_size == 0.
+      size_t cmp_size = (elem_size != 0) ? elem_size : a->size;
+      if (!__ESBMC_values_equal(a->value, b->value, cmp_size))
         return false;
     }
   }
@@ -793,7 +827,7 @@ bool __ESBMC_dict_eq(
       const PyListObject *rhs_list =
         (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
                                : *(const PyListObject **)rhs_value->value;
-      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0))
+      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0, 0))
         return false;
     }
     else
@@ -852,32 +886,53 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
 // lists/dicts/None) keep their pointer record — i.e. Python's shallow-copy
 // semantics, unlike __ESBMC_list_copy whose generic byte-copy drops stored
 // pointers (#5102). Used for tuple(list) and list slice self-assignment.
-PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
+// elem_size: statically-known scalar element byte size (0 if unknown); passed
+// through to the per-element copy so it can take the constant-size fast path
+// instead of the symbolic o->size memcpy loop. 0 preserves prior behaviour.
+PyListObject *__ESBMC_list_copy_shallow_sz(
+  PyListObject *l,
+  size_t list_type_id,
+  size_t elem_size)
 {
   __ESBMC_assert(l != NULL, "list_copy_shallow: list is null");
   PyListObject *copied = __ESBMC_list_create();
   size_t i = 0;
   while (i < l->size)
   {
-    __ESBMC_list_push_shallow(copied, &l->items[i], list_type_id);
+    __ESBMC_list_push_shallow_sz(copied, &l->items[i], list_type_id, elem_size);
     i++;
   }
   return copied;
+}
+
+PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
+{
+  return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0);
 }
 
 // Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing
 // rules: pointer-payload elements (nested lists/dicts/None, size == 0 or
 // type_id == list_type_id) keep their pointer record; scalars get an
 // independent byte-copy so two slots never alias one buffer.
-static void
-__ESBMC_list_store_elem(PyObject *slot, const PyObject *o, size_t list_type_id)
+// elem_size: the statically-known element byte size from the frontend (the
+// list's declared element type). The deep-copy path uses it as the copy
+// length so __ESBMC_copy_value sees a compile-time constant and takes its
+// branch-free fast path, instead of the symbolic-index field read o->size
+// (which forces memcpy's per-byte loop to unwind per element). Falls back to
+// o->size when the frontend could not supply a concrete size (elem_size == 0).
+static void __ESBMC_list_store_elem(
+  PyObject *slot,
+  const PyObject *o,
+  size_t list_type_id,
+  size_t elem_size)
 {
   if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
   {
     *slot = *o;
     return;
   }
-  slot->value = __ESBMC_copy_value(o->value, o->size, o->type_id, 0, NULL, 0);
+  size_t copy_size = (elem_size != 0) ? elem_size : o->size;
+  slot->value = __ESBMC_copy_value(o->value, copy_size, o->type_id, 0, NULL, 0);
   slot->float_idx = o->float_idx;
   slot->type_id = o->type_id;
   slot->size = o->size;
@@ -898,7 +953,8 @@ bool __ESBMC_list_slice_assign(
   int has_upper,
   int64_t step,
   const PyListObject *src,
-  size_t list_type_id)
+  size_t list_type_id,
+  size_t elem_size)
 {
   __ESBMC_assert(
     l != NULL && src != NULL, "list_slice_assign: list or source is null");
@@ -942,8 +998,10 @@ bool __ESBMC_list_slice_assign(
 
   // Self-assignment (l[1:] = l): snapshot src before mutating l, with the
   // same sharing rules as the writes below (see __ESBMC_list_copy_shallow).
+  // Pass elem_size so the snapshot's scalar copies take the constant-size fast
+  // path too (the writes below already do via __ESBMC_list_store_elem).
   if (src == l)
-    src = __ESBMC_list_copy_shallow(l, list_type_id);
+    src = __ESBMC_list_copy_shallow_sz(l, list_type_id, elem_size);
 
   if (step == 1)
   {
@@ -984,7 +1042,8 @@ bool __ESBMC_list_slice_assign(
   int64_t idx = start;
   while (k < writelen)
   {
-    __ESBMC_list_store_elem(&l->items[idx], &src->items[k], list_type_id);
+    __ESBMC_list_store_elem(
+      &l->items[idx], &src->items[k], list_type_id, elem_size);
     idx += step;
     k++;
   }

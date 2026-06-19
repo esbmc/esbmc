@@ -18,6 +18,8 @@
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
+
+#include <functional>
 #include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -51,12 +53,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           "__ESBMC_list_size not found for list condition check");
 
       // Build len(x) != 0 in IREP2, back-migrating once (V.3).
-      expr2tc arg2, zero2;
-      if (value_expr.type().is_pointer())
-        migrate_expr(value_expr, arg2);
-      else
-        migrate_expr(address_of_exprt(value_expr), arg2);
-      migrate_expr(gen_zero(size_type()), zero2);
+      expr2tc arg2;
+      migrate_expr(value_expr, arg2);
+      if (!is_pointer_type(arg2->type))
+        arg2 = address_of2tc(arg2->type, arg2);
+      expr2tc zero2 = gen_zero(migrate_type(size_type()));
 
       expr2tc size_call2 = side_effect_function_call2tc(
         migrate_type(size_type()), symbol_expr2tc(*size_func), {arg2});
@@ -553,7 +554,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
-      struct_side = gen_address_of(struct_side);
+    {
+      // V.3: take the struct's address in IREP2 — exact round-trip of the
+      // legacy gen_address_of (a plain address_of of the struct value).
+      expr2tc ss2;
+      migrate_expr(struct_side, ss2);
+      struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+    }
   }
 
   // Python reference-identity when one operand is a by-value class instance and
@@ -600,9 +607,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         // ESBMC's object/offset pointer model decides identity. Casting both
         // to the integer handle instead would lose the distinct-object
         // guarantee and spuriously satisfy `a != b` for distinct instances.
+        // V.3: built in IREP2 — exact round-trip of the legacy
+        // gen_address_of + typecast_exprt (migrate's typecast defaults the
+        // same rounding-mode symbol the 2-arg typecast2tc uses).
         typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
-        struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
-        handle_side = typecast_exprt(handle_side, ptr_t);
+        const type2tc ptr_t2 = migrate_type(ptr_t);
+        expr2tc ss2;
+        migrate_expr(struct_side, ss2);
+        struct_side =
+          migrate_expr_back(typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        expr2tc hs2;
+        migrate_expr(handle_side, hs2);
+        handle_side = migrate_expr_back(typecast2tc(ptr_t2, hs2));
       }
     }
   }
@@ -661,16 +677,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           return e;
         };
 
-        side_effect_expr_function_callt strcmp_call;
-        strcmp_call.function() = symbol_expr(*strcmp_symbol);
-        strcmp_call.arguments() = {as_char_ptr(lhs), as_char_ptr(rhs)};
-        strcmp_call.location() = get_location_from_decl(element);
-        strcmp_call.type() = int_type();
+        // V.3: build `strcmp(a, b) op 0` (op is Eq/NotEq) in IREP2, back
+        // -migrating once. Exact round-trip of the legacy side-effect strcmp
+        // call compared against zero via equality/notequal.
+        expr2tc lhs2, rhs2;
+        migrate_expr(as_char_ptr(lhs), lhs2);
+        migrate_expr(as_char_ptr(rhs), rhs2);
+        expr2tc strcmp_call2 = side_effect_function_call2tc(
+          migrate_type(int_type()),
+          symbol_expr2tc(*strcmp_symbol),
+          {lhs2, rhs2});
+        expr2tc zero2 = gen_zero(migrate_type(int_type()));
+        expr2tc cmp2 = (op == "Eq") ? equality2tc(strcmp_call2, zero2)
+                                    : notequal2tc(strcmp_call2, zero2);
 
-        exprt result(
-          python_frontend::map_operator(op, bool_type()), bool_type());
-        result.copy_to_operands(strcmp_call, gen_zero(int_type()));
-        result.location() = get_location_from_decl(element);
+        exprt result = migrate_expr_back(cmp2);
+        const locationt loc = get_location_from_decl(element);
+        result.location() = loc;
+        result.op0().location() = loc; // re-attach the strcmp call location
         return result;
       }
     }
@@ -960,24 +984,28 @@ exprt python_converter::handle_array_operations(
                             ? scalar_expr
                             : typecast_exprt(scalar_expr, elem_type);
 
-    exprt result_array = array_expr;
-    // V.3: build the array element access in IREP2 (index2tc), the exact
-    // round-trip of index_exprt (behaviour-preserving). The array and element
-    // type are loop-invariant, so migrate them once.
+    // V.3: build the per-element index in IREP2 and accumulate the array update
+    // with with2tc. The +/* element op stays a legacy node so map_operator +
+    // migrate_expr select the correct integer (add/mul) or IEEE-float
+    // (ieee_add/ieee_mul + rounding mode) form per element type; the array is
+    // back-migrated once at the end.
     expr2tc ar2;
     migrate_expr(array_expr, ar2);
     const type2tc elem_t2 = migrate_type(elem_type);
+    const type2tc index_t2 = migrate_type(size_type());
+
+    expr2tc result2 = ar2;
     for (long long i = 0; i < array_size; ++i)
     {
-      exprt index = from_integer(i, size_type());
-      expr2tc ix2;
-      migrate_expr(index, ix2);
+      expr2tc ix2 = from_integer(BigInt(i), index_t2);
       exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
-      result_array = with_exprt(result_array, index, bin_elem);
+      expr2tc bin_elem2;
+      migrate_expr(bin_elem, bin_elem2);
+      result2 = with2tc(result2->type, result2, ix2, bin_elem2);
     }
-    return result_array;
+    return migrate_expr_back(result2);
   };
 
   // For direct Python binary operators over arrays, keep behaviour explicit
@@ -1158,6 +1186,104 @@ exprt python_converter::handle_tuple_operations(
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Lexicographic ordering for tuples, lowered to element-wise comparisons
+  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct trips
+  // an is_signedbv assertion):
+  //   (a0,a1,..) < (b0,b1,..)
+  //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
+  // Components may be integer/bool/float scalars (mixed int/float promote to
+  // double, matching Python's numeric tower) or nested tuples (compared
+  // recursively). Tuples of differing arity compare on the common prefix, with
+  // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
+  // swapped operands; LtE/GtE negate the strict result. Any other component
+  // kind (string/list/...) makes the whole comparison fall through unchanged.
+  if (
+    lhs_is_tuple && rhs_is_tuple &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
+  {
+    bool ok = true;
+    auto is_num = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+             t == bool_type();
+    };
+
+    auto memb = [&](const expr2tc &s, const struct_typet::componentt &c) {
+      return migrate_expr_back(
+        member2tc(migrate_type(c.type()), s, c.get_name()));
+    };
+
+    // Strict lexicographic less-than for two tuple-typed expressions.
+    std::function<exprt(const exprt &, const exprt &)> lex_lt =
+      [&](const exprt &ta, const exprt &tb) -> exprt {
+      const auto &ca = to_struct_type(ta.type()).components();
+      const auto &cb = to_struct_type(tb.type()).components();
+      const size_t m = std::min(ca.size(), cb.size());
+
+      expr2tc a2, b2;
+      migrate_expr(ta, a2);
+      migrate_expr(tb, b2);
+
+      // Base: a proper prefix is strictly less than the longer tuple.
+      exprt result = gen_boolean(ca.size() < cb.size());
+      for (size_t k = m; k-- > 0;)
+      {
+        exprt ai = memb(a2, ca[k]);
+        exprt bi = memb(b2, cb[k]);
+
+        exprt lt, eq;
+        const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
+        const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
+        if (ai_tuple && bi_tuple)
+        {
+          lt = lex_lt(ai, bi);
+          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+        }
+        else if (is_num(ai.type()) && is_num(bi.type()))
+        {
+          // Promote a mixed int/float pair to double (Python int->float).
+          if (ai.type() != bi.type())
+          {
+            ai = typecast_exprt(ai, double_type());
+            bi = typecast_exprt(bi, double_type());
+          }
+          lt = exprt("<", bool_type());
+          lt.copy_to_operands(ai, bi);
+          eq = equality_exprt(ai, bi);
+        }
+        else
+        {
+          ok = false; // unsupported / mismatched component kinds
+          return gen_boolean(false);
+        }
+
+        exprt tail("and", bool_type());
+        tail.copy_to_operands(eq, result);
+        exprt head("or", bool_type());
+        head.copy_to_operands(lt, tail);
+        result = head;
+      }
+      return result;
+    };
+
+    const bool swap = (op == "Gt" || op == "LtE");
+    const bool negate = (op == "LtE" || op == "GtE");
+    exprt &a = swap ? rhs : lhs;
+    exprt &b = swap ? lhs : rhs;
+
+    exprt result = lex_lt(a, b);
+    if (!ok)
+      return nil_exprt(); // a non-orderable component: leave unchanged
+
+    if (negate)
+    {
+      exprt n("not", bool_type());
+      n.copy_to_operands(result);
+      result = n;
+    }
+    result.location() = get_location_from_decl(element);
     return result;
   }
 

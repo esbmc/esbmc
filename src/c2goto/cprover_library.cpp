@@ -490,8 +490,6 @@ void add_cprover_library(contextt &context, const languaget *language)
   else
 #endif
   {
-    if (language && language->id() == "python")
-      goto_reader.set_functions_to_read(python_c_models);
     lib_start = clib->start;
     lib_size = clib->size;
   }

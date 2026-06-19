@@ -618,7 +618,19 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (th.is_constructor_call(call_))
   {
-    class_name = func_name;
+    // An explicit `Base.__init__(self, ...)` call names the receiver class and
+    // passes self explicitly. is_constructor_call() flags any `.__init__`, but
+    // here the constructor is the named class's own, stored under the class
+    // name (@C@Base@F@Base), not the literal "__init__". Resolve both the class
+    // and the (renamed) function to the receiver so the symbol is found; a
+    // direct `Base()` call keeps func_name as the class name already.
+    if (func_name == "__init__" && json_utils::is_class(obj_name, ast))
+    {
+      class_name = obj_name;
+      func_name = obj_name;
+    }
+    else
+      class_name = func_name;
   }
   else if (is_member_function_call)
   {

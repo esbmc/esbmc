@@ -9,6 +9,7 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -18,6 +19,7 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
+#include <util/message.h>
 
 #include <vector>
 
@@ -125,11 +127,29 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
-  if (
-    validate_witness && !witness_target_line.empty() &&
-    !has_prefix(msg, "unwinding assertion loop") &&
-    cur_state->source.pc->location.get_line() != witness_target_line)
-    new_expr = gen_true_expr();
+  if (validate_witness && !has_prefix(msg, "unwinding assertion loop"))
+  {
+    const size_t seg = cur_state->cur_seg;
+    const waypoint *target_wp = nullptr;
+    if (seg < cur_state->witness_segs.size())
+      for (const auto &wp : cur_state->witness_segs[seg])
+        if (wp.type == waypoint::target)
+        {
+          target_wp = &wp;
+          break;
+        }
+
+    if (
+      !target_wp ||
+      cur_state->source.pc->location.get_line() != target_wp->line_id ||
+      cur_state->witness_target_reached)
+      new_expr = gen_true_expr();
+    else
+    {
+      cur_state->advance_witness_position();
+      cur_state->witness_target_reached = true;
+    }
+  }
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -195,6 +215,34 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
+{
+  expr2tc c = the_assumption;
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  if (!is_equality2t(c))
+    return;
+
+  const equality2t &eq = to_equality2t(c);
+  expr2tc lhs = eq.side_1;
+  expr2tc rhs = eq.side_2;
+
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
+  // patterns; propagating either would mask signbit-sensitive bugs.
+  auto is_fp_zero = [](const expr2tc &e) {
+    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
+  };
+
+  // Only propagate when the other side is a constant: a symbol == symbol
+  // assumption must NOT be turned into an assignment, as that perturbs the
+  // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
+  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+    cur_state->assignment(lhs, rhs);
+  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+    cur_state->assignment(rhs, lhs);
+}
+
 void goto_symext::assume(const expr2tc &the_assumption)
 {
   expr2tc assumption = the_assumption;
@@ -223,6 +271,75 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
     target, total_claims, remaining_claims, simplified_claims);
+}
+
+static void substitute_result(expr2tc &e, const expr2tc &ret_val)
+{
+  if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
+  {
+    e = ret_val;
+    return;
+  }
+  if (is_constant_int2t(e))
+  {
+    if (
+      is_unsignedbv_type(ret_val->type) &&
+      to_constant_int2t(e).value.is_negative())
+      log_warning(
+        "witness: function_return constraint compares signed constant {} "
+        "against unsigned return type; constraint may be trivially false",
+        integer2string(to_constant_int2t(e).value));
+    e = from_integer(to_constant_int2t(e).value, ret_val->type);
+    return;
+  }
+  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+}
+
+void goto_symext::symex_witness_function_return(
+  expr2tc ret_val,
+  const irep_idt &call_line)
+{
+  if (cur_state->cur_seg >= cur_state->witness_segs.size())
+    return;
+
+  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+  for (const waypoint &wp : seg)
+  {
+    if (wp.type == waypoint::function_enter)
+    {
+      if (wp.line_id.empty() || wp.line_id != call_line)
+        continue;
+      if (wp.action == waypoint::avoid)
+      {
+        cur_state->source.pc++;
+        return;
+      }
+
+      cur_state->advance_witness_position();
+      return;
+    }
+
+    if (wp.type != waypoint::function_return)
+      continue;
+    if (!wp.parsed_cond.valid)
+      continue;
+    if (wp.line_id != call_line)
+      continue;
+
+    cur_state->rename(ret_val);
+
+    expr2tc constraint = wp.parsed_cond.expr;
+    substitute_result(constraint, ret_val);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(constraint));
+    else
+    {
+      assume(constraint);
+      cur_state->advance_witness_position();
+    }
+    return;
+  }
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -467,31 +584,7 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
-  expr2tc c = cond;
-  // Recursively remove typecast
-  while (is_typecast2t(c))
-    c = to_typecast2t(c).from;
-
-  // Hack for assume, which allows us to take advantage
-  // of constant propagation in some cases
-  if (is_equality2t(c))
-  {
-    // In the IEEE-754 floating-point number semantics,
-    // there can be situations where the numerical comparison is equal,
-    // but the internal bit patterns are different: +0.0 and -0.0
-
-    // We don't perform constant propagation on it.
-    expr2tc lhs = to_equality2t(c).side_1;
-    expr2tc rhs = to_equality2t(c).side_2;
-    auto is_float_zero = [](const expr2tc &e) {
-      const constant_floatbv2t *f = try_to_constant_floatbv2t(e);
-      return f && f->value.is_zero();
-    };
-    if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_float_zero(rhs))
-      cur_state->assignment(lhs, rhs);
-    else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_float_zero(lhs))
-      cur_state->assignment(rhs, lhs);
-  }
+  propagate_assume_equality(cond);
 }
 
 void goto_symext::symex_assert()
@@ -530,6 +623,18 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
+  // "__ESBMC_uninterpreted_*" is the native spelling of an uninterpreted
+  // function (the "__CPROVER_uninterpreted_*" alias is handled later, in
+  // symex_function_call_code, since it is not __ESBMC-prefixed). All __ESBMC_*
+  // calls are routed here before body inlining, so the native prefix must be
+  // intercepted in run_intrinsic. The caller has already advanced the program
+  // counter, so symex_uninterpreted_function must not (and does not) touch it.
+  if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
+  {
+    symex_uninterpreted_function(func_call, symname);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
@@ -629,6 +734,24 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_memcpy")
   {
     intrinsic_memcpy(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memchr")
+  {
+    intrinsic_memchr(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memcmp")
+  {
+    intrinsic_memcmp(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memmove")
+  {
+    intrinsic_memmove(art, func_call);
     return;
   }
 
@@ -1091,6 +1214,18 @@ void goto_symext::run_intrinsic(
 
     if (matched->action != waypoint::avoid)
       cur_state->advance_witness_position();
+    return;
+  }
+
+  // Not a recognised intrinsic. If the operational-model library provides a
+  // real body for this __ESBMC-prefixed symbol (e.g. __ESBMC_run_unexpected),
+  // execute it as an ordinary call rather than treating it as an intrinsic.
+  auto func_it = goto_functions.function_map.find(symname);
+  if (
+    func_it != goto_functions.function_map.end() &&
+    func_it->second.body_available)
+  {
+    bump_call(func_call, symname);
     return;
   }
 

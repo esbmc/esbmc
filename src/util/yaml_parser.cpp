@@ -94,6 +94,8 @@ void intern_location(waypoint &wp)
 {
   if (wp.line != c_nonset)
     wp.line_id = irep_idt(integer2string(wp.line));
+  if (wp.column != c_nonset)
+    wp.column_id = irep_idt(integer2string(wp.column));
   wp.function_id = irep_idt(wp.function);
 }
 
@@ -106,9 +108,10 @@ struct
   waypoint target;
   bool has_target = false;
 } wp_cache;
+
 } // namespace
 
-std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
+std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
 {
   if (path == wp_cache.path)
     return wp_cache.waypoints;
@@ -157,7 +160,6 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
           {
             wp_cache.target = wp;
             wp_cache.has_target = true;
-            continue;
           }
           wp.segment_idx = seg_idx;
           wp_cache.waypoints.push_back(std::move(wp));
@@ -177,7 +179,7 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
 
 bool yaml_parser::get_target_waypoint(const std::string &path, waypoint &out)
 {
-  get_waypoints(path);
+  get_waypoints(path); // ensures cache is populated
   if (!wp_cache.has_target)
     return false;
   out = wp_cache.target;
@@ -209,6 +211,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
       wp.file = loc["file_name"].as<std::string>();
     if (loc["line"])
       wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["column"])
+      wp.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
     if (loc["function"])
       wp.function = loc["function"].as<std::string>();
   }
@@ -246,46 +250,20 @@ waypoint::Action yaml_parser::action_from_string(const std::string &s)
   return waypoint::follow;
 }
 
-// Extract the lhs identifier from a C assignment statement, e.g.:
-//   "  int x = foo(a);"  → "x"
-//   "  x = foo(a);"      → "x"
-// Returns an empty string if no assignment lhs is found.
-static std::string extract_lhs(const std::string &line)
-{
-  // Match: optional leading whitespace, optional type tokens, then IDENT =
-  // We look for the last word before '=' that precedes a '('.
-  static const std::regex lhs_pat(R"((\w+)\s*=\s*[\w*&]+\s*\()");
-  std::smatch m;
-  if (std::regex_search(line, m, lhs_pat))
-    return m[1];
-  return {};
-}
-
-static void
-replace_all(std::string &s, const std::string &from, const std::string &to)
-{
-  std::string::size_type pos = 0;
-  while ((pos = s.find(from, pos)) != std::string::npos)
-  {
-    s.replace(pos, from.size(), to);
-    pos += to.size();
-  }
-}
-
 std::string yaml_parser::build_violation_witness_source(
   const std::string &source_path,
   const std::string &original_path,
   const std::vector<waypoint> &waypoints)
 {
-  // Inject after the source line so declarations are in scope.
+  // Inject assumption waypoints on the same physical line as the pointed
+  // statement. This preserves physical line numbers for all subsequent lines,
+  // so both ESBMC_SVCOMP builds (physical line numbers) and regular builds
+  // (logical line numbers via #line) see the correct line for each waypoint.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
   {
-    if (
-      (wp.type != waypoint::assumption &&
-       wp.type != waypoint::function_return) ||
-      wp.line == c_nonset)
+    if (wp.type != waypoint::assumption || wp.line == c_nonset)
       continue;
     by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
   }
@@ -304,65 +282,25 @@ std::string yaml_parser::build_violation_witness_source(
   while (std::getline(in, line_text))
   {
     ++line_num;
-    out << line_text << "\n";
 
     auto it = by_line.find(line_num);
     if (it != by_line.end())
     {
       for (const waypoint *wp : it->second)
       {
-        std::string expr = wp->value;
-
-        if (wp->type == waypoint::function_return)
-        {
-          if (wp->format == "ext_c_expression")
-          {
-            if (expr.find("\\at") != std::string::npos)
-            {
-              log_warning(
-                "function_return at line {}: \\at() not yet supported, "
-                "skipping",
-                line_num);
-              continue;
-            }
-            if (expr.find("\\result") != std::string::npos)
-            {
-              std::string lhs = extract_lhs(line_text);
-              if (lhs.empty())
-              {
-                log_warning(
-                  "function_return at line {}: cannot determine lhs for "
-                  "\\result substitution, skipping",
-                  line_num);
-                continue;
-              }
-              replace_all(expr, "\\result", lhs);
-            }
-          }
-          log_progress(
-            "Injecting {} function_return at line {}: {}",
-            wp->action == waypoint::avoid ? "avoid" : "follow",
-            line_num,
-            expr);
-        }
-        else
-        {
-          log_progress(
-            "Injecting {} assumption at line {}: {}",
-            wp->action == waypoint::avoid ? "avoid" : "follow",
-            line_num,
-            expr);
-        }
-
-        // Re-emit #line before each call so that every injected intrinsic
-        // is attributed to line_num regardless of how many are in the loop.
-        // Without this, the compiler auto-increments and std::prev would
-        // return the wrong line for the 3rd and beyond injected calls.
+        log_progress(
+          "Injecting {} assumption at line {}: {}",
+          wp->action == waypoint::avoid ? "avoid" : "follow",
+          line_num,
+          wp->value);
         out << "#line " << line_num << " \"" << original_path << "\"\n";
         out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
-            << expr << "));\n";
+            << wp->value << "));\n";
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
       }
     }
+
+    out << line_text << "\n";
   }
 
   return out.str();

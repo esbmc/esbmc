@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/type_byte_size.h>
 
 /**
@@ -126,7 +126,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   abort();
 }
 
-smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 

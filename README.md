@@ -199,7 +199,7 @@ VERIFICATION FAILED
 ```
 
 ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
-For detailed information about Python support, please take a look at the [Python Frontend Documentation](https://claude.ai/chat/src/python-frontend/README.md).
+For detailed information about Python support, please take a look at the [Python Frontend Documentation](src/python-frontend/README.md).
 
 ## Tutorials
 

@@ -1,11 +1,11 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <sstream>
 #include <util/base_type.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/message/format.h>
 
-smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_bool(const typecast2t &cast)
 {
   if (is_pointer_type(cast.from))
   {
@@ -19,7 +19,8 @@ smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
   return convert_ast(neq);
 }
 
-smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
+smt_astt
+smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
@@ -40,8 +41,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -77,8 +78,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   return mk_concat(frontpart, zero_fracbits);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -93,8 +94,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
   return mk_concat(switched, zero);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   assert(is_fixedbv_type(cast.from));
@@ -152,7 +153,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   return mk_concat(magnitude, fraction);
 }
 
-smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
 {
   // Convert each type
   if (is_bool_type(cast.from))
@@ -187,7 +188,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if (is_unsignedbv_type(cast.type))
     return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
@@ -207,7 +208,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_ints(const typecast2t &cast)
 {
   if (int_encoding)
     return convert_typecast_to_ints_intmode(cast);
@@ -228,7 +229,8 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
+smt_astt
+smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
 {
   assert(int_encoding);
   // Integer-mode conversion of integers. Immediately, we don't care about
@@ -279,7 +281,7 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
 }
 
 smt_astt
-smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
+smt_solver_baset::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -308,7 +310,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 }
 
 smt_astt
-smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
+smt_solver_baset::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -327,7 +329,8 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
   return mk_extract(a, to_width - 1, 0);
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
+smt_astt
+smt_solver_baset::convert_typecast_to_ints_from_bool(const typecast2t &cast)
 {
   assert(!int_encoding);
   smt_astt a = convert_ast(cast.from);
@@ -395,7 +398,7 @@ capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
     "cap");
 }
 
-smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 {
   // First, sanity check -- typecast from one kind of pointer to another kind
   // is a simple operation. Check for that first.
@@ -449,7 +452,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
-  std::string newname = mk_fresh_name("smt_convt::int_to_ptr");
+  std::string newname = mk_fresh_name("smt_solver_baset::int_to_ptr");
   expr2tc output_sym = symbol2tc(cast.type, newname);
   smt_astt output = convert_ast(output_sym);
   smt_astt output_obj = output->project(this, 0);
@@ -538,7 +541,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   return output;
 }
 
-smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 {
   type2tc addr_type = ptraddr_type2();
   type2tc diff_type = get_int_type(config.ansi_c.address_width);
@@ -579,7 +582,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   return convert_ast(typecast2tc(cast.type, address));
 }
 
-smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_struct(const typecast2t &cast)
 {
   const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
   const struct_type2t &struct_type_to = to_struct_type(cast.type);
@@ -674,7 +677,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   return fresh;
 }
 
-smt_astt smt_convt::convert_typecast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
