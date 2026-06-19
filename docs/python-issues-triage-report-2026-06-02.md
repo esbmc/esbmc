@@ -338,3 +338,49 @@ expectation — not an isolated point fix.
 no new isolated, soundly-fixable point fix is available on current `master` without the §5
 architectural work. The two Python-touching landings (`#5381`, `#5382`) do not intersect the
 open KNOWNBUG set. The §5 priority order stands.
+
+---
+
+## 10. 2026-06-19 re-validation & cmath inverse-trig crash fix
+
+Re-test against current `master` (tip `79c8b93eb0`), after the **17 commits** since §9's tip
+`74da7c0400` (notably `#5403` numpy float/complex literal folding, `#5407` np.copysign/fmax/fmin
+scalar-constant crash, `#5404` calloc zero-size, and the V.3 IREP2 frontend landings
+`#5391/#5392/#5401/#5402/#5406/#5408/#5412`). The §3 KNOWNBUG classification is unchanged —
+none of these commits touches a cmath inverse-trig path, and the cmath fix below lives entirely
+in the `caller == "cmath"` dispatch entry, so it cannot move any non-cmath KNOWNBUG.
+
+### 10a. New isolated, soundly-fixable defect found & fixed
+**`cmath.acos`/`cmath.acosh` crashed on pure-imaginary inputs (PR #5415).**
+
+`cmath.acos(0.5j)` and `cmath.acosh(0.5j)` aborted with
+`ERROR: function call: argument "…models/cmath.py@F@acos@z" type mismatch: got pointer,
+expected struct` (SIGABRT / core dump). The "cmath inverse functions" dispatch entry in
+`function_call/expr.cpp` matched only `asin`/`atan`/`asinh`/`atanh`, and `acos` was likewise
+absent from `python_math::is_unary_dispatch_function`. So `cmath.acos`/`cmath.acosh` matched no
+cmath/math handler and fell through to a generic call path that passed the complex literal as a
+**pointer** to the model function's by-value `struct` parameter — the same `got pointer, expected
+struct` argument-binding fault family seen in §8/§9's `depth_first_search`, but here from a
+missing dispatch case rather than the object/pointer-vs-value model.
+
+`acos`/`acosh` were excluded from the original fast path on purpose: that path returns
+`complex(0, ·)`, and their pure-imaginary result has a **nonzero** real part. But the exclusion
+left no correct route at all.
+
+**Fix:** add `acos`/`acosh` to the dispatch entry with their own closed-form pure-imaginary fast
+path, valid for **all** real `y` (guard is just `z.real == 0`):
+`acos(i*y) = (pi/2, -asinh(y))`, `acosh(i*y) = (asinh(|y|), copysign(pi/2, y))`. Every other
+input still routes to the `cmath.py` model unchanged. The fast path matches CPython bit-for-bit
+and is strictly more accurate than the model on the imaginary axis (the model returns `0`
+instead of `pi/2` for `acosh(0j)` and is 1 ULP off elsewhere). New regression pair
+`regression/python/cmath_inverse_pure_imag{,_fail}`; dual-solver Bitwuzla+Z3 agreement; all 133
+`python/(cmath|complex)` regression tests green; code-reviewed (0 critical/major/minor blocking).
+
+Unlike §6a/§7a, this fix **does** restore a working feature (acos/acosh on the imaginary axis now
+verify with exact values) rather than only converting a crash to a diagnostic — it is the §5-item-5
+robustness category, but with a sound value model rather than an "unsupported feature" stub.
+
+### 10b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
+on current `master` without the §5 architectural work; the §5 priority order stands.
