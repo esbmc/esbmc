@@ -340,6 +340,7 @@ bool clang_c_languaget::parse(const std::string &path)
   {
     const std::string witness_path = config.options.get_option("witness");
     auto &waypoints = yaml_parser::get_waypoints(witness_path);
+    yaml_parser::fill_columns(actual_path, waypoints);
     clang_c_lexert lexer;
     for (auto &wp : waypoints)
     {

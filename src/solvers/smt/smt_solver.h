@@ -1046,7 +1046,6 @@ private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);
-
 };
 
 /** Given an array type, create a type2tc representing its domain. */

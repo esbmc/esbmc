@@ -111,7 +111,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // edges).  'avoid' waypoints are persistent (no advance); 'follow' waypoints
   // consume the segment on match.  Non-matching 'follow' entries stop the scan.
   if (
-    validate_witness && forward &&
+    validate_witness && forward && !is_constant(old_guard) &&
     cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
