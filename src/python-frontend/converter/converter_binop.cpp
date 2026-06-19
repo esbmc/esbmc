@@ -978,24 +978,28 @@ exprt python_converter::handle_array_operations(
                             ? scalar_expr
                             : typecast_exprt(scalar_expr, elem_type);
 
-    exprt result_array = array_expr;
-    // V.3: build the array element access in IREP2 (index2tc), the exact
-    // round-trip of index_exprt (behaviour-preserving). The array and element
-    // type are loop-invariant, so migrate them once.
+    // V.3: build the per-element index in IREP2 and accumulate the array update
+    // with with2tc. The +/* element op stays a legacy node so map_operator +
+    // migrate_expr select the correct integer (add/mul) or IEEE-float
+    // (ieee_add/ieee_mul + rounding mode) form per element type; the array is
+    // back-migrated once at the end.
     expr2tc ar2;
     migrate_expr(array_expr, ar2);
     const type2tc elem_t2 = migrate_type(elem_type);
+    const type2tc index_t2 = migrate_type(size_type());
+
+    expr2tc result2 = ar2;
     for (long long i = 0; i < array_size; ++i)
     {
-      exprt index = from_integer(i, size_type());
-      expr2tc ix2;
-      migrate_expr(index, ix2);
+      expr2tc ix2 = from_integer(BigInt(i), index_t2);
       exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
-      result_array = with_exprt(result_array, index, bin_elem);
+      expr2tc bin_elem2;
+      migrate_expr(bin_elem, bin_elem2);
+      result2 = with2tc(result2->type, result2, ix2, bin_elem2);
     }
-    return result_array;
+    return migrate_expr_back(result2);
   };
 
   // For direct Python binary operators over arrays, keep behaviour explicit
