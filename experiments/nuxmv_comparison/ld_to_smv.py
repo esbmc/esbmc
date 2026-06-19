@@ -219,7 +219,7 @@ class SMVGen:
                 state_vars[et] = SMV_INT
         return state_vars
 
-    def _process_blocks(self, rung, cond):
+    def _process_blocks(self, rung):
         """Process function blocks in a rung; mutates self._bld_* state."""
         for tname, iname, params in rung.blocks:
             in_v = self._bld_latest.get(params.get('IN', 'FALSE'), params.get('IN', 'FALSE'))
@@ -284,7 +284,7 @@ class SMVGen:
                     self._bld_sr_set[var].append(cond)
                 elif storage == 'reset':
                     self._bld_sr_reset[var].append(cond)
-            self._process_blocks(rung, cond)
+            self._process_blocks(rung)
         self._merge_sr_coils()
 
     def _build_next_assigns(self, state_vars):
