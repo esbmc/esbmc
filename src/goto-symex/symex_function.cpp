@@ -805,6 +805,31 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   return true;
 }
 
+bool goto_symext::is_python_gc_object(const symbolt *base) const
+{
+  if (!base || base->mode != "Python")
+    return false;
+
+  const typet &bt = ns.follow(base->get_type());
+  if (!bt.is_struct())
+    return false;
+
+  // Only user-defined class instances get GC lifetime. Internal Python model
+  // aggregates (tuples, dicts, Optional unions) manage their own
+  // representation/lifetime and must not have frame teardown skipped. Mirror
+  // the frontend's authoritative exclusion list (is_excluded_struct_tag in
+  // src/python-frontend/converter/converter_dunder.cpp); keep the two in sync.
+  const std::string tag = to_struct_type(bt).tag().as_string();
+  if (
+    tag.find("dict_") != std::string::npos ||
+    tag.find("tag-dict") != std::string::npos ||
+    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+    tag == "__python_dict__")
+    return false;
+
+  return true;
+}
+
 void goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
@@ -821,6 +846,13 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // Python objects are garbage-collected (issue #4773): keep user class
+    // instances alive past their defining frame so references captured into a
+    // returned/escaping aggregate stay valid. Skip tearing down their L2 and
+    // value-set bindings; is_live_variable() reports them live to match.
+    if (is_python_gc_object(ns.lookup(it.base_name)))
+      continue;
+
     type2tc ptr = pointer_type2tc(pointer_type2());
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
