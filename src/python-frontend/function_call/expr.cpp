@@ -2504,8 +2504,10 @@ function_call_expr::get_dispatch_table()
      },
      "cmath log/log10"},
 
-    // cmath inverse functions: use a fast path only on pure-imaginary inputs
-    // and delegate all other cases to the Python cmath model implementation.
+    // cmath inverse functions: on pure-imaginary inputs they have an exact
+    // closed form, so use a fast path there and delegate every other input to
+    // the Python cmath model. asin/atan/asinh/atanh are purely imaginary on
+    // the imaginary axis; acos/acosh keep a nonzero real part.
     {[this]() {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
@@ -2516,7 +2518,7 @@ function_call_expr::get_dispatch_table()
        const std::string &func_name = function_id_.get_function();
        return (
          func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
-         func_name == "atanh");
+         func_name == "atanh" || func_name == "acos" || func_name == "acosh");
      },
      [this]() -> exprt {
        const std::string &raw_func_name = function_id_.get_function();
@@ -2561,32 +2563,70 @@ function_call_expr::get_dispatch_table()
        model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
+       python_math &math = converter_.get_math_handler();
        exprt zr = build_member(z, "real", double_type());
        exprt zi = build_member(z, "imag", double_type());
+       exprt zero = from_double(0.0, double_type());
+       exprt fast_guard = equality_exprt(zr, zero);
 
+       // acos(i*y) and acosh(i*y) have a nonzero real part, but a closed form
+       // valid for every real y, so their fast path covers all pure-imaginary
+       // inputs (zr == 0):
+       //   acos(i*y)  = (pi/2, -asinh(y))
+       //   acosh(i*y) = (asinh(|y|), copysign(pi/2, y))
+       if (func_name == "acos" || func_name == "acosh")
+       {
+         // pi/2 at double precision (CPython's exact value); the fast path is
+         // CPython-faithful and supersedes the model on the imaginary axis.
+         exprt half_pi = from_double(1.5707963267948966, double_type());
+         exprt fast_path;
+         if (func_name == "acos")
+         {
+           exprt asinh_zi = math.handle_asinh(zi, call_);
+           if (is_cpp_throw_expr(asinh_zi))
+             return asinh_zi;
+           exprt neg_asinh("unary-", double_type());
+           neg_asinh.copy_to_operands(asinh_zi);
+           fast_path = make_complex(half_pi, neg_asinh);
+         }
+         else
+         {
+           exprt abs_zi = math.handle_fabs(zi, call_);
+           if (is_cpp_throw_expr(abs_zi))
+             return abs_zi;
+           exprt real_part = math.handle_asinh(abs_zi, call_);
+           if (is_cpp_throw_expr(real_part))
+             return real_part;
+           exprt imag_part = math.handle_copysign(half_pi, zi, call_);
+           if (is_cpp_throw_expr(imag_part))
+             return imag_part;
+           fast_path = make_complex(real_part, imag_part);
+         }
+         return if_exprt(fast_guard, fast_path, model_call);
+       }
+
+       // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
+       // fast path has a zero real part.
        exprt imag_result;
        if (func_name == "asin")
-         imag_result = converter_.get_math_handler().handle_asinh(zi, call_);
+         imag_result = math.handle_asinh(zi, call_);
        else if (func_name == "atan")
-         imag_result = converter_.get_math_handler().handle_atanh(zi, call_);
+         imag_result = math.handle_atanh(zi, call_);
        else if (func_name == "asinh")
-         imag_result = converter_.get_math_handler().handle_asin(zi, call_);
+         imag_result = math.handle_asin(zi, call_);
        else
-         imag_result = converter_.get_math_handler().handle_atan(zi, call_);
+         imag_result = math.handle_atan(zi, call_);
 
        if (is_cpp_throw_expr(imag_result))
          return imag_result;
 
-       exprt fast_path =
-         make_complex(from_double(0.0, double_type()), imag_result);
-       exprt zero = from_double(0.0, double_type());
-       exprt fast_guard = equality_exprt(zr, zero);
+       exprt fast_path = make_complex(zero, imag_result);
 
        // For atan(i*y) and asinh(i*y), the pure-imag shortcut only matches
        // the principal branch safely within the unit interval.
        if (func_name == "atan" || func_name == "asinh")
        {
-         exprt abs_zi = converter_.get_math_handler().handle_fabs(zi, call_);
+         exprt abs_zi = math.handle_fabs(zi, call_);
          if (is_cpp_throw_expr(abs_zi))
            return abs_zi;
 
