@@ -26,6 +26,31 @@ def fmt_time(t, verdict):
         return t
 
 
+def _bench_cells(row, exp):
+    ev, et = row["esbmc_verdict"], row["esbmc_time_s"]
+    bv, bt = row["nuxmv_bdd_verdict"], row["nuxmv_bdd_time_s"]
+    iv, it_ = row["nuxmv_ic3_verdict"], row["nuxmv_ic3_time_s"]
+    return (
+        verdict_cell(ev, exp), fmt_time(et, ev),
+        verdict_cell(bv, exp), fmt_time(bt, bv),
+        verdict_cell(iv, exp), fmt_time(it_, iv),
+    )
+
+
+def _row_to_latex(row, bench_labels):
+    bench = row["benchmark"]
+    label = bench_labels.get(bench, bench)
+    exp = row["expected"]
+    ints, rungs, props = row["num_int_vars"], row["num_rungs"], row["num_props"]
+    e_cell, e_time, b_cell, b_time, i_cell, i_time = _bench_cells(row, exp)
+    return (
+        f"{label} & {ints} & {rungs} & {props} & "
+        f"{e_cell} & {e_time} & "
+        f"{b_cell} & {b_time} & "
+        f"{i_cell} & {i_time} \\\\"
+    )
+
+
 BENCH_LABELS = {
     "tank_level_safe": r"\textsc{TankLevel} (safe)",
     "tank_level_unsafe": r"\textsc{TankLevel} (unsafe)",
@@ -73,33 +98,7 @@ def main(csv_path):
     lines.append(r"\midrule")
 
     for row in rows:
-        bench = row["benchmark"]
-        label = BENCH_LABELS.get(bench, bench)
-        exp = row["expected"]
-        ev = row["esbmc_verdict"]
-        et = row["esbmc_time_s"]
-        bv = row["nuxmv_bdd_verdict"]
-        bt = row["nuxmv_bdd_time_s"]
-        iv = row["nuxmv_ic3_verdict"]
-        it_ = row["nuxmv_ic3_time_s"]
-        ints = row["num_int_vars"]
-        rungs = row["num_rungs"]
-        props = row["num_props"]
-
-        e_cell = verdict_cell(ev, exp)
-        b_cell = verdict_cell(bv, exp)
-        i_cell = verdict_cell(iv, exp)
-
-        e_time = fmt_time(et, ev)
-        b_time = fmt_time(bt, bv)
-        i_time = fmt_time(it_, iv)
-
-        lines.append(
-            f"{label} & {ints} & {rungs} & {props} & "
-            f"{e_cell} & {e_time} & "
-            f"{b_cell} & {b_time} & "
-            f"{i_cell} & {i_time} \\\\"
-        )
+        lines.append(_row_to_latex(row, BENCH_LABELS))
 
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")

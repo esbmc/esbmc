@@ -15,7 +15,7 @@ import csv
 import os
 import pathlib
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 
