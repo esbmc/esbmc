@@ -3037,10 +3037,13 @@ so the body-seam back-migration disappears. Active work moves there.
 > Solidity) and **V.4.4b removed the legacy body seam entirely** — the IREP2
 > round-trip is now the only body path, the `to_code(symbol.get_value())`
 > bypass and the `--no-irep2-bodies` escape hatch are gone, and
-> `--irep2-bodies` survives only as a deprecated no-op. Remaining: the deeper
-> W1 removal (rewrite `goto_convert_rec` handlers to consume `code_*2t`
-> directly, dropping the round-trip), the V.1k IREP2-native adjuster
-> keystone, and V.5/V.6. This supersedes the "not started / costed path"
+> `--irep2-bodies` survives only as a deprecated no-op. The deeper W1 removal
+> (rewrite `goto_convert_rec` handlers to consume `code_*2t` directly, dropping
+> the round-trip) was scoped and prototyped and is **concluded as a closed
+> boundary** — the body round-trip is fundamental for source-location fidelity
+> (see *V.4 outcome — the deeper W1 removal is a closed boundary*). Remaining:
+> the V.1k IREP2-native adjuster keystone and V.5/V.6. This supersedes the
+> "not started / costed path"
 > framing this paragraph originally carried (it predated the V.4 work); the
 > §V.2 phase entries hold the authoritative per-phase status, and §18's
 > "next step is Part V Phase V.4" pause note is likewise discharged.
@@ -3575,14 +3578,89 @@ verdict parity, dual-solver, asserts build (§V.5).
      per-construct parity fixes (#5330/#5335/#5340/#5346/#5355) closed the
      rest, since the per-frontend `_01` smoke tests do not exercise every body
      construct. *Next:* the deeper W1 removal — rewrite the `goto_convert_rec`
-     handlers to consume `code_*2t` directly so the back-migration (and its
-     round-trip overhead) disappears — remains future work, not V.4.4.
+     handlers to consume `code_*2t` directly — was scoped and prototyped and is
+     a **closed boundary** (location-fidelity wall); see *V.4 outcome* below.
 
 **Risk/scope:** V.4.0 and V.4.1 are small and safe (infra only). V.4.2+
 touch the shared goto pipeline → gate on `esbmc-cpp` and a
 Solidity/CUDA stratum, not only `python` (RV3), and require
 byte-identical GOTO (RV4). Stage behind the flag; never flip two
 frontends in one commit.
+
+#### V.4 outcome — the deeper W1 removal is a closed boundary (location-fidelity wall)
+
+> **Status: concluded (2026-06-19).** V.4.0→V.4.4b landed (the IREP2 round-trip
+> is the only body path). The *deeper* W1 step §V.4.4b flagged as "Next" —
+> rewriting `goto_convert_rec` to consume `code_*2t` **directly**, dropping the
+> back-migration — was scoped and prototyped, and the conclusion is that it is
+> **not achievable as "remove the round-trip."** The body round-trip to legacy
+> is fundamental for **source-location fidelity**, not merely side-effect
+> cleaning. Recorded here so it is not re-attempted without new infrastructure.
+
+**The two walls, both proven empirically.**
+
+1. **W1-clean — cleaning must be total, and is legacy.** (Established earlier:
+   `goto_sideeffects.cpp` is 100 % `exprt`; `goto_symext::handle_sideeffect`
+   `assert(0)`s on any non-allocation side-effect, so `function_call`/`++`/`--`/
+   comma must be **fully hoisted** at `goto_convert`.) The W1 dual-API seam
+   (`remove_sideeffects(expr2tc&)`, [#5414](https://github.com/esbmc/esbmc/pull/5414))
+   plus its native `has_sideeffect`/fast-path
+   ([#5417](https://github.com/esbmc/esbmc/pull/5417)) are landed, but the body
+   of the hoisting is still legacy.
+
+2. **W1-loc — value-operand source locations cannot live in IREP2.** This is the
+   decisive wall. IREP2 value nodes (`symbol2t`, `constant_int2t`, …) carry **no
+   per-node location** — the closed type system omits it by design (the same
+   value-traveling attribute the migration set out to remove; cf. Part III
+   `#sol_*`, Part IV `#cpp_type`). `goto_convert`'s side-effect removal
+   *generates* instructions (temp decls/assignments for calls-in-expressions,
+   guard checks) whose locations come from the **value operands'** source
+   locations. The body round-trip → legacy → `restore_value_locations`
+   ([#5348](https://github.com/esbmc/esbmc/pull/5348),
+   `goto_convert_functions.cpp`) is the mechanism that supplies them.
+   **Proof:** no-op `restore_value_locations` and the generated instructions for
+   `int y = f() + 1;` lose their location (`line 3 column 3` → blank). There is
+   no IREP2-native equivalent without re-adding per-node locations to the value
+   nodes — rejected, for the same reason every other value-traveling-metadata
+   wall in this document was.
+
+**The favourable sub-slice was prototyped and measured.** The only statements
+that carry *no* value-operand locations are the structural leaves
+(`skip`/`goto`/`label`/`break`/`continue`), which could in principle be consumed
+natively. Instrumenting `goto_convert`'s dispatcher over 25 `regression/esbmc`
+programs: **skip/goto are 3.30 % of statements** (812 / 24 611). And 3.3 % is a
+*count* ceiling that overstates the benefit three ways:
+
+- skip/goto carry the **smallest** payloads (a `skip` is empty, a `goto` is one
+  guard), so the migrate *work* saved is far below 3.3 %;
+- consuming them natively requires the **whole** body to run through an
+  IREP2-native dispatcher, so every value statement is then migrated back
+  **per-statement** instead of via today's single whole-body `migrate_expr_back`
+  — net migrate work ≈ unchanged, minus the trivial skip/goto subtrees;
+- it still doesn't remove the round-trip for value statements (W1-loc).
+
+The cost to capture that negligible, mostly-*relocated* saving is a new IREP2
+dispatcher + a reimplementation of `convert_block`'s destructor-stack /
+`end_location`-unwind logic on `code_block2t` + goto target-tracking + flag
+plumbing + **byte-identical-GOTO validation across every frontend**. Poor trade;
+**not pursued.**
+
+**What W1 did deliver (kept):** the dual-API `remove_sideeffects(expr2tc&)` seam
+and native `has_sideeffect` (#5414/#5417 — the IREP2 entry future cleaning work
+hangs off), and `code_block2t` `end_location` carriage
+([#5426](https://github.com/esbmc/esbmc/pull/5426)) — which, beyond being the
+prerequisite that exposed the W1-loc wall, **fixed a latent regression**: the
+V.4.4b round-trip was dropping nested-block `end_location`s, leaving nested-scope
+C++ destructor instructions unlocated.
+
+**Conclusion.** The body round-trip stays, by the same governing rule as the
+frontend boundaries: the legacy form carries value-traveling metadata
+(per-node source locations) that IREP2's closed type system deliberately does
+not, and verification-visible fidelity (counterexample text, witness columns,
+coverage) depends on it. W1 is therefore a **RETAIN_BOUNDARY**, not a pending
+migration. Re-opening it requires either an IREP2-native location-carriage
+design (a large, separate initiative) or a decision that location fidelity may
+degrade (it may not — it is `test.desc`- and witness-visible).
 
 ### Phase V.5 — IREP2-native counterexample printer (removes W4)
 Part II Phase 2.7: an IREP2 C/C++ printer so traces / `test.desc`-matched text
