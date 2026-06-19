@@ -646,6 +646,32 @@ static bool apply_numpy_binary_to_scalars(
     result = apply_complex_binary(function, lhs_scalar, rhs_scalar);
   else
   {
+    if (
+      function == "power" && lhs_kind == scalar_kind::int_like &&
+      rhs_kind == scalar_kind::int_like)
+    {
+      numeric_value lhs_numeric;
+      numeric_value rhs_numeric;
+      if (
+        try_extract_numeric_constant(lhs, lhs_numeric) &&
+        try_extract_numeric_constant(rhs, rhs_numeric) &&
+        rhs_numeric.int_value >= 0)
+      {
+        BigInt exact_power;
+        if (try_exact_integer_power(
+              lhs_numeric.int_value, rhs_numeric.int_value, exact_power))
+        {
+          const BigInt min_val = BigInt(std::numeric_limits<int64_t>::min());
+          const BigInt max_val = BigInt(std::numeric_limits<int64_t>::max());
+          if (exact_power < min_val || exact_power > max_val)
+            return false;
+
+          out = {{"_type", "Constant"}, {"value", exact_power.to_int64()}};
+          return true;
+        }
+      }
+    }
+
     const double left = lhs_scalar.value.real();
     const double right = rhs_scalar.value.real();
     double folded = 0.0;
