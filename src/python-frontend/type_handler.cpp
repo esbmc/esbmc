@@ -1368,29 +1368,6 @@ size_t type_handler::get_type_width(const typet &type) const
   return 32;
 }
 
-typet type_handler::get_tuple_type(const nlohmann::json &tuple_node) const
-{
-  struct_typet tuple_type;
-
-  // Handle tuple expressions
-  if (tuple_node.contains("_type") && tuple_node["_type"] == "Tuple")
-  {
-    if (tuple_node.contains("elts"))
-    {
-      const auto &elts = tuple_node["elts"];
-      for (size_t i = 0; i < elts.size(); i++)
-      {
-        typet elem_type = get_typet(elts[i]);
-        std::string comp_name = "element_" + std::to_string(i);
-        struct_typet::componentt comp(comp_name, elem_type);
-        tuple_type.components().push_back(comp);
-      }
-    }
-  }
-
-  return tuple_type;
-}
-
 typet type_handler::build_optional_type(const typet &base_type)
 {
   // Create a struct with two fields:
