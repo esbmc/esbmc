@@ -88,6 +88,21 @@ void transpose(int64_t *src, int64_t *dst, int64_t rows, int64_t cols)
   }
 }
 
+void transpose_double(double *src, double *dst, int64_t rows, int64_t cols)
+{
+  int i = 0;
+  while (i < rows)
+  {
+    int j = 0;
+    while (j < cols)
+    {
+      dst[j * rows + i] = src[i * cols + j];
+      ++j;
+    }
+    ++i;
+  }
+}
+
 #if 0
 #  define IDX(i, j, n) ((i) * (n) + (j))
 

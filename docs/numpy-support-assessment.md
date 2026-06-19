@@ -61,16 +61,20 @@ call it does one of:
 - **Math ufuncs** (`sin`, `cos`, `exp`, `sqrt`, `arctan`, `fabs`, `ceil`,
   `floor`, `round`, `trunc`, `fmod`, `arccos`, `copysign`, …): if operands are
   concrete, **constant-fold in host C++** (`apply_numpy_unary_math` calls
-  `std::sin` etc.); if symbolic scalar, delegate to the shared math handler
-  which emits a libm OM call. **[V]**
+  `std::sin` etc.); list-backed literal `floor`/`fabs`/`trunc` now fold
+  through the same 1-D/2-D path, list-backed literal `arccos` folds through
+  the same 1-D/2-D path, and runtime 1-D `arccos` lists now lower through the
+  libm array OM. Scalar `fmod` still delegates to the shared math handler for
+  libm lowering. **[V]**
 - **Element-wise arithmetic** (`add`, `subtract`, `multiply`, `divide`,
   `power`): a cascade of `try_extract_scalar_*` attempts to fold the whole
   operation to literals (scalar, 1-D, 2-D, complex). If folding succeeds, the
   result is emitted as a literal `List`. If shapes are literal but elements are
   symbolic, lower to the `umath.c` OM. Otherwise reject. **[V]**
 - **Linear algebra** (`dot`, `matmul`): if 2-D×2-D / 1-D etc., emit a call to
-  `linalg.c::dot`/`dot_double`; `det` is **host-folded** for 2×2/3×3 constant
-  matrices only. **[V]**
+  `linalg.c::dot`/`dot_double`; `transpose` now lowers runtime 2-D array
+  variables through `linalg.c::transpose`/`transpose_double`; `det` is
+  **host-folded** for 2×2/3×3 constant matrices only. **[V]**
 - **Complex ufuncs** (`real`, `imag`, `conj`, `conjugate`, `angle`, `abs`):
   host-fold for constants; symbolic fallback builds a complex struct and uses
   the complex/math handlers. **[V]**
@@ -128,10 +132,10 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | **Shape** `.shape` | Partial | 1-D/2-D, literal **[T]** `shape_*` |
 | `.ndim`, `.size`, `.dtype`, `.T` attr | Missing/Partial | `.T` via `transpose()` only **[I]** |
 | `reshape`, `ravel`, `flatten`, `squeeze`, `expand_dims` | Missing | no handler **[V]** |
-| `transpose` (2-D) | Partial | 2-D literal; `transpose2`,`transpose7` KNOWNBUG **[T]** |
+| `transpose` (1-D/2-D) | Partial | 1-D literal identity + 2-D literal/runtime array lowering; `transpose2`,`transpose7` KNOWNBUG **[T]** |
 | **Arithmetic** `+ - * /` scalar/array | Partial/Fold-only | literal fold; symbolic int via umath **[V]** |
 | `power` | Partial | host `std::pow` fold; int dtype overflow modelled **[T]** `power`, `power-overflow-fail` |
-| `//` floor-div, `%` mod (array) | Missing/Partial | `fmod` scalar only **[T]** `fmod_array_unsupported` |
+| `//` floor-div, `%` mod (array) | Missing/Partial | `np.fmod` supports literal list-backed 1D/2D broadcasting; runtime array operands remain rejected **[T]** `fmod_array_unsupported` |
 | **Comparison/logical** `> < == & |` | Missing | no element-wise comparison ufunc **[I]** `mixed-types-comp` is scalar |
 | **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Missing | no handler **[V]** |
 | `np.fmax`,`np.fmin` (binary, element-wise) | Unsound/KNOWNBUG | KNOWNBUG; stub returns 0.2 **[T]** |
@@ -139,7 +143,7 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | `matmul` | Partial | 1-D/2-D, symbolic elements OK **[T]** `matmul_*` |
 | `linalg.det` | Partial | **constant** 2×2/3×3 only **[T]**; 1×1,4×4 rejected |
 | `linalg.inv`,`solve`,`eig`,`svd`,`norm`,`qr`,`cholesky` | Missing | no handler **[V]** |
-| **Math fns** `sin cos exp sqrt arctan fabs ceil floor round trunc arccos copysign` | Partial | scalar fold + libm symbolic for some **[T]** |
+| **Math fns** `sin cos exp sqrt arctan fabs ceil floor round trunc arccos copysign` | Partial | scalar fold + list-backed literal `floor`/`fabs`/`trunc`; runtime 1-D `arccos` array lowering **[T]** |
 | `tan arcsin tan2 log log2 log10 sinh cosh tanh` | Missing | not in `is_math_function` **[V]** |
 | `remainder`,`rint`,`nextafter`,`modf`,`frexp`,`isclose` | KNOWNBUG | declared, not correctly modelled **[T]** |
 | Constants `np.pi`, `np.e` | Missing/KNOWNBUG | `e` KNOWNBUG **[T]** |
