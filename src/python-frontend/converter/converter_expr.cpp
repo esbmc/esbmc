@@ -85,7 +85,8 @@ static void throw_numpy_multidim_index_error(
 class get_expr_depth_guard
 {
 public:
-  explicit get_expr_depth_guard(python_converter &converter) : converter(converter)
+  explicit get_expr_depth_guard(python_converter &converter)
+    : converter(converter)
   {
     constexpr std::size_t kMaxGetExprDepth = 512;
     if (++converter.get_expr_depth_ > kMaxGetExprDepth)

@@ -107,6 +107,36 @@ static double to_double(const numeric_value &value)
                       : value.double_value;
 }
 
+static bool numpy_constant_folding_enabled()
+{
+  return !config.options.get_bool_option("python-no-fold");
+}
+
+static BigInt pow_bigint_non_negative(BigInt base, BigInt exponent)
+{
+  assert(exponent >= 0);
+  BigInt result = 1;
+  while (exponent > 0)
+  {
+    if ((exponent % 2) != 0)
+      result *= base;
+    exponent /= 2;
+    if (exponent > 0)
+      base *= base;
+  }
+  return result;
+}
+
+static bool
+try_exact_integer_power(int64_t base, int64_t exponent, BigInt &result)
+{
+  if (exponent < 0)
+    return false;
+
+  result = pow_bigint_non_negative(BigInt(base), BigInt(exponent));
+  return true;
+}
+
 static bool overflow_checks_enabled()
 {
   return config.options.get_bool_option("overflow-check") ||
@@ -2034,8 +2064,9 @@ exprt numpy_call_expr::create_expr_from_call()
     resolve_var(rhs);
 
     if (
-      function == "add" || function == "subtract" || function == "multiply" ||
-      function == "divide" || function == "power")
+      allow_numpy_fold &&
+      (function == "add" || function == "subtract" || function == "multiply" ||
+       function == "divide" || function == "power"))
     {
       if (
         lhs["_type"] == "List" && rhs["_type"] == "List" &&
@@ -2894,7 +2925,8 @@ exprt numpy_call_expr::get()
         {
           const std::string dtype = get_dtype();
           const bool is_integer_dtype = dtype.find("int") != std::string::npos;
-          if (function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
+          if (
+            function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
           {
             BigInt exact_power;
             if (try_exact_integer_power(
@@ -2953,7 +2985,8 @@ exprt numpy_call_expr::get()
                 !is_unsigned && dtype_size < 64 &&
                 ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
               {
-                wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
+                wrapped_signed -=
+                  static_cast<int64_t>(uint64_t{1} << dtype_size);
               }
 
               if (rounded_value != wrapped_signed)
