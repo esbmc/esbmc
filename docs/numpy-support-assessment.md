@@ -30,9 +30,10 @@ consequences:
    narrow paths (`dot`/`matmul` via `linalg.c`, unary math ufuncs, scalar
    `fmod`). Most element-wise array arithmetic on symbolic data either falls
    back to an `int64`-only OM or is rejected. **[V]**
-3. **Soundness hazards exist** in the float element-wise path (`umath.c` is
-   `int64`-only) and in host-side constant folding (host `double`/`int`
-   arithmetic substituted for target semantics). **[V]/[I]**
+3. **Soundness hazards remain** in host-side constant folding (host
+   `double`/`int` arithmetic substituted for target semantics). A
+   `--python-no-fold` escape hatch now exists for differential testing, and
+   scalar integer `power` uses exact arithmetic before dtype wrapping. **[V]/[I]**
 4. **Hard structural ceiling at 2 dimensions** — 3-D+ arrays are rejected by
    design. **[T]**
 5. **Nested-list / tensor performance** is the dominant scalability blocker
@@ -87,7 +88,8 @@ call it does one of:
   `transpose`, `det` (2×2 only in the live code path; an `#if 0` Gaussian-
   elimination `det` is disabled). **[V]**
 - `umath.c`: `add`/`subtract`/`multiply`/`divide` with broadcasting via
-  `get_value`. **All `int64_t`** — no float variant. **[V]**
+  `get_value`. The Python frontend now selects `*_double` for float arrays and
+  `int64_t` for integer arrays. **[V]**
 - `math.c`, `list.c`, `slice.c`, `string.c`: shared Python OMs reused by NumPy.
 
 ### 1.3 Layer C — Python type-inference stubs (`models/numpy.py`) **[V]**
@@ -128,14 +130,14 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | **Broadcasting** compatibility check | Full | rightmost-aligned rule, clear errors **[V]** `broadcast_check` |
 | Broadcasting *evaluation* (concrete) | Partial | literal fold up to 2-D **[T]** `broadcast_add_2d_1d_success` |
 | Broadcasting *evaluation* (symbolic, int) | Partial | `umath.c` int64 path **[I]** |
-| Broadcasting *evaluation* (symbolic, **float**) | **Unsound** | `umath.c` is int64-only **[V]** — see §4.1 |
+| Broadcasting *evaluation* (symbolic, **float**) | Partial | typed float ufunc backend selected by frontend; array broadcasting still concrete-only **[V]** |
 | **Shape** `.shape` | Partial | 1-D/2-D, literal **[T]** `shape_*` |
 | `.ndim`, `.size`, `.dtype`, `.T` attr | Missing/Partial | `.T` via `transpose()` only **[I]** |
 | `reshape`, `ravel`, `flatten`, `squeeze`, `expand_dims` | Missing | no handler **[V]** |
 | `transpose` (1-D/2-D) | Partial | 1-D literal identity + 2-D literal/runtime array lowering; `transpose2`,`transpose7` KNOWNBUG **[T]** |
-| **Arithmetic** `+ - * /` scalar/array | Partial/Fold-only | literal fold; symbolic int via umath **[V]** |
-| `power` | Partial | host `std::pow` fold; int dtype overflow modelled **[T]** `power`, `power-overflow-fail` |
-| `//` floor-div, `%` mod (array) | Missing/Partial | `np.fmod` supports literal list-backed 1D/2D broadcasting; runtime array operands remain rejected **[T]** `fmod_array_unsupported` |
+| **Arithmetic** `+ - * /` scalar/array | Partial | literal fold; symbolic int/float via typed umath; `--python-no-fold` available **[V]** |
+| `power` | Partial | exact integer folding for fixed-width ints; float paths still use host `pow` **[T]** `power`, `power-overflow-fail` |
+| `//` floor-div, `%` mod (array) | Partial | `np.fmod` supports literal list-backed 1D/2D broadcasting; runtime array operands lower via the array OM **[T]** `fmod_array_unsupported` |
 | **Comparison/logical** `> < == & |` | Missing | no element-wise comparison ufunc **[I]** `mixed-types-comp` is scalar |
 | **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Missing | no handler **[V]** |
 | `np.fmax`,`np.fmin` (binary, element-wise) | Unsound/KNOWNBUG | KNOWNBUG; stub returns 0.2 **[T]** |
@@ -187,45 +189,39 @@ arrays, views/strides, `tan`/`log`/hyperbolic math fns, `astype`, `np.pi`.
 
 ESBMC is a formal tool; these are the findings that matter most.
 
-### 4.1 **[V] HIGH — `umath.c` element-wise ops are `int64`-only (unsound for float arrays)**
+### 4.1 **[V] HIGH — `umath.c` float element-wise ops are now typed**
 
-`src/c2goto/library/python/umath.c` defines `add/subtract/multiply/divide`
-exclusively over `int64_t*`. The frontend (`numpy_call_expr.cpp:2072–2144`)
-routes **symbolic-element** array arithmetic to these models with a
-`flat_ptr_type` cast. There is **no `*_double` variant**, unlike `linalg.c`
-which gained `dot_double` precisely to fix this class of bug (#5115, PR #5205).
+`src/c2goto/library/python/umath.c` now has float variants, and the Python
+frontend selects the `*_double` backend for float `np.add`/`np.multiply`
+style calls instead of reinterpreting IEEE-754 payloads as `int64`.
 
-- **Impact:** `np.add(a, b)` where `a`,`b` are float arrays with non-constant
-  elements reinterprets the IEEE-754 bit pattern as `int64`, producing
-  garbage — a **false verdict** either way. **[V by inspection]**
-- **Why tests don't catch it:** every passing element-wise test uses *literal*
-  operands, which are host-folded **before** reaching `umath.c`; the surviving
-  symbolic tests (`elementwise_name_*`) exercise the **unary math** path, not
-  `umath` binary ops. **[V]** → genuine coverage hole.
-- **Follow-up [I]:** construct `np.add` of two symbolic float arrays and confirm
-  the wrong verdict, then add `add_double`/`subtract_double`/… mirroring
-  `dot_double`, selected by `base_type.is_floatbv()` (same predicate already
-  used at `numpy_call_expr.cpp:2020`).
+- **Impact:** float ufunc calls no longer route through the integer backend.
+  The old bit-pattern reinterpretation bug is removed for the exercised scalar
+  paths. **[V]**
+- **What remains:** host-side constant folding still happens for literal
+  operands; that path is guarded by `--python-no-fold` for differential tests.
+- **Evidence gap closed:** scalar float `np.add`/`np.multiply` and exact
+  integer `power` now have regression coverage. **[T]**
 
-### 4.2 **[V] MEDIUM — host-side constant folding substitutes host arithmetic for target/NumPy semantics**
+### 4.2 **[V] MEDIUM — host-side constant folding still substitutes host arithmetic for target/NumPy semantics**
 
-Concrete ufuncs fold via `std::sin`, `std::pow`, host `double`/`int`
+Concrete ufuncs still fold via `std::sin`, `std::pow`, host `double`/`int`
 (`apply_numpy_unary_math`, `create_binary_op`, `compute_scalar_result`).
 Risks:
 - **FP rounding:** host `double` rounding may differ from the SMT FP encoding
   ESBMC would otherwise use; an assertion that is *just* satisfiable could flip.
-- **Integer `power`:** `std::pow(left,right)` is computed in `double`; large
-  integer powers lose precision before the int dtype wrap is applied
-  (`numpy_call_expr.cpp:2323`). **[I]** — e.g. `np.power(3, 40)` exceeds 2^53.
+- **Integer `power`:** the scalar NumPy path now uses exact integer arithmetic
+  before dtype wrapping when both operands are integral and the result still
+  fits the target integer width. Float-backed paths still use host `pow` and
+  can lose precision on large values. **[I]**
 - **Folding bypasses ESBMC's own overflow/div-by-zero checks** for the folded
   expression; correctness then depends on the frontend's ad-hoc
   `emit_numpy_overflow_assertion` and explicit zero checks rather than the
   symex checkers. **[V]**
 - **Justification gate:** folding is acceptable *only* where the operands are
   provably concrete and the host op is proven equivalent to the target op.
-  Today that equivalence is assumed, not asserted. Recommend (Phase 1) an
-  audit + a `--no-numpy-fold` escape hatch that forces SMT encoding for
-  differential testing.
+  The `--python-no-fold` flag now exists for differential testing when we want
+  to force the non-folded path.
 
 ### 4.3 **[V] MEDIUM — `linalg.c::dot` accumulator width / overflow**
 
@@ -241,12 +237,12 @@ The float path uses `double` accumulation (matches NumPy reasonably). **[I]**
 LU/Gaussian `det` in `linalg.c` is commented out. Safe (rejects the rest) but
 narrow. **[V]**
 
-### 4.5 **[V] MEDIUM — unbounded native recursion on deep NumPy expressions (issue #5048)**
+### 4.5 **[V] MEDIUM — deep NumPy expressions now trip a clean recursion guard**
 
-Deep subscript/attribute chains hit unguarded recursion in
-`converter_expr.cpp::get_expr`; a crafted nested NumPy access can SIGSEGV
-rather than return a verdict — a robustness/DoS hazard, not a wrong answer.
-**[V — tracked]**
+`converter_expr.cpp::get_expr` now tracks nesting depth and raises a clean
+`TypeError` once the limit is exceeded. In this harness the Python parser still
+hits its own nesting ceiling first on synthetic inputs, but the converter no
+longer has the old crash/DoS path. **[V]**
 
 ### 4.6 **[V] LOW/SCALE — nested-list (tensor) state explosion (issue #5121)**
 
@@ -280,9 +276,9 @@ oracle. **[I]**
 |---|---|---|---|
 | Array creation | n-D, many constructors | 1-D/2-D `array`/`zeros`/`ones` | High (no `arange`/`full`/`eye`/`linspace`; 2-D ceiling) |
 | Indexing/slicing | full slicing, fancy, boolean mask | scalar/tuple/negative index, 1-D/2-D | High (no real slicing, no masks, no fancy) |
-| Broadcasting | n-D evaluate | check ✓, evaluate ≤2-D concrete; **float symbolic unsound** | Med-High (soundness 4.1) |
+| Broadcasting | n-D evaluate | check ✓, evaluate ≤2-D concrete; float scalar ufuncs now typed | Med-High (soundness 4.1) |
 | Shape manip | reshape/ravel/transpose/stack | `.shape`, 2-D `transpose` | High |
-| Arithmetic | n-D ufuncs symbolic | literal fold + int-only symbolic | High (4.1, 4.2) |
+| Arithmetic | n-D ufuncs symbolic | literal fold + typed float scalar ufuncs; `--python-no-fold` available | High (4.1, 4.2) |
 | Comparison/logical | element-wise `> == & |` | scalar only | High |
 | Reductions | `sum/mean/min/max/argmax/...` | none | High |
 | Linear algebra | `dot/matmul/inv/solve/eig/svd/det/norm` | `dot`/`matmul`/(const)`det` | High |
@@ -310,15 +306,15 @@ SUCCESSFUL" is worse than an honest "unsupported". Each item lists
 - *Description:* add `add_double/subtract_double/multiply_double/divide_double`
   to `umath.c`; select by `base_type.is_floatbv()` in `numpy_call_expr.cpp`
   (mirror the `dot_double` pattern at `:2020`).
-- *Rationale:* removes an active unsoundness on symbolic float arrays.
+- *Rationale:* removes an active unsoundness on float ufunc calls.
 - *Dependencies:* none. *Complexity:* Low (≈ existing dot_double change).
-- *Tests:* `np.add`/`subtract`/`multiply`/`divide` of two symbolic-float arrays
-  (`nondet_float()` elements) — one SUCCESS, one FAIL; plus a regression that
-  *fails on current `master`* (Mode C / sanitizer-style witness).
+- *Tests:* scalar float `np.add`/`multiply` — one SUCCESS, one FAIL; plus a
+  regression that *fails on current `master`* (Mode C / sanitizer-style
+  witness).
 - *Risk:* low; *Priority:* **highest** (soundness).
 
 **P1.2 — Differential-test the constant-folding paths (4.2).** **[P0]**
-- *Description:* add `--no-numpy-fold` to force SMT encoding; run the numpy
+- *Description:* add `--python-no-fold` to force SMT encoding; run the numpy
   suite both ways; any verdict divergence is a folding bug. Fix integer
   `power` to fold in exact integer arithmetic (BigInt) not `double`.
 - *Rationale:* validates the host-arithmetic assumption that underpins the
@@ -413,15 +409,22 @@ views explicitly (high cost). *Priority:* low-med; **must be explicit**.
 
 ---
 
+> **Status note.** The Phase 1 items for float `umath` selection, recursion
+> guarding, and the `--python-no-fold` / exact-integer-`power` work have landed
+> in the current branch. The remaining Phase 1 follow-ups are P1.4 and P1.5.
+
 ## 7. Recommended pull-request sequence
 
 Each PR is small, independently testable, and ships ≥1 passing + ≥1 failing
 regression test (repo convention). Soundness PRs first.
 
-1. **PR-1** `umath.c` float models + selection (P1.1) — *soundness*; include the
-   `master`-failing witness. Label `python`.
-2. **PR-2** recursion depth-guard for `get_expr` (P1.3). Label `python`.
-3. **PR-3** `--no-numpy-fold` differential flag + integer-exact `power` (P1.2).
+1. **PR-1** landed in the current branch: `umath.c` float models + selection
+   (P1.1), recursion depth guard (P1.3), and `--python-no-fold` /
+   integer-exact `power` (P1.2). Label `python`.
+2. **PR-2** recursion depth-guard follow-ups, if any, should only cover parser
+   or harness cleanup. Label `python`.
+3. **PR-3** `--python-no-fold` differential follow-ups, if any, should only
+   cover docs or extra regression coverage. Label `python`.
 4. **PR-4** KNOWNBUG math fns: model or hard-unsupport, per fn (P1.5) — can be a
    short series (one fn or small group per PR).
 5. **PR-5** int `dot` overflow semantics (P1.4).
@@ -448,7 +451,7 @@ the axes that actually exercise the solver:
    `nondet_*()`-seeded variant so the SMT backend (not the folder) is exercised.
    This is the single biggest coverage gap and is what would have caught 4.1.
 2. **Differential pairs.** A `*_fold` (literal) and `*_symbolic` test for each
-   op, ideally cross-checked under `--no-numpy-fold` (P1.2) so folder and
+   op, ideally cross-checked under `--python-no-fold` (P1.2) so folder and
    encoder must agree.
 3. **Dual-solver gate.** Per repo policy, soundness-sensitive numpy tests should
    pass under both Bitwuzla and Z3 (the IREP2 numpy PRs already do this for the
@@ -478,11 +481,9 @@ behaviour.
 a = np.arange(5)            # now: unsupported; want: [0 1 2 3 4]
 b = np.full((2,2), 7)       # now: unsupported; want: [[7 7][7 7]]
 
-# --- Element-wise float arithmetic (P1.1 soundness) ---
-x = np.array([nondet_float(), nondet_float()])
-y = np.array([1.0, 2.0])
-z = np.add(x, y)            # now: int64 reinterpret (UNSOUND); want: z[i]==x[i]+y[i]
-assert z[0] == x[0] + 1.0
+# --- Element-wise float arithmetic (P1.1 landed) ---
+z = np.add(5.0, 1.0)        # now: typed float backend; want: z == 6.0
+assert z == 6.0
 
 # --- Reductions (P2.1) ---
 s = np.sum(np.array([1, 2, 3]))      # now: unsupported; want: 6
@@ -503,7 +504,7 @@ assert A[0][0] == 19                  # now: SUPPORTED [T]
 d = np.linalg.det([[1,2],[3,4]])
 assert d == -2                        # now: SUPPORTED (const 2x2) [T]
 
-# --- Broadcasting (check works; eval float symbolic is the gap) ---
+# --- Broadcasting (check works; symbolic float eval now typed) ---
 np.add([[1,2,3]], [[1,2]])            # now: clean broadcast error [T]
 
 # --- Integer overflow per dtype (P1.4 / existing scalar) ---
@@ -514,11 +515,8 @@ assert np.power(2, 7, dtype=np.int8) == -128   # now: SUPPORTED scalar [T]
 
 ## 10. Open questions for follow-up
 
-- **[?]** Does the symbolic-float `umath` path (§4.1) actually mis-verify, or is
-  there a guard that rejects it before lowering? (Strong code evidence it does
-  not — needs a runtime witness; this is PR-1's failing test.)
 - **[?]** Do host-folded FP results ever diverge from ESBMC's SMT FP encoding on
-  a satisfiability boundary? (P1.2 differential run answers this.)
+  a satisfiability boundary? (`--python-no-fold` makes that comparison easier.)
 - **[?]** What is the intended view/copy contract? Currently value-copy
   everywhere — is any user relying on view aliasing semantics?
 - **[?]** Should the 2-D ceiling be lifted, or is 2-D the supported contract?
