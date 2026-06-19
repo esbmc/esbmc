@@ -1080,10 +1080,12 @@ constexpr std::size_t count_derived_field_entries(std::index_sequence<Is...>)
 // kind declares `static constexpr std::size_t excluded_field_bytes = ...;`
 // giving the byte size of those excluded members, so `fields_cover_class`
 // stops counting them as "missed". The only current use is the non-reflected
-// `locationt location` on the V.4 structured-CF code kinds (esbmc/esbmc#4715):
-// source location must travel with the statement for goto_convert, but must
-// not enter value identity (matching how a goto instructiont stores its
-// locationt separately from its IREP2 code). Kinds without the member get 0.
+// Non-reflected `locationt` members on code kinds (esbmc/esbmc#4715): the V.4
+// structured-CF kinds carry a `location`, and code_block2t also carries an
+// `end_location`. Source locations must travel with the statement for
+// goto_convert, but must not enter value identity (matching how a goto
+// instructiont stores its locationt separately from its IREP2 code). Kinds
+// without such members get 0.
 template <class K, class = void>
 struct kind_excluded_field_bytes
 {

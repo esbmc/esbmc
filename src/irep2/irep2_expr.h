@@ -1836,12 +1836,20 @@ class code_block2t : public expr2t
 public:
   std::vector<expr2tc> operands;
   locationt location; // not reflected: source loc travels with the stmt
-  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
+  // not reflected: the closing-brace location travels with the block too, so a
+  // code_block2t consumed natively by goto_convert (W1, esbmc/esbmc#4715) keeps
+  // the end location convert_block needs for destructor placement.
+  locationt end_location;
+  static constexpr std::size_t excluded_field_bytes = 2 * sizeof(locationt);
 
   code_block2t(
     const std::vector<expr2tc> &ops,
-    const locationt &loc = locationt())
-    : expr2t(get_empty_type(), code_block_id), operands(ops), location(loc)
+    const locationt &loc = locationt(),
+    const locationt &end_loc = locationt())
+    : expr2t(get_empty_type(), code_block_id),
+      operands(ops),
+      location(loc),
+      end_location(end_loc)
   {
   }
   code_block2t(const code_block2t &ref) = default;
