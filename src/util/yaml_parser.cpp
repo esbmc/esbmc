@@ -112,7 +112,12 @@ struct
 // // line comments, or 0 if none exists.
 size_t first_ternary_col_in_line(const std::string &text)
 {
-  enum class S { Code, Str, Chr } state = S::Code;
+  enum class S
+  {
+    Code,
+    Str,
+    Chr
+  } state = S::Code;
   for (size_t i = 0; i < text.size(); ++i)
   {
     char c = text[i];
@@ -240,9 +245,10 @@ void yaml_parser::fill_columns(
   if (!in)
     return;
 
-  std::sort(pending.begin(), pending.end(), [](const waypoint *a, const waypoint *b) {
-    return a->line < b->line;
-  });
+  std::sort(
+    pending.begin(), pending.end(), [](const waypoint *a, const waypoint *b) {
+      return a->line < b->line;
+    });
 
   size_t cur_line = 0;
   size_t pi = 0;

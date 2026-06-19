@@ -21,9 +21,8 @@ public:
   /// Fills in missing column numbers for waypoints that need it by scanning
   /// the source file at @p src_path.  Idempotent: already-filled waypoints
   /// are skipped.
-  static void fill_columns(
-    const std::string &src_path,
-    std::vector<waypoint> &waypoints);
+  static void
+  fill_columns(const std::string &src_path, std::vector<waypoint> &waypoints);
 
   // Reads the source file at `source_path` and returns a new source string
   // with witness intrinsic calls inserted before each annotated line.
