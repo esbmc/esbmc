@@ -21,12 +21,15 @@ namespace
 // Expose the protected remove_sideeffects overloads for testing.
 struct test_convertt : public goto_convertt
 {
-  test_convertt(contextt &c, optionst &o) : goto_convertt(c, o) {}
+  test_convertt(contextt &c, optionst &o) : goto_convertt(c, o)
+  {
+  }
   using goto_convertt::remove_sideeffects;
 };
 
-const char *const SRC = "int f(void) { return 1; }\n"
-                        "int main(void) { return 0; }\n";
+const char *const SRC =
+  "int f(void) { return 1; }\n"
+  "int main(void) { return 0; }\n";
 
 optionst default_options()
 {
@@ -36,12 +39,13 @@ optionst default_options()
 } // namespace
 
 TEST_CASE(
-  "remove_sideeffects expr2tc overload leaves a side-effect-free expr unchanged",
+  "remove_sideeffects expr2tc overload leaves a side-effect-free expr "
+  "unchanged",
   "[goto-convert][irep2]")
 {
   std::string src = SRC;
-  program p = goto_factory::get_goto_functions(
-    src, goto_factory::Architecture::BIT_64);
+  program p =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
   optionst opts = default_options();
   test_convertt conv(p.context, opts);
 
@@ -60,8 +64,8 @@ TEST_CASE(
   "[goto-convert][irep2]")
 {
   std::string src = SRC;
-  program p = goto_factory::get_goto_functions(
-    src, goto_factory::Architecture::BIT_64);
+  program p =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
   const symbolt *f = p.context.find_symbol("c:@F@f");
   REQUIRE(f != nullptr);
 
