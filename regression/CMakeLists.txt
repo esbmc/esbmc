@@ -474,17 +474,6 @@ set(_slow_regression_tests
     # not converge. Marked KNOWNBUG; the larger inner timeout lets testing_tool
     # record the KNOWNBUG verdict instead of ctest hard-killing the run (#4805).
     "regression/python/github_4782_object_size"
-    # topological_ordering(_fail) run the real graph-traversal body (a set() of
-    # Node structs compared and copied element-wise) under --incremental-bmc.
-    # They hit the same symbolic-list scalability wall as github_4782_object_size
-    # and do not converge; the per-byte memcpy/memcmp the list OM uses for the
-    # 48-byte Node payload (no word-wise shortcut -- see list.c) keeps them past
-    # the 120s default cap. They stay KNOWNBUG; the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing the
-    # run at the default budget, where the inner and outer timeouts coincide and
-    # ctest wins the race (#4805, #5121).
-    "regression/quixbugs/topological_ordering"
-    "regression/quixbugs/topological_ordering_fail"
     # dict65_4 and dictcomp_readback_func_fail still verify with the expected
     # verdict, but PR #4805's list-OM copy/compare changes slowed them across
     # the 120s cap on the DebugOpt Linux runner (dict65_4 ~89s->~121s,
