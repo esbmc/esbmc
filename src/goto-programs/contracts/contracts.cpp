@@ -908,6 +908,34 @@ void code_contractst::enforce_contracts(
       }
     }
 
+    // Recursive self-calls: under enforcement the function body is executed by
+    // the checking wrapper, and a self-call resolves to that same wrapper, so
+    // the real recursion is unwound unboundedly (OOM) instead of using the
+    // function's own contract (#5313). Replace each self-call in the original
+    // body with the contract (assert requires → havoc assigns → assume ensures),
+    // exactly as --replace-call-with-contract does. original_body_copy still
+    // carries the contract clauses (the renamed body has them stripped), so use
+    // it as the contract source.
+    {
+      goto_programt &self_body =
+        goto_functions.function_map[original_name_id].body;
+      std::vector<goto_programt::targett> self_calls;
+      Forall_goto_program_instructions (i_it, self_body)
+      {
+        if (!i_it->is_function_call() || !is_code_function_call2t(i_it->code))
+          continue;
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        if (
+          is_symbol2t(call.function) &&
+          to_symbol2t(call.function).get_symbol_name() ==
+            id2string(original_id))
+          self_calls.push_back(i_it);
+      }
+      for (auto call_it : self_calls)
+        generate_replacement_at_call(
+          *func_sym, original_body_copy, call_it, self_body);
+    }
+
     // Extract is_fresh mappings from function body for ensures clause replacement
     std::vector<code_contractst::is_fresh_mapping_t> is_fresh_mappings =
       extract_is_fresh_mappings_from_body(original_body_copy);
