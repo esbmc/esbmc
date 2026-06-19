@@ -14,6 +14,7 @@
 #  define CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()                                   \
     __pragma(message("Disabling diagnostic checks for clang headers"))         \
       CC_DIAGNOSTIC_DISABLE(4146 4244 4267 4291 4624)
+#  define CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()
 #else
 #  define CC_DIAGNOSTIC_PUSH() _Pragma("GCC diagnostic push")
 #  define CC_DIAGNOSTIC_POP() _Pragma("GCC diagnostic pop")
@@ -24,7 +25,34 @@
     DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")                     \
     DO_PRAGMA(GCC diagnostic ignored "-Wnonnull")                              \
     DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-declarations")              \
-    DO_PRAGMA(GCC diagnostic ignored "-Wclass-memaccess")
+    CC_DIAGNOSTIC_IGNORE_CLASS_MEMACCESS()
+
+// -Wclass-memaccess is GCC-only; Clang does not recognise it and would emit
+// -Wunknown-warning-option on the pragma itself.
+#  if defined(__GNUC__) && !defined(__clang__)
+#    define CC_DIAGNOSTIC_IGNORE_CLASS_MEMACCESS()                             \
+      DO_PRAGMA(GCC diagnostic ignored "-Wclass-memaccess")
+#  else
+#    define CC_DIAGNOSTIC_IGNORE_CLASS_MEMACCESS()
+#  endif
+
+// -Wdeprecated-literal-operator exists only on Clang >= 17 and GCC >= 15;
+// emitting the pragma on older compilers trips -Wunknown-warning-option
+// (Clang) or -Wpragmas (GCC). Probe with Clang's __has_warning where
+// available, and fall back to a GCC version check otherwise.
+#  if defined(__has_warning)
+#    if __has_warning("-Wdeprecated-literal-operator")
+#      define CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()               \
+        DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-literal-operator")
+#    else
+#      define CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()
+#    endif
+#  elif defined(__GNUC__) && __GNUC__ >= 15
+#    define CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()                 \
+      DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-literal-operator")
+#  else
+#    define CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()
+#  endif
 #endif
 
 #ifndef GNUC_PREREQ

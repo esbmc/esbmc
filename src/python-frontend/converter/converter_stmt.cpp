@@ -1875,8 +1875,20 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        // Skip getting expr for dict literals - handle specially later
-        if (!dict_handler_->is_dict_literal(ast_node["value"]))
+        // This RHS build only exists to probe rhs.type() for the Any/char*
+        // string adjustment below; the value is discarded and the real RHS is
+        // built again later. Skip it for kinds whose type is statically known
+        // and never a char* string, otherwise get_expr emits the whole
+        // construction a second time as dead code. Dict literals were already
+        // skipped (handled specially later); list literals and comprehensions
+        // matter most — eliding their dead duplicate roughly halves
+        // list-construction cost on construction-heavy programs (#5121).
+        const std::string rhs_kind =
+          ast_node["value"].value("_type", std::string());
+        const bool rhs_kind_skips_type_probe =
+          dict_handler_->is_dict_literal(ast_node["value"]) ||
+          rhs_kind == "List" || rhs_kind == "ListComp";
+        if (!rhs_kind_skips_type_probe)
         {
           if (ast_node["_type"] != "Call")
           {

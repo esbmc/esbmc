@@ -577,10 +577,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
             // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
             expr2tc base2;
-            migrate_expr(
-              base_expr.type().is_pointer() ? base_expr
-                                            : address_of_exprt(base_expr),
-              base2);
+            migrate_expr(base_expr, base2);
+            if (!is_pointer_type(base2->type))
+              base2 = address_of2tc(base2->type, base2);
             expr2tc size_call = side_effect_function_call2tc(
               migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
             exprt list_len = migrate_expr_back(
@@ -957,8 +956,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
           // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
           expr2tc base2;
-          migrate_expr(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          migrate_expr(expr, base2);
+          if (!is_pointer_type(base2->type))
+            base2 = address_of2tc(base2->type, base2);
           expr2tc size_call = side_effect_function_call2tc(
             migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
           exprt list_len =
@@ -1134,16 +1134,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           base.type() = bt; // restore #cpp_type that migrate_type drops
         }
 
-        if (base.type().is_pointer())
-        {
-          exprt deref("dereference");
-          deref.type() = base.type().subtype();
-          deref.move_to_operands(base);
-          base = std::move(deref);
-        }
-
+        // V.3: dereference (when base is a pointer) and member access built in
+        // IREP2; exact round-trip of the legacy dereference + member_exprt.
         expr2tc b2;
         migrate_expr(base, b2);
+        if (base.type().is_pointer())
+          b2 = dereference2tc(migrate_type(base.type().subtype()), b2);
         return migrate_expr_back(
           member2tc(migrate_type(clean_type), b2, attr_name));
       };

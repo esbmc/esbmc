@@ -10,11 +10,13 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <solvers/smt/smt_conv.h>
 #include <util/config.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
+#include <util/threeval.h>
 #include <vector>
+
+class smt_convt;
 
 class symex_target_equationt : public symex_targett
 {
@@ -87,20 +89,6 @@ public:
   // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
   // callers must run vacuity probes through the non-incremental path.
   virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
-  void convert_internal_step(
-    smt_convt &smt_conv,
-    smt_astt &assumpt_ast,
-    smt_convt::ast_vec &assertions,
-    SSA_stept &s,
-    bool vacuity_mode);
-
-  // Pre-register address_of expressions over string/array literals so
-  // int-to-ptr casts see them regardless of source-level declaration order
-  // (issue #1539).
-  void pre_register_addresses(
-    smt_convt &smt_conv,
-    std::list<SSA_stept>::iterator begin,
-    std::list<SSA_stept>::iterator end);
 
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
@@ -177,8 +165,9 @@ public:
     // write through stack_trace_payload().
     std::unique_ptr<std::vector<stack_framet>> stack_trace_box;
 
-    // for conversion
-    smt_astt guard_ast, cond_ast;
+    // Discharged assertion expression used for counterexample trace queries.
+    // Nil for non-assertion steps.
+    expr2tc cond_expr;
 
     // for slicing
     bool ignore;
@@ -213,8 +202,7 @@ public:
           o.stack_trace_box
             ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
             : nullptr),
-        guard_ast(o.guard_ast),
-        cond_ast(o.cond_ast),
+        cond_expr(o.cond_expr),
         ignore(o.ignore),
         hidden(o.hidden),
         loop_number(o.loop_number)
@@ -324,6 +312,7 @@ public:
   };
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
+  ~runtime_encoded_equationt() override;
 
   void push_ctx() override;
   void pop_ctx() override;
@@ -336,8 +325,8 @@ public:
   tvt ask_solver_question(const expr2tc &question);
 
   smt_convt &conv;
-  std::list<smt_convt::ast_vec> assert_vec_list;
-  std::list<smt_astt> assumpt_chain;
+  struct solver_statet;
+  std::unique_ptr<solver_statet> solver_state;
   std::list<SSA_stepst::iterator> scoped_end_points;
   SSA_stepst::iterator cvt_progress;
 };

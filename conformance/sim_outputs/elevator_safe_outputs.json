@@ -1,0 +1,3608 @@
+{
+  "benchmark": "elevator_safe",
+  "source": "Our work",
+  "n_sequences": 50,
+  "n_scans": 10,
+  "outputs": [
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 1,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 1,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 1
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ],
+    [
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 0,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 1,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      },
+      {
+        "Motor_Up": 0,
+        "Motor_Down": 0,
+        "Door_Open": 0,
+        "Alarm_Active": 1,
+        "Motor_Running": 0
+      }
+    ]
+  ]
+}

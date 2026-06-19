@@ -740,6 +740,26 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "sizeof")
+  {
+    // sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
+    // eagerly-computed byte-size value. Both become reflected sizeof2t fields,
+    // replacing the legacy sizeof-type side channel (esbmc/esbmc#5337). The
+    // frontends always produce both operands (the C adjust pass fills the value
+    // for VLAs); fail closed rather than over-read op1 in a release build.
+    if (expr.operands().size() != 2)
+    {
+      log_error("sizeof node must carry a type operand and a value operand");
+      abort();
+    }
+    type = migrate_type(expr.type());
+    type2tc measured = migrate_type(expr.op0().type());
+    expr2tc value;
+    migrate_expr(expr.op1(), value);
+    new_expr_ref = sizeof2tc(type, value, measured);
+    return;
+  }
+
   if (
     expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
     expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
@@ -755,17 +775,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    // Preserve the `#c_sizeof_type` of a folded sizeof(T) constant (clang stores
-    // the element type T here, e.g. for malloc(sizeof(T))). constant_int2t has
-    // no irept named-subs, so without this the type is lost on the
-    // --irep2-bodies round-trip and the allocated object degrades to char
-    // (esbmc/esbmc#4715).
-    type2tc sizeof_type;
-    const irept &szt = expr.c_sizeof_type();
-    if (szt.is_not_nil())
-      sizeof_type = migrate_type(static_cast<const typet &>(szt));
-
-    new_expr_ref = constant_int2tc(type, val, sizeof_type);
+    new_expr_ref = constant_int2tc(type, val);
     return;
   }
 
@@ -987,7 +997,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (false_val->type->type_id != type->type_id)
       false_val = typecast2tc(type, false_val);
 
-    new_expr_ref = if2tc(type, cond, true_val, false_val);
+    new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
   }
 
@@ -2918,10 +2928,16 @@ exprt migrate_expr_back(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    // Restore the folded sizeof(T) element type so malloc/alloca lowering can
-    // recover the allocated object's type (esbmc/esbmc#4715).
-    if (!is_nil_type(ref2.sizeof_type))
-      theexpr.c_sizeof_type(migrate_type_back(ref2.sizeof_type));
+    return theexpr;
+  }
+  case expr2t::sizeof_id:
+  {
+    // Rebuild the legacy `sizeof` exprt: op0 a type_exprt carrying the measured
+    // type T, op1 the byte-size value (esbmc/esbmc#5337).
+    const sizeof2t &ref2 = to_sizeof2t(ref);
+    exprt theexpr("sizeof", migrate_type_back(ref->type));
+    theexpr.copy_to_operands(type_exprt(migrate_type_back(ref2.sizeof_type)));
+    theexpr.copy_to_operands(migrate_expr_back(ref2.value));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
@@ -3070,6 +3086,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       migrate_expr_back(ref2.true_value),
       migrate_expr_back(ref2.false_value));
     theif.type() = thetype;
+    if (ref2.location.is_not_nil())
+      theif.location() = ref2.location;
     return theif;
   }
   case expr2t::equality_id:

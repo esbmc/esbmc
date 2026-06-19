@@ -227,3 +227,160 @@ useful for any program using `reversed()` in a value context.
 No further isolated, sound point fix is available on current master without the §5
 architectural work (flow-sensitive class tracking, tuple-unpack inference, any-typing,
 string/tuple-equality soundness). The §5 priority order stands.
+
+---
+
+## 8. 2026-06-16 re-validation — signatures shifted, no new isolated fix
+
+Independent re-run of **all 46 KNOWNBUG python/quixbugs/humaneval tests** against current
+`master` (tip `bd2e4a7d79`), each with its own `test.desc` flags, after the **63 commits**
+that landed since §7. That set includes the largest Python push of any inter-sweep window —
+`#5329` (model a class used as a first-class value; flip `rover` to CORE), `#5324`/`#5336`
+(tuple targets / `d.items()` in dict comprehensions), `#5333` (`@property` getters),
+`#5338`/`#5347`/`#5353`/`#5356` (lexicographic tuple ordering, sort literal/symbolic lists of
+tuples, resolve `list[Tuple[...]]` element type), `#5306` (`issuperset` lowering), `#5319`
+(forward-ref class returns), `#5331`/`#5332` (while-else, complex inference).
+
+**Result: zero KNOWNBUG→CORE flips.** Every test still misses its expected verdict; the §3
+classification holds. A pass that checks each KNOWNBUG test against its expected regex flagged
+**no** candidate (the test harness `sys.exit(77)`s any KNOWNBUG that matches — none did).
+
+### 8a. The Python push shifted error signatures *deeper into the same clusters*
+The class/tuple/dict-comprehension work did not open a new isolated point fix; it advanced
+several tests from one design-cluster failure to a *later* one in the same cluster:
+
+| Test | §7 failure mode | Today's failure mode | Still bottoms out in |
+|---|---|---|---|
+| `depth_first_search` | `ABORT`→diagnostic `__ESBMC_get_object_size: …non-array object` (#5042) | `ERROR: function call: argument "…@search_from@node" type mismatch: got pointer, expected struct` | object pointer-vs-value model (#3067): the nested `search_from`'s param is typed as a `Node` struct by value, but `startnode`/`nextnode` arrive as pointers |
+| `github_4782_object_size` | fast clean diagnostic (`…non-array object`) | BMC **timeout** — the set/graph is now modelled far enough that it no longer reaches the non-array `object_size` guard, and instead hits the unwinding wall | object/set model (#3067) → §3c perf |
+| `shortest_paths(_fail)` | `ERROR: Only simple targets are supported in DictComp` | `ERROR: DictComp tuple target requires iterating a list of tuples` (after `#5324`) | dict-key-tuple modelling + any-typed param (`{v: … for u, v in weight_by_edge}` iterates a **dict**'s tuple keys, and `weight_by_edge` is an unannotated parameter — #2848) |
+
+The `depth_first_search` and `github_4782_object_size` cases are the *same* DFS-over-graph
+program (set membership + nested closure + generator expression); both are #3067 object-model
+work, not isolated bugs. `shortest_paths` needs dict-comprehension iteration over a dict's
+tuple keys plus `.items()` tuple unpacking, `min`, and dict `==` — the §3b dict/tuple-equality
+cluster, gated additionally by any-typing on the parameter.
+
+### 8b. Everything else: unchanged disposition
+Re-confirmed failure modes on today's master: perf/timeout (§3c, policy-banned) for
+`breadth_first_search(_fail)`, `knapsack(_fail)`, `next_permutation(_fail)`,
+`reverse_linked_list`, `shortest_path_lengths(_fail)`, `topological_ordering(_fail)`, and
+humaneval_37/86/90/93/158; clean "unsupported feature" errors for the tuple-unpack gaps
+(`minimum_spanning_tree` "Cannot unpack signedbv", `powerset` "Cannot unpack pointer",
+`shortest_path_length` "Cannot unpack empty"), mixed-type `sorted()` (humaneval_123) and
+non-constant tuple slice (humaneval_148); wrong-verdict soundness clusters (humaneval_1/1-1/
+67/91/95/145, `detect_cycle`, `wrap`, `bare_raise_nested`, `github_4117_function_internal`);
+`concurrency_fail` (threading MVP); `bitcount_fail` UNKNOWN (§3d); humaneval_162 `hashlib`
+(infeasible). Each remains a design-level blocker, a policy-banned timeout, a substantial
+sound feature, or a questionable test expectation — not an isolated point fix.
+
+**Build note.** This sweep ran a Z3-only `esbmc`. The four `--bitwuzla`-pinned tests
+(humaneval_39, `flatten_fail`, `rpn_eval`, `rpn_eval_fail`) were re-run under `--z3` and
+reproduce the §3c perf/timeout disposition; the solver pin does not change their
+classification.
+
+**Bottom line.** §7b's conclusion is reaffirmed five days and 63 commits later: no new
+isolated, soundly-fixable point fix is available on current `master` without the §5
+architectural work. The recent class/tuple/dict-comprehension landings are real progress on
+the §5 roadmap (they move tests *through* the cluster), but the remaining KNOWNBUGs are still
+gated on flow-sensitive class tracking, the object/pointer-vs-value model, tuple-unpack
+inference, any-typing, and string/tuple-equality soundness. The §5 priority order stands.
+
+---
+
+## 9. 2026-06-17 re-validation — one-day window, no flips, no signature shift
+
+Independent re-run of **all 46 KNOWNBUG python/quixbugs/humaneval tests** against current
+`master` (tip `74da7c0400`), each with its own `test.desc` flags. Only **4 functional commits**
+landed since §8's tip `bd2e4a7d79`: `#5381` (multi-element list repetition `[a,b]*n` with a
+runtime count), `#5382` (don't model non-scalar uninterpreted functions as native SMT UFs —
+fixes an `smt_sort.h:220` abort on pointer/aggregate UF args), `#5384` (fma interval lifting),
+and `#5368` (witness 2.1 branching waypoints). `#5383` was the §8 report itself.
+
+**Result: zero KNOWNBUG→CORE flips.** The full set was driven through `ctest` (which exits
+non-zero on any KNOWNBUG that now matches its expected regex): `100% tests passed, 0 tests
+failed out of 46` — every test still misses its expected verdict. The §3 classification holds.
+
+### 9a. None of the four commits touches a Python KNOWNBUG path
+The two Python-relevant commits were checked against the actual test set rather than assumed:
+
+- **`#5381` (multi-element `[a,b]*n`)** — a scan of all 46 KNOWNBUG sources for multi-element
+  list-repetition shows **no** test uses it (the only `*`-with-list hit, humaneval_145
+  `n[0] * neg`, is a scalar multiply). So the fix cannot shift any KNOWNBUG signature.
+- **`#5382` (non-scalar UF abort)** — targets C/SV-COMP harnesses that declare pointer/aggregate
+  `__ESBMC_uninterpreted_*` callbacks (the `aws-c-common` hash-table reproducer, #5145/#5287).
+  No Python KNOWNBUG routes a pointer/aggregate through an uninterpreted function, so it is
+  out of scope here. (Distinct from the separately-tracked cmath-intensive `smt_sort.h:123`
+  crash, which is pre-existing and unrelated.)
+
+### 9b. The §8 signature-shifted tests re-confirmed identical
+The three tests §8 called out as having moved deeper into their clusters reproduce **the same
+signatures** today:
+
+| Test | Today's signature (tip `74da7c0400`) | Bottoms out in |
+|---|---|---|
+| `depth_first_search` | `ERROR: function call: argument "…@search_from@node" type mismatch: got pointer, expected struct` (SIGABRT) | object pointer-vs-value model (#3067) |
+| `github_4782_object_size` | BMC **timeout** (no longer reaches the non-array `object_size` guard) | object/set model (#3067) → §3c perf |
+| `shortest_paths` | `ERROR: DictComp tuple target requires iterating a list of tuples` (after `#5324`) | dict-key-tuple modelling + any-typing (#2848/#3067) |
+
+### 9c. Everything else: unchanged disposition
+Re-confirmed on today's master: perf/timeout (§3c, policy-banned) for `breadth_first_search(_fail)`,
+`knapsack(_fail)`, `next_permutation(_fail)`, `reverse_linked_list`, `shortest_path_lengths(_fail)`,
+`flatten_fail`, `topological_ordering(_fail)`, humaneval_33/37/90/93/158 — several of these
+genuinely ran 240–360 s against their own TIMEOUT property, i.e. the honest unwinding wall;
+clean "unsupported feature" errors for the tuple-unpack gaps and mixed-type `sorted()` /
+non-constant tuple slice; wrong-verdict soundness clusters; `concurrency_fail` (threading MVP);
+`bitcount_fail` UNKNOWN (§3d); humaneval_162 `hashlib` (infeasible). Each remains a design-level
+blocker, a policy-banned timeout, a substantial sound feature, or a questionable test
+expectation — not an isolated point fix.
+
+**Bottom line.** One day and four functional commits after §8, the conclusion is reaffirmed:
+no new isolated, soundly-fixable point fix is available on current `master` without the §5
+architectural work. The two Python-touching landings (`#5381`, `#5382`) do not intersect the
+open KNOWNBUG set. The §5 priority order stands.
+
+---
+
+## 10. 2026-06-19 re-validation & cmath inverse-trig crash fix
+
+Re-test against current `master` (tip `79c8b93eb0`), after the **17 commits** since §9's tip
+`74da7c0400` (notably `#5403` numpy float/complex literal folding, `#5407` np.copysign/fmax/fmin
+scalar-constant crash, `#5404` calloc zero-size, and the V.3 IREP2 frontend landings
+`#5391/#5392/#5401/#5402/#5406/#5408/#5412`). The §3 KNOWNBUG classification is unchanged —
+none of these commits touches a cmath inverse-trig path, and the cmath fix below lives entirely
+in the `caller == "cmath"` dispatch entry, so it cannot move any non-cmath KNOWNBUG.
+
+### 10a. New isolated, soundly-fixable defect found & fixed
+**`cmath.acos`/`cmath.acosh` crashed on pure-imaginary inputs (PR #5415).**
+
+`cmath.acos(0.5j)` and `cmath.acosh(0.5j)` aborted with
+`ERROR: function call: argument "…models/cmath.py@F@acos@z" type mismatch: got pointer,
+expected struct` (SIGABRT / core dump). The "cmath inverse functions" dispatch entry in
+`function_call/expr.cpp` matched only `asin`/`atan`/`asinh`/`atanh`, and `acos` was likewise
+absent from `python_math::is_unary_dispatch_function`. So `cmath.acos`/`cmath.acosh` matched no
+cmath/math handler and fell through to a generic call path that passed the complex literal as a
+**pointer** to the model function's by-value `struct` parameter — the same `got pointer, expected
+struct` argument-binding fault family seen in §8/§9's `depth_first_search`, but here from a
+missing dispatch case rather than the object/pointer-vs-value model.
+
+`acos`/`acosh` were excluded from the original fast path on purpose: that path returns
+`complex(0, ·)`, and their pure-imaginary result has a **nonzero** real part. But the exclusion
+left no correct route at all.
+
+**Fix:** add `acos`/`acosh` to the dispatch entry with their own closed-form pure-imaginary fast
+path, valid for **all** real `y` (guard is just `z.real == 0`):
+`acos(i*y) = (pi/2, -asinh(y))`, `acosh(i*y) = (asinh(|y|), copysign(pi/2, y))`. Every other
+input still routes to the `cmath.py` model unchanged. The fast path matches CPython bit-for-bit
+and is strictly more accurate than the model on the imaginary axis (the model returns `0`
+instead of `pi/2` for `acosh(0j)` and is 1 ULP off elsewhere). New regression pair
+`regression/python/cmath_inverse_pure_imag{,_fail}`; dual-solver Bitwuzla+Z3 agreement; all 133
+`python/(cmath|complex)` regression tests green; code-reviewed (0 critical/major/minor blocking).
+
+Unlike §6a/§7a, this fix **does** restore a working feature (acos/acosh on the imaginary axis now
+verify with exact values) rather than only converting a crash to a diagnostic — it is the §5-item-5
+robustness category, but with a sound value model rather than an "unsupported feature" stub.
+
+### 10b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
+on current `master` without the §5 architectural work; the §5 priority order stands.

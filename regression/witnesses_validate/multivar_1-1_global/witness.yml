@@ -8,9 +8,9 @@
       version: "7.11.0"
     task:
       input_files:
-        - "main5.c"
+        - "main.c"
       input_file_hashes:
-        "main5.c": "869cba7a794600e8366162836dd834355bea5b7af09db35a4af15c6e6738346f"
+        "main.c": "869cba7a794600e8366162836dd834355bea5b7af09db35a4af15c6e6738346f"
       specification: "G ! call(reach_error())"
       data_model: "LP64"
       language: "C"
@@ -18,7 +18,7 @@
     - invariant:
         type: "loop_invariant"
         location:
-          file_name: "main5.c"
+          file_name: "main.c"
           line: 20
           column: 3
           function: "main"

@@ -5,7 +5,7 @@ bitblast_convt::bitblast_convt(
   bool int_encoding,
   const namespacet &_ns,
   sat_iface *_sat_api)
-  : smt_convt(int_encoding, _ns), sat_api(_sat_api)
+  : smt_solver_baset(int_encoding, _ns), sat_api(_sat_api)
 {
 }
 

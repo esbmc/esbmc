@@ -22,6 +22,7 @@
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
+#include <util/type_byte_size.h>
 #include <string>
 #include <functional>
 
@@ -453,40 +454,28 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       elem_symbol.get_type().is_struct()
         ? elem_symbol.get_type()
         : converter_.name_space().follow(elem_symbol.get_type());
-    const struct_union_typet &struct_type = to_struct_union_type(resolved);
 
-    // Sum the widths of all components to get the true struct size in bytes.
-    size_t total_size = 0;
-    for (const auto &comp : struct_type.components())
+    // Measure the struct by its true byte size via the canonical computation.
+    // A hand-rolled component sum mistakes array- and struct-typed components
+    // (e.g. a tuple key of strings, whose elements are char[N]) for pointers,
+    // over-reporting the size and tripping an out-of-bounds copy in
+    // __ESBMC_copy_value. A struct member that is a dynamically- or
+    // infinitely-sized array has no static size; type_byte_size throws there,
+    // so fall back to pointer width as the legacy summation did.
+    BigInt total_size;
+    try
     {
-      const typet &ct = comp.type();
-      if (ct.id() == "symbol")
-      {
-        // Nested struct/class component: recurse via namespace follow
-        const typet &followed = converter_.name_space().follow(ct);
-        if (followed.is_struct())
-        {
-          for (const auto &sc : to_struct_union_type(followed).components())
-          {
-            if (!sc.type().width().empty())
-              total_size +=
-                std::stoull(sc.type().width().as_string(), nullptr, 10) / 8;
-            else
-              total_size += config.ansi_c.pointer_width() / 8;
-          }
-        }
-        else
-          total_size += config.ansi_c.pointer_width() / 8;
-      }
-      else if (!ct.width().empty())
-        total_size += std::stoull(ct.width().as_string(), nullptr, 10) / 8;
-      else
-        total_size += config.ansi_c.pointer_width() / 8;
+      total_size =
+        type_byte_size(migrate_type(resolved), &converter_.name_space());
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      total_size = config.ansi_c.pointer_width() / 8;
     }
     if (total_size == 0)
       total_size = config.ansi_c.pointer_width() / 8;
 
-    elem_size = from_integer(BigInt(total_size), size_type());
+    elem_size = from_integer(total_size, size_type());
   }
   // For non-char, non-bool pointer types (e.g., Optional[T] stored as T*):
   // pointer_typet has no width() attribute, so we must use pointer_width here
@@ -982,6 +971,24 @@ exprt python_list::get()
     converter_.add_instruction(list_push_func_call);
     list_type_map[list_id].push_back(
       std::make_pair(map_elem.identifier().as_string(), map_elem.type()));
+  }
+
+  return build_symbol(list_symbol);
+}
+
+exprt python_list::build_list_from_exprs(const std::vector<exprt> &elems)
+{
+  symbolt &list_symbol = create_list();
+  const std::string &list_id = list_symbol.id.as_string();
+
+  for (const exprt &elem : elems)
+  {
+    // build_push_list_call materializes the value into a temp symbol, derives
+    // the element type-id from its type, and copies it into the list storage.
+    exprt push_call = build_push_list_call(list_symbol, list_value_, elem);
+    converter_.add_instruction(push_call);
+    list_type_map[list_id].push_back(
+      std::make_pair(std::string(), elem.type()));
   }
 
   return build_symbol(list_symbol);
@@ -2092,6 +2099,75 @@ void python_list::handle_slice_assignment(
       converter_.get_type_handler().type_to_string(list_type)),
     config.ansi_c.address_width));
 
+  // Statically-known element byte size, passed to the model so its per-element
+  // copy uses a compile-time-constant size and takes __ESBMC_copy_value's
+  // branch-free fast path, instead of reading the symbolic-index field
+  // src->items[k].size (which forces memcpy's per-byte loop to unwind per
+  // element — the dominant cost on large slice assignments). Emitted ONLY for
+  // an unambiguous fixed-width scalar element type; 0 otherwise, which makes
+  // the model fall back to the per-element o->size read (exact prior behaviour,
+  // so a missing/ambiguous type can never produce a wrong copy length).
+  // Derive the element byte size from the RHS source list's elements so the
+  // model copies with a compile-time-constant size (fast path) instead of the
+  // symbolic-index field read src->items[k].size. We read the *converted* RHS
+  // element type, which is the actual data being stored, so the size is always
+  // correct. Only a plain fixed-width scalar (bitvector) is emitted; anything
+  // else (pointers, structs, strings, nested lists, non-literal/heterogeneous
+  // RHS) keeps elem_size 0, making the model fall back to the per-element
+  // o->size read — exact prior behaviour, so a wrong length is impossible.
+  auto scalar_width = [](const typet &t) -> size_t {
+    if (
+      (t.id() == "signedbv" || t.id() == "unsignedbv" || t.id() == "floatbv" ||
+       t.id() == "fixedbv") &&
+      !t.width().empty())
+      return std::stoull(t.width().as_string(), nullptr, 10) / 8;
+    return 0;
+  };
+  size_t elem_size_bytes = 0;
+  if (
+    value_node.contains("_type") && value_node["_type"] == "List" &&
+    value_node.contains("elts") && value_node["elts"].is_array() &&
+    !value_node["elts"].empty())
+  {
+    // RHS is a list literal: size from its (uniform) element types.
+    bool uniform = true;
+    size_t w = 0;
+    for (const auto &elt : value_node["elts"])
+    {
+      size_t ew = 0;
+      try
+      {
+        ew = scalar_width(converter_.get_expr(elt).type());
+      }
+      catch (...)
+      {
+        uniform = false;
+        break;
+      }
+      if (ew == 0 || (w != 0 && ew != w))
+      {
+        uniform = false;
+        break;
+      }
+      w = ew;
+    }
+    if (uniform)
+      elem_size_bytes = w;
+  }
+  else if (
+    value_node.contains("_type") && value_node["_type"] == "Name" &&
+    value_node.contains("id"))
+  {
+    // RHS is a list variable (includes self-assignment l[...] = l): size from
+    // its declared element type.
+    const typet et = get_list_element_type(value_node["id"].get<std::string>());
+    if (!et.is_nil())
+      elem_size_bytes = scalar_width(et);
+  }
+  constant_exprt elem_size(size_type());
+  elem_size.set_value(
+    integer2binary(BigInt(elem_size_bytes), config.ansi_c.address_width));
+
   exprt call = build_call_expr(
     *fn,
     bool_type(),
@@ -2102,7 +2178,8 @@ void python_list::handle_slice_assignment(
      from_integer(has_upper ? 1 : 0, int_type()),
      from_integer(step_val, i64),
      rhs.type().is_pointer() ? rhs : build_address_of(rhs),
-     list_type_id});
+     list_type_id,
+     elem_size});
   call.location() = location;
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
@@ -3415,6 +3492,32 @@ exprt python_list::compare(
   const size_t float_type_id =
     float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
 
+  // Statically-known element byte size for the primitive comparison, so the
+  // model's __ESBMC_values_equal takes its branch-free fast path instead of
+  // memcmp's symbolic-size byte loop (the dominant cost when comparing large
+  // lists, e.g. `assert l == [...]`). Emitted only when both operands' first
+  // element is the same fixed-width scalar; 0 otherwise, which makes the model
+  // fall back to the per-element a->size read (exact prior behaviour).
+  size_t eq_elem_size_bytes = 0;
+  {
+    auto scalar_width = [](const typet &t) -> size_t {
+      if (
+        (t.id() == "signedbv" || t.id() == "unsignedbv" ||
+         t.id() == "floatbv" || t.id() == "fixedbv") &&
+        !t.width().empty())
+        return std::stoull(t.width().as_string(), nullptr, 10) / 8;
+      return 0;
+    };
+    const typet lt =
+      get_list_element_type(converted_l1.identifier().as_string(), 0);
+    const typet rt =
+      get_list_element_type(converted_l2.identifier().as_string(), 0);
+    size_t lw = lt.is_nil() ? 0 : scalar_width(lt);
+    size_t rw = rt.is_nil() ? 0 : scalar_width(rt);
+    if (lw != 0 && lw == rw)
+      eq_elem_size_bytes = lw;
+  }
+
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
@@ -3425,6 +3528,8 @@ exprt python_list::compare(
   list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
   list_eq_func_call.arguments().push_back(
     from_integer(float_type_id, size_type())); // float_type_id
+  list_eq_func_call.arguments().push_back(
+    from_integer(eq_elem_size_bytes, size_type())); // elem_size
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
@@ -3442,7 +3547,7 @@ exprt python_list::compare(
 exprt python_list::create_vla(
   const nlohmann::json &element,
   const exprt &count,
-  const exprt &list_elem)
+  const std::vector<exprt> &list_elems)
 {
   locationt location = converter_.get_location_from_decl(element);
 
@@ -3470,13 +3575,14 @@ exprt python_list::create_vla(
   counter_code.location() = location;
   converter_.add_instruction(counter_code);
 
-  // while (counter < bound) { result.push(list_elem); counter += 1; }
+  // while (counter < bound) { push each elem in order; counter += 1; }
   exprt cond("<", bool_type());
   cond.operands().push_back(build_symbol(counter));
   cond.operands().push_back(build_symbol(bound));
 
   code_blockt then;
-  then.copy_to_operands(build_push_list_call(result, element, list_elem));
+  for (const auto &list_elem : list_elems)
+    then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
   exprt incr("+", int_type());
   incr.copy_to_operands(build_symbol(counter));
@@ -3489,9 +3595,10 @@ exprt python_list::create_vla(
   while_cod.copy_to_operands(cond, then);
   converter_.add_instruction(while_cod);
 
-  // Record the element type so downstream indexing resolves it.
-  list_type_map[result.id.as_string()].push_back(
-    std::make_pair(std::string(), list_elem.type()));
+  // Record one type-map entry per source element for index-based type lookups.
+  auto &result_types = list_type_map[result.id.as_string()];
+  for (const auto &list_elem : list_elems)
+    result_types.push_back(std::make_pair(std::string(), list_elem.type()));
 
   return build_symbol(result);
 }
@@ -3661,13 +3768,52 @@ exprt python_list::list_repetition(
     return build_symbol(*elem_sym);
   };
 
+  // Get all element expressions from list_type_map for a variable list.
+  auto elems_from_type_map =
+    [&](const std::string &src_id) -> std::vector<exprt> {
+    std::vector<exprt> elems;
+    auto it = list_type_map.find(src_id);
+    if (it == list_type_map.end() || it->second.empty())
+      return elems;
+    for (const auto &entry : it->second)
+    {
+      if (entry.first.empty())
+        return {};
+      symbolt *elem_sym = converter_.find_symbol(entry.first);
+      if (!elem_sym)
+        return {};
+      elems.push_back(build_symbol(*elem_sym));
+    }
+    return elems;
+  };
+
+  // Collect source elements for the VLA path: literal `elts`,
+  // or the variable list's type map, falling back to a single `fallback` element
+  // if neither yields anything.
+  auto collect_vla_elems = [&](
+                             const nlohmann::json &node,
+                             const exprt &list_operand,
+                             const exprt &fallback) -> std::vector<exprt> {
+    std::vector<exprt> elems;
+    if (node.contains("elts") && node["elts"].is_array())
+    {
+      for (const auto &elt : node["elts"])
+        elems.push_back(converter_.get_expr(elt));
+    }
+    else
+      elems = elems_from_type_map(list_operand.identifier().as_string());
+    if (elems.empty())
+      elems.push_back(fallback);
+    return elems;
+  };
+
   // Count on the lhs (e.g.: 3 * [1] or n * lst). The list operand is the rhs.
   if (lhs.type() != list_type)
   {
-    // List element comes from the rhs operand
-    if (right_node.contains("elts"))
-      list_elem = converter_.get_expr(right_node["elts"][0]);
-    else
+    // For literal `elts`, defer the elts[0] extraction to the constant-count branch
+    // the VLA path re-extracts every element via collect_vla_elems.
+    const bool from_elts = right_node.contains("elts");
+    if (!from_elts)
     {
       // rhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(rhs.identifier().as_string());
@@ -3678,23 +3824,24 @@ exprt python_list::list_repetition(
 
     if (lhs.is_constant())
     {
+      if (from_elts)
+        list_elem = converter_.get_expr(right_node["elts"][0]);
       assert(is_integer_type(lhs.type()));
       list_size = binary2integer(lhs.value().c_str(), true);
     }
     else
     {
       // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
-      return create_vla(list_value_, lhs, list_elem);
+      return create_vla(
+        list_value_, lhs, collect_vla_elems(right_node, rhs, list_elem));
     }
   }
 
   // Count on the rhs (e.g.: [1] * 3 or lst * n). The list operand is the lhs.
   if (rhs.type() != list_type)
   {
-    // List element comes from the lhs operand
-    if (left_node.contains("elts"))
-      list_elem = converter_.get_expr(left_node["elts"][0]);
-    else
+    const bool from_elts = left_node.contains("elts");
+    if (!from_elts)
     {
       // lhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(lhs.identifier().as_string());
@@ -3705,13 +3852,16 @@ exprt python_list::list_repetition(
 
     if (rhs.is_constant())
     {
+      if (from_elts)
+        list_elem = converter_.get_expr(left_node["elts"][0]);
       assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
     }
     else
     {
       // Non-constant count (symbol `n` or compound `m + 1`): repeat at runtime.
-      return create_vla(list_value_, rhs, list_elem);
+      return create_vla(
+        list_value_, rhs, collect_vla_elems(left_node, lhs, list_elem));
     }
   }
 

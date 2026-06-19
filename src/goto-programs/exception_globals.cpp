@@ -8,12 +8,21 @@
 
 namespace
 {
-/// Register one zero-initialised static global, unless @p id already exists.
+/// Register one zero-initialised static global.
+/// The exception state is per-thread: a propagating exception, its type and its
+/// object belong to the thread that raised it, so the globals are thread-local.
+/// symex routes thread-local globals to a per-thread instance (renaming.cpp), so
+/// one thread cannot observe, catch, or clear another thread's in-flight
+/// exception — which is what makes the lowered dispatch sound under concurrency.
+///
+/// If @p id already exists it is a bare extern declaration (the OM
+/// std::uncaught_exceptions() reads __ESBMC_exc_uncaught_count, so linking that
+/// body pulls the declaration into the context before this pass runs).
+/// move_symbol_to_context adopts this real definition over the extern decl
+/// (its `s->is_extern && !symbol.is_extern` replace rule), so no manual upgrade
+/// is needed.
 void add_global(contextt &context, const char *id, const typet &type)
 {
-  if (context.find_symbol(id) != nullptr)
-    return;
-
   symbolt sym;
   sym.id = id;
   sym.name = id;
@@ -23,6 +32,28 @@ void add_global(contextt &context, const char *id, const typet &type)
   sym.lvalue = true;
   sym.static_lifetime = true;
   sym.file_local = false;
+  sym.is_thread_local = true;
+
+  context.move_symbol_to_context(sym);
+}
+
+void add_extern_function(
+  contextt &context,
+  const char *id,
+  const code_typet &type)
+{
+  if (context.find_symbol(id))
+    return;
+
+  symbolt sym;
+  sym.id = id;
+  sym.name = id;
+  sym.mode = "C";
+  sym.set_type(type);
+  sym.lvalue = false;
+  sym.static_lifetime = false;
+  sym.file_local = false;
+  sym.is_extern = true;
 
   context.move_symbol_to_context(sym);
 }
@@ -34,4 +65,12 @@ void create_exception_state_symbols(contextt &context)
   add_global(context, exception_globals::typeid_id, size_type());
   add_global(
     context, exception_globals::value_id, pointer_typet(empty_typet()));
+  add_global(context, exception_globals::uncaught_count_id, size_type());
+  add_global(context, exception_globals::terminate_reason_id, size_type());
+
+  code_typet void_fn;
+  void_fn.return_type() = empty_typet();
+  add_extern_function(context, exception_globals::push_handled_id, void_fn);
+  add_extern_function(context, exception_globals::pop_handled_id, void_fn);
+  add_extern_function(context, exception_globals::rethrow_current_id, void_fn);
 }

@@ -274,6 +274,23 @@ protected:
    */
   virtual void assertion(const expr2tc &assertion, const std::string &msg);
 
+  /// Lift `var == const` from an assume into the level2 constant
+  /// propagator so subsequent renames of `var` substitute the constant
+  /// directly. Called from symex_assume() after the assumption has been
+  /// recorded into the SSA target, so the constraint itself is preserved
+  /// and the lift only affects future renames.
+  ///
+  /// Peels outer typecasts (the C frontend wraps the equality as
+  /// (bool)(int)(x == k) for __VERIFIER_assume-style intrinsics), matches
+  /// `symbol == const` or `const == symbol`, and writes the constant into
+  /// the level2 entry for the symbol via cur_state->assignment.
+  ///
+  /// Skips IEEE-754 zero constants: +0.0 and -0.0 compare equal under
+  /// IEEE equality but have distinct bit patterns, so propagating either
+  /// would silently fold signbit-sensitive code (1.0/x, copysign, bit
+  /// reinterpretation) and mask real bugs.
+  void propagate_assume_equality(const expr2tc &the_assumption);
+
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
@@ -384,6 +401,22 @@ protected:
    *  @param code Function code to actually call
    */
   virtual void symex_function_call_code(const expr2tc &call);
+
+  /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -1245,8 +1278,7 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Pre-interned target waypoint line; empty when no target is present. */
-  irep_idt witness_target_line;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
