@@ -159,6 +159,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
 
   struct_typet dict_struct;
   dict_struct.tag("__python_dict__");
+  set_python_aggregate_kind(dict_struct, "dict");
 
   typet list_type = type_handler_.get_list_type();
 

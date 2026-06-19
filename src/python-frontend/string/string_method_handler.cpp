@@ -2565,6 +2565,7 @@ exprt string_handler::handle_string_partition(
       tag += "_" + elems[i]->type().to_string();
     }
     tuple_type.tag(tag);
+    set_python_aggregate_kind(tuple_type, "tuple");
 
     struct_exprt tuple_expr(tuple_type);
     tuple_expr.operands() = {a, b, c};

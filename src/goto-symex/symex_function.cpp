@@ -11,6 +11,7 @@
 #include <util/i2string.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
+#include <util/python_types.h>
 #include <util/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
@@ -816,18 +817,10 @@ bool goto_symext::is_python_gc_object(const symbolt *base) const
 
   // Only user-defined class instances get GC lifetime. Internal Python model
   // aggregates (tuples, dicts, Optional unions) manage their own
-  // representation/lifetime and must not have frame teardown skipped. Mirror
-  // the frontend's authoritative exclusion list (is_excluded_struct_tag in
-  // src/python-frontend/converter/converter_dunder.cpp); keep the two in sync.
-  const std::string tag = to_struct_type(bt).tag().as_string();
-  if (
-    tag.find("dict_") != std::string::npos ||
-    tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-    tag == "__python_dict__")
-    return false;
-
-  return true;
+  // representation/lifetime and must not have frame teardown skipped. The
+  // frontend stamps those aggregates with an explicit kind attribute at
+  // type-creation time; see util/python_types.h.
+  return !is_python_internal_aggregate(bt);
 }
 
 void goto_symext::pop_frame()

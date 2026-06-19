@@ -1399,6 +1399,7 @@ typet type_handler::build_optional_type(const typet &base_type)
 
   struct_typet optional_type;
   optional_type.tag("tag-Optional_" + base_type.to_string());
+  set_python_aggregate_kind(optional_type, "optional");
 
   // Add is_none field
   struct_typet::componentt is_none_field("is_none", "is_none", bool_type());
