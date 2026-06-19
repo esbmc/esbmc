@@ -438,9 +438,7 @@ TEST_CASE(
   REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
 }
 
-TEST_CASE(
-  "migrate preserves code_block end_location",
-  "[migrate][v4-cf]")
+TEST_CASE("migrate preserves code_block end_location", "[migrate][v4-cf]")
 {
   // W1 (esbmc#4715): code_block2t carries a non-reflected end_location (the
   // closing-brace location) so it survives the --irep2-bodies round-trip.
