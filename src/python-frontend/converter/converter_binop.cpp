@@ -554,7 +554,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
-      struct_side = gen_address_of(struct_side);
+    {
+      // V.3: take the struct's address in IREP2 — exact round-trip of the
+      // legacy gen_address_of (a plain address_of of the struct value).
+      expr2tc ss2;
+      migrate_expr(struct_side, ss2);
+      struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+    }
   }
 
   // Python reference-identity when one operand is a by-value class instance and
