@@ -438,6 +438,36 @@ TEST_CASE(
   REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
 }
 
+TEST_CASE("migrate preserves code_block end_location", "[migrate][v4-cf]")
+{
+  // W1 (esbmc#4715): code_block2t carries a non-reflected end_location (the
+  // closing-brace location) so it survives the --irep2-bodies round-trip.
+  // convert_block stamps it onto the destructor-unwind instructions at scope
+  // exit; without it those instructions are unlocated. Equality ignores it, so
+  // assert on it explicitly.
+  use_test_ns();
+  locationt loc, end_loc;
+  loc.set_file("contract.sol");
+  loc.set_line(3);
+  end_loc.set_file("contract.sol");
+  end_loc.set_line(9);
+
+  codet block("code");
+  block.statement("block");
+  block.location() = loc;
+  block.end_location(end_loc);
+
+  expr2tc m;
+  migrate_expr(block, m);
+  REQUIRE(is_code_block2t(m));
+  REQUIRE(to_code_block2t(m).end_location.get_line() == "9");
+
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_line() == "3");
+  REQUIRE(
+    static_cast<const locationt &>(back.end_location()).get_line() == "9");
+}
+
 TEST_CASE(
   "migrate round-trips sizeof(T) carrying the measured type",
   "[migrate][v4-cf]")

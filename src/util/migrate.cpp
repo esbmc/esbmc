@@ -2322,7 +2322,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         ops.push_back(o);
       }
     }
-    new_expr_ref = code_block2tc(ops, expr.location());
+    new_expr_ref = code_block2tc(
+      ops,
+      expr.location(),
+      static_cast<const locationt &>(expr.end_location()));
     return;
   }
 
@@ -4085,6 +4088,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       block.copy_to_operands(migrate_expr_back(op));
     if (ref2.location.is_not_nil())
       block.location() = ref2.location;
+    if (ref2.end_location.is_not_nil())
+      block.end_location(ref2.end_location);
     return block;
   }
   // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Reproduce the
