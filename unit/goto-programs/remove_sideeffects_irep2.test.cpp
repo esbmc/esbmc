@@ -103,8 +103,8 @@ TEST_CASE(
   // 1 + f(): the side effect is nested under an add, so the native
   // has_sideeffect scan must recurse into the operand to find it.
   type2tc int_t = migrate_type(int_type());
-  expr2tc call =
-    side_effect_function_call2tc(int_t, symbol_expr2tc(*f), std::vector<expr2tc>{});
+  expr2tc call = side_effect_function_call2tc(
+    int_t, symbol_expr2tc(*f), std::vector<expr2tc>{});
   expr2tc nested = add2tc(int_t, constant_int2tc(int_t, BigInt(1)), call);
 
   goto_programt dest;
@@ -140,6 +140,6 @@ TEST_CASE(
     locationt());
 
   REQUIRE(conv.has_sideeffect(assign));
-  REQUIRE(
-    conv.has_sideeffect(add2tc(int_t, constant_int2tc(int_t, BigInt(2)), assign)));
+  REQUIRE(conv.has_sideeffect(
+    add2tc(int_t, constant_int2tc(int_t, BigInt(2)), assign)));
 }
