@@ -3,10 +3,10 @@
  *
  * Models a typical network parser pattern: read bytes via recv() into a
  * fixed-size buffer, then use the returned length as an array index without
- * checking it against the buffer size. The recv() operational model fills
- * the buffer with non-deterministic bytes and returns a non-deterministic
- * length in [1, len]. When len == BUF_SIZE, a caller that indexes buf[n]
- * where n == len triggers an out-of-bounds access (off-by-one).
+ * checking it against the buffer size. The recv() operational model returns
+ * a non-deterministic length in [1, len]. When len == BUF_SIZE, a caller
+ * that indexes buf[n] where n == len triggers an out-of-bounds access
+ * (off-by-one).
  *
  * Expected: ESBMC reports array bounds violation.
  */

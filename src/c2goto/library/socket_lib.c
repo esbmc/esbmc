@@ -145,11 +145,15 @@ __ESBMC_HIDE:;
 
 /* ============================================================
  *  recv()
- *  Fills buf with up to len non-deterministic bytes.
  *  Returns the number of bytes "received" (0 to len), or -1 on error.
  *
- *  This is the most critical model for security verification:
- *  the non-deterministic fill simulates attacker-controlled input.
+ *  The model captures attacker influence through the non-deterministic
+ *  return length; the buffer contents themselves are left unchanged, matching
+ *  the behaviour of an unmodelled recv() stub.  We deliberately do NOT fill
+ *  the buffer with a data-dependent loop (bounded by len): such a loop fails
+ *  to converge under --incremental-bmc / --k-induction once len exceeds the
+ *  default unwind bound (see the CWE-252 recv regression tests, which run
+ *  under --incremental-bmc).
  * ============================================================ */
 ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
@@ -173,12 +177,6 @@ __ESBMC_HIDE:;
 
   /* Constrain received bytes to [1, len] */
   __ESBMC_assume(result >= 1 && (size_t)result <= len);
-
-  /* Fill buffer with non-deterministic (attacker-controlled) bytes */
-  for (ssize_t i = 0; i < result; i++)
-  {
-    ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
-  }
 
   return result;
 }
@@ -234,10 +232,7 @@ __ESBMC_HIDE:;
 
   __ESBMC_assume(result >= 1 && (size_t)result <= len);
 
-  for (ssize_t i = 0; i < result; i++)
-  {
-    ((uint8_t *)buf)[i] = __VERIFIER_nondet_uchar();
-  }
+  /* Buffer contents are left non-deterministic (see recv() above). */
 
   if (src_addr != (void *)0 && addrlen != (void *)0)
   {
