@@ -954,7 +954,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         a = mk_ite(op_nonneg, pos_result, sqrt_nan);
       }
       if (ir_ieee)
-        ir_ieee_api->store_nan_pred(a, mk_not(op_nonneg));
+      {
+        smt_astt op_nan = ir_ieee_api->get_nan_pred(operand);
+        smt_astt neg_pred = mk_not(op_nonneg);
+        ir_ieee_api->store_nan_pred(
+          a, op_nan ? mk_or(op_nan, neg_pred) : neg_pred);
+      }
     }
     else
     {
