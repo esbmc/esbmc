@@ -22,12 +22,13 @@ Usage:
   python3 ld_to_smv.py  program.ld  props.yaml  [--out program.smv]
 """
 
-import xml.etree.ElementTree as ET
-import yaml
 import argparse
 import re
 import sys
 from collections import defaultdict
+
+import defusedxml.ElementTree as XmlET
+import yaml
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +62,7 @@ def smv_init(iec):
 # ---------------------------------------------------------------------------
 class LDParser:
     def __init__(self, path):
-        tree = ET.parse(path)
+        tree = XmlET.parse(path)
         root = tree.getroot()
         self.inputs  = {}
         self.outputs = {}
@@ -392,9 +393,11 @@ class SMVGen:
 
     def _xlat(self, expr, latest):
         expr = expr.replace('&&', '&').replace('||', '|')
+
         def repl(m):
             v = m.group(0)
             return latest.get(v, v)
+
         return re.sub(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', repl, expr)
 
 
@@ -409,7 +412,7 @@ def main():
     args = ap.parse_args()
 
     parser = LDParser(args.ld)
-    with open(args.props) as f:
+    with open(args.props, encoding='utf-8') as f:
         data = yaml.safe_load(f)
     props = data.get('properties', [])
 
@@ -417,7 +420,7 @@ def main():
     smv = gen.generate()
 
     if args.out:
-        with open(args.out, 'w') as f:
+        with open(args.out, 'w', encoding='utf-8') as f:
             f.write(smv)
         print(f'[ld_to_smv] Written: {args.out}', file=sys.stderr)
     else:
