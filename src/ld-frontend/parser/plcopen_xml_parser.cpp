@@ -569,27 +569,25 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     if (net.name.empty())
     {
       pugi::xml_node action_node = body_node.parent().parent();
-      std::string action_name =
-        (std::string)action_node.name() == "action"
-          ? text_or_attr(action_node, "name", "name")
-          : "";
+      std::string action_name = (std::string)action_node.name() == "action"
+                                  ? text_or_attr(action_node, "name", "name")
+                                  : "";
       net.name = action_name.empty() ? "main" : action_name;
     }
     ast.networks.push_back(std::move(net));
   }
-  for (auto xpath_node : root.select_nodes(
-         "//pou/body/ladderDiagram | "
-         "//pou/actions/action/body/ladderDiagram"))
+  for (auto xpath_node :
+       root.select_nodes("//pou/body/ladderDiagram | "
+                         "//pou/actions/action/body/ladderDiagram"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
     if (net.name.empty())
     {
       pugi::xml_node action_node = body_node.parent().parent();
-      std::string action_name =
-        (std::string)action_node.name() == "action"
-          ? text_or_attr(action_node, "name", "name")
-          : "";
+      std::string action_name = (std::string)action_node.name() == "action"
+                                  ? text_or_attr(action_node, "name", "name")
+                                  : "";
       net.name = action_name.empty() ? "main" : action_name;
     }
     ast.networks.push_back(std::move(net));
