@@ -553,21 +553,45 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
-  // Parse networks (one per POU body)
-  for (auto xpath_node : root.select_nodes("//pou/body/LD"))
+  // Parse networks (one per POU body, plus one per SFC/transition action
+  // body). Beremiz and other vendor tools commonly place the rung-bearing
+  // <LD> network inside <pou><actions><action><body><LD>, not directly
+  // under <pou><body>, when the LD logic is invoked from an SFC step
+  // action rather than forming the POU's own top-level body. Both
+  // locations must be searched, or the action-nested rungs are silently
+  // skipped and the program verifies vacuously (no rung assignments,
+  // all variables at their zero-initialised default).
+  for (auto xpath_node :
+       root.select_nodes("//pou/body/LD | //pou/actions/action/body/LD"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
     if (net.name.empty())
-      net.name = "main";
+    {
+      pugi::xml_node action_node = body_node.parent().parent();
+      std::string action_name =
+        (std::string)action_node.name() == "action"
+          ? text_or_attr(action_node, "name", "name")
+          : "";
+      net.name = action_name.empty() ? "main" : action_name;
+    }
     ast.networks.push_back(std::move(net));
   }
-  for (auto xpath_node : root.select_nodes("//pou/body/ladderDiagram"))
+  for (auto xpath_node : root.select_nodes(
+         "//pou/body/ladderDiagram | "
+         "//pou/actions/action/body/ladderDiagram"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
     if (net.name.empty())
-      net.name = "main";
+    {
+      pugi::xml_node action_node = body_node.parent().parent();
+      std::string action_name =
+        (std::string)action_node.name() == "action"
+          ? text_or_attr(action_node, "name", "name")
+          : "";
+      net.name = action_name.empty() ? "main" : action_name;
+    }
     ast.networks.push_back(std::move(net));
   }
 
