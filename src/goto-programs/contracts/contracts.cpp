@@ -844,6 +844,25 @@ void code_contractst::enforce_contracts(
           if (comment == "contract::ensures" || comment == "contract::requires")
           {
             instructions_to_remove.insert(it);
+
+            // The GOTO pointer/arithmetic-safety pass emits auto-generated
+            // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
+            // clause expression, immediately preceding this ASSUME. They are
+            // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
+            // ensures clause they reference __ESBMC_return_value, which is
+            // unbound in the original body, yielding a spurious violation
+            // (#5043). The wrapper re-checks the clause with return_value
+            // properly bound, so drop the contiguous run of safety asserts
+            // belonging to this clause. Contract clauses precede the function
+            // body, so a real body assertion never sits directly before a
+            // clause ASSUME; walking back over asserts cannot reach body code.
+            for (auto p = it; p != renamed_body.instructions.begin();)
+            {
+              --p;
+              if (!p->is_assert())
+                break;
+              instructions_to_remove.insert(p);
+            }
           }
         }
       }
