@@ -1567,11 +1567,15 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
-        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow)
-        exprt overflow(">", bool_type());
-        overflow.copy_to_operands(abs_value, logical_len);
-        exprt converted = size_sub(logical_len, abs_value);
-        return if_exprt(overflow, gen_zero(size_type()), converted);
+        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow).
+        // (V.3: built in IREP2.)
+        const type2tc size_t2 = migrate_type(size_type());
+        expr2tc abs2, len2, converted2;
+        migrate_expr(abs_value, abs2);
+        migrate_expr(logical_len, len2);
+        migrate_expr(size_sub(logical_len, abs_value), converted2);
+        return migrate_expr_back(if2tc(
+          size_t2, greaterthan2tc(abs2, len2), gen_zero(size_t2), converted2));
       }
 
       exprt e = converter_.get_expr(bound);
@@ -1598,17 +1602,19 @@ exprt python_list::handle_range_slice(
     // Clamp bounds to [0, logical_len] to match Python semantics.
     if (!negative_step)
     {
-      // lower = max(0, min(lower, logical_len))
-      exprt lower_ge_len(">=", bool_type());
-      lower_ge_len.copy_to_operands(lower_expr, logical_len);
-      lower_expr = if_exprt(lower_ge_len, logical_len, lower_expr);
-      lower_expr.type() = size_type();
-
-      // upper = max(0, min(upper, logical_len))
-      exprt upper_ge_len(">=", bool_type());
-      upper_ge_len.copy_to_operands(upper_expr, logical_len);
-      upper_expr = if_exprt(upper_ge_len, logical_len, upper_expr);
-      upper_expr.type() = size_type();
+      // bound = (bound >= logical_len) ? logical_len : bound
+      // (V.3: built in IREP2.)
+      const type2tc size_t2 = migrate_type(size_type());
+      expr2tc len2;
+      migrate_expr(logical_len, len2);
+      auto clamp_to_len = [&](exprt &bound) {
+        expr2tc b2;
+        migrate_expr(bound, b2);
+        bound = migrate_expr_back(
+          if2tc(size_t2, greaterthanequal2tc(b2, len2), len2, b2));
+      };
+      clamp_to_len(lower_expr);
+      clamp_to_len(upper_expr);
     }
 
     // Calculate slice length
