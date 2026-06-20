@@ -3275,7 +3275,7 @@ exprt python_list::compare(
 
         if (lhs_n == rhs_n && lhs_n <= 64)
         {
-          exprt all_equal = gen_boolean(true);
+          expr2tc all_equal = gen_true_expr(); // V.3: accumulate in IREP2
           bool comparable = true;
 
           for (size_t i = 0; i < lhs_n; ++i)
@@ -3304,20 +3304,18 @@ exprt python_list::compare(
             exprt lhs_val = extract_pyobject_value(lhs_at, lhs_elem_type);
             exprt rhs_val = extract_pyobject_value(rhs_at, rhs_elem_type);
 
-            exprt eq_elem;
-            if (lhs_elem_type == rhs_elem_type && is_numeric(lhs_elem_type))
+            // Same-type numeric/bool compares directly; mixed numeric promotes
+            // both sides to double first. (V.3: built in IREP2.)
+            if (
+              lhs_elem_type == rhs_elem_type &&
+              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)))
             {
-              eq_elem = equality_exprt(lhs_val, rhs_val);
-            }
-            else if (lhs_elem_type == rhs_elem_type && is_bool(lhs_elem_type))
-            {
-              eq_elem = equality_exprt(lhs_val, rhs_val);
+              // direct compare
             }
             else if (is_numeric(lhs_elem_type) && is_numeric(rhs_elem_type))
             {
               lhs_val = build_typecast(lhs_val, double_type());
               rhs_val = build_typecast(rhs_val, double_type());
-              eq_elem = equality_exprt(lhs_val, rhs_val);
             }
             else
             {
@@ -3325,16 +3323,17 @@ exprt python_list::compare(
               break;
             }
 
-            exprt and_expr("and", bool_type());
-            and_expr.copy_to_operands(all_equal, eq_elem);
-            all_equal = and_expr;
+            expr2tc lhs_val2, rhs_val2;
+            migrate_expr(lhs_val, lhs_val2);
+            migrate_expr(rhs_val, rhs_val2);
+            all_equal = and2tc(all_equal, equality2tc(lhs_val2, rhs_val2));
           }
 
           if (comparable)
           {
             if (op == "NotEq")
-              return not_exprt(all_equal);
-            return all_equal;
+              return migrate_expr_back(not2tc(all_equal));
+            return migrate_expr_back(all_equal);
           }
         }
       }
