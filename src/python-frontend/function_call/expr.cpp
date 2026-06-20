@@ -3846,7 +3846,9 @@ exprt function_call_expr::handle_general_function_call()
             if (inferred_classes_from_fallback)
             {
               locationt location = converter_.get_location_from_decl(call_);
-              exprt zero_fallback = gen_zero(any_type());
+              // V.3: build the void* null fallback via the IREP2 factory.
+              exprt zero_fallback =
+                migrate_expr_back(gen_zero(migrate_type(any_type())));
               zero_fallback.location() = location;
               zero_fallback.location().user_provided(true);
               return zero_fallback;
@@ -4211,8 +4213,9 @@ exprt function_call_expr::handle_general_function_call()
     else
     {
       // Passing a void pointer to the "cls" argument
+      // (V.3: build the void* null via the IREP2 factory).
       typet t = pointer_typet(empty_typet());
-      call.arguments().push_back(gen_zero(t));
+      call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
       // All methods for the int class without parameters acts solely on the encapsulated integer value.
