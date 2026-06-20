@@ -1522,14 +1522,30 @@ exprt function_call_expr::handle_min_max(
           exprt elem =
             build_member(arg, components[i].get_name(), components[i].type());
 
-          // Create comparison: elem < result (for min) or elem > result (for max)
-          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-          condition.copy_to_operands(elem, result);
-
-          // result = (elem < result) ? elem : result
-          if_exprt update(condition, elem, result);
-          update.type() = components[i].type();
-          result = update;
+          // result = (elem < result) ? elem : result  (> for max).
+          // V.3: build the select in IREP2 when both branches share the
+          // result type; mixed-type tuple components keep the legacy builder
+          // (if2t asserts type-id equality).
+          const typet &ut = components[i].type();
+          if (elem.type() == ut && result.type() == ut)
+          {
+            const type2tc ut2 = migrate_type(ut);
+            expr2tc elem2, result2;
+            migrate_expr(elem, elem2);
+            migrate_expr(result, result2);
+            expr2tc cond = comparison_op == exprt::i_lt
+                             ? lessthan2tc(elem2, result2)
+                             : greaterthan2tc(elem2, result2);
+            result = migrate_expr_back(if2tc(ut2, cond, elem2, result2));
+          }
+          else
+          {
+            exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+            condition.copy_to_operands(elem, result);
+            if_exprt update(condition, elem, result);
+            update.type() = ut;
+            result = update;
+          }
         }
 
         return result;
@@ -1577,17 +1593,21 @@ exprt function_call_expr::handle_min_max(
       e = build_typecast(e, result_type);
 
   // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
-  exprt result = exprs[0];
+  // V.3: build the min/max selection chain in IREP2. All args are already
+  // promoted to result_type, so the if2t branch types agree.
+  const type2tc rt2 = migrate_type(result_type);
+  expr2tc result2;
+  migrate_expr(exprs[0], result2);
   for (size_t i = 1; i < exprs.size(); ++i)
   {
-    exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-    condition.copy_to_operands(exprs[i], result);
-    if_exprt update(condition, exprs[i], result);
-    update.type() = result_type;
-    result = update;
+    expr2tc e2;
+    migrate_expr(exprs[i], e2);
+    expr2tc cond = comparison_op == exprt::i_lt ? lessthan2tc(e2, result2)
+                                                : greaterthan2tc(e2, result2);
+    result2 = if2tc(rt2, cond, e2, result2);
   }
 
-  return result;
+  return migrate_expr_back(result2);
 }
 
 exprt function_call_expr::handle_print() const
