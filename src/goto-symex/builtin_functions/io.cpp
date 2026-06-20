@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/printf_formatter.h>
 #include <string>
@@ -22,74 +23,51 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   code_printf2t &new_rhs = to_code_printf2t(renamed_rhs);
 
-  if (new_rhs.bs_name.empty())
+  // Position of the format-string argument in `operands`, indexed by
+  // printf_kindt: printf takes it as arg 0, fprintf/dprintf/sprintf/
+  // vfprintf as arg 1, snprintf as arg 2.  Default-init to silence
+  // GCC's -Wmaybe-uninitialized (it can't see that the switch is total
+  // over the enum class).
+  size_t fmt_idx = 0;
+  switch (new_rhs.kind)
   {
-    log_error("No base_name for code_printf2t");
-    return;
+  case printf_kindt::PRINTF:
+  case printf_kindt::VPRINTF:
+    fmt_idx = 0;
+    break;
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+  case printf_kindt::SPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::ASPRINTF:
+  case printf_kindt::VASPRINTF:
+    fmt_idx = 1;
+    break;
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::VSNPRINTF:
+    fmt_idx = 2;
+    break;
   }
+  assert(new_rhs.operands.size() > fmt_idx && "Wrong printf-family signature");
 
-  const std::string &base_name = new_rhs.bs_name;
-
-  // get the format string base on the bs_name
   irep_idt fmt;
   size_t idx;
-  if (base_name == "printf")
+  const expr2tc &base_expr = get_base_object(new_rhs.operands[fmt_idx]);
+  const bool format_is_constant = is_constant_string2t(base_expr);
+  if (format_is_constant)
   {
-    // 1. printf: 1st argument
-    assert(new_rhs.operands.size() >= 1 && "Wrong printf signature");
-    const expr2tc &base_expr = get_base_object(new_rhs.operands[0]);
-    if (is_constant_string2t(base_expr))
-    {
-      fmt = to_constant_string2t(base_expr).value;
-      idx = 1;
-    }
-    else
-    {
-      // e.g.
-      // int x = 1;
-      // printf(x); // output ""
-      fmt = "";
-      idx = 0;
-    }
-  }
-  else if (
-    base_name == "fprintf" || base_name == "dprintf" ||
-    base_name == "sprintf" || base_name == "vfprintf")
-  {
-    // 2.fprintf, sprintf, dprintf: 2nd argument
-    assert(
-      new_rhs.operands.size() >= 2 &&
-      "Wrong fprintf/sprintf/dprintf/vfprintf signature");
-    const expr2tc &base_expr = get_base_object(new_rhs.operands[1]);
-    if (is_constant_string2t(base_expr))
-    {
-      fmt = to_constant_string2t(base_expr).value;
-      idx = 2;
-    }
-    else
-    {
-      fmt = "";
-      idx = 1;
-    }
-  }
-  else if (base_name == "snprintf")
-  {
-    // 3. snprintf: 3rd argument
-    assert(new_rhs.operands.size() >= 3 && "Wrong snprintf signature");
-    const expr2tc &base_expr = get_base_object(new_rhs.operands[2]);
-    if (is_constant_string2t(base_expr))
-    {
-      fmt = to_constant_string2t(base_expr).value;
-      idx = 3;
-    }
-    else
-    {
-      fmt = "";
-      idx = 2;
-    }
+    fmt = to_constant_string2t(base_expr).value;
+    idx = fmt_idx + 1;
   }
   else
-    abort();
+  {
+    // e.g.   int x = 1; printf(x); // output ""
+    // The format string is not known at compile time, so the output length
+    // cannot be bounded; the return value is handled as unbounded below.
+    fmt = "";
+    idx = fmt_idx;
+  }
 
   // Check format specifiers against original operands before renaming/conversion
   if (options.get_bool_option("printf-check"))
@@ -219,6 +197,17 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     }
   }
 
+  // For asprintf/vasprintf, save the char **strp argument (operand[0])
+  // before erasing the leading arguments so we can later model the side-effect
+  // on *strp. Without this, *strp keeps its uninitialized nondet value, causing
+  // value-set aliasing and spurious memsafety false alarms (GitHub #5139,
+  // #5140, #5141).
+  const bool is_allocating = new_rhs.kind == printf_kindt::ASPRINTF ||
+                             new_rhs.kind == printf_kindt::VASPRINTF;
+  expr2tc strp;
+  if (is_allocating && !new_rhs.operands.empty())
+    strp = new_rhs.operands[0];
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -272,8 +261,27 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     printf_formatter(fmt.as_string(), args);
     printf_formatter.as_string(); // populate min_outlen / max_outlen
 
-    // 4. do assign: constant when fully determined, bounded nondet otherwise
-    if (printf_formatter.min_outlen == printf_formatter.max_outlen)
+    // 4. do assign. The return value is the number of characters that would be
+    //    written. We can pin it to an exact constant only when the format
+    //    string is a compile-time constant AND every conversion was soundly
+    //    bounded; we can bound it to [min,max] when those hold but some
+    //    argument is nondet; otherwise there is no sound upper bound.
+    //
+    //    For asprintf/vasprintf specifically, the return value is -1 on
+    //    allocation failure and the output length on success. When the format
+    //    is not soundly bounded (e.g. a %s with a non-literal argument), we
+    //    cap the return at INT_MAX/2 (host int is 32-bit on all supported
+    //    targets). This prevents spurious signed-overflow alarms on subsequent
+    //    arithmetic such as `applet_len + used` in busybox (GitHub #5144)
+    //    while still catching real overflows: any genuine overflow in such
+    //    arithmetic requires used to exceed INT_MAX/2, which in turn demands a
+    //    >1 GB formatted string — infeasible in practice. Tightening further
+    //    would risk masking real overflows; see also GitHub #4976-#4979.
+    const bool sound_bound = format_is_constant && printf_formatter.bounded;
+    const bool is_allocating = new_rhs.kind == printf_kindt::ASPRINTF ||
+                               new_rhs.kind == printf_kindt::VASPRINTF;
+    if (
+      sound_bound && printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
       symex_assign(code_assign2tc(
         lhs,
@@ -287,16 +295,52 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
       replace_nondet(nondet);
-      expr2tc lo =
-        constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
-      expr2tc hi =
-        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-      assume(
-        and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      if (sound_bound)
+      {
+        expr2tc lo =
+          constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
+        expr2tc hi =
+          constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
+        assume(and2tc(
+          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      }
+      else if (is_allocating)
+      {
+        // -1 on allocation failure; cap success side at INT_MAX/2.
+        expr2tc lo = constant_int2tc(int_type2(), BigInt(-1));
+        expr2tc hi = constant_int2tc(int_type2(), BigInt(INT_MAX / 2));
+        assume(and2tc(
+          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      }
+      else
+        assume(
+          greaterthanequal2tc(nondet, constant_int2tc(int_type2(), BigInt(0))));
       symex_assign(code_assign2tc(lhs, nondet));
     }
+  }
+
+  // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
+  // The buffer size is modelled as 1 byte; exact sizing requires va_list
+  // recovery (G-C, not yet implemented). With --no-bounds-check this is
+  // sufficient to eliminate the false alarms while exact size analysis is
+  // deferred. Users running with --bounds-check should be aware of this
+  // limitation.
+  if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
+  {
+    // Derive char * from strp's declared type (char **) so the dereference
+    // width matches what the value-set analysis and SMT encoding expect.
+    type2tc char_ptr_type = to_pointer_type(strp->type).subtype;
+    expr2tc deref_strp = dereference2tc(char_ptr_type, strp);
+    expr2tc malloc_se = sideeffect2tc(
+      char_ptr_type,
+      expr2tc(),
+      constant_int2tc(size_type2(), BigInt(1)),
+      std::vector<expr2tc>(),
+      char_type2(),
+      sideeffect2t::allockind::malloc);
+    symex_assign(code_assign2tc(deref_strp, malloc_se));
   }
 
   target->output(
@@ -435,7 +479,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }

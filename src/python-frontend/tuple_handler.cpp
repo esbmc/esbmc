@@ -2,11 +2,43 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/function_call/expr.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/migrate.h>
+
+namespace
+{
+// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
+// preserving). Back-migrated for the legacy adjust/goto-convert seam.
+exprt build_symbol(const symbolt &sym)
+{
+  return migrate_expr_back(symbol_expr2tc(sym));
+}
+
+// member2t needs a struct/union/symbol source (tuple component access here is
+// always over a tuple struct). Restore the exact component type
+// (result.type() = t) so the #cpp_type attribute migrate_type drops is
+// preserved; fall back to legacy for any non-matching source.
+exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  if (
+    is_struct_type(base2->type) || is_union_type(base2->type) ||
+    is_symbol_type(base2->type))
+  {
+    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
+    result.type() = t;
+    return result;
+  }
+  return member_exprt(base, name, t);
+}
+} // namespace
 
 tuple_handler::tuple_handler(
   python_converter &converter,
@@ -58,12 +90,46 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   element_exprs.reserve(elts.size());
   element_types.reserve(elts.size());
 
+  locationt elem_loc = converter_.get_location_from_decl(element);
+
+  // A tuple element that is itself a function call (e.g. ``(g(a), g(a))``)
+  // comes back from get_expr as a code_function_callt (a code statement).
+  // Embedding that directly as a struct operand leaks a call statement into
+  // the GOTO RETURN and crashes on a null operand (issue #5036). Normalise it
+  // to a value expression and spill it into a temporary, exactly as the list
+  // literal path does in python_list::get() for issue #4699.
+  auto materialize_tuple_elem = [&](const exprt &elem) -> exprt {
+    if (elem.is_symbol())
+      return elem;
+
+    const exprt value_elem = to_value_expr(elem, converter_.name_space());
+
+    symbolt &tmp = converter_.create_tmp_symbol(
+      element, "$tuple_elem$", value_elem.type(), value_elem);
+    code_declt decl(build_symbol(tmp));
+    decl.location() = elem_loc;
+    converter_.add_instruction(decl);
+
+    code_assignt assign(build_symbol(tmp), value_elem);
+    assign.location() = elem_loc;
+    converter_.add_instruction(assign);
+    return build_symbol(tmp);
+  };
+
   // First pass: get all expressions to determine types
   for (size_t i = 0; i < elts.size(); i++)
   {
+    // Clear current_lhs so that constructor calls inside tuple elements
+    // (e.g. (A(), B())) create their own self temp variable instead of
+    // inheriting the outer assignment target as self.
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt elem_expr = converter_.get_expr(elts[i]);
-    element_exprs.push_back(elem_expr);
+    converter_.current_lhs = saved_lhs;
+
+    elem_expr = materialize_tuple_elem(elem_expr);
     element_types.push_back(elem_expr.type());
+    element_exprs.push_back(elem_expr);
   }
 
   // Create struct type for the tuple
@@ -90,6 +156,28 @@ bool tuple_handler::is_tuple_type(const typet &type) const
 
   const struct_typet &struct_type = to_struct_type(type);
   return struct_type.tag().as_string().find("tag-tuple") == 0;
+}
+
+exprt tuple_handler::get_tuple_element(
+  const exprt &array,
+  const struct_typet &tuple_type,
+  size_t idx) const
+{
+  const auto &components = tuple_type.components();
+
+  // An inline tuple literal `(a, b, c)` is a struct_exprt whose operands are
+  // already-materialised, addressable temp symbols (see get_tuple_expr). A
+  // member access into such a constant struct rvalue is not addressable, so a
+  // downstream address_of — e.g. the strcmp set up for a string element —
+  // reaches the unhandled constant_struct branch in smt_memspace.cpp and
+  // aborts (#5185). Return the operand directly; a named tuple variable is a
+  // symbol, for which a member access is a proper lvalue. This mirrors the
+  // identical handling in handle_tuple_membership.
+  if (array.id() == "struct" && array.operands().size() == components.size())
+    return array.operands()[idx];
+
+  return build_member(
+    array, components[idx].get_name(), components[idx].type());
 }
 
 exprt tuple_handler::handle_tuple_subscript(
@@ -181,8 +269,7 @@ exprt tuple_handler::handle_tuple_subscript(
 
     struct_exprt result(new_type);
     for (size_t k : kept)
-      result.copy_to_operands(
-        member_exprt(array, components[k].get_name(), components[k].type()));
+      result.copy_to_operands(get_tuple_element(array, tuple_type, k));
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
@@ -253,11 +340,10 @@ exprt tuple_handler::handle_tuple_subscript(
     converter_.add_instruction(bounds_assert);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
-    exprt chain = member_exprt(array, components[0].get_name(), first_type);
+    exprt chain = get_tuple_element(array, tuple_type, 0);
     for (size_t k = 1; k < n; ++k)
     {
-      exprt member =
-        member_exprt(array, components[k].get_name(), components[k].type());
+      exprt member = get_tuple_element(array, tuple_type, k);
       exprt cond =
         binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
       if_exprt sel(cond, member, chain);
@@ -287,11 +373,9 @@ exprt tuple_handler::handle_tuple_subscript(
       "Tuple index out of range (size: " + std::to_string(tuple_size) + ")");
   }
 
-  // Create member access expression: t[0] -> t.element_0
-  std::string member_name = "element_" + integer2string(index_val);
-  const struct_typet::componentt &comp = tuple_type.components()[idx];
-
-  exprt result = member_exprt(array, member_name, comp.type());
+  // Create member access expression: t[0] -> t.element_0 (or, for an inline
+  // tuple literal, the addressable operand symbol — see get_tuple_element).
+  exprt result = get_tuple_element(array, tuple_type, idx);
 
   if (element.contains("lineno"))
   {
@@ -332,7 +416,7 @@ exprt tuple_handler::prepare_rhs_for_unpacking(
 
     symbolt *added_temp =
       converter_.symbol_table().move_symbol_to_context(temp_symbol);
-    exprt temp_var = symbol_expr(*added_temp);
+    exprt temp_var = build_symbol(*added_temp);
 
     if (rhs.is_function_call())
     {
@@ -380,11 +464,34 @@ void tuple_handler::handle_tuple_unpacking(
   // Create assignments: x = temp.element_0, y = temp.element_1, ...
   for (size_t i = 0; i < targets.size(); i++)
   {
-    if (targets[i]["_type"] != "Name")
+    const std::string tgt_type = targets[i]["_type"].get<std::string>();
+
+    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. Resolve the
+    // element's (possibly symbol-referenced) type to a concrete struct, build
+    // the member access temp.element_i, and recurse so the sub-pattern is
+    // unpacked element-wise.
+    if (tgt_type == "Tuple" || tgt_type == "List")
+    {
+      const typet resolved =
+        converter_.name_space().follow(tuple_type.components()[i].type());
+      // Guard before recursing: unpacking a non-tuple element into a nested
+      // pattern (e.g. `(a, b), c = (5, 3)`) is a TypeError in Python. Reject it
+      // explicitly so the recursive to_struct_type() never casts a non-struct.
+      if (!is_tuple_type(resolved))
+      {
+        throw std::runtime_error(
+          "Cannot unpack non-tuple element into nested target");
+      }
+      std::string member_name = "element_" + std::to_string(i);
+      exprt nested_rhs = build_member(rhs, member_name, resolved);
+      handle_tuple_unpacking(ast_node, targets[i], nested_rhs, target_block);
+      continue;
+    }
+
+    if (tgt_type != "Name")
     {
       throw std::runtime_error(
-        "Tuple unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
+        "Tuple unpacking only supports simple names, not " + tgt_type);
     }
 
     std::string var_name = targets[i]["id"].get<std::string>();
@@ -412,11 +519,11 @@ void tuple_handler::handle_tuple_unpacking(
 
     // Create member access: temp.element_i
     std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(
-      rhs, member_name, tuple_type.components()[i].type());
+    exprt member_access =
+      build_member(rhs, member_name, tuple_type.components()[i].type());
 
     // Create assignment
-    code_assignt assign(symbol_expr(*var_symbol), member_access);
+    code_assignt assign(build_symbol(*var_symbol), member_access);
     assign.location() = converter_.get_location_from_decl(ast_node);
     target_block.copy_to_operands(assign);
   }
@@ -451,6 +558,18 @@ typet tuple_handler::get_tuple_type_from_annotation(
       element_types.push_back(elem_type);
     }
   }
+  else
+  {
+    // Single element type: tuple[int]. The slice is the lone element node
+    // (a bare Name or nested subscript), not an elts list. Without this the
+    // tuple would get zero components — the opaque struct the callers of this
+    // function are specifically avoiding.
+    if (slice.contains("id") && slice["id"].is_string())
+      element_types.push_back(
+        type_handler_.get_typet(slice["id"].get<std::string>()));
+    else
+      element_types.push_back(type_handler_.get_typet(slice));
+  }
 
   return create_tuple_struct_type(element_types);
 }
@@ -458,7 +577,8 @@ typet tuple_handler::get_tuple_type_from_annotation(
 exprt tuple_handler::handle_tuple_membership(
   const exprt &lhs,
   const exprt &rhs,
-  bool invert) const
+  bool invert,
+  const nlohmann::json &element)
 {
   assert(rhs.type().is_struct());
   const struct_typet &tuple_type = to_struct_type(rhs.type());
@@ -481,14 +601,55 @@ exprt tuple_handler::handle_tuple_membership(
       return false_exprt();
   }
 
-  // Build OR chain: lhs == tuple.element_0 || lhs == tuple.element_1 || ...
+  // Python's `x in (a, b, c)` is element-wise equality: x == a or x == b or ...
+  // Strings are compared by content (strcmp), not by pointer/array identity, so
+  // each string element needs handle_string_comparison rather than equality_exprt.
+  const bool lhs_is_string = lhs.type().is_array() || lhs.type().is_pointer();
+
+  // An inline tuple literal `(a, b, c)` is a struct_exprt whose operands are
+  // already-materialised, addressable element symbols. A member access into
+  // such a constant struct is not addressable, so taking the base address for
+  // strcmp would crash; use the operand directly. A named tuple variable is a
+  // symbol, for which a member access is a proper lvalue.
+  const bool rhs_is_struct_literal =
+    rhs.id() == "struct" && rhs.operands().size() == components.size();
+
   exprt result;
   for (size_t i = 0; i < components.size(); i++)
   {
     std::string member_name = "element_" + std::to_string(i);
-    member_exprt member_access(rhs, member_name, components[i].type());
+    exprt member_access =
+      rhs_is_struct_literal
+        ? rhs.operands()[i]
+        : build_member(rhs, member_name, components[i].type());
 
-    exprt equality = equality_exprt(lhs, member_access);
+    const bool comp_is_string =
+      components[i].type().is_array() || components[i].type().is_pointer();
+
+    exprt equality;
+    if (lhs_is_string && comp_is_string)
+    {
+      // String content equality via the shared comparison machinery, which
+      // either folds to a boolean or sets up a strcmp(...) == 0 expression
+      // (signalled by a nil return — assemble it like the binop caller does).
+      exprt l = lhs;
+      exprt r = member_access;
+      equality = converter_.handle_string_comparison("Eq", l, r, element);
+      if (equality.is_nil())
+      {
+        equality = exprt("=", bool_type());
+        equality.copy_to_operands(l, r);
+      }
+    }
+    else if (lhs_is_string != comp_is_string)
+    {
+      // Cross-type: a string is never == a non-string in Python.
+      equality = false_exprt();
+    }
+    else
+    {
+      equality = equality_exprt(lhs, member_access);
+    }
 
     if (i == 0)
       result = equality;

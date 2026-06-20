@@ -39,8 +39,8 @@ std::string const right_conf_file =
 
 void check_option(
   boost::program_options::option option,
-  std::string key,
-  std::string value)
+  const std::string &key,
+  const std::string &value)
 {
   INFO("key: " << key << " value: " << value);
   REQUIRE(option.string_key == key);

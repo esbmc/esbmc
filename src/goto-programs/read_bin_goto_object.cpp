@@ -71,7 +71,7 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if (!symbol.is_type && symbol.type.is_code())
+    if (!symbol.is_type && symbol.get_type().is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
@@ -79,8 +79,9 @@ bool read_bin_goto_object(
       auto it = goto_functions.function_map.find(symbol.id);
       if (it == goto_functions.function_map.end())
         goto_functions.function_map.emplace(symbol.id, goto_functiont());
-      goto_functions.function_map.at(symbol.id).type =
-        to_code_type(symbol.type);
+      goto_functiont &f = goto_functions.function_map.at(symbol.id);
+      f.type = migrate_symbol_type(symbol);
+      f.exception_spec = exception_specificationt::from_type(symbol.get_type());
     }
 
     // Add functions only from the list if there is a whitelist
@@ -107,7 +108,7 @@ bool read_bin_goto_object(
   for (unsigned i = 0; i < count; i++)
   {
     irept t;
-    dstring fname = irepconverter.read_string(in);
+    irep_idt fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
     auto it = goto_functions.function_map.find(fname);
     if (it == goto_functions.function_map.end())

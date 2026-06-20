@@ -1725,7 +1725,9 @@ std::string c_expr2stringt::convert_code_decl(const codet &src, unsigned indent)
     else if (symbol->is_extern)
       dest += "extern ";
 
-    if (symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
+    if (
+      symbol->get_type().is_code() &&
+      to_code_type(symbol->get_type()).get_inlined())
       dest += "inline ";
   }
 
@@ -2193,8 +2195,11 @@ c_expr2stringt::convert_extractbit(const exprt &src, unsigned precedence)
 
 std::string c_expr2stringt::convert_sizeof(const exprt &src, unsigned)
 {
+  // The measured type T rides as the type of the first (type_exprt) operand;
+  // a second operand, when present, carries the byte-size value (#5337).
   std::string dest = "sizeof(";
-  dest += convert(static_cast<const typet &>(src.c_sizeof_type()));
+  if (!src.operands().empty())
+    dest += convert(src.op0().type());
   dest += ')';
 
   return dest;

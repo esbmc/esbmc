@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc
+^ERROR: __ESBMC_get_object_size: cannot determine the size of a non-array object$

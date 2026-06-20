@@ -10,6 +10,7 @@
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
@@ -192,7 +193,7 @@ void solidity_convertert::get_default_symbol(
   symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
-  symbol.type = std::move(type);
+  symbol.set_type(std::move(type));
   symbol.name = name;
   symbol.id = id;
 }
@@ -465,14 +466,25 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &ast_node)
 
 void solidity_convertert::get_size_of_expr(const typet &t, exprt &size_of_expr)
 {
-  size_of_expr = exprt("sizeof", size_type());
+  // Emit a `sizeof` node carrying the measured type as the type of its first
+  // operand (a type_exprt) and the byte size as a second operand, mirroring the
+  // C frontend; the type lets get_alloc_type recover the allocated type and the
+  // value gives a sound, fully-evaluated size (esbmc/esbmc#5337).
   typet elem_type = t;
   if (elem_type.is_struct())
   {
     struct_union_typet st = to_struct_union_type(elem_type);
     elem_type = symbol_typet(prefix + st.tag().as_string());
   }
-  size_of_expr.set("#c_sizeof_type", elem_type);
+  exprt value = c_sizeof(elem_type, ns);
+  if (value.is_nil())
+  {
+    log_error("sizeof: type has no size, {}", elem_type.name());
+    abort();
+  }
+  size_of_expr = exprt("sizeof", size_type());
+  size_of_expr.copy_to_operands(type_exprt(elem_type));
+  size_of_expr.copy_to_operands(value);
 }
 
 // check if the abi.encodedSignature is the same
@@ -666,7 +678,7 @@ void solidity_convertert::get_aux_array(
   std::string debug_modulename =
     get_modulename_from_path(loc.file().as_string());
 
-  assert(!new_src_expr.type().get("#sol_array_size").empty());
+  assert(has_sol_array_size(new_src_expr.type()));
   typet t = new_src_expr.type();
 
   symbolt sym;
@@ -676,7 +688,7 @@ void solidity_convertert::get_aux_array(
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
-  added_symbol.value = new_src_expr;
+  added_symbol.set_value(new_src_expr);
   new_expr = symbol_expr(added_symbol);
 }
 
@@ -685,10 +697,10 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
   typet rt = rhs.type();
 
   unsigned int arr_size = 0;
-  if (!rt.get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.get("#sol_array_size").as_string());
-  else if (rt.has_subtype() && !rt.subtype().get("#sol_array_size").empty())
-    arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
+  if (has_sol_array_size(rt))
+    arr_size = std::stoi(get_sol_array_size(rt));
+  else if (rt.has_subtype() && has_sol_array_size(rt.subtype()))
+    arr_size = std::stoi(get_sol_array_size(rt.subtype()));
   else
   {
     // arr_size = _ESBMC_array_length(rhs);
@@ -795,7 +807,7 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   aux_sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(aux_sym);
-  added_sym.value = val;
+  added_sym.set_value(val);
 
   code_declt decl(symbol_expr(added_sym));
   decl.operands().push_back(val);

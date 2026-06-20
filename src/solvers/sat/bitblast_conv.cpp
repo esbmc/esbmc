@@ -5,7 +5,7 @@ bitblast_convt::bitblast_convt(
   bool int_encoding,
   const namespacet &_ns,
   sat_iface *_sat_api)
-  : smt_convt(int_encoding, _ns), sat_api(_sat_api)
+  : smt_solver_baset(int_encoding, _ns), sat_api(_sat_api)
 {
 }
 
@@ -316,6 +316,7 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
     abort();
   }
 
+  va_end(ap);
   return s;
 }
 
@@ -467,7 +468,7 @@ expr2tc bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   uint64_t accuml = 0;
   for (unsigned int i = 0; i < sz; i++)
   {
-    uint64_t mask = 1 << i;
+    uint64_t mask = UINT64_C(1) << i;
     tvt t = sat_api->l_get(mast->bv[i]);
     if (t.is_true())
     {
@@ -500,7 +501,7 @@ bool bitblast_convt::process_clause(const bvt &bv, bvt &dest)
 
   dest.reserve(bv.size());
 
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); ++it)
   {
     literalt l = *it;
 
@@ -527,7 +528,7 @@ void bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
 
   dest.reserve(bv.size());
 
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); ++it)
   {
     if (s.insert(*it).second)
       dest.push_back(*it);

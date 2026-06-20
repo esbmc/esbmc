@@ -1,0 +1,4 @@
+CORE
+main.c
+--interval-analysis
+\A(?![\s\S]*fails to convert)[\s\S]*VERIFICATION SUCCESSFUL[\s\S]*\Z

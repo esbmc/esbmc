@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
@@ -22,7 +22,7 @@ jobs:
         run: cd scripts/build-info && pipenv run python build-info.py "${{ github.workspace }}/info-out"
 
       - name: Upload info artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esbmc-info-manual
           path: info-out/esbmc.info

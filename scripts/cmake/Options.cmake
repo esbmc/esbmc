@@ -49,6 +49,7 @@ option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSION)" OFF)
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default: OFF)" OFF)
+option(ENABLE_MIMALLOC "Link the mimalloc allocator into esbmc (default: OFF). Speeds up the allocation-heavy symex path (~15% on high-unwind runs) but regresses some SV-COMP benchmarks. Found via find_package, or downloaded when DOWNLOAD_DEPENDENCIES is ON." OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
 option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (default: OFF)" OFF)
@@ -68,8 +69,8 @@ if(WIN32)
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
 else()
-  set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
-  set(DEFAULT_LLVM_NAME "clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04")
+  set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v8.3/clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
+  set(DEFAULT_LLVM_NAME "clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04")
 
   set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
@@ -111,7 +112,7 @@ set(ESBMC_CHERI_PURECAP_SYSROOT "" CACHE STRING "Path containing the mips64-unkn
 set(ESBMC_BUNDLE_LIBC_32BIT "${ENABLE_BUNDLE_LIBC_32BIT}" CACHE BOOL "Enable 32-bit libc bundling" FORCE)
 
 # Demand C++23
-set (CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

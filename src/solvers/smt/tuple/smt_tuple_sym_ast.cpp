@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
@@ -57,8 +57,10 @@
  * slower approach works.
  */
 
-smt_astt
-tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt tuple_sym_smt_ast::ite(
+  smt_solver_baset *ctx,
+  smt_astt cond,
+  smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
@@ -72,10 +74,11 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   expr2tc result = symbol2tc(sort->get_tuple_type(), name);
   smt_astt result_sym = ctx->convert_ast(result);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
   // Iterate through each field and encode an ite.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -89,7 +92,7 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt tuple_sym_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -97,13 +100,14 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   tuple_sym_smt_astt ta = this;
   tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
-  smt_convt::ast_vec eqs;
-  eqs.reserve(data.members.size());
+  smt_solver_baset::ast_vec eqs;
+  eqs.reserve(members.size());
 
   // Iterate through each field and encode an equality.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
@@ -115,25 +119,26 @@ smt_astt tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 smt_astt tuple_sym_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr [[maybe_unused]] /*ndebug*/) const
+  const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
-  smt_convt::ast_vec eqs;
+  smt_solver_baset::ast_vec eqs;
   assert(
     is_nil_expr(idx_expr) &&
     "Can't apply non-constant index update to "
     "structure");
 
   // XXX: future work, accept member_name exprs?
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members, deciding what to do with them.
-  for (unsigned int j = 0; j < data.members.size(); j++)
+  for (unsigned int j = 0; j < members.size(); j++)
   {
     if (j == idx)
     {
@@ -158,28 +163,32 @@ smt_astt tuple_sym_smt_ast::update(
 }
 
 smt_astt tuple_sym_smt_ast::select(
-  smt_convt *ctx [[maybe_unused]],
+  smt_solver_baset *ctx [[maybe_unused]],
   const expr2tc &idx [[maybe_unused]]) const
 {
   log_error("Select operation applied to tuple");
   abort();
 }
 
-smt_astt tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt
+tuple_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
   // have to open up the (tuple symbol) a, tack on the field name to the end
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
   // a new tuple_sym_smt_ast containing its name.
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  const std::vector<irep_idt> &member_names =
+    struct_union_member_names(sort->get_tuple_type());
 
-  assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
-  const std::string &fieldname = data.member_names[idx].as_string();
+  assert(idx < members.size() && "Out-of-bounds tuple element accessed");
+  const std::string &fieldname = member_names[idx].as_string();
   std::string sym_name = name + fieldname;
 
   // Cope with recursive structs.
-  const type2tc &restype = data.members[idx];
+  const type2tc &restype = members[idx];
   smt_sortt s = ctx->convert_sort(restype);
 
   if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))

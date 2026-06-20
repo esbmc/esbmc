@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --incremental-bmc
+--no-slice --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$

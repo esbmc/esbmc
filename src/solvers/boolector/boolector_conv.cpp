@@ -9,7 +9,7 @@ void error_handler(const char *msg)
   abort();
 }
 
-smt_convt *create_new_boolector_solver(
+smt_solver_baset *create_new_boolector_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -23,7 +23,7 @@ smt_convt *create_new_boolector_solver(
 }
 
 boolector_convt::boolector_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
+  : smt_solver_baset(ns, options), array_iface(true, true), fp_convt(this)
 
 {
   if (options.get_bool_option("int-encoding"))
@@ -48,7 +48,7 @@ boolector_convt::~boolector_convt()
 
 void boolector_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   boolector_push(btor, 1);
 }
 
@@ -58,10 +58,10 @@ void boolector_convt::pop_ctx()
   symtab_levels.erase(ctx_level);
 
   boolector_pop(btor, 1);
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt boolector_convt::dec_solve()
+smt_resultt boolector_convt::dec_solve()
 {
   pre_solve();
 
@@ -230,32 +230,6 @@ smt_astt boolector_convt::mk_bvnot(smt_astt a)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   return new_ast(
     boolector_not(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), a->sort);
-}
-
-smt_astt boolector_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    boolector_nor(
-      btor,
-      to_solver_smt_ast<btor_smt_ast>(a)->a,
-      to_solver_smt_ast<btor_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt boolector_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    boolector_nand(
-      btor,
-      to_solver_smt_ast<btor_smt_ast>(a)->a,
-      to_solver_smt_ast<btor_smt_ast>(b)->a),
-    a->sort);
 }
 
 smt_astt boolector_convt::mk_bvxor(smt_astt a, smt_astt b)
@@ -575,6 +549,51 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
+smt_astt boolector_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function. boolector_uf mints a fresh function on every
+  // call, so it is cached and reused across applications; sharing one
+  // declaration is what makes the solver enforce congruence.
+  auto it = uf_decls.find(name);
+  BoolectorNode *fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<BoolectorSort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<BoolectorSort>(arg->sort)->s);
+
+    BoolectorSort fun_sort = boolector_fun_sort(
+      btor,
+      domain.data(),
+      domain.size(),
+      to_solver_smt_sort<BoolectorSort>(rangesort)->s);
+    fun = boolector_uf(btor, fun_sort, name.c_str());
+    uf_decls.emplace(name, fun);
+  }
+
+  // boolector_apply takes the argument nodes (without the function) plus the
+  // function node separately.
+  std::vector<BoolectorNode *> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<btor_smt_ast>(arg)->a);
+
+  return new_ast(
+    boolector_apply(btor, apply_args.data(), apply_args.size(), fun),
+    rangesort);
+}
+
 smt_astt
 boolector_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
@@ -702,16 +721,14 @@ expr2tc boolector_convt::get_array_elem(
 smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
 
-  const btor_smt_ast *side1 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_1));
-  const btor_smt_ast *side2 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_2));
+  const btor_smt_ast *side1 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op1));
+  const btor_smt_ast *side2 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op2));
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed =
-    (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
+  bool is_signed = (is_signedbv_type(op1) || is_signedbv_type(op2));
 
   BoolectorNode *res;
   if (is_add2t(overflow.operand))
@@ -753,7 +770,7 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
   }
   else
   {
-    return smt_convt::overflow_arith(expr);
+    return smt_solver_baset::overflow_arith(expr);
   }
 
   const smt_sort *s = boolean_sort;

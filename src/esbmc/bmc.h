@@ -11,8 +11,7 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/options.h>
 #include <util/algorithms.h>
@@ -37,9 +36,9 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
-  virtual smt_convt::resultt start_bmc();
-  virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
-  virtual ~bmct() = default;
+  virtual smt_resultt start_bmc();
+  virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
+  virtual ~bmct();
 
 protected:
   const contextt &context;
@@ -52,12 +51,24 @@ protected:
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
-  virtual smt_convt::resultt
+  virtual smt_resultt
   run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
+
+  // Re-encode `local_eq` in vacuity mode against a fresh solver and check
+  // whether the path to each kept claim is reachable. UNSAT means the
+  // discharge was vacuous: the path assumptions alone are unsatisfiable.
+  smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
+
+  // Set by the vacuity probe when at least one kept claim discharged
+  // vacuously; consulted by report_result to map the final verdict from
+  // SUCCESSFUL to UNKNOWN. Atomic because multi_property_check writes from
+  // parallel job threads.
+  std::atomic<bool> vacuity_detected{false};
 
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
+  virtual void report_unknown();
   virtual void keep_alive_function() const;
 
   virtual void
@@ -69,19 +80,18 @@ protected:
 
   virtual void show_vcc(std::ostream &out, const symex_target_equationt &eq);
 
-  virtual void
-  report_trace(smt_convt::resultt &res, const symex_target_equationt &eq);
+  virtual void report_trace(smt_resultt &res, const symex_target_equationt &eq);
 
-  virtual void report_result(smt_convt::resultt &res);
+  virtual void report_result(smt_resultt &res);
 
   virtual void
   bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
 
-  smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
+  smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
   int ltl_run_thread(symex_target_equationt &equation) const;
 
-  smt_convt::resultt multi_property_check(
+  smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
     smt_convt &runtime_solver);
@@ -124,7 +134,7 @@ protected:
   /// each witness's solver model is still live; this function only handles
   /// the human-readable counterexample output.
   virtual void report_multi_property_trace(
-    const smt_convt::resultt &res,
+    const smt_resultt &res,
     const std::vector<witness_recordt> &witnesses,
     enumeration_stop_reasont stop_reason,
     const std::string &msg);
@@ -136,6 +146,7 @@ protected:
     const bool &is_cond_cov,
     const bool &is_branch_cov,
     const bool &is_branch_func_cov,
+    const bool &is_k_path_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
 

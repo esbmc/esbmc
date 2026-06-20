@@ -231,7 +231,7 @@ frame_enforcert::collect_global_variables(const contextt &context)
 
   context.foreach_operand([&globals](const symbolt &s) {
     // Skip functions, types, and non-lvalue symbols
-    if (s.type.is_code() || s.is_type || !s.lvalue)
+    if (s.get_type().is_code() || s.is_type || !s.lvalue)
       return;
 
     // Only process static lifetime variables (globals and static locals)
@@ -244,7 +244,7 @@ frame_enforcert::collect_global_variables(const contextt &context)
       return;
 
     // Build symbol expression
-    type2tc global_type = migrate_type(s.type);
+    type2tc global_type = migrate_symbol_type(s);
     expr2tc sym_expr = symbol2tc(global_type, s.id);
 
     // Skip pointer types (consistent with loop frame rule behavior)
@@ -273,7 +273,7 @@ void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
     if (!is_sideeffect2t(assign.source))
       continue;
     const sideeffect2t &effect = to_sideeffect2t(assign.source);
-    if (effect.kind != sideeffect2t::old_snapshot)
+    if (effect.kind != sideeffect2t::allockind::old_snapshot)
       continue;
 
     // The operand of old_snapshot is the original variable
@@ -359,7 +359,7 @@ expr2tc frame_enforcert::create_snapshot_symbol(
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.type = migrate_type_back(original->type);
+  set_symbol_type(snapshot_symbol, original->type);
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;

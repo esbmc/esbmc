@@ -9,7 +9,6 @@
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
@@ -17,8 +16,8 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-object_numberingt value_sett::object_numbering;
-object_number_numberingt value_sett::obj_numbering_refset;
+thread_local object_numberingt value_sett::object_numbering;
+thread_local object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(std::ostream &out) const
 {
@@ -268,9 +267,8 @@ void value_sett::get_value_set_rec(
       /* We have a member of a union. The value-set of it is the same as the
        * union of the value-sets of each member. */
       assert(is_union_type(memb.source_value->type));
-      auto *u =
-        static_cast<const struct_union_data *>(memb.source_value->type.get());
-      for (const irep_idt &name : u->member_names)
+      for (const irep_idt &name :
+           struct_union_member_names(memb.source_value->type))
         get_value_set_rec(
           memb.source_value,
           dest,
@@ -402,9 +400,9 @@ void value_sett::get_value_set_rec(
     const sideeffect2t &side = to_sideeffect2t(expr);
     switch (side.kind)
     {
-    case sideeffect2t::alloca:
-    case sideeffect2t::realloc:
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::alloca:
+    case sideeffect2t::allockind::realloc:
+    case sideeffect2t::allockind::malloc:
     {
       assert(suffix == "");
       const type2tc &dynamic_type = side.alloctype;
@@ -416,8 +414,8 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new:
+    case sideeffect2t::allockind::cpp_new_arr:
     {
       assert(suffix == "");
       assert(is_pointer_type(side.type));
@@ -432,7 +430,7 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       // Introduction of nondeterminism does not introduce new pointer vars
       return;
 
@@ -558,9 +556,7 @@ void value_sett::get_value_set_rec(
     return;
   }
 
-  if (
-    is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
-    is_bitnand2t(expr) || is_bitnor2t(expr))
+  if (is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
     get_value_set_rec(*expr->get_sub_expr(0), dest, suffix, original_type);
@@ -578,10 +574,6 @@ void value_sett::get_value_set_rec(
     if (sym.thename == "NULL" && is_pointer_type(expr))
     {
       const pointer_type2t &ptr_ref = to_pointer_type(expr->type);
-      typet subtype = migrate_type_back(ptr_ref.subtype);
-      if (subtype.id() == "symbol")
-        subtype = ns.follow(subtype);
-
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
       insert(dest, tmp, BigInt(0));
       return;
@@ -859,16 +851,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if (is_symbol2t(expr))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
-      assert(sym);
-      const irept &a = sym->type.find("alignment");
-      if (a.is_not_nil())
+      if (sym != nullptr)
       {
-        assert(a.is_constant());
-        irep_idt v = static_cast<const exprt &>(a).value();
-        BigInt V = binary2integer(v.as_string(), false);
-        assert(V.is_positive());
-        assert(V <= UINT_MAX);
-        obj.offset_alignment = V.to_uint64();
+        const irept &a = sym->get_type().find("alignment");
+        if (a.is_not_nil())
+        {
+          assert(a.is_constant());
+          irep_idt v = static_cast<const exprt &>(a).value();
+          BigInt V = binary2integer(v.as_string(), false);
+          assert(V.is_positive());
+          assert(V <= UINT_MAX);
+          obj.offset_alignment = V.to_uint64();
+        }
       }
     }
 
@@ -1093,8 +1087,8 @@ void value_sett::assign(
 
     // Build a sym specific to this type. Give l1 number to guard against
     // recursively entering this code path
-    expr2tc xchg_sym =
-      symbol2tc(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+    expr2tc xchg_sym = symbol2tc(
+      lhs->type, xchg_name, symbol_renaming_level::level1, xchg_num++, 0, 0, 0);
 
     assign(xchg_sym, ifref.true_value, false);
     assign(xchg_sym, ifref.false_value, true);
@@ -1104,67 +1098,70 @@ void value_sett::assign(
     return;
   }
 
-  // Must have concrete type.
-  assert(!is_symbol_type(lhs));
+  // Symbol (template) types have no concrete memory layout; skip silently.
+  if (is_symbol_type(lhs))
+    return;
   const type2tc &lhs_type = lhs->type;
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    if (lhs_type->type_id == rhs->type->type_id)
+    /* Types do not agree (different kind, or same kind but structurally
+     * incompatible). The latter happens when a single translation unit ends
+     * up with two declarations of the same struct tag that differ in members
+     * - e.g. glibc's `struct tm` (with `__tm_gmtoff`/`__tm_zone`) versus
+     * ESBMC's operational `time.h` (`tm_gmtoff`/`tm_zone`) - or for
+     * dereferences like:
+     *
+     *   struct S { int x; } a;
+     *   int b;
+     *   a = *(struct S *)&b;
+     *
+     * which build_reference_to() reports as a dereference_failure. For
+     * value-set tracking we simply drop the assignment.
+     */
+    if (lhs_type->type_id != rhs->type->type_id)
+      return;
+    const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
+    if (
+      rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
+      !is_subclass_of(lhs_type, rhs->type, ns))
+      return;
+
+    // Assign the values of all members of the rhs thing to the lhs. It's
+    // sort-of-valid for the right hand side to be a superclass of the subclass,
+    // in which case there are some fields not common between them, so we
+    // iterate over the superclasses members.
+    const std::vector<type2tc> &members = struct_union_members(rhs->type);
+    const std::vector<irep_idt> &member_names =
+      struct_union_member_names(rhs->type);
+
+    for (size_t i = 0; i < members.size(); i++)
     {
-      /* either both union or both struct */
-      assert(lhs_type->type_id == rhs->type->type_id);
+      const type2tc &subtype = members[i];
+      const irep_idt &name = member_names[i];
 
-      // Assign the values of all members of the rhs thing to the lhs. It's
-      // sort-of-valid for the right hand side to be a superclass of the subclass,
-      // in which case there are some fields not common between them, so we
-      // iterate over the superclasses members.
-      auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
-      const std::vector<type2tc> &members = rhs_data->members;
-      const std::vector<irep_idt> &member_names = rhs_data->member_names;
+      // ignore methods
+      if (is_code_type(subtype))
+        continue;
 
-      for (size_t i = 0; i < members.size(); i++)
+      expr2tc lhs_member = member2tc(subtype, lhs, name);
+
+      expr2tc rhs_member;
+      if (is_unknown2t(rhs))
       {
-        const type2tc &subtype = members[i];
-        const irep_idt &name = member_names[i];
-
-        // ignore methods
-        if (is_code_type(subtype))
-          continue;
-
-        expr2tc lhs_member = member2tc(subtype, lhs, name);
-
-        expr2tc rhs_member;
-        if (is_unknown2t(rhs))
-        {
-          rhs_member = unknown2tc(subtype);
-        }
-        else if (is_invalid2t(rhs))
-        {
-          rhs_member = invalid2tc(subtype);
-        }
-        else
-        {
-          assert(
-            base_type_eq(rhs->type, lhs_type, ns) ||
-            is_subclass_of(lhs_type, rhs->type, ns));
-          expr2tc rhs_member = make_member(rhs, name);
-
-          // XXX -- shouldn't this be one level of indentation up?
-          assign(lhs_member, rhs_member, add_to_sets);
-        }
+        rhs_member = unknown2tc(subtype);
       }
-    }
-    else
-    {
-      /* types do not agree, this can happen during dereferences like this:
-       *   struct S { int x; } a;
-       *   int b;
-       *   a = *(struct S *)&b;
-       * and is caught as a dereference_failure by build_reference_to().
-       *
-       * Thus, we ignore this value-set assignment request here.
-       */
+      else if (is_invalid2t(rhs))
+      {
+        rhs_member = invalid2tc(subtype);
+      }
+      else
+      {
+        expr2tc rhs_member = make_member(rhs, name);
+
+        // XXX -- shouldn't this be one level of indentation up?
+        assign(lhs_member, rhs_member, add_to_sets);
+      }
     }
     return;
   }
@@ -1400,11 +1397,9 @@ void value_sett::do_function_call(
   const symbolt &symbol,
   const std::vector<expr2tc> &arguments)
 {
-  const code_typet &type = to_code_type(symbol.type);
-
-  type2tc tmp_migrated_type = migrate_type(type);
-  const code_type2t &migrated_type =
-    dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
+  // The symbol stores its type as IREP2 natively (Part I); read it directly
+  // rather than back-migrating the legacy cache and re-migrating it.
+  const code_type2t &migrated_type = to_code_type(symbol.get_type2());
 
   const std::vector<type2tc> &argument_types = migrated_type.arguments;
   const std::vector<irep_idt> &argument_names = migrated_type.argument_names;
@@ -1491,11 +1486,6 @@ void value_sett::apply_code(const expr2tc &code)
     const code_assign2t &ref = to_code_assign2t(code);
     assign(ref.target, ref.source);
   }
-  else if (is_code_init2t(code))
-  {
-    const code_init2t &ref = to_code_init2t(code);
-    assign(ref.target, ref.source);
-  }
   else if (is_code_decl2t(code))
   {
     const code_decl2t &ref = to_code_decl2t(code);
@@ -1549,12 +1539,12 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
 
-  auto *data = static_cast<const struct_union_data *>(type.get());
-  const std::vector<type2tc> &members = data->members;
+  const std::vector<type2tc> &members = struct_union_members(type);
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = data->get_component_number(component_name);
+    unsigned no =
+      struct_union_get_component_number(type, component_name).value();
     return to_constant_struct2t(src).datatype_members[no];
   }
   if (is_constant_union2t(src))
@@ -1587,7 +1577,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = data->get_component_number(component_name);
+  unsigned no = struct_union_get_component_number(type, component_name).value();
   const type2tc &subtype = members[no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;

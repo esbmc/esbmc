@@ -5,6 +5,7 @@
 # uses to verify Python programs, so they must match the built-in names
 # exactly. Argument names are part of the API contract matched by ESBMC's
 # Python converter, even when the abstract body does not reference them.
+import math
 
 
 # Stubs for type inference.
@@ -60,7 +61,7 @@ def fabs(x: float) -> float:
 
 
 def sqrt(x: float) -> float:
-    return 0.2
+    return math.sqrt(x)
 
 
 def fmin(x: float, y: float) -> float:
@@ -84,11 +85,11 @@ def copysign(x: float, y: float) -> float:
 
 
 def sin(x: float) -> float:
-    return 0.2
+    return math.sin(x)
 
 
 def cos(x: float) -> float:
-    return 0.2
+    return math.cos(x)
 
 
 def arccos(x: float) -> float:
@@ -96,7 +97,7 @@ def arccos(x: float) -> float:
 
 
 def exp(x: float) -> float:
-    return 0.2
+    return math.exp(x)
 
 
 def fmod(x: float) -> float:
@@ -104,7 +105,7 @@ def fmod(x: float) -> float:
 
 
 def arctan(x: float) -> float:
-    return 0.2
+    return math.atan(x)
 
 
 def dot(a: float, b: float) -> float:

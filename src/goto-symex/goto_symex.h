@@ -8,7 +8,6 @@
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
-#include <stack>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/options.h>
@@ -16,6 +15,20 @@
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
+
+// Thrown by symex when the inductive step encounters a construct it cannot
+// soundly encode (recursion, threads, function-pointer calls). The thrower
+// also sets `disable-inductive-step` so the strategy layer downgrades the
+// result to UNKNOWN; the throw short-circuits the rest of symex.
+class inductive_step_disabled_exceptiont
+{
+public:
+  explicit inductive_step_disabled_exceptiont(std::string r)
+    : reason(std::move(r))
+  {
+  }
+  std::string reason;
+};
 
 /**
  *  Primay symbolic execution class.
@@ -56,7 +69,7 @@ public:
   public:
     allocated_obj(
       const expr2tc &s,
-      const guardt &g,
+      const guard2tc &g,
       const bool a,
       const std::string n)
       : obj(s), alloc_guard(g), auto_deallocd(a), name(n)
@@ -65,7 +78,7 @@ public:
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
     expr2tc obj;
     /** Guard when allocation occured. */
-    guardt alloc_guard;
+    guard2tc alloc_guard;
     /** Record if the object is automatically desallocated (allocated with alloca). */
     bool auto_deallocd;
     /** The object name */
@@ -117,7 +130,7 @@ public:
     return symbol2tc(
       get_bool_type(),
       id2string(guard_identifier_s),
-      symbol2t::level1,
+      symbol_renaming_level::level1,
       0,
       0,
       cur_state->top().level1.thread_id,
@@ -181,10 +194,25 @@ protected:
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
+   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
+   *  Used by execution_statet to record an explicit reference to the sibling
+   *  path on the active transition result, so it can be preserved across
+   *  context switches without re-discovering it by scanning merge_state_map.
+   *  No-op for non-concurrent symex.
+   */
+  virtual void record_branch_sibling(
+    goto_programt::const_targett /*target*/,
+    statet::merge_state_listt::iterator /*sibling*/)
+  {
+  }
+
+  /**
    *  Perform interpretation of RETURN instruction.
    *  @param code return statement.
    */
   void symex_return(const expr2tc &code);
+  void
+  symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
 
   /**
    *  Interpret an OTHER instruction.
@@ -192,7 +220,7 @@ protected:
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
    */
-  void symex_other(const expr2tc code);
+  void symex_other(const expr2tc &code);
 
   /**
    *  Interpret an DECL instruction.
@@ -202,14 +230,14 @@ protected:
    *  variables (which is what entering a function and declaring variables
    *  does).
    */
-  void symex_decl(const expr2tc code);
+  void symex_decl(const expr2tc &code);
 
   /**
    *  Interpret an DEAD instruction.
    *  It calls free on alloca'd symbols and erase the symbols from the
    *  propagation map.
    */
-  void symex_dead(const expr2tc code);
+  void symex_dead(const expr2tc &code);
 
   /**
    *  Interpret an ASSUME instruction.
@@ -246,6 +274,23 @@ protected:
    */
   virtual void assertion(const expr2tc &assertion, const std::string &msg);
 
+  /// Lift `var == const` from an assume into the level2 constant
+  /// propagator so subsequent renames of `var` substitute the constant
+  /// directly. Called from symex_assume() after the assumption has been
+  /// recorded into the SSA target, so the constraint itself is preserved
+  /// and the lift only affects future renames.
+  ///
+  /// Peels outer typecasts (the C frontend wraps the equality as
+  /// (bool)(int)(x == k) for __VERIFIER_assume-style intrinsics), matches
+  /// `symbol == const` or `const == symbol`, and writes the constant into
+  /// the level2 entry for the symbol via cur_state->assignment.
+  ///
+  /// Skips IEEE-754 zero constants: +0.0 and -0.0 compare equal under
+  /// IEEE equality but have distinct bit patterns, so propagating either
+  /// would silently fold signbit-sensitive code (1.0/x, copysign, bit
+  /// reinterpretation) and mask real bugs.
+  void propagate_assume_equality(const expr2tc &the_assumption);
+
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
@@ -267,21 +312,22 @@ protected:
    *  Merge pointer tracking value sets in a phi function.
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
-   *  @param goto_state Previously executed goto state to be merged in.
+   *  @param merge_state Previously recorded merge snapshot to be merged in.
    *  @param dest Thread state for previous jump to be merged into.
    */
-  void merge_value_sets(const statet::goto_statet &goto_state);
+  void merge_value_sets(const statet::merge_statet &merge_state);
 
-  void merge_locality(const statet::goto_statet &goto_state);
+  void merge_locality(const statet::merge_statet &merge_state);
 
   /**
-   *  Join together a previous jump state into thread state.
+   *  Join a previous jump's merge snapshot into the active thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
    *  states being joined.
-   *  @param goto_state The previous jumps state to be merged into the current
+   *  @param merge_state Previous jump snapshot to be merged into the current
+   *  state.
    */
-  void phi_function(const statet::goto_statet &goto_state);
+  void phi_function(const statet::merge_statet &merge_state);
 
   /**
    *  Test whether unwinding bound has been exceeded.
@@ -355,6 +401,22 @@ protected:
    *  @param code Function code to actually call
    */
   virtual void symex_function_call_code(const expr2tc &call);
+
+  /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -436,6 +498,9 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform init_thread_local; seeds each `__thread`-qualified global
+   *  to its static initializer in the active thread's renaming scope. */
+  void intrinsic_init_thread_local(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
   void intrinsic_really_atomic_begin(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
@@ -475,6 +540,56 @@ protected:
   void intrinsic_memcpy(
     reachability_treet &art,
     const code_function_call2t &func_call);
+
+  /**
+   * @brief Intrinsic call for C memchr function call
+   *
+   * This will either invoke our operational model (at string.c)
+   * or build the result pointer directly: it scans the first n bytes of the
+   * object pointed to by buf and returns a pointer to the first byte equal to
+   * the (unsigned char) value ch, or NULL if no such byte is found.
+   *
+   * @param art
+   * @param func_call memchr function call
+   */
+  void intrinsic_memchr(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Models __ESBMC_memcmp(s1, s2, n): for a constant n with both pointers
+   *  resolving to concrete primitive objects, build the lexicographic
+   *  comparison result as a single nested-ite expression over the n byte
+   *  reads (no loop, no unwinding) and assign it to the call's return.
+   *  Falls back to the C __memcmp_impl loop otherwise. */
+  void intrinsic_memcmp(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
+   *  primitive object with a constant offset, validating that an
+   *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
+   *  loop) on any miss. */
+  bool memcmp_resolve_operand(
+    const expr2tc &ptr,
+    unsigned long number_of_bytes,
+    expr2tc &object,
+    uint64_t &offset,
+    uint64_t &avail_bytes);
+
+  /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
+   *  is built from the current src/dst bytes before assigning, so overlapping
+   *  regions are correct); only the C fallback differs. */
+  void intrinsic_memmove(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /** Shared core for intrinsic_memcpy / intrinsic_memmove; @p bump_name is the
+   *  C fallback (__memcpy_impl / __memmove_impl) used when the byte-exact
+   *  optimisation cannot apply. */
+  void intrinsic_memcpy_impl(
+    reachability_treet &art,
+    const code_function_call2t &func_call,
+    const std::string &bump_name);
 
   // Function to call a symname function, in case where were not able to optimize it
   void
@@ -516,50 +631,6 @@ protected:
 
   void volatile_check(expr2tc &expr);
 
-  /* Check if thrown_type in Python inherits from catch_type */
-  bool is_python_exception_subtype(
-    const irep_idt &thrown_type,
-    const irep_idt &catch_type);
-
-  /** Walk back up stack frame looking for exception handler. */
-  bool symex_throw();
-
-  /** Core throw dispatch: match throw_code against stack_catch and jump.
-   *  Called by symex_throw() and symex_throw_bad_cast(). */
-  bool symex_throw_dispatch(const expr2tc &throw_code);
-
-  /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
-   *  namespace and dispatch the exception through the normal throw path. */
-  bool symex_throw_bad_cast();
-
-  /** Register exception handler on stack. */
-  void symex_catch();
-
-  /** Register throw handler on stack. */
-  void symex_throw_decl();
-
-  /** Update throw target. */
-  void update_throw_target(
-    goto_symex_statet::exceptiont *except [[maybe_unused]],
-    goto_programt::const_targett target,
-    const expr2tc &code,
-    bool is_ellipsis = false);
-
-  /** Check if we can rethrow an exception:
-   *  if we can then update the target.
-   *  if we can't then gives a error.
-   */
-  bool handle_rethrow(
-    const expr2tc &operand,
-    const goto_programt::instructiont &instruction);
-
-  /** Check if we can throw an exception:
-   *  if we can't then gives a error.
-   */
-  int handle_throw_decl(
-    goto_symex_statet::exceptiont *frame,
-    const irep_idt &id);
-
   /**
    *  Finalize the result of a realloc operation.
    *  Creates the final assignment of the realloc result pointer to the lhs,
@@ -575,7 +646,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &result,
     const expr2tc &new_array,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &realloc_size);
 
   /**
@@ -589,7 +660,7 @@ protected:
   void update_pointer_validity(
     const expr2tc &old_ptr,
     const expr2tc &alloc_fail,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Model allocation failure behavior for realloc.
@@ -604,7 +675,7 @@ protected:
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Create result pointer from newly allocated array.
@@ -685,7 +756,7 @@ protected:
   bool handle_realloc_zero_size(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &realloc_size);
 
   /**
@@ -707,7 +778,7 @@ protected:
     const type2tc &elem_type,
     const type2tc &new_elem_type,
     bool old_is_array,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Copy memory content from old to new allocation.
@@ -729,7 +800,7 @@ protected:
     const expr2tc &new_elem_count,
     const type2tc &elem_type,
     bool old_is_array,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Create a new dynamic memory symbol.
@@ -788,7 +859,7 @@ protected:
   void handle_sideeffect(
     const expr2tc &lhs,
     const sideeffect2t &effect,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
@@ -802,7 +873,7 @@ protected:
   bool handle_conditional(
     const expr2tc &lhs,
     const if2t &if_effect,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Make symbolic assignment.
@@ -819,7 +890,7 @@ protected:
   virtual void symex_assign(
     const expr2tc &code,
     const bool hidden = false,
-    const guardt &guard = guardt());
+    const guard2tc &guard = guard2tc());
 
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
@@ -827,7 +898,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -844,7 +915,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -870,7 +941,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -886,7 +957,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -907,7 +978,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -923,7 +994,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -941,7 +1012,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -958,7 +1029,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -975,7 +1046,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -993,7 +1064,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -1012,7 +1083,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -1030,41 +1101,41 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Implementation of realloc. */
   void symex_realloc(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Symbolic implementation of alloca. */
   expr2tc symex_alloca(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Wrapper around for alloca and malloc. */
   expr2tc symex_mem(
     const bool is_malloc,
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,
     const type2tc &base_type,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
@@ -1074,7 +1145,7 @@ protected:
   void symex_cpp_new(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
@@ -1083,7 +1154,7 @@ protected:
   void symex_va_arg(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1164,33 +1235,6 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  /* Exception Handling.
-   * This will stack the try-catch blocks, so we always know which catch
-   * we should jump.
-   */
-  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
-
-  /** Stack of try-catch blocks. */
-  stack_catcht stack_catch;
-
-  /** Pointer to last thrown exception. */
-  goto_programt::instructiont *last_throw;
-
-  /** Backing storage for last_throw when the throw originates from the
-   *  __ESBMC_throw_bad_cast intrinsic rather than a real THROW instruction. */
-  goto_programt::instructiont bad_cast_throw;
-
-  /** Map of currently active exception targets, i.e. instructions where an
-   *  exception is going to be merged in in the future. Keys are iterators to
-   *  the instruction catching the object; values are the symbols that the
-   *  thrown piece of data has been assigned to. */
-  std::map<goto_programt::const_targett, expr2tc> thrown_obj_map;
-
-  /** Flag to indicate if we are go into the unexpected flow. */
-  bool inside_unexpected;
-  /** Store the unexpected function end */
-  irep_idt unexpected_end;
-
   /** Disable return value optimization */
   bool no_return_value_opt;
   /** Limit size for stack */
@@ -1232,6 +1276,9 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
+  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  bool validate_witness;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
@@ -1260,9 +1307,9 @@ protected:
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) override;
+    const guard2tc &guard) override;
 
-  void dereference_assume(const guardt &guard) override;
+  void dereference_assume(const guard2tc &guard) override;
 
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;

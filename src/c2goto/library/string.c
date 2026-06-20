@@ -115,6 +115,12 @@ __ESBMC_HIDE:;
 int strncmp(const char *s1, const char *s2, size_t n)
 {
 __ESBMC_HIDE:;
+  /* C11/C17 7.24.4.4: compare "not more than n characters". For n == 0 no
+   * characters are examined, so the result is 0 and neither pointer is read
+   * (a read here would be out of bounds at a one-past-the-end pointer). */
+  if (n == 0)
+    return 0;
+
   size_t i = 0;
   unsigned char ch1, ch2;
   do
@@ -308,7 +314,7 @@ __ESBMC_HIDE:;
   return __ESBMC_memset(s, c, n);
 }
 
-void *memmove(void *dest, const void *src, size_t n)
+void *__memmove_impl(void *dest, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdest = dest;
@@ -334,7 +340,15 @@ __ESBMC_HIDE:;
   return dest;
 }
 
-int memcmp(const void *s1, const void *s2, size_t n)
+void *memmove(void *dest, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memmove_impl;
+  (void)hax;
+  return __ESBMC_memmove(dest, src, n);
+}
+
+int __memcmp_impl(const void *s1, const void *s2, size_t n)
 {
 __ESBMC_HIDE:;
   int res = 0;
@@ -349,7 +363,15 @@ __ESBMC_HIDE:;
   return res;
 }
 
-void *memchr(const void *buf, int ch, size_t n)
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcmp_impl;
+  (void)hax;
+  return __ESBMC_memcmp(s1, s2, n);
+}
+
+void *__memchr_impl(const void *buf, int ch, size_t n)
 {
 __ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
@@ -359,4 +381,12 @@ __ESBMC_HIDE:;
   }
 
   return (n ? (void *)buf : NULL);
+}
+
+void *memchr(const void *buf, int ch, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memchr_impl;
+  (void)hax;
+  return __ESBMC_memchr(buf, ch, n);
 }

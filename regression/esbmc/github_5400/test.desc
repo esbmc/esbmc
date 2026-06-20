@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak --force-malloc-success --unwind 6
+^VERIFICATION FAILED$
+^.*forgotten memory.*$

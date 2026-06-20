@@ -5,6 +5,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
+#include <util/message.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 
@@ -99,7 +100,7 @@ void goto_symext::intrinsic_builtin_object_size(
             const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
             const symbolt *symbol = ns.lookup(symtype.symbol_name);
             addressed_type = (symbol != nullptr)
-                               ? migrate_type(symbol->type)
+                               ? migrate_symbol_type(*symbol)
                                : internal_deref_items.front().object->type;
           }
           else
@@ -176,9 +177,27 @@ void goto_symext::intrinsic_get_object_size(
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
   dereference(deref, dereferencet::INTERNAL);
 
-  assert(is_array_type(internal_deref_items.front().object->type));
-  expr2tc obj_size =
-    to_array_type(internal_deref_items.front().object->type).array_size;
+  // __ESBMC_get_object_size returns the element count of the array object the
+  // pointer addresses. If the pointer cannot be resolved to a concrete object,
+  // or the resolved object is not an array, that count is undefined: reading
+  // internal_deref_items.front() on an empty container is UB (SIGSEGV in
+  // release) and to_array_type() on a non-array trips an assertion. The Python
+  // set/graph operational models can route such a pointer here (issues #4782,
+  // #4804, #4805). Emit a clean diagnostic instead of crashing. The array path
+  // below is byte-for-byte unchanged, so C/C++ callers — which always pass an
+  // array object — are unaffected.
+  if (
+    internal_deref_items.empty() ||
+    !is_array_type(internal_deref_items.front().object->type))
+  {
+    log_error(
+      "__ESBMC_get_object_size: cannot determine the size of a non-array "
+      "object");
+    abort();
+  }
+
+  const type2tc &obj_type = internal_deref_items.front().object->type;
+  expr2tc obj_size = to_array_type(obj_type).array_size;
 
   expr2tc ret_ref = func_call.ret;
   if (!is_nil_expr(ret_ref))

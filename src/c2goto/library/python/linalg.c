@@ -3,16 +3,48 @@
 #include <math.h>
 #include <stdint.h>
 
+// Generic dot product for int64_t arrays
+// A: m×n matrix, B: n×p matrix, C: m×p output matrix (all stored as flat arrays)
+// All arrays are stored row-major contiguous in memory
 void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
 {
-  int i = 0;
+  int64_t i = 0;
   while (i < m)
   {
-    int j = 0;
+    int64_t j = 0;
     while (j < p)
     {
-      int sum = 0;
-      int k = 0;
+      int64_t sum = 0;
+      int64_t k = 0;
+      while (k < n)
+      {
+        sum += *(A + i * n + k) * *(B + k * p + j);
+        k++;
+      }
+      *(C + i * p + j) = sum;
+      j++;
+    }
+    i++;
+  }
+}
+
+// Floating-point version for double arrays
+void dot_double(
+  double *A,
+  double *B,
+  double *C,
+  int64_t m,
+  int64_t n,
+  int64_t p)
+{
+  int64_t i = 0;
+  while (i < m)
+  {
+    int64_t j = 0;
+    while (j < p)
+    {
+      double sum = 0.0;
+      int64_t k = 0;
       while (k < n)
       {
         sum += *(A + i * n + k) * *(B + k * p + j);
@@ -30,7 +62,33 @@ void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
   dot(A, B, C, m, n, p);
 }
 
+void matmul_double(
+  double *A,
+  double *B,
+  double *C,
+  int64_t m,
+  int64_t n,
+  int64_t p)
+{
+  dot_double(A, B, C, m, n, p);
+}
+
 void transpose(int64_t *src, int64_t *dst, int64_t rows, int64_t cols)
+{
+  int i = 0;
+  while (i < rows)
+  {
+    int j = 0;
+    while (j < cols)
+    {
+      dst[j * rows + i] = src[i * cols + j];
+      ++j;
+    }
+    ++i;
+  }
+}
+
+void transpose_double(double *src, double *dst, int64_t rows, int64_t cols)
 {
   int i = 0;
   while (i < rows)

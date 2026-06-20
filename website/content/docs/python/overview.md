@@ -7,16 +7,15 @@ The Python frontend converts Python source files into ESBMC's internal represent
 
 > The pipeline has three stages: **AST generation** (Python) → **type annotation** (Python) → **symbol table generation** (C++). Each stage feeds into the next before ESBMC's backend takes over.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/esbmc/esbmc/master/src/python-frontend/images/arch.png" alt="ESBMC Python Frontend Architecture" style="max-width:65%;" />
-</p>
-<p align="center"><em>Python Frontend Architecture</em></p>
+![ESBMC Python Frontend Architecture](https://raw.githubusercontent.com/esbmc/esbmc/master/src/python-frontend/images/arch.png)
 
 ## AST Generation
 
 Python code translation starts by parsing `.py` files into an Abstract Syntax Tree (AST). This is done using Python's built-in [`ast`](https://docs.python.org/3/library/ast.html) module and the [`ast2json`](https://pypi.org/project/ast2json/) package, which serializes the AST to JSON. The process runs alongside the Python interpreter and produces a JSON file for each `.py` file processed, including any imported modules.
 
 This approach's main advantage is that it relies on a native Python module, ensuring the parsed representation faithfully reflects the language.
+
+The parser is implemented as the `src/python-frontend/parser/` package. ESBMC invokes its `parser/__main__.py` entrypoint with a Python 3 interpreter; module discovery, cycle detection, and relative-import rewriting live in `parser/import_resolver.py`, which emits structured diagnostics on missing modules and cyclic imports.
 
 ## Type Annotation
 

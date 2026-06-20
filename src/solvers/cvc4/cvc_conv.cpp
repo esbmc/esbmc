@@ -1,9 +1,10 @@
 #include <util/c_types.h>
+#include <util/mp_arith.h>
 #include <cvc_conv.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>
 
-smt_convt *create_new_cvc_solver(
+smt_solver_baset *create_new_cvc_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -17,7 +18,7 @@ smt_convt *create_new_cvc_solver(
 }
 
 cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(false, false),
     fp_convt(this),
     to_bv_counter(0),
@@ -30,7 +31,7 @@ cvc_convt::cvc_convt(const namespacet &ns, const optionst &options)
   smt.setOption("produce-assertions", true);
 }
 
-smt_convt::resultt cvc_convt::dec_solve()
+smt_resultt cvc_convt::dec_solve()
 {
   pre_solve();
 
@@ -731,32 +732,6 @@ smt_astt cvc_convt::mk_bvnot(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    em.mkExpr(
-      CVC4::kind::BITVECTOR_NOR,
-      to_solver_smt_ast<cvc_smt_ast>(a)->a,
-      to_solver_smt_ast<cvc_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt cvc_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    em.mkExpr(
-      CVC4::kind::BITVECTOR_NAND,
-      to_solver_smt_ast<cvc_smt_ast>(a)->a,
-      to_solver_smt_ast<cvc_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt cvc_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -1003,10 +978,13 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
 {
-  // TODO: Is this correct? CVC4 doesn't have any call for
-  // em.mkConst(CVC4::Integer(...));
   smt_sortt s = mk_int_sort();
-  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_int64()));
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range build the Rational from a decimal string — the same
+  // arbitrary-precision overload mk_smt_real below uses. Issue #4642.
+  CVC4::Expr e = theint.is_int64()
+                   ? em.mkConst(CVC4::Rational(theint.to_int64()))
+                   : em.mkConst(CVC4::Rational(integer2string(theint, 10)));
   return new_ast(e, s);
 }
 
@@ -1126,6 +1104,45 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     em.mkVar(name, to_solver_smt_sort<CVC4::Type>(s)->s); // "global", eh?
   sym_tab.bind(name, e, true);
   return new_ast(e, s);
+}
+
+smt_astt cvc_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function variable so every application shares it and
+  // the solver enforces functional congruence natively.
+  auto it = uf_decls.find(name);
+  CVC4::Expr fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<CVC4::Type> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<CVC4::Type>(arg->sort)->s);
+
+    CVC4::Type fun_type =
+      em.mkFunctionType(domain, to_solver_smt_sort<CVC4::Type>(rangesort)->s);
+    fun = em.mkVar(name, fun_type);
+    uf_decls.emplace(name, fun);
+  }
+
+  // APPLY_UF takes [function, arg0, arg1, ...].
+  std::vector<CVC4::Expr> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<cvc_smt_ast>(arg)->a);
+
+  return new_ast(em.mkExpr(CVC4::kind::APPLY_UF, apply_args), rangesort);
 }
 
 smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
@@ -1277,12 +1294,12 @@ void cvc_smt_ast::dump() const
 
 void cvc_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   smt.push();
 }
 
 void cvc_convt::pop_ctx()
 {
   smt.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }

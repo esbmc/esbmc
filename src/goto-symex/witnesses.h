@@ -30,6 +30,7 @@ public:
   bool cycle_head = false;
   std::string invariant;
   std::string invariant_scope;
+  std::string cwe; // comma-separated CWE list (e.g. "CWE-476, CWE-125")
   nodet(void)
   {
     id = "N" + integer2string(_id);
@@ -84,16 +85,38 @@ public:
     target,
     function_enter,
     function_return,
-    branching
+    branching,
+    unknown
   };
 
-  Type type;
+  enum Action
+  {
+    follow, // must be passed exactly once
+    avoid,  // must never be passed
+    cycle   // must be passed infinitely
+  };
+
+  // Parsed \result constraint for function_return waypoints.
+  // expr is an IRep2 expression tree with symbol2tc("\\result") as placeholder.
+  struct parsed_constraintt
+  {
+    expr2tc expr;
+    bool valid = false;
+  };
+
+  Type type = unknown;
+  Action action = follow;
+  size_t segment_idx = 0;
   std::string file;
   std::string value;
   std::string format;
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
+  irep_idt line_id;
+  irep_idt column_id;
+  irep_idt function_id;
+  parsed_constraintt parsed_cond;
 };
 
 class invariant
@@ -104,10 +127,11 @@ public:
     loop_invariant,
     loop_transition_invariant,
     location_invariant,
-    location_transition_invariant
+    location_transition_invariant,
+    unknown
   };
 
-  Type type;
+  Type type = unknown;
   std::string file;
   std::string value;
   std::string format;

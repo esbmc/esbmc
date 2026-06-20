@@ -15,7 +15,7 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_sym_smt_ast(smt_convt *ctx, smt_sortt s, std::string _name)
+  tuple_sym_smt_ast(smt_solver_baset *ctx, smt_sortt s, std::string _name)
     : smt_ast(ctx, s), name(std::move(_name))
   {
   }
@@ -25,15 +25,16 @@ public:
    *  string (i.e., no associated type). */
   const std::string name;
 
-  smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
-  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  smt_astt
+  ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const override;
+  smt_astt eq(smt_solver_baset *ctx, smt_astt other) const override;
   smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const override;
-  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+    const expr2tc &idx_expr = expr2tc()) const override;
+  smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   void dump() const override
   {

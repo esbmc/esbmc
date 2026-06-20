@@ -5,6 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -192,6 +193,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::function_return)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "function_return";
   else if (wp.type == waypoint::branching)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "branching";
@@ -206,6 +210,15 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
              << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+  else if (wp.type == waypoint::function_return)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "acsl_expression";
     waypoint << YAML::EndMap;
   }
   else if (wp.type == waypoint::branching)
@@ -241,6 +254,13 @@ void create_node_node(nodet &node, xmlnodet &nodenode)
     data_violation.add("<xmlattr>.key", "violation");
     data_violation.put_value("true");
     nodenode.add_child("data", data_violation);
+  }
+  if (!node.cwe.empty())
+  {
+    xmlnodet data_cwe;
+    data_cwe.add("<xmlattr>.key", "cwe");
+    data_cwe.put_value(node.cwe);
+    nodenode.add_child("data", data_cwe);
   }
   if (node.sink)
   {
@@ -373,6 +393,13 @@ void create_graphml(xmlnodet &graphml)
   frontier_default_node.put_value("false");
   frontier_node.add_child("default", frontier_default_node);
   graphml.add_child("graphml.key", frontier_node);
+
+  xmlnodet cwe_node;
+  cwe_node.add("<xmlattr>.id", "cwe");
+  cwe_node.put(xmlnodet::path_type("<xmlattr>|attr.name", '|'), "cwe");
+  cwe_node.put(xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
+  cwe_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", cwe_node);
 
   xmlnodet violation_node;
   violation_node.add("<xmlattr>.id", "violation");
@@ -859,52 +886,6 @@ void create_violation_yaml_emitter(
   _create_yaml_metadata_emitter(verifiedfile, options, root);
 }
 
-static const std::regex
-  regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
-
-void reformat_assignment_array(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  std::string &assignment)
-{
-  std::regex re{R"(((-?[0-9]+(.[0-9]+)?)))"};
-  using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  BigInt pos = 0;
-  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
-  std::string assignment_array = "";
-  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-       it != end;)
-  {
-    std::string value = *it++;
-    assignment_array += lhs + "[" + integer2string(pos) + "] = " + value + "; ";
-    ++pos;
-  }
-  assignment_array.pop_back();
-  assignment = assignment_array;
-}
-
-static const std::regex regex_structs(
-  "[a-zA-Z0-9_]+ = \\{ ?(\\.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?),? ?)+\\};");
-
-void reformat_assignment_structs(
-  const namespacet &ns,
-  const goto_trace_stept &step,
-  std::string &assignment)
-{
-  std::regex re{R"((((.([a-zA-Z0-9_]+)=(-?[0-9]+(.[0-9]+)?))+)))"};
-  using reg_itr = std::regex_token_iterator<std::string::iterator>;
-  std::string lhs = from_expr(ns, "", step.lhs, presentationt::WITNESS);
-  std::string assignment_struct = "";
-  for (reg_itr it{assignment.begin(), assignment.end(), re, 1}, end{};
-       it != end;)
-  {
-    std::string a = *it++;
-    assignment_struct += lhs + a + "; ";
-  }
-  assignment_struct.pop_back();
-  assignment = assignment_struct;
-}
-
 void check_replace_invalid_assignment(std::string &assignment)
 {
   /* replace: SAME-OBJECT(&var1, &var2) into &var1 == &var2 (XXX check if should stay) */
@@ -924,7 +905,13 @@ void check_replace_invalid_assignment(std::string &assignment)
     std::regex_search(assignment, m, std::regex("CONCAT")) ||
     std::regex_search(assignment, m, std::regex("BITCAST:")) ||
     std::regex_search(assignment, m, std::regex("byte_extract")) ||
-    std::regex_search(assignment, m, std::regex("byte_update")))
+    std::regex_search(assignment, m, std::regex("byte_update")) ||
+    /* Aggregate initialisers ({ ... }, including nested and array-of forms)
+     * are not valid C scalar expressions, so the SV-COMP witness validators
+     * (CPAchecker, cpa-witness2test) reject the whole automaton when one
+     * appears in an assumption. Dropping the assumption only loses replay
+     * precision; it never changes the verdict. See #1520 (nested array). */
+    std::regex_search(assignment, m, std::regex("[{}]")))
     assignment.clear();
 }
 
@@ -946,10 +933,6 @@ std::string get_formated_assignment(
       assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
-    if (std::regex_match(assignment, regex_array))
-      reformat_assignment_array(ns, step, assignment);
-    else if (std::regex_match(assignment, regex_structs))
-      reformat_assignment_structs(ns, step, assignment);
     check_replace_invalid_assignment(assignment);
   }
   return assignment;
@@ -1176,9 +1159,10 @@ bool find_nondet_in_expr(const expr2tc &expr)
 // struct, because smt_convt::get's member-id case skips the tuple
 // re-query when the result is struct-typed. When `value` isn't the
 // matching constant_* for an aggregate type, we re-resolve it via
-// get_by_ast on the converted root expression — that path goes
-// through the AST-based tuple_get which recurses through nested
-// tuple-selects and produces fully materialised leaves. This keeps
+// get_by_ast on the root expression — that AST-based path goes through
+// the tuple_get / get_array machinery which recurses through nested
+// tuple-selects and produces fully materialised leaves, and (unlike
+// get_by_type) accepts a non-symbol root such as a member access. This keeps
 // the multi-witness blocking clause sound: make_blocking_expr builds
 // equalities against value_expr, so any unresolved subterm there
 // would block nothing.
@@ -1193,8 +1177,7 @@ static expr2tc zero_fill_aggregate(
     const struct_type2t &st = to_struct_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_struct2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     const constant_struct2t *cs = (effective && is_constant_struct2t(effective))
                                     ? &to_constant_struct2t(effective)
                                     : nullptr;
@@ -1244,8 +1227,7 @@ static expr2tc zero_fill_aggregate(
     const array_type2t &at = to_array_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_array2t(effective))
-      effective =
-        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+      effective = smt_conv.get_by_ast(root_expr);
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
@@ -1257,7 +1239,8 @@ static expr2tc zero_fill_aggregate(
       // arrays) cannot be checked here.
       if (is_constant_int2t(at.array_size))
       {
-        const BigInt &n = to_constant_int2t(at.array_size).value;
+        [[maybe_unused]] const BigInt &n =
+          to_constant_int2t(at.array_size).value;
         assert(
           n == BigInt(ca.datatype_members.size()) &&
           "constant_array2t element count != array_type2t::array_size");
@@ -1293,7 +1276,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
   // Use the EXACT same logic as generate_testcase
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())
@@ -1377,10 +1360,11 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
   for (const auto &n : nondets)
   {
     expr2tc eq;
+    const constant_floatbv2t *value_fbv =
+      try_to_constant_floatbv2t(n.value_expr);
     if (
-      is_floatbv_type(n.symbol_expr->type) &&
-      is_constant_floatbv2t(n.value_expr) &&
-      to_constant_floatbv2t(n.value_expr).value.is_NaN())
+      is_floatbv_type(n.symbol_expr->type) && value_fbv &&
+      value_fbv->value.is_NaN())
     {
       eq = isnan2tc(n.symbol_expr);
     }

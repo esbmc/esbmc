@@ -8,6 +8,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
+#include <util/cwe_mapping.h>
 #include <util/std_types.h>
 #include <ostream>
 
@@ -91,7 +92,12 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
         out << "  " << pc->location << "\n";
 
       if (!comment.empty())
+      {
         out << "  " << comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
+      }
       out << "  " << from_expr(ns, "", pc->guard) << "\n";
       out << "\n";
     }
@@ -305,6 +311,7 @@ void violation_graphml_goto_trace(
 
         nodet *violation_node = new nodet();
         violation_node->violation = true;
+        violation_node->cwe = format_cwe_list(cwe_for(step.comment));
 
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
@@ -413,7 +420,7 @@ void violation_yaml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        // Only emit assumptions for nondet variables
+        // Only emit waypoints for nondet variables
         if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
           break;
 
@@ -421,10 +428,16 @@ void violation_yaml_goto_trace(
         if (assignment.empty())
           break;
 
+        // Extract just the value part ("lhs == value" → "value") for \result
+        std::string value_str;
+        auto eq_pos = assignment.find(" == ");
+        if (eq_pos != std::string::npos)
+          value_str = assignment.substr(eq_pos + 4);
+
         waypoint wp;
-        wp.type = waypoint::assumption;
+        wp.type = waypoint::function_return;
         wp.file = yml.verified_file;
-        wp.value = assignment;
+        wp.value = "\\result == " + value_str;
         wp.line = get_line_number(
           yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
@@ -536,7 +549,12 @@ void appendInfo(
   {
     if (!dest.empty())
       dest += " ";
-    dest += label + " " + id2string(value);
+    // Append in place rather than `label + " " + id2string(value)`, which
+    // builds two throwaway temporaries per trace label (this scales with
+    // counterexample size).
+    dest += label;
+    dest += ' ';
+    dest += value;
   }
 }
 
@@ -610,6 +628,9 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(step.comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
 
         if (step.pc->is_assert())
           out << "  " << from_expr(ns, "", step.pc->guard) << "\n";

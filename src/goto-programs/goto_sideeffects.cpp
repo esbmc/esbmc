@@ -5,6 +5,7 @@
 #include <util/i2string.h>
 #include <util/message.h>
 #include <util/message/format.h>
+#include <util/migrate.h>
 #include <util/rename.h>
 #include <util/std_expr.h>
 
@@ -149,12 +150,34 @@ bool goto_convertt::has_sideeffect(const exprt &expr)
   return false;
 }
 
+bool goto_convertt::has_sideeffect(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call, malloc,
+  // ++/--, …) OR sideeffect_assign2t (assignment / compound-assignment used as
+  // an expression); the legacy has_sideeffect treats both as side effects.
+  if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &op) {
+    if (!found && has_sideeffect(op))
+      found = true;
+  });
+  return found;
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
   bool result_is_used)
 {
-  if (!has_sideeffect(expr))
+  // Always enter for ternary (if_exprt) so that --validate-violation-witness
+  // can lower sideeffect-free ternaries to IF/GOTO with the ? column recorded
+  // on expr.location(), enabling column-accurate branching waypoint matching.
+  if (!has_sideeffect(expr) && expr.id() != "if")
     return;
 
   if (expr.is_and() || expr.is_or())
@@ -224,22 +247,26 @@ void goto_convertt::remove_sideeffects(
 
   if (expr.id() == "if")
   {
-    // first clean condition
+    // first clean condition sideeffects
     remove_sideeffects(expr.op0(), dest);
 
-    // possibly done now
+    // If neither branch has a sideeffect and we are not validating a violation
+    // witness, the ternary can stay as an if_exprt — no lowering needed.
+    // Under --validate-violation-witness we always lower so that the resulting
+    // IF instruction carries the ? column from expr.location(), which symex_goto
+    // uses for column-accurate branching waypoint matching.
     if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
-      !has_sideeffect(to_if_expr(expr).false_case()))
+      !has_sideeffect(to_if_expr(expr).false_case()) &&
+      !options.get_bool_option("validate-violation-witness"))
       return;
 
-    // copy expression
     if_exprt if_expr = to_if_expr(expr);
 
     if (!if_expr.cond().is_boolean())
       throw "first argument of `if' must be boolean, but got ";
 
-    const locationt location = expr.op0().location();
+    const locationt location = expr.location();
 
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
@@ -251,7 +278,6 @@ void goto_convertt::remove_sideeffects(
     {
       symbolt &new_symbol = new_tmp_symbol(expr.type());
 
-      // declare this symbol first
       code_declt decl(symbol_expr(new_symbol));
       decl.location() = location;
       convert_decl(decl, dest);
@@ -268,12 +294,10 @@ void goto_convertt::remove_sideeffects(
       assignment_false.location() = location;
       convert(assignment_false, tmp_false);
 
-      // overwrites expr
       expr = symbol_expr(new_symbol);
     }
     else
     {
-      // preserve the expressions for possible later checks
       if (if_expr.true_case().is_not_nil())
       {
         code_expressiont code_expression(if_expr.true_case());
@@ -289,9 +313,7 @@ void goto_convertt::remove_sideeffects(
       expr = nil_exprt();
     }
 
-    // generate guard for argument side-effects
     generate_ifthenelse(if_expr.cond(), tmp_true, tmp_false, location, dest);
-
     return;
   }
 
@@ -590,6 +612,29 @@ void goto_convertt::remove_sideeffects(
       abort();
     }
   }
+}
+
+// IREP2 dual-API seam (W1, esbmc/esbmc#4715): an expr2tc overload of
+// remove_sideeffects. The side-effect-free common case is handled natively (no
+// migration round-trip — mirroring the first line of the legacy overload). A
+// side-effect-bearing or ternary expression is delegated to the legacy exprt
+// path for now (migrate out, run the unchanged legacy removal, migrate back),
+// which is behaviour-identical by construction; the per-kind hoisting is ported
+// to native expr2tc in a later phase behind this same signature.
+void goto_convertt::remove_sideeffects(
+  expr2tc &expr,
+  goto_programt &dest,
+  bool result_is_used)
+{
+  // Native fast path: nil, or a side-effect-free non-ternary expression, needs
+  // no hoisting. The legacy overload always enters for a ternary (if2t) so that
+  // --validate-violation-witness can lower it; preserve that by delegating.
+  if (is_nil_expr(expr) || (!has_sideeffect(expr) && !is_if2t(expr)))
+    return;
+
+  exprt legacy = migrate_expr_back(expr);
+  remove_sideeffects(legacy, dest, result_is_used);
+  migrate_expr(legacy, expr);
 }
 
 void goto_convertt::remove_assignment(
@@ -1009,7 +1054,7 @@ void goto_convertt::remove_function_call(
   symbolt new_symbol;
 
   new_symbol.name = "return_value$";
-  new_symbol.type = expr.type();
+  new_symbol.set_type(expr.type());
   new_symbol.location = expr.location();
 
   // get name of function, if available
@@ -1122,7 +1167,7 @@ void goto_convertt::remove_cpp_new(
   symbolt new_symbol;
 
   new_symbol.name = "new_ptr$" + std::to_string(++tmp_symbol.counter);
-  new_symbol.type = expr.type();
+  new_symbol.set_type(expr.type());
   new_symbol.id = tmp_symbol.prefix + id2string(new_symbol.name);
 
   new_name(new_symbol);
@@ -1173,6 +1218,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
   {
     codet assignment("assign");
     assignment.reserve_operands(2);
+    new_symbol.set_value(expr.op0());
     assignment.copy_to_operands(symbol_expr(new_symbol));
     assignment.move_to_operands(expr.op0());
     assignment.location() = expr.location();
@@ -1193,7 +1239,9 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
     dest.destructive_append(tmp_program);
   }
 
+  const locationt loc = expr.location();
   expr = symbol_expr(new_symbol);
+  expr.location() = loc;
 }
 
 void goto_convertt::remove_statement_expression(
@@ -1233,7 +1281,7 @@ void goto_convertt::remove_statement_expression(
   decl.location() = location;
   convert_decl(decl, dest);
 
-  symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
+  symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.get_type());
   tmp_symbol_expr.location() = location;
 
   if (last.statement() == "expression")

@@ -1,0 +1,258 @@
+name: Witness Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchexec_url:
+        description: 'URL of the benchexec run to validate'
+        required: false
+      esbmc_source:
+        type: choice
+        description: 'ESBMC binary source'
+        options:
+          - Download from benchexec run
+          - Rebuild
+      validator:
+        type: choice
+        description: 'Witness validator'
+        options:
+          - ESBMC
+          - CPAChecker
+      witness:
+        type: choice
+        description: 'Witness type to validate'
+        options:
+          - Full
+          - Violation
+          - Correctness
+      mode:
+        type: choice
+        description: 'Validation scope'
+        options:
+          - Full
+          - RunSet
+          - Task
+      runset:
+        type: choice
+        description: 'Run-set (only used when mode is RunSet)'
+        options:
+          - SV-COMP26_unreach-call
+          - SV-COMP26_no-data-race
+          - SV-COMP26_valid-memcleanup
+          - SV-COMP26_valid-memsafety
+          - SV-COMP26_termination
+          - SV-COMP26_no-overflow
+          - SV-COMP26_unreach-call_demo
+          - SV-COMP26_no-data-race_demo
+          - SV-COMP26_valid-memsafety_demo
+          - SV-COMP26_no-overflow_demo
+      task:
+        type: choice
+        description: 'Task (only used when mode is Task)'
+        options:
+          - ReachSafety-Arrays
+          - ReachSafety-BitVectors
+          - ReachSafety-ControlFlow
+          - ReachSafety-ECA
+          - ReachSafety-Floats
+          - ReachSafety-Heap
+          - ReachSafety-Loops
+          - ReachSafety-ProductLines
+          - ReachSafety-Recursive
+          - ReachSafety-Sequentialized
+          - ReachSafety-XCSP
+          - ReachSafety-Combinations
+          - ReachSafety-Hardware
+          - ReachSafety-Hardness
+          - ReachSafety-CorrectnessWitnesses
+          - ReachSafety-ViolationWitnesses
+          - ConcurrencySafety-Main
+          - SoftwareSystems-AWS-C-Common-ReachSafety
+          - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+          - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+          - SoftwareSystems-Other-ReachSafety
+          - SoftwareSystems-uthash-ReachSafety
+          - SoftwareSystems-Intel-TDX-Module-ReachSafety
+          - Termination-ViolationWitnesses
+          - NoDataRace-Main
+          - MemSafety-MemCleanup
+          - SoftwareSystems-uthash-MemCleanup
+          - MemSafety-Arrays
+          - MemSafety-Heap
+          - MemSafety-LinkedLists
+          - MemSafety-Other
+          - MemSafety-Juliet
+          - SoftwareSystems-coreutils-MemSafety
+          - SoftwareSystems-DeviceDriversLinux64-MemSafety
+          - SoftwareSystems-Other-MemSafety
+          - SoftwareSystems-uthash-MemSafety
+          - ConcurrencySafety-MemSafety
+          - NoOverflows-Main
+          - NoOverflows-Juliet
+          - SoftwareSystems-BusyBox-NoOverflows
+          - SoftwareSystems-coreutils-NoOverflows
+          - SoftwareSystems-uthash-NoOverflows
+          - ConcurrencySafety-NoOverflows
+          - Termination-BitVectors
+          - Termination-MainControlFlow
+          - Termination-MainHeap
+          - Termination-Other
+          - SoftwareSystems-DeviceDriversLinux64-Termination
+
+jobs:
+  build-esbmc:
+    if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Rebuild' }}
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b Release -e OFF -C'
+      testing: false
+
+  run-validation:
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 12000
+    needs: build-esbmc
+    if: ${{ always() && !cancelled() && (needs.build-esbmc.result == 'success' || needs.build-esbmc.result == 'skipped') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          path: esbmc-src
+
+      - name: Extract run ID from URL
+        id: parse
+        if: ${{ inputs.benchexec_url != '' }}
+        run: |
+          url="${{ inputs.benchexec_url }}"
+          run_id=${url#*/runs/}; run_id=${run_id%%/*}
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-result
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
+        run: |
+          rm -rf ./esbmc-output $HOME/esbmc-output
+          unzip -q output.zip
+          mv esbmc-output $HOME/esbmc-output
+
+      - name: Download ESBMC binary (from benchexec run)
+        if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Download from benchexec run' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download ESBMC binary (rebuilt)
+        if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Rebuild' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
+          path: ./
+
+      - name: Install ESBMC binary
+        if: ${{ inputs.validator == 'ESBMC' }}
+        run: |
+          mkdir -p $HOME/output-action
+          cp bin/esbmc $HOME/output-action/esbmc
+          cp esbmc-src/scripts/competitions/svcomp/esbmc-wrapper.py $HOME/output-action/esbmc-wrapper.py
+          chmod +x $HOME/output-action/esbmc $HOME/output-action/esbmc-wrapper.py
+
+      - name: Run Validation (Full)
+        if: ${{ inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+
+      - name: Run Validation (RunSet)
+        if: ${{ inputs.mode == 'RunSet' }}
+        run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+
+      - name: Run Validation (Task)
+        if: ${{ inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
+
+      - name: Show validation summary
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
+
+      - name: Move validation output
+        run: mv $HOME/witness-output.zip ./witness-output.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: witness-result
+          path: witness-output.zip
+
+  generate-table:
+    runs-on: ubuntu-slim
+    needs: run-validation
+    if: ${{ always() && needs.run-validation.result == 'success' }}
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install benchexec
+        run: |
+          pip install --user benchexec
+          echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v6
+
+      - name: Extract run ID from URL
+        id: parse
+        if: ${{ inputs.benchexec_url != '' }}
+        run: |
+          url="${{ inputs.benchexec_url }}"
+          run_id=${url#*/runs/}; run_id=${run_id%%/*}
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-result
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract benchexec results
+        if: ${{ inputs.benchexec_url != '' }}
+        run: unzip output.zip || true
+
+      - name: Download witness results
+        uses: actions/download-artifact@v8
+        with:
+          name: witness-result
+          path: ./
+
+      - name: Extract witness results
+        run: unzip witness-output.zip || true
+
+      - name: Generate html table
+        run: ./scripts/competitions/compare-runs.sh esbmc-output witness-output
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: html-table
+          path: |
+            diff-esbmc-output-witness-output/
+            esbmc-output/
+            witness-output/

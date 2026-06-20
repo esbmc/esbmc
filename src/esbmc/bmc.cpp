@@ -19,16 +19,17 @@
 #include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
-#include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
+#include <goto-symex/sarif.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
+#include <solvers/smt/smt_conv.h>
 #include <sstream>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
@@ -45,6 +46,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -67,7 +69,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -99,6 +101,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       _context);
   }
 }
+
+bmct::~bmct() = default;
 
 void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 {
@@ -150,6 +154,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (witness_yaml_output != "")
     violation_yaml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("sarif-output").empty())
+    sarif_goto_trace(options, ns, goto_trace);
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -225,7 +232,7 @@ void bmct::keep_alive_function() const
   }
 }
 
-smt_convt::resultt bmct::run_decision_procedure(
+smt_resultt bmct::run_decision_procedure(
   smt_convt &smt_conv,
   symex_target_equationt &eq) const
 {
@@ -275,13 +282,13 @@ smt_convt::resultt bmct::run_decision_procedure(
     }
 
     if (options.get_bool_option("smt-formula-only"))
-      return smt_convt::P_SMTLIB;
+      return P_SMTLIB;
   }
 
   log_progress("Solving with solver {}", smt_conv.solver_text());
 
   fine_timet sat_start = current_time();
-  smt_convt::resultt dec_result = smt_conv.dec_solve();
+  smt_resultt dec_result = smt_conv.dec_solve();
   fine_timet sat_stop = current_time();
   keep_alive_running = false;
 
@@ -300,6 +307,33 @@ void bmct::report_success()
 void bmct::report_failure()
 {
   log_fail("\nVERIFICATION FAILED");
+}
+
+void bmct::report_unknown()
+{
+  log_fail("\nVERIFICATION UNKNOWN");
+}
+
+smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
+{
+  // Re-encode in vacuity mode: each kept assertion contributes its path
+  // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
+  // The result is UNSAT iff the path to every kept claim is unreachable.
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  local_eq.convert(*solver, /*vacuity_mode=*/true);
+  return solver->dec_solve();
+}
+
+// True when a discharged claim is a candidate for vacuity probing. Skips
+// the loop-invariant pass's own synthetic sanity assertions: each is
+// sequenced under an ASSUME(false) terminator, so any claim appearing
+// after the first loop's inductive step would always probe vacuous. The
+// probe targets user-facing claims (contract ensures, user assertions),
+// not internal pass scaffolding.
+static bool is_vacuity_probe_candidate(const std::string &claim_property)
+{
+  return claim_property != "invariant-base-case" &&
+         claim_property != "invariant-inductive-step";
 }
 
 void bmct::show_program(const symex_target_equationt &eq)
@@ -362,9 +396,7 @@ void bmct::show_program(const symex_target_equationt &eq)
   log_status("{}", oss.str());
 }
 
-void bmct::report_trace(
-  smt_convt::resultt &res,
-  const symex_target_equationt &eq)
+void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
 {
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -374,7 +406,7 @@ void bmct::report_trace(
 
   switch (res)
   {
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     if (is && term)
     {
     }
@@ -384,7 +416,7 @@ void bmct::report_trace(
     }
     break;
 
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     if (!bs && show_cex)
     {
       error_trace(*runtime_solver, eq);
@@ -438,11 +470,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -465,7 +497,7 @@ void bmct::clear_verified_claims_in_goto(
 }
 
 void bmct::report_multi_property_trace(
-  const smt_convt::resultt &res,
+  const smt_resultt &res,
   const std::vector<witness_recordt> &witnesses,
   enumeration_stop_reasont stop_reason,
   const std::string &msg)
@@ -475,11 +507,11 @@ void bmct::report_multi_property_trace(
 
   switch (res)
   {
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     log_success("Claim '{}' holds up to the current K", msg);
     return;
 
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     break;
 
   default:
@@ -700,6 +732,17 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   return j;
 }
 
+// Predicate used by both the final and the verbose k-path reporters.
+static bool is_kpath_maximal(const std::string &claim_sig)
+{
+  const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+  // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+  // future emission path puts a tab in msg.
+  const auto tab = claim_sig.rfind('\t');
+  return redundant.count(
+           {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -786,14 +829,16 @@ void report_coverage(
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-claims-rm");
 
-    // reached claims:
+    // Local copy: the JSON writer downstream reads the original
+    // reached_claims; mutating it here would mark every claim uncovered.
+    auto reached_claims_local = reached_claims;
     auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim_pair : total_cond_assert)
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
       std::string claim_sig = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim_sig))
+      if (reached_claims_local.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
@@ -807,7 +852,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        reached_claims.erase(claim_sig);
+        reached_claims_local.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -819,7 +864,7 @@ void report_coverage(
           claim_msg = "!(" + claim_msg + ")";
         std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim_sig))
+        if (reached_claims_local.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
@@ -836,7 +881,7 @@ void report_coverage(
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        reached_claims.erase(r_claim_sig);
+        reached_claims_local.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);
@@ -929,17 +974,30 @@ void report_coverage(
   else if (is_k_path_cov)
   {
     const size_t total = goto_coveraget::total_kpath;
-    const size_t tracked_instance = reached_claims.size();
+    const size_t spanning = goto_coveraget::total_kpath_spanning;
+
+    // Phase-2 (issue #4335): both numerator and denominator must restrict
+    // to maximal goals under the atom-multiset subsumption order (Marré-
+    // Bertolino, IEEE TSE 2003). Filter reached_claims against
+    // k_path_spanning_redundant so a reached-but-subsumed goal does not
+    // inflate the numerator against the maximal-only denominator.
+    const size_t tracked_instance = std::count_if(
+      reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
+    log_result("Spanning Set : {}", spanning);
     log_result("Reached : {}", tracked_instance);
 
+    // Listing shows every reached claim regardless of maximality so the
+    // user can see which subsumed goals were also reached — this is a
+    // diagnostic flag, not a coverage-formula display.
     if (options.get_bool_option("k-path-coverage-claims"))
       for (const auto &claim : reached_claims)
         log_status("  {}", prettify_solidity_expr(claim));
 
-    if (total != 0)
-      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    if (spanning != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / spanning);
     else
       log_result("k-Path Coverage: N/A (no k-path goals)");
   }
@@ -986,6 +1044,18 @@ void report_coverage(
       claim_entry["column"] = loc["column"];
       claim_entry["function"] = loc["function"];
       claim_entry["status"] = covered ? "covered" : "uncovered";
+      // k-path Phase-2 (#4335): annotate each claim as feasible (a
+      // maximal element of the subsumption lattice and thus part of the
+      // spanning set) or spanning-set-redundant (subsumed by a stronger
+      // emitted goal — covering it adds no information beyond covering
+      // its subsumer).
+      if (is_k_path_cov)
+      {
+        const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+        claim_entry["feasibility"] = redundant.count({claim_msg, claim_loc}) > 0
+                                       ? "spanning-set-redundant"
+                                       : "feasible";
+      }
       claims_json.push_back(claim_entry);
     }
 
@@ -994,6 +1064,23 @@ void report_coverage(
     for (const auto &c : claims_json)
       if (c["status"] == "covered")
         covered_count++;
+
+    // For k-path coverage, restrict the summary to maximal goals so the
+    // JSON percentage matches the terminal spanning-set-filtered output.
+    // Individual claims keep their `feasibility` annotation so consumers
+    // that want raw counts can still derive them from the `claims` array.
+    if (is_k_path_cov)
+    {
+      total = 0;
+      covered_count = 0;
+      for (const auto &c : claims_json)
+        if (c["feasibility"] == "feasible")
+        {
+          ++total;
+          if (c["status"] == "covered")
+            ++covered_count;
+        }
+    }
 
     json report;
     report["coverage_type"] = cov_type;
@@ -1038,6 +1125,7 @@ void bmct::report_coverage_verbose(
   const bool &is_cond_cov,
   const bool &is_branch_cov,
   const bool &is_branch_func_cov,
+  const bool &is_k_path_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -1123,6 +1211,22 @@ void bmct::report_coverage_verbose(
       else
         log_result("Branch Function Coverage: 0%");
     }
+    else if (is_k_path_cov)
+    {
+      // Match the final reporter's spanning-set formula so per-witness
+      // progress agrees with the final summary.
+      const size_t tracked_instance = std::count_if(
+        reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+      if (options.get_bool_option("k-path-coverage-claims"))
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
+
+      // spanning >= 1 here: verbose only fires after a reached claim,
+      // which implies total_kpath >= 1 (Marré-Bertolino).
+      log_result(
+        "Current k-Path Coverage: {}%\n",
+        tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
+    }
     else
     {
       log_error("Unsupported coverage metrics");
@@ -1131,7 +1235,7 @@ void bmct::report_coverage_verbose(
   }
 }
 
-void bmct::report_result(smt_convt::resultt &res)
+void bmct::report_result(smt_resultt &res)
 {
   // k-induction prints its own messages
   if (options.get_bool_option("k-induction-parallel"))
@@ -1149,7 +1253,7 @@ void bmct::report_result(smt_convt::resultt &res)
 
   switch (res)
   {
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     if (is && term)
     {
       report_failure();
@@ -1161,11 +1265,23 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
-        report_success();
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
+      {
+        if (vacuity_detected)
+          report_unknown();
+        else
+          report_success();
+      }
     }
     else
     {
@@ -1173,7 +1289,7 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     break;
 
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     if (!is && !fc)
     {
       report_failure();
@@ -1191,7 +1307,7 @@ void bmct::report_result(smt_convt::resultt &res)
     // Return failure if we didn't actually check anything, we just emitted the
     // test information to an SMTLIB formatted file. Causes esbmc to quit
     // immediately (with no error reported)
-  case smt_convt::P_SMTLIB:
+  case P_SMTLIB:
     return;
 
   default:
@@ -1206,10 +1322,10 @@ void bmct::report_result(smt_convt::resultt &res)
   }
 }
 
-smt_convt::resultt bmct::start_bmc()
+smt_resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
-  smt_convt::resultt res = run(eq);
+  smt_resultt res = run(eq);
   if (!options.get_bool_option("multi-property"))
     // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
@@ -1217,7 +1333,7 @@ smt_convt::resultt bmct::start_bmc()
   return res;
 }
 
-smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
+smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 {
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
@@ -1225,7 +1341,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   if (options.get_bool_option("schedule"))
     return run_thread(eq);
 
-  smt_convt::resultt res;
+  smt_resultt res;
   do
   {
     if (++interleaving_number > 1)
@@ -1234,12 +1350,12 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
-    if (res == smt_convt::P_SATISFIABLE)
+    if (res == P_SATISFIABLE)
     {
       if (config.options.get_bool_option("smt-model"))
         runtime_solver->print_model();
@@ -1250,7 +1366,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
     if (res)
     {
-      if (res == smt_convt::P_SATISFIABLE)
+      if (res == P_SATISFIABLE)
         ++interleaving_failed;
 
       if (!options.get_bool_option("all-runs"))
@@ -1281,7 +1397,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       log_warning("No LTL traces seen, apparently");
   }
 
-  return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
+  return interleaving_failed > 0 ? P_SATISFIABLE : res;
 }
 
 void bmct::bidirectional_search(
@@ -1299,13 +1415,15 @@ void bmct::bidirectional_search(
   unsigned assert_loop_number = 0;
   for (const auto &ssait : eq.SSA_steps)
   {
-    if (ssait.is_assert() && smt_conv.l_get(ssait.cond_ast).is_false())
+    if (
+      ssait.is_assert() && !is_nil_expr(ssait.cond_expr) &&
+      smt_conv.l_get(ssait.cond_expr).is_false())
     {
       if (!ssait.loop_number)
         return;
 
       // Save the location of the failed assertion
-      frames = ssait.stack_trace;
+      frames = ssait.stack_trace();
       assert_loop_number = ssait.loop_number;
 
       // We are not interested in instructions before the failed assertion yet
@@ -1363,7 +1481,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol_renaming_level::level0);
 
       if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -1413,7 +1532,7 @@ void bmct::bidirectional_search(
   }
 }
 
-smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
+smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
   // Clear collected pytest test data at the start of coverage run
   if (options.get_bool_option("generate-pytest-testcase"))
@@ -1464,7 +1583,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       show_program(*eq);
 
     if (options.get_bool_option("program-only"))
-      return smt_convt::P_SMTLIB;
+      return P_SMTLIB;
 
     log_status(
       "Generated {} VCC(s), {} remaining after simplification ({} "
@@ -1473,18 +1592,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
 
-    if (options.get_bool_option("document-subgoals"))
-    {
-      std::ostringstream oss;
-      document_subgoals(*eq, oss);
-      log_status("{}", oss.str());
-      return smt_convt::P_SMTLIB;
-    }
-
     if (options.get_bool_option("show-vcc"))
     {
       show_vcc(*eq);
-      return smt_convt::P_SMTLIB;
+      return P_SMTLIB;
     }
 
     if (solver_result.remaining_claims == 0)
@@ -1494,7 +1605,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         log_status(
           "No VCC remaining, no SMT formula will be generated for"
           " this program\n");
-        return smt_convt::P_SMTLIB;
+        return P_SMTLIB;
       }
 
       // In coverage mode, still print the coverage summary even when all
@@ -1509,20 +1620,20 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
           options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
       }
 
-      return smt_convt::P_UNSATISFIABLE;
+      return P_UNSATISFIABLE;
     }
 
     if (options.get_bool_option("ltl"))
     {
       int res = ltl_run_thread(*eq);
       if (res == -1)
-        return smt_convt::P_SMTLIB;
+        return P_SMTLIB;
       if (res < 0)
-        return smt_convt::P_ERROR;
+        return P_ERROR;
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
-      return smt_convt::P_UNSATISFIABLE;
+      return P_UNSATISFIABLE;
     }
 
     if (!options.get_bool_option("smt-during-symex"))
@@ -1540,25 +1651,60 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
-    return run_decision_procedure(*runtime_solver, *eq);
+    smt_resultt result = run_decision_procedure(*runtime_solver, *eq);
+
+    // Per-claim vacuity probe in single-property mode: a whole-equation
+    // reachability check would silently miss a vacuous claim whenever some
+    // *other* claim has a reachable path.
+    if (
+      result == P_UNSATISFIABLE && options.get_bool_option("check-vacuity") &&
+      remaining_asserts > 0)
+    {
+      log_status(
+        "Probing {} claim(s) for vacuous discharge",
+        remaining_asserts.to_int64());
+
+      for (size_t i = 1; i <= remaining_asserts.to_uint64(); i++)
+      {
+        symex_target_equationt vac_eq = *eq;
+        claim_slicer keeper(
+          i, /*show_slice_info=*/false, /*is_goto_cov=*/false, ns);
+        keeper.run(vac_eq.SSA_steps);
+
+        if (!is_vacuity_probe_candidate(keeper.claim_property))
+          continue;
+
+        if (check_vacuity(vac_eq) == P_UNSATISFIABLE)
+        {
+          log_warning(
+            "Vacuous discharge: claim '{}' has unsatisfiable path "
+            "assumptions; possible causes include an over-constrained loop "
+            "invariant, requires clause, or upstream assume.",
+            keeper.claim_cstr);
+          vacuity_detected = true;
+        }
+      }
+    }
+
+    return result;
   }
 
   catch (std::string &error_str)
   {
     log_error("{}", error_str);
-    return smt_convt::P_ERROR;
+    return P_ERROR;
   }
 
   catch (const char *error_str)
   {
     log_error("{}", error_str);
-    return smt_convt::P_ERROR;
+    return P_ERROR;
   }
 
   catch (std::bad_alloc &)
   {
     log_error("Out of memory\n");
-    return smt_convt::P_ERROR;
+    return P_ERROR;
   }
 }
 
@@ -1566,8 +1712,11 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
   /* LTL checking - first check for whether we have a negative prefix, then
    * the indeterminate ones. */
-  using Type = std::pair<std::string_view, ltl_res>;
-  static constexpr std::array seq = {
+  // Keys are interned irep_idt, matching SSA_stept::comment, so the
+  // comparisons below are dstring identity checks with no per-step
+  // string materialisation.
+  using Type = std::pair<irep_idt, ltl_res>;
+  static const std::array seq = {
     Type{"LTL_BAD", ltl_res_bad},
     Type{"LTL_FAILING", ltl_res_failing},
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
@@ -1588,13 +1737,13 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
           num_asserts++;
       }
 
-    smt_convt::resultt solver_result = smt_convt::P_UNSATISFIABLE;
+    smt_resultt solver_result = P_UNSATISFIABLE;
     log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
       std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
       solver_result = run_decision_procedure(*smt_conv, equation);
-      if (solver_result == smt_convt::P_SATISFIABLE)
+      if (solver_result == P_SATISFIABLE)
         log_status("Found trace satisfying {}", which);
     }
     else
@@ -1612,13 +1761,13 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 
     switch (solver_result)
     {
-    case smt_convt::P_SATISFIABLE:
+    case P_SATISFIABLE:
       return check;
-    case smt_convt::P_ERROR:
+    case P_ERROR:
       return -2;
-    case smt_convt::P_SMTLIB:
+    case P_SMTLIB:
       return -1;
-    case smt_convt::P_UNSATISFIABLE:
+    case P_UNSATISFIABLE:
       continue;
     }
   }
@@ -1627,13 +1776,13 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   return ltl_res_good;
 }
 
-smt_convt::resultt bmct::multi_property_check(
+smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
   smt_convt &runtime_solver)
 {
   // Initial values
-  smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
+  smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
   std::atomic<size_t> ce_counter{0};
   std::unordered_set<size_t> jobs;
@@ -1831,9 +1980,21 @@ smt_convt::resultt bmct::multi_property_check(
 
     // Save current instance with timing
     fine_timet solve_start = current_time();
-    smt_convt::resultt solver_result =
-      run_decision_procedure(*solver_ptr, local_eq);
+    smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    // After UNSAT, probe whether the path to the kept claim is reachable.
+    // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
+    bool is_vacuous = false;
+    if (
+      solver_result == P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") &&
+      is_vacuity_probe_candidate(claim.claim_property))
+    {
+      is_vacuous = (check_vacuity(local_eq) == P_UNSATISFIABLE);
+      if (is_vacuous)
+        vacuity_detected = true;
+    }
 
     // Show colored result after solving
     const std::string GREEN = is_color ? "\033[32m" : "";
@@ -1842,16 +2003,25 @@ smt_convt::resultt bmct::multi_property_check(
 
     if (!is_cov_silent)
     {
-      if (solver_result == smt_convt::P_UNSATISFIABLE)
+      if (solver_result == P_UNSATISFIABLE)
       {
-        // Claim passed - show in green
-        log_status(
-          "{}✓ PASSED{}: '{}'",
-          GREEN,
-          RESET,
-          prettify_solidity_expr(claim.claim_cstr));
+        if (is_vacuous)
+          log_status(
+            "{}? UNKNOWN{}: '{}' (vacuous discharge: path assumptions are "
+            "unsatisfiable; possible causes include an over-constrained "
+            "loop invariant, requires clause, or upstream assume)",
+            YELLOW,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
+        else
+          // Claim passed - show in green
+          log_status(
+            "{}✓ PASSED{}: '{}'",
+            GREEN,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
       }
-      else if (solver_result == smt_convt::P_SATISFIABLE)
+      else if (solver_result == P_SATISFIABLE)
       {
         if (is)
           // Inductive step could not prove this claim - show in yellow
@@ -1881,18 +2051,23 @@ smt_convt::resultt bmct::multi_property_check(
     } while (!summary.total_time_s.compare_exchange_weak(
       old_total_time_s, new_total_time_s));
 
-    if (solver_result == smt_convt::P_SATISFIABLE)
+    if (solver_result == P_SATISFIABLE)
     {
       if (is)
         summary.unknown_properties++;
       else
         summary.failed_properties++;
     }
-    else if (solver_result == smt_convt::P_UNSATISFIABLE)
-      summary.passed_properties++;
+    else if (solver_result == P_UNSATISFIABLE)
+    {
+      if (is_vacuous)
+        summary.unknown_properties++;
+      else
+        summary.passed_properties++;
+    }
 
     // If an assertion instance is verified to be violated
-    if (solver_result == smt_convt::P_SATISFIABLE)
+    if (solver_result == P_SATISFIABLE)
     {
       // Inductive step SAT means unprovable (UNKNOWN), not a real
       // counterexample — skip trace generation and return early.
@@ -1949,9 +2124,9 @@ smt_convt::resultt bmct::multi_property_check(
       // Drive enumeration with a separate variable so the original SAT
       // outcome stays in `solver_result` for downstream bookkeeping
       // (final_result, fail-fast counter, claim cleanup).
-      smt_convt::resultt enum_result = solver_result;
+      smt_resultt enum_result = solver_result;
       bool ctx_pushed = false;
-      while (enum_result == smt_convt::P_SATISFIABLE)
+      while (enum_result == P_SATISFIABLE)
       {
         witness_recordt w;
         build_goto_trace(local_eq, *solver_ptr, w.trace, is_compact_trace);
@@ -2044,8 +2219,7 @@ smt_convt::resultt bmct::multi_property_check(
       // set is *not* exhaustive — flag it explicitly.
       if (
         stop_reason == enumeration_stop_reasont::Unsat &&
-        enum_result != smt_convt::P_UNSATISFIABLE &&
-        enum_result != smt_convt::P_SATISFIABLE)
+        enum_result != P_UNSATISFIABLE && enum_result != P_SATISFIABLE)
         stop_reason = enumeration_stop_reasont::Error;
 
       // Drop every blocking clause we asserted; the next claim's solve
@@ -2077,12 +2251,13 @@ smt_convt::resultt bmct::multi_property_check(
           is_cond_cov,
           is_branch_cov,
           is_branch_func_cov,
+          is_k_path_cov,
           reached_claims,
           reached_mul_claims);
       else if (!is_cov_silent)
       {
         report_multi_property_trace(
-          smt_convt::P_SATISFIABLE, witnesses, stop_reason, claim.claim_msg);
+          P_SATISFIABLE, witnesses, stop_reason, claim.claim_msg);
       }
 
       {
@@ -2101,7 +2276,7 @@ smt_convt::resultt bmct::multi_property_check(
         clear_verified_claims_in_goto(claim, is_goto_cov);
       }
     }
-    else if (solver_result == smt_convt::P_UNSATISFIABLE)
+    else if (solver_result == P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
       // either forward condition or inductive step

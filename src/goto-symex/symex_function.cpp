@@ -48,6 +48,13 @@ bool goto_symext::get_unwind_recursion(
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
+
+      // If we're actually running the inductive step right now, abort
+      // symex: the IS encoding would be unsound, and finishing it just
+      // wastes time and risks producing a contradictory verdict before
+      // the strategy layer can downgrade the result to UNKNOWN.
+      if (inductive_step)
+        throw inductive_step_disabled_exceptiont("recursion");
     }
 
     const symbolt &symbol = *ns.lookup(identifier);
@@ -159,7 +166,7 @@ unsigned goto_symext::argument_assignments(
             const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
             symbolt const *sym = ns.lookup(sym_type.symbol_name);
             if (sym)
-              ptr_subtype = migrate_type(sym->type);
+              ptr_subtype = migrate_symbol_type(*sym);
             else
               break;
           }
@@ -207,24 +214,28 @@ unsigned goto_symext::argument_assignments(
   unsigned va_index = UINT_MAX;
   if (function_type.ellipsis)
   {
-    // These are va_arg arguments; their types may differ from call to call
+    // These are va_arg arguments; their types may differ from call to call.
+    // Build the `<fn>::va_arg` prefix once; each iteration only appends the
+    // counter, rather than rebuilding the whole prefix string every probe.
+    const std::string va_prefix = id2string(function_identifier) + "::va_arg";
+    auto va_name = [&va_prefix](unsigned n) {
+      return va_prefix + std::to_string(n);
+    };
+
     unsigned va_count = 0;
-    while (new_context.find_symbol(
-             id2string(function_identifier) + "::va_arg" +
-             std::to_string(va_count)) != nullptr)
+    while (new_context.find_symbol(va_name(va_count)) != nullptr)
       ++va_count;
 
     va_index = va_count;
     for (; it1 != arguments.end(); ++it1, va_count++)
     {
-      irep_idt identifier =
-        id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
+      irep_idt identifier = va_name(va_count);
 
       // add to symbol table
       symbolt symbol;
       symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
-      symbol.type = migrate_type_back((*it1)->type);
+      set_symbol_type(symbol, (*it1)->type);
 
       if (new_context.move(symbol))
       {
@@ -260,10 +271,109 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+bool goto_symext::symex_uninterpreted_function(
+  const code_function_call2t &call,
+  const irep_idt &identifier)
+{
+  // A function whose name begins "__ESBMC_uninterpreted_" (ESBMC's native
+  // namespace) or "__CPROVER_uninterpreted_" (CBMC compatibility) is modelled
+  // as an uninterpreted function: its value is an arbitrary but *fixed*
+  // function of its arguments (functional congruence). Any concrete body,
+  // including its side effects, is deliberately discarded. The mangled
+  // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
+  // (used only for the prefix test) is the suffix after the last '@'.
+  //
+  // Both prefixes are always recognised: the "__CPROVER_uninterpreted_" alias
+  // maps onto the native semantics, matching CBMC (which likewise ignores any
+  // body). Both namespaces are reserved, so no legitimate program relies on
+  // such a body executing.
+  const std::string &mangled = identifier.as_string();
+  std::string name = mangled.substr(mangled.rfind('@') + 1);
+  if (
+    !has_prefix(name, "__ESBMC_uninterpreted_") &&
+    !has_prefix(name, "__CPROVER_uninterpreted_"))
+    return false;
+
+  // On a dead branch the call is still "handled" (its body stays uninterpreted),
+  // but it must contribute no fresh result or congruence history: those would be
+  // vacuous here yet pollute every later live call to the same function. This
+  // matters because the native prefix reaches us via run_intrinsic, which runs
+  // even under a false guard, and a function-pointer call can reach the CPROVER
+  // path the same way.
+  if (cur_state->guard.is_false())
+    return true;
+
+  // A void uninterpreted function has no observable result to constrain; the
+  // body is still skipped so it stays uninterpreted.
+  if (is_nil_expr(call.ret))
+    return true;
+
+  // Read and rename the arguments to their current SSA terms.
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  // A native uninterpreted-function symbol can only be declared over scalar
+  // (number/bool) argument and result sorts. A pointer or aggregate operand
+  // lowers to a tuple sort, which mk_smt_uninterpreted_function cannot encode
+  // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
+  // harnesses hit this with a `const void *` hasher/equals argument). When any
+  // argument or the result is non-scalar, fall back to a fresh nondeterministic
+  // result. This is a sound over-approximation: it drops only the functional-
+  // congruence constraint (equal arguments need no longer imply an equal
+  // result), never adding behaviour, and the body is still discarded.
+  bool uf_encodable = is_number_type(call.ret->type);
+  for (const expr2tc &argument : arguments)
+    uf_encodable = uf_encodable && is_number_type(argument->type);
+
+  expr2tc result;
+  if (uf_encodable)
+  {
+    // Emit an uninterpreted-function application and assign it to the return.
+    // Functional congruence (equal arguments imply an equal result) is enforced
+    // downstream by the SMT backend's native uninterpreted-function support
+    // (with a generic Ackermannisation fallback for solvers that lack it), so
+    // no congruence history is tracked here. Key the function on the full
+    // mangled identifier so two genuinely distinct symbols that share a C-level
+    // name are never tied together by congruence.
+    result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+  }
+  else
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has a non-scalar signature; modelling its "
+      "result as unconstrained nondet (no functional congruence)",
+      name);
+    result = sideeffect2tc(
+      call.ret->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(result);
+  }
+
+  symex_assign(code_assign2tc(call.ret, result));
+  return true;
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+
+  // Intercept "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*" calls
+  // before inlining any body.
+  if (symex_uninterpreted_function(call, identifier))
+  {
+    cur_state->source.pc++;
+    return;
+  }
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =
@@ -387,11 +497,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
-  // assign arguments
-  type2tc tmp_type = migrate_type(goto_function.type);
-
-  frame.va_index =
-    argument_assignments(identifier, to_code_type(tmp_type), arguments);
+  // assign arguments (goto_function.type is already IREP2)
+  frame.va_index = argument_assignments(
+    identifier, to_code_type(goto_function.type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
@@ -403,14 +511,57 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
-static std::list<std::pair<guardt, expr2tc>>
+// True if a function of type `candidate` may be called through a function
+// pointer whose declared pointed-to type is `declared_type`. Mirrors CBMC's
+// remove_function_pointers signature check, adapted to ESBMC's representation
+// in which an unprototyped `void (*)()` is indistinguishable from a prototyped
+// `void (*)(void)` (both carry no arguments and no ellipsis). Such pointers are
+// treated as matching any target, preserving ESBMC's permissive K&R dispatch
+// (regression/esbmc/function_deref_{2,3,4}). Return types are intentionally not
+// compared, to avoid pruning the common void*/typed-pointer casts.
+static bool function_is_type_compatible(
+  const code_type2t &declared_type,
+  const code_type2t &candidate,
+  const namespacet &ns)
+{
+  // An unprototyped (`void (*)()`) or variadic pointer does not pin the
+  // argument count, so any target is admissible.
+  if (declared_type.arguments.empty() || declared_type.ellipsis)
+    return true;
+
+  // A variadic or unprototyped target accepts the declared arguments.
+  if (candidate.arguments.empty() || candidate.ellipsis)
+    return true;
+
+  // Both have fixed arity: the counts must match (the #5296 case rejects a
+  // 1-argument pointer against a 2-argument target here).
+  if (candidate.arguments.size() != declared_type.arguments.size())
+    return false;
+
+  // Each declared parameter must match the target's, allowing the same
+  // number<->pointer interchange the call site performs in
+  // argument_assignments.
+  for (std::size_t i = 0; i < declared_type.arguments.size(); ++i)
+  {
+    const type2tc &a = declared_type.arguments[i];
+    const type2tc &b = candidate.arguments[i];
+    if (base_type_eq(a, b, ns))
+      continue;
+    if (!((is_number_type(a) || is_pointer_type(a)) &&
+          (is_number_type(b) || is_pointer_type(b))))
+      return false;
+  }
+  return true;
+}
+
+static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
-  std::list<std::pair<guardt, expr2tc>> l;
+  std::list<std::pair<guard2tc, expr2tc>> l;
 
   if (is_if2t(expr))
   {
-    std::list<std::pair<guardt, expr2tc>> l1, l2;
+    std::list<std::pair<guard2tc, expr2tc>> l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
     expr2tc notguardexpr = not2tc(guardexpr);
@@ -430,7 +581,7 @@ get_function_list(const expr2tc &expr)
 
   if (is_symbol2t(expr))
   {
-    guardt guard;
+    guard2tc guard;
     guard.make_true();
     l.emplace_back(guard, expr);
     return l;
@@ -456,6 +607,20 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
   // symex_function_call_symbol, when dealing with if's we need to fork and
   // merge.
+  if (
+    (k_induction || inductive_step) &&
+    !options.get_bool_option("disable-inductive-step"))
+  {
+    log_warning(
+      "k-induction does not support function pointer calls yet. "
+      "Disabling inductive step");
+    options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("function pointer call");
+  }
+
   if (is_nil_expr(call.function))
   {
     log_error(
@@ -485,12 +650,45 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     return;
   }
 
-  std::list<std::pair<guardt, expr2tc>> l = get_function_list(func_ptr);
+  std::list<std::pair<guard2tc, expr2tc>> l = get_function_list(func_ptr);
+
+  // Drop candidates whose signature is incompatible with the declared
+  // function-pointer type (#5296). An over-approximated value-set can list
+  // address-taken functions of unrelated arity; dispatching a call to such a
+  // wrong-arity target silently nondet-fills the missing arguments
+  // (argument_assignments), which the solver can turn into a spurious
+  // VERIFICATION FAILED. The declared signature is the function operand's type:
+  // a code type for the usual dereferenced-pointer call, or a pointer-to-code
+  // when the operand is the bare pointer. If the filter would remove every
+  // candidate, keep the full list so a frontend type quirk on the real target
+  // can never silently skip the call.
+  const type2tc &func_type = is_pointer_type(call.function->type)
+                               ? to_pointer_type(call.function->type).subtype
+                               : call.function->type;
+  if (is_code_type(func_type))
+  {
+    const code_type2t &declared_type = to_code_type(func_type);
+    std::list<std::pair<guard2tc, expr2tc>> compatible;
+    for (auto &it : l)
+      if (
+        !is_code_type(it.second->type) ||
+        function_is_type_compatible(
+          declared_type, to_code_type(it.second->type), ns))
+        compatible.push_back(it);
+      else
+        log_debug(
+          "function-pointer",
+          "dropping incompatible call target '{}'",
+          to_symbol2t(it.second).thename.as_string());
+
+    if (!compatible.empty())
+      l = std::move(compatible);
+  }
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
   auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem) {
-    const guardt &guard = elem.first;
+    const guard2tc &guard = elem.first;
     const symbol2t &sym = to_symbol2t(elem.second);
     if (!guard.is_false() && !is_code_type(sym.type))
     {
@@ -533,14 +731,14 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     }
 
     // Set up a merge of the current state into the target function.
-    statet::goto_state_listt &goto_state_list =
-      cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
+    statet::merge_state_listt &merge_state_list =
+      cur_state->top().merge_state_map[fit->second.body.instructions.begin()];
 
     cur_state->top().cur_function_ptr_targets.emplace_back(
       fit->second.body.instructions.begin(), it.second);
 
-    goto_state_list.emplace_back(*cur_state);
-    statet::goto_statet &new_state = goto_state_list.back();
+    merge_state_list.emplace_back(*cur_state);
+    statet::merge_statet &new_state = merge_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
@@ -569,10 +767,10 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   // unconditional.
   if (!first)
   {
-    statet::goto_state_listt &goto_state_list =
+    statet::merge_state_listt &merge_state_list =
       cur_state->top()
-        .goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.emplace_back(*cur_state);
+        .merge_state_map[cur_state->top().function_ptr_combine_target];
+    merge_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -617,7 +815,7 @@ void goto_symext::pop_frame()
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
 
-  if (!cur_state->guard.is_false() && stack_catch.empty())
+  if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming
@@ -694,10 +892,10 @@ void goto_symext::symex_return(const expr2tc &code)
   // goto to the end of the function
 
   // put into state-queue
-  statet::goto_state_listt &goto_state_list =
-    cur_state->top().goto_state_map[cur_state->top().end_of_function];
+  statet::merge_state_listt &merge_state_list =
+    cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.emplace_back(*cur_state);
+  merge_state_list.emplace_back(*cur_state);
 
   // check whether the stack limit and return
   // value optimization have been activated.

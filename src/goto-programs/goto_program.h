@@ -6,6 +6,7 @@
 #include <cassert>
 #include <ostream>
 #include <set>
+#include <vector>
 #include <irep2/irep2_utils.h>
 #include <util/location.h>
 #include <util/namespace.h>
@@ -26,25 +27,30 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,            // branch, possibly guarded
-  ASSUME = 2,          // non-failing guarded self loop
-  ASSERT = 3,          // assertions
-  OTHER = 4,           // anything else
-  SKIP = 5,            // just advance the PC
-  LOCATION = 8,        // semantically like SKIP
-  END_FUNCTION = 9,    // exit point of a function
-  ATOMIC_BEGIN = 10,   // marks a block without interleavings
-  ATOMIC_END = 11,     // end of a block without interleavings
-  RETURN = 12,         // return from a function
-  ASSIGN = 13,         // assignment lhs:=rhs
-  DECL = 14,           // declare a local variable
-  DEAD = 15,           // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16,  // call a function
-  THROW = 17,          // throw an exception
-  CATCH = 18,          // catch an exception
-  THROW_DECL = 19,     // list of throws that a function can throw
-  THROW_DECL_END = 20, // end of throw declaration
-  LOOP_INVARIANT = 21  // loop invariant
+  GOTO = 1,           // branch, possibly guarded
+  ASSUME = 2,         // non-failing guarded self loop
+  ASSERT = 3,         // assertions
+  OTHER = 4,          // anything else
+  SKIP = 5,           // just advance the PC
+  LOCATION = 8,       // semantically like SKIP
+  END_FUNCTION = 9,   // exit point of a function
+  ATOMIC_BEGIN = 10,  // marks a block without interleavings
+  ATOMIC_END = 11,    // end of a block without interleavings
+  RETURN = 12,        // return from a function
+  ASSIGN = 13,        // assignment lhs:=rhs
+  DECL = 14,          // declare a local variable
+  DEAD = 15,          // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16, // call a function
+  THROW = 17,         // throw an exception
+  CATCH = 18,         // catch an exception
+  // 19 and 20 were THROW_DECL / THROW_DECL_END, removed in favour of
+  // function-level exception-specification metadata. The numeric values are
+  // left as a gap so the remaining kinds keep their GOTO-binary encoding (and
+  // the in-repo v1 binary fixtures keep loading). A pre-removal binary that
+  // actually contains 19/20 -- only produced from C++ exception-spec code by an
+  // older ESBMC -- has no handler and fails loudly at the symex_step default,
+  // like any other unsupported instruction in a cross-version binary.
+  LOOP_INVARIANT = 21 // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -88,8 +94,6 @@ public:
   class instructiont
   {
   public:
-    mutable std::mutex clear_claims_mutex;
-
     expr2tc code;
 
     //! function this belongs to
@@ -104,11 +108,23 @@ public:
     //! guard for gotos, assume, assert
     expr2tc guard;
 
-    //! loop invariant for loop_invariant instruction
-    std::list<expr2tc> loop_invariants;
+    //! Loop-contract payload (invariants + assigns-clause targets). Only
+    //! loop_invariant instructions ever carry it, so it lives in a lazily
+    //! allocated side struct rather than costing 48 bytes (two empty
+    //! std::lists) on every instruction in the program.
+    struct loop_contract_datat
+    {
+      std::list<expr2tc> invariants;
+      std::list<expr2tc> assigns_targets; // for frame rule enforcement
+    };
+    std::unique_ptr<loop_contract_datat> loop_contract_data;
 
-    //! loop assigns targets for frame rule enforcement
-    std::list<expr2tc> loop_assigns_targets;
+    loop_contract_datat &loop_contract_payload()
+    {
+      if (!loop_contract_data)
+        loop_contract_data = std::make_unique<loop_contract_datat>();
+      return *loop_contract_data;
+    }
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
@@ -153,6 +169,11 @@ public:
     // condition, so GOTO-taken means the branch body (original target) IS reached.
     bool flipped_guard;
 
+    // Set by convert_switch: decimal strings of all case constants whose
+    // target is this GOTO, used by witness waypoint matching.  Contains more
+    // than one entry when multiple case labels fall through to the same body.
+    std::vector<std::string> switch_case_ids;
+
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -166,8 +187,7 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
-      loop_invariants.clear();
-      loop_assigns_targets.clear();
+      loop_contract_data.reset();
       inductive_step_instruction = false;
       inductive_assertion = false;
       flipped_guard = false;
@@ -208,16 +228,6 @@ public:
     inline void make_catch()
     {
       clear(CATCH);
-    }
-
-    inline void make_throw_decl()
-    {
-      clear(THROW_DECL);
-    }
-
-    inline void make_throw_decl_end()
-    {
-      clear(THROW_DECL_END);
     }
 
     inline void make_assertion(const expr2tc &g)
@@ -388,11 +398,19 @@ public:
         location(other.location),
         type(other.type),
         guard(other.guard),
+        // Deep-copy the loop-contract payload. Without this, copying a
+        // LOOP_INVARIANT instruction silently drops its invariants and
+        // assigns-clause targets.
+        loop_contract_data(
+          other.loop_contract_data
+            ? std::make_unique<loop_contract_datat>(*other.loop_contract_data)
+            : nullptr),
         targets(other.targets),
         labels(other.labels),
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -400,7 +418,6 @@ public:
         scope_id(other.scope_id),
         parent_scope_id(other.parent_scope_id)
     {
-      // instruction_mutex is not copied
     }
 
     instructiont &operator=(const instructiont &other)
@@ -415,11 +432,16 @@ public:
         location(std::move(other.location)),
         type(other.type),
         guard(std::move(other.guard)),
+        // Move the loop-contract payload — same reasoning as the copy
+        // ctor; without this, move-constructing a LOOP_INVARIANT
+        // instruction loses its invariants.
+        loop_contract_data(std::move(other.loop_contract_data)),
         targets(std::move(other.targets)),
         labels(std::move(other.labels)),
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -446,13 +468,21 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
-      instruction.loop_invariants.swap(loop_invariants);
-      instruction.loop_assigns_targets.swap(loop_assigns_targets);
+      // Swap the labels too — copy-assign goes through
+      // `instructiont(other).swap(*this)`, so without swapping
+      // labels here the assignment preserves the LHS's labels
+      // instead of taking the RHS's.
+      instruction.labels.swap(labels);
+      loop_contract_data.swap(instruction.loop_contract_data);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
+      instruction.switch_case_ids.swap(switch_case_ids);
+      // Swap location_number too — same copy-assign-through-swap
+      // reasoning as for labels.
+      std::swap(instruction.location_number, location_number);
       std::swap(instruction.loop_number, loop_number);
       std::swap(instruction.pragma_unroll_count, pragma_unroll_count);
       std::swap(target_number, instruction.target_number);
@@ -463,21 +493,23 @@ public:
     void add_loop_invariant(const expr2tc &invariant)
     {
       assert(is_loop_invariant());
-      loop_invariants.push_back(invariant);
+      loop_contract_payload().invariants.push_back(invariant);
     }
     std::list<expr2tc> get_loop_invariants() const
     {
-      return loop_invariants;
+      return loop_contract_data ? loop_contract_data->invariants
+                                : std::list<expr2tc>{};
     }
 
     void add_loop_assigns_target(const expr2tc &target)
     {
       assert(is_loop_invariant());
-      loop_assigns_targets.push_back(target);
+      loop_contract_payload().assigns_targets.push_back(target);
     }
     std::list<expr2tc> get_loop_assigns_targets() const
     {
-      return loop_assigns_targets;
+      return loop_contract_data ? loop_contract_data->assigns_targets
+                                : std::list<expr2tc>{};
     }
 
     //! A globally unique number to identify a program location.
@@ -632,16 +664,19 @@ public:
     const irep_idt &identifier,
     std::ostream &out) const;
 
-  /// Sets the `function` member of each instruction if not yet set
+  /// Sets the `function` member of each instruction if not yet set, or
+  /// unconditionally when \p force is true (e.g. to re-tag a body copied from
+  /// another function, as contract renaming does).
   /// Note that a goto program need not be a goto function and therefore,
   /// we cannot do this in update(), but only at the level of
   /// of goto_functionst where goto programs are guaranteed to be
   /// named functions.
-  void update_instructions_function(const irep_idt &function_id)
+  void
+  update_instructions_function(const irep_idt &function_id, bool force = false)
   {
     for (auto &instruction : instructions)
     {
-      if (instruction.function.empty())
+      if (force || instruction.function.empty())
       {
         instruction.function = function_id;
       }

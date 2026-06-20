@@ -275,10 +275,6 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
     convert_catch(code, dest);
   else if (statement == "cpp-throw")
     convert_throw(code, dest);
-  else if (statement == "throw_decl")
-    convert_throw_decl(code, dest);
-  else if (statement == "throw_decl_end")
-    convert_throw_decl_end(code, dest);
   else if (statement == "dead")
     copy(code, DEAD, dest);
   else
@@ -295,44 +291,75 @@ void goto_convertt::convert(const codet &code, goto_programt &dest)
   }
 }
 
-void goto_convertt::convert_throw_decl_end(
-  const exprt &expr,
-  goto_programt &dest)
+/// The automatic object a destructor-stack entry cleans up: the symbol of a
+/// `dead` entry, or the `this` argument of a destructor call. Empty if neither.
+static irep_idt destructor_entry_symbol(const codet &entry)
 {
-  // add the THROW_DECL_END instruction to 'dest'
-  std::vector<irep_idt> exc; /* TODO: should this really be empty? */
-  goto_programt::targett throw_decl_end_instruction = dest.add_instruction();
-  throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc(exc);
-  throw_decl_end_instruction->location = expr.location();
+  if (entry.get_statement() == "dead" && entry.operands().size() == 1)
+  {
+    if (entry.op0().id() == "symbol")
+      return entry.op0().identifier();
+  }
+  else if (entry.get_statement() == "function_call")
+  {
+    const code_function_callt &call = to_code_function_call(entry);
+    if (!call.arguments().empty() && call.arguments()[0].id() == "address_of")
+    {
+      const exprt &obj = call.arguments()[0].op0();
+      if (obj.id() == "symbol")
+        return obj.identifier();
+    }
+  }
+  return irep_idt();
 }
 
-void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
-  // add the THROW_DECL instruction to 'dest'
-  goto_programt::targett throw_decl_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("throw-decl");
-  c.location() = expr.location();
+  // The thrown operand may still carry side effects — most importantly a
+  // `temporary_object` that constructs the thrown value — when convert_throw is
+  // reached through the code-statement path (a codet("cpp-throw"), as produced
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
+  // in remove_sideeffects, which lowers operands before dispatching here. Lower
+  // them now so the thrown value is a plain symbol, matching the legacy flag-off
+  // GOTO; otherwise the constructor never runs and the handler reads an
+  // unconstructed object. A no-op when the operand is already side-effect-free.
+  exprt expr = expr_in;
+  Forall_operands (it, expr)
+    remove_sideeffects(*it, dest);
 
-  // the THROW_DECL instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
+  // C++ stack unwinding: before the throw, run the destructors of the automatic
+  // objects constructed since the nearest enclosing try block, in reverse
+  // construction order ([except.ctor]). throw_stack_size is the destructor-stack
+  // level at that try's entry — or 0 when the throw is not in any try, so an
+  // exception propagating out of the function destroys all of its locals.
+  //
+  // The thrown object itself must NOT be unwound: its lifetime is owned by the
+  // exception machinery and it has to survive the throw. It is the most-recently
+  // constructed full-expression temporary, so its destructor entries sit on top
+  // of the stack (above the enclosing try's locals). Detach them, run the
+  // (non-destructive) unwind of the try-block locals, then restore them so the
+  // normal fall-through cleanup after the throw is unchanged.
+  destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt thrown_id =
+    expr.operands().empty() || expr.op0().id() != "symbol"
+      ? irep_idt()
+      : expr.op0().identifier();
+
+  // One object contributes up to two adjacent top entries (a `dead` and a
+  // destructor call), both naming the thrown symbol; the loop drains them all.
+  destructor_stackt detached;
+  while (!thrown_id.empty() && stack.size() > targets.throw_stack_size &&
+         destructor_entry_symbol(stack.back()) == thrown_id)
   {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
+    detached.push_back(stack.back());
+    stack.pop_back();
   }
 
-  throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->location = expr.location();
-  migrate_expr(c, throw_decl_instruction->code);
-}
+  unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
 
-void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
-{
+  for (auto it = detached.rbegin(); it != detached.rend(); ++it)
+    stack.push_back(*it);
+
   // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
 
@@ -359,10 +386,19 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   goto_programt::targett end_target = end.add_instruction();
   end_target->make_skip();
 
+  // Record the destructor-stack level at try-block entry so a throw inside the
+  // body unwinds exactly the body's locals (not the enclosing scope's objects,
+  // which outlive the handler). Restore afterwards so the catch handlers — and
+  // any enclosing try — use the outer level. Save/restore handles nesting.
+  const std::size_t old_throw_stack_size = targets.throw_stack_size;
+  targets.throw_stack_size = targets.destructor_stack.size();
+
   // the first operand is the 'try' block
   goto_programt tmp;
   convert(to_code(code.op0()), tmp);
   dest.destructive_append(tmp);
+
+  targets.throw_stack_size = old_throw_stack_size;
 
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction = dest.add_instruction();
@@ -440,6 +476,33 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
 
   exprt expr = code.op0();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
+  // source location from a side_effect_exprt: sideeffect2t carries no location
+  // field, unlike the enclosing code_expression statement (whose location does
+  // survive). remove_function_call copies expr.location() into the lowered call,
+  // so for the function_call side effect that backs the void builtins
+  // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
+  // loop-invariant / requires / ensures contracts) this yields a location-less
+  // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
+  // counter ignore it ("Total Asserts: 0", spurious SUCCESSFUL). Restore the
+  // statement location onto the side effect when the round-trip has dropped it;
+  // a no-op on the legacy path (the side effect keeps its own location there).
+  if (expr.id() == "sideeffect" && expr.location().get_file().empty())
+    expr.location() = code.location();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+  // nested side_effect_exprt("cpp-throw") to its code form codet("cpp-throw"):
+  // migrate_expr_back has no way to know the throw sat in expression position
+  // (block statements need is_code(), so the back-arm cannot universally emit
+  // the side-effect form). A code operand here is therefore a statement that
+  // must be converted as such; otherwise remove_sideeffects below does not
+  // recognize it as a side effect and the throw is silently dropped.
+  if (expr.is_code())
+  {
+    convert(to_code(expr), dest);
+    return;
+  }
 
   if (expr.id() == "if")
   {
@@ -664,7 +727,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
-  if (s->static_lifetime || s->type.is_code())
+  if (s->static_lifetime || s->get_type().is_code())
     return; // this is a SKIP!
 
   // Check if is an VLA declaration and rewrite the declaration
@@ -673,7 +736,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    s->type = var.type();
+    s->set_type(var.type());
   }
 
   exprt initializer = nil_exprt();
@@ -709,7 +772,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
   // top of the destructor stack
-  const symbol_exprt symbol_expr(s->id, s->type);
+  const symbol_exprt symbol_expr(s->id, s->get_type());
 
   {
     code_deadt code_dead(symbol_expr);
@@ -718,7 +781,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // do destructor
   code_function_callt destructor;
-  if (get_destructor(ns, s->type, destructor))
+  if (get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -741,7 +804,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
   if (expr.id() != "symbol")
     return false;
   const symbolt *sym = ns.lookup(expr.identifier());
-  return sym && sym->type.get_bool("#atomic");
+  return sym && sym->get_type().get_bool("#atomic");
 }
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable
@@ -1341,7 +1404,16 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     goto_programt::targett x = tmp_cases.add_instruction();
     x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
-    x->location = case_ops.front().find_location();
+    x->location = code.location();
+    if (
+      options.get_bool_option("validate-violation-witness") ||
+      options.get_option("witness-output-yaml") != "")
+      for (const auto &op : case_ops)
+      {
+        BigInt val;
+        if (!to_integer(op, val))
+          x->switch_case_ids.push_back(integer2string(val));
+      }
   }
 
   {
@@ -1388,6 +1460,19 @@ void goto_convertt::convert_return(
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
+    // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+    // sideeffect_exprt("cpp-throw") that appears as the return value to its
+    // code form codet("cpp-throw"). A throw has void type and cannot be used
+    // as a return value; convert it as a statement and return early (the throw
+    // is unconditional, so no RETURN instruction is needed).
+    // Mirrors the same guard in convert_expression (line ~475).
+    if (
+      new_code.return_value().is_code() &&
+      to_code(new_code.return_value()).get_statement() == "cpp-throw")
+    {
+      convert(to_code(new_code.return_value()), dest);
+      return;
+    }
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
@@ -1519,7 +1604,10 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // do guarded assertions directly
+  // Disabled under --validate-violation-witness: the folding eliminates the
+  // conditional GOTO that witness branching waypoints need to steer the path.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     true_case.instructions.size() == 1 &&
     true_case.instructions.back().is_assert() &&
     is_false(true_case.instructions.back().guard) &&
@@ -1540,7 +1628,9 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // similarly, do guarded assertions directly
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     false_case.instructions.size() == 1 &&
     false_case.instructions.back().is_assert() &&
     is_false(false_case.instructions.back().guard) &&
@@ -1562,7 +1652,9 @@ void goto_convertt::generate_ifthenelse(
 
   // a special case for C libraries that use
   // (void)((cond) || (assert(0),0))
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     is_empty(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&

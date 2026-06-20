@@ -186,45 +186,26 @@ void goto_programt::instructiont::output_instruction(
         << "\n";
     break;
 
-  case THROW_DECL:
-    out << "THROW_DECL (";
-
-    {
-      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(code);
-
-      for (unsigned int i = 0; i < ref.exception_list.size(); ++i)
-      {
-        if (i)
-          out << ", ";
-        out << ref.exception_list[i];
-      }
-      out << ")";
-    }
-
-    out << "\n";
-    break;
-
-  case THROW_DECL_END:
-    out << "THROW_DECL_END";
-    out << "\n";
-    break;
-
   case LOOP_INVARIANT:
+  {
     out << "LOOP_INVARIANT";
-    for (const auto &invariant : loop_invariants)
+    const std::list<expr2tc> invariants = get_loop_invariants();
+    for (const auto &invariant : invariants)
     {
       out << " " << from_expr(ns, identifier, invariant);
     }
-    if (!loop_assigns_targets.empty())
+    const std::list<expr2tc> assigns = get_loop_assigns_targets();
+    if (!assigns.empty())
     {
       out << " ASSIGNS:";
-      for (const auto &target : loop_assigns_targets)
+      for (const auto &target : assigns)
       {
         out << " " << from_expr(ns, identifier, target);
       }
     }
     out << "\n";
     break;
+  }
 
   default:
     throw "unknown statement";
@@ -484,12 +465,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
     break;
   case CATCH:
     out << "CATCH";
-    break;
-  case THROW_DECL:
-    out << "THROW_DECL";
-    break;
-  case THROW_DECL_END:
-    out << "THROW_DECL_END";
     break;
   default:
     assert(!"Unknown instruction type");

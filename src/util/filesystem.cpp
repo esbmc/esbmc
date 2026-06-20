@@ -37,8 +37,15 @@ tmp_path::~tmp_path()
 {
   if (_keep)
     return;
-  uintmax_t removed [[maybe_unused]] = boost::filesystem::remove_all(_path);
-  assert(removed >= 1 && "expected to remove temp path");
+  // Best-effort cleanup: the path may already be gone. create_tmp_dir() also
+  // hands the path to register_tmp_for_cleanup(), so cleanup_registered_tmps()
+  // — invoked from the signal handler before exit() runs static/RAII
+  // destructors (see signal_catcher.cpp) — can remove it first. remove_all
+  // then returns 0, which is a valid "nothing to remove" outcome, not an
+  // error. Use the non-throwing form and tolerate a missing path; asserting
+  // removed >= 1 here aborted on SIGTERM/SIGINT (e.g. a benchexec timeout).
+  boost::system::error_code ec;
+  boost::filesystem::remove_all(_path, ec);
 }
 
 tmp_path &tmp_path::operator=(tmp_path o)

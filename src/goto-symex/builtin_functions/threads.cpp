@@ -6,11 +6,13 @@
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
+#include <util/context.h>
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/message.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
+#include <util/symbol.h>
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
 {
@@ -41,8 +43,7 @@ void goto_symext::intrinsic_switch_to(
 void goto_symext::intrinsic_switch_from(reachability_treet &art)
 {
   // Mark switching back to this thread as already having been explored
-  art.get_cur_state()
-    .DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
+  art.mark_active_thread_explored();
 
   // And force a context switch.
   art.get_cur_state().force_cswitch();
@@ -134,6 +135,10 @@ void goto_symext::intrinsic_spawn_thread(
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("concurrency");
   }
 
   // As an argument, we expect the address of a symbol.
@@ -183,6 +188,25 @@ void goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
+}
+
+void goto_symext::intrinsic_init_thread_local(reachability_treet &)
+{
+  // Seed each `__thread`-qualified global to its static initializer in the
+  // active thread's renaming scope. Called from pthread_trampoline before
+  // the user worker runs; without this, level1's per-thread routing (see
+  // renaming.cpp::is_thread_local) leaves the first read unconstrained.
+  // The main thread gets its TLS init from clang_c_maint::static_lifetime_init
+  // in __ESBMC_main, so we don't need to special-case it here.
+  new_context.foreach_operand([this](const symbolt &sym) {
+    if (!sym.is_thread_local || !sym.static_lifetime)
+      return;
+    expr2tc lhs = symbol2tc(migrate_type(sym.get_type()), sym.id);
+    const exprt &init = sym.get_value();
+    expr2tc rhs;
+    migrate_expr(init.is_nil() ? gen_zero(sym.get_type()) : init, rhs);
+    symex_assign(code_assign2tc(lhs, rhs), true);
+  });
 }
 
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)

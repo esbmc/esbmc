@@ -9,11 +9,14 @@
 #include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
-#include <solvers/smt/smt_conv.h>
+#include <memory>
 #include <util/config.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
+#include <util/threeval.h>
 #include <vector>
+
+class smt_convt;
 
 class symex_target_equationt : public symex_targett
 {
@@ -78,20 +81,14 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
-  virtual void convert(smt_convt &smt_conv);
-  void convert_internal_step(
-    smt_convt &smt_conv,
-    smt_astt &assumpt_ast,
-    smt_convt::ast_vec &assertions,
-    SSA_stept &s);
-
-  // Pre-register address_of expressions over string/array literals so
-  // int-to-ptr casts see them regardless of source-level declaration order
-  // (issue #1539).
-  void pre_register_addresses(
-    smt_convt &smt_conv,
-    std::list<SSA_stept>::iterator begin,
-    std::list<SSA_stept>::iterator end);
+  // When `vacuity_mode` is true, each non-ignored assertion is encoded as
+  // its path assumption alone instead of `not(assumpt -> cond)`. The final
+  // OR over the assertions vector is then UNSAT iff every kept claim's path
+  // is unreachable — i.e. the discharge is vacuous.
+  // Note: `runtime_encoded_equationt` overrides `convert` and does NOT
+  // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
+  // callers must run vacuity probes through the non-incremental path.
+  virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
 
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
@@ -102,11 +99,6 @@ public:
   public:
     sourcet source;
     goto_trace_stept::typet type;
-
-    // One stack trace recorded per function activation record. Valid for
-    // assignment and assert steps only. In reverse order (most recent in idx
-    // 0).
-    std::vector<stack_framet> stack_trace;
 
     bool is_assert() const
     {
@@ -143,17 +135,39 @@ public:
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // for ASSUME/ASSERT
+    // for ASSUME/ASSERT. Interned: assertion messages are a small,
+    // highly repetitive set ("dereference failure", "array bounds
+    // violated", ...), so irep_idt both shrinks the inline footprint
+    // (4 bytes vs a 32-byte std::string) and dedups the payload across
+    // the many steps that share a message.
     expr2tc cond;
-    std::string comment;
+    irep_idt comment;
 
-    // for OUTPUT
-    std::string format_string;
-    std::list<expr2tc> output_args;
+    // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
+    // side effects produce them), so the format string and argument
+    // lists live in a lazily-allocated side struct rather than inline
+    // on every SSA step. This keeps sizeof(SSA_stept) ~80 bytes smaller
+    // on the assignment/assume/assert steps that dominate large
+    // equations. Access through the output_* helpers below.
+    struct output_datat
+    {
+      std::string format_string;
+      std::list<expr2tc> output_args;
+      std::list<expr2tc> converted_output_args; // filled during conversion
+    };
+    std::unique_ptr<output_datat> output_data;
 
-    // for conversion
-    smt_astt guard_ast, cond_ast;
-    std::list<expr2tc> converted_output_args;
+    // One stack trace recorded per function activation record, in reverse
+    // order (most recent in idx 0). Only assignment and assert steps ever
+    // populate it, so — like output_data — it lives in a lazily-allocated
+    // side vector rather than costing 24 bytes inline on the assume/branch/
+    // renumber/output steps that never use it. Read through stack_trace(),
+    // write through stack_trace_payload().
+    std::unique_ptr<std::vector<stack_framet>> stack_trace_box;
+
+    // Discharged assertion expression used for counterexample trace queries.
+    // Nil for non-assertion steps.
+    expr2tc cond_expr;
 
     // for slicing
     bool ignore;
@@ -166,6 +180,62 @@ public:
 
     SSA_stept() : ignore(false), hidden(false)
     {
+    }
+
+    // SSA_stept is copied wholesale (e.g. the per-claim local_eq in
+    // bmc.cpp), so the unique_ptr payload needs deep-copy semantics.
+    // Moves stay default (cheap pointer steal).
+    SSA_stept(const SSA_stept &o)
+      : source(o.source),
+        type(o.type),
+        guard(o.guard),
+        lhs(o.lhs),
+        rhs(o.rhs),
+        original_lhs(o.original_lhs),
+        original_rhs(o.original_rhs),
+        cond(o.cond),
+        comment(o.comment),
+        output_data(
+          o.output_data ? std::make_unique<output_datat>(*o.output_data)
+                        : nullptr),
+        stack_trace_box(
+          o.stack_trace_box
+            ? std::make_unique<std::vector<stack_framet>>(*o.stack_trace_box)
+            : nullptr),
+        cond_expr(o.cond_expr),
+        ignore(o.ignore),
+        hidden(o.hidden),
+        loop_number(o.loop_number)
+    {
+    }
+    SSA_stept &operator=(const SSA_stept &o)
+    {
+      if (this != &o)
+        *this = SSA_stept(o); // copy-and-move
+      return *this;
+    }
+    SSA_stept(SSA_stept &&) = default;
+    SSA_stept &operator=(SSA_stept &&) = default;
+
+    output_datat &output_payload()
+    {
+      if (!output_data)
+        output_data = std::make_unique<output_datat>();
+      return *output_data;
+    }
+
+    // Read-only view of the stack trace; empty when none was recorded.
+    const std::vector<stack_framet> &stack_trace() const
+    {
+      static const std::vector<stack_framet> empty;
+      return stack_trace_box ? *stack_trace_box : empty;
+    }
+
+    std::vector<stack_framet> &stack_trace_payload()
+    {
+      if (!stack_trace_box)
+        stack_trace_box = std::make_unique<std::vector<stack_framet>>();
+      return *stack_trace_box;
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
@@ -242,20 +312,21 @@ public:
   };
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
+  ~runtime_encoded_equationt() override;
 
   void push_ctx() override;
   void pop_ctx() override;
 
   std::shared_ptr<symex_targett> clone() const override;
 
-  void convert(smt_convt &smt_conv) override;
+  void convert(smt_convt &smt_conv, bool vacuity_mode = false) override;
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
 
   smt_convt &conv;
-  std::list<smt_convt::ast_vec> assert_vec_list;
-  std::list<smt_astt> assumpt_chain;
+  struct solver_statet;
+  std::unique_ptr<solver_statet> solver_state;
   std::list<SSA_stepst::iterator> scoped_end_points;
   SSA_stepst::iterator cvt_progress;
 };

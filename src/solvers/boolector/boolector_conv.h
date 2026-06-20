@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_
 
 #include <cstdio>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
 #include <util/namespace.h>
 
@@ -20,7 +20,9 @@ public:
   void dump() const override;
 };
 
-class boolector_convt : public smt_convt, public array_iface, public fp_convt
+class boolector_convt : public smt_solver_baset,
+                        public array_iface,
+                        public fp_convt
 {
 public:
   boolector_convt(const namespacet &ns, const optionst &options);
@@ -28,7 +30,7 @@ public:
 
   void push_ctx() override;
   void pop_ctx() override;
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;
@@ -45,8 +47,6 @@ public:
   smt_astt mk_bvlshr(smt_astt a, smt_astt b) override;
   smt_astt mk_bvneg(smt_astt a) override;
   smt_astt mk_bvnot(smt_astt a) override;
-  smt_astt mk_bvnor(smt_astt a, smt_astt b) override;
-  smt_astt mk_bvnand(smt_astt a, smt_astt b) override;
   smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvand(smt_astt a, smt_astt b) override;
@@ -80,6 +80,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -112,6 +116,12 @@ public:
   Btor *btor;
 
   symtabt symtable;
+
+  /** Uninterpreted-function declarations, keyed by name. boolector_uf mints a
+   *  fresh function on each call, so it is cached and reused across
+   *  applications; sharing one declaration gives native functional
+   *  congruence. */
+  std::unordered_map<std::string, BoolectorNode *> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_BOOLECTOR_BOOLECTOR_CONV_H_ */

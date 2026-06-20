@@ -114,7 +114,8 @@ struct switch_locale
 
   ~switch_locale() noexcept
   {
-    const char *n = setlocale(cat, orig.c_str()); // restore locale
+    [[maybe_unused]] const char *n =
+      setlocale(cat, orig.c_str()); // restore locale
     assert(n);
     assert(n == orig);
   }
@@ -205,6 +206,9 @@ struct convert_mb
 
   size_t encode(char *buf, uint32_t c)
   {
+    // mbsinit is a pure query (no side effects), so this assertion is safe
+    // even though it is compiled out under NDEBUG.
+    // cppcheck-suppress assertWithSideEffect
     assert(c || mbsinit(&ps));
     return wide     ? wcrtomb(buf, c, &ps)
            : w == 2 ? c16rtomb(buf, c, &ps)

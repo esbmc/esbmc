@@ -1,6 +1,6 @@
 CORE
 main.c
---all-witnesses --incremental-bmc
+--all-witnesses --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$
 \[Counterexamples - 5 witnesses\]
 Witness 1 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=

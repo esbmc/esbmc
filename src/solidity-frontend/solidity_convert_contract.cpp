@@ -142,7 +142,7 @@ void solidity_convertert::add_static_contract_instance(const std::string c_name)
     abort();
   }
 
-  added_sym.value = ctor;
+  added_sym.set_value(ctor);
 }
 
 void solidity_convertert::get_inherit_static_contract_instance_name(
@@ -240,7 +240,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   param.cmt_identifier(aid);
   param.location() = l;
   ft.arguments().push_back(param);
-  add_sym.type = ft;
+  add_sym.set_type(ft);
 
   // body
   exprt func_body = code_blockt();
@@ -292,7 +292,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   current_functionDecl = old_current_functionDecl;
   current_functionName = old_current_functionName;
 
-  add_sym.value = func_body;
+  add_sym.set_value(func_body);
 
   new_expr = symbol_expr(add_sym);
   move_builtin_to_contract(c_name, new_expr, "public", true);
@@ -393,7 +393,7 @@ void solidity_convertert::get_inherit_static_contract_instance(
   call.location().line(1);
   exprt val;
   get_temporary_object(call, val);
-  added_ctor_symbol.value = val;
+  added_ctor_symbol.set_value(val);
   sym = added_ctor_symbol;
 
   log_debug("solidity", "finish get_inherit_static_contract_instance");
@@ -468,7 +468,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.value = msg_sender;
+  added_old_sender.set_value(msg_sender);
   old_sender_decl.operands().push_back(msg_sender);
   front_block.move_to_operands(old_sender_decl);
 
@@ -515,7 +515,6 @@ bool solidity_convertert::get_high_level_call_wrapper(
 
 nlohmann::json solidity_convertert::reorder_arguments(
   const nlohmann::json &expr,
-  const nlohmann::json &src_ast_json,
   const nlohmann::json &callee_expr_json)
 {
   // build a map from name to argument
@@ -653,8 +652,8 @@ bool solidity_convertert::multi_transaction_verification(
   // no params
   main_type.make_ellipsis();
 
-  main_sym.type = main_type;
-  main_sym.value = func_body;
+  main_sym.set_type(main_type);
+  main_sym.set_value(func_body);
 
   // set "_ESBMC_Main_X" as the main function
   // this will be overwrite in multi-contract mode.
@@ -733,8 +732,8 @@ bool solidity_convertert::register_harness_main(
 
   symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
   main_type.make_ellipsis();
-  added_symbol.type = main_type;
-  added_symbol.value = func_body;
+  added_symbol.set_type(main_type);
+  added_symbol.set_value(func_body);
   config.main = sol_name;
   return false;
 }

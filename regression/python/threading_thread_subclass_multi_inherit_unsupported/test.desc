@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*Multiple inheritance is not supported for Thread subclass `Worker`

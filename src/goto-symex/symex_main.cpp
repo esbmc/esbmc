@@ -9,6 +9,7 @@
 
 #include <pointer-analysis/value_set_analysis.h>
 
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
@@ -18,6 +19,7 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
+#include <util/message.h>
 
 #include <vector>
 
@@ -125,6 +127,30 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
+  if (validate_witness && !has_prefix(msg, "unwinding assertion loop"))
+  {
+    const size_t seg = cur_state->cur_seg;
+    const waypoint *target_wp = nullptr;
+    if (seg < cur_state->witness_segs.size())
+      for (const auto &wp : cur_state->witness_segs[seg])
+        if (wp.type == waypoint::target)
+        {
+          target_wp = &wp;
+          break;
+        }
+
+    if (
+      !target_wp ||
+      cur_state->source.pc->location.get_line() != target_wp->line_id ||
+      cur_state->witness_target_reached)
+      new_expr = gen_true_expr();
+    else
+    {
+      cur_state->advance_witness_position();
+      cur_state->witness_target_reached = true;
+    }
+  }
+
   // add assertion to the target equation
   assertion(new_expr, msg);
 
@@ -165,6 +191,10 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
   if (options.get_bool_option("smt-symex-assume"))
   {
+    // Do nothing if the assumption is already true
+    if (is_true(assumption))
+      return false;
+
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
@@ -185,11 +215,43 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
+{
+  expr2tc c = the_assumption;
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  if (!is_equality2t(c))
+    return;
+
+  const equality2t &eq = to_equality2t(c);
+  expr2tc lhs = eq.side_1;
+  expr2tc rhs = eq.side_2;
+
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
+  // patterns; propagating either would mask signbit-sensitive bugs.
+  auto is_fp_zero = [](const expr2tc &e) {
+    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
+  };
+
+  // Only propagate when the other side is a constant: a symbol == symbol
+  // assumption must NOT be turned into an assignment, as that perturbs the
+  // symbolic state and aliasing (e.g. a[i]=7; assume(i==j); read a[j]).
+  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+    cur_state->assignment(lhs, rhs);
+  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+    cur_state->assignment(rhs, lhs);
+}
+
 void goto_symext::assume(const expr2tc &the_assumption)
 {
   expr2tc assumption = the_assumption;
   cur_state->rename(assumption);
   do_simplify(assumption);
+
+  // Check for assume-false against the renamed+simplified expression
+  // BEFORE guard_expr mutates it
+  bool assume_is_false = is_assume_false(assumption);
 
   if (is_true(assumption))
     return;
@@ -201,7 +263,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption) || is_assume_false(the_assumption))
+  if (assume_is_false)
     cur_state->guard.make_false();
 }
 
@@ -209,6 +271,75 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
     target, total_claims, remaining_claims, simplified_claims);
+}
+
+static void substitute_result(expr2tc &e, const expr2tc &ret_val)
+{
+  if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
+  {
+    e = ret_val;
+    return;
+  }
+  if (is_constant_int2t(e))
+  {
+    if (
+      is_unsignedbv_type(ret_val->type) &&
+      to_constant_int2t(e).value.is_negative())
+      log_warning(
+        "witness: function_return constraint compares signed constant {} "
+        "against unsigned return type; constraint may be trivially false",
+        integer2string(to_constant_int2t(e).value));
+    e = from_integer(to_constant_int2t(e).value, ret_val->type);
+    return;
+  }
+  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
+}
+
+void goto_symext::symex_witness_function_return(
+  expr2tc ret_val,
+  const irep_idt &call_line)
+{
+  if (cur_state->cur_seg >= cur_state->witness_segs.size())
+    return;
+
+  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+  for (const waypoint &wp : seg)
+  {
+    if (wp.type == waypoint::function_enter)
+    {
+      if (wp.line_id.empty() || wp.line_id != call_line)
+        continue;
+      if (wp.action == waypoint::avoid)
+      {
+        cur_state->source.pc++;
+        return;
+      }
+
+      cur_state->advance_witness_position();
+      return;
+    }
+
+    if (wp.type != waypoint::function_return)
+      continue;
+    if (!wp.parsed_cond.valid)
+      continue;
+    if (wp.line_id != call_line)
+      continue;
+
+    cur_state->rename(ret_val);
+
+    expr2tc constraint = wp.parsed_cond.expr;
+    substitute_result(constraint, ret_val);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(constraint));
+    else
+    {
+      assume(constraint);
+      cur_state->advance_witness_position();
+    }
+    return;
+  }
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -239,23 +370,7 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    if (
-      inside_unexpected &&
-      unexpected_end == cur_state->source.pc->function.as_string())
-    {
-      std::string msg = std::string("Unexpected exceptions");
-      claim(gen_false_expr(), msg);
-    }
-
     symex_end_of_function();
-    if (!stack_catch.empty())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -268,9 +383,16 @@ void goto_symext::symex_step(reachability_treet &art)
     replace_nondet(tmp);
     volatile_check(tmp);
 
+    // Lower Python predicates (isnone/isinstance/hasattr) *before* dereference:
+    // a short-circuited `a is None or a.b is None` dereferences `a.b` under the
+    // guard `not isnone(a)`, and dereference records the NULL-pointer safety
+    // assertion immediately. If the isnone is still live it leaks into that
+    // assertion's condition and reaches the SMT backend unlowered (no convert
+    // rule for isnone), aborting. dereference never introduces any of these
+    // predicates, so lowering first is strictly safe.
+    simplify_python_builtins(tmp);
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
-    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -307,41 +429,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false())
-    {
-      code_assign2t deref_code = to_code_assign2t(instruction.code); // copy
-
-      // XXX jmorse -- this is not fully symbolic.
-      if (auto it = thrown_obj_map.find(cur_state->source.pc);
-          it != thrown_obj_map.end())
-      {
-        const expr2tc &thrown_obj = it->second;
-
-        if (
-          is_pointer_type(deref_code.target->type) &&
-          !is_pointer_type(thrown_obj->type))
-        {
-          if (is_constant(thrown_obj))
-          {
-            expr2tc new_target =
-              dereference2tc(thrown_obj->type, deref_code.target);
-            deref_code.target = new_target;
-            deref_code.source = thrown_obj;
-          }
-          else
-          {
-            expr2tc new_thrown_obj =
-              address_of2tc(thrown_obj->type, thrown_obj);
-            deref_code.source = new_thrown_obj;
-          }
-        }
-        else
-          deref_code.source = thrown_obj;
-
-        thrown_obj_map.erase(cur_state->source.pc);
-      }
-
-      symex_assign(code_assign2tc(std::move(deref_code)));
-    }
+      symex_assign(instruction.code);
 
     cur_state->source.pc++;
     break;
@@ -410,6 +498,38 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
+    // Violation-witness: handle function_enter waypoints in the current segment.
+    // avoid, not matching: skip (persistent).
+    // avoid, matching: skip the call (pc++), segment does not advance.
+    // follow, not matching: stop (follows are ordered; cannot bypass).
+    // follow, matching: advance to next segment; fall through to the call.
+    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    {
+      const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+      const auto &loc = cur_state->source.pc->location;
+      for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
+      {
+        const waypoint &wp = seg[wp_idx];
+        if (wp.type != waypoint::function_enter)
+          continue;
+        const bool loc_matches =
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function());
+        if (loc_matches)
+        {
+          if (wp.action == waypoint::avoid)
+          {
+            cur_state->source.pc++;
+            return;
+          }
+          cur_state->advance_witness_position();
+          break;
+        }
+        if (wp.action != waypoint::avoid)
+          break;
+      }
+    }
+
     symex_function_call(deref_code);
   }
   break;
@@ -432,41 +552,11 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
-  case CATCH:
-    symex_catch();
-    break;
-
-  case THROW:
-    if (!cur_state->guard.is_false())
-    {
-      if (symex_throw())
-        cur_state->source.pc++;
-    }
-    else
-    {
-      cur_state->source.pc++;
-    }
-    break;
-
-  case THROW_DECL:
-    symex_throw_decl();
-    cur_state->source.pc++;
-    break;
-
-  case THROW_DECL_END:
-    // When we reach THROW_DECL_END, we must clear any throw_decl
-    if (stack_catch.size())
-    {
-      // Get to the correct try (always the last one)
-      goto_symex_statet::exceptiont *except = &stack_catch.top();
-
-      except->has_throw_decl = false;
-      except->throw_list_set.clear();
-    }
-
-    cur_state->source.pc++;
-    break;
-
+  // THROW / CATCH / THROW_DECL / THROW_DECL_END are rewritten into ordinary
+  // guarded control flow by remove_exceptions before symex (issue #5075), so
+  // they never reach here; an exception-using program the pass cannot lower is
+  // reported as unsupported. Any such instruction surviving to symex is a bug,
+  // caught by the default abort below.
   default:
     log_error(
       "GOTO instruction type {} not handled in goto_symext::symex_step",
@@ -494,33 +584,7 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
-  expr2tc c = cond;
-  // Recursively remove typecast
-  while (is_typecast2t(c))
-    c = to_typecast2t(c).from;
-
-  // Hack for assume, which allows us to take advantage
-  // of constant propagation in some cases
-  if (is_equality2t(c))
-  {
-    // In the IEEE-754 floating-point number semantics,
-    // there can be situations where the numerical comparison is equal,
-    // but the internal bit patterns are different: +0.0 and -0.0
-
-    // We don't perform constant propagation on it.
-    expr2tc lhs = to_equality2t(c).side_1;
-    expr2tc rhs = to_equality2t(c).side_2;
-    if (
-      is_symbol2t(lhs) && is_constant_expr(rhs) &&
-      !(is_constant_floatbv2t(rhs) &&
-        to_constant_floatbv2t(rhs).value.is_zero()))
-      cur_state->assignment(lhs, rhs);
-    else if (
-      is_symbol2t(rhs) && is_constant_expr(lhs) &&
-      !(is_constant_floatbv2t(lhs) &&
-        to_constant_floatbv2t(lhs).value.is_zero()))
-      cur_state->assignment(rhs, lhs);
-  }
+  propagate_assume_equality(cond);
 }
 
 void goto_symext::symex_assert()
@@ -559,6 +623,18 @@ void goto_symext::run_intrinsic(
   reachability_treet &art,
   const std::string &symname)
 {
+  // "__ESBMC_uninterpreted_*" is the native spelling of an uninterpreted
+  // function (the "__CPROVER_uninterpreted_*" alias is handled later, in
+  // symex_function_call_code, since it is not __ESBMC-prefixed). All __ESBMC_*
+  // calls are routed here before body inlining, so the native prefix must be
+  // intercepted in run_intrinsic. The caller has already advanced the program
+  // counter, so symex_uninterpreted_function must not (and does not) touch it.
+  if (has_prefix(symname, "c:@F@__ESBMC_uninterpreted_"))
+  {
+    symex_uninterpreted_function(func_call, symname);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
@@ -607,6 +683,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_init_thread_local")
+  {
+    intrinsic_init_thread_local(art);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
@@ -652,6 +734,24 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_memcpy")
   {
     intrinsic_memcpy(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memchr")
+  {
+    intrinsic_memchr(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memcmp")
+  {
+    intrinsic_memcmp(art, func_call);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_memmove")
+  {
+    intrinsic_memmove(art, func_call);
     return;
   }
 
@@ -890,7 +990,7 @@ void goto_symext::run_intrinsic(
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
@@ -1010,7 +1110,8 @@ void goto_symext::run_intrinsic(
   if (
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
+    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
   {
     bump_call(func_call, symname);
     return;
@@ -1062,7 +1163,9 @@ void goto_symext::run_intrinsic(
     assert(list_object_symbol);
 
     symex_mem_inf(
-      func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
+      func_call.ret,
+      migrate_symbol_type(*list_object_symbol),
+      cur_state->guard);
 
     return;
   }
@@ -1070,9 +1173,59 @@ void goto_symext::run_intrinsic(
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
 
-  if (symname == "c:@F@__ESBMC_throw_bad_cast")
+  if (symname == "c:@F@__ESBMC_witness_assume")
   {
-    symex_throw_bad_cast();
+    if (!validate_witness)
+      return;
+
+    // operands: [seg_idx_const, constraint]
+    if (func_call.operands.size() < 2)
+      return;
+    size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
+    if (seg_idx != cur_state->cur_seg)
+      return;
+
+    // pc has already been incremented past this intrinsic call; step back one
+    // to get the location of the __ESBMC_witness_assume instruction itself.
+    const irep_idt cur_line =
+      std::prev(cur_state->source.pc)->location.get_line();
+    const waypoint *matched = nullptr;
+    for (const auto &wp : cur_state->witness_segs[seg_idx])
+    {
+      if (
+        (wp.type == waypoint::assumption ||
+         wp.type == waypoint::function_return) &&
+        wp.line_id == cur_line)
+      {
+        matched = &wp;
+        break;
+      }
+    }
+    if (!matched)
+      return;
+
+    expr2tc arg = func_call.operands[1];
+    cur_state->rename(arg);
+
+    if (matched->action == waypoint::avoid)
+      assume(not2tc(arg));
+    else
+      assume(arg);
+
+    if (matched->action != waypoint::avoid)
+      cur_state->advance_witness_position();
+    return;
+  }
+
+  // Not a recognised intrinsic. If the operational-model library provides a
+  // real body for this __ESBMC-prefixed symbol (e.g. __ESBMC_run_unexpected),
+  // execute it as an ordinary call rather than treating it as an intrinsic.
+  auto func_it = goto_functions.function_map.find(symname);
+  if (
+    func_it != goto_functions.function_map.end() &&
+    func_it->second.body_available)
+  {
+    bump_call(func_call, symname);
     return;
   }
 
@@ -1193,14 +1346,42 @@ void goto_symext::add_memory_leak_checks()
     for (int i = 0; !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
+      /* A symbol can be reached at this frontier level through several pointers
+       * with different preconditions (e.g. a node inserted into a list chosen
+       * by a non-deterministic index is, in the value-set, reachable from every
+       * list head). Merge those entries by symbol, OR-ing their path conditions,
+       * before expanding each symbol once. Expanding under only the first
+       * incoming path — as the old per-symbol 'visited' cull did — gives the
+       * symbol's outgoing edges a guard that is false on the executions taking
+       * the other paths, under-approximating reachability and producing spurious
+       * "forgotten memory" leaks (#2335). The single expansion per symbol keeps
+       * termination on circular data structures. */
+      std::unordered_map<std::string, std::pair<expr2tc, value_sett::entryt>>
+        merged;
+      std::vector<std::string> order;
       for (const auto &[path_to_e, g] : globals)
         for (const value_sett::entryt &e : g)
         {
-          /* Skip if already visited
-           *
-           * TODO: this is possibly wrongly culling paths that have different
-           *       preconditions; should take path_to_e into account. */
-          if (!visited.emplace(e.identifier + e.suffix).second)
+          std::string key = e.identifier + e.suffix;
+          auto [mit, ins] = merged.emplace(key, std::make_pair(path_to_e, e));
+          if (ins)
+            order.push_back(std::move(key));
+          else
+          {
+            /* An empty path stands for 'true' and absorbs everything. */
+            expr2tc &p = mit->second.first;
+            if (p)
+              p = path_to_e ? or2tc(p, path_to_e) : path_to_e;
+          }
+        }
+
+      for (const std::string &key : order)
+      {
+        const auto &[path_to_e, e] = merged.at(key);
+        {
+          /* Each globally reachable symbol is expanded only once, even for
+           * circular data structures. */
+          if (!visited.emplace(key).second)
             continue;
 
           /* Unfortunately, we just have the symbol id and a suffix that's only
@@ -1225,7 +1406,7 @@ void goto_symext::add_memory_leak_checks()
             i,
             e.identifier,
             e.suffix);
-          sym_expr2->type = migrate_type(sym->type);
+          sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
 
           /* Rename so that it reflects the current state. */
           assert(cur_state->call_stack.size() >= 1);
@@ -1255,10 +1436,11 @@ void goto_symext::add_memory_leak_checks()
               for (expr2tc &p : sub_exprs)
               {
                 assert(is_structure_type(p));
-                const struct_union_data &u =
-                  static_cast<const struct_union_data &>(*p->type);
-                unsigned n = u.get_component_number(c.member_name);
-                p = member2tc(u.members[n], p, c.member_name);
+                unsigned n =
+                  struct_union_get_component_number(p->type, c.member_name)
+                    .value();
+                p =
+                  member2tc(struct_union_members(p->type)[n], p, c.member_name);
               }
               continue;
             }
@@ -1432,6 +1614,7 @@ void goto_symext::add_memory_leak_checks()
             tmp.emplace_back(is_e, std::move(root_points_to));
           }
         }
+      }
       globals = std::move(tmp);
     }
 
@@ -1451,20 +1634,24 @@ void goto_symext::add_memory_leak_checks()
       // Iterate over each (expression, condition) pair in tgts
       for (const auto &[e, g] : tgts)
       {
-        /* XXX: 'obj' is the address of a statically known dynamic object,
-           *      couldn't we just statically check whether the symbol 'e'
-           *      addresses is the same as 'obj' directly?
-           *
-           * Explanation:
-           * - 'g' acts as a guard condition, determining whether 'e' should be considered.
-           * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
-           * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
-           *   then 'g' is combined with 'same_object2tc(obj, e)'.
-           * - Otherwise, we directly use 'same_object2tc(obj, e)'.
-           */
-        expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                         ? and2tc(g, same_object2tc(obj, e))
-                         : same_object2tc(obj, e);
+        /* 'obj' is the address of a statically known dynamic object; 'e' is
+         * the address of an object found reachable from a global, and 'g' is
+         * the condition under which 'e' is actually reachable. The object is
+         * globally reachable here iff some reachable 'e' is the same object as
+         * 'obj', i.e. the contribution of this target is g ∧ same_object(obj,e).
+         *
+         * The guard 'g' must ALWAYS be conjoined. Dropping it (as was done for
+         * guards that are neither an and2t nor a bare same_object2t, e.g. the
+         * or2t built when an object is reachable via more than one path) makes
+         * same_object(obj,e) unconditional. Since 'obj' itself appears among
+         * the targets, same_object(obj,obj) is trivially true, so 'targeted'
+         * collapses to true and the object's leak claim becomes vacuous — a
+         * missed leak (false VERIFICATION SUCCESSFUL) for memory that is in
+         * fact orphaned on some path. See issue #5400.
+         *
+         * 'g' is non-null by construction: every entry recorded in 'tgts' above
+         * carries the non-null reachability condition 'is_e'. */
+        expr2tc same = and2tc(g, same_object2tc(obj, e));
         is_any = is_any ? or2tc(is_any, same) : same;
       }
       return is_any ? is_any : gen_false_expr();

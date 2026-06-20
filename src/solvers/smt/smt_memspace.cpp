@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <sstream>
-#include <solvers/smt/smt_conv.h>
+#include <utility>
+#include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 
@@ -29,7 +30,7 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt smt_convt::convert_ptr_cmp(
+smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &side1,
   const expr2tc &side2,
   const expr2tc &templ_expr)
@@ -38,7 +39,7 @@ smt_astt smt_convt::convert_ptr_cmp(
   // it's obviously broken).
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
-  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
+  assert(is_comp_expr(templ_expr));
 
   /* Compare just the offsets. This is compatible with both C and CHERI-C,
    * because we already asserted that they point to the same object (unless
@@ -51,19 +52,41 @@ smt_astt smt_convt::convert_ptr_cmp(
    * which case offsets could flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc op = templ_expr;
-  relation_data &rel = static_cast<relation_data &>(*op);
-  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
+  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc op;
+  switch (templ_expr->expr_id)
+  {
+  case expr2t::equality_id:
+    op = equality2tc(s1, s2);
+    break;
+  case expr2t::notequal_id:
+    op = notequal2tc(s1, s2);
+    break;
+  case expr2t::lessthan_id:
+    op = lessthan2tc(s1, s2);
+    break;
+  case expr2t::greaterthan_id:
+    op = greaterthan2tc(s1, s2);
+    break;
+  case expr2t::lessthanequal_id:
+    op = lessthanequal2tc(s1, s2);
+    break;
+  case expr2t::greaterthanequal_id:
+    op = greaterthanequal2tc(s1, s2);
+    break;
+  default:
+    std::unreachable();
+  }
   return convert_ast(op);
 }
 
-smt_astt
-smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
+smt_astt smt_solver_baset::convert_pointer_arith(
+  const expr2tc &expr,
+  const type2tc &type)
 {
-  const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
-  const expr2tc &side1 = expr_ref.side_1;
-  const expr2tc &side2 = expr_ref.side_2;
+  const expr2tc &side1 = *expr->get_sub_expr(0);
+  const expr2tc &side2 = *expr->get_sub_expr(1);
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
@@ -109,9 +132,27 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
       }
 
-      assert(side1->type == side2->type);
+      // C11 6.5.6p9: both operands of a pointer difference must point to
+      // elements of the same array object, so their element types are
+      // compatible and -- crucially for the division below -- have equal
+      // size. ESBMC's value-set/dereference machinery can nonetheless hand us
+      // two operands whose pointer subtypes are structurally distinct yet
+      // same-sized: classically a void* operand (subtype `empty`, for which
+      // sizeof==1 by the GCC extension) paired with the concrete `char`
+      // element type of the object it was resolved to. Sanity-check equal
+      // element *size* rather than identical pointer types so these legitimate
+      // cases are encoded instead of aborting; the divisor is still side1's
+      // element size, which equals side2's whenever the old structural check
+      // held. The size comparison is structural, so only assert it for
+      // constant (non-VLA) sizes -- two semantically-equal symbolic sizes can
+      // be different expression trees and must not abort a well-formed run.
       expr2tc type_size =
         type_byte_size_expr(to_pointer_type(side1->type).subtype, &ns);
+      expr2tc side2_size =
+        type_byte_size_expr(to_pointer_type(side2->type).subtype, &ns);
+      assert(
+        !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
+        type_size == side2_size);
       type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
       expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
 
@@ -188,7 +229,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   abort();
 }
 
-void smt_convt::renumber_symbol_address(
+void smt_solver_baset::renumber_symbol_address(
   const expr2tc &guard,
   const expr2tc &addr_symbol,
   const expr2tc &new_size)
@@ -198,7 +239,7 @@ void smt_convt::renumber_symbol_address(
 
   const typet *t = nullptr;
   if (const symbolt *s = ns.lookup(sym.thename))
-    t = &s->type;
+    t = &s->get_type();
 
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
@@ -228,7 +269,7 @@ void smt_convt::renumber_symbol_address(
   }
 }
 
-smt_astt smt_convt::convert_identifier_pointer(
+smt_astt smt_solver_baset::convert_identifier_pointer(
   const expr2tc &expr,
   const std::string &symbol,
   const typet *type)
@@ -313,7 +354,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(
+smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
   const typet *type)
@@ -403,7 +444,7 @@ smt_astt smt_convt::init_pointer_obj(
   return ptr_val;
 }
 
-void smt_convt::finalize_pointer_chain(unsigned int objnum)
+void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 {
   type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
@@ -472,7 +513,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
   }
 }
 
-smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
 
@@ -498,7 +539,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     const typet *t = nullptr;
     if (const symbolt *s = ns.lookup(symbol.thename))
-      t = &s->type;
+      t = &s->get_type();
 
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }
@@ -548,8 +589,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   {
     // Take the address of whatever's being cast. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp->type = obj.type;
+    expr2tc tmp = address_of2tc(obj.type, to_typecast2t(obj.ptr_obj).from);
     return convert_ast(tmp);
   }
 
@@ -557,7 +597,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
-void smt_convt::init_addr_space_array()
+void smt_solver_baset::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -624,7 +664,9 @@ void smt_convt::init_addr_space_array()
   addr_space_data.back()[1] = 0;
 }
 
-void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
+void smt_solver_baset::bump_addrspace_array(
+  unsigned int idx,
+  const expr2tc &val)
 {
   expr2tc oldname = symbol2tc(
     addr_space_arr_type,
@@ -640,7 +682,7 @@ void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   convert_assign(equality2tc(newname, store));
 }
 
-std::string smt_convt::get_cur_addrspace_ident()
+std::string smt_solver_baset::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

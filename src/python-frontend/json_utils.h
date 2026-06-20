@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <functional>
 #include <unordered_map>
+#include <vector>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -482,6 +484,94 @@ const JsonType get_var_value(
     value = find_var_decl(value["value"]["id"], function, ast);
   }
   return value;
+}
+
+template <typename JsonType>
+bool has_multiple_assignments_in_block(
+  const std::string &var_name,
+  const JsonType &block)
+{
+  unsigned count = 0;
+  auto visit = [&](const JsonType &body, const auto &self) -> bool {
+    for (const auto &element : body)
+    {
+      const auto &t = element["_type"];
+
+      // Check for annotated assignment (AnnAssign)
+      const bool is_ann = t == "AnnAssign" && element.contains("target") &&
+                          element["target"].contains("id") &&
+                          element["target"]["id"] == var_name;
+      // Check for regular assignment (Assign)
+      const bool is_assign = t == "Assign" && element.contains("targets") &&
+                             !element["targets"].empty() &&
+                             element["targets"][0].contains("_type") &&
+                             element["targets"][0]["_type"] == "Name" &&
+                             element["targets"][0].contains("id") &&
+                             element["targets"][0]["id"] == var_name;
+      // Check for augmented assignment (AugAssign)
+      const bool is_aug = t == "AugAssign" && element.contains("target") &&
+                          element["target"].contains("id") &&
+                          element["target"]["id"] == var_name;
+      if ((is_ann || is_assign || is_aug) && ++count > 1)
+        return true;
+
+      // Avoid descending into new scopes
+      if (t == "FunctionDef" || t == "ClassDef" || t == "Lambda")
+        continue;
+
+      // Recurse into nested blocks
+      for (const auto &key : {"body", "orelse", "finalbody"})
+        if (
+          element.contains(key) && element[key].is_array() &&
+          self(element[key], self))
+          return true;
+
+      // Try/Except handlers
+      if (element.contains("handlers") && element["handlers"].is_array())
+        for (const auto &h : element["handlers"])
+          if (
+            h.contains("body") && h["body"].is_array() && self(h["body"], self))
+            return true;
+
+      // Match cases
+      if (element.contains("cases") && element["cases"].is_array())
+        for (const auto &c : element["cases"])
+          if (
+            c.contains("body") && c["body"].is_array() && self(c["body"], self))
+            return true;
+    }
+    return false;
+  };
+  return block.contains("body") && block["body"].is_array() &&
+         visit(block["body"], visit);
+}
+
+template <typename JsonType>
+bool has_multiple_assignments_in_scope(
+  const std::string &var_name,
+  const std::string &function,
+  const JsonType &ast)
+{
+  // If no function context, search in global scope
+  if (function.empty())
+    return has_multiple_assignments_in_block(var_name, ast);
+
+  // Parse function path (e.g., "foo@F@bar" -> ["foo", "bar"])
+  std::vector<std::string> function_path = split_function_path(function);
+
+  // Search from innermost to outermost scope (closure semantics)
+  for (int level = static_cast<int>(function_path.size()) - 1; level >= 0;
+       --level)
+  {
+    std::vector<std::string> partial_path(
+      function_path.begin(), function_path.begin() + level + 1);
+    JsonType func_node = find_function_by_path(ast, partial_path);
+    if (!func_node.empty() && !get_var_node(var_name, func_node).empty())
+      return has_multiple_assignments_in_block(var_name, func_node);
+  }
+
+  // Fallback: global scope
+  return has_multiple_assignments_in_block(var_name, ast);
 }
 
 template <typename JsonType>

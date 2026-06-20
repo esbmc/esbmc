@@ -91,12 +91,6 @@ void goto2ct::check(goto_programt::instructiont &instruction)
   case ATOMIC_END:
     check_atomic_end(instruction);
     break;
-  case THROW_DECL:
-    check_throw_decl(instruction);
-    break;
-  case THROW_DECL_END:
-    check_throw_decl_end(instruction);
-    break;
   case OTHER:
     check_other(instruction);
     break;
@@ -207,18 +201,6 @@ void goto2ct::check_atomic_end(goto_programt::instructiont instruction
 {
 }
 
-void goto2ct::check_throw_decl(goto_programt::instructiont instruction
-                               [[maybe_unused]])
-{
-  assert(is_code_cpp_throw_decl2t(instruction.code));
-}
-
-void goto2ct::check_throw_decl_end(goto_programt::instructiont instruction
-                                   [[maybe_unused]])
-{
-  assert(is_code_cpp_throw_decl_end2t(instruction.code));
-}
-
 void goto2ct::check_other(goto_programt::instructiont instruction
                           [[maybe_unused]])
 {
@@ -233,7 +215,7 @@ void check_if_sideeffect_or_assign_expr(expr2tc expr [[maybe_unused]])
 // This method iterates recursively through subexpressions
 // and checks whether any of them is a "sideeffect"
 // or "assign" expression
-void goto2ct::check_guard(expr2tc expr)
+void goto2ct::check_guard(const expr2tc &expr)
 {
   check_if_sideeffect_or_assign_expr(expr);
   for (size_t i = 0; i < expr->get_num_sub_exprs(); i++)

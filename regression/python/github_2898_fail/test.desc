@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---incremental-bmc
+--no-unwinding-assertions --unwind 6
 ^VERIFICATION FAILED$

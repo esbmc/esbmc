@@ -2,15 +2,15 @@
 title: "Function Contracts"
 date: 2026-04-08T00:00:00Z
 draft: false
-weight: 4
+weight: 5
 ---
 
 Function contracts let you state what a function requires from its callers and
-what it promises to deliver — as machine-checkable annotations rather than
-prose comments. ESBMC uses these annotations in two ways: to **verify** that a
-function's implementation lives up to its promise, and to **replace** a
-function call with its promise so that callers can be verified without
-re-analyzing the function body.
+what it promises to deliver — as machine-checkable annotations rather than prose
+comments. ESBMC uses these annotations in two ways: to **verify** that a
+function's implementation lives up to its promise, and to **replace** a function
+call with its promise so that callers can be verified without re-analyzing the
+function body.
 
 ## Your first contract
 
@@ -42,8 +42,8 @@ Two new lines appeared:
 
 - `__ESBMC_requires(cond)` — the **pre-condition**: what the caller must
   guarantee before calling this function.
-- `__ESBMC_ensures(cond)` — the **post-condition**: what the function
-  guarantees when it returns.
+- `__ESBMC_ensures(cond)` — the **post-condition**: what the function guarantees
+  when it returns.
 
 Now ask ESBMC to check whether the implementation satisfies the contract:
 
@@ -51,16 +51,14 @@ Now ask ESBMC to check whether the implementation satisfies the contract:
 esbmc file.c --enforce-contract increment --function increment
 ```
 
-The `--function increment` flag tells ESBMC to start verification at
-`increment` instead of `main`. ESBMC will treat every parameter and every
-global variable as an arbitrary value (subject to the `requires` constraint)
-and then check that `ensures` holds after the body runs.
+The `--function increment` flag tells ESBMC to start verification at `increment`
+instead of `main`. ESBMC will treat every parameter and every global variable as
+an arbitrary value (subject to the `requires` constraint) and then check that
+`ensures` holds after the body runs.
 
-{{< callout type="info" >}}
-Always pair `--enforce-contract func` with `--function func`. Without it,
-ESBMC follows the call chain from `main`, which limits the range of inputs the
-function is tested against.
-{{< /callout >}}
+{{< callout type="info" >}} Always pair `--enforce-contract func` with
+`--function func`. Without it, ESBMC follows the call chain from `main`, which
+limits the range of inputs the function is tested against. {{< /callout >}}
 
 ### Referring to the return value
 
@@ -80,8 +78,8 @@ int add_one(int n) {
 ### Capturing the value at entry: `__ESBMC_old`
 
 The counter example above used `__ESBMC_old(counter)`. This captures the value
-of an expression *at the moment the function was called* — before the body
-runs. It is only meaningful inside `ensures`.
+of an expression _at the moment the function was called_ — before the body runs.
+It is only meaningful inside `ensures`.
 
 Without `__ESBMC_old`, writing `counter == counter + 1` would be a tautology
 (the left and right `counter` both refer to the post-call value). With it, you
@@ -112,33 +110,33 @@ void modify_value(void) {
 }
 ```
 
-`__ESBMC_assigns(value)` declares that `modify_value` is only allowed to
-change `value`. It does two things depending on which mode ESBMC is running:
+`__ESBMC_assigns(value)` declares that `modify_value` is only allowed to change
+`value`. It does two things depending on which mode ESBMC is running:
 
-**In enforce mode** (`--enforce-contract`): ESBMC checks that the function
-body actually only modifies the declared targets. If the body writes to `other`
+**In enforce mode** (`--enforce-contract`): ESBMC checks that the function body
+actually only modifies the declared targets. If the body writes to `other`
 without `other` being listed, ESBMC reports a verification failure.
 
-**In replace mode** (`--replace-call-with-contract`): when ESBMC replaces a
-call to `modify_value` with its contract, it *havocs* (assigns an arbitrary
-value to) only the listed targets. `other` keeps its concrete value, giving
-callers stronger guarantees.
+**In replace mode** (`--replace-call-with-contract`): when ESBMC replaces a call
+to `modify_value` with its contract, it _havocs_ (assigns an arbitrary value to)
+only the listed targets. `other` keeps its concrete value, giving callers
+stronger guarantees.
 
 ### Assigns targets you can declare
 
-| Syntax | What it covers |
-|--------|---------------|
-| `__ESBMC_assigns(x)` | A scalar variable or global |
-| `__ESBMC_assigns(p->field)` | A field via pointer |
-| `__ESBMC_assigns(*p)` | Whatever a pointer points to |
-| `__ESBMC_assigns(arr[i])` | A single array element |
-| `__ESBMC_assigns(x, y, z)` | Multiple targets (up to 5) |
+| Syntax                                      | What it covers                     |
+| ------------------------------------------- | ---------------------------------- |
+| `__ESBMC_assigns(x)`                        | A scalar variable or global        |
+| `__ESBMC_assigns(p->field)`                 | A field via pointer                |
+| `__ESBMC_assigns(*p)`                       | Whatever a pointer points to       |
+| `__ESBMC_assigns(arr[i])`                   | A single array element             |
+| `__ESBMC_assigns(x, y, z)`                  | Multiple targets (up to 5)         |
 | `__ESBMC_assigns()` or `__ESBMC_assigns(0)` | Nothing — declares a pure function |
 
 ### What happens when there is no `assigns` clause?
 
-In **replace mode**, ESBMC conservatively havocs all static global variables
-and any pointer parameters. This is sound but imprecise: callers will see all
+In **replace mode**, ESBMC conservatively havocs all static global variables and
+any pointer parameters. This is sound but imprecise: callers will see all
 globals as arbitrary values after the call, which may produce spurious failures.
 Adding an `assigns` clause — even a coarse one — limits the disruption.
 
@@ -179,17 +177,15 @@ At each call site, ESBMC replaces the call with three steps:
 3. **Assumes** the `ensures` clause (takes the postcondition as given).
 
 The function body is never unrolled. This keeps the verification of the caller
-fast, at the cost of trusting the contract. If the contract is wrong, the
-caller verification may produce a false result — which is why enforce mode
-exists.
+fast, at the cost of trusting the contract. If the contract is wrong, the caller
+verification may produce a false result — which is why enforce mode exists.
 
-{{< callout type="warning" >}}
-Replace mode is an over-approximation. Havocing introduces nondeterminism that
-may not occur in the real implementation. A failure in replace mode does not
-always correspond to a real bug — examine the counterexample to see whether the
-havoced values are actually reachable under the concrete body. If they are not,
-tighten the `ensures` clause or narrow the `assigns` targets.
-{{< /callout >}}
+{{< callout type="warning" >}} Replace mode is an over-approximation. Havocing
+introduces nondeterminism that may not occur in the real implementation. A
+failure in replace mode does not always correspond to a real bug — examine the
+counterexample to see whether the havoced values are actually reachable under
+the concrete body. If they are not, tighten the `ensures` clause or narrow the
+`assigns` targets. {{< /callout >}}
 
 ### Using both together
 
@@ -202,8 +198,8 @@ esbmc file.c --enforce-contract caller \
              --function caller
 ```
 
-`caller`'s body is verified using `callee`'s contract as a trusted
-abstraction. Each function is verified in isolation.
+`caller`'s body is verified using `callee`'s contract as a trusted abstraction.
+Each function is verified in isolation.
 
 ## Compositional verification
 
@@ -213,8 +209,8 @@ The following TLV (Tag-Length-Value) parser has three levels of calls:
 parse_message → parse_header → validate_tag
 ```
 
-Each function is annotated with a contract. The verification proceeds
-bottom-up: leaf functions first, then their callers, then `main`.
+Each function is annotated with a contract. The verification proceeds bottom-up:
+leaf functions first, then their callers, then `main`.
 
 ```c
 typedef unsigned char u8;
@@ -312,15 +308,15 @@ any callee bodies:
 esbmc tlv.c --replace-call-with-contract "*"
 ```
 
-Each function is analyzed once, independently. The cost of re-unrolling the
-same callee at every call site is eliminated.
+Each function is analyzed once, independently. The cost of re-unrolling the same
+callee at every call site is eliminated.
 
 ## Loop contracts and the frame rule
 
 `__ESBMC_loop_assigns` and `--loop-frame-rule` extend loop invariants with a
-frame claim — which variables a loop may change — and check that all others
-are untouched. These are documented in the
-[Loop Invariant Support](/docs/#loop-invariants) section.
+frame claim — which variables a loop may change — and check that all others are
+untouched. These are documented in the
+[Loop Invariant Support](/docs/loop-invariants) section.
 
 ## Quantified conditions
 
@@ -348,16 +344,16 @@ int find_min(int *a, int n)
 }
 ```
 
-The `__ESBMC_forall(&i, body)` reads: "for all values of `i`, `body` holds."
-The variable must be declared in scope and passed by address.
+The `__ESBMC_forall(&i, body)` reads: "for all values of `i`, `body` holds." The
+variable must be declared in scope and passed by address.
 
-{{< callout type="warning" >}}
-`__ESBMC_forall` and `__ESBMC_exists` require a solver that supports
-quantifiers. Use `--z3`:
+{{< callout type="warning" >}} `__ESBMC_forall` and `__ESBMC_exists` require a
+solver that supports quantifiers. Use `--z3`:
 
 ```bash
 esbmc file.c --enforce-contract find_min --function find_min --z3
 ```
+
 {{< /callout >}}
 
 ## Memory freshness: `__ESBMC_is_fresh`
@@ -366,8 +362,8 @@ esbmc file.c --enforce-contract find_min --function find_min --z3
 allocated block of at least `size` bytes that does not alias any existing
 memory.
 
-In `requires`: the caller must provide a freshly allocated pointer.
-In `ensures`: the function promises to return a freshly allocated block.
+In `requires`: the caller must provide a freshly allocated pointer. In
+`ensures`: the function promises to return a freshly allocated block.
 
 ```c
 void create_buffer(char **out, int n) {
@@ -410,9 +406,9 @@ void reset(void) {
 
 Then enforce or replace all annotated functions in one command:
 
-| Option | Effect |
-|--------|--------|
-| `--enforce-all-contracts` | Enforce every `__ESBMC_contract`-annotated function |
+| Option                    | Effect                                                       |
+| ------------------------- | ------------------------------------------------------------ |
+| `--enforce-all-contracts` | Enforce every `__ESBMC_contract`-annotated function          |
 | `--replace-all-contracts` | Replace calls to every `__ESBMC_contract`-annotated function |
 
 These options only affect explicitly annotated functions. Non-annotated
@@ -426,28 +422,28 @@ functions.
 
 ## Quick reference
 
-| Construct | Where | Purpose |
-|-----------|-------|---------|
-| `__ESBMC_requires(cond)` | Function body | Pre-condition |
-| `__ESBMC_ensures(cond)` | Function body | Post-condition |
-| `__ESBMC_assigns(t1, t2, ...)` | Function body | Modification frame |
-| `__ESBMC_return_value` | Inside `ensures` | Return value of the function |
-| `__ESBMC_old(expr)` | Inside `ensures` | Value of `expr` at function entry |
-| `__ESBMC_is_fresh(ptr, size)` | `requires` / `ensures` | Memory freshness |
-| `__ESBMC_forall(&var, body)` | `requires` / `ensures` | Universal quantifier (needs `--z3`) |
-| `__ESBMC_exists(&var, body)` | `requires` / `ensures` | Existential quantifier (needs `--z3`) |
-| `__ESBMC_loop_invariant(cond)` | Before loop | Loop invariant |
-| `__ESBMC_loop_assigns(v1, ...)` | Before loop | Loop modification frame |
-| `__ESBMC_contract` | Function attribute | Marks function for bulk processing |
+| Construct                       | Where                  | Purpose                               |
+| ------------------------------- | ---------------------- | ------------------------------------- |
+| `__ESBMC_requires(cond)`        | Function body          | Pre-condition                         |
+| `__ESBMC_ensures(cond)`         | Function body          | Post-condition                        |
+| `__ESBMC_assigns(t1, t2, ...)`  | Function body          | Modification frame                    |
+| `__ESBMC_return_value`          | Inside `ensures`       | Return value of the function          |
+| `__ESBMC_old(expr)`             | Inside `ensures`       | Value of `expr` at function entry     |
+| `__ESBMC_is_fresh(ptr, size)`   | `requires` / `ensures` | Memory freshness                      |
+| `__ESBMC_forall(&var, body)`    | `requires` / `ensures` | Universal quantifier (needs `--z3`)   |
+| `__ESBMC_exists(&var, body)`    | `requires` / `ensures` | Existential quantifier (needs `--z3`) |
+| `__ESBMC_loop_invariant(cond)`  | Before loop            | Loop invariant                        |
+| `__ESBMC_loop_assigns(v1, ...)` | Before loop            | Loop modification frame               |
+| `__ESBMC_contract`              | Function attribute     | Marks function for bulk processing    |
 
-| Option | Purpose |
-|--------|---------|
-| `--enforce-contract <f>` | Verify `f` against its contract |
-| `--replace-call-with-contract <f>` | Replace calls to `f` with its contract |
-| `--enforce-all-contracts` | Enforce all `__ESBMC_contract`-annotated functions |
-| `--replace-all-contracts` | Replace calls to all `__ESBMC_contract`-annotated functions |
-| `--loop-invariant-check` | Enable loop invariant checking (see [Loop Invariant Support](/docs/#loop-invariants)) |
-| `--loop-frame-rule` | Enable loop frame rule (requires `--loop-invariant-check`) |
+| Option                             | Purpose                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `--enforce-contract <f>`           | Verify `f` against its contract                                                      |
+| `--replace-call-with-contract <f>` | Replace calls to `f` with its contract                                               |
+| `--enforce-all-contracts`          | Enforce all `__ESBMC_contract`-annotated functions                                   |
+| `--replace-all-contracts`          | Replace calls to all `__ESBMC_contract`-annotated functions                          |
+| `--loop-invariant-check`           | Enable loop invariant checking (see [Loop Invariant Support](/docs/loop-invariants)) |
+| `--loop-frame-rule`                | Enable loop frame rule (requires `--loop-invariant-check`)                           |
 
 ## Known limitations
 

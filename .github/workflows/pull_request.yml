@@ -2,18 +2,22 @@ name: PR
 
 on: [pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Check testing tool suite
   testing-tool:
     runs-on: ubuntu-slim
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
-    name: static llvm-21 DebugOpt
+    name: static llvm-22 DebugOpt
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
@@ -35,16 +39,20 @@ jobs:
       build-flags: '-b DebugOpt -c 21'
       testing: true
 
-  # Check project with clang-format
+  # Check project with clang-format. This job no longer auto-commits fixes:
+  # it only *checks* that the lines changed in the PR are formatted, and on
+  # failure posts a comment explaining how to fix the already-committed lines
+  # (scripts/install-format-hook.sh --fix) and how to install the local
+  # pre-commit hook that prevents the failure next time.
   code-style:
     name: Check C/C++ code-style
     runs-on: ubuntu-slim
     permissions:
-      # Give the default GITHUB_TOKEN write permission to commit and push the
-      # added or changed files to the repository.
-      contents: write
+      # Read code; write only PR comments (no push / auto-commit).
+      contents: read
+      pull-requests: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Install Dependencies
@@ -53,7 +61,8 @@ jobs:
       run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - name: Extract Clang 11
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
-    - name: Run clang-format on changed files
+    - name: Check formatting of changed lines
+      id: fmt
       shell: bash
       run: |
         mapfile -t files < <(
@@ -69,15 +78,134 @@ jobs:
           exit 0
         fi
 
-        ./clang/bin/clang-format -style=file -i -fallback-style=none "${files[@]}"
+        # Format only the lines that differ from the base branch (not whole
+        # files) and emit a diff instead of editing. A non-empty diff means
+        # the PR touched lines that are not clang-format-11-clean.
+        diff=$(python3 ./clang/bin/git-clang-format \
+          --binary ./clang/bin/clang-format \
+          --style file \
+          --extensions h,c,cpp,hpp,hh \
+          --diff \
+          "origin/${{ github.base_ref }}" -- "${files[@]}")
+
+        # git-clang-format prints these sentinels when nothing needs changing.
+        if [ -z "$diff" ] || \
+           [ "$diff" = "no modified files to format" ] || \
+           [ "$diff" = "clang-format did not modify any files" ]; then
+          echo "Changed lines are clang-format clean."
+          exit 0
+        fi
+
+        echo "::error::Changed lines are not clang-format-11 clean."
+        echo "$diff"
+        {
+          echo "diff<<DIFF_EOF"
+          echo "$diff"
+          echo "DIFF_EOF"
+        } >> "$GITHUB_OUTPUT"
+        exit 1
+    - name: Comment with fix instructions
+      if: ${{ failure() && steps.fmt.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const diff = process.env.FMT_DIFF || '';
+          const truncated = diff.length > 60000
+            ? diff.slice(0, 60000) + '\n... (diff truncated) ...'
+            : diff;
+          const base = context.payload.pull_request.base.ref;
+          // Hidden marker used only to identify our comments for cleanup once
+          // the check passes (see the "Clean up ..." step). We still post a
+          // fresh comment per failure rather than updating an old one.
+          const marker = '<!-- esbmc-clang-format-check -->';
+          const body = [
+            marker,
+            '### Code style check failed',
+            '',
+            'Some lines changed in this PR are not formatted with **clang-format 11**.',
+            '',
+            '**Fix the lines already committed** — reformat the changed lines with the same clang-format 11 CI uses, then commit and push:',
+            '',
+            '```sh',
+            './scripts/install-format-hook.sh --fix origin/' + base,
+            'git add -u && git commit -m "apply clang-format" && git push',
+            '```',
+            '',
+            '**Avoid this next time** — install the pre-commit hook once; it formats changed lines automatically on every future commit:',
+            '',
+            '```sh',
+            './scripts/install-format-hook.sh',
+            '```',
+            '',
+            '<details><summary>Required formatting diff</summary>',
+            '',
+            '```diff',
+            truncated,
+            '```',
+            '',
+            '</details>',
+          ].join('\n');
+
+          // Always post a fresh comment (do not update an old one): if the
+          // contributor keeps pushing unformatted code, a new comment each
+          // time is harder to overlook than a silently-updated one.
+          const { owner, repo } = context.repo;
+          await github.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: context.payload.pull_request.number,
+            body,
+          });
+      env:
+        FMT_DIFF: ${{ steps.fmt.outputs.diff }}
+    - name: Clean up stale code-style comments
+      # On success, delete any failure comments left by earlier runs so a
+      # fixed PR doesn't keep showing "check failed". Identified by the hidden
+      # marker the comment step embeds.
+      if: ${{ success() && github.event.pull_request.head.repo.full_name == github.repository }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const marker = '<!-- esbmc-clang-format-check -->';
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.paginate(
+            github.rest.issues.listComments,
+            { owner, repo, issue_number });
+          for (const c of comments) {
+            if (c.body && c.body.includes(marker)) {
+              await github.rest.issues.deleteComment(
+                { owner, repo, comment_id: c.id });
+            }
+          }
     - name: Delete downloaded Clang 11
+      if: always()
       run: rm -rf clang*
-    # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v5
-      if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-    - name: Throws error if changes were made
-      run: git diff --exit-code --ignore-cr-at-eol
-      if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+
+
+  # Check CMake files with cmakelint
+  cmake-lint:
+    name: Check CMake style (cmakelint)
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Install cmakelint
+        run: pip install cmakelint
+      - name: Run cmakelint on tracked CMake files
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            git ls-files '*.cmake' 'CMakeLists.txt' '**/CMakeLists.txt' '**/*.cmake'
+          )
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No CMake files to lint."
+            exit 0
+          fi
+          cmakelint --config=.cmakelintrc "${files[@]}"
 
 
   # Check project with YAPF
@@ -88,14 +216,14 @@ jobs:
         contents: write
       steps:
         - name: Checkout PR branch (not merge ref)
-          uses: actions/checkout@v4
+          uses: actions/checkout@v6
           with:
             ref: ${{ github.event.pull_request.head.sha }}
             fetch-depth: 0
             persist-credentials: true
 
         - name: Set up Python
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v6
           with:
             python-version: '3.10'
 
@@ -118,7 +246,7 @@ jobs:
             yapf --in-place "${files[@]}"
 
         - name: Auto-commit formatting changes
-          uses: stefanzweifel/git-auto-commit-action@v5
+          uses: stefanzweifel/git-auto-commit-action@v7
           if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           with:
             commit_message: 'style(python): apply YAPF auto-formatting'
@@ -138,7 +266,7 @@ jobs:
     name: Build and upload coverage to Codecov
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
@@ -163,12 +291,12 @@ jobs:
                '*/build/*' \
                --output-file coverage.info
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.info
       - name: Save coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.info

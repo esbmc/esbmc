@@ -1,6 +1,6 @@
 CORE
 main.c
---all-witnesses --max-witnesses 4 --incremental-bmc
+--all-witnesses --max-witnesses 4 --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$
 \[Counterexamples - 4 witnesses\]
 ^[^\n]*Inputs : \[0\] = \{ \.i=\{ \.a=-?\d+, \.b=-?\d+ \}, \.c=-?\d+ \}$

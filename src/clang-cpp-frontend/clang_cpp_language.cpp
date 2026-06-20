@@ -84,6 +84,19 @@ extern "C" {
   intrinsics.append(clang_c_languaget::internal_additions());
   intrinsics.append(R"(
 void __ESBMC_throw_bad_cast(void);
+
+// Exception-lowering runtime hooks. remove_exceptions inserts calls to these
+// after parsing, so they must be visible during library linking for the OM
+// bodies to be pulled into the goto program. Declared only for C++ (the C
+// frontend cannot produce throw/catch): a pure-C program never uses exception
+// lowering, so injecting these into every C TU would force the OM bodies to be
+// linked into exception-free programs, perturbing analyses such as
+// termination's recurrent-set search.
+void __ESBMC_push_handled_exception(void);
+void __ESBMC_pop_handled_exception(void);
+void __ESBMC_rethrow_current_exception(void);
+void *__ESBMC_current_exception_raw(void);
+void __ESBMC_rethrow_exception_raw(void *);
 #undef _Bool
 #pragma pop_macro("_Bool")
 })");
@@ -116,18 +129,27 @@ void clang_cpp_languaget::set_language_version()
     config.language.cpp_std = cxx_stdt::cpp98;
 }
 
-bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
+bool clang_cpp_languaget::typecheck(
+  contextt &context,
+  const std::string &module)
 {
   set_language_version();
-  clang_cpp_convertert converter(context, AST, "C++");
+
+  // Convert + adjust this translation unit in an isolated context, then
+  // merge the fully-adjusted symbols into the shared context via c_link.
+  // This keeps each TU's convert/adjust from re-walking and re-adjusting
+  // symbols contributed by other frontends/TUs sharing `context` (#5309).
+  contextt new_context;
+
+  clang_cpp_convertert converter(new_context, AST, "C++");
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(context);
+  clang_cpp_adjust adjuster(new_context);
   if (adjuster.adjust())
     return true;
 
-  return false;
+  return c_link(context, new_context, module);
 }
 
 bool clang_cpp_languaget::final(contextt &context)

@@ -122,6 +122,18 @@ const struct group_opt_templ all_cmd_options[] = {
       "Set maximum nesting depth for Python list comparison (default is 4)"},
    }},
 #endif
+#ifdef ENABLE_LD_FRONTEND
+  {"LD frontend",
+   {{"ld-props",
+     boost::program_options::value<std::string>()->value_name("file"),
+     "YAML safety-property specification for IEC 61131-3 Ladder Diagram "
+     "(.ld) programs"},
+    {"ld-fault-injection",
+     NULL,
+     "Plant known semantic errors in the Ladder Diagram (negate contact "
+     "polarities, degrade Set/Reset coils to plain output coils) to validate "
+     "that the property checks detect them"}}},
+#endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
    {{"sol",
@@ -199,7 +211,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-loops", NULL, "Show the loops in the program"},
     {"show-claims", NULL, "Only show claims"},
     {"show-vcc", NULL, "Show the verification conditions"},
-    {"document-subgoals", NULL, "Generate subgoals documentation"},
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
@@ -259,6 +270,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("path"),
      "Generate the verification result witness in both Yaml and GraphML "
      "format"},
+    {"sarif-output",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "Generate a SARIF 2.1.0 report of the violation; use '-' for stdout. "
+     "Each result is annotated with the matching CWE ids (CWE 4.20)."},
     {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "Generate the verification result witness in GraphML format; use '-' for "
@@ -276,9 +291,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"validate-correctness-witness",
      NULL,
      "Validate the YAML correctness witness (2.0)"},
-    {"witness-parse-tree",
+    {"validate-violation-witness",
      NULL,
-     "Show YAML correctness witness c_expression parse tree"},
+     "Validate the YAML violation witness (2.0)"},
     {"witness",
      boost::program_options::value<std::string>()->value_name("<path>"),
      "Set the witness path"},
@@ -378,9 +393,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
     {"slice-assumes", NULL, "Remove unused assume statements"},
-    {"extended-try-analysis",
-     NULL,
-     "Skip backward stack search for C++ throw targets"},
     {"skip-bmc", NULL, "Do not perform bounded model checking"},
     {"no-cache-asserts",
      NULL,
@@ -435,7 +447,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
-     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"},
+    {"check-vacuity",
+     NULL,
+     "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
+     "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
+     "Default on when --loop-invariant or --loop-invariant-check is set."},
+    {"no-vacuity-check",
+     NULL,
+     "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",
@@ -564,6 +584,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ub-shift-check",
      NULL,
      "Enable undefined behavior check on shift operations"},
+    {"clz-zero-check",
+     NULL,
+     "Enable undefined behavior check on __builtin_clz of a zero argument"},
     {"struct-fields-check",
      NULL,
      "Enable over-sized read checks for struct fields"},
@@ -577,6 +600,12 @@ const struct group_opt_templ all_cmd_options[] = {
      "thread interleaving"},
     {"lock-order-check", NULL, "Enable for lock acquisition ordering check"},
     {"atomicity-check", NULL, "Enable atomicity check at visible assignments"},
+    {"uninitialised-vars-check",
+     NULL,
+     "Enable check for reads of uninitialised local variables (CWE-457)"},
+    {"unchecked-return-value-check",
+     NULL,
+     "Enable check for unchecked return values of fallible calls (CWE-252)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -594,8 +623,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "Enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"},
+     "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
+     "treats reach_error()/__VERIFIER_error() as error sentinels"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
@@ -780,6 +809,13 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Interactively choose thread scheduling at interleaving points"},
    }},
+  {"IREP2 migration (esbmc/esbmc#4715)",
+   {{"irep2-bodies",
+     NULL,
+     "Deprecated no-op (accepted for backward compatibility). goto_convert "
+     "always lowers function bodies through the IREP2 round-trip "
+     "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
+     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

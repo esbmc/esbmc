@@ -1,12 +1,13 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
 #include <util/c_expr2string.h>
+#include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/migrate.h>
@@ -33,7 +34,8 @@ public:
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
-      enable_is_instance_check(options.get_bool_option("is-instance-check"))
+      enable_is_instance_check(options.get_bool_option("is-instance-check")),
+      enable_clz_zero_check(options.get_bool_option("clz-zero-check"))
   {
   }
 
@@ -47,40 +49,44 @@ protected:
 
   void check_rec(
     const expr2tc &expr,
-    guardt &guard,
+    guard2tc &guard,
     const locationt &loc,
     bool address);
 
   void div_by_zero_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
-  void
-  bounds_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  void bounds_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
 
   void pointer_rel_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void float_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void cast_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
+  /** check __builtin_clz* is not called with a zero argument (UB) */
+  void clz_zero_check(const expr2tc &code, const locationt &loc);
   /* check for signed/unsigned_bv */
   void input_overflow_check_int(
     const BigInt &width,
@@ -93,10 +99,10 @@ protected:
     bool &buf_overflow);
 
   void
-  shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  shift_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void
-  nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  nan_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void is_instance_check(
     goto_programt::targett target,
@@ -126,7 +132,7 @@ protected:
     const std::string &comment,
     const std::string &property,
     const locationt &location,
-    const guardt &guard);
+    const guard2tc &guard);
 
   goto_programt new_code;
   std::set<expr2tc> assertions;
@@ -141,11 +147,12 @@ protected:
   bool enable_ub_shift_check;
   bool enable_nan_check;
   bool enable_is_instance_check;
+  bool enable_clz_zero_check;
 };
 
 void goto_checkt::div_by_zero_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_div_by_zero_check)
@@ -173,7 +180,7 @@ void goto_checkt::div_by_zero_check(
 
 void goto_checkt::float_overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_overflow_check)
@@ -252,7 +259,7 @@ void goto_checkt::float_overflow_check(
 
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
@@ -311,7 +318,7 @@ void goto_checkt::cast_overflow_check(
 
 void goto_checkt::overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (
@@ -451,25 +458,28 @@ void goto_checkt::input_overflow_check(
   for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
        i++)
   {
-    const expr2tc &base_expr = get_base_object(func_call.operands[i]);
+    expr2tc base_expr = get_base_object(func_call.operands[i]);
     irep_idt arg_name;
-    if (is_symbol2t(base_expr))
-      arg_name = to_symbol2t(base_expr).thename;
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));
     // scanf("%13d",&arr[0]);  --> overflow
-    if (arg_name.empty())
+    //
+    // `&arr[i]` is lowered to pointer arithmetic `arr + i` (an add2t),
+    // which get_base_object does not peel.  Descend into the pointer-typed
+    // operand to recover the underlying buffer symbol.
+    if (
+      (is_add2t(base_expr) || is_sub2t(base_expr)) &&
+      is_pointer_type(base_expr))
     {
-      expr2tc deref = get_base_object(func_call.operands[i]);
-      exprt ptr = migrate_expr_back(deref);
-
-      // not the format we expected
-      if (!ptr.type().is_pointer())
-        return;
-
-      arg_name = ptr.operands()[0].identifier();
+      const expr2tc &lhs = *base_expr->get_sub_expr(0);
+      const expr2tc &rhs = *base_expr->get_sub_expr(1);
+      base_expr = get_base_object(is_pointer_type(lhs) ? lhs : rhs);
     }
+
+    if (is_symbol2t(base_expr))
+      arg_name = to_symbol2t(base_expr).thename;
+
     arg_names.push_back(arg_name);
   }
 
@@ -493,7 +503,7 @@ void goto_checkt::input_overflow_check(
       return;
 
     const symbolt &arg = *ns.lookup(arg_names.at(i));
-    const irep_idt type_id = arg.type.id();
+    const irep_idt type_id = arg.get_type().id();
     std::string width;
 
     // if no length limits, then we treat it as a buffer overflow
@@ -508,13 +518,13 @@ void goto_checkt::input_overflow_check(
 
     if (type_id == "array")
     {
-      width = to_array_type(arg.type).size().cformat().as_string();
+      width = to_array_type(arg.get_type()).size().cformat().as_string();
       input_overflow_check_arr(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if (type_id == "unsignedbv" || type_id == "signedbv")
     {
-      width = arg.type.width().as_string();
+      width = arg.get_type().width().as_string();
       input_overflow_check_int(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
@@ -526,8 +536,8 @@ void goto_checkt::input_overflow_check(
     else if (type_id == "pointer")
     {
       // remove typecast
-      assert(arg.value.is_typecast());
-      const exprt out_operands = to_typecast_expr(arg.value).op();
+      assert(arg.get_value().is_typecast());
+      const exprt out_operands = to_typecast_expr(arg.get_value()).op();
       const exprt::operandst operands = out_operands.op1().operands();
 
       if (!operands[0].has_operands())
@@ -547,20 +557,24 @@ void goto_checkt::input_overflow_check(
         // e.g
         // int *arr = (int*) malloc(10 * sizeof(int));
         // scanf("%12d",&arr[0]);  --> overflow
-        const exprt &it = operands[0].op1();
+        // The per-element type T rides on the sizeof(T) operand of the
+        // `count * sizeof(T)` size expression (esbmc/esbmc#5337); peel any
+        // surrounding typecast to reach it.
+        const exprt *sz = &operands[0].op1();
+        while (sz->id() == "typecast" && sz->operands().size() == 1)
+          sz = &sz->op0();
+        if (sz->id() != "sizeof" || sz->operands().empty())
+          return;
+        const typet &elem = sz->op0().type();
 
-        if (
-          it.c_sizeof_type().id() == typet::t_signedbv ||
-          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        if (elem.id() == typet::t_signedbv || elem.id() == typet::t_unsignedbv)
         {
-          width = it.c_sizeof_type().width().as_string();
+          width = elem.width().as_string();
           input_overflow_check_int(
             string2integer(width), string2integer(limits.at(i)), buf_overflow);
         }
 
-        else if (
-          it.c_sizeof_type().id() == typet::t_floatbv ||
-          it.c_sizeof_type().id() == typet::t_fixedbv)
+        else if (elem.id() == typet::t_floatbv || elem.id() == typet::t_fixedbv)
         {
           // TODO
           break;
@@ -585,14 +599,13 @@ void goto_checkt::input_overflow_check(
     t->location.user_provided(true);
     t->location.property("overflow");
     t->location.comment(
-      "buffer overflow on " +
-      c_expr2string(migrate_expr_back(func_call.function), ns));
+      "buffer overflow on " + from_expr(ns, "", func_call.function));
   }
 }
 
 void goto_checkt::shift_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   overflow_check(expr, guard, loc);
@@ -658,7 +671,7 @@ void goto_checkt::shift_check(
 
 void goto_checkt::nan_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_nan_check)
@@ -837,7 +850,7 @@ typet goto_checkt::resolve_python_effective_type(
     {
       const symbolt *type_symbol = ns.lookup(pointed);
       if (type_symbol != nullptr)
-        pointed = type_symbol->type;
+        pointed = type_symbol->get_type();
     }
 
     if (pointed.id() == "struct")
@@ -848,7 +861,7 @@ typet goto_checkt::resolve_python_effective_type(
   {
     const symbolt *type_symbol = ns.lookup(effective);
     if (type_symbol != nullptr)
-      effective = type_symbol->type;
+      effective = type_symbol->get_type();
   }
 
   return effective;
@@ -868,7 +881,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
     const symbolt *symbol = ns.lookup(followed);
     if (symbol == nullptr)
       return expr2tc();
-    type2tc symbol_type = migrate_type(symbol->type);
+    type2tc symbol_type = migrate_symbol_type(*symbol);
     return symbol2tc(symbol_type, symbol->id);
   }
 
@@ -878,7 +891,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
 
 void goto_checkt::pointer_rel_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_pointer_check || disable_pointer_relation_check)
@@ -920,7 +933,7 @@ static bool has_dereference(const expr2tc &expr)
 
 void goto_checkt::bounds_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   (void)guard;
@@ -992,7 +1005,7 @@ void goto_checkt::add_guarded_claim(
   const std::string &comment,
   const std::string &property,
   const locationt &location,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc e = expr;
 
@@ -1019,7 +1032,7 @@ void goto_checkt::add_guarded_claim(
 
 void goto_checkt::check_rec(
   const expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   const locationt &loc,
   bool address)
 {
@@ -1059,7 +1072,7 @@ void goto_checkt::check_rec(
   {
     assert(is_bool_type(expr));
 
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
 
     bool is_or = is_or2t(expr);
     expr->foreach_operand([this, &is_or, &guard, &loc](const expr2tc &e) {
@@ -1076,7 +1089,7 @@ void goto_checkt::check_rec(
         guard.add(e);
     });
 
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -1090,20 +1103,20 @@ void goto_checkt::check_rec(
 
     // Check true path
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       guard.add(i.cond);
       check_rec(i.true_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     // Check false path, the guard is negated
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       expr2tc tmp = i.cond;
       make_not(tmp);
       guard.add(tmp);
       check_rec(i.false_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     return;
@@ -1174,8 +1187,37 @@ void goto_checkt::check_rec(
 
 void goto_checkt::check(const expr2tc &expr, const locationt &loc)
 {
-  guardt guard;
+  guard2tc guard;
   check_rec(expr, guard, loc, false);
+}
+
+void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return;
+
+  // __builtin_clz/clzl/clzll(0) is undefined behaviour (GCC); assert the
+  // argument is non-zero. Matched exactly so the two-argument __builtin_clzg is
+  // not caught.
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  if (
+    name != "c:@F@__builtin_clz" && name != "c:@F@__builtin_clzl" &&
+    name != "c:@F@__builtin_clzll")
+    return;
+
+  if (call.operands.size() != 1)
+    return;
+
+  const expr2tc &arg = call.operands[0];
+  expr2tc nonzero = notequal2tc(arg, gen_zero(arg->type));
+  guard2tc guard;
+  add_guarded_claim(
+    nonzero,
+    "__builtin_clz of zero is undefined",
+    "undef-behavior",
+    loc,
+    guard);
 }
 
 void goto_checkt::goto_check(goto_programt &goto_program)
@@ -1241,7 +1283,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
                 expr2tc cast_overflow =
                   overflow_cast2tc(assign.source, narrow_width);
                 make_not(cast_overflow);
-                guardt guard;
+                guard2tc guard;
                 add_guarded_claim(
                   cast_overflow,
                   "Narrowing assignment overflow",
@@ -1261,6 +1303,9 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
       if (enable_overflow_check)
         input_overflow_check(i.code, loc);
+
+      if (enable_clz_zero_check)
+        clz_zero_check(i.code, loc);
     }
     else if (i.is_return())
     {

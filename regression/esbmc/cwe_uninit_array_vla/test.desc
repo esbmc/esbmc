@@ -1,0 +1,4 @@
+CORE
+main.c
+--uninitialised-vars-check --incremental-bmc
+^VERIFICATION SUCCESSFUL$

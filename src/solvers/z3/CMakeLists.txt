@@ -2,14 +2,10 @@ set(Z3_MIN_VERSION "4.8.9")
 
 if(DEFINED Z3_DIR)
     set(ENABLE_Z3 ON)
-elseif(EXISTS $ENV{HOME}/z3)
-    set(ENABLE_Z3 ON)
-else()
-    if(ENABLE_Z3 AND DOWNLOAD_DEPENDENCIES)
-        message("Downloading Z3")
-        download_zip_and_extract(Z3 ${ESBMC_Z3_URL})
-        set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/${ESBMC_Z3_NAME})
-    endif()
+elseif(ENABLE_Z3 AND DOWNLOAD_DEPENDENCIES)
+    message("Downloading Z3")
+    download_zip_and_extract(Z3 ${ESBMC_Z3_URL})
+    set(Z3_DIR ${CMAKE_BINARY_DIR}/Z3/${ESBMC_Z3_NAME})
 endif()
 
 if(ENABLE_Z3)
@@ -49,11 +45,11 @@ if(ENABLE_Z3)
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-    if (BUILD_STATIC)
+    if(BUILD_STATIC)
         target_link_libraries(solverz3 fmt::fmt "${Z3_LIB}" -pthread "${LIBGOMP_LIB}" -ldl)
-    else ()
+    else()
         target_link_libraries(solverz3 fmt::fmt "${Z3_LIB}")
-    endif ()
+    endif()
     # Add to solver link
     target_link_libraries(solvers INTERFACE solverz3)
 

@@ -389,7 +389,8 @@ std::string expr2ct::convert_rec(
   }
 
   unsigned precedence;
-  return convert_norep((exprt &)src, precedence);
+  return convert_norep(
+    static_cast<const exprt &>(static_cast<const irept &>(src)), precedence);
 }
 
 std::string expr2ct::convert_code_printf(const codet &src, unsigned indent)
@@ -1024,7 +1025,9 @@ std::string expr2ct::convert_code_decl(const codet &src, unsigned indent)
     else if (symbol->is_extern)
       dest += "extern ";
 
-    if (symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
+    if (
+      symbol->get_type().is_code() &&
+      to_code_type(symbol->get_type()).get_inlined())
       dest += "inline ";
   }
 
@@ -1397,7 +1400,7 @@ std::string expr2ct::convert_realloc(const exprt &src, unsigned &precedence)
 
   unsigned p0, p1;
   std::string op0 = convert(src.op0(), p0);
-  std::string size = convert((const exprt &)src.cmt_size(), p1);
+  std::string size = convert(static_cast<const exprt &>(src.cmt_size()), p1);
 
   std::string dest = "realloc";
   dest += '(';

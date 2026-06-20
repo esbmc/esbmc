@@ -4,8 +4,9 @@
 #include <solvers/smt/smt_sort.h>
 
 #include <irep2/irep2_expr.h>
+#include <util/message.h>
 
-class smt_convt;
+class smt_solver_baset;
 
 /** Storage of an SMT function application.
  *  This class represents a single SMT function app, abstractly. Solver
@@ -16,12 +17,12 @@ class smt_convt;
  *
  *  While an expression becomes an smt_ast, the inverse is not true, and a
  *  single expression may in fact become many smt_asts in various places. See
- *  smt_convt for more details on how conversion occurs.
+ *  smt_solver_baset for more details on how conversion occurs.
  *
  *  The function arguments and the actual function application itself are all
  *  abstract and dealt with by the solver converter class. Only the sort needs
  *  to be available for us to make conversion decisions.
- *  @see smt_convt
+ *  @see smt_solver_baset
  *  @see smt_sort
  */
 
@@ -35,20 +36,21 @@ public:
   smt_sortt sort;
 
   /** The solver context */
-  const smt_convt *context;
+  const smt_solver_baset *context;
 
-  smt_ast(smt_convt *ctx, smt_sortt s);
+  smt_ast(smt_solver_baset *ctx, smt_sortt s);
   virtual ~smt_ast() = default;
 
   // "this" is the true operand.
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
+  virtual smt_astt
+  ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const;
 
   /** Abstractly produce an equality. Does the right thing (TM) whether it's
    *  a normal piece of AST or a tuple / array.
    *  @param ctx SMT context to produce the equality in.
    *  @param other Piece of AST to compare 'this' with.
    *  @return Boolean typed AST representing an equality */
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt eq(smt_solver_baset *ctx, smt_astt other) const;
 
   /** Abstractly produce an assign. Defaults to being an equality, however
    *  for some special cases up to the backend, there may be optimizations made
@@ -56,7 +58,7 @@ public:
    *  @param ctx SMT context to do the assignment in.
    *  @param sym Symbol to assign to
    *  @return AST representing the assigned symbol */
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
+  virtual void assign(smt_solver_baset *ctx, smt_astt sym) const;
 
   /** Abstractly produce an "update", i.e., an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.
@@ -65,22 +67,22 @@ public:
    *  @param idx_expr If an array, expression representing the index
    *  @return AST of this type, representing the update */
   virtual smt_astt update(
-    smt_convt *ctx,
+    smt_solver_baset *ctx,
     smt_astt value,
     unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const;
+    const expr2tc &idx_expr = expr2tc()) const;
 
   /** Select a value from an array, for both normal arrays and tuple arrays.
    *  @param ctx SMT context to produce this in.
    *  @param idx Index to select the value from.
    *  @return AST of the array's range sort representing the selected item */
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const;
 
   /** Project a member from a structure, or an field-array from a struct array.
    *  @param ctx SMT context to produce this in.
    *  @param elem Struct index to project.
    *  @return AST representing the chosen element / element-array */
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+  virtual smt_astt project(smt_solver_baset *ctx, unsigned int elem) const;
 
   virtual void dump() const
   {
@@ -92,7 +94,7 @@ template <typename solver_ast>
 class solver_smt_ast : public smt_ast
 {
 public:
-  solver_smt_ast(smt_convt *ctx, solver_ast _a, smt_sortt s)
+  solver_smt_ast(smt_solver_baset *ctx, solver_ast _a, smt_sortt s)
     : smt_ast(ctx, s), a(_a)
   {
   }

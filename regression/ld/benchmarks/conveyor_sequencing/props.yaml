@@ -1,0 +1,22 @@
+properties:
+  - id: P4
+    kind: invariant
+    expression: "Belt_1 || !Conveyor_Running"
+    description: "Belt_1 must be running whenever Conveyor_Running is true"
+
+  - id: P5
+    kind: invariant
+    expression: "Belt_2 || !Conveyor_Running"
+    description: "Belt_2 must be running whenever Conveyor_Running is true"
+
+  - id: P6
+    kind: absence
+    expression: "Emergency_Stop && Conveyor_Running"
+    description: "Conveyor must not run when Emergency_Stop is active"
+
+  - id: P7
+    kind: response
+    trigger: Start_Button
+    response: Conveyor_Running
+    max_scans: 5
+    justification: "TON1_PT is set to 2 ticks; worst-case response including timer confirmation is 3 scans plus 2 scan margin"

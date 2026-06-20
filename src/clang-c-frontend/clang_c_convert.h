@@ -83,6 +83,20 @@ protected:
   irep_idt mode;
   symbol_generator anon_symbol;
 
+  // set_location() cache. Profiling on ECA-style programs showed that every
+  // exprt built during AST conversion gets its own freshly-allocated
+  // locationt dt (4 named_sub entries: file/line/column/function). On a
+  // 590 KB benchmark that was 168 MB / 2M detatches — 68% of peak heap.
+  // Since consecutive AST nodes almost always share file+function (and
+  // often line+column for compiler-generated decls), share the locationt
+  // dt across calls when the source key matches.
+  locationt last_loc;
+  unsigned last_loc_line = 0;
+  unsigned last_loc_column = 0;
+  std::string last_loc_filename;
+  std::string last_loc_function;
+  bool last_loc_valid = false;
+
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
 
@@ -115,6 +129,17 @@ protected:
     const clang::FunctionDecl &fd,
     exprt &new_expr,
     const code_typet &ftype);
+
+  /**
+   *  Annotate a function's type with its C++ exception specification.
+   *  No-op in C (which has no exception specifications); overridden in the
+   *  C++ frontend to record noexcept / dynamic-throw specifications as
+   *  function-boundary metadata on the function type.
+   */
+  virtual void
+  annotate_exception_specification(const clang::FunctionDecl &, typet &)
+  {
+  }
 
   /**
    *  Parse function parameters
@@ -339,7 +364,10 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
-  bool get_APValue_expr(const clang::APValue &value, exprt &new_expr);
+  bool get_APValue_expr(
+    const clang::APValue &value,
+    exprt &new_expr,
+    const clang::QualType *type = nullptr);
 
   /*
    * Function to check whether a MemberExpr references to a static variable

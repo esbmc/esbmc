@@ -1,0 +1,35 @@
+# src/util migrate_* call-site scoreboard (IREP2 migration Part II)
+#
+# Regenerate with: scripts/irep2-migration/migrate_census.sh src/util
+#
+# History (TOTAL column = bare migrate_expr/migrate_type sites; BACK =
+# migrate_*_back sites; true seam size = TOTAL + BACK):
+#   Part II start (6c4d610694):        TOTAL 192, BACK 284.
+#   Phase 2.1 (dead-code hygiene):     no migrate-site change.
+#   Phase 2.2 (retire simplifier):     TOTAL 192->193 (c_typecast bridge
+#     migrate_expr/back at the frontend-blocked do_typecast(exprt&)).
+#   Phase 2.3 (round-trip elimination): TOTAL 193->192, BACK 284->275.
+#     commit 12: expr_simplifier 9->1 migrate_type_back (native fixedbv/
+#       ieee_float spec ctors + from_integer(type2tc)); 1 residual at the
+#       gen_zero-for-complex site (needs gen_zero(type2tc) complex support).
+#     commit 13: namespacet::follow(type2tc) native (drops its 2 sites).
+#     The Phase 2.2 c_typecast +1 is reclaimed; BACK is down 9.
+#   Phase 2.3 commit 14 (drop legacy c_sizeof(typet)) is BLOCKED: its 3
+#     callers are 2 frontends + goto2c (frontend boundary), not dead.
+#
+# Primary metric (docs/irep2-migration.md Part II §10): seam call sites
+# decreasing. FWD = all - back (can read negative); the back-arm coverage
+# in migrate.cpp cannot shrink (pinned by symbolt's lazy legacy cache).
+#
+FILE                                                          FWD   BACK  TOTAL
+----                                                          ---   ----  -----
+src/util/migrate.cpp                                          -80    258    178
+src/util/symbol.cpp                                            -1      7      6
+src/util/migrate.h                                             -1      3      2
+src/util/symbol.h                                              -1      3      2
+src/util/c_sizeof.cpp                                           0      1      1
+src/util/c_typecast.cpp                                         0      1      1
+src/util/expr_simplifier.cpp                                    0      1      1
+src/util/string2array.cpp                                       0      1      1
+----                                                          ---   ----  -----
+TOTAL                                                         -83    275    192

@@ -73,6 +73,21 @@ public:
   static bool
     enable_eval_assumptions; /// Try to evaluate in a guard in a TVT to accelerate bottoms
   static bool enable_ibex_contractor; /// Use ibex contractor
+
+  /// When set, the transformer skips any instruction whose
+  /// `inductive_step_instruction` flag is true. Used by the post-k-induction
+  /// loop-bounds pass: havoc'd assignments and entry-condition assumes that
+  /// k-induction emitted before each loop head are made transparent, so the
+  /// fixpoint at the loop head matches the bounds at the *original* loop
+  /// head (before k-induction's transformation). The bounds are then a sound
+  /// inductive hypothesis to assume right after the havoc.
+  ///
+  /// thread_local so a future threaded --k-induction-parallel can run
+  /// concurrent interval analyses without one transformer's "skip" leaking
+  /// into another's. Always toggled via scoped_skip_inductive
+  /// (interval_analysis.cpp), which save-and-restores the prior value so
+  /// an exception or a nested call cannot leave it stuck.
+  static thread_local bool skip_inductive_step_instructions;
   // Widening options
   static unsigned
     fixpoint_limit; /// Sets a limit for number of iterations before widening

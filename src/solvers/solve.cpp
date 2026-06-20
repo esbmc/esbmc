@@ -3,6 +3,8 @@
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/fp/fp_conv.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
@@ -76,30 +78,54 @@ static std::string pick_default_solver()
   abort();
 }
 
+// Determine the solver the user explicitly asked for, returning "" if none.
+// Aborts if the user requested more than one solver flag simultaneously.
+static std::string resolve_user_solver_choice(const optionst &options)
+{
+  std::string solver_name;
+  for (const std::string &name : all_solvers)
+    if (options.get_bool_option(name))
+    {
+      if (!solver_name.empty())
+      {
+        log_error("Please only specify one solver");
+        abort();
+      }
+      solver_name = name;
+    }
+
+  if (solver_name.empty())
+    solver_name = options.get_option("default-solver");
+
+  return solver_name;
+}
+
+void check_solver_availability(const optionst &options)
+{
+  std::string solver_name = resolve_user_solver_choice(options);
+  // No explicit choice — pick_default_solver() will choose from what's built
+  // in when the solver is actually needed.
+  if (solver_name.empty())
+    return;
+  if (esbmc_solvers.count(solver_name))
+    return;
+  log_error(
+    "The {} solver has not been built into this version of ESBMC, sorry",
+    solver_name);
+  abort();
+}
+
 static solver_creator &
 pick_solver(std::string &solver_name, const optionst &options)
 {
   if (solver_name == "")
-  {
-    // Pick one based on options.
-    for (const std::string &name : all_solvers)
-      if (options.get_bool_option(name))
-      {
-        if (solver_name != "")
-        {
-          log_error("Please only specify one solver");
-          abort();
-        }
+    solver_name = resolve_user_solver_choice(options);
 
-        solver_name = name;
-      }
-  }
-
-  if (solver_name == "")
-    solver_name = options.get_option("default-solver");
-
-  // Check for --ir option and default to Z3 for integer/real arithmetic
-  if (solver_name == "" && options.get_bool_option("ir"))
+  // --ir and --ir-ieee both request integer/real arithmetic (both set the
+  // "int-encoding" option). Default to Z3, which supports the Int/Real sorts,
+  // when no solver was chosen. Keying off "int-encoding" rather than the raw
+  // "ir" flag is what lets --ir-ieee auto-select too (issue #5179).
+  if (solver_name == "" && options.get_bool_option("int-encoding"))
   {
 #ifdef Z3
     if (esbmc_solvers.count("z3"))
@@ -122,6 +148,24 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (solver_name == "")
     solver_name = pick_default_solver();
 
+  // Integer/real encoding is incompatible with bit-vector-only backends
+  // (Bitwuzla, Boolector). Fail with a clear message and a clean exit instead
+  // of letting the backend abort() at construction time (issue #5179). This is
+  // reachable when Z3 is not built in, or when a bit-vector-only solver is
+  // forced via --default-solver together with --ir / --ir-ieee.
+  if (
+    options.get_bool_option("int-encoding") &&
+    (solver_name == "bitwuzla" || solver_name == "boolector"))
+  {
+    log_error(
+      "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
+      "supports the Int/Real sorts (e.g. Z3); the '{}' backend is "
+      "bit-vector-only. Re-run with an integer/real-capable solver, or build "
+      "Z3 into ESBMC.",
+      solver_name);
+    exit(1);
+  }
+
   auto it = esbmc_solvers.find(solver_name);
   if (it != esbmc_solvers.end())
     return *it->second;
@@ -142,7 +186,7 @@ smt_convt *create_solver(
   fp_convt *fp_api = nullptr;
 
   solver_creator &factory = pick_solver(solver_name, options);
-  smt_convt *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
+  smt_solver_baset *ctx = factory(options, ns, &tuple_api, &array_api, &fp_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
@@ -179,5 +223,5 @@ smt_convt *create_solver(
     ctx->set_fp_conv(fp_api);
 
   ctx->smt_post_init();
-  return ctx;
+  return new smt_convt(std::unique_ptr<smt_solver_baset>(ctx));
 }

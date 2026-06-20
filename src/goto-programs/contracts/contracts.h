@@ -42,6 +42,7 @@
 #include <goto-programs/frame_enforcer.h>
 #include <util/context.h>
 #include <util/namespace.h>
+#include <map>
 #include <set>
 #include <string>
 
@@ -384,13 +385,18 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param is_fresh_sizes Maps each __ESBMC_is_fresh pointer symbol to its
+  ///        byte-size expression, so the array-element witness index is bounded
+  ///        by the real allocation (size/sizeof(elem)) rather than the default
+  ///        ARRAY_ALLOC_ELEMS used for validity-assumption allocations.
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
     const std::vector<expr2tc> &assigns_targets,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, expr2tc> &is_fresh_sizes);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
   /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
@@ -520,12 +526,34 @@ private:
   /// \param location Location information
   /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
+  /// \param allocated_ptrs Output: pointer-typed lvalues that received a heap
+  ///        allocation. Stack-backed struct params are not appended. Callers
+  ///        use this to emit matching free() calls at wrapper exit so
+  ///        --memory-leak-check does not blame the user's function for
+  ///        wrapper-internal allocations (CWE-401).
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    const std::set<irep_idt> &array_params = {},
-    const std::set<irep_idt> &skip_params = {});
+    const std::set<irep_idt> &array_params,
+    const std::set<irep_idt> &skip_params,
+    std::vector<expr2tc> &allocated_ptrs);
+
+  /// \brief Emit malloc + non-null ASSUME + tracking push for one pointer param.
+  /// Shared body of the array-param and primitive-pointer branches of
+  /// add_pointer_validity_assumptions. Allocates ARRAY_ALLOC_ELEMS elements of
+  /// \p pointed_to_type, assigns the result to \p p, assumes p != NULL, and
+  /// records \p p in \p allocated_ptrs so the caller can emit a matching free.
+  /// \param kind_label Short description used in the goto-instruction comment
+  ///        and the debug log (e.g. "array" or "primitive array").
+  void emit_pointer_param_malloc(
+    goto_programt &wrapper,
+    const expr2tc &p,
+    const type2tc &param_type,
+    const type2tc &pointed_to_type,
+    const locationt &location,
+    std::vector<expr2tc> &allocated_ptrs,
+    const char *kind_label);
 };
 
 #endif // ESBMC_CONTRACTS_H

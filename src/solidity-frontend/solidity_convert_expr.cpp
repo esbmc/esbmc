@@ -362,7 +362,7 @@ bool solidity_convertert::get_expr(
         arr_sym.file_local = true;
         arr_sym.lvalue = true;
         auto &added = *move_symbol_to_context(arr_sym);
-        added.value = gen_zero(get_complete_type(arr_t, ns), true);
+        added.set_value(gen_zero(get_complete_type(arr_t, ns), true));
       }
 
       new_expr = symbol_expr(*context.find_symbol(arr_id));
@@ -593,7 +593,7 @@ bool solidity_convertert::get_expr(
             continue;
 
           exprt &arg = call.arguments()[i];
-          if (arg.type() != out_sym->type)
+          if (arg.type() != out_sym->get_type())
             continue;
 
           move_to_back_block(code_assignt(arg, symbol_expr(*out_sym)));
@@ -861,8 +861,8 @@ bool solidity_convertert::get_literal_expr(
     std::string expected_size;
     if (is_static)
     {
-      assert(!byte_t.get("#sol_bytesn_size").empty());
-      expected_size = byte_t.get("#sol_bytesn_size").as_string();
+      assert(has_sol_bytesn_size(byte_t));
+      expected_size = get_sol_bytesn_size(byte_t);
     }
 
     if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
@@ -906,7 +906,7 @@ bool solidity_convertert::get_literal_expr(
           byte_t,
           location,
           call);
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         exprt len = from_integer(std::stoul(expected_size), uint_type());
         call.arguments().push_back(len);
       }
@@ -917,7 +917,7 @@ bool solidity_convertert::get_literal_expr(
         return true;
       }
       set_sol_type(call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-      call.type().set("#sol_bytesn_size", expected_size);
+      set_sol_bytesn_size(call.type(), expected_size);
       new_expr = make_aux_var(call, location);
       return false;
     }
@@ -934,7 +934,7 @@ bool solidity_convertert::get_literal_expr(
       // add padding
       if (is_static && is_hex_string)
       {
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         size_t actual_len = val_str.length() / 2;
         size_t expected_len = std::stoul(expected_size);
 
@@ -985,7 +985,7 @@ bool solidity_convertert::get_literal_expr(
       else
       {
         set_sol_type(str_call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-        str_call.type().set("#sol_bytesn_size", byte_t.get("#sol_bytesn_size"));
+        set_sol_bytesn_size(str_call.type(), get_sol_bytesn_size(byte_t));
       }
       new_expr = make_aux_var(str_call, location);
       return false;
@@ -1109,7 +1109,7 @@ bool solidity_convertert::get_tuple_expr(
     exprt inits;
     inits = gen_zero(arr_type);
     set_sol_type(inits.type(), SolidityGrammar::SolType::ARRAY_LITERAL);
-    inits.type().set("#sol_array_size", size.cformat().as_string());
+    set_sol_array_size(inits.type(), size.cformat().as_string());
 
     // populate array
     int i = 0;
@@ -1354,7 +1354,7 @@ bool solidity_convertert::get_call_expr(
     if (new_expr.is_member() && new_expr.component_name() == "length")
       return false;
 
-    std::string sol_name = new_expr.type().get("#sol_name").as_string();
+    std::string sol_name = get_sol_name(new_expr.type());
     if (sol_name == "revert")
     {
       // Special case: revert
@@ -1587,8 +1587,7 @@ bool solidity_convertert::get_call_expr(
   auto it = expr.find("names");
   if (it != expr.end() && it->is_array() && !it->empty())
   {
-    nlohmann::json clean_expr =
-      reorder_arguments(expr, src_ast_json, callee_expr_json);
+    nlohmann::json clean_expr = reorder_arguments(expr, callee_expr_json);
     if (get_non_library_function_call(decl_ref, clean_expr, call))
       return true;
 
@@ -1686,7 +1685,7 @@ bool solidity_convertert::get_contract_member_call_expr(
   {
     if (get_var_decl_ref(base_expr_json, true, base))
       return true;
-    base_cname = base.type().get("#sol_contract").as_string();
+    base_cname = get_sol_contract(base.type());
     assert(!base_cname.empty());
   }
 
@@ -1840,7 +1839,7 @@ bool solidity_convertert::get_contract_member_call_expr(
         locationt());
       symbolt &added_old_sender = *move_symbol_to_context(old_sender);
       code_declt old_sender_decl(symbol_expr(added_old_sender));
-      added_old_sender.value = msg_sender;
+      added_old_sender.set_value(msg_sender);
       old_sender_decl.operands().push_back(msg_sender);
       move_to_front_block(old_sender_decl);
 
@@ -2002,7 +2001,7 @@ bool solidity_convertert::get_index_access_expr(
   {
     bool is_bytes_set = is_mapping_set_lvalue(expr); // set vs get
     typet result_type = byte_static_t;
-    result_type.set("#sol_bytesn_size", 1);
+    set_sol_bytesn_size(result_type, 1);
 
     std::string aux_name, aux_id;
     get_aux_var(aux_name, aux_id);
@@ -2026,7 +2025,7 @@ bool solidity_convertert::get_index_access_expr(
       temp_sym.file_local = true;
       temp_sym.lvalue = true;
       auto &tmp_added_sym = *move_symbol_to_context(temp_sym);
-      tmp_added_sym.value = array;
+      tmp_added_sym.set_value(array);
       code_declt decl(symbol_expr(tmp_added_sym));
       decl.operands().push_back(array);
       move_to_front_block(decl);
@@ -2047,7 +2046,7 @@ bool solidity_convertert::get_index_access_expr(
           get_call);
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(pos);
-        added_sym.value = get_call;
+        added_sym.set_value(get_call);
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);
@@ -2091,7 +2090,7 @@ bool solidity_convertert::get_index_access_expr(
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(dynamic_pool);
         get_call.arguments().push_back(pos);
-        added_sym.value = get_call;
+        added_sym.set_value(get_call);
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);
@@ -2124,7 +2123,7 @@ bool solidity_convertert::get_index_access_expr(
   // them.  This ensures the result carries the inner mapping's element type
   // so that subsequent m[k] indexing works correctly.
   if (
-    array.type().is_array() && array.type().get_bool("#sol_mapping_array") &&
+    array.type().is_array() && get_sol_mapping_array(array.type()) &&
     array.type().has_subtype())
   {
     new_expr = index_exprt(array, pos, array.type().subtype());
@@ -2137,7 +2136,7 @@ bool solidity_convertert::get_index_access_expr(
 
 bool solidity_convertert::get_index_range_access_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &literal_type,
+  const nlohmann::json & /*literal_type*/,
   exprt &new_expr)
 {
   // IndexRangeAccess: data[start:end] on calldata arrays/bytes
@@ -2163,7 +2162,7 @@ bool solidity_convertert::get_index_range_access_expr(
 
 bool solidity_convertert::get_new_object_expr(
   const nlohmann::json &expr,
-  const nlohmann::json &literal_type,
+  const nlohmann::json & /*literal_type*/,
   exprt &new_expr)
 {
   locationt location;
@@ -2713,7 +2712,7 @@ bool solidity_convertert::get_binary_operator_expr(
     else if (
       (rt_sol == SolidityGrammar::SolType::ARRAY ||
        rt_sol == SolidityGrammar::SolType::ARRAY_LITERAL) &&
-      lhs.is_symbol() && lt.get_bool("#sol_dynarray_state"))
+      lhs.is_symbol() && get_sol_dynarray_state(lt))
     {
       // Dynarray state var: element-wise assignment from array literal
       // e.g. items = [1,2,3] → items[0]=1; items[1]=2; items[2]=3; items_len=3
@@ -2791,7 +2790,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::DYNARRAY && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: skip arrcpy, just note the assignment is handled
       // by the caller's existing mechanism (element-wise via loops would be
@@ -2832,7 +2831,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::ARRAY_CALLOC && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: `items = new uint[](n)` → just set length = n
       exprt size_expr;
@@ -3242,7 +3241,7 @@ bool solidity_convertert::get_unary_operator_expr(
     {
       const symbolt *s = ns.lookup(resolved_type.identifier());
       if (s)
-        resolved_type = s->type;
+        resolved_type = s->get_type();
     }
 
     exprt zero = gen_zero(resolved_type);

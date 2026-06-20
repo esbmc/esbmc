@@ -4,11 +4,162 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
+
+namespace
+{
+struct equation_conversion_statet
+{
+  // Conjunction of all in-scope assumptions, as an expr2tc. Solver-AST
+  // handling stays inside smt_convt: the equation only manipulates
+  // expr2tc and lets convert_ast/assert_expr bridge to the solver.
+  expr2tc assumpt_expr;
+  // Negated discharge condition per kept assertion (or the path
+  // assumption alone in vacuity mode). OR'd together and asserted once.
+  std::vector<expr2tc> assertions;
+};
+
+void pre_register_addresses(
+  smt_convt &smt_conv,
+  symex_target_equationt::SSA_stepst::iterator begin,
+  symex_target_equationt::SSA_stepst::iterator end)
+{
+  // Only pre-register address_of of compile-time constants (string and
+  // array literals).  These have static lifetime and exist throughout the
+  // program, so including them early in the address space cannot produce
+  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
+  // cast could legitimately reach them regardless of where the literal's
+  // use happens to appear in the source.  Dynamic/automatic objects keep
+  // their original lazy registration to avoid exposing later-allocated
+  // memory to earlier casts.
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e)
+      return;
+    if (is_address_of2t(e))
+    {
+      // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
+      expr2tc obj = to_address_of2t(e).ptr_obj;
+      while (is_index2t(obj) || is_member2t(obj))
+        obj = is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_member2t(obj).source_value;
+      if (is_constant_string2t(obj) || is_constant_array2t(obj))
+        smt_conv.convert_ast(e);
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+
+  for (auto it = begin; it != end; ++it)
+  {
+    const symex_target_equationt::SSA_stept &step = *it;
+    if (step.ignore)
+      continue;
+    walk(step.guard);
+    walk(step.cond);
+    walk(step.lhs);
+    walk(step.rhs);
+    if (step.output_data)
+      for (const expr2tc &arg : step.output_data->output_args)
+        walk(arg);
+  }
+}
+
+void convert_internal_step(
+  const namespacet &ns,
+  bool ssa_trace,
+  bool ssa_smt_trace,
+  unsigned &output_count,
+  smt_convt &smt_conv,
+  equation_conversion_statet &state,
+  symex_target_equationt::SSA_stept &step,
+  bool vacuity_mode)
+{
+  if (step.ignore)
+  {
+    step.cond_expr = gen_true_expr();
+    return;
+  }
+
+  if (ssa_trace)
+  {
+    std::ostringstream oss;
+    step.output(ns, oss);
+    log_status("{}", oss.str());
+  }
+
+  smt_conv.convert_ast(step.guard);
+
+  if (step.is_assume() || step.is_assert() || step.is_branching())
+  {
+    smt_conv.convert_ast(step.cond);
+    if (ssa_smt_trace)
+      smt_conv.dump_expr(step.cond);
+  }
+  else if (step.is_assignment())
+  {
+    smt_conv.convert_assign(step.cond);
+    if (ssa_smt_trace)
+      smt_conv.dump_expr(step.cond);
+  }
+  else if (step.is_output())
+  {
+    symex_target_equationt::SSA_stept::output_datat &od = step.output_payload();
+    for (const expr2tc &tmp : od.output_args)
+    {
+      if (is_constant_expr(tmp) || is_constant_string2t(tmp))
+        od.converted_output_args.push_back(tmp);
+      else
+      {
+        expr2tc sym =
+          symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
+        expr2tc eq = equality2tc(sym, tmp);
+        smt_conv.convert_assign(eq);
+        if (ssa_smt_trace)
+          smt_conv.dump_expr(eq);
+        od.converted_output_args.push_back(sym);
+      }
+    }
+  }
+  else if (step.is_renumber())
+  {
+    smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
+  }
+  else if (!step.is_skip())
+  {
+    assert(0 && "Unexpected SSA step type in conversion");
+  }
+
+  if (step.is_assert())
+  {
+    if (vacuity_mode)
+    {
+      // Vacuity probe: ask whether the path to this claim is reachable at
+      // all, ignoring the claim itself. If the OR of all kept claims'
+      // path assumption is UNSAT, every discharge was vacuous.
+      step.cond_expr = state.assumpt_expr;
+      state.assertions.push_back(state.assumpt_expr);
+    }
+    else
+    {
+      step.cond_expr = implies2tc(state.assumpt_expr, step.cond);
+      state.assertions.push_back(not2tc(step.cond_expr));
+    }
+  }
+  else if (step.is_assume())
+  {
+    state.assumpt_expr = and2tc(state.assumpt_expr, step.cond);
+  }
+  else
+  {
+    step.cond_expr = gen_true_expr();
+  }
+}
+} // namespace
 
 void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
@@ -42,7 +193,8 @@ void symex_target_equationt::assignment(
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -61,8 +213,9 @@ void symex_target_equationt::output(
   SSA_step.guard = guard;
   SSA_step.type = goto_trace_stept::OUTPUT;
   SSA_step.source = source;
-  SSA_step.output_args = args;
-  SSA_step.format_string = fmt;
+  auto &od = SSA_step.output_payload();
+  od.output_args = args;
+  od.format_string = fmt;
 
   if (debug_print)
     debug_print_step(SSA_step);
@@ -124,7 +277,8 @@ void symex_target_equationt::assertion(
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -152,147 +306,28 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
-void symex_target_equationt::pre_register_addresses(
-  smt_convt &smt_conv,
-  std::list<SSA_stept>::iterator begin,
-  std::list<SSA_stept>::iterator end)
-{
-  // Only pre-register address_of of compile-time constants (string and
-  // array literals).  These have static lifetime and exist throughout the
-  // program, so including them early in the address space cannot produce
-  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
-  // cast could legitimately reach them regardless of where the literal's
-  // use happens to appear in the source.  Dynamic/automatic objects keep
-  // their original lazy registration to avoid exposing later-allocated
-  // memory to earlier casts.
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
-    if (!e)
-      return;
-    if (is_address_of2t(e))
-    {
-      // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
-      expr2tc obj = to_address_of2t(e).ptr_obj;
-      while (is_index2t(obj) || is_member2t(obj))
-        obj = is_index2t(obj) ? to_index2t(obj).source_value
-                              : to_member2t(obj).source_value;
-      if (is_constant_string2t(obj) || is_constant_array2t(obj))
-        smt_conv.convert_ast(e);
-    }
-    e->foreach_operand([&](const expr2tc &op) { walk(op); });
-  };
-
-  for (auto it = begin; it != end; ++it)
-  {
-    const SSA_stept &step = *it;
-    if (step.ignore)
-      continue;
-    walk(step.guard);
-    walk(step.cond);
-    walk(step.lhs);
-    walk(step.rhs);
-    for (const expr2tc &arg : step.output_args)
-      walk(arg);
-  }
-}
-
-void symex_target_equationt::convert(smt_convt &smt_conv)
+void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
   // Register address-taken objects first so int-to-ptr casts see the full
   // set of candidate objects regardless of source-level declaration order.
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
 
-  smt_convt::ast_vec assertions;
-  smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
+  equation_conversion_statet state;
+  state.assumpt_expr = gen_true_expr();
 
   for (auto &SSA_step : SSA_steps)
-    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
+    convert_internal_step(
+      ns,
+      ssa_trace,
+      ssa_smt_trace,
+      output_count,
+      smt_conv,
+      state,
+      SSA_step,
+      vacuity_mode);
 
-  if (!assertions.empty())
-    smt_conv.assert_ast(smt_conv.make_n_ary_or(assertions));
-}
-
-void symex_target_equationt::convert_internal_step(
-  smt_convt &smt_conv,
-  smt_astt &assumpt_ast,
-  smt_convt::ast_vec &assertions,
-  SSA_stept &step)
-{
-  smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
-  smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
-
-  if (step.ignore)
-  {
-    step.cond_ast = true_val;
-    step.guard_ast = false_val;
-    return;
-  }
-
-  if (ssa_trace)
-  {
-    std::ostringstream oss;
-    step.output(ns, oss);
-    log_status("{}", oss.str());
-  }
-
-  step.guard_ast = smt_conv.convert_ast(step.guard);
-
-  if (step.is_assume() || step.is_assert() || step.is_branching())
-  {
-    expr2tc tmp(step.cond);
-    step.cond_ast = smt_conv.convert_ast(tmp);
-
-    if (ssa_smt_trace)
-    {
-      step.cond_ast->dump();
-    }
-  }
-  else if (step.is_assignment())
-  {
-    smt_astt assign = smt_conv.convert_assign(step.cond);
-    if (ssa_smt_trace)
-    {
-      assign->dump();
-    }
-  }
-  else if (step.is_output())
-  {
-    for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
-         o_it != step.output_args.end();
-         ++o_it)
-    {
-      const expr2tc &tmp = *o_it;
-      if (is_constant_expr(tmp) || is_constant_string2t(tmp))
-        step.converted_output_args.push_back(tmp);
-      else
-      {
-        expr2tc sym =
-          symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
-        expr2tc eq = equality2tc(sym, tmp);
-        smt_astt assign = smt_conv.convert_assign(eq);
-        if (ssa_smt_trace)
-          assign->dump();
-        step.converted_output_args.push_back(sym);
-      }
-    }
-  }
-  else if (step.is_renumber())
-  {
-    smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
-  }
-  else if (!step.is_skip())
-  {
-    assert(0 && "Unexpected SSA step type in conversion");
-  }
-
-  if (step.is_assert())
-  {
-    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
-    assertions.push_back(smt_conv.invert_ast(step.cond_ast));
-  }
-  else if (step.is_assume())
-  {
-    assumpt_ast = smt_conv.mk_and(assumpt_ast, step.cond_ast);
-  }
+  if (!state.assertions.empty())
+    smt_conv.assert_expr(disjunction(state.assertions));
 }
 
 void symex_target_equationt::output(std::ostream &out) const
@@ -486,15 +521,24 @@ void symex_target_equationt::reconstruct_symbolic_expression(
   }
 }
 
+struct runtime_encoded_equationt::solver_statet
+{
+  std::list<equation_conversion_statet> states;
+};
+
 runtime_encoded_equationt::runtime_encoded_equationt(
   const namespacet &_ns,
   smt_convt &_conv)
-  : symex_target_equationt(_ns), conv(_conv)
+  : symex_target_equationt(_ns),
+    conv(_conv),
+    solver_state(std::make_unique<solver_statet>())
 {
-  assert_vec_list.emplace_back();
-  assumpt_chain.push_back(conv.convert_ast(gen_true_expr()));
+  solver_state->states.emplace_back();
+  solver_state->states.back().assumpt_expr = gen_true_expr();
   cvt_progress = SSA_steps.end();
 }
+
+runtime_encoded_equationt::~runtime_encoded_equationt() = default;
 
 void runtime_encoded_equationt::flush_latest_instructions()
 {
@@ -528,8 +572,15 @@ void runtime_encoded_equationt::flush_latest_instructions()
 
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)
-    convert_internal_step(
-      conv, assumpt_chain.back(), assert_vec_list.back(), *run_it);
+    ::convert_internal_step(
+      ns,
+      ssa_trace,
+      ssa_smt_trace,
+      output_count,
+      conv,
+      solver_state->states.back(),
+      *run_it,
+      /*vacuity_mode=*/false);
 
   --run_it;
   cvt_progress = run_it;
@@ -540,8 +591,7 @@ void runtime_encoded_equationt::push_ctx()
   flush_latest_instructions();
 
   // And push everything back.
-  assumpt_chain.push_back(assumpt_chain.back());
-  assert_vec_list.push_back(assert_vec_list.back());
+  solver_state->states.push_back(solver_state->states.back());
   scoped_end_points.push_back(cvt_progress);
   conv.push_ctx();
 }
@@ -558,12 +608,20 @@ void runtime_encoded_equationt::pop_ctx()
 
   conv.pop_ctx();
   scoped_end_points.pop_back();
-  assert_vec_list.pop_back();
-  assumpt_chain.pop_back();
+  solver_state->states.pop_back();
 }
 
-void runtime_encoded_equationt::convert(smt_convt &smt_conv)
+void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
+  // The incremental path doesn't re-walk SSA_steps, so the per-assertion
+  // path-assumption rewrite that vacuity mode needs cannot be applied here.
+  // Fail loudly rather than producing normal-mode results under a vacuity
+  // probe.
+  (void)vacuity_mode;
+  assert(
+    !vacuity_mode &&
+    "runtime_encoded_equationt::convert does not support vacuity mode");
+
   // Don't actually convert. We've already done most of the conversion by now
   // (probably), instead flush all unconverted instructions. We don't push
   // a context, because a) where do we unpop it, but b) we're never going to
@@ -571,8 +629,8 @@ void runtime_encoded_equationt::convert(smt_convt &smt_conv)
   flush_latest_instructions();
 
   // Finally, we also want to assert the set of assertions.
-  if (!assert_vec_list.back().empty())
-    smt_conv.assert_ast(smt_conv.make_n_ary_or(assert_vec_list.back()));
+  if (!solver_state->states.back().assertions.empty())
+    smt_conv.assert_expr(disjunction(solver_state->states.back().assertions));
 }
 
 std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
@@ -585,10 +643,8 @@ std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
     SSA_steps.size() == 0 &&
     "runtime_encoded_equationt shouldn't be "
     "cloned when it contains data");
-  auto nthis = std::shared_ptr<runtime_encoded_equationt>(
-    new runtime_encoded_equationt(*this));
-  nthis->cvt_progress = nthis->SSA_steps.end();
-  return nthis;
+  return std::shared_ptr<symex_targett>(
+    new runtime_encoded_equationt(ns, conv));
 }
 
 tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
@@ -600,50 +656,47 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // wipe some state afterwards.
   push_ctx();
 
-  // Convert the question (must be a bool).
+  // Convert the question (must be a bool) at this outer context level so its
+  // AST is cached above the two probe scopes below; otherwise each probe's
+  // pop_ctx would drop the cache entry and force a re-conversion.
   assert(is_bool_type(question));
-  smt_astt q = conv.convert_ast(question);
+  conv.convert_ast(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  conv.assert_ast(assumpt_chain.back());
+  conv.assert_expr(solver_state->states.back().assumpt_expr);
 
-  // Now, how to ask the question? Unfortunately the clever solver stuff won't
-  // negate the condition, it'll only give us a handle to it that it negates
-  // when we access. So, we have to make an assertion, check it, pop it, then
+  // Now, how to ask the question? We make an assertion, check it, pop it, then
   // check another.
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.assert_ast(q);
-  smt_convt::resultt res1 = conv.dec_solve();
+  conv.assert_expr(question);
+  smt_resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.assert_ast(conv.invert_ast(q));
-  smt_convt::resultt res2 = conv.dec_solve();
+  conv.assert_expr(not2tc(question));
+  smt_resultt res2 = conv.dec_solve();
   pop_ctx();
 
   // So; which result?
   if (
-    res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
-    res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
+    res1 == P_ERROR || res1 == P_SMTLIB || res2 == P_ERROR || res2 == P_SMTLIB)
   {
     log_error("Solver returned error while asking question");
     abort();
   }
-  else if (res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
+  else if (res1 == P_SATISFIABLE && res2 == P_SATISFIABLE)
   {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
   }
-  else if (
-    res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_UNSATISFIABLE)
+  else if (res1 == P_SATISFIABLE && res2 == P_UNSATISFIABLE)
   {
     // Truth of question is satisfiable; other not; so we're true.
     final_res = tvt(tvt::TV_TRUE);
   }
-  else if (
-    res1 == smt_convt::P_UNSATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
+  else if (res1 == P_UNSATISFIABLE && res2 == P_SATISFIABLE)
   {
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);

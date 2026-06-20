@@ -28,20 +28,19 @@ static bool can_typecast_argument(const type2tc &formal, const type2tc &actual)
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,
-  const code_typet &code_type,
+  const code_type2t &code_type,
   const std::vector<expr2tc> &arguments,
   goto_programt &dest)
 {
-  const code_typet::argumentst &argument_types = code_type.arguments();
+  const std::vector<type2tc> &argument_types = code_type.arguments;
+  const std::vector<irep_idt> &argument_names = code_type.argument_names;
+  assert(argument_types.size() == argument_names.size());
 
   auto actual_it = arguments.begin();
-  for (const auto &argument_type : argument_types)
+  for (size_t i = 0; i < argument_types.size(); ++i)
   {
-    // The "argument_type" entry from a code_typet is itself an exprt that
-    // carries the formal parameter's name (#identifier) and type.
-    const exprt &formal = static_cast<const exprt &>(argument_type);
-    const irep_idt &identifier = formal.cmt_identifier();
-    const type2tc formal_type = migrate_type(ns.follow(formal.type()));
+    const irep_idt &identifier = argument_names[i];
+    const type2tc formal_type = ns.follow(argument_types[i]);
 
     // If the call site supplied fewer arguments than the function definition
     // declares, only declare the formal parameter (it remains unassigned and
@@ -57,7 +56,7 @@ void goto_inlinet::parameter_assignments(
       if (identifier != "")
       {
         goto_programt::targett decl = dest.add_instruction();
-        decl->make_other();
+        decl->make_decl();
         decl->code = code_decl2tc(formal_type, identifier);
         decl->location = location;
         decl->function = location.get_function();
@@ -74,7 +73,7 @@ void goto_inlinet::parameter_assignments(
 
     {
       goto_programt::targett decl = dest.add_instruction();
-      decl->make_other();
+      decl->make_decl();
       decl->code = code_decl2tc(formal_type, identifier);
       decl->location = location;
       decl->function = location.get_function();
@@ -210,6 +209,18 @@ void goto_inlinet::expand_function_call(
 
   goto_functiont &f = m_it->second;
 
+  // A function with a restrictive C++ exception specification (noexcept or a
+  // dynamic throw(...) list) must keep its own runtime frame so the
+  // specification can be enforced when an exception exits its boundary.
+  // Inlining it into the caller would erase that boundary, so leave the call
+  // in place. A later explicit exception-control-flow representation could
+  // preserve the boundary while still allowing the body to be inlined.
+  if (f.exception_spec.is_restrictive())
+  {
+    ++target;
+    return;
+  }
+
   // see if we need to inline this
   if (!full)
   {
@@ -239,7 +250,7 @@ void goto_inlinet::expand_function_call(
 
     goto_programt tmp;
     parameter_assignments(
-      tmp2.instructions.front().location, f.type, arguments, tmp);
+      tmp2.instructions.front().location, to_code_type(f.type), arguments, tmp);
     tmp.destructive_append(tmp2);
 
     if (f.body.hide)
@@ -404,9 +415,29 @@ void goto_inline(
 
   goto_inline.goto_inline(it->second.body);
 
-  // clean up
+  // Functions with a restrictive exception specification are intentionally not
+  // inlined (see expand_function_call): their calls are left in place so symex
+  // creates a real frame whose boundary the specification is enforced at. Make
+  // each such function self-contained by inlining its own (non-restrictive)
+  // callees into it, so its preserved body does not depend on bodies we are
+  // about to release.
   for (auto &it : goto_functions.function_map)
-    if (it.first != "main")
+    if (
+      it.first != "__ESBMC_main" && it.second.body_available &&
+      it.second.exception_spec.is_restrictive())
+      goto_inline.goto_inline(it.second.body);
+
+  // clean up: every callee has been inlined into __ESBMC_main (or into a
+  // preserved restrictive function), so the other function bodies are stale and
+  // can be released. Preserve the entry point keyed by the bare name
+  // "__ESBMC_main" (NOT the user's `main`, which is keyed by its mangled symbol
+  // identifier `c:@F@main`; comparing against the literal "main" matched
+  // nothing and silently cleared every body, including the entry, leaving symex
+  // with an empty program), together with the restrictive functions whose
+  // frames symex still executes.
+  for (auto &it : goto_functions.function_map)
+    if (
+      it.first != "__ESBMC_main" && !it.second.exception_spec.is_restrictive())
     {
       it.second.body_available = false;
       it.second.body.clear();

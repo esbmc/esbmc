@@ -1,0 +1,6 @@
+CORE
+main.c
+--k-path-coverage=2 --unwind 2 --no-unwinding-assertions --verbosity coverage:1
+^Current k-Path Coverage: 100%$
+^k-Path Coverage: 100%$
+^VERIFICATION FAILED$

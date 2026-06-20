@@ -47,7 +47,32 @@ public:
 
   exprt get();
 
+  /**
+   * @brief Materialize a fresh list from already-evaluated element values.
+   *
+   * Unlike get(), which converts AST element nodes, this builds the list from
+   * exprt values directly — used to emit the result of a frontend-computed
+   * sort over tuples, where each element is a conditional (ite) selection over
+   * the input elements. Records each element's type in the type map so later
+   * subscripting recovers the element type. The constructor's @c list_value_
+   * node supplies the source location.
+   */
+  exprt build_list_from_exprs(const std::vector<exprt> &elems);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+
+  /**
+   * @brief Lower a list slice assignment l[lower:upper:step] = value to a
+   * __ESBMC_list_slice_assign model call. The step must be a constant literal
+   * (or absent); the value must evaluate to a list.
+   * @param list_expr  Expression for the target list (value or pointer)
+   * @param slice_node The Slice AST node holding lower/upper/step
+   * @param value_node The AST node of the assigned (right-hand side) value
+   */
+  void handle_slice_assignment(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &value_node);
 
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
@@ -160,10 +185,17 @@ public:
    * @brief Extract and dereference value from a PyObject* expression
    * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
    * @param elem_type The expected element type
+   * @param mixed_numeric When true and elem_type is float, the element may be
+   *        either an int or a float at runtime (a dynamic index into a mixed
+   *        int/float list). The float value is then read by dispatching on the
+   *        stored type_id: float elements come from __ESBMC_float_buf, int
+   *        elements are promoted from their payload to double.
    * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
    */
-  exprt
-  extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
+  exprt extract_pyobject_value(
+    const exprt &pyobject_expr,
+    const typet &elem_type,
+    bool mixed_numeric = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
@@ -184,6 +216,34 @@ public:
    * Used to detect mixed-numeric lists that need special handling in min/max.
    */
   static bool has_mixed_numeric_types(const std::string &list_id);
+
+  /**
+   * @brief Infer the element type of a list literal AST node, accounting for
+   * the int->float promotion applied at construction.
+   *
+   * A heterogeneous int/float literal is promoted to a homogeneous double list
+   * in python_list::get (promote_ints, #5156), so its values all live in
+   * __ESBMC_float_buf as doubles. A read of such a literal must therefore use a
+   * float element type whatever element the index selects; using the first
+   * element's (int) type misreads the stored double's bits (#5160 regression).
+   *
+   * @return double_type() for a mixed int/float literal, the first element's
+   *         type otherwise, or an empty typet() when no element is available.
+   */
+  typet infer_literal_element_type(const nlohmann::json &list_literal);
+
+  /**
+   * @brief Non-throwing query for an all-numeric list's element type.
+   *
+   * Unlike check_homogeneous_list_types(), this never throws: it returns
+   * double_type() when the list mixes int and float (Python promotes int to
+   * float), the single shared integer type when every element is that same
+   * integer type, and an empty typet() when the list is unknown, empty, or
+   * holds any non-numeric element (or integers of differing widths). Used to
+   * type a dict-comprehension loop variable without relying on exceptions for
+   * control flow.
+   */
+  static typet numeric_element_type(const std::string &list_id);
 
   /**
    * @brief Build an inline min/max computation for a mixed int/float list.
@@ -231,6 +291,18 @@ public:
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
   /**
+   * @brief Emit a __ESBMC_list_copy_shallow call producing a shallow copy of
+   * src_list (Python copy semantics: scalar elements get independent buffers,
+   * nested containers stay shared). Used by tuple(list), which must snapshot
+   * the source so later list mutations do not show through the tuple.
+   * @param src_list List-typed expression (symbol or list-returning call)
+   * @param element  AST node used for location info and temp naming
+   * @return Symbol expression of the copied list
+   */
+  exprt
+  build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
    */
@@ -238,6 +310,33 @@ public:
     const symbolt &list,
     const nlohmann::json &op,
     const exprt &elem);
+
+  /**
+   * @brief Build a list.count(x) call — number of elements equal to x.
+   * Returns a size_t-typed value expression.
+   */
+  exprt build_count_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /**
+   * @brief Build a list.index(x) call — position of the first element equal to
+   * x. Raises ValueError (via assertion) if x is not found. Returns a
+   * size_t-typed value expression.
+   */
+  exprt build_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
+  /// Shared implementation of build_count_list_call / build_index_list_call;
+  /// @p func_id selects the `c:@F@__ESBMC_list_{count,index}` model.
+  exprt build_count_index_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const std::string &func_id);
 
   /**
    * @brief Emit a call to a set membership-mutating C model function.
@@ -315,11 +414,14 @@ public:
 private:
   friend class python_dict_handler;
 
+  // Repeat the elements in `list_elems` `count` times at runtime (`count` may
+  // be any integer expression: a constant, a symbol like `n`, or a compound
+  // like `m + 1`). Each iteration pushes every element in order. Builds a
+  // fresh list so a literal source's element is not reused (avoids off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
-    const symbolt *list,
-    symbolt *size_var,
-    const exprt &list_elem);
+    const exprt &count,
+    const std::vector<exprt> &list_elems);
 
   exprt build_list_at_call(
     const exprt &list,

@@ -89,6 +89,10 @@ def run(cmd_line):
   return out
 
 def parse_result(the_output, prop):
+  # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
+  # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
+  # --sarif-output. Both are purely informational; the SV-COMP category is
+  # still derived from the unchanged freeform comment strings below.
 
   # Parse output
   if "Timed out" in the_output:
@@ -241,7 +245,7 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -257,7 +261,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --no-por --smt-symex-guard --bitwuzla "
+    command_line += " --smt-symex-guard --bitwuzla "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
@@ -267,7 +271,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
     command_line += "--no-pointer-check --no-bounds-check --no-assertions "
-    command_line += "--termination --max-inductive-step 3 "
+    # --interval-analysis strengthens the inductive step: the post-havoc
+    # bound pass pins each havoced loop variable (including ones modified
+    # only through a callee) to its interval, so IS reasons from the
+    # reachable state space instead of an arbitrary havoc. +52 correct-
+    # false on the termination set with no new wrong results.
+    command_line += "--termination --max-inductive-step 3 --interval-analysis "
     return command_line
 
   if prop == Property.overflow:
@@ -288,7 +297,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+      if not validate:
+        command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check-only --no-assertions "
@@ -315,15 +326,15 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   return command_line
 
-def verify(strat, prop, concurrency, dargs, esbmc_ci):
-  # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
+def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
-  # Call ESBMC
+  if witness_path:
+    esbmc_command_line += "--validate-" + validate_mode + "-witness "
+    esbmc_command_line += "--witness " + witness_path + " "
+
   output = run(esbmc_command_line)
-
   res = parse_result(output.decode(), category_property)
-  # Parse output
   return res
 
 # Options
@@ -336,6 +347,11 @@ parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kindu
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
 parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
+parser.add_argument("--witness", help="Path to witness file; enables witness validation mode")
+parser.add_argument("--validate-violation-witness", dest="validate_violation", action='store_true',
+                    help="Validate a violation witness (use with --witness)")
+parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
+                    help="Validate a correctness witness (use with --witness)")
 
 args = parser.parse_args()
 
@@ -346,6 +362,7 @@ benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
 esbmc_ci = args.ci
+witness_path = args.witness
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -358,6 +375,11 @@ if property_file is None:
 if benchmark is None:
   print("Please, specify a benchmark to verify")
   exit(1)
+
+if witness_path and not args.validate_violation and not args.validate_correctness:
+  print("Please specify --validate-violation-witness or --validate-correctness-witness when using --witness")
+  exit(1)
+validate_mode = "violation" if args.validate_violation else "correctness" if args.validate_correctness else None
 
 # Parse property files
 f = open(property_file, 'r')
@@ -380,6 +402,6 @@ else:
   print("Unsupported Property")
   exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci)
+result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
 print(get_result_string(result))

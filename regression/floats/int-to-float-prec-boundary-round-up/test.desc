@@ -1,0 +1,4 @@
+CORE
+main.c
+--floatbv --z3 --32
+^VERIFICATION SUCCESSFUL$

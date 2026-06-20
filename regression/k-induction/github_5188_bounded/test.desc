@@ -1,0 +1,4 @@
+CORE
+main.c
+--function g --overflow-check --unwind 4 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

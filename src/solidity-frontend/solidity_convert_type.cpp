@@ -302,7 +302,7 @@ bool solidity_convertert::get_type_description(
             integer2binary(z_ext_value, bv_width(int_type())),
             integer2string(z_ext_value),
             int_type()));
-        new_type.set("#sol_array_size", outer_size_str);
+        set_sol_array_size(new_type, outer_size_str);
         set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
       }
     }
@@ -349,7 +349,7 @@ bool solidity_convertert::get_type_description(
           integer2binary(z_ext_value, bv_width(int_type())),
           integer2string(z_ext_value),
           int_type()));
-      new_type.set("#sol_array_size", the_size);
+      set_sol_array_size(new_type, the_size);
       set_sol_type(new_type, SolidityGrammar::SolType::ARRAY_LITERAL);
     }
     else
@@ -413,7 +413,7 @@ bool solidity_convertert::get_type_description(
         new_type = array_typet();
         new_type.size(exprt("infinity"));
         new_type.subtype() = sub_type;
-        new_type.set("#sol_mapping_array", true);
+        set_sol_mapping_array(new_type, true);
         set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
       }
       else
@@ -436,7 +436,7 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    new_type.set("#sol_contract", cname);
+    set_sol_contract(new_type, cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -574,11 +574,11 @@ bool solidity_convertert::get_type_description(
 
   // set data location
   if (typeIdentifier.find("_memory_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "memory");
+    set_sol_data_loc(new_type, "memory");
   else if (typeIdentifier.find("_storage_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "storage");
+    set_sol_data_loc(new_type, "storage");
   else if (typeIdentifier.find("_calldata_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "calldata");
+    set_sol_data_loc(new_type, "calldata");
 
   return false;
 }
@@ -914,7 +914,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
     new_type = byte_static_t;
-    new_type.set("#sol_bytesn_size", bytesn_type_name_to_size(type));
+    set_sol_bytesn_size(new_type, bytesn_type_name_to_size(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
@@ -1045,7 +1045,7 @@ bool solidity_convertert::get_array_pointer_type(
     new_type = array_typet();
     new_type.size(exprt("infinity"));
     new_type.subtype() = base_type;
-    new_type.set("#sol_mapping_array", true);
+    set_sol_mapping_array(new_type, true);
     set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
     return false;
   }
@@ -1064,7 +1064,7 @@ bool solidity_convertert::get_array_pointer_type(
             decl["typeName"]["length"]["referencedDeclaration"], length))
         return true;
     }
-    new_type.set("#sol_array_size", length);
+    set_sol_array_size(new_type, length);
     set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
   }
   else
@@ -1137,12 +1137,10 @@ void solidity_convertert::convert_type_expr(
   {
     if (src_sol_type != dest_sol_type)
       not_same_type = true;
-    else if (
-      src_type.get("#sol_bytesn_size") != dest_type.get("#sol_bytesn_size"))
+    else if (get_sol_bytesn_size(src_type) != get_sol_bytesn_size(dest_type))
       // including unset situation
       not_same_type = true;
-    else if (
-      src_type.get("#sol_array_size") != dest_type.get("#sol_array_size"))
+    else if (get_sol_array_size(src_type) != get_sol_array_size(dest_type))
       not_same_type = true;
   }
 
@@ -1301,10 +1299,9 @@ void solidity_convertert::convert_type_expr(
 
         // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
-        if (!dest_type.get("#sol_bytesn_size").empty())
+        if (has_sol_bytesn_size(dest_type))
           len_expr = from_integer(
-            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
-            size_type());
+            std::stoul(get_sol_bytesn_size(dest_type)), size_type());
         else
         {
           log_error("got unexpected bytes typecast");
@@ -1439,7 +1436,7 @@ void solidity_convertert::convert_type_expr(
       exprt original_addr = src_expr;
 
       exprt c_ins;
-      std::string _cname = dest_type.get("#sol_contract").as_string();
+      std::string _cname = get_sol_contract(dest_type);
       get_static_contract_instance_ref(_cname, c_ins);
 
       // Propagate the cast address into the singleton's $address member
@@ -1478,7 +1475,7 @@ void solidity_convertert::convert_type_expr(
       // the goal is to convert the rhs constant array to a static global var
 
       // get rhs constant array size
-      const std::string src_size = src_type.get("#sol_array_size").as_string();
+      const std::string src_size = get_sol_array_size(src_type);
       if (src_size.empty())
       {
         // e.g. a = new uint[](len);
@@ -1490,7 +1487,7 @@ void solidity_convertert::convert_type_expr(
       unsigned z_src_size = std::stoul(src_size, nullptr);
 
       // get lhs array size
-      std::string dest_size = dest_type.get("#sol_array_size").as_string();
+      std::string dest_size = get_sol_array_size(dest_type);
       if (dest_size.empty())
       {
         if (dest_sol_type == SolidityGrammar::SolType::ARRAY)
@@ -1518,7 +1515,7 @@ void solidity_convertert::convert_type_expr(
         // - dest_type: uint*
         array_typet arr_t = array_typet(dest_type.subtype(), dest_array_size);
         set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
-        arr_t.set("#sol_array_size", src_size);
+        set_sol_array_size(arr_t, src_size);
         exprt new_arr = exprt(irept::id_array, arr_t);
 
         exprt arr_comp;
@@ -1574,7 +1571,7 @@ void solidity_convertert::convert_type_expr(
 
           // update "#sol_array_size"
           assert(!dest_size.empty());
-          src_expr.type().set("#sol_array_size", dest_size);
+          set_sol_array_size(src_expr.type(), dest_size);
         }
       }
 

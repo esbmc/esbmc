@@ -3,15 +3,16 @@
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/config.h>
-#include <util/string_constant.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <fstream>
 #include <sstream>
 #include <map>
 #include <algorithm>
+#include <unordered_set>
 
 // pytest_generator class implementation
 std::string pytest_generator::extract_module_name(const std::string &input_file)
@@ -131,7 +132,7 @@ std::string pytest_generator::extract_function_name(
   // extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.source.pc->location.function() != "")
@@ -617,7 +618,7 @@ void pytest_generator::collect(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())
@@ -1018,6 +1019,20 @@ void pytest_generator::collect(
   }
 }
 
+std::string
+pytest_generator::fingerprint(const std::vector<std::string> &test_case)
+{
+  std::string fp;
+  for (const auto &field : test_case)
+  {
+    fp += std::to_string(field.size());
+    fp += ':';
+    fp += field;
+    fp += ';';
+  }
+  return fp;
+}
+
 void pytest_generator::generate(const std::string &file_name) const
 {
   std::lock_guard<std::mutex> lock(data_mutex);
@@ -1027,6 +1042,23 @@ void pytest_generator::generate(const std::string &file_name) const
     log_warning("No test cases collected. No pytest file generated.");
     return;
   }
+
+  // Deduplicate before writing.
+  // Coverage mode collects one counterexample per reached goal,
+  // and distinct goals routinely resolve to the same input,
+  // so the parametrize list would otherwise repeat identical cases.
+  std::vector<std::vector<std::string>> unique_cases;
+  unique_cases.reserve(test_cases.size());
+  std::unordered_set<std::string> seen;
+  for (const auto &tc : test_cases)
+  {
+    if (seen.insert(fingerprint(tc)).second)
+      unique_cases.push_back(tc);
+  }
+
+  size_t skipped = test_cases.size() - unique_cases.size();
+  if (skipped > 0)
+    log_status("Skipped {} duplicate test case(s).", skipped);
 
   // Extract module name from input file
   std::string input_file = config.options.get_option("input-file");
@@ -1038,7 +1070,7 @@ void pytest_generator::generate(const std::string &file_name) const
   // Write file components
   write_file_header(pytest_file, input_file);
   write_imports(pytest_file, module_name);
-  write_test_data(pytest_file, param_names, test_cases);
+  write_test_data(pytest_file, param_names, unique_cases);
 
   // Generate test function
   std::string test_func_name =
@@ -1048,7 +1080,7 @@ void pytest_generator::generate(const std::string &file_name) const
   pytest_file.close();
   log_status(
     "Generated pytest test case with {} test(s): {}",
-    test_cases.size(),
+    unique_cases.size(),
     file_name);
 }
 
@@ -1091,7 +1123,7 @@ void pytest_generator::generate_single(
   // Traverse SSA steps to extract nondet variables
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())

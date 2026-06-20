@@ -2,12 +2,13 @@
 #define CPROVER_GOTO_SYMEX_PYTEST_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <solvers/smt/smt_conv.h>
 #include <util/namespace.h>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <fstream>
+
+class smt_convt;
 
 /// Generates pytest test-cases for Python programs
 class pytest_generator
@@ -53,6 +54,9 @@ private:
 
   /// Build comma-separated parameter list string
   static std::string build_param_list(const std::vector<std::string> &params);
+
+  /// Dedup key for a test-case row
+  static std::string fingerprint(const std::vector<std::string> &test_case);
 
   /// Write test data in parametrize format
   void write_test_data(

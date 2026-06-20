@@ -37,7 +37,7 @@ bool goto_functions_algorithm::runOnLoop(loopst &, goto_programt &)
 }
 
 bool goto_functions_algorithm::runOnFunction(
-  std::pair<const dstring, goto_functiont> &)
+  std::pair<const irep_idt, goto_functiont> &)
 {
   return true;
 }

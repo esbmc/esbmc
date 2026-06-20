@@ -1,4 +1,4 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
@@ -88,7 +88,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
-  smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
+  smt_sortt subtype = ctx->convert_sort(to_array_type(array_type).subtype);
 
   // Optimize the creation of a const array.
   if (const_array)
@@ -140,21 +140,21 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   // XXX - what's the correct type to return here.
   std::vector<expr2tc> outmem;
-  const struct_union_data &strct =
-    ctx->get_type_def(tuple->sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(tuple->sort->get_tuple_type());
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
   if (tuple->elements.size() == 0)
   {
-    for (unsigned int i = 0; i < strct.members.size(); i++)
+    for (unsigned int i = 0; i < members.size(); i++)
       outmem.emplace_back();
     return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     expr2tc res;
     if (is_tuple_ast_type(it))
