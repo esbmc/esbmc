@@ -121,7 +121,8 @@ static void emit_numpy_overflow_assertion(
   if (!overflow_checks_enabled())
     return;
 
-  code_assertt overflow_assert(gen_boolean(false));
+  // V.3: build the always-fail overflow assert condition in IREP2.
+  code_assertt overflow_assert(migrate_expr_back(gen_false_expr()));
   overflow_assert.location() = converter.get_location_from_decl(call);
   overflow_assert.location().comment(
     "Integer overflow detected in " + function_id.get_function() + "() call");
