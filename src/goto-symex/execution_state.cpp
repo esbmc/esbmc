@@ -1054,6 +1054,45 @@ void execution_statet::calculate_mpor_constraints()
   dependency_chain = new_dep_chain;
 }
 
+// Is @p e an access to user-visible shared state? The recorded global accesses
+// always live in shared memory, but two kinds are excluded here: they feed MPOR
+// dependency tracking yet, on their own, must not be treated as a shared-state
+// access (doing so only widens the DFS without exposing new behaviours):
+//
+//   * pthread synchronisation objects (mutex / cond-var / rwlock / barrier /
+//     spinlock) — they already drive scheduling through the pthread library's
+//     explicit switch mechanisms, so treating every lock access as a cswitch
+//     point blows up the DFS width;
+//   * the library's per-thread bookkeeping arrays __ESBMC_pthread_thread_*
+//     (ended / running / detach / key) — consulting another thread's lifecycle
+//     state observes no user-visible shared state.
+//
+// Any other global access counts as a genuine shared-state access.
+bool execution_statet::is_shared_var_access(const expr2tc &e)
+{
+  const type2tc &t = e->type;
+  std::string tn;
+  if (is_struct_type(t))
+    tn = to_struct_type(t).name.as_string();
+  else if (is_union_type(t))
+    tn = to_union_type(t).name.as_string();
+
+  if (
+    tn.find("pthread_mutex_t") != std::string::npos ||
+    tn.find("pthread_cond_t") != std::string::npos ||
+    tn.find("pthread_rwlock_t") != std::string::npos ||
+    tn.find("pthread_barrier_t") != std::string::npos ||
+    tn.find("pthread_spinlock_t") != std::string::npos)
+    return false;
+
+  if (
+    is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
+                        "__ESBMC_pthread_thread") != std::string::npos)
+    return false;
+
+  return true;
+}
+
 bool execution_statet::has_cswitch_point_occured() const
 {
   // Context switches can occur due to being forced, or by global state access
@@ -1061,46 +1100,15 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
-  // contribute to MPOR dependency tracking (so lock/unlock pairs create
-  // dependency chains between threads), but must not by themselves force
-  // a context switch point here — they already drive scheduling through
-  // the pthread library's explicit switch mechanisms, and treating every
-  // lock access as a cswitch point blows up the DFS width.
-  auto is_pthread_sync_type = [](const type2tc &t) {
-    if (is_nil_type(t))
-      return false;
-    if (is_struct_type(t))
-    {
-      const std::string &n = to_struct_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos ||
-             n.find("pthread_barrier_t") != std::string::npos ||
-             n.find("pthread_spinlock_t") != std::string::npos;
-    }
-    if (is_union_type(t))
-    {
-      const std::string &n = to_union_type(t).name.as_string();
-      return n.find("pthread_mutex_t") != std::string::npos ||
-             n.find("pthread_cond_t") != std::string::npos ||
-             n.find("pthread_rwlock_t") != std::string::npos;
-    }
+  return accesses_shared_var(thread_last_reads[active_thread]) ||
+         accesses_shared_var(thread_last_writes[active_thread]);
+}
 
-    return false;
-  };
-
-  auto any_non_sync = [&](const std::set<expr2tc> &s) {
-    for (const auto &e : s)
-      if (!is_pthread_sync_type(e->type))
-        return true;
-    return false;
-  };
-
-  if (
-    any_non_sync(thread_last_reads[active_thread]) ||
-    any_non_sync(thread_last_writes[active_thread]))
-    return true;
+bool execution_statet::accesses_shared_var(const std::set<expr2tc> &s)
+{
+  for (const expr2tc &e : s)
+    if (is_shared_var_access(e))
+      return true;
   return false;
 }
 

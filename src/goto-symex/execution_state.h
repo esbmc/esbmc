@@ -473,6 +473,20 @@ public:
   bool has_cswitch_point_occured() const;
 
   /**
+   *  Is @p e an access to user-visible shared state?
+   *  The recorded global accesses always live in shared memory, but accesses to
+   *  pthread synchronisation objects and to the pthread library's per-thread
+   *  bookkeeping arrays are excluded: they feed MPOR dependency tracking but, on
+   *  their own, must not be treated as shared-state accesses (doing so blows up
+   *  the DFS width without exposing new behaviours).
+   *  @return True if @p e is a genuine shared-state access.
+   */
+  static bool is_shared_var_access(const expr2tc &e);
+
+  /** Does @p s contain any shared-state access? @see is_shared_var_access */
+  static bool accesses_shared_var(const std::set<expr2tc> &s);
+
+  /**
    *  Can execution continue in this thread?
    *  Answer is no if the thread has ended or there's nothing on the call stack
    *  @return False if there are no further instructions to execute.
