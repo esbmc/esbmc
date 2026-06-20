@@ -15,27 +15,27 @@ struct in_addr {
 /* IPv4 socket address */
 struct sockaddr_in {
     sa_family_t    sin_family;
-    in_port_t      sin_port;
-    struct in_addr sin_addr;
-    unsigned char  sin_zero[8];
+    in_port_t      sin_port; // cppcheck-suppress unusedStructMember
+    struct in_addr sin_addr; // cppcheck-suppress unusedStructMember
+    unsigned char  sin_zero[8]; // cppcheck-suppress unusedStructMember
 };
 
 /* IPv6 address */
 struct in6_addr {
     union {
-        uint8_t  s6_addr[16];
-        uint16_t s6_addr16[8];
-        uint32_t s6_addr32[4];
+        uint8_t  s6_addr[16]; // cppcheck-suppress unusedStructMember
+        uint16_t s6_addr16[8]; // cppcheck-suppress unusedStructMember
+        uint32_t s6_addr32[4]; // cppcheck-suppress unusedStructMember
     };
 };
 
 /* IPv6 socket address */
 struct sockaddr_in6 {
     sa_family_t     sin6_family;
-    in_port_t       sin6_port;
-    uint32_t        sin6_flowinfo;
-    struct in6_addr sin6_addr;
-    uint32_t        sin6_scope_id;
+    in_port_t       sin6_port; // cppcheck-suppress unusedStructMember
+    uint32_t        sin6_flowinfo; // cppcheck-suppress unusedStructMember
+    struct in6_addr sin6_addr; // cppcheck-suppress unusedStructMember
+    uint32_t        sin6_scope_id; // cppcheck-suppress unusedStructMember
 };
 
 #define INADDR_ANY       ((in_addr_t) 0x00000000)

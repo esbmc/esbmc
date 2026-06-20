@@ -58,31 +58,31 @@ typedef unsigned int socklen_t;
 typedef unsigned short sa_family_t;
 
 struct sockaddr {
-    sa_family_t sa_family;
-    char        sa_data[14];
+    sa_family_t sa_family; // cppcheck-suppress unusedStructMember
+    char        sa_data[14]; // cppcheck-suppress unusedStructMember
 };
 
 struct sockaddr_storage {
-    sa_family_t ss_family;
-    char        __ss_pad1[6];
-    int64_t     __ss_align;
-    char        __ss_pad2[112];
+    sa_family_t ss_family; // cppcheck-suppress unusedStructMember
+    char        __ss_pad1[6]; // cppcheck-suppress unusedStructMember
+    int64_t     __ss_align; // cppcheck-suppress unusedStructMember
+    char        __ss_pad2[112]; // cppcheck-suppress unusedStructMember
 };
 
 /* I/O vector for scatter/gather I/O */
 struct iovec {
-    void  *iov_base;
-    size_t iov_len;
+    void  *iov_base; // cppcheck-suppress unusedStructMember
+    size_t iov_len; // cppcheck-suppress unusedStructMember
 };
 
 struct msghdr {
-    void         *msg_name;
-    socklen_t     msg_namelen;
-    struct iovec *msg_iov;
-    size_t        msg_iovlen;
-    void         *msg_control;
-    size_t        msg_controllen;
-    int           msg_flags;
+    void         *msg_name; // cppcheck-suppress unusedStructMember
+    socklen_t     msg_namelen; // cppcheck-suppress unusedStructMember
+    struct iovec *msg_iov; // cppcheck-suppress unusedStructMember
+    size_t        msg_iovlen; // cppcheck-suppress unusedStructMember
+    void         *msg_control; // cppcheck-suppress unusedStructMember
+    size_t        msg_controllen; // cppcheck-suppress unusedStructMember
+    int           msg_flags; // cppcheck-suppress unusedStructMember
 };
 
 /* Function declarations */

@@ -35,8 +35,8 @@ typedef struct {
 #ifndef __timeval_defined
 #define __timeval_defined 1
 struct timeval {
-    long tv_sec;
-    long tv_usec;
+    long tv_sec; // cppcheck-suppress unusedStructMember
+    long tv_usec; // cppcheck-suppress unusedStructMember
 };
 #endif
 
@@ -45,9 +45,9 @@ int select(int nfds, fd_set *readfds, fd_set *writefds,
 
 /* poll */
 struct pollfd {
-    int   fd;
-    short events;
-    short revents;
+    int   fd; // cppcheck-suppress unusedStructMember
+    short events; // cppcheck-suppress unusedStructMember
+    short revents; // cppcheck-suppress unusedStructMember
 };
 
 #define POLLIN     0x0001

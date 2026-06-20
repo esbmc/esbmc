@@ -41,6 +41,7 @@ extern unsigned long __VERIFIER_nondet_ulong(void);
  * ============================================================ */
 int socket(int domain, int type, int protocol)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int fd = __VERIFIER_nondet_int();
 
@@ -61,6 +62,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(addr != (void *)0, "bind: addr must not be NULL");
 
@@ -79,6 +81,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int listen(int sockfd, int backlog)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int result = __VERIFIER_nondet_int();
   if (result != 0)
@@ -96,6 +99,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int fd = __VERIFIER_nondet_int();
 
@@ -131,6 +135,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(addr != (void *)0, "connect: addr must not be NULL");
 
@@ -157,6 +162,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 ssize_t recv(int sockfd, void *buf, size_t len, int flags)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(buf != (void *)0, "recv: buf must not be NULL");
 
@@ -175,8 +181,9 @@ __ESBMC_HIDE:;
     return 0;
   }
 
-  /* Constrain received bytes to [1, len] */
-  __ESBMC_assume(result >= 1 && (size_t)result <= len);
+  /* Constrain received bytes to [1, len]; result >= 1 already holds here
+   * because the result < 0 and result == 0 cases returned above. */
+  __ESBMC_assume((size_t)result <= len);
 
   return result;
 }
@@ -187,6 +194,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 ssize_t send(int sockfd, const void *buf, size_t len, int flags)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(buf != (void *)0, "send: buf must not be NULL");
 
@@ -214,6 +222,7 @@ ssize_t recvfrom(
   struct sockaddr *src_addr,
   socklen_t *addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(buf != (void *)0, "recvfrom: buf must not be NULL");
 
@@ -230,7 +239,8 @@ __ESBMC_HIDE:;
     return 0;
   }
 
-  __ESBMC_assume(result >= 1 && (size_t)result <= len);
+  /* result >= 1 already holds here (the < 0 and == 0 cases returned above). */
+  __ESBMC_assume((size_t)result <= len);
 
   /* Buffer contents are left non-deterministic (see recv() above). */
 
@@ -263,6 +273,7 @@ ssize_t sendto(
   const struct sockaddr *dest_addr,
   socklen_t addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(buf != (void *)0, "sendto: buf must not be NULL");
 
@@ -289,6 +300,7 @@ int setsockopt(
   const void *optval,
   socklen_t optlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int result = __VERIFIER_nondet_int();
   if (result != 0)
@@ -306,6 +318,7 @@ int getsockopt(
   void *optval,
   socklen_t *optlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int result = __VERIFIER_nondet_int();
   if (result != 0)
@@ -321,6 +334,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(addr != (void *)0, "getsockname: addr must not be NULL");
   __ESBMC_assert(addrlen != (void *)0, "getsockname: addrlen must not be NULL");
@@ -347,6 +361,7 @@ __ESBMC_HIDE:;
 
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(addr != (void *)0, "getpeername: addr must not be NULL");
   __ESBMC_assert(addrlen != (void *)0, "getpeername: addrlen must not be NULL");
@@ -376,6 +391,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int shutdown(int sockfd, int how)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int result = __VERIFIER_nondet_int();
   if (result != 0)
@@ -396,6 +412,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 static void __esbmc_fd_set_havoc(fd_set *set)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (set == (void *)0)
     return;
@@ -412,6 +429,7 @@ int select(
   fd_set *exceptfds,
   struct timeval *timeout)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int result = __VERIFIER_nondet_int();
 
@@ -438,6 +456,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int poll(struct pollfd *fds, unsigned long nfds, int timeout)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(
     fds != (void *)0 || nfds == 0, "poll: fds must not be NULL when nfds > 0");
@@ -478,6 +497,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 uint32_t inet_addr(const char *cp)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(cp != (void *)0, "inet_addr: cp must not be NULL");
 
@@ -491,6 +511,7 @@ __ESBMC_HIDE:;
  * ============================================================ */
 int inet_pton(int af, const char *src, void *dst)
 {
+  // cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(src != (void *)0, "inet_pton: src must not be NULL");
   __ESBMC_assert(dst != (void *)0, "inet_pton: dst must not be NULL");
