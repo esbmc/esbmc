@@ -65,6 +65,10 @@ The standard given is the one the test exercises (`--std`).
 - `noexcept` / `throw()` exception specifications are lowered under `--lower-exceptions` (`regression/esbmc-cpp/try_catch/lower-exceptions_noexcept_*`, `exception_spec_noexcept_*`)
 - `dynamic_cast<T&>` throws `std::bad_cast` on a failed reference cast
 - Virtual base destructor and member/base destructor-chain synthesis fixes
+- `<exception>` operational model: `std::exception_ptr` with `current_exception` / `rethrow_exception` / `make_exception_ptr`, and nested exceptions (`throw_with_nested` / `rethrow_if_nested`). The per-thread handled-exception stack and uncaught counter are instrumented pay-per-use — only when the program touches them (`lower-exceptions_make_exception_ptr`, `lower-exceptions_exception_ptr_rethrow`, `lower-exceptions_nested_rethrow`)
+- `std::uncaught_exception` / `std::uncaught_exceptions` via a lowered per-thread count (`lower-exceptions_uncaught_count`)
+- `std::vector::at` throws `std::out_of_range` instead of asserting (`try-catch_vector_02_bug`); `std::bad_cast` / `std::bad_typeid` derive from `std::exception` with a virtual `what()`
+- Concurrent exceptions: the exception-state globals are thread-local, so each thread raises, catches, and clears its own in-flight exception independently — concurrently-throwing programs are lowered directly rather than rejected (`lower-exceptions_concurrent`). A pthread start routine reached through a computed pointer (or also called directly) cannot get a sound per-function uncaught-escape check and is declined as unsupported; declining is sound — it never validates a buggy program (`lower-exceptions_concurrent_dualuse`)
 
 # Features WIP:
 - Fixing our OMs for STL libraries
