@@ -69,6 +69,15 @@ exprt build_deref_member(
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
 }
+
+// Build v + 1 : size_type in IREP2, back-migrated once (V.3).
+exprt build_size_inc(const exprt &v)
+{
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc v2;
+  migrate_expr(v, v2);
+  return migrate_expr_back(add2tc(size_t2, v2, gen_one(size_t2)));
+}
 } // namespace
 
 symbolt &python_set::create_set_list()
@@ -600,8 +609,10 @@ exprt python_set::build_set_difference_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -609,7 +620,7 @@ exprt python_set::build_set_difference_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -732,7 +743,7 @@ exprt python_set::build_set_intersection_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -863,8 +874,10 @@ exprt python_set::build_set_union_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -872,7 +885,7 @@ exprt python_set::build_set_union_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -994,7 +1007,7 @@ void python_set::emit_filtered_extend(
   if_stmt.copy_to_operands(guard, then_block);
   body.copy_to_operands(if_stmt);
 
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   codet loop;
@@ -1101,7 +1114,7 @@ exprt python_set::build_set_relation_call(
   if_stmt.copy_to_operands(not_in, then_block);
   body.copy_to_operands(if_stmt);
 
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   codet loop;
