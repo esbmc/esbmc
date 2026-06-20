@@ -1454,7 +1454,8 @@ exprt python_list::handle_range_slice(
   // already reported by the checker.
   if (literal_zero_step)
   {
-    code_assertt step_assert(gen_boolean(false));
+    // V.3: build the always-fail assert condition in IREP2.
+    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
     step_assert.location() = converter_.get_location_from_decl(slice_node);
     step_assert.location().comment("ValueError: slice step cannot be zero");
     converter_.add_instruction(step_assert);
