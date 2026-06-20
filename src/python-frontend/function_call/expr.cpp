@@ -2577,7 +2577,11 @@ function_call_expr::get_dispatch_table()
        exprt zr = build_member(z, "real", double_type());
        exprt zi = build_member(z, "imag", double_type());
        exprt zero = from_double(0.0, double_type());
-       exprt fast_guard = equality_exprt(zr, zero);
+       // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
+       expr2tc zr2, zero2;
+       migrate_expr(zr, zr2);
+       migrate_expr(zero, zero2);
+       expr2tc fast_guard = equality2tc(zr2, zero2);
 
        // acos(i*y) and acosh(i*y) have a nonzero real part, but a closed form
        // valid for every real y, so their fast path covers all pure-imaginary
@@ -2595,8 +2599,10 @@ function_call_expr::get_dispatch_table()
            exprt asinh_zi = math.handle_asinh(zi, call_);
            if (is_cpp_throw_expr(asinh_zi))
              return asinh_zi;
-           exprt neg_asinh("unary-", double_type());
-           neg_asinh.copy_to_operands(asinh_zi);
+           expr2tc asinh_zi2;
+           migrate_expr(asinh_zi, asinh_zi2);
+           exprt neg_asinh =
+             migrate_expr_back(neg2tc(migrate_type(double_type()), asinh_zi2));
            fast_path = make_complex(half_pi, neg_asinh);
          }
          else
@@ -2612,7 +2618,7 @@ function_call_expr::get_dispatch_table()
              return imag_part;
            fast_path = make_complex(real_part, imag_part);
          }
-         return if_exprt(fast_guard, fast_path, model_call);
+         return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
        }
 
        // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
@@ -2641,14 +2647,16 @@ function_call_expr::get_dispatch_table()
            return abs_zi;
 
          exprt one = from_double(1.0, double_type());
-         exprt imag_guard =
-           func_name == "atan"
-             ? static_cast<exprt>(binary_relation_exprt(abs_zi, "<", one))
-             : static_cast<exprt>(binary_relation_exprt(abs_zi, "<=", one));
-         fast_guard = and_exprt(fast_guard, imag_guard);
+         expr2tc abs_zi2, one2;
+         migrate_expr(abs_zi, abs_zi2);
+         migrate_expr(one, one2);
+         expr2tc imag_guard = func_name == "atan"
+                                ? lessthan2tc(abs_zi2, one2)
+                                : lessthanequal2tc(abs_zi2, one2);
+         fast_guard = and2tc(fast_guard, imag_guard);
        }
 
-       return if_exprt(fast_guard, fast_path, model_call);
+       return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
      },
      "cmath inverse pure-imag fast path"},
 
