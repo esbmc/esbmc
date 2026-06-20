@@ -2828,17 +2828,16 @@ function_call_expr::get_dispatch_table()
          }
          else
          {
-           exprt double_operand = arg_expr;
+           // V.3: build the "operand < 0" guard in IREP2.
+           expr2tc double_operand;
+           migrate_expr(arg_expr, double_operand);
            if (!arg_expr.type().is_floatbv())
-           {
-             double_operand =
-               exprt("typecast", type_handler_.get_typet("float", 0));
-             double_operand.copy_to_operands(arg_expr);
-           }
+             double_operand = typecast2tc(
+               migrate_type(type_handler_.get_typet("float", 0)),
+               double_operand);
 
-           exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-           domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-           domain_check.copy_to_operands(double_operand, zero);
+           domain_check = migrate_expr_back(
+             lessthan2tc(double_operand, gen_zero(double_operand->type)));
          }
 
          // Create the exception raise as a code expression
@@ -2875,16 +2874,14 @@ function_call_expr::get_dispatch_table()
              type_error.has_value())
 
            return *type_error;
-         // Domain check for log: operand must be > 0
-         exprt fp_operand = arg_expr;
+         // Domain check for log: operand must be > 0 (V.3: built in IREP2).
+         expr2tc fp_operand;
+         migrate_expr(arg_expr, fp_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           fp_operand = exprt("typecast", type_handler_.get_typet("float", 0));
-           fp_operand.copy_to_operands(arg_expr);
-         }
-         exprt zero = gen_zero(fp_operand.type());
-         exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(fp_operand, zero);
+           fp_operand = typecast2tc(
+             migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
+         exprt domain_check = migrate_expr_back(
+           lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
              "ValueError", "math domain error");
@@ -2908,27 +2905,20 @@ function_call_expr::get_dispatch_table()
 
            return *type_error;
          // Domain check for acos: operand must be in [-1.0, 1.0]
-         exprt double_operand = arg_expr;
+         // (V.3: built in IREP2).
+         const type2tc float_type2 =
+           migrate_type(type_handler_.get_typet("float", 0));
+         expr2tc double_operand;
+         migrate_expr(arg_expr, double_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           double_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
-         }
+           double_operand = typecast2tc(float_type2, double_operand);
 
-         typet float_type = type_handler_.get_typet("float", 0);
-         typet bool_t = type_handler_.get_typet("bool", 0);
+         expr2tc pos_one = gen_one(float_type2);
+         expr2tc neg_one = neg2tc(float_type2, pos_one);
 
-         exprt pos_one = gen_one(float_type);
-         exprt neg_one("unary-", float_type);
-         neg_one.copy_to_operands(pos_one);
-
-         exprt lt_neg = exprt("<", bool_t);
-         lt_neg.copy_to_operands(double_operand, neg_one);
-         exprt gt_pos = exprt(">", bool_t);
-         gt_pos.copy_to_operands(double_operand, pos_one);
-         exprt domain_check = exprt("or", bool_t);
-         domain_check.copy_to_operands(lt_neg, gt_pos);
+         exprt domain_check = migrate_expr_back(or2tc(
+           lessthan2tc(double_operand, neg_one),
+           greaterthan2tc(double_operand, pos_one)));
 
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
