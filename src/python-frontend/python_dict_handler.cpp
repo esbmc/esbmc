@@ -617,19 +617,18 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   {
     // Dict comprehensions may include filters such as
     // {k: v for x in xs if cond1 if cond2}
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc combined2;
+    bool first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc c2;
+      migrate_expr(converter_.get_expr(if_clause), c2);
+      combined2 = first ? c2 : and2tc(combined2, c2);
+      first = false;
     }
+    exprt combined_condition = migrate_expr_back(combined2);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
@@ -744,19 +743,18 @@ exprt python_dict_handler::build_range_dict_comprehension(
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc combined2;
+    bool first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc c2;
+      migrate_expr(converter_.get_expr(if_clause), c2);
+      combined2 = first ? c2 : and2tc(combined2, c2);
+      first = false;
     }
+    exprt combined_condition = migrate_expr_back(combined2);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
