@@ -4000,9 +4000,9 @@ exprt function_call_expr::handle_general_function_call()
           nondet_expr.location().user_provided(true);
           nondet_expr.location().comment(
             "Unsupported function '" + func_name + "' called");
-          // Also add an assertion to the current block to flag this as an error
-          exprt false_expr = gen_boolean(false);
-          code_assertt assert_code(false_expr);
+          // Also add an assertion to the current block to flag this as an
+          // error (V.3: build the always-fail condition in IREP2).
+          code_assertt assert_code(migrate_expr_back(gen_false_expr()));
           assert_code.location() = location;
           assert_code.location().user_provided(true);
           assert_code.location().comment(
@@ -5102,7 +5102,8 @@ exprt function_call_expr::generate_attribute_error(
 
   log_warning("{}", error_msg.str());
 
-  code_assertt assert_code(gen_boolean(false));
+  // V.3: build the always-fail assert condition in IREP2.
+  code_assertt assert_code(migrate_expr_back(gen_false_expr()));
   assert_code.location() = location;
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());
