@@ -394,9 +394,11 @@ exprt python_set::get_from_iterable(
       elem_expr = deref;
       list_helper.add_type_info(set_id, std::string(), elem_expr.type());
 
-      // Break if we hit the null terminator
-      exprt is_zero("=", bool_type());
-      is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
+      // Break if we hit the null terminator (V.3: built in IREP2).
+      expr2tc elem2;
+      migrate_expr(elem_expr, elem2);
+      exprt is_zero = migrate_expr_back(
+        equality2tc(elem2, gen_zero(migrate_type(char_type()))));
       code_breakt brk;
       code_ifthenelset break_if;
       break_if.cond() = is_zero;
@@ -432,7 +434,10 @@ exprt python_set::get_from_iterable(
       contains_call.location() = loc;
       loop_body.copy_to_operands(contains_call);
 
-      not_exprt not_contains(build_symbol(contains_result));
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc cr2;
+      migrate_expr(build_symbol(contains_result), cr2);
+      exprt not_contains = migrate_expr_back(not2tc(cr2));
 
       code_blockt push_block;
       exprt push_call = build_call_expr(
@@ -457,7 +462,10 @@ exprt python_set::get_from_iterable(
     {
       exprt contains_expr =
         list_helper.contains(elem_expr, build_symbol(set_symbol));
-      not_exprt not_contains(contains_expr);
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc ce2;
+      migrate_expr(contains_expr, ce2);
+      exprt not_contains = migrate_expr_back(not2tc(ce2));
 
       code_blockt push_block;
       exprt push_call =
@@ -470,8 +478,11 @@ exprt python_set::get_from_iterable(
       loop_body.copy_to_operands(push_if);
     }
 
-    // Increment index: i++
-    plus_exprt idx_inc(build_symbol(idx_sym), gen_one(size_type()));
+    // Increment index: i = i + 1 (V.3: built in IREP2).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc idx2;
+    migrate_expr(build_symbol(idx_sym), idx2);
+    exprt idx_inc = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
     code_assignt idx_update(build_symbol(idx_sym), idx_inc);
     loop_body.copy_to_operands(idx_update);
   }
