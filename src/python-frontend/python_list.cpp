@@ -173,12 +173,12 @@ exprt build_dereference(const exprt &ptr, const typet &t)
 // Default depth for list comparison if option not set
 static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
 
-static bool is_excluded_struct_tag_for_object_ref(const std::string &tag)
+static bool is_excluded_struct_tag_for_object_ref(const struct_typet &st)
 {
-  return tag.find("dict_") != std::string::npos ||
-         tag.find("tag-dict") != std::string::npos ||
-         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-         tag == "__python_dict__";
+  // Internal Python model aggregates (tuple, dict, Optional) are not user class
+  // instances; the kind is read from the attribute stamped at type-creation
+  // time. See util/python_types.h.
+  return is_python_internal_aggregate(st);
 }
 
 static bool
@@ -200,7 +200,7 @@ is_empty_user_class_object_type(const typet &type, const namespacet &ns)
     tag.rfind("tag-struct __ESBMC_", 0) == 0)
     return false;
 
-  if (is_excluded_struct_tag_for_object_ref(tag))
+  if (is_excluded_struct_tag_for_object_ref(to_struct_type(resolved)))
     return false;
 
   // Empty user-defined classes (no data fields) should be stored as object

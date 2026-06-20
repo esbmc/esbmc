@@ -197,8 +197,6 @@ public:
    */
   typet get_dict_type(const nlohmann::json &dict_value) const;
 
-  typet get_tuple_type(const nlohmann::json &tuple_node) const;
-
   /**
    * @brief Returns the registered struct type used for Python slice objects.
    *

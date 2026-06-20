@@ -8,6 +8,7 @@
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/python_types.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 
@@ -73,6 +74,7 @@ struct_typet tuple_handler::create_tuple_struct_type(
 
   // Set the tag to ensure type identity
   tuple_type.tag(build_tuple_tag(element_types));
+  set_python_aggregate_kind(tuple_type, "tuple");
 
   return tuple_type;
 }

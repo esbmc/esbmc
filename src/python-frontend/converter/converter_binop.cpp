@@ -322,16 +322,14 @@ exprt python_converter::handle_membership_operator(
   if (rhs_resolved_type.is_struct())
   {
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
-    std::string tag = struct_type.tag().as_string();
+    const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (
-      tag.find("dict_") != std::string::npos ||
-      tag.find("tag-dict") != std::string::npos)
+    if (kind == "dict")
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
 
-    if (tag.starts_with("tag-tuple"))
+    if (kind == "tuple")
     {
       // `x in (a, b, c)` is element-wise equality, with string elements
       // compared by content. handle_tuple_membership builds the OR chain.

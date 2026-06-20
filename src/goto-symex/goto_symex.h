@@ -359,6 +359,18 @@ protected:
   void pop_frame();
 
   /**
+   *  Whether `base` is a user-defined Python class instance that follows
+   *  garbage-collected lifetime semantics (issue #4773). Such objects are kept
+   *  alive past their defining frame so references captured into a returned or
+   *  otherwise escaping aggregate stay valid, matching CPython (which heap-
+   *  allocates objects and frees them only when unreachable). Internal Python
+   *  model aggregates (tuples, dicts, and the list/slice/object/type
+   *  operational-model structs) are excluded: they manage their own
+   *  representation and must not have frame teardown skipped.
+   */
+  bool is_python_gc_object(const symbolt *base) const;
+
+  /**
    *  Create assignment for return statement.
    *  Generate an assignment to the return variable from this return statement.
    *  @param assign Assignment expression. Output.
