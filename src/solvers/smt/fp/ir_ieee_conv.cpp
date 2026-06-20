@@ -83,7 +83,9 @@ smt_astt ir_ieee_convt::combine_nan_preds(smt_astt a, smt_astt b) const
 }
 
 void ir_ieee_convt::store_combined_nan_pred(
-  smt_astt result, smt_astt s1, smt_astt s2)
+  smt_astt result,
+  smt_astt s1,
+  smt_astt s2)
 {
   smt_astt nan_p = combine_nan_preds(get_nan_pred(s1), get_nan_pred(s2));
   if (nan_p)
