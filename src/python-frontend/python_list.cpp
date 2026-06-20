@@ -3935,7 +3935,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(
-    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr())); // V.3
   code_declt contains_ret_decl(build_symbol(contains_ret));
   converter_.add_instruction(contains_ret_decl);
 
@@ -4042,9 +4045,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   contains_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(contains_call);
 
-  exprt result("=", bool_type());
-  result.copy_to_operands(build_symbol(contains_ret));
-  result.copy_to_operands(gen_boolean(true));
+  // V.3: build `contains_ret == true` in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_ret), cr2);
+  exprt result = migrate_expr_back(equality2tc(cr2, gen_true_expr()));
 
   return result;
 }
