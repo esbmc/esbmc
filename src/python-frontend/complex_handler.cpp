@@ -133,9 +133,13 @@ exprt complex_handler::complex_div(
     ieee_binop("ieee_div", numer_imag, denom));
 
   // Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
-  exprt yr_zero = equality_exprt(yr, zero);
-  exprt yi_zero = equality_exprt(yi, zero);
-  exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
+  // V.3: built in IREP2, back-migrated for the legacy code_ifthenelset guard.
+  expr2tc yr2, yi2, zero2;
+  migrate_expr(yr, yr2);
+  migrate_expr(yi, yi2);
+  migrate_expr(zero, zero2);
+  exprt denom_is_zero =
+    migrate_expr_back(and2tc(equality2tc(yr2, zero2), equality2tc(yi2, zero2)));
 
   exprt raise_zdiv = converter_.get_exception_handler().gen_exception_raise(
     "ZeroDivisionError", "complex division by zero");
