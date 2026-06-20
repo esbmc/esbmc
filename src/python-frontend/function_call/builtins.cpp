@@ -1315,14 +1315,21 @@ exprt function_call_expr::handle_complex() const
 
             if (true_complex && false_complex)
             {
-              exprt real_part = if_exprt(
-                cond,
-                from_double(true_complex->first, double_type()),
-                from_double(false_complex->first, double_type()));
-              exprt imag_part = if_exprt(
-                cond,
-                from_double(true_complex->second, double_type()),
-                from_double(false_complex->second, double_type()));
+              // V.3: build the per-part conditional selects in IREP2 (both
+              // branches are double constants, so the if2t types agree).
+              const type2tc dbl2 = double_type2();
+              expr2tc cond2, tr2, fr2, ti2, fi2;
+              migrate_expr(cond, cond2);
+              migrate_expr(
+                from_double(true_complex->first, double_type()), tr2);
+              migrate_expr(
+                from_double(false_complex->first, double_type()), fr2);
+              migrate_expr(
+                from_double(true_complex->second, double_type()), ti2);
+              migrate_expr(
+                from_double(false_complex->second, double_type()), fi2);
+              exprt real_part = migrate_expr_back(if2tc(dbl2, cond2, tr2, fr2));
+              exprt imag_part = migrate_expr_back(if2tc(dbl2, cond2, ti2, fi2));
               return make_complex(real_part, imag_part);
             }
 
