@@ -137,6 +137,12 @@ try_exact_integer_power(int64_t base, int64_t exponent, BigInt &result)
   return true;
 }
 
+static void throw_negative_integer_power_error()
+{
+  throw std::runtime_error(
+    "ValueError: Integers to negative integer powers are not allowed");
+}
+
 static bool overflow_checks_enabled()
 {
   return config.options.get_bool_option("overflow-check") ||
@@ -670,6 +676,20 @@ static bool apply_numpy_binary_to_scalars(
   const bool wants_float =
     wants_complex || lhs_kind == scalar_kind::float_like ||
     rhs_kind == scalar_kind::float_like || function == "divide";
+
+  if (
+    function == "power" && lhs_kind == scalar_kind::int_like &&
+    rhs_kind == scalar_kind::int_like)
+  {
+    numeric_value rhs_numeric;
+    if (
+      try_extract_numeric_constant(rhs, rhs_numeric) &&
+      rhs_numeric.int_value < 0)
+      throw_negative_integer_power_error();
+  }
+
+  if (!numpy_constant_folding_enabled())
+    return false;
 
   scalar_value result;
   if (wants_complex)
@@ -1407,7 +1427,8 @@ T get_constant_value(const nlohmann::json &node)
   // node["value"].get<T>() below would raise an opaque nlohmann type_error.
   // Surface the curated overflow diagnostic instead so the user sees the
   // same message they get from get_literal.
-  auto reject_bigint = [](const nlohmann::json &c) {
+  auto reject_bigint = [](const nlohmann::json &c)
+  {
     if (c.contains("_bigint"))
       throw python_int_overflow_excp(
         "Python int overflow: literal " + c["_bigint"].get<std::string>() +
@@ -1449,9 +1470,11 @@ T get_constant_value(const nlohmann::json &node)
 exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
+  const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
   // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var) {
+  auto resolve_var = [this](nlohmann::json &var)
+  {
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
@@ -1711,8 +1734,8 @@ exprt numpy_call_expr::create_expr_from_call()
         // Constant-fold transpose for fully constant 2D numeric lists.
         // This avoids forcing integer-only backend transpose for float literals.
         if (
-          list_arg.contains("elts") && !list_arg["elts"].empty() &&
-          list_arg["elts"][0].is_object() &&
+          allow_numpy_fold && list_arg.contains("elts") &&
+          !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
           list_arg["elts"][0].contains("_type") &&
           list_arg["elts"][0]["_type"] == "List")
         {
@@ -1873,14 +1896,17 @@ exprt numpy_call_expr::create_expr_from_call()
         {
           try
           {
-            exprt folded =
-              fold_numpy_unary_constant_list(converter_, function, list_arg);
-            if (converter_.current_lhs)
+            if (allow_numpy_fold)
             {
-              converter_.current_lhs->type() = folded.type();
-              converter_.update_symbol(*converter_.current_lhs);
+              exprt folded =
+                fold_numpy_unary_constant_list(converter_, function, list_arg);
+              if (converter_.current_lhs)
+              {
+                converter_.current_lhs->type() = folded.type();
+                converter_.update_symbol(*converter_.current_lhs);
+              }
+              return folded;
             }
-            return folded;
           }
           catch (const std::runtime_error &)
           {
@@ -1901,11 +1927,15 @@ exprt numpy_call_expr::create_expr_from_call()
           code_function_callt call =
             to_code_function_call(to_code(function_call_expr::get()));
           typet t = type_handler_.get_list_type(list_arg);
+          if (!converter_.current_lhs)
+            throw std::runtime_error(
+              "Internal error: numpy.arccos runtime lowering requires an "
+              "assignment target");
+          auto &current_lhs = *converter_.current_lhs;
+          current_lhs.type() = t;
+          converter_.update_symbol(current_lhs);
 
-          converter_.current_lhs->type() = t;
-          converter_.update_symbol(*converter_.current_lhs);
-
-          call.arguments().push_back(np_address_of(*converter_.current_lhs));
+          call.arguments().push_back(np_address_of(current_lhs));
           exprt array_size = from_integer(list_arg["elts"].size(), int_type());
           call.arguments().push_back(array_size);
           return call;
@@ -1914,7 +1944,7 @@ exprt numpy_call_expr::create_expr_from_call()
         if (function == "transpose")
         {
           typet t = type_handler_.get_list_type(list_arg);
-          if (!t.subtype().is_array())
+          if (allow_numpy_fold && !t.subtype().is_array())
           {
             exprt folded = converter_.get_expr(list_arg);
             if (converter_.current_lhs)
@@ -1945,11 +1975,13 @@ exprt numpy_call_expr::create_expr_from_call()
             type_handler_.build_array(base_type, shape[0]);
           typet result_type =
             type_handler_.build_array(result_row_type, shape[1]);
-          if (converter_.current_lhs)
-          {
-            converter_.current_lhs->type() = result_type;
-            converter_.update_symbol(*converter_.current_lhs);
-          }
+          if (!converter_.current_lhs)
+            throw std::runtime_error(
+              "Internal error: numpy.transpose runtime lowering requires an "
+              "assignment target");
+          auto &current_lhs = *converter_.current_lhs;
+          current_lhs.type() = result_type;
+          converter_.update_symbol(current_lhs);
 
           auto &args = call.arguments();
           typet flat_ptr_type =
@@ -1958,9 +1990,7 @@ exprt numpy_call_expr::create_expr_from_call()
             args[0] = np_typecast(args[0], flat_ptr_type);
 
           exprt row0 = np_index(
-            *converter_.current_lhs,
-            from_integer(0, size_type()),
-            result_type.subtype());
+            current_lhs, from_integer(0, size_type()), result_type.subtype());
           exprt elem00 =
             np_index(row0, from_integer(0, size_type()), base_type);
           args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
@@ -1971,21 +2001,26 @@ exprt numpy_call_expr::create_expr_from_call()
 
         if (is_supported_numpy_unary_math(function))
         {
-          exprt folded =
-            fold_numpy_unary_constant_list(converter_, function, list_arg);
-          if (converter_.current_lhs)
+          if (allow_numpy_fold)
           {
-            converter_.current_lhs->type() = folded.type();
-            converter_.update_symbol(*converter_.current_lhs);
+            exprt folded =
+              fold_numpy_unary_constant_list(converter_, function, list_arg);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
           }
-          return folded;
         }
 
         // Constant-fold np.ceil for concrete 1D numeric lists.
         if (function == "ceil")
         {
           std::vector<numeric_value> input_values;
-          if (try_extract_numeric_1d_list(list_arg, input_values))
+          if (
+            allow_numpy_fold &&
+            try_extract_numeric_1d_list(list_arg, input_values))
           {
             nlohmann::json out;
             out["_type"] = "List";
@@ -2017,23 +2052,28 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         typet t = type_handler_.get_list_type(list_arg);
+        if (!converter_.current_lhs)
+          throw std::runtime_error(
+            "Internal error: numpy.ceil runtime lowering requires an "
+            "assignment target");
+        auto &current_lhs = *converter_.current_lhs;
 
         // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
         // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
 
         if (t.subtype().is_array())
-          converter_.current_lhs->type() = long_long_int_type();
+          current_lhs.type() = long_long_int_type();
         else
-          converter_.current_lhs->type() = t;
+          current_lhs.type() = t;
 
-        converter_.update_symbol(*converter_.current_lhs);
+        converter_.update_symbol(current_lhs);
 
         // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
         // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
         // The lines below add the output array and size arguments to the call.
 
         // Add output argument
-        call.arguments().push_back(np_address_of(*converter_.current_lhs));
+        call.arguments().push_back(np_address_of(current_lhs));
 
         // Add array size arguments
         if (t.subtype().is_array())
@@ -2062,6 +2102,14 @@ exprt numpy_call_expr::create_expr_from_call()
 
     resolve_var(lhs);
     resolve_var(rhs);
+
+    if (
+      function == "power" && lhs.contains("value") && rhs.contains("value") &&
+      lhs["value"].is_number_integer() && rhs["value"].is_number_integer() &&
+      rhs["value"].get<int64_t>() < 0)
+    {
+      throw_negative_integer_power_error();
+    }
 
     if (
       allow_numpy_fold &&
@@ -2593,27 +2641,29 @@ exprt numpy_call_expr::create_expr_from_call()
         }
 
         auto as_dim =
-          [](const std::vector<std::size_t> &shape, std::size_t axis) {
-            if (shape.empty())
-              return from_integer(1, int_type());
-            if (shape.size() == 1)
-              return from_integer(
-                axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          [](const std::vector<std::size_t> &shape, std::size_t axis)
+        {
+          if (shape.empty())
+            return from_integer(1, int_type());
+          if (shape.size() == 1)
             return from_integer(
-              static_cast<int>(axis < shape.size() ? shape[axis] : 1),
-              int_type());
-          };
+              axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          return from_integer(
+            static_cast<int>(axis < shape.size() ? shape[axis] : 1),
+            int_type());
+        };
 
         auto build_array_type =
-          [&](const std::vector<std::size_t> &shape, const typet &elem_type) {
-            if (shape.empty())
-              return elem_type;
+          [&](const std::vector<std::size_t> &shape, const typet &elem_type)
+        {
+          if (shape.empty())
+            return elem_type;
 
-            typet array_type = elem_type;
-            for (auto it = shape.rbegin(); it != shape.rend(); ++it)
-              array_type = type_handler_.build_array(array_type, *it);
-            return array_type;
-          };
+          typet array_type = elem_type;
+          for (auto it = shape.rbegin(); it != shape.rend(); ++it)
+            array_type = type_handler_.build_array(array_type, *it);
+          return array_type;
+        };
 
         typet lhs_scalar_type =
           get_array_scalar_type(type_handler_.get_typet(lhs));
@@ -2797,7 +2847,8 @@ exprt numpy_call_expr::get()
       exprt lhs_expr = converter_.get_expr(lhs);
       exprt rhs_expr = converter_.get_expr(rhs);
       const typet list_type = type_handler_.get_list_type();
-      auto is_container = [&list_type](const exprt &e) {
+      auto is_container = [&list_type](const exprt &e)
+      {
         return e.type().is_array() || e.type() == list_type ||
                (e.type().is_pointer() && e.type().subtype() == list_type);
       };
@@ -2808,7 +2859,8 @@ exprt numpy_call_expr::get()
         lhs_expr, rhs_expr, call_);
     }
 
-    auto is_scalar_node = [](const nlohmann::json &node) {
+    auto is_scalar_node = [](const nlohmann::json &node)
+    {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
     };
@@ -2823,7 +2875,8 @@ exprt numpy_call_expr::get()
       auto rhs = extract_value(call_["args"][1]);
 
       auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool {
+        [&](double left, double right, double &out) -> bool
+      {
         if (function == "add")
         {
           out = left + right;
@@ -2873,7 +2926,9 @@ exprt numpy_call_expr::get()
       // so the BinOp path below crashes migrate_expr.
       // Fold the scalar-constant case here.
       // Symbolic and array operands are unsupported.
-      if (function == "copysign" || function == "fmax" || function == "fmin")
+      if (
+        allow_numpy_fold &&
+        (function == "copysign" || function == "fmax" || function == "fmin"))
       {
         double folded = 0.0;
         if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
