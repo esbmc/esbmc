@@ -641,14 +641,17 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     loop_body.copy_to_operands(pair_block);
   }
 
-  exprt increment("+", size_type());
-  increment.copy_to_operands(build_symbol(index_var), gen_one(size_type()));
+  // V.3: build index + 1 and index < length in IREP2.
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc idx2, len2;
+  migrate_expr(build_symbol(index_var), idx2);
+  migrate_expr(length_expr, len2);
+  exprt increment = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
 
-  exprt loop_condition("<", bool_type());
-  loop_condition.copy_to_operands(build_symbol(index_var), length_expr);
+  exprt loop_condition = migrate_expr_back(lessthan2tc(idx2, len2));
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -768,16 +771,18 @@ exprt python_dict_handler::build_range_dict_comprehension(
   }
 
   // loop_var = loop_var + 1
-  exprt increment("+", idx_type);
-  increment.copy_to_operands(build_symbol(*loop_var), gen_one(idx_type));
+  // V.3: build loop_var + 1 and loop_var < stop in IREP2.
+  const type2tc idx_t2 = migrate_type(idx_type);
+  expr2tc lv2, stop2;
+  migrate_expr(build_symbol(*loop_var), lv2);
+  migrate_expr(build_symbol(stop_var), stop2);
+  exprt increment = migrate_expr_back(add2tc(idx_t2, lv2, gen_one(idx_t2)));
   code_assignt loop_inc(build_symbol(*loop_var), increment);
   loop_inc.location() = location;
   loop_body.copy_to_operands(loop_inc);
 
   // while (loop_var < stop)
-  exprt loop_condition("<", bool_type());
-  loop_condition.copy_to_operands(
-    build_symbol(*loop_var), build_symbol(stop_var));
+  exprt loop_condition = migrate_expr_back(lessthan2tc(lv2, stop2));
 
   codet while_stmt;
   while_stmt.set_statement("while");
