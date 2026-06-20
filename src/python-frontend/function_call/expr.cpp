@@ -2441,9 +2441,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isnan_expr("isnan", bool_typet());
-         isnan_expr.copy_to_operands(arg_expr);
-         return isnan_expr;
+         // V.3: build isnan in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isnan2tc(arg2));
        }
        else // __ESBMC_isinf
        {
@@ -2455,9 +2456,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isinf_expr("isinf", bool_typet());
-         isinf_expr.copy_to_operands(arg_expr);
-         return isinf_expr;
+         // V.3: build isinf in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isinf2tc(arg2));
        }
      },
      "isnan/isinf"},
