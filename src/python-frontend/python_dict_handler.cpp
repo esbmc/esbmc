@@ -3065,9 +3065,10 @@ exprt python_dict_handler::handle_dict_popitem(
   size_call.location() = location;
   converter_.add_instruction(size_call);
 
-  // Empty dict → raise KeyError
-  exprt is_empty =
-    equality_exprt(build_symbol(size_var), gen_zero(size_type()));
+  // Empty dict → raise KeyError (V.3: build the check in IREP2).
+  expr2tc size2;
+  migrate_expr(build_symbol(size_var), size2);
+  exprt is_empty = migrate_expr_back(equality2tc(size2, gen_zero(size2->type)));
 
   code_blockt empty_block;
   {
@@ -3471,8 +3472,11 @@ exprt python_dict_handler::handle_dict_update(
     dict_expr, key_expr, value_expr, location, call_node, pair_block);
   loop_body.copy_to_operands(pair_block);
 
-  // Advance to the next source entry.
-  exprt next_index = plus_exprt(build_symbol(index_var), gen_one(size_type()));
+  // Advance to the next source entry (V.3: build index + 1 in IREP2).
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc idx2;
+  migrate_expr(build_symbol(index_var), idx2);
+  exprt next_index = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
   code_assignt index_update(build_symbol(index_var), next_index);
   index_update.location() = location;
   loop_body.copy_to_operands(index_update);
