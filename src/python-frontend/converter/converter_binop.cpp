@@ -116,19 +116,40 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
       return logical_expr;
-    // Result expression starts from last operand as default else branch
+    // Result expression starts from last operand as default else branch.
+    const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
       const exprt &current = logical_expr.operands()[i];
       exprt current_cond = get_truthy_condition(current);
-      exprt if_expr("if", t);
-      if (logical_expr.is_and())
-        if_expr.copy_to_operands(current_cond, result_expr, current);
+      // V.3: build the short-circuit select in IREP2 when both branches
+      // share the result type-id. A mixed-type BoolOp keeps the result type
+      // as any_type() while the operands stay concrete (extract_type_from_
+      // boolean_op's "fall back to Any" path); if2t asserts type-id equality,
+      // so those reconcile post-conversion via the legacy adjuster as before.
+      expr2tc cond2, current2, result2;
+      migrate_expr(current_cond, cond2);
+      migrate_expr(current, current2);
+      migrate_expr(result_expr, result2);
+      if (
+        current2->type->type_id == t2->type_id &&
+        result2->type->type_id == t2->type_id)
+      {
+        // and: cond ? result : current  /  or: cond ? current : result
+        result_expr = migrate_expr_back(
+          logical_expr.is_and() ? if2tc(t2, cond2, result2, current2)
+                                : if2tc(t2, cond2, current2, result2));
+      }
       else
-        if_expr.copy_to_operands(current_cond, current, result_expr);
-
-      result_expr = if_expr;
+      {
+        exprt if_expr("if", t);
+        if (logical_expr.is_and())
+          if_expr.copy_to_operands(current_cond, result_expr, current);
+        else
+          if_expr.copy_to_operands(current_cond, current, result_expr);
+        result_expr = if_expr;
+      }
     }
     return result_expr;
   }
