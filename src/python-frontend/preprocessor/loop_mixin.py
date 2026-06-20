@@ -1463,8 +1463,8 @@ class LoopMixin:
 
         tmp_name = f"ESBMC_items_elt_{list_var}"
         tuple_ann = ast.Name(id="tuple", ctx=ast.Load())
-        body.append(self._create_var_subscript_assign(node, tmp_name, list_var,
-                                                       index_var, tuple_ann))
+        body.append(
+            self._create_var_subscript_assign(node, tmp_name, list_var, index_var, tuple_ann))
         unpack = ast.Assign(
             targets=[target_elt],
             value=ast.Name(id=tmp_name, ctx=ast.Load()),
