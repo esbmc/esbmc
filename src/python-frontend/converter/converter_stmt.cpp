@@ -23,6 +23,7 @@
 #include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
@@ -64,6 +65,28 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
 {
   return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
          (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
+}
+
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
 }
 
 // RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
@@ -3382,6 +3405,35 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::ASSERT:
     {
+      // Fold whole-assertion tests that provably evaluate to True at
+      // conversion time (e.g. `f(GLOBAL) == [literal]` for a pure f). This
+      // bypasses operational-model loops (strlen/str-slice) whose unwinding
+      // would otherwise scale with the data size. Gated on the test containing
+      // a function call so plain symbolic asserts stay on the solver path;
+      // only a constant True short-circuits — False/unknown fall through so
+      // the solver still detects genuine violations. Disabled under any
+      // coverage mode, where the original assert/branches must be instrumented.
+      const bool coverage_active =
+        is_coverage_mode() ||
+        config.options.get_bool_option("assertion-coverage") ||
+        config.options.get_bool_option("assertion-coverage-claims");
+      if (
+        !coverage_active && element.contains("test") &&
+        ast_contains_call(element["test"]))
+      {
+        python_consteval evaluator(*ast_json);
+        auto folded = evaluator.try_eval_global_expr(element["test"]);
+        if (folded && folded->kind == PyConstValue::BOOL && folded->bool_val)
+        {
+          code_assertt proven;
+          proven.assertion() = gen_boolean(true);
+          proven.location() = get_location_from_decl(element);
+          proven.location().comment("assertion proven by constant evaluation");
+          block.move_to_operands(proven);
+          break;
+        }
+      }
+
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
       if (test.statement() == "cpp-throw")
