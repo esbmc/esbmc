@@ -1031,26 +1031,30 @@ exprt python_list::build_list_at_call(
   exprt index_as_size = build_typecast(index, size_type());
 
   // Create: actual_index = (index < 0) ? (size + index) : index
-  exprt is_negative("<", bool_type());
-  is_negative.copy_to_operands(index, gen_zero(index.type()));
+  // (V.3: build the negative-index normalization in IREP2.)
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc index2, index_as_size2, size_var2;
+  migrate_expr(index, index2);
+  migrate_expr(index_as_size, index_as_size2);
+  migrate_expr(build_symbol(size_var), size_var2);
 
-  // For negative: size + index (since index is negative, this is size - abs(index))
-  exprt positive_index("+", size_type());
-  positive_index.copy_to_operands(build_symbol(size_var), index_as_size);
-
-  // Choose between positive conversion or original
-  if_exprt converted_index(is_negative, positive_index, index_as_size);
-  converted_index.type() = size_type();
+  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+  // For negative: size + index (since index is negative, this is
+  // size - abs(index)).
+  expr2tc positive_index = add2tc(size_t2, size_var2, index_as_size2);
+  // Choose between positive conversion or original.
+  expr2tc converted_index2 =
+    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+  exprt converted_index = migrate_expr_back(converted_index2);
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
     // Runtime guard only for negative-index normalization. This prevents
     // underflowed indices (e.g., [] [-1]) from reaching the backend while
     // preserving legacy behavior for non-negative accesses.
-    exprt oob_cond(">=", bool_type());
-    oob_cond.copy_to_operands(converted_index, build_symbol(size_var));
-    exprt negative_oob("and", bool_type());
-    negative_oob.copy_to_operands(is_negative, oob_cond);
+    // negative_oob = is_negative && (converted_index >= size) (V.3: IREP2).
+    expr2tc negative_oob =
+      and2tc(is_negative, greaterthanequal2tc(converted_index2, size_var2));
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -1058,7 +1062,7 @@ exprt python_list::build_list_at_call(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = negative_oob;
+    guard.cond() = migrate_expr_back(negative_oob);
     guard.then_case() = throw_code;
     guard.location() = location;
     converter_.add_instruction(guard);
