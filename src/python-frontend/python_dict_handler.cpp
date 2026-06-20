@@ -964,9 +964,13 @@ exprt python_dict_handler::handle_dict_subscript(
   // If index == SIZE_MAX the key was not found: throw KeyError so that
   // try/except KeyError handlers can catch it (instead of failing the property).
   {
+    // V.3: build the not-found check (index == SIZE_MAX) in IREP2.
     const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-    constant_exprt size_max(size_max_val, size_type());
-    exprt key_not_found = equality_exprt(build_symbol(index_var), size_max);
+    const constant_exprt size_max(size_max_val, size_type());
+    expr2tc idx2, max2;
+    migrate_expr(build_symbol(index_var), idx2);
+    migrate_expr(size_max, max2);
+    exprt key_not_found = migrate_expr_back(equality2tc(idx2, max2));
 
     std::string keyerror_msg = "KeyError: key not found in dictionary";
     std::string keyerror_type_str = "KeyError";
@@ -1368,7 +1372,12 @@ exprt python_dict_handler::handle_dict_membership(
   exprt contains_result = list_handler.contains(key_expr, keys_member);
 
   if (negated)
-    return not_exprt(contains_result);
+  {
+    // V.3: build the negated-membership result in IREP2.
+    expr2tc cr2;
+    migrate_expr(contains_result, cr2);
+    return migrate_expr_back(not2tc(cr2));
+  }
 
   return contains_result;
 }
