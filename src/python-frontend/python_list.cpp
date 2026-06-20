@@ -4518,19 +4518,18 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // If we had filter conditions, wrap append in if statement
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc filt_combined;
+    bool filt_first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc filt_c;
+      migrate_expr(converter_.get_expr(if_clause), filt_c);
+      filt_combined = filt_first ? filt_c : and2tc(filt_combined, filt_c);
+      filt_first = false;
     }
+    exprt combined_condition = migrate_expr_back(filt_combined);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
@@ -4539,9 +4538,11 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     loop_body.copy_to_operands(if_stmt);
   }
 
-  // 9. Increment index: i = i + 1
-  exprt increment("+", size_type());
-  increment.copy_to_operands(build_symbol(index_var), gen_one(size_type()));
+  // 9. Increment index: i = i + 1 (V.3: built in IREP2).
+  const type2tc inc_t2 = migrate_type(size_type());
+  expr2tc inc_idx;
+  migrate_expr(build_symbol(index_var), inc_idx);
+  exprt increment = migrate_expr_back(add2tc(inc_t2, inc_idx, gen_one(inc_t2)));
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
