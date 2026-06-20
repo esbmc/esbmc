@@ -2240,7 +2240,7 @@ void python_converter::get_var_assign(
       if (rhs_identifier.empty() && rhs.id() == exprt::member)
       {
         const exprt &dict_sym = rhs.op0();
-        const std::string &component =
+        const std::string component =
           to_member_expr(rhs).get_component_name().as_string();
         if (
           dict_sym.is_symbol() &&
