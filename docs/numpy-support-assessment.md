@@ -32,8 +32,10 @@ consequences:
    back to an `int64`-only OM or is rejected. **[V]**
 3. **Soundness hazards remain** in host-side constant folding (host
    `double`/`int` arithmetic substituted for target semantics). A
-   `--python-no-fold` escape hatch now exists for differential testing, and
-   scalar integer `power` uses exact arithmetic before dtype wrapping. **[V]/[I]**
+   `--python-no-fold` escape hatch now suppresses the literal-fold paths
+   exercised by the frontend, and scalar integer `power` uses exact arithmetic
+   before dtype wrapping while rejecting negative integer exponents
+   explicitly. **[V]/[I]**
 4. **Hard structural ceiling at 2 dimensions** — 3-D+ arrays are rejected by
    design. **[T]**
 5. **Nested-list / tensor performance** is the dominant scalability blocker
@@ -69,9 +71,10 @@ call it does one of:
   libm lowering. **[V]**
 - **Element-wise arithmetic** (`add`, `subtract`, `multiply`, `divide`,
   `power`): a cascade of `try_extract_scalar_*` attempts to fold the whole
-  operation to literals (scalar, 1-D, 2-D, complex). If folding succeeds, the
-  result is emitted as a literal `List`. If shapes are literal but elements are
-  symbolic, lower to the `umath.c` OM. Otherwise reject. **[V]**
+  operation to literals (scalar, 1-D, 2-D, complex) unless
+  `--python-no-fold` is active. If folding succeeds, the result is emitted as
+  a literal `List`. If shapes are literal but elements are symbolic, lower to
+  the `umath.c` OM. Otherwise reject. **[V]**
 - **Linear algebra** (`dot`, `matmul`): if 2-D×2-D / 1-D etc., emit a call to
   `linalg.c::dot`/`dot_double`; `transpose` now lowers runtime 2-D array
   variables through `linalg.c::transpose`/`transpose_double`; `det` is
@@ -136,7 +139,7 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | `reshape`, `ravel`, `flatten`, `squeeze`, `expand_dims` | Missing | no handler **[V]** |
 | `transpose` (1-D/2-D) | Partial | 1-D literal identity + 2-D literal/runtime array lowering; `transpose2`,`transpose7` KNOWNBUG **[T]** |
 | **Arithmetic** `+ - * /` scalar/array | Partial | literal fold; symbolic int/float via typed umath; `--python-no-fold` available **[V]** |
-| `power` | Partial | exact integer folding for fixed-width ints; float paths still use host `pow` **[T]** `power`, `power-overflow-fail` |
+| `power` | Partial | exact integer folding for fixed-width ints; negative integer exponents fail explicitly; float paths still use host `pow` **[T]** `power`, `power-overflow-fail` |
 | `//` floor-div, `%` mod (array) | Partial | `np.fmod` supports literal list-backed 1D/2D broadcasting; runtime array operands lower via the array OM **[T]** `fmod_array_unsupported` |
 | **Comparison/logical** `> < == & |` | Missing | no element-wise comparison ufunc **[I]** `mixed-types-comp` is scalar |
 | **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Missing | no handler **[V]** |
@@ -198,8 +201,9 @@ style calls instead of reinterpreting IEEE-754 payloads as `int64`.
 - **Impact:** float ufunc calls no longer route through the integer backend.
   The old bit-pattern reinterpretation bug is removed for the exercised scalar
   paths. **[V]**
-- **What remains:** host-side constant folding still happens for literal
-  operands; that path is guarded by `--python-no-fold` for differential tests.
+- **What remains:** host-side constant folding still happens for some literal
+  operands, but the arithmetic/list folds now honor `--python-no-fold` more
+  consistently for differential tests.
 - **Evidence gap closed:** scalar float `np.add`/`np.multiply` and exact
   integer `power` now have regression coverage. **[T]**
 
@@ -212,8 +216,9 @@ Risks:
   ESBMC would otherwise use; an assertion that is *just* satisfiable could flip.
 - **Integer `power`:** the scalar NumPy path now uses exact integer arithmetic
   before dtype wrapping when both operands are integral and the result still
-  fits the target integer width. Float-backed paths still use host `pow` and
-  can lose precision on large values. **[I]**
+  fits the target integer width. Negative integer exponents fail explicitly.
+  Float-backed paths still use host `pow` and can lose precision on large
+  values. **[I]**
 - **Folding bypasses ESBMC's own overflow/div-by-zero checks** for the folded
   expression; correctness then depends on the frontend's ad-hoc
   `emit_numpy_overflow_assertion` and explicit zero checks rather than the
