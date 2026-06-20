@@ -1448,8 +1448,12 @@ class LoopMixin:
 
         Simple Name target — emits ``name: elem_ann = list_var[index_var]``.
         Tuple/List target (nested unpacking, e.g. ``for (u, v), w in d.items():``) —
-        emits a destructuring Assign ``target_elt = list_var[index_var]`` so the
-        converter's normal tuple-unpacking-from-subscript path handles it.
+        binds the element to a local tuple temp first, then destructures from that
+        temp. Unpacking directly from ``list_var[index_var]`` lowers each component
+        to ``(*(tuple*)elem->value).element_i``, which dereferences to an array
+        rvalue for string components and aborts ("Can't construct rvalue reference
+        to array type"). A whole-struct copy into a local makes each component read
+        a local member access instead, reusing the working ``u, v = t`` path.
         """
         name = self._name_id_or_none(target_elt)
         if name is not None:
@@ -1457,15 +1461,13 @@ class LoopMixin:
                                                           elem_ann))
             return
 
-        subscript = ast.Subscript(
-            value=ast.Name(id=list_var, ctx=ast.Load()),
-            slice=ast.Name(id=index_var, ctx=ast.Load()),
-            ctx=ast.Load(),
-        )
-        self.ensure_all_locations(subscript, node)
+        tmp_name = f"ESBMC_items_elt_{list_var}"
+        tuple_ann = ast.Name(id="tuple", ctx=ast.Load())
+        body.append(self._create_var_subscript_assign(node, tmp_name, list_var,
+                                                       index_var, tuple_ann))
         unpack = ast.Assign(
             targets=[target_elt],
-            value=subscript,
+            value=ast.Name(id=tmp_name, ctx=ast.Load()),
         )
         self.ensure_all_locations(unpack, node)
         body.append(unpack)
