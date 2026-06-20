@@ -2589,8 +2589,10 @@ exprt python_list::handle_index_access(
     }
 
     // For variable indices, prefer compile-time list element type information
-    // when available.
-    if (elem_type == typet() && array.is_symbol())
+    // when available.  Also fire when elem_type is empty_typet(): that is the
+    // sentinel returned by get_typet("tuple"), meaning "don't use the
+    // annotation as-is; resolve the concrete struct type via list_type_map."
+    if ((elem_type == typet() || elem_type.is_empty()) && array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
       auto type_map_it = list_type_map.find(list_name);

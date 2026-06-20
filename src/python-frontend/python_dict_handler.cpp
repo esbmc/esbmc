@@ -82,6 +82,11 @@ exprt build_address_of(const exprt &obj)
 }
 } // namespace
 
+std::unordered_map<std::string, std::string>
+  python_dict_handler::dict_keys_list_id_;
+std::unordered_map<std::string, std::string>
+  python_dict_handler::dict_vals_list_id_;
+
 python_dict_handler::python_dict_handler(
   python_converter &converter,
   contextt &symbol_table,
@@ -840,6 +845,11 @@ exprt python_dict_handler::create_dict_from_literal(
     exprt push_key =
       list_handler.build_push_list_call(keys_list, element, key_expr);
     converter_.add_instruction(push_key);
+    // Track the key's element type so that handle_index_access can resolve
+    // the concrete struct type for tuple keys instead of relying solely on
+    // the "tuple" annotation (which produces empty_typet as a sentinel).
+    list_handler.add_type_info(
+      keys_list.id.as_string(), std::string(), key_expr.type());
 
     exprt value_expr = converter_.get_expr(values[i]);
 
@@ -874,6 +884,16 @@ exprt python_dict_handler::create_dict_from_literal(
   code_assignt values_assign(values_member, build_symbol(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
+
+  // Record the dict symbol → internal list symbol mapping so that
+  // converter_stmt can propagate list_type_map entries when it sees
+  // ESBMC_keys_N = dict_sym.keys (a member expression, not a symbol copy).
+  if (target_symbol.is_symbol())
+  {
+    const std::string &dict_id = target_symbol.identifier().as_string();
+    dict_keys_list_id_[dict_id] = keys_list.id.as_string();
+    dict_vals_list_id_[dict_id] = values_list.id.as_string();
+  }
 
   return target_symbol;
 }

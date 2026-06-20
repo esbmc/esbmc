@@ -2233,6 +2233,27 @@ void python_converter::get_var_assign(
       const std::string &rhs_identifier = rhs.identifier().as_string();
       python_list::copy_type_info(rhs_identifier, lhs_identifier);
 
+      // When rhs is dict_sym.keys / dict_sym.values (a member expression
+      // rather than a list symbol), rhs_identifier is empty and
+      // copy_type_info above is a no-op.  Look up the dict's internal
+      // keys-list or values-list symbol and propagate from there instead.
+      if (rhs_identifier.empty() && rhs.id() == exprt::member)
+      {
+        const exprt &dict_sym = rhs.op0();
+        const std::string &component =
+          to_member_expr(rhs).get_component_name().as_string();
+        if (
+          dict_sym.is_symbol() &&
+          (component == "keys" || component == "values"))
+        {
+          const std::string &dict_id = dict_sym.identifier().as_string();
+          const std::string &src = python_dict_handler::get_internal_list_id(
+            dict_id, component == "keys");
+          if (!src.empty())
+            python_list::copy_type_info(src, lhs_identifier);
+        }
+      }
+
       if (lhs_symbol)
       {
         const symbolt *rhs_symbol = nullptr;
