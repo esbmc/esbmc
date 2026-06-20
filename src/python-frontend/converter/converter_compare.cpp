@@ -414,17 +414,15 @@ exprt python_converter::try_lower_slice_member_is_none(
     return nil_exprt();
   const typet flag_type = slice_struct.get_component(flag_name).type();
 
-  // V.3: IREP2 member access (exact round-trip of member_exprt).
+  // V.3: build the flag member access and the is/is-not-None check in IREP2,
+  // back-migrated once at the return.
   expr2tc fb2;
   migrate_expr(member_side->op0(), fb2);
-  exprt flag_access =
-    migrate_expr_back(member2tc(migrate_type(flag_type), fb2, flag_name));
+  const expr2tc flag2 = member2tc(migrate_type(flag_type), fb2, flag_name);
   // `sl.start is None` ⇔ flag is zero (bound was absent).
   // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
-  equality_exprt eq(flag_access, gen_zero(flag_type));
-  if (op == "Is")
-    return eq;
-  return not_exprt(eq);
+  const expr2tc eq2 = equality2tc(flag2, gen_zero(flag2->type));
+  return migrate_expr_back(op == "Is" ? eq2 : not2tc(eq2));
 }
 
 exprt python_converter::handle_none_comparison(
