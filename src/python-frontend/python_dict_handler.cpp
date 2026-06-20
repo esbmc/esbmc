@@ -80,6 +80,18 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
+// (V.3). SIZE_MAX is the dict lookup's not-found sentinel.
+exprt build_key_found(const symbolt &index_var)
+{
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  const constant_exprt size_max(size_max_val, size_type());
+  expr2tc idx2, max2;
+  migrate_expr(build_symbol(index_var), idx2);
+  migrate_expr(size_max, max2);
+  return migrate_expr_back(not2tc(equality2tc(idx2, max2)));
+}
 } // namespace
 
 python_dict_handler::python_dict_handler(
@@ -2213,10 +2225,7 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
@@ -2443,10 +2452,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
@@ -2809,10 +2815,7 @@ exprt python_dict_handler::handle_dict_pop(
   try_find_call.location() = location;
   converter_.add_instruction(try_find_call);
 
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
