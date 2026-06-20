@@ -351,16 +351,20 @@ class CoreVisitorsMixin:
         return result
 
     def _maybe_lower_dictcomp_over_items(self, node):
-        """Lower ``x = {key: val for k, v in d.items()}`` into ``x = {}``
-        followed by a population loop ``for k, v in d.items(): x[key] = val``.
+        """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
+        followed by a population loop, e.g.
+        ``x = {key: val for k, v in d.items()}`` ->
+        ``x = {}; for k, v in d.items(): x[key] = val``, and
+        ``x = {v: val for u, v in d}`` -> ``x = {}; for u, v in d: x[v] = val``.
 
         The converter's dict-comprehension handler models a list-of-tuples
-        iterable but not a ``dict.items()`` view (items() returns the keys list
-        as a placeholder, so the (k, v) tuple target cannot be unpacked).
-        Reusing the for-loop items() lowering (visit_For -> _transform_items_for)
-        gives the comprehension the (key, value) bindings it needs. Scoped to
-        ``.items()`` iterables so list-of-tuples dict comprehensions keep their
-        existing converter path.
+        iterable but not a dict view: ``d.items()`` returns the keys list as a
+        placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
+        dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
+        for-loop lowering (visit_For -> _transform_items_for / dict-key
+        iteration) gives the comprehension the bindings it needs. Scoped to dict
+        iterables so list-of-tuples dict comprehensions keep their existing
+        converter path.
         """
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
             return None
@@ -372,7 +376,14 @@ class CoreVisitorsMixin:
         outer = comp.generators[0].iter
         is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
                          and outer.func.attr == "items")
-        if not is_items_call:
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        if not (is_items_call or is_dict_iter or is_keys_call):
             return None
 
         target_id = node.targets[0].id
