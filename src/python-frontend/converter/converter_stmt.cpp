@@ -2191,7 +2191,8 @@ void python_converter::get_var_assign(
           !expected_base.empty() && !ctor_name.empty() &&
           !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
-          code_assertt ctor_assert(gen_boolean(false));
+          // V.3: build the always-fail assert condition in IREP2.
+          code_assertt ctor_assert(migrate_expr_back(gen_false_expr()));
           ctor_assert.location() = location_begin;
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
@@ -2230,7 +2231,8 @@ void python_converter::get_var_assign(
       rhs.type().is_array() && !lhs.type().is_array() &&
       !lhs.type().is_pointer())
     {
-      code_assertt type_assert(gen_boolean(false));
+      // V.3: build the always-fail assert condition in IREP2.
+      code_assertt type_assert(migrate_expr_back(gen_false_expr()));
       type_assert.location() = location_begin;
       type_assert.location().comment(
         "Type violation: incompatible types in assignment");
