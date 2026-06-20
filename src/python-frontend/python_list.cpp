@@ -1775,6 +1775,7 @@ exprt python_list::handle_range_slice(
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
+    const type2tc signed_t2 = migrate_type(signed_t); // V.3: for IREP2 selects
 
     // Step 1: produce a signed `resolved` value.
     //   - missing bound → step-direction default
@@ -1794,10 +1795,12 @@ exprt python_list::handle_range_slice(
       exprt val_signed =
         build_typecast(converter_.get_expr(slice_node[name]), signed_t);
       exprt size_plus_val = signed_add(size_signed, val_signed);
-      exprt is_neg("<", bool_type());
-      is_neg.copy_to_operands(val_signed, zero_s);
-      resolved = if_exprt(is_neg, size_plus_val, val_signed);
-      resolved.type() = signed_t;
+      // val < 0 ? size + val : val  (V.3: built in IREP2).
+      expr2tc val2, spv2;
+      migrate_expr(val_signed, val2);
+      migrate_expr(size_plus_val, spv2);
+      resolved = migrate_expr_back(
+        if2tc(signed_t2, lessthan2tc(val2, gen_zero(signed_t2)), spv2, val2));
     }
 
     // Step 2: clamp to the CPython-defined window for this step direction.
@@ -1810,17 +1813,17 @@ exprt python_list::handle_range_slice(
     const exprt over =
       negative_step ? signed_sub(size_signed, one_s) : size_signed;
 
-    exprt is_under("<", bool_type());
-    is_under.copy_to_operands(resolved, under);
-    exprt c1 = if_exprt(is_under, under, resolved);
-    c1.type() = signed_t;
+    // c1 = max(resolved, under); c2 = min(c1, over)  (V.3: built in IREP2).
+    expr2tc resolved2, under2, over2;
+    migrate_expr(resolved, resolved2);
+    migrate_expr(under, under2);
+    migrate_expr(over, over2);
+    expr2tc c1 =
+      if2tc(signed_t2, lessthan2tc(resolved2, under2), under2, resolved2);
+    expr2tc c2 = if2tc(signed_t2, greaterthan2tc(c1, over2), over2, c1);
+    exprt c2_legacy = migrate_expr_back(c2);
 
-    exprt is_over(">", bool_type());
-    is_over.copy_to_operands(c1, over);
-    exprt c2 = if_exprt(is_over, over, c1);
-    c2.type() = signed_t;
-
-    return negative_step ? c2 : build_typecast(c2, size_type());
+    return negative_step ? c2_legacy : build_typecast(c2_legacy, size_type());
   };
 
   exprt lower_expr = resolve_bound("lower", false);
