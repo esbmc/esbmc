@@ -2883,8 +2883,11 @@ exprt python_list::handle_index_access(
       list_at_call = build_symbol(elem_obj);
     }
 
-    // Extract and dereference PyObject value
-    return extract_pyobject_value(list_at_call, elem_type, mixed_numeric);
+    // Extract and dereference PyObject value. string_safe: a subscript read is
+    // value-context (assigned to the target), so an any_type string element may
+    // be returned by pointer without overrunning its short char[] storage.
+    return extract_pyobject_value(
+      list_at_call, elem_type, mixed_numeric, /*string_safe=*/true);
   }
 
   // Handle static string indexing with IndexError on out-of-bounds
@@ -4637,7 +4640,8 @@ exprt python_list::build_pop_list_call(
 exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
   const typet &elem_type,
-  bool mixed_numeric)
+  bool mixed_numeric,
+  bool string_safe)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
   // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
@@ -4701,8 +4705,13 @@ exprt python_list::extract_pyobject_value(
   // same value the annotated str path returns) with no dereference. Every other
   // type keeps the proven dereference read, so numeric elements are unaffected.
   // The dispatch key is the caller-stamped type, not a usage heuristic, so this
-  // stays sound.
-  if (elem_type.is_pointer() && elem_type.subtype().id() == "empty")
+  // stays sound. Gated on string_safe because the result is an if-expression
+  // (rvalue): callers that take its address (membership/find on heaps, queues,
+  // sets) need the plain dereference lvalue, so only value-context reads
+  // (subscript) opt in.
+  if (
+    string_safe && elem_type.is_pointer() &&
+    elem_type.subtype().id() == "empty")
   {
     const size_t str_type_id = std::hash<std::string>{}(
       converter_.get_type_handler().type_to_string(pointer_typet(char_type())));
