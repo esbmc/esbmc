@@ -162,28 +162,34 @@ void ld_languaget::show_parse(std::ostream &out)
     {
       out << "  Rung " << rung.id << ": " << rung.elements.size()
           << " elements : ";
-      std::string coil_var, coil_kind;
+      std::string contacts;
+      std::vector<std::pair<std::string, std::string>> coils;
       bool first = true;
       for (const auto &elem : rung.elements)
       {
         if (elem.kind == RungElementKind::Contact)
         {
           if (!first)
-            out << " && ";
+            contacts += " && ";
           first = false;
           if (elem.contact.kind == ContactKind::NormallyClosed)
-            out << "!";
-          out << elem.contact.variable;
+            contacts += "!";
+          contacts += elem.contact.variable;
         }
         else if (elem.kind == RungElementKind::Coil)
         {
-          coil_var = elem.coil.variable;
-          coil_kind = elem.coil.kind == CoilKind::Set
-                        ? "SET"
-                        : (elem.coil.kind == CoilKind::Reset ? "RESET" : "=");
+          std::string kind = elem.coil.kind == CoilKind::Set
+                               ? "SET"
+                               : (elem.coil.kind == CoilKind::Reset ? "RESET"
+                                                                     : "=");
+          coils.emplace_back(kind, elem.coil.variable);
         }
       }
-      out << "  ->  " << coil_kind << " " << coil_var << "\n";
+      if (coils.empty())
+        out << contacts << "  ->  (no coil)\n";
+      else
+        for (const auto &[kind, var] : coils)
+          out << contacts << "  ->  " << kind << " " << var << "\n";
     }
   }
 }

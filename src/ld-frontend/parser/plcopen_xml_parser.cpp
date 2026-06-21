@@ -1,6 +1,7 @@
 #include <ld-frontend/parser/plcopen_xml_parser.h>
 #include <pugixml.hpp>
 #include <cassert>
+#include <iostream>
 #include <unordered_map>
 #include <functional>
 #include <set>
@@ -353,6 +354,23 @@ static bool parse_graphical_ld(
         rung.id = "g" + std::to_string(rung_counter++);
         rung.loc = {source_file, 0, 0};
 
+        // Refuse paths containing unsupported non-contact elements (e.g. timer
+        // or FB outputs). Silently skipping them would produce a weaker, vacuous
+        // model; emitting a diagnostic and dropping the path is safer.
+        for (int nid : path)
+        {
+          const GNode &g = nodes.at(nid);
+          if (g.tag != "contact" && g.tag != "leftPowerRail")
+          {
+            std::cerr << "warning: graphical LD: rung path contains "
+                      << "unsupported element '" << g.tag << "'"
+                      << (g.var.empty() ? "" : " (var=" + g.var + ")")
+                      << " — FB/timer outputs on rail→coil paths are not yet "
+                      << "modelled; skipping path to avoid a vacuous model.\n";
+            return;
+          }
+        }
+
         // Emit contacts from the path
         for (int nid : path)
         {
@@ -436,6 +454,10 @@ static bool parse_graphical_ld(
       !coils_seen.count(lid))
       coils.push_back(lid);
 
+  // NOTE: the DFS enumerates all simple paths from each leftPowerRail to each
+  // coil. The number of paths is exponential in the number of parallel branches.
+  // This is tractable for the small graphical LD programs evaluated here; larger
+  // vendor exports with many parallel rungs may need a path-count guard.
   for (int rail : left_rails)
     for (int coil : coils)
     {
