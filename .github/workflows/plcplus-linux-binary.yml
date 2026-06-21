@@ -1,0 +1,63 @@
+name: Build ESBMC-PLC+ Linux binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/goto-programs/plcopen_xml_parser.cpp'
+      - 'src/goto-programs/plcopen_xml_parser.h'
+      - 'src/frontends/ld/**'
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout ESBMC-PLC+ fork
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential cmake ninja-build git wget curl \
+            gcc-12 g++-12 \
+            libboost-all-dev libgmp-dev libssl-dev \
+            bison flex python3
+
+      - name: Configure CMake (minimal PLC+ build)
+        run: |
+          cmake -S . -B build \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-12 \
+            -DCMAKE_CXX_COMPILER=g++-12 \
+            -DDOWNLOAD_DEPENDENCIES=On \
+            -DENABLE_BOOLECTOR=Off \
+            -DENABLE_YICES=Off \
+            -DENABLE_BITWUZLA=Off \
+            -DENABLE_GOTO_CONTRACTOR=Off \
+            -DBUILD_TESTING=Off \
+            -DENABLE_REGRESSION=Off \
+            -DENABLE_SOLIDITY_FRONTEND=Off \
+            -DENABLE_JIMPLE_FRONTEND=Off \
+            -DENABLE_PYTHON_FRONTEND=Off \
+            -DENABLE_CSMITH=Off
+
+      - name: Build ESBMC
+        run: cmake --build build --target esbmc -j$(nproc)
+
+      - name: Verify binary supports --ld-props
+        run: |
+          ./build/src/esbmc/esbmc --version
+          ./build/src/esbmc/esbmc --help 2>&1 | grep -q "ld-props" && \
+            echo "OK: --ld-props supported" || \
+            (echo "FAIL: --ld-props not found in binary" && exit 1)
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esbmc-linux-amd64
+          path: build/src/esbmc/esbmc
+          retention-days: 30
