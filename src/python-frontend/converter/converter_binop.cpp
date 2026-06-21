@@ -366,7 +366,12 @@ exprt python_converter::handle_membership_operator(
   {
     python_list list(*this, element);
     exprt contains_expr = list.contains(lhs, rhs);
-    return invert ? not_exprt(contains_expr) : contains_expr;
+    if (!invert)
+      return contains_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc c2;
+    migrate_expr(contains_expr, c2);
+    return migrate_expr_back(not2tc(c2));
   }
 
   // Get string type identifiers
@@ -381,7 +386,12 @@ exprt python_converter::handle_membership_operator(
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);
-    return invert ? not_exprt(membership_expr) : membership_expr;
+    if (!invert)
+      return membership_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc m2;
+    migrate_expr(membership_expr, m2);
+    return migrate_expr_back(not2tc(m2));
   }
 
   throw std::runtime_error(
