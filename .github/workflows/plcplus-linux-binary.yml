@@ -50,10 +50,20 @@ jobs:
       - name: Build ESBMC
         run: cmake --build build --target esbmc -j$(nproc)
 
+      - name: Fix RPATH and bundle Z3 library
+        run: |
+          apt-get install -y patchelf
+          Z3_LIB=$(find build/Z3 -name "libz3.so" | head -1)
+          echo "Found Z3 lib: $Z3_LIB"
+          cp "$Z3_LIB" libz3.so
+          patchelf --set-rpath /usr/local/lib build/src/esbmc/esbmc
+          cp build/src/esbmc/esbmc esbmc-linux-amd64
+
       - name: Verify binary supports --ld-props
         run: |
-          ./build/src/esbmc/esbmc --version
-          ./build/src/esbmc/esbmc --help 2>&1 | grep -q "ld-props" && \
+          export LD_LIBRARY_PATH="$(pwd):$LD_LIBRARY_PATH"
+          ./esbmc-linux-amd64 --version
+          ./esbmc-linux-amd64 --help 2>&1 | grep -q "ld-props" && \
             echo "OK: --ld-props supported" || \
             (echo "FAIL: --ld-props not found in binary" && exit 1)
 
@@ -61,5 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: esbmc-linux-amd64
-          path: build/src/esbmc/esbmc
+          path: |
+            esbmc-linux-amd64
+            libz3.so
           retention-days: 30
