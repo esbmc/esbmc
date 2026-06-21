@@ -3155,7 +3155,10 @@ exprt python_list::compare(
 
     locationt loc = converter_.get_location_from_decl(list_value_);
     symbolt &eq_ret = converter_.create_tmp_symbol(
-      list_value_, "set_eq_tmp", bool_type(), gen_boolean(false));
+      list_value_,
+      "set_eq_tmp",
+      bool_type(),
+      migrate_expr_back(gen_false_expr())); // V.3
     code_declt eq_ret_decl(build_symbol(eq_ret));
     converter_.add_instruction(eq_ret_decl);
 
@@ -3174,14 +3177,11 @@ exprt python_list::compare(
     set_eq_call.location() = loc;
     converter_.add_instruction(set_eq_call);
 
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(eq_ret));
-    if (op == "Eq")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+    expr2tc er2;
+    migrate_expr(build_symbol(eq_ret), er2);
+    return migrate_expr_back(
+      equality2tc(er2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
   }
 
   // Fast path for list equality/inequality when we have concrete type-map
