@@ -12,10 +12,12 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/symbolic_types.h>
@@ -943,7 +945,8 @@ void python_converter::validate_return_paths(
   locationt loc = get_location_from_decl(function_node);
 
   code_assertt missing_return_assert;
-  missing_return_assert.assertion() = gen_boolean(false);
+  // V.3: build the always-fail assert condition in IREP2.
+  missing_return_assert.assertion() = migrate_expr_back(gen_false_expr());
   missing_return_assert.location() = loc;
   missing_return_assert.location().comment(
     "Missing return statement detected in function '" + current_func_name_ +

@@ -595,7 +595,13 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     smt_astt a = ctx->mk_ite(div_by_zero, inf_result, real_result);
     store_interval(a, bounds.first, bounds.second);
-    store_combined_nan_pred(a, side1, side2);
+    smt_astt zero_div_zero_nan =
+      ctx->mk_and(ctx->mk_eq(side1, zero), div_by_zero);
+    store_nan_pred(
+      a,
+      combine_nan_preds(
+        combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+        zero_div_zero_nan));
     return a;
   }
 

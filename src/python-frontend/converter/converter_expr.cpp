@@ -278,8 +278,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(value.get<long long>(), long_long_int_type());
 
   // Handle boolean literals (True/False)
+  // V.3: build the bool constant in IREP2, back-migrated for the legacy seam.
   if (value.is_boolean())
-    return gen_boolean(value.get<bool>());
+    return migrate_expr_back(
+      value.get<bool>() ? gen_true_expr() : gen_false_expr());
 
   // Handle floating-point literals (float)
   if (value.is_number_float())

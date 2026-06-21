@@ -4441,19 +4441,35 @@ exprt function_call_expr::handle_general_function_call()
       }
       else
       {
-        const typet list_type = type_handler_.get_list_type();
-        symbolt &tmp_list = converter_.create_tmp_symbol(
-          call_, "$obj_size_list_arg$", list_type, exprt());
+        // get_expr() may hand back an inline list-returning call -- e.g. the
+        // sorted(m) in len(sorted(m)) -- as a code_function_callt statement
+        // rather than a value. Assigning that statement to a temp discards the
+        // call's return value, leaving the temp at its NONDET decl and giving a
+        // wrong size (#5464). materialize_list_function_call() binds the return
+        // value into a temp and yields that symbol (the same path the
+        // sorted()[i] subscript sibling uses, #4807); non-call args pass
+        // through unchanged.
+        arg = converter_.materialize_list_function_call(
+          arg, call_, *converter_.current_block);
 
-        code_declt tmp_decl(build_symbol(tmp_list));
-        tmp_decl.location() = location;
-        converter_.current_block->copy_to_operands(tmp_decl);
+        if (arg.is_symbol())
+          list_symbol = converter_.find_symbol(arg.identifier().as_string());
+        else
+        {
+          const typet list_type = type_handler_.get_list_type();
+          symbolt &tmp_list = converter_.create_tmp_symbol(
+            call_, "$obj_size_list_arg$", list_type, exprt());
 
-        code_assignt tmp_assign(build_symbol(tmp_list), arg);
-        tmp_assign.location() = location;
-        converter_.current_block->copy_to_operands(tmp_assign);
+          code_declt tmp_decl(build_symbol(tmp_list));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
 
-        list_symbol = &tmp_list;
+          code_assignt tmp_assign(build_symbol(tmp_list), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+
+          list_symbol = &tmp_list;
+        }
       }
 
       assert(list_symbol);

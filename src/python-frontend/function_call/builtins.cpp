@@ -1743,13 +1743,15 @@ exprt function_call_expr::reduce_iterable_literal_truthiness(
   const auto &elts = iterable_arg["elts"];
 
   if (elts.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &elt : elts)
   {
     exprt is_truthy = is_empty_literal(elt)
-                        ? gen_boolean(false)
+                        ? migrate_expr_back(gen_false_expr()) // V.3
                         : compute_element_truthiness(converter_.get_expr(elt));
     result = result ? combine_truthiness(std::move(*result), is_truthy, op)
                     : is_truthy;
@@ -1765,7 +1767,9 @@ exprt function_call_expr::reduce_tuple_expr_truthiness(
   const auto &components = tuple_type.components();
 
   if (components.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &component : components)
