@@ -636,7 +636,6 @@ exprt function_call_builder::build() const
   }
 
   symbol_id function_id = build_function_id();
-
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
