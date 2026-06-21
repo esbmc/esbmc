@@ -435,14 +435,18 @@ exprt python_converter::handle_chained_comparisons_logic(
   const nlohmann::json &element,
   exprt &bin_expr)
 {
-  exprt cond("and", bool_type());
-  cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
+  // Collect the per-pair comparisons (bin_expr is the first), then fold the
+  // conjunction in IREP2 and back-migrate once. V.3: the legacy n-ary "and"
+  // is spliced by migrate into exactly this left-nested and2t chain (and the
+  // mandatory --irep2-bodies round-trip normalises both forms identically),
+  // so building it directly is behaviour-preserving. The callers guarantee
+  // comparators.size() > 1, so there are always at least two conjuncts.
+  std::vector<exprt> conjuncts;
+  conjuncts.push_back(bin_expr); // bin_expr compares left and comparators[0]
 
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt logical_expr(
-      python_frontend::map_operator(op, bool_type()), bool_type());
     exprt op1 = get_expr(element["comparators"][i]);
     exprt op2 = get_expr(element["comparators"][i + 1]);
 
@@ -458,21 +462,31 @@ exprt python_converter::handle_chained_comparisons_logic(
       {
         exprt expr(python_frontend::map_operator(op, bool_type()), bool_type());
         expr.copy_to_operands(op1, op2);
-        cond.move_to_operands(expr);
+        conjuncts.push_back(expr);
       }
       else
       {
-        cond.move_to_operands(string_expr);
+        conjuncts.push_back(string_expr);
       }
     }
     else
     {
-      logical_expr.copy_to_operands(op1);
-      logical_expr.copy_to_operands(op2);
-      cond.move_to_operands(logical_expr);
+      exprt logical_expr(
+        python_frontend::map_operator(op, bool_type()), bool_type());
+      logical_expr.copy_to_operands(op1, op2);
+      conjuncts.push_back(logical_expr);
     }
   }
-  return cond;
+
+  expr2tc acc;
+  migrate_expr(conjuncts.front(), acc);
+  for (size_t i = 1; i < conjuncts.size(); ++i)
+  {
+    expr2tc c2;
+    migrate_expr(conjuncts[i], c2);
+    acc = and2tc(acc, c2);
+  }
+  return migrate_expr_back(acc);
 }
 
 exprt python_converter::handle_membership_operator(
