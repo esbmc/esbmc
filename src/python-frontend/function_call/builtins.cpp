@@ -1657,8 +1657,9 @@ exprt function_call_expr::handle_print() const
 
 exprt function_call_expr::compute_element_truthiness(const exprt &element) const
 {
+  // V.3: build the scalar truthiness predicate in IREP2.
   if (element.type() == none_type())
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   if (element.type().is_bool())
     return element;
@@ -1666,13 +1667,18 @@ exprt function_call_expr::compute_element_truthiness(const exprt &element) const
   if (
     element.type().id() == "signedbv" || element.type().id() == "unsignedbv" ||
     element.type().id() == "floatbv" || element.type().is_pointer())
-    return not_exprt(equality_exprt(element, gen_zero(element.type())));
+  {
+    // element != 0
+    expr2tc el2;
+    migrate_expr(element, el2);
+    return migrate_expr_back(not2tc(equality2tc(el2, gen_zero(el2->type))));
+  }
 
   if (is_complex_type(element.type()))
     return complex_to_bool_expr(element);
 
   // For other types, assume truthy (conservative)
-  return gen_boolean(true);
+  return migrate_expr_back(gen_true_expr());
 }
 
 exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
