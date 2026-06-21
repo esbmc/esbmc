@@ -2913,16 +2913,27 @@ exprt numpy_call_expr::get()
           out = std::fmin(left, right);
           return true;
         }
+        if (function == "round")
+        {
+          // numpy.round(x, decimals): round to the given number of decimal
+          // places using round-half-to-even (the default FP rounding mode, so
+          // std::nearbyint matches numpy bit-for-bit). decimals may be zero or
+          // negative (e.g. round(12345, -2) == 12300).
+          const double scale = std::pow(10.0, right);
+          out = std::nearbyint(left * scale) / scale;
+          return true;
+        }
         return false;
       };
 
-      // copysign/fmax/fmin have no operator_map() entry and no handler,
+      // copysign/fmax/fmin/round have no operator_map() entry and no handler,
       // so the BinOp path below crashes migrate_expr.
       // Fold the scalar-constant case here.
       // Symbolic and array operands are unsupported.
       if (
         allow_numpy_fold &&
-        (function == "copysign" || function == "fmax" || function == "fmin"))
+        (function == "copysign" || function == "fmax" || function == "fmin" ||
+         function == "round"))
       {
         double folded = 0.0;
         if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
