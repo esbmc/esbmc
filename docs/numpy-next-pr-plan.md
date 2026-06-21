@@ -3,79 +3,49 @@
 This file groups the remaining NumPy roadmap into the smallest set of pull
 requests that is still realistic to review and test independently.
 
-Final review: PR 1 landed in the current branch and PR 2 remains the next
-substantial unit. Keep them separate; merging PR 2 into a follow-up would make
-the review surface too large and would mix unrelated failure modes.
+Current branch state: the current PR lands the reductions, comparison/logical
+ufuncs, constructors, `where`, and the common scalar math family. Keep the
+remaining work separate so review stays focused and the failure modes do not
+get mixed.
 
-## PR 2: NumPy math, linear algebra, and broad API coverage
+## Next PR: NumPy overflow and indexing cleanup
 
 ### Scope
-- Either model correctly or make explicit unsupported errors for:
-  - `copysign`
-  - `fmax`
-  - `fmin`
-  - `rint`
-  - `remainder`
-  - `nextafter`
-  - `modf`
-  - `frexp`
-  - `isclose`
-  - `np.e`
 - Tighten integer `dot`/`matmul` overflow semantics to match the intended
   dtype model
-- Add reductions:
-  - `sum`, `prod`, `min`, `max`, `mean`, `argmin`, `argmax`
-- Add comparison and logical ufuncs:
-  - `>`, `<`, `>=`, `==`, `!=`
-  - `logical_and`, `logical_or`, `logical_not`
-- Add constructors:
-  - `arange`, `full`, `eye`, `identity`, `linspace`
 - Add general slicing and selection:
   - 1-D/2-D slicing
-  - `where`
   - bounded boolean-mask indexing
-- Add remaining common math functions:
-  - `tan`
-  - `arcsin`
-  - `log`
-  - `log2`
-  - `log10`
-  - `sinh`
-  - `cosh`
-  - `tanh`
+- Close any remaining follow-up around `where`/selection semantics if the
+  bounded-mask model needs extra guardrails
 
 ### Why this PR exists
-- These are currently a silent-wrong risk
 - Integer matrix ops still have a correctness gap
-- These are the most broadly useful missing array primitives
-- They build on the corrected arithmetic and folding substrate from PR 1
-- Slicing and selection are the next biggest gaps for realistic NumPy code
-- The remaining scalar math set is straightforward once the core paths exist
+- Slicing and mask indexing remain the largest practical coverage gaps
+- These are the remaining pieces that still change verdicts for realistic
+  NumPy code in this area
+- They build on the reductions/comparison/constructor/math coverage that is
+  already landing in the current branch
 
 ### Suggested split inside the PR
-- Batch 1: `copysign`, `fmax`, `fmin`
-- Batch 2: `rint`, `remainder`, `nextafter`
-- Batch 3: `modf`, `frexp`, `isclose`, `np.e`
-- Keep `dot`/`matmul` overflow handling in the same PR only if it stays small;
-  otherwise split it back out
+- Batch 1: integer `dot`/`matmul` overflow semantics
+- Batch 2: 1-D/2-D slicing
+- Batch 3: bounded boolean-mask indexing and `where` cleanup, if needed
 
 ### Tests
-- Success: each fixed function behaves as expected
-- Fail: each unsupported function rejects with the exact diagnostic
-- Fail: overflow witness exercises the chosen `dot` boundary
-- Edge: signed zero, NaN, dtype-width boundaries, and mixed-size inputs
-- Success: each reduction/comparison/constructor has a literal happy path
-- Fail: unsupported shape or empty-array boundaries fail cleanly
-- Edge: axis handling, boolean outputs, and dtype behavior
+- Success: overflow-checked `dot`/`matmul` matches the intended dtype model
+- Success: slicing and mask-indexing happy paths return the expected values
+- Fail: overflow witnesses exercise the chosen `dot`/`matmul` boundary
+- Fail: unsupported slice/mask shapes reject with the exact diagnostic
+- Edge: slice bounds, empty results, signed zero, NaN, dtype-width boundaries,
+  and mixed-size inputs
 
 ### Docs
-- Remove each fixed math function from the KNOWNBUG list
-- Move any still-unsupported function into the explicit-unsupported section
 - Update the linear algebra table
 - Clarify the final overflow contract
-- Update the coverage matrix for reductions, comparisons, constructors, linear
-  algebra, slicing, selection, and the remaining math functions
-- Remove any no-longer-true "Missing" entries
+- Update the coverage matrix for slicing, selection, and the remaining
+  indexing semantics
+- Remove any no-longer-true "Missing" entries tied to the current branch work
 
 ## Notes for every PR
 
@@ -89,7 +59,6 @@ the review surface too large and would mix unrelated failure modes.
 ## Commit order
 
 ### PR 2 commits
-1. Clean up the NumPy math `KNOWNBUG` functions
-2. Tighten integer `dot`/`matmul` overflow semantics
-3. Add reductions, comparisons, logical ufuncs, and constructors
-4. Add slicing, `where`, bounded mask indexing, and the remaining common math
+1. Tighten integer `dot`/`matmul` overflow semantics
+2. Add 1-D/2-D slicing support
+3. Add bounded boolean-mask indexing and `where` cleanup
