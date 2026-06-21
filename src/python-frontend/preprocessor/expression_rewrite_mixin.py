@@ -338,12 +338,20 @@ class ExpressionRewriteMixin:
 
     def visit_While(self, node):
         node = self.generic_visit(node)
+        # Lower `while ... else: <orelse>` (the else runs when the loop ends
+        # without break) into a did-not-break flag, the same desugaring used for
+        # for-else. Without this the while node keeps its orelse, which the
+        # converter emits as an invalid third operand of the GOTO `while`
+        # ("while takes two operands"). _lower_for_else is a no-op when there is
+        # no orelse and clears node.orelse otherwise.
+        while_else_pre, while_else_post = self._lower_for_else(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
-        if prefix:
-            return prefix + [node]
-        return node
+        result = (prefix or []) + [node]
+        if while_else_pre or while_else_post:
+            return while_else_pre + result + while_else_post
+        return result if prefix else node
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

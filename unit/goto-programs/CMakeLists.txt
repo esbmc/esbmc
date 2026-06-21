@@ -10,3 +10,4 @@ new_unit_test(interval-symex-guard-test "interval_symex_guard.test.cpp" "mode_ta
 new_unit_test(k-path-spanning-test "k_path_spanning.test.cpp" "gotoprograms;langapi")
 new_unit_test(rw-set-test "rw_set.test.cpp" "gotoprograms;pointeranalysis;solve")
 new_unit_test(exception-typeid-test "exception_typeid.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(remove-sideeffects-irep2-test "remove_sideeffects_irep2.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")

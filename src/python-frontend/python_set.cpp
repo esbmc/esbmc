@@ -69,6 +69,15 @@ exprt build_deref_member(
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
 }
+
+// Build v + 1 : size_type in IREP2, back-migrated once (V.3).
+exprt build_size_inc(const exprt &v)
+{
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc v2;
+  migrate_expr(v, v2);
+  return migrate_expr_back(add2tc(size_t2, v2, gen_one(size_t2)));
+}
 } // namespace
 
 symbolt &python_set::create_set_list()
@@ -394,9 +403,11 @@ exprt python_set::get_from_iterable(
       elem_expr = deref;
       list_helper.add_type_info(set_id, std::string(), elem_expr.type());
 
-      // Break if we hit the null terminator
-      exprt is_zero("=", bool_type());
-      is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
+      // Break if we hit the null terminator (V.3: built in IREP2).
+      expr2tc elem2;
+      migrate_expr(elem_expr, elem2);
+      exprt is_zero = migrate_expr_back(
+        equality2tc(elem2, gen_zero(migrate_type(char_type()))));
       code_breakt brk;
       code_ifthenelset break_if;
       break_if.cond() = is_zero;
@@ -432,7 +443,10 @@ exprt python_set::get_from_iterable(
       contains_call.location() = loc;
       loop_body.copy_to_operands(contains_call);
 
-      not_exprt not_contains(build_symbol(contains_result));
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc cr2;
+      migrate_expr(build_symbol(contains_result), cr2);
+      exprt not_contains = migrate_expr_back(not2tc(cr2));
 
       code_blockt push_block;
       exprt push_call = build_call_expr(
@@ -457,7 +471,10 @@ exprt python_set::get_from_iterable(
     {
       exprt contains_expr =
         list_helper.contains(elem_expr, build_symbol(set_symbol));
-      not_exprt not_contains(contains_expr);
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc ce2;
+      migrate_expr(contains_expr, ce2);
+      exprt not_contains = migrate_expr_back(not2tc(ce2));
 
       code_blockt push_block;
       exprt push_call =
@@ -470,8 +487,11 @@ exprt python_set::get_from_iterable(
       loop_body.copy_to_operands(push_if);
     }
 
-    // Increment index: i++
-    plus_exprt idx_inc(build_symbol(idx_sym), gen_one(size_type()));
+    // Increment index: i = i + 1 (V.3: built in IREP2).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc idx2;
+    migrate_expr(build_symbol(idx_sym), idx2);
+    exprt idx_inc = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
     code_assignt idx_update(build_symbol(idx_sym), idx_inc);
     loop_body.copy_to_operands(idx_update);
   }
@@ -589,8 +609,10 @@ exprt python_set::build_set_difference_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -598,7 +620,7 @@ exprt python_set::build_set_difference_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -721,7 +743,7 @@ exprt python_set::build_set_intersection_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -852,8 +874,10 @@ exprt python_set::build_set_union_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -861,7 +885,7 @@ exprt python_set::build_set_union_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -983,7 +1007,7 @@ void python_set::emit_filtered_extend(
   if_stmt.copy_to_operands(guard, then_block);
   body.copy_to_operands(if_stmt);
 
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   codet loop;
@@ -992,8 +1016,8 @@ void python_set::emit_filtered_extend(
   converter.add_instruction(loop);
 }
 
-exprt python_set::build_set_method_call(
-  const symbolt &self,
+exprt python_set::build_set_relation_call(
+  const exprt &self,
   const exprt &other,
   const nlohmann::json &element,
   const std::string &method_name)
@@ -1005,98 +1029,111 @@ exprt python_set::build_set_method_call(
     return e.type().is_pointer() ? e : exprt(build_address_of(e));
   };
 
-  if (method_name == "issubset")
-  {
-    // Allocate a bool result initialised to true; iterate self, clear it
-    // when an element is missing from `other`.
-    symbolt &result = converter_.create_tmp_symbol(
-      element, "$issubset$", bool_type(), gen_boolean(true));
-    converter_.add_instruction(code_declt(build_symbol(result)));
-    converter_.add_instruction(
-      code_assignt(build_symbol(result), gen_boolean(true)));
+  // A.issubset(B) holds iff every element of A is in B; issuperset is the
+  // mirror (every element of B is in A). Iterate one list, clear a bool
+  // result initialised to true when an element is missing from the other.
+  const bool superset = method_name == "issuperset";
+  const exprt iterated = superset ? as_ptr(other) : as_ptr(self);
+  const exprt container = superset ? as_ptr(self) : as_ptr(other);
 
-    const symbolt *size_func = symtab.find_symbol("c:@F@__ESBMC_list_size");
-    const symbolt *at_func = symtab.find_symbol("c:@F@__ESBMC_list_at");
-    const symbolt *contains_func =
-      symtab.find_symbol("c:@F@__ESBMC_list_contains");
-    assert(size_func && at_func && contains_func);
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$" + method_name + "$", bool_type(), gen_boolean(true));
+  converter_.add_instruction(code_declt(build_symbol(result)));
+  converter_.add_instruction(
+    code_assignt(build_symbol(result), gen_boolean(true)));
 
-    symbolt &n_sym = converter_.create_tmp_symbol(
-      element, "$issubset_n$", size_type(), gen_zero(size_type()));
-    converter_.add_instruction(code_declt(build_symbol(n_sym)));
-    code_function_callt size_call;
-    size_call.function() = build_symbol(*size_func);
-    size_call.arguments().push_back(build_symbol(self));
-    size_call.lhs() = build_symbol(n_sym);
-    size_call.type() = size_type();
-    size_call.location() = loc;
-    converter_.add_instruction(size_call);
+  const symbolt *size_func = symtab.find_symbol("c:@F@__ESBMC_list_size");
+  const symbolt *at_func = symtab.find_symbol("c:@F@__ESBMC_list_at");
+  const symbolt *contains_func =
+    symtab.find_symbol("c:@F@__ESBMC_list_contains");
+  assert(size_func && at_func && contains_func);
 
-    symbolt &i_sym = converter_.create_tmp_symbol(
-      element, "$issubset_i$", size_type(), gen_zero(size_type()));
-    converter_.add_instruction(code_declt(build_symbol(i_sym)));
-    converter_.add_instruction(
-      code_assignt(build_symbol(i_sym), gen_zero(size_type())));
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_n$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(build_symbol(n_sym)));
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_func);
+  size_call.arguments().push_back(iterated);
+  size_call.lhs() = build_symbol(n_sym);
+  size_call.type() = size_type();
+  size_call.location() = loc;
+  converter_.add_instruction(size_call);
 
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_i$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(build_symbol(i_sym)));
+  converter_.add_instruction(
+    code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-    code_blockt body;
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
 
-    exprt at_call = build_call_expr(
-      *at_func,
-      pointer_typet(converter_.get_type_handler().get_list_element_type()),
-      {build_symbol(self), build_symbol(i_sym)});
-    at_call.location() = loc;
+  code_blockt body;
 
-    symbolt &elem_sym = converter_.create_tmp_symbol(
-      element,
-      "$issubset_elem$",
-      pointer_typet(converter_.get_type_handler().get_list_element_type()),
-      exprt());
-    code_declt elem_decl(build_symbol(elem_sym));
-    elem_decl.copy_to_operands(at_call);
-    body.copy_to_operands(elem_decl);
+  exprt at_call = build_call_expr(
+    *at_func,
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    {iterated, build_symbol(i_sym)});
+  at_call.location() = loc;
 
-    symbolt &in = converter_.create_tmp_symbol(
-      element, "$issubset_in$", bool_type(), gen_boolean(false));
-    body.copy_to_operands(code_declt(build_symbol(in)));
+  symbolt &elem_sym = converter_.create_tmp_symbol(
+    element,
+    "$" + method_name + "_elem$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt elem_decl(build_symbol(elem_sym));
+  elem_decl.copy_to_operands(at_call);
+  body.copy_to_operands(elem_decl);
 
-    code_function_callt contains_call;
-    contains_call.function() = build_symbol(*contains_func);
-    contains_call.lhs() = build_symbol(in);
-    contains_call.arguments().push_back(as_ptr(other));
-    const exprt elem = build_symbol(elem_sym);
-    contains_call.arguments().push_back(
-      build_deref_member(elem, "value", pointer_typet(empty_typet())));
-    contains_call.arguments().push_back(
-      build_deref_member(elem, "type_id", size_type()));
-    contains_call.arguments().push_back(
-      build_deref_member(elem, "size", size_type()));
-    contains_call.type() = bool_type();
-    contains_call.location() = loc;
-    body.copy_to_operands(contains_call);
+  symbolt &in = converter_.create_tmp_symbol(
+    element, "$" + method_name + "_in$", bool_type(), gen_boolean(false));
+  body.copy_to_operands(code_declt(build_symbol(in)));
 
-    exprt not_in("not", bool_type());
-    not_in.copy_to_operands(build_symbol(in));
-    code_blockt then_block;
-    then_block.copy_to_operands(
-      code_assignt(build_symbol(result), gen_boolean(false)));
-    codet if_stmt;
-    if_stmt.set_statement("ifthenelse");
-    if_stmt.copy_to_operands(not_in, then_block);
-    body.copy_to_operands(if_stmt);
+  code_function_callt contains_call;
+  contains_call.function() = build_symbol(*contains_func);
+  contains_call.lhs() = build_symbol(in);
+  contains_call.arguments().push_back(container);
+  const exprt elem = build_symbol(elem_sym);
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "value", pointer_typet(empty_typet())));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "type_id", size_type()));
+  contains_call.arguments().push_back(
+    build_deref_member(elem, "size", size_type()));
+  contains_call.type() = bool_type();
+  contains_call.location() = loc;
+  body.copy_to_operands(contains_call);
 
-    plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
-    body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
+  exprt not_in("not", bool_type());
+  not_in.copy_to_operands(build_symbol(in));
+  code_blockt then_block;
+  then_block.copy_to_operands(
+    code_assignt(build_symbol(result), gen_boolean(false)));
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  if_stmt.copy_to_operands(not_in, then_block);
+  body.copy_to_operands(if_stmt);
 
-    codet loop;
-    loop.set_statement("while");
-    loop.copy_to_operands(cond, body);
-    converter_.add_instruction(loop);
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
+  body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
-    return build_symbol(result);
-  }
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+
+  return build_symbol(result);
+}
+
+exprt python_set::build_set_method_call(
+  const symbolt &self,
+  const exprt &other,
+  const nlohmann::json &element,
+  const std::string &method_name)
+{
+  if (method_name == "issubset" || method_name == "issuperset")
+    return build_set_relation_call(
+      build_symbol(self), other, element, method_name);
 
   if (method_name == "update")
   {

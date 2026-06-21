@@ -557,20 +557,24 @@ void goto_checkt::input_overflow_check(
         // e.g
         // int *arr = (int*) malloc(10 * sizeof(int));
         // scanf("%12d",&arr[0]);  --> overflow
-        const exprt &it = operands[0].op1();
+        // The per-element type T rides on the sizeof(T) operand of the
+        // `count * sizeof(T)` size expression (esbmc/esbmc#5337); peel any
+        // surrounding typecast to reach it.
+        const exprt *sz = &operands[0].op1();
+        while (sz->id() == "typecast" && sz->operands().size() == 1)
+          sz = &sz->op0();
+        if (sz->id() != "sizeof" || sz->operands().empty())
+          return;
+        const typet &elem = sz->op0().type();
 
-        if (
-          it.c_sizeof_type().id() == typet::t_signedbv ||
-          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        if (elem.id() == typet::t_signedbv || elem.id() == typet::t_unsignedbv)
         {
-          width = it.c_sizeof_type().width().as_string();
+          width = elem.width().as_string();
           input_overflow_check_int(
             string2integer(width), string2integer(limits.at(i)), buf_overflow);
         }
 
-        else if (
-          it.c_sizeof_type().id() == typet::t_floatbv ||
-          it.c_sizeof_type().id() == typet::t_fixedbv)
+        else if (elem.id() == typet::t_floatbv || elem.id() == typet::t_fixedbv)
         {
           // TODO
           break;

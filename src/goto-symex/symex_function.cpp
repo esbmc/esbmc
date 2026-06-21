@@ -11,6 +11,7 @@
 #include <util/i2string.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
+#include <util/python_types.h>
 #include <util/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
@@ -271,10 +272,109 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+bool goto_symext::symex_uninterpreted_function(
+  const code_function_call2t &call,
+  const irep_idt &identifier)
+{
+  // A function whose name begins "__ESBMC_uninterpreted_" (ESBMC's native
+  // namespace) or "__CPROVER_uninterpreted_" (CBMC compatibility) is modelled
+  // as an uninterpreted function: its value is an arbitrary but *fixed*
+  // function of its arguments (functional congruence). Any concrete body,
+  // including its side effects, is deliberately discarded. The mangled
+  // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
+  // (used only for the prefix test) is the suffix after the last '@'.
+  //
+  // Both prefixes are always recognised: the "__CPROVER_uninterpreted_" alias
+  // maps onto the native semantics, matching CBMC (which likewise ignores any
+  // body). Both namespaces are reserved, so no legitimate program relies on
+  // such a body executing.
+  const std::string &mangled = identifier.as_string();
+  std::string name = mangled.substr(mangled.rfind('@') + 1);
+  if (
+    !has_prefix(name, "__ESBMC_uninterpreted_") &&
+    !has_prefix(name, "__CPROVER_uninterpreted_"))
+    return false;
+
+  // On a dead branch the call is still "handled" (its body stays uninterpreted),
+  // but it must contribute no fresh result or congruence history: those would be
+  // vacuous here yet pollute every later live call to the same function. This
+  // matters because the native prefix reaches us via run_intrinsic, which runs
+  // even under a false guard, and a function-pointer call can reach the CPROVER
+  // path the same way.
+  if (cur_state->guard.is_false())
+    return true;
+
+  // A void uninterpreted function has no observable result to constrain; the
+  // body is still skipped so it stays uninterpreted.
+  if (is_nil_expr(call.ret))
+    return true;
+
+  // Read and rename the arguments to their current SSA terms.
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  // A native uninterpreted-function symbol can only be declared over scalar
+  // (number/bool) argument and result sorts. A pointer or aggregate operand
+  // lowers to a tuple sort, which mk_smt_uninterpreted_function cannot encode
+  // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
+  // harnesses hit this with a `const void *` hasher/equals argument). When any
+  // argument or the result is non-scalar, fall back to a fresh nondeterministic
+  // result. This is a sound over-approximation: it drops only the functional-
+  // congruence constraint (equal arguments need no longer imply an equal
+  // result), never adding behaviour, and the body is still discarded.
+  bool uf_encodable = is_number_type(call.ret->type);
+  for (const expr2tc &argument : arguments)
+    uf_encodable = uf_encodable && is_number_type(argument->type);
+
+  expr2tc result;
+  if (uf_encodable)
+  {
+    // Emit an uninterpreted-function application and assign it to the return.
+    // Functional congruence (equal arguments imply an equal result) is enforced
+    // downstream by the SMT backend's native uninterpreted-function support
+    // (with a generic Ackermannisation fallback for solvers that lack it), so
+    // no congruence history is tracked here. Key the function on the full
+    // mangled identifier so two genuinely distinct symbols that share a C-level
+    // name are never tied together by congruence.
+    result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+  }
+  else
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has a non-scalar signature; modelling its "
+      "result as unconstrained nondet (no functional congruence)",
+      name);
+    result = sideeffect2tc(
+      call.ret->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(result);
+  }
+
+  symex_assign(code_assign2tc(call.ret, result));
+  return true;
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+
+  // Intercept "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*" calls
+  // before inlining any body.
+  if (symex_uninterpreted_function(call, identifier))
+  {
+    cur_state->source.pc++;
+    return;
+  }
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =
@@ -412,6 +512,49 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
+// True if a function of type `candidate` may be called through a function
+// pointer whose declared pointed-to type is `declared_type`. Mirrors CBMC's
+// remove_function_pointers signature check, adapted to ESBMC's representation
+// in which an unprototyped `void (*)()` is indistinguishable from a prototyped
+// `void (*)(void)` (both carry no arguments and no ellipsis). Such pointers are
+// treated as matching any target, preserving ESBMC's permissive K&R dispatch
+// (regression/esbmc/function_deref_{2,3,4}). Return types are intentionally not
+// compared, to avoid pruning the common void*/typed-pointer casts.
+static bool function_is_type_compatible(
+  const code_type2t &declared_type,
+  const code_type2t &candidate,
+  const namespacet &ns)
+{
+  // An unprototyped (`void (*)()`) or variadic pointer does not pin the
+  // argument count, so any target is admissible.
+  if (declared_type.arguments.empty() || declared_type.ellipsis)
+    return true;
+
+  // A variadic or unprototyped target accepts the declared arguments.
+  if (candidate.arguments.empty() || candidate.ellipsis)
+    return true;
+
+  // Both have fixed arity: the counts must match (the #5296 case rejects a
+  // 1-argument pointer against a 2-argument target here).
+  if (candidate.arguments.size() != declared_type.arguments.size())
+    return false;
+
+  // Each declared parameter must match the target's, allowing the same
+  // number<->pointer interchange the call site performs in
+  // argument_assignments.
+  for (std::size_t i = 0; i < declared_type.arguments.size(); ++i)
+  {
+    const type2tc &a = declared_type.arguments[i];
+    const type2tc &b = candidate.arguments[i];
+    if (base_type_eq(a, b, ns))
+      continue;
+    if (!((is_number_type(a) || is_pointer_type(a)) &&
+          (is_number_type(b) || is_pointer_type(b))))
+      return false;
+  }
+  return true;
+}
+
 static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
@@ -509,6 +652,39 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   }
 
   std::list<std::pair<guard2tc, expr2tc>> l = get_function_list(func_ptr);
+
+  // Drop candidates whose signature is incompatible with the declared
+  // function-pointer type (#5296). An over-approximated value-set can list
+  // address-taken functions of unrelated arity; dispatching a call to such a
+  // wrong-arity target silently nondet-fills the missing arguments
+  // (argument_assignments), which the solver can turn into a spurious
+  // VERIFICATION FAILED. The declared signature is the function operand's type:
+  // a code type for the usual dereferenced-pointer call, or a pointer-to-code
+  // when the operand is the bare pointer. If the filter would remove every
+  // candidate, keep the full list so a frontend type quirk on the real target
+  // can never silently skip the call.
+  const type2tc &func_type = is_pointer_type(call.function->type)
+                               ? to_pointer_type(call.function->type).subtype
+                               : call.function->type;
+  if (is_code_type(func_type))
+  {
+    const code_type2t &declared_type = to_code_type(func_type);
+    std::list<std::pair<guard2tc, expr2tc>> compatible;
+    for (auto &it : l)
+      if (
+        !is_code_type(it.second->type) ||
+        function_is_type_compatible(
+          declared_type, to_code_type(it.second->type), ns))
+        compatible.push_back(it);
+      else
+        log_debug(
+          "function-pointer",
+          "dropping incompatible call target '{}'",
+          to_symbol2t(it.second).thename.as_string());
+
+    if (!compatible.empty())
+      l = std::move(compatible);
+  }
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
@@ -630,6 +806,23 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   return true;
 }
 
+bool goto_symext::is_python_gc_object(const symbolt *base) const
+{
+  if (!base || base->mode != "Python")
+    return false;
+
+  const typet &bt = ns.follow(base->get_type());
+  if (!bt.is_struct())
+    return false;
+
+  // Only user-defined class instances get GC lifetime. Internal Python model
+  // aggregates (tuples, dicts, Optional unions) manage their own
+  // representation/lifetime and must not have frame teardown skipped. The
+  // frontend stamps those aggregates with an explicit kind attribute at
+  // type-creation time; see util/python_types.h.
+  return !is_python_internal_aggregate(bt);
+}
+
 void goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
@@ -646,6 +839,13 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // Python objects are garbage-collected (issue #4773): keep user class
+    // instances alive past their defining frame so references captured into a
+    // returned/escaping aggregate stay valid. Skip tearing down their L2 and
+    // value-set bindings; is_live_variable() reports them live to match.
+    if (is_python_gc_object(ns.lookup(it.base_name)))
+      continue;
+
     type2tc ptr = pointer_type2tc(pointer_type2());
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);

@@ -313,8 +313,20 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
-void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
+  // The thrown operand may still carry side effects — most importantly a
+  // `temporary_object` that constructs the thrown value — when convert_throw is
+  // reached through the code-statement path (a codet("cpp-throw"), as produced
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
+  // in remove_sideeffects, which lowers operands before dispatching here. Lower
+  // them now so the thrown value is a plain symbol, matching the legacy flag-off
+  // GOTO; otherwise the constructor never runs and the handler reads an
+  // unconstructed object. A no-op when the operand is already side-effect-free.
+  exprt expr = expr_in;
+  Forall_operands (it, expr)
+    remove_sideeffects(*it, dest);
+
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
   // construction order ([except.ctor]). throw_stack_size is the destructor-stack
@@ -464,6 +476,20 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   }
 
   exprt expr = code.op0();
+
+  // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
+  // source location from a side_effect_exprt: sideeffect2t carries no location
+  // field, unlike the enclosing code_expression statement (whose location does
+  // survive). remove_function_call copies expr.location() into the lowered call,
+  // so for the function_call side effect that backs the void builtins
+  // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
+  // loop-invariant / requires / ensures contracts) this yields a location-less
+  // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
+  // counter ignore it ("Total Asserts: 0", spurious SUCCESSFUL). Restore the
+  // statement location onto the side effect when the round-trip has dropped it;
+  // a no-op on the legacy path (the side effect keeps its own location there).
+  if (expr.id() == "sideeffect" && expr.location().get_file().empty())
+    expr.location() = code.location();
 
   // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
   // nested side_effect_exprt("cpp-throw") to its code form codet("cpp-throw"):
@@ -1378,7 +1404,16 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     goto_programt::targett x = tmp_cases.add_instruction();
     x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
-    x->location = case_ops.front().find_location();
+    x->location = code.location();
+    if (
+      options.get_bool_option("validate-violation-witness") ||
+      options.get_option("witness-output-yaml") != "")
+      for (const auto &op : case_ops)
+      {
+        BigInt val;
+        if (!to_integer(op, val))
+          x->switch_case_ids.push_back(integer2string(val));
+      }
   }
 
   {
@@ -1425,6 +1460,19 @@ void goto_convertt::convert_return(
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
+    // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) lowers a
+    // sideeffect_exprt("cpp-throw") that appears as the return value to its
+    // code form codet("cpp-throw"). A throw has void type and cannot be used
+    // as a return value; convert it as a statement and return early (the throw
+    // is unconditional, so no RETURN instruction is needed).
+    // Mirrors the same guard in convert_expression (line ~475).
+    if (
+      new_code.return_value().is_code() &&
+      to_code(new_code.return_value()).get_statement() == "cpp-throw")
+    {
+      convert(to_code(new_code.return_value()), dest);
+      return;
+    }
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
@@ -1556,7 +1604,10 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // do guarded assertions directly
+  // Disabled under --validate-violation-witness: the folding eliminates the
+  // conditional GOTO that witness branching waypoints need to steer the path.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     true_case.instructions.size() == 1 &&
     true_case.instructions.back().is_assert() &&
     is_false(true_case.instructions.back().guard) &&
@@ -1577,7 +1628,9 @@ void goto_convertt::generate_ifthenelse(
   }
 
   // similarly, do guarded assertions directly
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     false_case.instructions.size() == 1 &&
     false_case.instructions.back().is_assert() &&
     is_false(false_case.instructions.back().guard) &&
@@ -1599,7 +1652,9 @@ void goto_convertt::generate_ifthenelse(
 
   // a special case for C libraries that use
   // (void)((cond) || (assert(0),0))
+  // Disabled under --validate-violation-witness for the same reason.
   if (
+    !options.get_bool_option("validate-violation-witness") &&
     is_empty(false_case) && true_case.instructions.size() == 2 &&
     true_case.instructions.front().is_assert() &&
     is_false(true_case.instructions.front().guard) &&

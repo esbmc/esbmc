@@ -76,7 +76,7 @@ exprt python_converter::wrap_in_optional(
   exprt is_none_value;
   if (value.type() == none_type())
   {
-    is_none_value = gen_boolean(true);
+    is_none_value = migrate_expr_back(gen_true_expr()); // V.3
     // Set value field to zero for None case
     optional_value.operands().push_back(is_none_value);
     optional_value.operands().push_back(
@@ -84,7 +84,7 @@ exprt python_converter::wrap_in_optional(
   }
   else
   {
-    is_none_value = gen_boolean(false);
+    is_none_value = migrate_expr_back(gen_false_expr()); // V.3
     optional_value.operands().push_back(is_none_value);
     optional_value.operands().push_back(value);
   }

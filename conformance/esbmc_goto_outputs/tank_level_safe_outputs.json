@@ -1,0 +1,2114 @@
+{
+  "benchmark": "tank_level_safe",
+  "ld_file": "benchmarks/tank_level_control/tank_level_control.ld",
+  "n_sequences": 50,
+  "n_scans": 10,
+  "nondet_vars": [
+    "AUTO_MODE",
+    "HIGH_SWITCH",
+    "LOW_SWITCH"
+  ],
+  "n_assignments": 4,
+  "outputs": [
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      }
+    ],
+    [
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 1
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 1,
+        "VALVE": 0
+      },
+      {
+        "PUMP": 0,
+        "VALVE": 0
+      }
+    ]
+  ]
+}

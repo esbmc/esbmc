@@ -1,10 +1,12 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-09 (Pass 5 — calloc overflow fix #4433 regression + printf G-D wiring; see §9)
+**Last updated:** 2026-06-17 (Pass 7 — triage new batch #5393–#5400; fix #5395 calloc zero-size,
+root-cause #5400 missed-leak soundness bug; see §11. Pass 6 reconcile in §10)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
-**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `66304a6178` (Pass 4);
-Pass 3 on `4f12db8419`; prior passes on `95be952e8a`.
+**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `74da7c0400` (Pass 6, aarch64
+macOS); Pass 5 on `bef6149cad`; Pass 4 on `66304a6178`; Pass 3 on `4f12db8419`; prior passes on
+`95be952e8a`.
 **Verification policy:** ESBMC is a formal-verification tool. No unsound fix, heuristic
 workaround, silent behaviour change, or unverified assumption is shipped. Where an issue cannot
 be fixed *soundly* with a localized change, the blocker and the required design change are
@@ -696,3 +698,317 @@ impact, which is not feasible in this environment.
 4. #5138–#5140 — memory-model/reachability precision for `forgotten`/`invalid pointer` verdicts.
 5. Carry-forward: witness-validator (#1470/#1471/#1492/#4611), #4432 (data-race-checker perf),
    #4980 (termination ranking recogniser).
+
+---
+
+## 10. Pass 6 — reconcile with master (2026-06-17)
+
+Pass 5 left five actionable threads (its §9.3 list). Between 2026-06-09 and 2026-06-17 most of them
+landed on master, and the deep aws-hash investigation (#5287/#5145) was carried to a conclusion. This
+pass reconciles the report with the current open/closed state, re-validates the still-open set, and
+records the one new empirical result that matters: **#5145 still reproduces on current master even
+after the UF-modelling fixes** (#5364, #5382), confirming its residual is the documented memory-model
+limitation, not the `__CPROVER_uninterpreted_*` gap.
+
+Reference: master `74da7c0400`, ESBMC 8.3.0, aarch64 macOS host. Verdicts marked **repro** were
+re-run locally this pass; closures are confirmed against the GitHub issue/PR state.
+
+### 10.1 Closed since Pass 5 — Pass-5/Pass-4 remaining work landed
+
+| # (cluster) | Property | Closed | Fixed by |
+|---|---|---|---|
+| #4976, #4977, #4978, #4979 | no-overflow (busybox `bb_verror_msg`) | 06-09 … 06-16 | **#5278** (cap `asprintf`/`vasprintf` return at `INT_MAX/2`) + **#5279** (model `*strp` heap allocation) |
+| #5143, #5144 | no-overflow (busybox `usleep`) | 06-16 / 06-09 | same `bb_verror_msg` cluster (#5278/#5279) |
+| #5133, #5134, #5135, #5136 | no-data-race (atomic-only callees) | 06-08 | **#5233** (`[goto-race] instrument atomic-only callees as atomic`, the Pass-4 PR) |
+| #5139, #5140, #5141 | valid-memsafety (busybox) | 06-09 | closed (the `bb_verror_msg`/`realloc` precision class; #5141 folded into the printf cluster) |
+| #5137 | no-data-race (thread-join-binomial) | 06-10 | closed — triaged to value-set int→ptr thread-arg imprecision (§8.3 / §10.4), not a localized fix |
+| #5224 | unreach-call (Intel-TDX, 54 tasks) | 06-09 | **#5228** (`[k-induction] disable inductive step on pointer-array writes`) |
+
+This discharges Pass-5 remaining-work items 1 (#5233 merged), 2 (the busybox no-overflow cluster — the
+sound `INT_MAX`-bounded model the §3.1/§9.2 analysis called for, shipped as `INT_MAX/2` + a `*strp`
+allocation model), and 4 (#5139/#5140 closed). **#5012 itself stays open** for the *symbolic-format*
+residual (G-C `va_list` recovery), which #5278/#5279 deliberately do not attempt.
+
+### 10.2 #5287 / #5145 — aws_hash_table_create false alarm: carried to conclusion
+
+Pass 4 (§8.7) deferred #5145 as a "research-grade CBMC harness." A multi-day deep dive (2026-06-10 →
+06-14) decomposed it into **two independent bugs** in the original `.i`, and resolved the first:
+
+* **Bug A — function-pointer dispatch picks wrong-arity targets and drops arguments.** The heap
+  function-pointer (`state->equals_fn`/`hash_fn`) had an over-approximated value-set with no arity
+  filter, so a 1-arg call could dispatch to a 2-arg candidate and drop an argument
+  (`missing argument … modelled as nondet`). **FIXED → PR #5317** (merged 06-13, `[symex] filter
+  function-pointer call targets by signature` in `symex_function_call_deref`). A clean
+  FAILED→SUCCESSFUL flip is not observable with plain functions (the dispatch guard stays UNSAT), so
+  the standalone effect is a dropped spurious WARNING; it is a real soundness-relevant fix on its own.
+
+* **Bug B — the reported false alarm.** The post-create assert
+  `__VERIFIER_assert(uninterpreted_equals(p_elem->key, key))` computes `0` while `s_find_entry`
+  matched the same slot — two reads of the *same* byte-reconstructed FAM pointer field
+  (`dynamic_1_array`, `bounded_malloc`'d, symbolically indexed) yielding inconsistent pointer
+  identity. The RCA traced this to **compound imprecision across multiple layers** (UF semantics;
+  `int→ptr` cast minting fresh `int_to_ptr` per call in `convert_typecast_to_ptr`; `make_failed_symbol`
+  minting a fresh `invalid_object` per fallback read; `construct_from_dyn_offset` byte reads;
+  value-set dropping byte-*written* pointers in `get_value_set_rec`). Each individual layer is a *sound*
+  over-approximation; no single localized fix closes the harness.
+
+  - The UF half was modelled soundly and merged: **PR #5364** (`[symex] model __ESBMC_uninterpreted_* /
+    __CPROVER_uninterpreted_* with functional congruence`, Option A, merged 06-16), refined by **#5382**
+    (`don't model non-scalar uninterpreted functions as native UFs`, 06-17). #5364 **closed #5287**; the
+    general pointer-identity mechanism was filed and closed as **#5369** (`[symex] reads through an
+    unresolvable pointer mint inconsistent pointer identity`, closed 06-17 via #5382).
+
+  - **New result this pass (repro).** The original harness `aws_hash_table_create_harness.i` (issue
+    #5145, exact flags `--64 --k-induction --max-inductive-step 3 --no-pointer-check --no-bounds-check
+    --interval-analysis --force-malloc-success --no-div-by-zero-check`) **still reports
+    `VERIFICATION FAILED` / `Bug found (k = 1)`** on master `74da7c0400`. The trace now shows
+    `uninterpreted_equals` as a *modelled function* (`State 101 … rval = 0`) rather than an inlined
+    concrete body — i.e. #5364 changed the modelling but **not** the verdict, because the residual is the
+    havoc'd-slot read-consistency (Bug B's pointer-identity layers), exactly as the RCA predicted.
+
+**Disposition.** **#5145 stays open** as the SV-COMP tracker for this benchmark, now classified as a
+*known memory-model limitation* (not a UF-modelling gap). #5287's RCA comment + `PLAN_5287_option_b.md`
+are the durable handoff; a sound fix is a deliberate value-set/pointer-read-consistency project
+(no localized patch). **No new PR** — #5283's `ASSUME(ret!=0)` was measured unsound (closed), and every
+layer that can be patched in isolation has been (Bug A → #5317; UF → #5364/#5382) without flipping the
+verdict.
+
+### 10.3 Witness-format issues — pre-validation landed, end-to-end still blocked
+
+The Pass-3 carry-forward witness PRs merged: **#4940** (`[CI] WitnessMap pre-validation`, 06-03) and
+**#4945** (`[sv-comp] special treatment for reach error`, 06-04). These harden ESBMC's emitted witness
+but do not provide a CPAchecker/cpa-witness2test loop, which is still unavailable in this environment.
+So #1471, #1492, #4611 remain blocked on **end-to-end** validation; #1470 is reported resolved on master
+(recommend close once an x86 CI witness run confirms). No change in disposition.
+
+### 10.4 Still-open landscape (15 issues) — re-validated
+
+| # | Property / area | Pass-6 disposition |
+|---|---|---|
+| 1440 | wrapper CHECK() handling | latent; no live bug |
+| 1447 | incorrect-verdicts umbrella | keep open — tracker |
+| 1470 | overflow witness assignment | resolved on master; recommend close (needs x86 witness CI) |
+| 1471 | struct constant in witness | blocked on CPAchecker validator |
+| 1492 | FP violation witness | blocked on CPAchecker validator |
+| 4427 | unreach-call false negative (megaraid) | fixed-on-master by #4484 (fn-ptr inductive-step guard); recommend close after x86 CI confirm |
+| 4432 | no-data-race (mcslock) | data-race-checker interleaving perf on `__atomic_*` (§7.3); not host-arch |
+| 4438 | unreach-call false alarm (log_6_safe) | covered by **open** PR #4480; no separate PR |
+| 4439 | valid-memsafety (irda LDV) | research-grade LDV driver |
+| 4611 | witness `returnFromFunction`/dup nodes | blocked on validator; key is spec-conformant, must not rename |
+| 4980 | termination (turbografx) | ranking recogniser bails on FUNCTION_CALL bodies (§7.2); **not** covered by merged #4919; needs full 2413-benchmark validation |
+| 5012 | printf/(v)asprintf return-length OM | G-A/G-B + `*strp` shipped (#5270/#5278/#5279, closed the busybox cluster); open for G-C symbolic-format `va_list` recovery |
+| 5138 | valid-memsafety (comm_3args_ok) | reachable-memleak precision; needs an `ESBMC_SVCOMP` build to reproduce (§8.4); research-grade |
+| 5142 | no-overflow (imon LDV) | x86-only `.i` (parse-fails on aarch64); research-grade LDV driver |
+| 5145 | unreach-call (aws_hash harness) | known memory-model limitation (§10.2); UF half fixed (#5317/#5364/#5382), Bug-B residual open |
+
+### 10.5 Pass-6 running report
+
+**Analysed / re-validated.** All 15 open SV-COMP issues; the six closed clusters in §10.1; the
+aws-hash #5287/#5145 thread to conclusion (§10.2, incl. a fresh local repro of #5145 on master).
+
+**PRs opened by Pass 6.** None — every still-open issue is blocked on an unavailable validator
+(#1471/#1492/#4611), a research-grade subsystem change requiring full-set validation (#4980,
+#4439/#5142, #5145 Bug-B), an `ESBMC_SVCOMP` build (#5138), perf work (#4432), an in-flight PR
+(#4438→#4480), or already fixed-on-master pending CI confirm (#1470, #4427). This is the
+correctness-first outcome: no unsound or unvalidated patch is shipped to manufacture a PR count.
+
+**Duplicated work avoided.** #5145 not re-fixed at the UF layer — that half merged (#5317/#5364/#5382)
+and the verdict is unchanged, so the residual is logged against the closed #5287/#5369 RCA, not
+re-patched. #4438 not re-fixed (open PR #4480). The busybox no-overflow/memsafety clusters not
+re-diagnosed — closed by #5278/#5279.
+
+**Remaining work (priority order, updated 2026-06-17).**
+1. **#5145 / Bug B** — value-set precision for byte-*written* pointers into `bounded_malloc`'d FAMs +
+   dereference read-consistency (the closed #5369 RCA). Deliberate memory-model project; deepest blocker.
+2. **#5012** — G-C `va_list` argument recovery for the symbolic-format printf return-length residual.
+3. **#4980** — extend the termination ranking recogniser to tolerate side-effect-only call bodies
+   (sound only with a "does this call/store touch the measure/invariant variables?" check); requires
+   full SV-COMP termination-set (2413) validation.
+4. **#4432** — data-race-checker interleaving reduction / POR for atomic regions (`__atomic_*` builtins).
+5. **#5138** — reachable-memleak / `forgotten-memory` precision (reproduce under an `ESBMC_SVCOMP` build).
+6. **Close-outs pending CI:** #1470 and #4427 (recommend close after an x86 witness/CI confirm);
+   witness end-to-end validation for #1471/#1492/#4611 once a CPAchecker loop is available.
+
+---
+
+## 11. Pass 7 — new batch #5393–#5400 (2026-06-17)
+
+A fresh batch of eight `SV-COMP` issues was filed on 2026-06-17 (all from the
+[SV-COMP 26 benchexec run](https://github.com/esbmc/esbmc/actions), commit `ee2c67bf32`). This pass
+triages them on the same-day master `74da7c0400` (ESBMC 8.3.0, aarch64 macOS). Benchmarks were
+fetched read-only from the public sv-benchmarks GitLab and treated as untrusted input. **One sound
+localized fix was produced (#5395); one soundness bug was reproduced and root-caused (#5400).**
+
+### 11.1 New-batch landscape
+
+| # | Benchmark | Property | Disposition | PR |
+|---|---|---|---|---|
+| 5393 | aws-c-common `aws_hash_table_init_bounded_harness` | unreach-call | aws-hash memory-model cluster → #5145/#5287 (§11.3) | no |
+| 5394 | aws-c-common `aws_hash_table_init_unbounded_harness` | unreach-call | same cluster (§11.3) | no |
+| 5395 | ldv-regression `rule57_ebda_blast` | unreach-call | **FIXED** — `calloc(_, 0)` ignored `--force-malloc-success` (§11.2) | new |
+| 5396 | ldv-linux-3.14-races `nsc-ircc.ko.cil` | no-overflow | x86-only inline asm; aarch64 parse blocker (§11.4) | no |
+| 5397 | ldv-linux-3.14-races `nsc-ircc.ko.cil` | valid-memsafety | same file, x86 parse blocker (§11.4) | no |
+| 5398 | ldv-linux-3.14-races `cafe_ccic.ko.cil-1` | valid-memsafety | x86 LDV driver (§11.4) | no |
+| 5399 | ldv-linux-3.14-races `cafe_ccic.ko.cil-2` | valid-memsafety | x86 LDV driver (§11.4) | no |
+| 5400 | goblint-regression `09-regions_12-arraycollapse_rc` | valid-memsafety (memtrack) | **SOUNDNESS** — missed leak; value-set weak-update through a global pointer array (§11.5) | no (research-grade) |
+
+### 11.2 #5395 — `rule57_ebda_blast` unreach-call false alarm: FIXED
+
+**Status: FIXED. Sound localized OM fix + two regression tests.**
+
+**Reproduced** (repro) at the BMC base case (`k = 1`, plain `--incremental-bmc` and `--k-induction`
+agree, so it is a real path in ESBMC's model, not a k-induction artefact). The 139-line benchmark
+asserts `used_tmp_slot==0 ⇒ freed_tmp_slot`. The only failing path returns from `ebda_rsrc_controller`
+in the window where `freed_tmp_slot=0` and `used_tmp_slot=0`, reached when
+`ibmphp_find_same_bus_num()` returns NULL.
+
+**Root cause (source + trace).** That function does `return kzalloc(sizeof(struct bus_info), 0)`, i.e.
+`calloc(1, sizeof(struct bus_info))`. `struct bus_info {}` is **empty ⇒ sizeof == 0**, so the call is
+`calloc(1, 0)`. The `calloc` operational model (`src/c2goto/library/stdlib.c`), after PR #5269 added
+`if (!nmemb || !size) return NULL;` for overflow handling, returned NULL **unconditionally** for a
+zero-byte request — ignoring `--force-malloc-success`. A direct `malloc(0)` honours that option (the
+symex layer at `memory_alloc.cpp:618-642`), so `calloc(n, 0)` was inconsistent with `malloc(0)`: the
+trace shows `bus_info_ptr1 = NULL` despite `--force-malloc-success`, driving the error path and the
+false alarm.
+
+**Fix.** Route the zero-byte case to `malloc(0)` instead of returning NULL
+(`return NULL` → `return malloc(0)`; the guard condition is unchanged, so the later
+`__ESBMC_assume(nmemb <= SIZE_MAX / size)` overflow prune from #5269 is still protected from
+div-by-zero). Zero-size `calloc` now mirrors `malloc(0)`: non-null under `--force-malloc-success`,
+NULL under `--malloc-zero-is-null`. This is C-standard-conformant (C17 §7.22.3: `calloc(_, 0)` is
+implementation-defined NULL-or-unique-pointer, exactly like `malloc(0)`), and the benchmark's
+ground-truth `true` confirms the non-null intent.
+
+**Validation.** `#5395` benchmark with the issue's exact flags → `VERIFICATION SUCCESSFUL`. The three
+`github_4433` calloc-overflow regressions (#5269) still pass; all 49 calloc-using regression tests
+pass. Two new tests: `regression/esbmc-unix/github_5395_calloc_empty_struct` (empty-struct zero-size
+under `--force-malloc-success` ⇒ SUCCESSFUL) and `.../github_5395_calloc_zero_is_null_fail`
+(`calloc(1,0)` under `--malloc-zero-is-null` ⇒ NULL ⇒ FAILED, pinning the option boundary). The change
+is a single-statement-body change (condition unchanged) — Mode-C exempt per the triviality bar.
+
+### 11.3 #5393 / #5394 — aws-c-common hash-table *init* harnesses: aws-hash cluster
+
+Both are CBMC proof harnesses from `c/aws-c-common`, siblings of the `aws_hash_table_create_harness`
+(#5145/#5287). They share the same byte-addressed `bounded_malloc`'d-state + `__CPROVER_uninterpreted_*`
+modelling that the multi-day #5287 RCA decomposed into the compound pointer-read-consistency
+limitation (§10.2). The UF half is now modelled (#5364/#5382); the residual is the same memory-model
+project tracked by the closed #5287/#5369 RCA and `PLAN_5287_option_b.md`. No separate PR — folded into
+the aws-hash cluster.
+
+### 11.4 #5396–#5399 — ldv-linux-3.14-races drivers: x86 parse blockers
+
+`nsc-ircc.ko.cil` (#5396/#5397) and `cafe_ccic.ko.cil-{1,2}` (#5398/#5399) are full Linux-3.14 kernel
+driver CIL amalgamations containing **x86-only inline asm** (`"=a"`/`"a"` register constraints, `outb`,
+paravirt `call *%cN`), which the aarch64 macOS clang frontend rejects at parse time
+(`invalid output constraint '=a' in asm`). Same host-blocker / research-grade LDV-driver class as
+#4439/#4427/#5142. Need an x86 Linux host to triage.
+
+### 11.5 #5400 — `arraycollapse_rc` valid-memtrack: SOUNDNESS bug (missed leak), root-caused
+
+**Status: SOUNDNESS bug (incorrect `true`) reproduced and root-caused. Research-grade — no sound
+localized fix; same value-set-precision class as #5145/#4432/#5138.**
+
+This is the most serious category: ESBMC reports `VERIFICATION SUCCESSFUL` on a benchmark whose ground
+truth is `false(valid-memtrack)` — a **missed memory leak**. Reproduced (repro) with the issue's exact
+flags on master `74da7c0400`.
+
+**The leak is real.** In `main`, `p = new(3)` is inserted into `slot[j]` then `slot[k]`; the second
+`list_add` overwrites `p->next`, **orphaning** the node that was `slot[j]`'s previous head (a `new(2)`
+node) whenever `j != k`. That orphan is unreachable at exit = a `valid-memtrack` violation, which
+`--no-reachable-memory-leak` is supposed to catch (it suppresses only *reachable* memory).
+
+**Root cause (source + trace + reducer).** The bug is sequential (a minimal single-threaded reducer
+reproduces it; the pthread thread is irrelevant) and survives concrete indices. Reduced to: a global
+pointer **array** `slot[10]` where one node is orphaned via pointer reassignment while the others stay
+reachable. The discriminator:
+
+| reducer | `--no-reachable-memory-leak` | verdict |
+|---|---|---|
+| global pointer **array** `slot[10]` | on (SV-COMP config) | SUCCESSFUL ❌ (misses leak) |
+| global pointer **array** `slot[10]` | off | FAILED ✓ |
+| **scalar** globals `slot0`/`slot1` | on | FAILED ✓ |
+
+`add_memory_leak_checks` (`symex_main.cpp:1292`) builds the leak VCC as
+`alloc_guard ∧ ¬reachable_from_globals(obj)`, where `reachable_from_globals` is a BFS over the
+value-set. The `memcleanup` debug log shows the BFS marks **all** dynamic objects reachable, including
+the orphan: storing `d1.next` (reached through the global array `slot[]`) is a **weak value-set
+update** that retains the stale target `{d2, d5}` instead of strong-updating to `{d5}`, so the orphan
+`d2` keeps a spurious incoming edge and the leak VCC is killed. The scalar-global version
+strong-updates and correctly drops `d2`. A may-points-to over-approximation cannot soundly *suppress*
+leaks; doing so is what makes `--no-reachable-memory-leak` miss this one. (The code already documents
+array reachability in a negated context as a known-incomplete "workaround" at `symex_main.cpp:1448-1472`.)
+
+**Why no PR.** A sound fix requires either a strong-update-precise value-set for heap fields reached
+through global arrays, or a must-reachable (under-approximation) for the suppression — both are
+value-set/pointer-analysis changes with broad blast radius that cannot be validated against the full
+SV-COMP memsafety set in this environment. Same research-grade class as #5145 (closed #5369 RCA),
+#4432, #5138. Keep #5400 open as a soundness tracker with this RCA; do not ship an unvalidated
+heuristic.
+
+### 11.6 #5138 deep-dive — `comm_3args_ok` valid-memsafety false alarm (reproduced + root-caused)
+
+Pass 4 (§8.4) deferred #5138 as needing an `ESBMC_SVCOMP` build. Done this pass: built ESBMC with
+`-DESBMC_SVCOMP=On` (the `__ESBMC_SVCOMP` macro is a compile-time CMake option baked into the OM at
+`clang_c_language.cpp:249`, **not** a user `-D` flag) and **reproduced the exact issue**:
+`dereference failure: forgotten memory: dynamic_21_array` at `exit` (`stdlib.c:64`),
+`VERIFICATION FAILED` / `Bug found (k = 11)` / `FALSE_MEMTRACK`. (On a non-`ESBMC_SVCOMP` build a
+*different* artefact fires first — `io.c:113 fclose: invalid pointer freed`, the `fclose`→`free`
+of the static stdout object that the SV-COMP OM path skips — which is why the issue is invisible to a
+normal local build.)
+
+**Root cause (repro + `memcleanup` debug).** Same subsystem as #5400 — `add_memory_leak_checks`
+(`src/goto-symex/symex_main.cpp:1292`) under `--no-reachable-memory-leak` — but the **opposite horn**
+of the value-set imprecision dilemma. The leak VCC is `alloc_guard ∧ ¬reachable_from_globals(obj)`,
+where `reachable_from_globals` is a BFS over the value-set seeded from all global symbols. On this
+benchmark the BFS **under-approximates**: the `memcleanup-skip` histogram for one base-case pass shows
+only **21 targets followed** against **210 `unknown` value-set targets skipped** (plus 399 null, 525
+constant-string, 84 code, 21 invalid — all correctly ignored). The skip of `unknown` is a *deliberate*
+choice (`symex_main.cpp:1502-1515`: "Treating 'unknown' as could-point-anywhere generates too many
+false positives... We ignore it"). Consequence: the globally-reachable set collapses to a single
+object (`globals point to: c:5138.c@slotvec0_226539`), so any still-live dynamic object reached only
+through an `unknown`-valued global pointer — here `dynamic_21` — is judged unreachable and reported as
+a forgotten-memory leak, even though the program never lost it. Ground truth is `true`, so this is a
+**false alarm** (precision/incompleteness), not a soundness bug.
+
+**Relation to #5400.** Both are the value-set-based reachability in `add_memory_leak_checks` failing to
+capture the exit-time heap precisely. #5400 *retains a stale edge* (over-approx ⇒ misses a real leak,
+unsound); #5138 *drops a live edge* by skipping `unknown` (under-approx ⇒ false alarm). The
+`unknown`-skip at 1502-1515 is the explicit knob that trades one for the other — treating `unknown` as
+"reachable" instead would suppress #5138's false alarms but deepen the #5400 class of misses. A
+minimal `global → malloc → reachable-at-exit` program is handled **correctly** (SUCCESSFUL), so the
+trigger needs the coreutils structure where the value-set loses precision on a specific assignment
+path (the slotvec/quotearg machinery).
+
+**Disposition.** Research-grade — a sound fix needs precise exit-time heap reachability (or a sound,
+non-explosive treatment of `unknown` targets), the same value-set-precision project as #5400 / #5145.
+No localized fix; keep #5138 open as a precision tracker.
+
+### 11.7 Pass-7 running report
+
+**Analysed.** All eight #5393–#5400 (reproduced locally where the host allows; #5396–#5399 are x86
+parse blockers).
+
+**PRs opened.** One: `[om] calloc: route zero-size request to malloc(0), not NULL` — Fixes **#5395**.
+Sound, code-reviewed, two regression tests, 49/49 calloc regressions pass.
+
+**Duplicated work avoided.** #5393/#5394 not re-diagnosed — same aws-hash memory-model cluster as
+#5145/#5287 (UF half already merged via #5364/#5382). #5396–#5399 not re-fixed — x86 host blocker.
+
+**Skipped / deferred and why.** #5400 — soundness (missed leak); value-set weak-update through global
+pointer arrays defeats `--no-reachable-memory-leak` suppression; research-grade, no sound localized
+fix. #5138 — reproduced on an `ESBMC_SVCOMP` build and root-caused (§11.6): the mirror false-alarm of
+#5400 (value-set BFS skips `unknown` targets ⇒ drops a live edge); research-grade. #5393/#5394 —
+aws-hash pointer-read-consistency cluster (#5287/#5369 RCA). #5396–#5399 — x86-only inline asm parse
+blockers.
+
+**Remaining work (priority order, updated 2026-06-17).**
+1. **#5400** — strong-update-precise value-set for heap fields through global pointer arrays, or a
+   must-reachable suppression for `--no-reachable-memory-leak` (the `symex_main.cpp:1448-1472`
+   workaround). Soundness; highest severity.
+2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
+5. **#5138** — root-caused (§11.6): mirror of #5400; needs a sound treatment of `unknown` value-set
+   targets in the `--no-reachable-memory-leak` BFS. Pair with the #5400 reachability work.
+6. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+7. **x86 host triage** for #5396–#5399; close-outs #1470/#4427 pending CI.

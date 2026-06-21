@@ -23,6 +23,7 @@
 #include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
@@ -64,6 +65,28 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
 {
   return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
          (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
+}
+
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
 }
 
 // RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
@@ -473,19 +496,35 @@ void python_converter::handle_assignment_type_adjustments(
     {
       if (!rhs.type().is_empty())
       {
-        // Prevent type change from scalar (int/float/bool) to string/array
-        // when a prior declaration exists with the scalar type, as this
-        // creates a type inconsistency in the GOTO program.
-        bool is_incompatible =
-          rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
-          !lhs_symbol->get_type().is_pointer() &&
-          !lhs_symbol->get_type().id().empty() &&
-          !lhs_symbol->get_type().is_nil() &&
-          lhs_symbol->get_type() != type_handler_.get_list_type();
-        if (!is_incompatible)
+        // An RHS typed any_type() (void*) means "type unknown" — e.g. an
+        // instance attribute of a class the scanner could not resolve — not
+        // "the object is a void*". Demoting a list-annotated LHS to void*
+        // makes the for-loop lowering fall back to the array protocol (raw
+        // __ESBMC_get_object_size + pointer indexing), which aborts symex on
+        // the PyListObj struct (#4805). Keep the annotated list type and
+        // cast the RHS instead.
+        if (
+          lhs.type() == type_handler_.get_list_type() &&
+          rhs.type() == any_type())
         {
-          lhs_symbol->set_type(rhs.type());
-          lhs.type() = rhs.type();
+          rhs = typecast_exprt(rhs, lhs.type());
+        }
+        else
+        {
+          // Prevent type change from scalar (int/float/bool) to string/array
+          // when a prior declaration exists with the scalar type, as this
+          // creates a type inconsistency in the GOTO program.
+          bool is_incompatible =
+            rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
+            !lhs_symbol->get_type().is_pointer() &&
+            !lhs_symbol->get_type().id().empty() &&
+            !lhs_symbol->get_type().is_nil() &&
+            lhs_symbol->get_type() != type_handler_.get_list_type();
+          if (!is_incompatible)
+          {
+            lhs_symbol->set_type(rhs.type());
+            lhs.type() = rhs.type();
+          }
         }
       }
     }
@@ -1176,12 +1215,20 @@ void python_converter::handle_function_call_rhs(
   }
   else
   {
+    // The callee may not be in the symbol table yet when the called
+    // function is defined later in the module than its call site (a forward
+    // reference, e.g. `def f(): w = make()` with `make` defined afterwards).
+    // The block below only propagates instance-attribute type hints from the
+    // callee's return object to the LHS; it does not affect the GOTO call
+    // itself, which is built from the function identifier elsewhere. When the
+    // callee symbol is not available yet, skip the best-effort copy instead of
+    // aborting.
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<const code_typet &>(func_symbol->get_type())
-           .return_type()
-           .is_empty())
+    if (
+      func_symbol && !static_cast<const code_typet &>(func_symbol->get_type())
+                        .return_type()
+                        .is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -1676,8 +1723,20 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        // Skip getting expr for dict literals - handle specially later
-        if (!dict_handler_->is_dict_literal(ast_node["value"]))
+        // This RHS build only exists to probe rhs.type() for the Any/char*
+        // string adjustment below; the value is discarded and the real RHS is
+        // built again later. Skip it for kinds whose type is statically known
+        // and never a char* string, otherwise get_expr emits the whole
+        // construction a second time as dead code. Dict literals were already
+        // skipped (handled specially later); list literals and comprehensions
+        // matter most — eliding their dead duplicate roughly halves
+        // list-construction cost on construction-heavy programs (#5121).
+        const std::string rhs_kind =
+          ast_node["value"].value("_type", std::string());
+        const bool rhs_kind_skips_type_probe =
+          dict_handler_->is_dict_literal(ast_node["value"]) ||
+          rhs_kind == "List" || rhs_kind == "ListComp";
+        if (!rhs_kind_skips_type_probe)
         {
           if (ast_node["_type"] != "Call")
           {
@@ -2132,7 +2191,8 @@ void python_converter::get_var_assign(
           !expected_base.empty() && !ctor_name.empty() &&
           !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
-          code_assertt ctor_assert(gen_boolean(false));
+          // V.3: build the always-fail assert condition in IREP2.
+          code_assertt ctor_assert(migrate_expr_back(gen_false_expr()));
           ctor_assert.location() = location_begin;
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
@@ -2171,7 +2231,8 @@ void python_converter::get_var_assign(
       rhs.type().is_array() && !lhs.type().is_array() &&
       !lhs.type().is_pointer())
     {
-      code_assertt type_assert(gen_boolean(false));
+      // V.3: build the always-fail assert condition in IREP2.
+      code_assertt type_assert(migrate_expr_back(gen_false_expr()));
       type_assert.location() = location_begin;
       type_assert.location().comment(
         "Type violation: incompatible types in assignment");
@@ -2625,12 +2686,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)
     {
-      overall_cond = exprt("not", bool_type());
-      overall_cond.copy_to_operands(cond_tmp);
+      // V.3: build the unary-not condition in IREP2.
+      expr2tc ct2;
+      migrate_expr(cond_tmp, ct2);
+      overall_cond = migrate_expr_back(not2tc(ct2));
     }
 
-    exprt break_cond("not", bool_type());
-    break_cond.copy_to_operands(overall_cond);
+    // V.3: build the break guard !cond in IREP2.
+    expr2tc oc2;
+    migrate_expr(overall_cond, oc2);
+    exprt break_cond = migrate_expr_back(not2tc(oc2));
 
     code_breakt break_stmt;
     break_stmt.location() = location;
@@ -2651,7 +2716,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     codet while_code;
     while_code.set_statement("while");
     while_code.location() = location;
-    while_code.copy_to_operands(gen_boolean(true), loop_body);
+    // V.3: build the `while True` condition in IREP2.
+    while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
 
     transformed.copy_to_operands(while_code);
     current_element_type = t;
@@ -3346,6 +3412,35 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::ASSERT:
     {
+      // Fold whole-assertion tests that provably evaluate to True at
+      // conversion time (e.g. `f(GLOBAL) == [literal]` for a pure f). This
+      // bypasses operational-model loops (strlen/str-slice) whose unwinding
+      // would otherwise scale with the data size. Gated on the test containing
+      // a function call so plain symbolic asserts stay on the solver path;
+      // only a constant True short-circuits — False/unknown fall through so
+      // the solver still detects genuine violations. Disabled under any
+      // coverage mode, where the original assert/branches must be instrumented.
+      const bool coverage_active =
+        is_coverage_mode() ||
+        config.options.get_bool_option("assertion-coverage") ||
+        config.options.get_bool_option("assertion-coverage-claims");
+      if (
+        !coverage_active && element.contains("test") &&
+        ast_contains_call(element["test"]))
+      {
+        python_consteval evaluator(*ast_json);
+        auto folded = evaluator.try_eval_global_expr(element["test"]);
+        if (folded && folded->kind == PyConstValue::BOOL && folded->bool_val)
+        {
+          code_assertt proven;
+          proven.assertion() = gen_boolean(true);
+          proven.location() = get_location_from_decl(element);
+          proven.location().comment("assertion proven by constant evaluation");
+          block.move_to_operands(proven);
+          break;
+        }
+      }
+
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
       if (test.statement() == "cpp-throw")

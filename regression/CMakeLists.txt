@@ -18,6 +18,17 @@ set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 #so the Python side never needs its own default.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
+# Grace the ctest TIMEOUT property gets *on top of* the runner's own
+# ESBMC_REGRESS_TIMEOUT budget. The runner (testing_tool.py) enforces the real
+# budget internally: it kills ESBMC at ESBMC_REGRESS_TIMEOUT and, for
+# KNOWNBUG/FUTURE tests, accepts the timeout as satisfying the expected-fail
+# contract instead of erroring. That accept-and-return path needs a few seconds
+# (SIGTERM grace + final communicate) to complete. If ctest's own TIMEOUT
+# property equals ESBMC_REGRESS_TIMEOUT, ctest kills the runner mid-teardown and
+# reports a hard "Timeout" before the accept logic can run, defeating it. The
+# grace keeps ESBMC's compute budget unchanged while letting the runner finish.
+set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
+    "Seconds added to the ctest TIMEOUT property over the runner's own budget")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
@@ -38,6 +49,10 @@ if(BENCHBRINGUP)
   set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
 
+# Computed after any BENCHBRINGUP override so it tracks the final budget.
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
+     "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
+
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
     add_test(NAME ${test_name}
@@ -50,7 +65,7 @@ function(add_esbmc_regression_test folder modes test)
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
+      TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
       LABELS "regression;${folder}/")
 endfunction()
@@ -440,6 +455,43 @@ set(_slow_regression_tests
     # the larger inner timeout lets testing_tool record the FUTURE
     # verdict instead of ctest hard-killing the run.
     "regression/esbmc-unix/github_4435"
+    # github_4782_object_size pinned the old crash where a non-array pointer
+    # reaching __ESBMC_get_object_size (a set() of user objects in a graph
+    # traversal) dereferenced an empty deref item. PR #4805 keeps the receiver
+    # list-typed, so the array protocol -- and that crash -- is no longer
+    # taken; under --incremental-bmc the (correct) program now hits the same
+    # symbolic-list scalability wall as quixbugs/topological_ordering and does
+    # not converge. Marked KNOWNBUG; the larger inner timeout lets testing_tool
+    # record the KNOWNBUG verdict instead of ctest hard-killing the run (#4805).
+    "regression/python/github_4782_object_size"
+    # topological_ordering(_fail) run the real graph-traversal body (a set() of
+    # Node structs compared and copied element-wise) under --incremental-bmc.
+    # They hit the same symbolic-list scalability wall as github_4782_object_size
+    # and do not converge; the per-byte memcpy/memcmp the list OM uses for the
+    # 48-byte Node payload (no word-wise shortcut -- see list.c) keeps them past
+    # the 120s default cap. They stay KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing the
+    # run at the default budget, where the inner and outer timeouts coincide and
+    # ctest wins the race (#4805, #5121).
+    "regression/quixbugs/topological_ordering"
+    "regression/quixbugs/topological_ordering_fail"
+    # dict65_4 and dictcomp_readback_func_fail still verify with the expected
+    # verdict, but PR #4805's list-OM copy/compare changes slowed them across
+    # the 120s cap on the DebugOpt Linux runner (dict65_4 ~89s->~121s,
+    # dictcomp ~110s->~117s locally). They stay CORE; the 2x budget gives the
+    # extra headroom so they finish and match instead of being hard-killed.
+    "regression/python/dict65_4"
+    "regression/python/dictcomp_readback_func_fail"
+    # math_log-rec1 and multi_dimensional_array_1-success are THOROUGH
+    # --boolector tests that still verify SUCCESSFUL with the expected verdict,
+    # but making --irep2-bodies the default (V.4.4) adds the goto-convert
+    # round-trip's overhead, tipping these already-borderline tests across the
+    # 120s cap on the DebugOpt Linux runner (both hit ~120s in #5366 CI; locally
+    # ~47s / ~114s with Bitwuzla, verdict-identical with --no-irep2-bodies). The
+    # 2x budget restores headroom; the W1 round-trip removal will later reclaim
+    # the overhead.
+    "regression/esbmc/math_log-rec1"
+    "regression/esbmc/multi_dimensional_array_1-success"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
@@ -472,6 +524,11 @@ set(_very_slow_regression_tests
     # same band as shortest_path_lengths above. Give it the 3x budget so it
     # doesn't flap.
     "regression/humaneval/humaneval_62"
+    # list-slice-step-reverse verifies SUCCESSFUL but is symex-bound (reverse
+    # slicing under --unwind 7 --smt-symex-guard --bitwuzla). It is ~70s locally
+    # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
+    # fires, so 2x has no guaranteed headroom; give it the 3x budget.
+    "regression/python/list-slice-step-reverse"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

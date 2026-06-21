@@ -107,6 +107,42 @@ static double to_double(const numeric_value &value)
                       : value.double_value;
 }
 
+static bool numpy_constant_folding_enabled()
+{
+  return !config.options.get_bool_option("python-no-fold");
+}
+
+static BigInt pow_bigint_non_negative(BigInt base, BigInt exponent)
+{
+  assert(exponent >= 0);
+  BigInt result = 1;
+  while (exponent > 0)
+  {
+    if ((exponent % 2) != 0)
+      result *= base;
+    exponent /= 2;
+    if (exponent > 0)
+      base *= base;
+  }
+  return result;
+}
+
+static bool
+try_exact_integer_power(int64_t base, int64_t exponent, BigInt &result)
+{
+  if (exponent < 0)
+    return false;
+
+  result = pow_bigint_non_negative(BigInt(base), BigInt(exponent));
+  return true;
+}
+
+static void throw_negative_integer_power_error()
+{
+  throw std::runtime_error(
+    "ValueError: Integers to negative integer powers are not allowed");
+}
+
 static bool overflow_checks_enabled()
 {
   return config.options.get_bool_option("overflow-check") ||
@@ -121,7 +157,8 @@ static void emit_numpy_overflow_assertion(
   if (!overflow_checks_enabled())
     return;
 
-  code_assertt overflow_assert(gen_boolean(false));
+  // V.3: build the always-fail overflow assert condition in IREP2.
+  code_assertt overflow_assert(migrate_expr_back(gen_false_expr()));
   overflow_assert.location() = converter.get_location_from_decl(call);
   overflow_assert.location().comment(
     "Integer overflow detected in " + function_id.get_function() + "() call");
@@ -190,6 +227,37 @@ static scalar_value make_complex_scalar(double real, double imag)
   return out;
 }
 
+static bool
+try_extract_scalar_binary(const nlohmann::json &node, scalar_value &out)
+{
+  if (
+    !node.is_object() || !node.contains("_type") || node["_type"] != "BinOp" ||
+    !node.contains("op") || !node["op"].is_object() ||
+    !node["op"].contains("_type") || !node.contains("left") ||
+    !node.contains("right"))
+  {
+    return false;
+  }
+
+  const std::string op_type = node["op"]["_type"];
+  if (op_type != "Add" && op_type != "Sub")
+    return false;
+
+  scalar_value left;
+  scalar_value right;
+  if (
+    !try_extract_scalar_constant(node["left"], left) ||
+    !try_extract_scalar_constant(node["right"], right))
+  {
+    return false;
+  }
+
+  out.is_complex = left.is_complex || right.is_complex;
+  out.value =
+    op_type == "Add" ? left.value + right.value : left.value - right.value;
+  return true;
+}
+
 static bool is_complex_annotated_constant(const nlohmann::json &node)
 {
   if (!node.is_object())
@@ -205,11 +273,16 @@ try_extract_scalar_constant(const nlohmann::json &node, scalar_value &out)
     return false;
 
   const std::string type = node["_type"];
-  if (type != "Constant" && type != "UnaryOp")
+  if (type != "Constant" && type != "UnaryOp" && type != "BinOp")
     return false;
 
   try
   {
+    if (type == "BinOp")
+    {
+      if (try_extract_scalar_binary(node, out))
+        return true;
+    }
     if (type == "UnaryOp")
     {
       if (!node.contains("operand") || !node["operand"].is_object())
@@ -527,6 +600,27 @@ enum class scalar_kind
 static scalar_kind get_scalar_kind(const nlohmann::json &node)
 {
   if (
+    node.contains("_type") && node["_type"] == "BinOp" &&
+    node.contains("left") && node["left"].is_object())
+  {
+    const scalar_kind left_kind = get_scalar_kind(node["left"]);
+    const scalar_kind right_kind =
+      node.contains("right") && node["right"].is_object()
+        ? get_scalar_kind(node["right"])
+        : scalar_kind::int_like;
+
+    if (
+      left_kind == scalar_kind::complex_like ||
+      right_kind == scalar_kind::complex_like)
+      return scalar_kind::complex_like;
+    if (
+      left_kind == scalar_kind::float_like ||
+      right_kind == scalar_kind::float_like)
+      return scalar_kind::float_like;
+    return scalar_kind::int_like;
+  }
+
+  if (
     node.contains("_type") && node["_type"] == "UnaryOp" &&
     node.contains("operand") && node["operand"].is_object())
   {
@@ -584,11 +678,51 @@ static bool apply_numpy_binary_to_scalars(
     wants_complex || lhs_kind == scalar_kind::float_like ||
     rhs_kind == scalar_kind::float_like || function == "divide";
 
+  if (
+    function == "power" && lhs_kind == scalar_kind::int_like &&
+    rhs_kind == scalar_kind::int_like)
+  {
+    numeric_value rhs_numeric;
+    if (
+      try_extract_numeric_constant(rhs, rhs_numeric) &&
+      rhs_numeric.int_value < 0)
+      throw_negative_integer_power_error();
+  }
+
+  if (!numpy_constant_folding_enabled())
+    return false;
+
   scalar_value result;
   if (wants_complex)
     result = apply_complex_binary(function, lhs_scalar, rhs_scalar);
   else
   {
+    if (
+      function == "power" && lhs_kind == scalar_kind::int_like &&
+      rhs_kind == scalar_kind::int_like)
+    {
+      numeric_value lhs_numeric;
+      numeric_value rhs_numeric;
+      if (
+        try_extract_numeric_constant(lhs, lhs_numeric) &&
+        try_extract_numeric_constant(rhs, rhs_numeric) &&
+        rhs_numeric.int_value >= 0)
+      {
+        BigInt exact_power;
+        if (try_exact_integer_power(
+              lhs_numeric.int_value, rhs_numeric.int_value, exact_power))
+        {
+          const BigInt min_val = BigInt(std::numeric_limits<int64_t>::min());
+          const BigInt max_val = BigInt(std::numeric_limits<int64_t>::max());
+          if (exact_power < min_val || exact_power > max_val)
+            return false;
+
+          out = {{"_type", "Constant"}, {"value", exact_power.to_int64()}};
+          return true;
+        }
+      }
+    }
+
     const double left = lhs_scalar.value.real();
     const double right = rhs_scalar.value.real();
     double folded = 0.0;
@@ -607,6 +741,12 @@ static bool apply_numpy_binary_to_scalars(
     }
     else if (function == "power")
       folded = std::pow(left, right);
+    else if (function == "fmod")
+    {
+      if (right == 0.0)
+        return false;
+      folded = std::fmod(left, right);
+    }
     else
       return false;
 
@@ -772,7 +912,7 @@ static bool try_extract_numeric_2d_list(
 static bool is_supported_numpy_unary_math(const std::string &function)
 {
   return function == "sin" || function == "cos" || function == "exp" ||
-         function == "sqrt" || function == "arctan";
+         function == "sqrt" || function == "arctan" || function == "arccos";
 }
 
 static double apply_numpy_unary_math(const std::string &function, double value)
@@ -787,6 +927,14 @@ static double apply_numpy_unary_math(const std::string &function, double value)
     return std::sqrt(value);
   if (function == "arctan")
     return std::atan(value);
+  if (function == "floor")
+    return std::floor(value);
+  if (function == "fabs")
+    return std::fabs(value);
+  if (function == "trunc")
+    return std::trunc(value);
+  if (function == "arccos")
+    return std::acos(value);
 
   throw std::runtime_error("Unsupported Numpy unary function: " + function);
 }
@@ -856,6 +1004,14 @@ static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
   }
 
   return {};
+}
+
+static typet get_array_scalar_type(const typet &array_type)
+{
+  typet scalar_type = array_type;
+  while (scalar_type.is_array())
+    scalar_type = scalar_type.subtype();
+  return scalar_type;
 }
 
 static numeric_value extract_value(const nlohmann::json &arg)
@@ -1314,6 +1470,7 @@ T get_constant_value(const nlohmann::json &node)
 exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
+  const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
   // Resolve variables if they are names
   auto resolve_var = [this](nlohmann::json &var) {
@@ -1372,6 +1529,19 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         throw std::runtime_error(
           "TypeError: numpy.linalg.det requires a square 2D matrix");
+      }
+
+      for (const auto &row : matrix)
+      {
+        for (const auto &value : row)
+        {
+          if (value.is_complex)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.linalg.det does not support complex-valued "
+              "matrices");
+          }
+        }
       }
 
       if (n == 2)
@@ -1474,6 +1644,61 @@ exprt numpy_call_expr::create_expr_from_call()
     else if (arg_type == "List")
     {
       const std::string &operation = function_id_.get_function();
+      if (operation == "floor" || operation == "fabs" || operation == "trunc")
+      {
+        exprt folded = fold_numpy_unary_constant_list(
+          converter_, operation, call_["args"][0]);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+
+      if (operation == "arccos")
+      {
+        try
+        {
+          exprt folded = fold_numpy_unary_constant_list(
+            converter_, operation, call_["args"][0]);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = folded.type();
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return folded;
+        }
+        catch (const std::runtime_error &)
+        {
+        }
+
+        const auto &list_arg = call_["args"][0];
+        if (
+          list_arg.contains("elts") && list_arg["elts"].is_array() &&
+          !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
+          list_arg["elts"][0].contains("_type") &&
+          list_arg["elts"][0]["_type"] == "List")
+        {
+          throw std::runtime_error(
+            "Unsupported operation: numpy.arccos on runtime 2D arrays");
+        }
+
+        function_id_.set_function("__arccos_array");
+
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = type_handler_.get_list_type(list_arg);
+
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        call.arguments().push_back(np_address_of(*converter_.current_lhs));
+        exprt array_size = from_integer(list_arg["elts"].size(), int_type());
+        call.arguments().push_back(array_size);
+        return call;
+      }
+
       if (is_supported_numpy_unary_math(operation))
       {
         exprt folded = fold_numpy_unary_constant_list(
@@ -1488,12 +1713,28 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (operation == "transpose")
       {
-        // Constant-fold transpose for fully constant 2D numeric lists.
-        // This avoids forcing integer-only backend transpose for float literals.
         const auto &list_arg = call_["args"][0];
         if (
-          list_arg.contains("elts") && !list_arg["elts"].empty() &&
-          list_arg["elts"][0].is_object() &&
+          list_arg.contains("elts") && list_arg["elts"].is_array() &&
+          (list_arg["elts"].empty() ||
+           !(list_arg["elts"][0].is_object() &&
+             list_arg["elts"][0].contains("_type") &&
+             list_arg["elts"][0]["_type"] == "List")))
+        {
+          exprt folded = converter_.get_expr(list_arg);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = folded.type();
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return folded;
+        }
+
+        // Constant-fold transpose for fully constant 2D numeric lists.
+        // This avoids forcing integer-only backend transpose for float literals.
+        if (
+          allow_numpy_fold && list_arg.contains("elts") &&
+          !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
           list_arg["elts"][0].contains("_type") &&
           list_arg["elts"][0]["_type"] == "List")
         {
@@ -1580,29 +1821,205 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       auto arg = call_["args"][0];
       resolve_var(arg);
+      const std::string &function = function_id_.get_function();
+
+      if (function == "transpose")
+      {
+        exprt arg_expr = converter_.get_expr(arg);
+        typet t = arg_expr.type();
+        if (t.is_pointer() && t.subtype().is_array())
+          t = t.subtype();
+
+        if (t.is_array() && t.subtype().is_array())
+        {
+          std::vector<int> shape = type_handler_.get_array_type_shape(t);
+          if (shape.size() != 2)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.transpose currently supports up to 2D arrays");
+          }
+
+          typet base_type = t.subtype().subtype();
+          const bool is_float = base_type.is_floatbv();
+          function_id_.set_function(
+            is_float ? "transpose_double" : "transpose");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+
+          typet result_row_type =
+            type_handler_.build_array(base_type, shape[0]);
+          typet result_type =
+            type_handler_.build_array(result_row_type, shape[1]);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = result_type;
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+
+          auto &args = call.arguments();
+          typet flat_ptr_type =
+            pointer_typet(is_float ? base_type : long_long_int_type());
+          if (!args.empty())
+            args[0] = np_typecast(args[0], flat_ptr_type);
+
+          exprt row0 = np_index(
+            *converter_.current_lhs,
+            from_integer(0, size_type()),
+            result_type.subtype());
+          exprt elem00 =
+            np_index(row0, from_integer(0, size_type()), base_type);
+          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+          args.push_back(from_integer(shape[0], int_type()));
+          args.push_back(from_integer(shape[1], int_type()));
+          return call;
+        }
+
+        if (t.is_array())
+        {
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = t;
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return arg_expr;
+        }
+      }
+
       nlohmann::json list_arg = unwrap_list_like_node(arg);
 
       // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
       if (!list_arg.is_null() && list_arg.is_object())
       {
-        const std::string &function = function_id_.get_function();
+        if (function == "arccos")
+        {
+          try
+          {
+            if (allow_numpy_fold)
+            {
+              exprt folded =
+                fold_numpy_unary_constant_list(converter_, function, list_arg);
+              if (converter_.current_lhs)
+              {
+                converter_.current_lhs->type() = folded.type();
+                converter_.update_symbol(*converter_.current_lhs);
+              }
+              return folded;
+            }
+          }
+          catch (const std::runtime_error &)
+          {
+          }
+
+          if (
+            list_arg.contains("elts") && list_arg["elts"].is_array() &&
+            !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
+            list_arg["elts"][0].contains("_type") &&
+            list_arg["elts"][0]["_type"] == "List")
+          {
+            throw std::runtime_error(
+              "Unsupported operation: numpy.arccos on runtime 2D arrays");
+          }
+
+          function_id_.set_function("__arccos_array");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+          typet t = type_handler_.get_list_type(list_arg);
+          if (!converter_.current_lhs)
+            throw std::runtime_error(
+              "Internal error: numpy.arccos runtime lowering requires an "
+              "assignment target");
+          auto &current_lhs = *converter_.current_lhs;
+          current_lhs.type() = t;
+          converter_.update_symbol(current_lhs);
+
+          call.arguments().push_back(np_address_of(current_lhs));
+          exprt array_size = from_integer(list_arg["elts"].size(), int_type());
+          call.arguments().push_back(array_size);
+          return call;
+        }
+
+        if (function == "transpose")
+        {
+          typet t = type_handler_.get_list_type(list_arg);
+          if (allow_numpy_fold && !t.subtype().is_array())
+          {
+            exprt folded = converter_.get_expr(list_arg);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
+          }
+
+          std::vector<int> shape = type_handler_.get_array_type_shape(t);
+          if (shape.size() != 2)
+          {
+            throw std::runtime_error(
+              "TypeError: numpy.transpose currently supports up to 2D arrays");
+          }
+
+          typet base_type = t.subtype().subtype();
+          const bool is_float = base_type.is_floatbv();
+
+          function_id_.set_function(
+            is_float ? "transpose_double" : "transpose");
+
+          code_function_callt call =
+            to_code_function_call(to_code(function_call_expr::get()));
+
+          typet result_row_type =
+            type_handler_.build_array(base_type, shape[0]);
+          typet result_type =
+            type_handler_.build_array(result_row_type, shape[1]);
+          if (!converter_.current_lhs)
+            throw std::runtime_error(
+              "Internal error: numpy.transpose runtime lowering requires an "
+              "assignment target");
+          auto &current_lhs = *converter_.current_lhs;
+          current_lhs.type() = result_type;
+          converter_.update_symbol(current_lhs);
+
+          auto &args = call.arguments();
+          typet flat_ptr_type =
+            pointer_typet(is_float ? base_type : long_long_int_type());
+          if (!args.empty())
+            args[0] = np_typecast(args[0], flat_ptr_type);
+
+          exprt row0 = np_index(
+            current_lhs, from_integer(0, size_type()), result_type.subtype());
+          exprt elem00 =
+            np_index(row0, from_integer(0, size_type()), base_type);
+          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+          args.push_back(from_integer(shape[0], int_type()));
+          args.push_back(from_integer(shape[1], int_type()));
+          return call;
+        }
+
         if (is_supported_numpy_unary_math(function))
         {
-          exprt folded =
-            fold_numpy_unary_constant_list(converter_, function, list_arg);
-          if (converter_.current_lhs)
+          if (allow_numpy_fold)
           {
-            converter_.current_lhs->type() = folded.type();
-            converter_.update_symbol(*converter_.current_lhs);
+            exprt folded =
+              fold_numpy_unary_constant_list(converter_, function, list_arg);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return folded;
           }
-          return folded;
         }
 
         // Constant-fold np.ceil for concrete 1D numeric lists.
         if (function == "ceil")
         {
           std::vector<numeric_value> input_values;
-          if (try_extract_numeric_1d_list(list_arg, input_values))
+          if (
+            allow_numpy_fold &&
+            try_extract_numeric_1d_list(list_arg, input_values))
           {
             nlohmann::json out;
             out["_type"] = "List";
@@ -1634,23 +2051,28 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         typet t = type_handler_.get_list_type(list_arg);
+        if (!converter_.current_lhs)
+          throw std::runtime_error(
+            "Internal error: numpy.ceil runtime lowering requires an "
+            "assignment target");
+        auto &current_lhs = *converter_.current_lhs;
 
         // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
         // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
 
         if (t.subtype().is_array())
-          converter_.current_lhs->type() = long_long_int_type();
+          current_lhs.type() = long_long_int_type();
         else
-          converter_.current_lhs->type() = t;
+          current_lhs.type() = t;
 
-        converter_.update_symbol(*converter_.current_lhs);
+        converter_.update_symbol(current_lhs);
 
         // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
         // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
         // The lines below add the output array and size arguments to the call.
 
         // Add output argument
-        call.arguments().push_back(np_address_of(*converter_.current_lhs));
+        call.arguments().push_back(np_address_of(current_lhs));
 
         // Add array size arguments
         if (t.subtype().is_array())
@@ -1681,8 +2103,17 @@ exprt numpy_call_expr::create_expr_from_call()
     resolve_var(rhs);
 
     if (
-      function == "add" || function == "subtract" || function == "multiply" ||
-      function == "divide" || function == "power")
+      function == "power" && lhs.contains("value") && rhs.contains("value") &&
+      lhs["value"].is_number_integer() && rhs["value"].is_number_integer() &&
+      rhs["value"].get<int64_t>() < 0)
+    {
+      throw_negative_integer_power_error();
+    }
+
+    if (
+      allow_numpy_fold &&
+      (function == "add" || function == "subtract" || function == "multiply" ||
+       function == "divide" || function == "power"))
     {
       if (
         lhs["_type"] == "List" && rhs["_type"] == "List" &&
@@ -1694,6 +2125,9 @@ exprt numpy_call_expr::create_expr_from_call()
           "TypeError: numpy operation on two empty arrays is not supported "
           "yet");
       }
+
+      std::vector<std::size_t> lhs_shape;
+      std::vector<std::size_t> rhs_shape;
 
       scalar_value lhs_scalar;
       scalar_value rhs_scalar;
@@ -1830,15 +2264,97 @@ exprt numpy_call_expr::create_expr_from_call()
         }
         return converter_.get_expr(out);
       }
-
-      if (lhs["_type"] == "List" && rhs["_type"] == "List")
+      if (
+        try_extract_scalar_1d_list(lhs, lhs_1d) &&
+        try_extract_scalar_constant(rhs, rhs_scalar))
       {
-        std::vector<std::size_t> lhs_shape;
-        std::vector<std::size_t> rhs_shape;
+        nlohmann::json out;
+        out["_type"] = "List";
+        out["elts"] = nlohmann::json::array();
+        for (const auto &v : lhs_1d)
+          out["elts"].push_back(
+            to_json_constant(apply_complex_binary(function, v, rhs_scalar)));
+        exprt folded = converter_.get_expr(out);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+      if (
+        try_extract_scalar_constant(lhs, lhs_scalar) &&
+        try_extract_scalar_1d_list(rhs, rhs_1d))
+      {
+        nlohmann::json out;
+        out["_type"] = "List";
+        out["elts"] = nlohmann::json::array();
+        for (const auto &v : rhs_1d)
+          out["elts"].push_back(
+            to_json_constant(apply_complex_binary(function, lhs_scalar, v)));
+        exprt folded = converter_.get_expr(out);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+      if (
+        try_extract_scalar_2d_list(lhs, lhs_2d) &&
+        try_extract_scalar_constant(rhs, rhs_scalar))
+      {
+        nlohmann::json out;
+        out["_type"] = "List";
+        out["elts"] = nlohmann::json::array();
+        for (const auto &row_vals : lhs_2d)
+        {
+          nlohmann::json row;
+          row["_type"] = "List";
+          row["elts"] = nlohmann::json::array();
+          for (const auto &v : row_vals)
+            row["elts"].push_back(
+              to_json_constant(apply_complex_binary(function, v, rhs_scalar)));
+          out["elts"].push_back(row);
+        }
+        exprt folded = converter_.get_expr(out);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+      if (
+        try_extract_scalar_constant(lhs, lhs_scalar) &&
+        try_extract_scalar_2d_list(rhs, rhs_2d))
+      {
+        nlohmann::json out;
+        out["_type"] = "List";
+        out["elts"] = nlohmann::json::array();
+        for (const auto &row_vals : rhs_2d)
+        {
+          nlohmann::json row;
+          row["_type"] = "List";
+          row["elts"] = nlohmann::json::array();
+          for (const auto &v : row_vals)
+            row["elts"].push_back(
+              to_json_constant(apply_complex_binary(function, lhs_scalar, v)));
+          out["elts"].push_back(row);
+        }
+        exprt folded = converter_.get_expr(out);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+      if (
+        get_literal_shape(lhs, lhs_shape) && get_literal_shape(rhs, rhs_shape))
+      {
         std::vector<std::size_t> result_shape;
         if (
-          get_literal_shape(lhs, lhs_shape) &&
-          get_literal_shape(rhs, rhs_shape) &&
           compute_broadcast_shape(lhs_shape, rhs_shape, result_shape) &&
           result_shape.size() <= 2)
         {
@@ -2098,6 +2614,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
         std::vector<std::size_t> lhs_shape;
         std::vector<std::size_t> rhs_shape;
+
         if (
           !get_literal_shape(lhs, lhs_shape) ||
           !get_literal_shape(rhs, rhs_shape))
@@ -2134,10 +2651,30 @@ exprt numpy_call_expr::create_expr_from_call()
               int_type());
           };
 
-        const nlohmann::json &reference =
-          lhs_shape.size() >= rhs_shape.size() ? lhs : rhs;
-        typet size = type_handler_.get_typet(reference["elts"]);
-        typet t = converter_.get_static_array(reference, size).type();
+        auto build_array_type =
+          [&](const std::vector<std::size_t> &shape, const typet &elem_type) {
+            if (shape.empty())
+              return elem_type;
+
+            typet array_type = elem_type;
+            for (auto it = shape.rbegin(); it != shape.rend(); ++it)
+              array_type = type_handler_.build_array(array_type, *it);
+            return array_type;
+          };
+
+        typet lhs_scalar_type =
+          get_array_scalar_type(type_handler_.get_typet(lhs));
+        typet rhs_scalar_type =
+          get_array_scalar_type(type_handler_.get_typet(rhs));
+        const bool is_float =
+          lhs_scalar_type.is_floatbv() || rhs_scalar_type.is_floatbv();
+
+        typet elem_type =
+          is_float ? double_type()
+          : lhs_scalar_type.is_bool() || rhs_scalar_type.is_bool() ? bool_type()
+                                                                   : int_type();
+        typet t = build_array_type(result_shape, elem_type);
+        function_id_.set_function(operation + (is_float ? "_double" : ""));
 
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
@@ -2145,7 +2682,15 @@ exprt numpy_call_expr::create_expr_from_call()
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         auto &args = call.arguments();
-        args.push_back(np_address_of(*converter_.current_lhs));
+        const typet flat_ptr_type =
+          pointer_typet(is_float ? double_type() : long_long_int_type());
+        if (args.size() >= 2)
+        {
+          args[0] = typecast_exprt(args[0], flat_ptr_type);
+          args[1] = typecast_exprt(args[1], flat_ptr_type);
+        }
+        args.push_back(
+          np_typecast(np_address_of(*converter_.current_lhs), flat_ptr_type));
         args.push_back(as_dim(lhs_shape, 0));
         args.push_back(as_dim(lhs_shape, 1));
         args.push_back(as_dim(rhs_shape, 0));
@@ -2168,6 +2713,7 @@ exprt numpy_call_expr::create_expr_from_call()
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
+  const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
   // Create array from numpy.array()
   if (function == "array")
@@ -2253,29 +2799,60 @@ exprt numpy_call_expr::get()
   if (is_math_function())
   {
     // np.fmod(x, y) on scalars has the same semantics as math.fmod / C fmod, so
-    // delegate to the shared math handler, which constant-folds when both
-    // operands are concrete and otherwise emits the libm fmod call. This covers
-    // symbolic scalar operands (e.g. a function parameter), which the
-    // broadcasting machinery below does not handle. Array operands (fmod is a
-    // broadcasting ufunc) are not supported here — they are rejected with a
-    // clear diagnostic rather than mis-folded to a scalar.
+    // delegate to the shared math handler when the operands are not foldable
+    // literal lists. For list-backed 1D/2D inputs, fold here with the same
+    // broadcasting helper used by the other binary NumPy ops.
     if (function == "fmod" && call_["args"].size() == 2)
     {
-      exprt lhs = converter_.get_expr(call_["args"][0]);
-      exprt rhs = converter_.get_expr(call_["args"][1]);
-      // Reject container operands: static numpy arrays (array typet) and
-      // dynamic Python lists (the __ESBMC_PyListObj model, by value or by
-      // pointer). handle_fmod is scalar-only and would otherwise mis-fold
-      // them or crash the FP backend.
+      auto lhs = call_["args"][0];
+      auto rhs = call_["args"][1];
+
+      std::vector<std::size_t> lhs_shape;
+      std::vector<std::size_t> rhs_shape;
+      if (
+        get_literal_shape(lhs, lhs_shape) && get_literal_shape(rhs, rhs_shape))
+      {
+        std::vector<std::size_t> result_shape;
+        if (
+          compute_broadcast_shape(lhs_shape, rhs_shape, result_shape) &&
+          result_shape.size() <= 2)
+        {
+          nlohmann::json folded;
+          std::vector<std::size_t> indices;
+          if (build_broadcast_literal_result(
+                function,
+                lhs,
+                lhs_shape,
+                rhs,
+                rhs_shape,
+                result_shape,
+                indices,
+                0,
+                folded))
+          {
+            exprt result_expr = converter_.get_expr(folded);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = result_expr.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return result_expr;
+          }
+        }
+      }
+
+      exprt lhs_expr = converter_.get_expr(lhs);
+      exprt rhs_expr = converter_.get_expr(rhs);
       const typet list_type = type_handler_.get_list_type();
       auto is_container = [&list_type](const exprt &e) {
         return e.type().is_array() || e.type() == list_type ||
                (e.type().is_pointer() && e.type().subtype() == list_type);
       };
-      if (is_container(lhs) || is_container(rhs))
+      if (is_container(lhs_expr) || is_container(rhs_expr))
         throw std::runtime_error(
           "Unsupported operation: numpy.fmod on array operands");
-      return converter_.get_math_handler().handle_fmod(lhs, rhs, call_);
+      return converter_.get_math_handler().handle_fmod(
+        lhs_expr, rhs_expr, call_);
     }
 
     auto is_scalar_node = [](const nlohmann::json &node) {
@@ -2291,20 +2868,6 @@ exprt numpy_call_expr::get()
     {
       auto lhs = extract_value(call_["args"][0]);
       auto rhs = extract_value(call_["args"][1]);
-
-      nlohmann::json result;
-      if (lhs.is_int && rhs.is_int)
-      {
-        result =
-          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
-      }
-      else
-      {
-        result =
-          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
-      }
-
-      exprt expr = converter_.get_expr(result);
 
       auto compute_scalar_result =
         [&](double left, double right, double &out) -> bool {
@@ -2335,8 +2898,66 @@ exprt numpy_call_expr::get()
           out = std::pow(left, right);
           return true;
         }
+        if (function == "copysign")
+        {
+          out = std::copysign(left, right);
+          return true;
+        }
+        if (function == "fmax")
+        {
+          out = std::fmax(left, right);
+          return true;
+        }
+        if (function == "fmin")
+        {
+          out = std::fmin(left, right);
+          return true;
+        }
         return false;
       };
+
+      // copysign/fmax/fmin have no operator_map() entry and no handler,
+      // so the BinOp path below crashes migrate_expr.
+      // Fold the scalar-constant case here.
+      // Symbolic and array operands are unsupported.
+      if (
+        allow_numpy_fold &&
+        (function == "copysign" || function == "fmax" || function == "fmin"))
+      {
+        double folded = 0.0;
+        if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
+          throw std::runtime_error(
+            "compute_scalar_result missing branch for " + function);
+
+        // Mirror the dtype-override branch below:
+        // only restamp current_lhs when the user explicitly requested a dtype.
+        typet t = cached_double_type();
+        if (get_dtype_size() && converter_.current_lhs)
+        {
+          t = get_typet_from_dtype();
+          if (!t.is_floatbv())
+            t = cached_double_type();
+          converter_.current_lhs->type() = t;
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        exprt folded_expr = from_double(folded, t);
+        folded_expr.cformat(std::to_string(folded));
+        return folded_expr;
+      }
+
+      nlohmann::json result;
+      if (lhs.is_int && rhs.is_int)
+      {
+        result =
+          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
+      }
+      else
+      {
+        result =
+          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
+      }
+
+      exprt expr = converter_.get_expr(result);
 
       auto dtype_size = get_dtype_size();
       if (dtype_size && converter_.current_lhs)
@@ -2349,62 +2970,101 @@ exprt numpy_call_expr::get()
         for (auto &operand : expr.operands())
           operand.type() = expr.type();
 
-        double left = to_double(lhs);
-        double right = to_double(rhs);
-        double scalar_result = 0.0;
-
-        if (compute_scalar_result(left, right, scalar_result))
+        if (allow_numpy_fold)
         {
-          std::string dtype = get_dtype();
-          double final_value = scalar_result;
-
-          if (dtype.find("int") != std::string::npos)
+          const std::string dtype = get_dtype();
+          const bool is_integer_dtype = dtype.find("int") != std::string::npos;
+          if (
+            function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
           {
-            const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-            const int64_t rounded_value =
-              static_cast<int64_t>(std::llround(final_value));
-            const uint64_t mask = dtype_size >= 64
-                                    ? std::numeric_limits<uint64_t>::max()
-                                    : ((uint64_t{1} << dtype_size) - 1);
-            const uint64_t wrapped_bits =
-              static_cast<uint64_t>(rounded_value) & mask;
+            BigInt exact_power;
+            if (try_exact_integer_power(
+                  lhs.int_value, rhs.int_value, exact_power))
+            {
+              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+              const BigInt min_val =
+                is_unsigned ? BigInt(0) : -BigInt::power2(dtype_size - 1);
+              const BigInt max_val = is_unsigned
+                                       ? BigInt::power2(dtype_size) - 1
+                                       : BigInt::power2(dtype_size - 1) - 1;
+              if (exact_power < min_val || exact_power > max_val)
+              {
+                log_warning(
+                  "{}:{}: Integer overflow detected in {}() call. Consider "
+                  "using a larger integer type.",
+                  converter_.current_python_file,
+                  call_["end_lineno"].get<int>(),
+                  function_id_.get_function());
+                emit_numpy_overflow_assertion(converter_, call_, function_id_);
+              }
 
-            int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
-            if (
-              !is_unsigned && dtype_size < 64 &&
-              ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
-            {
-              wrapped_signed -= static_cast<int64_t>(uint64_t{1} << dtype_size);
-            }
+              BigInt wrapped = exact_power;
+              const BigInt modulus = BigInt::power2(dtype_size);
+              wrapped = wrapped % modulus;
+              if (wrapped < 0)
+                wrapped += modulus;
+              if (!is_unsigned && wrapped >= BigInt::power2(dtype_size - 1))
+                wrapped -= modulus;
 
-            if (rounded_value != wrapped_signed)
-            {
-              log_warning(
-                "{}:{}: Integer overflow detected in {}() call. Consider using "
-                "a larger integer type.",
-                converter_.current_python_file,
-                call_["end_lineno"].get<int>(),
-                function_id_.get_function());
-              emit_numpy_overflow_assertion(converter_, call_, function_id_);
-            }
-
-            if (is_unsigned)
-            {
-              exprt folded = from_integer(BigInt(wrapped_bits), t);
-              folded.cformat(std::to_string(wrapped_bits));
-              return folded;
-            }
-            else
-            {
-              exprt folded = from_integer(BigInt(wrapped_signed), t);
-              folded.cformat(std::to_string(wrapped_signed));
+              exprt folded = from_integer(wrapped, t);
+              folded.cformat(integer2string(wrapped));
               return folded;
             }
           }
-          else
+
+          double left = to_double(lhs);
+          double right = to_double(rhs);
+          double scalar_result = 0.0;
+
+          if (compute_scalar_result(left, right, scalar_result))
           {
-            exprt folded = from_double(final_value, t);
-            folded.cformat(std::to_string(final_value));
+            if (is_integer_dtype)
+            {
+              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+              const int64_t rounded_value =
+                static_cast<int64_t>(std::llround(scalar_result));
+              const uint64_t mask = dtype_size >= 64
+                                      ? std::numeric_limits<uint64_t>::max()
+                                      : ((uint64_t{1} << dtype_size) - 1);
+              const uint64_t wrapped_bits =
+                static_cast<uint64_t>(rounded_value) & mask;
+
+              int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
+              if (
+                !is_unsigned && dtype_size < 64 &&
+                ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
+              {
+                wrapped_signed -=
+                  static_cast<int64_t>(uint64_t{1} << dtype_size);
+              }
+
+              if (rounded_value != wrapped_signed)
+              {
+                log_warning(
+                  "{}:{}: Integer overflow detected in {}() call. Consider "
+                  "using a larger integer type.",
+                  converter_.current_python_file,
+                  call_["end_lineno"].get<int>(),
+                  function_id_.get_function());
+                emit_numpy_overflow_assertion(converter_, call_, function_id_);
+              }
+
+              if (is_unsigned)
+              {
+                exprt folded = from_integer(BigInt(wrapped_bits), t);
+                folded.cformat(std::to_string(wrapped_bits));
+                return folded;
+              }
+              else
+              {
+                exprt folded = from_integer(BigInt(wrapped_signed), t);
+                folded.cformat(std::to_string(wrapped_signed));
+                return folded;
+              }
+            }
+
+            exprt folded = from_double(scalar_result, t);
+            folded.cformat(std::to_string(scalar_result));
             return folded;
           }
         }

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
 
 static double round_ties_to_even_consteval(const double value)
 {
@@ -69,6 +70,7 @@ bool PyConstValue::is_truthy() const
   case STRING:
     return !string_val.empty();
   case TUPLE:
+  case LIST:
     return !tuple_val.empty();
   }
   return false;
@@ -92,6 +94,7 @@ static bool pyconst_equal(const PyConstValue &lhs, const PyConstValue &rhs)
   case PyConstValue::STRING:
     return lhs.string_val == rhs.string_val;
   case PyConstValue::TUPLE:
+  case PyConstValue::LIST:
     if (lhs.tuple_val.size() != rhs.tuple_val.size())
       return false;
     for (size_t i = 0; i < lhs.tuple_val.size(); ++i)
@@ -127,29 +130,44 @@ python_consteval::find_function(const std::string &name) const
   return nullptr;
 }
 
-/// Returns true if the JSON array of statements (or nested blocks) contains
-/// Assert or control-flow statements (If/For/While). Used to decline
-/// const-folding for functions whose structure matters for verification,
-/// coverage analysis, or branch/condition checking.
-static bool body_has_verification_relevant_stmts(const nlohmann::json &body)
+/// Generic recursive scan: true if any statement (or nested block) has a
+/// `_type` listed in `kinds`.
+static bool body_has_stmt_kind(
+  const nlohmann::json &body,
+  std::initializer_list<const char *> kinds)
 {
   for (const auto &stmt : body)
   {
     if (!stmt.contains("_type"))
       continue;
     const std::string &t = stmt["_type"];
-    if (
-      t == "Assert" || t == "If" || t == "For" || t == "While" ||
-      t == "FunctionDef")
-      return true;
+    for (const char *k : kinds)
+      if (t == k)
+        return true;
     if (stmt.contains("body") && stmt["body"].is_array())
-      if (body_has_verification_relevant_stmts(stmt["body"]))
+      if (body_has_stmt_kind(stmt["body"], kinds))
         return true;
     if (stmt.contains("orelse") && stmt["orelse"].is_array())
-      if (body_has_verification_relevant_stmts(stmt["orelse"]))
+      if (body_has_stmt_kind(stmt["orelse"], kinds))
         return true;
   }
   return false;
+}
+
+/// Bodies carrying properties that must be verified independently: an Assert
+/// (must reach the solver) or a nested FunctionDef (closures are unmodeled).
+/// Always blocks folding, regardless of control-flow permission.
+static bool body_has_unfoldable_stmts(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"Assert", "FunctionDef"});
+}
+
+/// Control flow whose branches matter for coverage/branch analysis. Blocks
+/// folding only on the conservative call-site pre-scan path (see
+/// python_consteval::allow_control_flow_).
+static bool body_has_control_flow(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"If", "For", "While"});
 }
 
 std::optional<PyConstValue> python_consteval::try_eval_call(
@@ -160,11 +178,19 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   if (!func_node)
     return std::nullopt;
 
-  // Don't fold functions containing asserts or control flow — they must
-  // be preserved for verification, coverage, and branch/condition analysis.
+  // Don't fold functions whose bodies carry independently-verifiable
+  // properties (asserts) or nested function definitions.
   if (
     func_node->contains("body") && (*func_node)["body"].is_array() &&
-    body_has_verification_relevant_stmts((*func_node)["body"]))
+    body_has_unfoldable_stmts((*func_node)["body"]))
+    return std::nullopt;
+
+  // On the conservative pre-scan path, also decline functions with control
+  // flow so their branches remain in the GOTO program for coverage analysis.
+  if (
+    !allow_control_flow_ && func_node->contains("body") &&
+    (*func_node)["body"].is_array() &&
+    body_has_control_flow((*func_node)["body"]))
     return std::nullopt;
 
   if (!func_node->contains("args") || !(*func_node)["args"].contains("args"))
@@ -249,6 +275,89 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   return PyConstValue::make_none();
 }
 
+void python_consteval::seed_globals(Env &env)
+{
+  if (!ast_.contains("body") || !ast_["body"].is_array())
+    return;
+
+  // Count every top-level write to each name (any Assign/AnnAssign/AugAssign
+  // target, including names bound through tuple/list unpacking). A name written
+  // more than once does not have a single stable module-scope value, so seeding
+  // it with its final value could mis-evaluate an assert that runs at an
+  // earlier program point — only single-write names are safe to seed.
+  std::unordered_map<std::string, int> write_count;
+  std::function<void(const nlohmann::json &)> count_target =
+    [&](const nlohmann::json &tgt) {
+      if (!tgt.contains("_type"))
+        return;
+      const std::string &tt = tgt["_type"];
+      if (tt == "Name")
+        ++write_count[tgt["id"].get<std::string>()];
+      else if ((tt == "Tuple" || tt == "List") && tgt.contains("elts"))
+        for (const auto &e : tgt["elts"])
+          count_target(e);
+    };
+  for (const auto &stmt : ast_["body"])
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string &t = stmt["_type"];
+    if (t == "Assign" && stmt.contains("targets"))
+      for (const auto &tgt : stmt["targets"])
+        count_target(tgt);
+    else if ((t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
+      count_target(stmt["target"]);
+  }
+
+  auto seed_one =
+    [&](const nlohmann::json &target, const nlohmann::json &value) {
+      if (!target.contains("_type") || target["_type"] != "Name")
+        return;
+      const std::string name = target["id"].get<std::string>();
+      if (write_count[name] != 1)
+        return;
+      auto val = eval_expr(value, env);
+      if (val)
+        env[name] = *val;
+    };
+
+  for (const auto &stmt : ast_["body"])
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string &t = stmt["_type"];
+
+    if (t == "Assign")
+    {
+      if (
+        !stmt.contains("targets") || stmt["targets"].size() != 1 ||
+        !stmt.contains("value"))
+        continue;
+      seed_one(stmt["targets"][0], stmt["value"]);
+    }
+    else if (t == "AnnAssign")
+    {
+      if (
+        !stmt.contains("target") || !stmt.contains("value") ||
+        stmt["value"].is_null())
+        continue;
+      seed_one(stmt["target"], stmt["value"]);
+    }
+  }
+}
+
+std::optional<PyConstValue>
+python_consteval::try_eval_global_expr(const nlohmann::json &expr)
+{
+  // A whole-assertion fold over fully-constant operands has a single
+  // deterministic path, so control-flow functions may be folded here without
+  // losing branch/condition coverage.
+  allow_control_flow_ = true;
+  Env env;
+  seed_globals(env);
+  return eval_expr(expr, env);
+}
+
 std::optional<python_consteval::StmtResult>
 python_consteval::exec_block(const nlohmann::json &body, Env &env)
 {
@@ -261,6 +370,77 @@ python_consteval::exec_block(const nlohmann::json &body, Env &env)
       return result;
   }
   return StmtResult{StmtResult::NORMAL, {}};
+}
+
+bool python_consteval::bind_target(
+  const nlohmann::json &target,
+  const PyConstValue &value,
+  Env &env)
+{
+  if (!target.contains("_type"))
+    return false;
+
+  const std::string &t = target["_type"];
+
+  if (t == "Name")
+  {
+    if (!target.contains("id"))
+      return false;
+    env[target["id"].get<std::string>()] = value;
+    return true;
+  }
+
+  // Tuple/list unpacking: a, b = <sequence>. Starred targets are unsupported.
+  if (t == "Tuple" || t == "List")
+  {
+    if (value.kind != PyConstValue::TUPLE && value.kind != PyConstValue::LIST)
+      return false;
+    if (!target.contains("elts"))
+      return false;
+    const auto &elts = target["elts"];
+    if (elts.size() != value.tuple_val.size())
+      return false;
+    for (size_t i = 0; i < elts.size(); ++i)
+      if (!bind_target(elts[i], value.tuple_val[i], env))
+        return false;
+    return true;
+  }
+
+  return false;
+}
+
+bool python_consteval::resolve_str_window(
+  const nlohmann::json &args,
+  const Env &env,
+  long long sz,
+  long long &start,
+  long long &end)
+{
+  start = 0;
+  end = sz;
+  if (args.size() >= 2)
+  {
+    auto a = eval_expr(args[1], env);
+    if (!a || a->kind != PyConstValue::INT)
+      return false;
+    start = a->int_val;
+  }
+  if (args.size() >= 3)
+  {
+    auto a = eval_expr(args[2], env);
+    if (!a || a->kind != PyConstValue::INT)
+      return false;
+    end = a->int_val;
+  }
+  if (start < 0)
+    start += sz;
+  if (end < 0)
+    end += sz;
+  start = std::max<long long>(0, std::min(start, sz));
+  end = std::max<long long>(0, std::min(end, sz));
+  if (end < start)
+    end = start;
+  return true;
 }
 
 std::optional<python_consteval::StmtResult>
@@ -297,9 +477,8 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
 
     for (const auto &target : stmt["targets"])
     {
-      if (target["_type"] != "Name")
-        return std::nullopt; // Only support simple variable assignment
-      env[target["id"].get<std::string>()] = *val;
+      if (!bind_target(target, *val, env))
+        return std::nullopt;
     }
     return StmtResult{StmtResult::NORMAL, {}};
   }
@@ -460,6 +639,30 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
   // Expression statement (e.g., standalone function calls)
   if (type == "Expr")
   {
+    // In-place list mutation: <name>.append(<expr>). Handled here (not in
+    // eval_expr) because it writes back into the environment.
+    const auto &value = stmt["value"];
+    if (
+      value.contains("_type") && value["_type"] == "Call" &&
+      value.contains("func") && value["func"].contains("_type") &&
+      value["func"]["_type"] == "Attribute" && value["func"].contains("attr") &&
+      value["func"]["attr"] == "append" && value["func"].contains("value") &&
+      value["func"]["value"].contains("_type") &&
+      value["func"]["value"]["_type"] == "Name" && value.contains("args") &&
+      value["args"].size() == 1)
+    {
+      const std::string &name = value["func"]["value"]["id"].get<std::string>();
+      auto it = env.find(name);
+      if (it != env.end() && it->second.kind == PyConstValue::LIST)
+      {
+        auto arg = eval_expr(value["args"][0], env);
+        if (!arg)
+          return std::nullopt;
+        it->second.tuple_val.push_back(*arg);
+        return StmtResult{StmtResult::NORMAL, {}};
+      }
+    }
+
     auto val = eval_expr(stmt["value"], env);
     if (!val)
       return std::nullopt;
@@ -527,7 +730,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     return std::nullopt;
   }
 
-  if (type == "Tuple")
+  if (type == "Tuple" || type == "List")
   {
     std::vector<PyConstValue> values;
     for (const auto &elt : node["elts"])
@@ -537,7 +740,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         return std::nullopt;
       values.push_back(*value);
     }
-    return PyConstValue::make_tuple(values);
+    return type == "List" ? PyConstValue::make_list(values)
+                          : PyConstValue::make_tuple(values);
   }
 
   // Variable lookup
@@ -797,6 +1001,15 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           result = left_val->bool_val != right_val->bool_val;
         else
           return std::nullopt;
+      }
+      // List/tuple equality (element-wise; kind must match)
+      else if (
+        (left_val->kind == PyConstValue::LIST ||
+         left_val->kind == PyConstValue::TUPLE) &&
+        (cmp_op == "Eq" || cmp_op == "NotEq"))
+      {
+        bool eq = pyconst_equal(*left_val, *right_val);
+        result = (cmp_op == "Eq") ? eq : !eq;
       }
       else
         return std::nullopt;
@@ -1082,30 +1295,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return std::nullopt;
           const std::string &needle = sub->string_val;
           long long start = 0;
-          long long end = static_cast<long long>(s.size());
-          if (args_arr.size() >= 2)
-          {
-            auto a = eval_expr(args_arr[1], env);
-            if (!a || a->kind != PyConstValue::INT)
-              return std::nullopt;
-            start = a->int_val;
-          }
-          if (args_arr.size() == 3)
-          {
-            auto a = eval_expr(args_arr[2], env);
-            if (!a || a->kind != PyConstValue::INT)
-              return std::nullopt;
-            end = a->int_val;
-          }
-          auto sz = static_cast<long long>(s.size());
-          if (start < 0)
-            start += sz;
-          if (end < 0)
-            end += sz;
-          start = std::max<long long>(0, std::min(start, sz));
-          end = std::max<long long>(0, std::min(end, sz));
-          if (end < start)
-            end = start;
+          long long end = 0;
+          if (!resolve_str_window(
+                args_arr, env, static_cast<long long>(s.size()), start, end))
+            return std::nullopt;
           long long c = 0;
           if (needle.empty())
             return PyConstValue::make_int(end - start + 1);
@@ -1126,20 +1319,33 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
 
         if (m == "find" || m == "rfind" || m == "index")
         {
-          if (args_arr.size() != 1)
+          if (args_arr.empty() || args_arr.size() > 3)
             return std::nullopt;
           auto sub = eval_expr(args_arr[0], env);
           if (!sub || sub->kind != PyConstValue::STRING)
             return std::nullopt;
           const std::string &needle = sub->string_val;
-          size_t pos = (m == "rfind") ? s.rfind(needle) : s.find(needle);
+
+          // Optional start/end search window (Python str.find(sub, start, end)).
+          long long start = 0;
+          long long end = 0;
+          if (!resolve_str_window(
+                args_arr, env, static_cast<long long>(s.size()), start, end))
+            return std::nullopt;
+
+          // Search within s[start:end]; matches are reported as indices into
+          // the original string (offset by `start`).
+          const std::string window = s.substr(
+            static_cast<size_t>(start), static_cast<size_t>(end - start));
+          size_t pos =
+            (m == "rfind") ? window.rfind(needle) : window.find(needle);
           if (pos == std::string::npos)
           {
             if (m == "index")
               return std::nullopt; // would raise ValueError — leave to BMC
             return PyConstValue::make_int(-1);
           }
-          return PyConstValue::make_int(static_cast<long long>(pos));
+          return PyConstValue::make_int(start + static_cast<long long>(pos));
         }
 
         if (m == "strip" || m == "lstrip" || m == "rstrip")

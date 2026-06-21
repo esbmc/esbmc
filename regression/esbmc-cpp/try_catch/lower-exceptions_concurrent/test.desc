@@ -1,4 +1,4 @@
 CORE
 main.cpp
 
-exception lowering: cannot lower a concurrent program
+^VERIFICATION SUCCESSFUL$

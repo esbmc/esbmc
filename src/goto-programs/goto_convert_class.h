@@ -57,6 +57,13 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
+  // IREP2 dual-API seam (W1, esbmc/esbmc#4715): delegates to the legacy
+  // exprt overload above; behaviour-identical by construction.
+  void remove_sideeffects(
+    expr2tc &expr,
+    goto_programt &dest,
+    bool result_is_used = true);
+
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
   bool rewrite_vla_decl(typet &var_type, goto_programt &dest);
@@ -67,6 +74,9 @@ protected:
     goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
+  // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
+  // sideeffect2t node, mirroring the legacy exprt overload above.
+  bool has_sideeffect(const expr2tc &expr);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to

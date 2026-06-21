@@ -195,13 +195,31 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
 
 void function_call_expr::get_function_type()
 {
-  if (type_handler_.is_constructor_call(call_))
+  const auto &func_node = call_["func"];
+
+  // An explicit `Base.__init__(self, ...)` call invokes the named base class's
+  // constructor with self passed explicitly; it is not an object construction.
+  // Let it fall through to the ClassMethod classification (is_class(caller)
+  // below) so no fresh self object is allocated -- the builder resolves it to
+  // the class's renamed constructor (@C@Base@F@Base) and the explicit self is
+  // the receiver. Without this it would be classified Constructor and the
+  // constructor would write to a throwaway $ctor_self$ temp.
+  const bool is_explicit_class_init =
+    func_node.contains("_type") && func_node["_type"] == "Attribute" &&
+    func_node.contains("attr") && func_node["attr"] == "__init__" &&
+    func_node.contains("value") && func_node["value"].is_object() &&
+    func_node["value"].contains("_type") &&
+    func_node["value"]["_type"] == "Name" &&
+    func_node["value"].contains("id") &&
+    json_utils::is_class(
+      func_node["value"]["id"].get<std::string>(), converter_.ast());
+
+  if (!is_explicit_class_init && type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
     return;
   }
 
-  const auto &func_node = call_["func"];
   if (
     !func_node.contains("_type") || !func_node["_type"].is_string() ||
     func_node["_type"] != "Attribute")
@@ -484,6 +502,37 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   auto arg = call_["args"][0];
+
+  // tuple(iterable): model the result as a shallow copy of the underlying
+  // list (CPython copy semantics: later mutations of the source list must
+  // not show through the tuple; element references are shared, not deep-
+  // copied). ==, len(), subscript and iteration then route through the
+  // existing list machinery. The generic constructor tail below would
+  // instead relabel the expression with get_typet("tuple") — an empty type —
+  // and every comparison over the result silently lowers to the nondet-bool
+  // fallback in get_binary_operator_expr (#4807).
+  if (func_name == "tuple")
+  {
+    if (call_["args"].size() > 1)
+      throw std::runtime_error("TypeError: tuple expected at most 1 argument");
+    exprt expr = converter_.get_expr(arg);
+    const typet &et = expr.type();
+    if (converter_.get_tuple_handler().is_tuple_type(et))
+      return expr; // returned unchanged — CPython tuple(t) also returns t
+    const namespacet ns(converter_.symbol_table());
+    const typet list_type = type_handler_.get_list_type(); // PyListObject *
+    if (
+      et == list_type ||
+      (et.is_pointer() && list_type.is_pointer() &&
+       ns.follow(et.subtype()) == ns.follow(list_type.subtype())))
+    {
+      // Covers list literals, variables, and list-returning calls.
+      python_list list_handler(converter_, call_);
+      return list_handler.build_shallow_copy_call(expr, call_);
+    }
+    throw std::runtime_error(
+      "tuple() is only supported over list and tuple arguments");
+  }
 
   // bytes(...) constructor. The generic constructor path below relabels the
   // argument expression's type as the bytes array type without converting the
@@ -808,7 +857,10 @@ exprt function_call_expr::build_constant_from_arg() const
         codet throw_code("expression");
         throw_code.operands().push_back(raise);
         code_ifthenelset guard;
-        guard.cond() = not_exprt(valid);
+        // V.3: build the "not valid" guard condition in IREP2.
+        expr2tc valid2;
+        migrate_expr(valid, valid2);
+        guard.cond() = migrate_expr_back(not2tc(valid2));
         guard.then_case() = throw_code;
         guard.location() = loc;
         converter_.add_instruction(guard);
@@ -1470,19 +1522,24 @@ exprt function_call_expr::handle_tuple_method() const
 
   if (method_name == "count")
   {
-    // sum(t.element_i == elem ? 1 : 0)
-    typet result_type = int_type();
-    exprt total = gen_zero(result_type);
+    // sum(t.element_i == elem ? 1 : 0), built in IREP2 (V.3).
+    const type2tc result_type = migrate_type(int_type());
+    expr2tc elem2;
+    migrate_expr(elem, elem2);
+    expr2tc total = gen_zero(result_type);
     for (const auto &comp : components)
     {
-      exprt member = build_member(receiver, comp.get_name(), comp.type());
-      exprt eq = equality_exprt(member, elem);
-      if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
-      sel.type() = result_type;
-      total = plus_exprt(total, sel);
-      total.type() = result_type;
+      expr2tc member2;
+      migrate_expr(
+        build_member(receiver, comp.get_name(), comp.type()), member2);
+      expr2tc sel = if2tc(
+        result_type,
+        equality2tc(member2, elem2),
+        gen_one(result_type),
+        gen_zero(result_type));
+      total = add2tc(result_type, total, sel);
     }
-    return total;
+    return migrate_expr_back(total);
   }
 
   // method_name == "index"
@@ -1490,16 +1547,18 @@ exprt function_call_expr::handle_tuple_method() const
   if (components.empty())
     throw std::runtime_error("tuple.index() on empty tuple");
 
-  // Build "any matched" guard so we can assert the element is present.
-  typet result_type = int_type();
-  exprt any_match = gen_boolean(false);
+  // Build "any matched" guard so we can assert the element is present (V.3).
+  const type2tc result_type = migrate_type(int_type());
+  expr2tc elem2;
+  migrate_expr(elem, elem2);
+  expr2tc any_match = gen_false_expr();
   for (const auto &comp : components)
   {
-    exprt member = build_member(receiver, comp.get_name(), comp.type());
-    exprt eq = equality_exprt(member, elem);
-    any_match = or_exprt(any_match, eq);
+    expr2tc member2;
+    migrate_expr(build_member(receiver, comp.get_name(), comp.type()), member2);
+    any_match = or2tc(any_match, equality2tc(member2, elem2));
   }
-  code_assertt found_assert(any_match);
+  code_assertt found_assert(migrate_expr_back(any_match));
   found_assert.location() = converter_.get_location_from_decl(call_);
   found_assert.location().comment("ValueError: tuple.index(x): x not in tuple");
   converter_.add_instruction(found_assert);
@@ -1507,17 +1566,20 @@ exprt function_call_expr::handle_tuple_method() const
   // Build chain right-to-left: result_(n-1) is index n-1, falling back to
   // earlier matches as we walk backwards. Net effect: leftmost match wins.
   size_t n = components.size();
-  exprt result = from_integer(BigInt(n - 1), result_type);
+  expr2tc result = from_integer(BigInt(n - 1), result_type);
   for (size_t k = n - 1; k-- > 0;)
   {
-    exprt member =
-      build_member(receiver, components[k].get_name(), components[k].type());
-    exprt eq = equality_exprt(member, elem);
-    if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
-    sel.type() = result_type;
-    result = sel;
+    expr2tc member2;
+    migrate_expr(
+      build_member(receiver, components[k].get_name(), components[k].type()),
+      member2);
+    result = if2tc(
+      result_type,
+      equality2tc(member2, elem2),
+      from_integer(BigInt(k), result_type),
+      result);
   }
-  return result;
+  return migrate_expr_back(result);
 }
 
 bool function_call_expr::is_dict_method_call() const
@@ -1869,9 +1931,19 @@ bool function_call_expr::is_set_method_call() const
   const std::string &method_name = function_id_.get_function();
   if (
     method_name != "add" && method_name != "discard" &&
-    method_name != "issubset" && method_name != "update" &&
-    method_name != "symmetric_difference")
+    method_name != "issubset" && method_name != "issuperset" &&
+    method_name != "update" && method_name != "symmetric_difference")
     return false;
+
+  // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
+  // sets by construction. Decide from the AST: resolving a Call receiver
+  // through get_object_list_symbol() would emit the set-construction IR as a
+  // side-effect, and discriminators must stay pure.
+  const auto &func_value = call_["func"]["value"];
+  if (func_value["_type"] == "Call")
+    return func_value["func"].contains("id") &&
+           (func_value["func"]["id"] == "set" ||
+            func_value["func"]["id"] == "frozenset");
 
   std::string dummy;
   const symbolt *sym = get_object_list_symbol(dummy);
@@ -1885,6 +1957,31 @@ exprt function_call_expr::handle_set_method() const
 
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
+  // which cannot change a subset/superset verdict. Use the iterable directly
+  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
+  // inside a loop would otherwise rebuild the set (one push plus one
+  // containment scan per element) on every iteration (#4805).
+  if (method_name == "issubset" || method_name == "issuperset")
+  {
+    const auto &receiver = call_["func"]["value"];
+    if (
+      receiver["_type"] == "Call" && receiver["func"].contains("id") &&
+      (receiver["func"]["id"] == "set" ||
+       receiver["func"]["id"] == "frozenset") &&
+      receiver["args"].size() == 1)
+    {
+      exprt iterable = converter_.get_expr(receiver["args"][0]);
+      if (iterable.type() == type_handler_.get_list_type())
+      {
+        exprt other = converter_.get_expr(args[0]);
+        python_set set_helper(converter_, call_);
+        return set_helper.build_set_relation_call(
+          iterable, other, call_, method_name);
+      }
+    }
+  }
 
   std::string set_display_name;
   const symbolt *set_symbol = get_object_list_symbol(set_display_name);
@@ -1901,7 +1998,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / update / symmetric_difference take another set/iterable.
+  // issubset / issuperset / update / symmetric_difference take another
+  // set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
@@ -2343,9 +2441,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isnan_expr("isnan", bool_typet());
-         isnan_expr.copy_to_operands(arg_expr);
-         return isnan_expr;
+         // V.3: build isnan in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isnan2tc(arg2));
        }
        else // __ESBMC_isinf
        {
@@ -2357,9 +2456,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isinf_expr("isinf", bool_typet());
-         isinf_expr.copy_to_operands(arg_expr);
-         return isinf_expr;
+         // V.3: build isinf in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isinf2tc(arg2));
        }
      },
      "isnan/isinf"},
@@ -2419,8 +2519,10 @@ function_call_expr::get_dispatch_table()
      },
      "cmath log/log10"},
 
-    // cmath inverse functions: use a fast path only on pure-imaginary inputs
-    // and delegate all other cases to the Python cmath model implementation.
+    // cmath inverse functions: on pure-imaginary inputs they have an exact
+    // closed form, so use a fast path there and delegate every other input to
+    // the Python cmath model. asin/atan/asinh/atanh are purely imaginary on
+    // the imaginary axis; acos/acosh keep a nonzero real part.
     {[this]() {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
@@ -2431,7 +2533,7 @@ function_call_expr::get_dispatch_table()
        const std::string &func_name = function_id_.get_function();
        return (
          func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
-         func_name == "atanh");
+         func_name == "atanh" || func_name == "acos" || func_name == "acosh");
      },
      [this]() -> exprt {
        const std::string &raw_func_name = function_id_.get_function();
@@ -2476,44 +2578,90 @@ function_call_expr::get_dispatch_table()
        model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
+       python_math &math = converter_.get_math_handler();
        exprt zr = build_member(z, "real", double_type());
        exprt zi = build_member(z, "imag", double_type());
+       exprt zero = from_double(0.0, double_type());
+       // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
+       expr2tc zr2, zero2;
+       migrate_expr(zr, zr2);
+       migrate_expr(zero, zero2);
+       expr2tc fast_guard = equality2tc(zr2, zero2);
 
+       // acos(i*y) and acosh(i*y) have a nonzero real part, but a closed form
+       // valid for every real y, so their fast path covers all pure-imaginary
+       // inputs (zr == 0):
+       //   acos(i*y)  = (pi/2, -asinh(y))
+       //   acosh(i*y) = (asinh(|y|), copysign(pi/2, y))
+       if (func_name == "acos" || func_name == "acosh")
+       {
+         // pi/2 at double precision (CPython's exact value); the fast path is
+         // CPython-faithful and supersedes the model on the imaginary axis.
+         exprt half_pi = from_double(1.5707963267948966, double_type());
+         exprt fast_path;
+         if (func_name == "acos")
+         {
+           exprt asinh_zi = math.handle_asinh(zi, call_);
+           if (is_cpp_throw_expr(asinh_zi))
+             return asinh_zi;
+           expr2tc asinh_zi2;
+           migrate_expr(asinh_zi, asinh_zi2);
+           exprt neg_asinh =
+             migrate_expr_back(neg2tc(migrate_type(double_type()), asinh_zi2));
+           fast_path = make_complex(half_pi, neg_asinh);
+         }
+         else
+         {
+           exprt abs_zi = math.handle_fabs(zi, call_);
+           if (is_cpp_throw_expr(abs_zi))
+             return abs_zi;
+           exprt real_part = math.handle_asinh(abs_zi, call_);
+           if (is_cpp_throw_expr(real_part))
+             return real_part;
+           exprt imag_part = math.handle_copysign(half_pi, zi, call_);
+           if (is_cpp_throw_expr(imag_part))
+             return imag_part;
+           fast_path = make_complex(real_part, imag_part);
+         }
+         return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
+       }
+
+       // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
+       // fast path has a zero real part.
        exprt imag_result;
        if (func_name == "asin")
-         imag_result = converter_.get_math_handler().handle_asinh(zi, call_);
+         imag_result = math.handle_asinh(zi, call_);
        else if (func_name == "atan")
-         imag_result = converter_.get_math_handler().handle_atanh(zi, call_);
+         imag_result = math.handle_atanh(zi, call_);
        else if (func_name == "asinh")
-         imag_result = converter_.get_math_handler().handle_asin(zi, call_);
+         imag_result = math.handle_asin(zi, call_);
        else
-         imag_result = converter_.get_math_handler().handle_atan(zi, call_);
+         imag_result = math.handle_atan(zi, call_);
 
        if (is_cpp_throw_expr(imag_result))
          return imag_result;
 
-       exprt fast_path =
-         make_complex(from_double(0.0, double_type()), imag_result);
-       exprt zero = from_double(0.0, double_type());
-       exprt fast_guard = equality_exprt(zr, zero);
+       exprt fast_path = make_complex(zero, imag_result);
 
        // For atan(i*y) and asinh(i*y), the pure-imag shortcut only matches
        // the principal branch safely within the unit interval.
        if (func_name == "atan" || func_name == "asinh")
        {
-         exprt abs_zi = converter_.get_math_handler().handle_fabs(zi, call_);
+         exprt abs_zi = math.handle_fabs(zi, call_);
          if (is_cpp_throw_expr(abs_zi))
            return abs_zi;
 
          exprt one = from_double(1.0, double_type());
-         exprt imag_guard =
-           func_name == "atan"
-             ? static_cast<exprt>(binary_relation_exprt(abs_zi, "<", one))
-             : static_cast<exprt>(binary_relation_exprt(abs_zi, "<=", one));
-         fast_guard = and_exprt(fast_guard, imag_guard);
+         expr2tc abs_zi2, one2;
+         migrate_expr(abs_zi, abs_zi2);
+         migrate_expr(one, one2);
+         expr2tc imag_guard = func_name == "atan"
+                                ? lessthan2tc(abs_zi2, one2)
+                                : lessthanequal2tc(abs_zi2, one2);
+         fast_guard = and2tc(fast_guard, imag_guard);
        }
 
-       return if_exprt(fast_guard, fast_path, model_call);
+       return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
      },
      "cmath inverse pure-imag fast path"},
 
@@ -2693,17 +2841,16 @@ function_call_expr::get_dispatch_table()
          }
          else
          {
-           exprt double_operand = arg_expr;
+           // V.3: build the "operand < 0" guard in IREP2.
+           expr2tc double_operand;
+           migrate_expr(arg_expr, double_operand);
            if (!arg_expr.type().is_floatbv())
-           {
-             double_operand =
-               exprt("typecast", type_handler_.get_typet("float", 0));
-             double_operand.copy_to_operands(arg_expr);
-           }
+             double_operand = typecast2tc(
+               migrate_type(type_handler_.get_typet("float", 0)),
+               double_operand);
 
-           exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-           domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-           domain_check.copy_to_operands(double_operand, zero);
+           domain_check = migrate_expr_back(
+             lessthan2tc(double_operand, gen_zero(double_operand->type)));
          }
 
          // Create the exception raise as a code expression
@@ -2740,16 +2887,14 @@ function_call_expr::get_dispatch_table()
              type_error.has_value())
 
            return *type_error;
-         // Domain check for log: operand must be > 0
-         exprt fp_operand = arg_expr;
+         // Domain check for log: operand must be > 0 (V.3: built in IREP2).
+         expr2tc fp_operand;
+         migrate_expr(arg_expr, fp_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           fp_operand = exprt("typecast", type_handler_.get_typet("float", 0));
-           fp_operand.copy_to_operands(arg_expr);
-         }
-         exprt zero = gen_zero(fp_operand.type());
-         exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(fp_operand, zero);
+           fp_operand = typecast2tc(
+             migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
+         exprt domain_check = migrate_expr_back(
+           lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
              "ValueError", "math domain error");
@@ -2773,27 +2918,20 @@ function_call_expr::get_dispatch_table()
 
            return *type_error;
          // Domain check for acos: operand must be in [-1.0, 1.0]
-         exprt double_operand = arg_expr;
+         // (V.3: built in IREP2).
+         const type2tc float_type2 =
+           migrate_type(type_handler_.get_typet("float", 0));
+         expr2tc double_operand;
+         migrate_expr(arg_expr, double_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           double_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
-         }
+           double_operand = typecast2tc(float_type2, double_operand);
 
-         typet float_type = type_handler_.get_typet("float", 0);
-         typet bool_t = type_handler_.get_typet("bool", 0);
+         expr2tc pos_one = gen_one(float_type2);
+         expr2tc neg_one = neg2tc(float_type2, pos_one);
 
-         exprt pos_one = gen_one(float_type);
-         exprt neg_one("unary-", float_type);
-         neg_one.copy_to_operands(pos_one);
-
-         exprt lt_neg = exprt("<", bool_t);
-         lt_neg.copy_to_operands(double_operand, neg_one);
-         exprt gt_pos = exprt(">", bool_t);
-         gt_pos.copy_to_operands(double_operand, pos_one);
-         exprt domain_check = exprt("or", bool_t);
-         domain_check.copy_to_operands(lt_neg, gt_pos);
+         exprt domain_check = migrate_expr_back(or2tc(
+           lessthan2tc(double_operand, neg_one),
+           greaterthan2tc(double_operand, pos_one)));
 
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
@@ -3142,6 +3280,246 @@ exprt function_call_expr::handle_general_function_call()
             python_list sorted_list_expr(converter_, sorted_list);
             return sorted_list_expr.get();
           }
+
+          // Concrete tuple path: a literal list of constant integer tuples
+          // (e.g. sorted([(3,1),(1,2)])). The runtime tuple-sort model retypes
+          // elements as int; sort here at convert time and rebuild a list of
+          // tuple literals so the element type is preserved and verification is
+          // cheap. Symbolic tuple lists fall through (still unsupported).
+          std::function<bool(const exprt &, BigInt &)> eval_const_int =
+            [&](const exprt &e, BigInt &out) -> bool {
+            if (
+              e.is_constant() && (e.type().is_signedbv() ||
+                                  e.type().is_unsignedbv() || e.is_boolean()))
+            {
+              out = binary2integer(
+                to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+              return true;
+            }
+            if (e.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(e.identifier().as_string());
+              return s && eval_const_int(s->get_value(), out);
+            }
+            // A negative literal reaches here as unary-minus over a constant
+            // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+            // as a typecast. Fold both.
+            if (e.id() == "unary-" && e.operands().size() == 1)
+            {
+              if (!eval_const_int(e.op0(), out))
+                return false;
+              out = -out;
+              return true;
+            }
+            if (e.id() == "typecast" && e.operands().size() == 1)
+              return eval_const_int(e.op0(), out);
+            return false;
+          };
+
+          struct sortable_tuple
+          {
+            std::vector<BigInt> key;
+            size_t pos;
+          };
+          std::vector<sortable_tuple> telems;
+          bool all_constant_tuples = true;
+          size_t arity = 0;
+
+          for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
+          {
+            const std::string elem_id =
+              python_list::get_list_element_id(list_id, i);
+            const symbolt *elem_sym =
+              elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+            exprt val = elem_sym ? elem_sym->get_value() : exprt();
+            while (val.is_symbol())
+            {
+              const symbolt *s =
+                converter_.find_symbol(val.identifier().as_string());
+              if (!s)
+                break;
+              val = s->get_value();
+            }
+            if (
+              !elem_sym ||
+              !converter_.get_tuple_handler().is_tuple_type(
+                elem_sym->get_type()) ||
+              val.id() != "struct" || val.operands().empty())
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            if (i == 0)
+              arity = val.operands().size();
+            else if (val.operands().size() != arity)
+            {
+              all_constant_tuples = false;
+              break;
+            }
+            std::vector<BigInt> key;
+            for (const auto &comp : val.operands())
+            {
+              BigInt v;
+              if (!eval_const_int(comp, v))
+              {
+                all_constant_tuples = false;
+                break;
+              }
+              key.push_back(v);
+            }
+            if (!all_constant_tuples)
+              break;
+            telems.push_back({std::move(key), i});
+          }
+
+          if (all_constant_tuples && !telems.empty())
+          {
+            std::stable_sort(
+              telems.begin(),
+              telems.end(),
+              [](const sortable_tuple &a, const sortable_tuple &b) {
+                if (a.key == b.key)
+                  return a.pos < b.pos;
+                return a.key < b.key; // lexicographic on the component vector
+              });
+            if (fast_path_reverse)
+              std::reverse(telems.begin(), telems.end());
+
+            nlohmann::json sorted_list;
+            sorted_list["_type"] = "List";
+            sorted_list["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, sorted_list);
+            for (const auto &te : telems)
+            {
+              nlohmann::json tup;
+              tup["_type"] = "Tuple";
+              tup["elts"] = nlohmann::json::array();
+              converter_.copy_location_fields_from_decl(call_, tup);
+              for (const BigInt &v : te.key)
+              {
+                // Mirror the parser's literal shape: a negative integer is
+                // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
+                // negative Constant nested in a tuple takes a slow conversion
+                // path, so emit the UnaryOp form for negatives.
+                nlohmann::json cst;
+                cst["_type"] = "Constant";
+                cst["value"] = (v < 0 ? -v : v).to_int64();
+                cst["kind"] = nullptr;
+                converter_.copy_location_fields_from_decl(call_, cst);
+                if (v < 0)
+                {
+                  nlohmann::json neg;
+                  neg["_type"] = "UnaryOp";
+                  neg["op"] = {{"_type", "USub"}};
+                  neg["operand"] = cst;
+                  converter_.copy_location_fields_from_decl(call_, neg);
+                  tup["elts"].push_back(neg);
+                }
+                else
+                  tup["elts"].push_back(cst);
+              }
+              sorted_list["elts"].push_back(tup);
+            }
+
+            python_list sorted_list_expr(converter_, sorted_list);
+            return sorted_list_expr.get();
+          }
+
+          // Symbolic tuple path: a list of tuples whose components may be
+          // symbolic (e.g. sorted([(a, b), (b, a)])). The runtime sort model
+          // compares the tuple storage as reinterpreted integers — not
+          // Python's lexicographic order — and retypes the result elements as
+          // int. Instead emit a convert-time oblivious sorting network
+          // (selection sort) that compares tuples lexicographically and
+          // selects elements with ite, producing a correctly ordered list
+          // whose elements keep their tuple type. Bounded to a small length to
+          // keep the ite trees manageable.
+          if (map_size <= 16)
+          {
+            std::vector<exprt> vals;
+            vals.reserve(map_size);
+            bool all_tuples = true;
+            typet tuple_type;
+            for (size_t i = 0; i < map_size; ++i)
+            {
+              const std::string elem_id =
+                python_list::get_list_element_id(list_id, i);
+              const symbolt *elem_sym =
+                elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+              if (
+                !elem_sym || !converter_.get_tuple_handler().is_tuple_type(
+                               elem_sym->get_type()))
+              {
+                all_tuples = false;
+                break;
+              }
+              // Heterogeneous tuples (different arity/component types) are left
+              // to the model; a homogeneous list is the sortable case.
+              if (i == 0)
+                tuple_type = elem_sym->get_type();
+              else if (elem_sym->get_type() != tuple_type)
+              {
+                all_tuples = false;
+                break;
+              }
+              vals.push_back(build_symbol(*elem_sym));
+            }
+
+            if (all_tuples && vals.size() == map_size && map_size > 0)
+            {
+              const locationt loc = converter_.get_location_from_decl(call_);
+              // Materialize a value into a fresh temp symbol so later
+              // comparisons reference the symbol rather than a nested ite tree.
+              // exprt has value semantics (no subexpression sharing), so
+              // threading raw ite trees through the network would blow up
+              // exponentially in the number of compare-exchanges.
+              auto materialize = [&](const exprt &value) -> exprt {
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$sort_tmp$", value.type(), value);
+                code_declt decl(build_symbol(tmp));
+                decl.copy_to_operands(value);
+                decl.location() = loc;
+                converter_.add_instruction(decl);
+                return build_symbol(tmp);
+              };
+
+              // Each compare-exchange puts the smaller (or larger, when
+              // reverse=True) tuple at the earlier slot. This selection-sort
+              // network is not stable, but stability is moot here: the
+              // comparison is over the whole tuple, so two elements that
+              // compare equal are bit-identical and reordering them is
+              // unobservable. (Do not reuse this network for a partial-key
+              // sort, where ties would be distinguishable.)
+              const std::string cmp_op = fast_path_reverse ? "Gt" : "Lt";
+              bool network_ok = true;
+              for (size_t i = 0; i < vals.size() && network_ok; ++i)
+              {
+                for (size_t j = i + 1; j < vals.size(); ++j)
+                {
+                  exprt a = vals[j];
+                  exprt b = vals[i];
+                  exprt cond =
+                    converter_.handle_tuple_operations(cmp_op, a, b, call_);
+                  if (cond.is_nil() || !cond.type().is_bool())
+                  {
+                    network_ok = false; // non-orderable components
+                    break;
+                  }
+                  exprt old_i = vals[i];
+                  exprt old_j = vals[j];
+                  vals[i] = materialize(if_exprt(cond, old_j, old_i));
+                  vals[j] = materialize(if_exprt(cond, old_i, old_j));
+                }
+              }
+
+              if (network_ok)
+              {
+                python_list result(converter_, call_);
+                return result.build_list_from_exprs(vals);
+              }
+            }
+          }
         }
       }
     }
@@ -3170,8 +3548,9 @@ exprt function_call_expr::handle_general_function_call()
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
-  const bool is_sorted_min_max =
-    func_name == "min" || func_name == "max" || func_name == "sorted";
+  const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
+                                 func_name == "sorted" ||
+                                 func_name == "reversed";
 
   // min(iter, default=...) / max(iter, default=...) route to *_default
   // variants that fall back to the supplied default when iter is empty
@@ -3467,7 +3846,9 @@ exprt function_call_expr::handle_general_function_call()
             if (inferred_classes_from_fallback)
             {
               locationt location = converter_.get_location_from_decl(call_);
-              exprt zero_fallback = gen_zero(any_type());
+              // V.3: build the void* null fallback via the IREP2 factory.
+              exprt zero_fallback =
+                migrate_expr_back(gen_zero(migrate_type(any_type())));
               zero_fallback.location() = location;
               zero_fallback.location().user_provided(true);
               return zero_fallback;
@@ -3626,9 +4007,9 @@ exprt function_call_expr::handle_general_function_call()
           nondet_expr.location().user_provided(true);
           nondet_expr.location().comment(
             "Unsupported function '" + func_name + "' called");
-          // Also add an assertion to the current block to flag this as an error
-          exprt false_expr = gen_boolean(false);
-          code_assertt assert_code(false_expr);
+          // Also add an assertion to the current block to flag this as an
+          // error (V.3: build the always-fail condition in IREP2).
+          code_assertt assert_code(migrate_expr_back(gen_false_expr()));
           assert_code.location() = location;
           assert_code.location().user_provided(true);
           assert_code.location().comment(
@@ -3832,8 +4213,9 @@ exprt function_call_expr::handle_general_function_call()
     else
     {
       // Passing a void pointer to the "cls" argument
+      // (V.3: build the void* null via the IREP2 factory).
       typet t = pointer_typet(empty_typet());
-      call.arguments().push_back(gen_zero(t));
+      call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
       // All methods for the int class without parameters acts solely on the encapsulated integer value.
@@ -4019,19 +4401,35 @@ exprt function_call_expr::handle_general_function_call()
       }
       else
       {
-        const typet list_type = type_handler_.get_list_type();
-        symbolt &tmp_list = converter_.create_tmp_symbol(
-          call_, "$obj_size_list_arg$", list_type, exprt());
+        // get_expr() may hand back an inline list-returning call -- e.g. the
+        // sorted(m) in len(sorted(m)) -- as a code_function_callt statement
+        // rather than a value. Assigning that statement to a temp discards the
+        // call's return value, leaving the temp at its NONDET decl and giving a
+        // wrong size (#5464). materialize_list_function_call() binds the return
+        // value into a temp and yields that symbol (the same path the
+        // sorted()[i] subscript sibling uses, #4807); non-call args pass
+        // through unchanged.
+        arg = converter_.materialize_list_function_call(
+          arg, call_, *converter_.current_block);
 
-        code_declt tmp_decl(build_symbol(tmp_list));
-        tmp_decl.location() = location;
-        converter_.current_block->copy_to_operands(tmp_decl);
+        if (arg.is_symbol())
+          list_symbol = converter_.find_symbol(arg.identifier().as_string());
+        else
+        {
+          const typet list_type = type_handler_.get_list_type();
+          symbolt &tmp_list = converter_.create_tmp_symbol(
+            call_, "$obj_size_list_arg$", list_type, exprt());
 
-        code_assignt tmp_assign(build_symbol(tmp_list), arg);
-        tmp_assign.location() = location;
-        converter_.current_block->copy_to_operands(tmp_assign);
+          code_declt tmp_decl(build_symbol(tmp_list));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
 
-        list_symbol = &tmp_list;
+          code_assignt tmp_assign(build_symbol(tmp_list), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+
+          list_symbol = &tmp_list;
+        }
       }
 
       assert(list_symbol);
@@ -4728,7 +5126,8 @@ exprt function_call_expr::generate_attribute_error(
 
   log_warning("{}", error_msg.str());
 
-  code_assertt assert_code(gen_boolean(false));
+  // V.3: build the always-fail assert condition in IREP2.
+  code_assertt assert_code(migrate_expr_back(gen_false_expr()));
   assert_code.location() = location;
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());

@@ -47,6 +47,18 @@ public:
 
   exprt get();
 
+  /**
+   * @brief Materialize a fresh list from already-evaluated element values.
+   *
+   * Unlike get(), which converts AST element nodes, this builds the list from
+   * exprt values directly — used to emit the result of a frontend-computed
+   * sort over tuples, where each element is a conditional (ite) selection over
+   * the input elements. Records each element's type in the type map so later
+   * subscripting recovers the element type. The constructor's @c list_value_
+   * node supplies the source location.
+   */
+  exprt build_list_from_exprs(const std::vector<exprt> &elems);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
   /**
@@ -279,6 +291,18 @@ public:
   build_copy_list_call(const symbolt &list, const nlohmann::json &element);
 
   /**
+   * @brief Emit a __ESBMC_list_copy_shallow call producing a shallow copy of
+   * src_list (Python copy semantics: scalar elements get independent buffers,
+   * nested containers stay shared). Used by tuple(list), which must snapshot
+   * the source so later list mutations do not show through the tuple.
+   * @param src_list List-typed expression (symbol or list-returning call)
+   * @param element  AST node used for location info and temp naming
+   * @return Symbol expression of the copied list
+   */
+  exprt
+  build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
    */
@@ -390,14 +414,14 @@ public:
 private:
   friend class python_dict_handler;
 
-  // Repeat `list_elem` a runtime number of times (`count` may be any integer
-  // expression: a constant, a symbol like `n`, or a compound like `m + 1`).
-  // Builds a fresh list, so a literal source's pre-populated element is not
-  // reused (avoids an off-by-one).
+  // Repeat the elements in `list_elems` `count` times at runtime (`count` may
+  // be any integer expression: a constant, a symbol like `n`, or a compound
+  // like `m + 1`). Each iteration pushes every element in order. Builds a
+  // fresh list so a literal source's element is not reused (avoids off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
     const exprt &count,
-    const exprt &list_elem);
+    const std::vector<exprt> &list_elems);
 
   exprt build_list_at_call(
     const exprt &list,

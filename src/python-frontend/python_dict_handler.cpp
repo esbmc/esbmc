@@ -80,6 +80,18 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
+// (V.3). SIZE_MAX is the dict lookup's not-found sentinel.
+exprt build_key_found(const symbolt &index_var)
+{
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  const constant_exprt size_max(size_max_val, size_type());
+  expr2tc idx2, max2;
+  migrate_expr(build_symbol(index_var), idx2);
+  migrate_expr(size_max, max2);
+  return migrate_expr_back(not2tc(equality2tc(idx2, max2)));
+}
 } // namespace
 
 python_dict_handler::python_dict_handler(
@@ -159,6 +171,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
 
   struct_typet dict_struct;
   dict_struct.tag("__python_dict__");
+  set_python_aggregate_kind(dict_struct, "dict");
 
   typet list_type = type_handler_.get_list_type();
 
@@ -433,10 +446,30 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     iterable_expr = build_symbol(tmp_var_symbol);
   }
 
-  if (target["_type"] != "Name")
+  // A tuple target (`{k: v for a, b in pairs}`) iterates a list of tuples and
+  // unpacks each element into the component names. Hold the element in a temp
+  // of the tuple's struct type and let tuple_handler::handle_tuple_unpacking
+  // emit the per-component assignments (the same path `a, b = t` uses), so the
+  // key/value expressions see the unpacked names.
+  const bool is_tuple_target = (target["_type"] == "Tuple");
+  typet tuple_elem_type;
+  if (is_tuple_target)
+  {
+    if (!iterable_expr.is_symbol())
+      throw std::runtime_error(
+        "DictComp tuple target requires a named list of tuples");
+    tuple_elem_type =
+      converter_.name_space().follow(python_list::get_list_element_type(
+        iterable_expr.identifier().as_string(), 0));
+    if (!converter_.get_tuple_handler().is_tuple_type(tuple_elem_type))
+      throw std::runtime_error(
+        "DictComp tuple target requires iterating a list of tuples");
+  }
+  else if (target["_type"] != "Name")
     throw std::runtime_error("Only simple targets are supported in DictComp");
 
-  std::string loop_var_name = target["id"].get<std::string>();
+  std::string loop_var_name =
+    is_tuple_target ? "$dictcomp_tuple$" : target["id"].get<std::string>();
   symbol_id loop_var_sid = converter_.create_symbol_id();
   loop_var_sid.set_object(loop_var_name);
 
@@ -449,7 +482,12 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // cannot be determined, so no currently-working case regresses.
   typet loop_var_type = any_type();
   bool mixed_numeric = false;
-  if (
+  if (is_tuple_target)
+  {
+    // The temp holds the element tuple; component reads come from unpacking.
+    loop_var_type = tuple_elem_type;
+  }
+  else if (
     iter.contains("_type") && iter["_type"] == "Call" &&
     iter.contains("func") && iter["func"].contains("_type") &&
     iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
@@ -544,6 +582,15 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
+  // For a tuple target, unpack the element tuple held in the temp into the
+  // component names (a, b) so the key/value expressions can reference them.
+  if (is_tuple_target)
+  {
+    exprt tuple_value = build_symbol(*loop_var);
+    converter_.get_tuple_handler().handle_tuple_unpacking(
+      element, target, tuple_value, loop_body);
+  }
+
   // Keep current_block redirected to loop_body across the whole pair build:
   // get_expr, contains(), get_list_element_info() and other helpers used by
   // handle_dict_subscript_assign emit DECL/ASSIGN side effects via
@@ -570,19 +617,18 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   {
     // Dict comprehensions may include filters such as
     // {k: v for x in xs if cond1 if cond2}
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc combined2;
+    bool first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc c2;
+      migrate_expr(converter_.get_expr(if_clause), c2);
+      combined2 = first ? c2 : and2tc(combined2, c2);
+      first = false;
     }
+    exprt combined_condition = migrate_expr_back(combined2);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
@@ -595,14 +641,17 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     loop_body.copy_to_operands(pair_block);
   }
 
-  exprt increment("+", size_type());
-  increment.copy_to_operands(build_symbol(index_var), gen_one(size_type()));
+  // V.3: build index + 1 and index < length in IREP2.
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc idx2, len2;
+  migrate_expr(build_symbol(index_var), idx2);
+  migrate_expr(length_expr, len2);
+  exprt increment = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
 
-  exprt loop_condition("<", bool_type());
-  loop_condition.copy_to_operands(build_symbol(index_var), length_expr);
+  exprt loop_condition = migrate_expr_back(lessthan2tc(idx2, len2));
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -697,19 +746,18 @@ exprt python_dict_handler::build_range_dict_comprehension(
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc combined2;
+    bool first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc c2;
+      migrate_expr(converter_.get_expr(if_clause), c2);
+      combined2 = first ? c2 : and2tc(combined2, c2);
+      first = false;
     }
+    exprt combined_condition = migrate_expr_back(combined2);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
@@ -723,16 +771,18 @@ exprt python_dict_handler::build_range_dict_comprehension(
   }
 
   // loop_var = loop_var + 1
-  exprt increment("+", idx_type);
-  increment.copy_to_operands(build_symbol(*loop_var), gen_one(idx_type));
+  // V.3: build loop_var + 1 and loop_var < stop in IREP2.
+  const type2tc idx_t2 = migrate_type(idx_type);
+  expr2tc lv2, stop2;
+  migrate_expr(build_symbol(*loop_var), lv2);
+  migrate_expr(build_symbol(stop_var), stop2);
+  exprt increment = migrate_expr_back(add2tc(idx_t2, lv2, gen_one(idx_t2)));
   code_assignt loop_inc(build_symbol(*loop_var), increment);
   loop_inc.location() = location;
   loop_body.copy_to_operands(loop_inc);
 
   // while (loop_var < stop)
-  exprt loop_condition("<", bool_type());
-  loop_condition.copy_to_operands(
-    build_symbol(*loop_var), build_symbol(stop_var));
+  exprt loop_condition = migrate_expr_back(lessthan2tc(lv2, stop2));
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -914,9 +964,13 @@ exprt python_dict_handler::handle_dict_subscript(
   // If index == SIZE_MAX the key was not found: throw KeyError so that
   // try/except KeyError handlers can catch it (instead of failing the property).
   {
+    // V.3: build the not-found check (index == SIZE_MAX) in IREP2.
     const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-    constant_exprt size_max(size_max_val, size_type());
-    exprt key_not_found = equality_exprt(build_symbol(index_var), size_max);
+    const constant_exprt size_max(size_max_val, size_type());
+    expr2tc idx2, max2;
+    migrate_expr(build_symbol(index_var), idx2);
+    migrate_expr(size_max, max2);
+    exprt key_not_found = migrate_expr_back(equality2tc(idx2, max2));
 
     std::string keyerror_msg = "KeyError: key not found in dictionary";
     std::string keyerror_type_str = "KeyError";
@@ -1318,7 +1372,12 @@ exprt python_dict_handler::handle_dict_membership(
   exprt contains_result = list_handler.contains(key_expr, keys_member);
 
   if (negated)
-    return not_exprt(contains_result);
+  {
+    // V.3: build the negated-membership result in IREP2.
+    expr2tc cr2;
+    migrate_expr(contains_result, cr2);
+    return migrate_expr_back(not2tc(cr2));
+  }
 
   return contains_result;
 }
@@ -2179,10 +2238,7 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
@@ -2409,10 +2465,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
@@ -2775,10 +2828,7 @@ exprt python_dict_handler::handle_dict_pop(
   try_find_call.location() = location;
   converter_.add_instruction(try_find_call);
 
-  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
-  constant_exprt size_max(size_max_val, size_type());
-  exprt key_found =
-    not_exprt(equality_exprt(build_symbol(index_var), size_max));
+  exprt key_found = build_key_found(index_var); // V.3
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
@@ -3027,9 +3077,10 @@ exprt python_dict_handler::handle_dict_popitem(
   size_call.location() = location;
   converter_.add_instruction(size_call);
 
-  // Empty dict → raise KeyError
-  exprt is_empty =
-    equality_exprt(build_symbol(size_var), gen_zero(size_type()));
+  // Empty dict → raise KeyError (V.3: build the check in IREP2).
+  expr2tc size2;
+  migrate_expr(build_symbol(size_var), size2);
+  exprt is_empty = migrate_expr_back(equality2tc(size2, gen_zero(size2->type)));
 
   code_blockt empty_block;
   {
@@ -3433,8 +3484,11 @@ exprt python_dict_handler::handle_dict_update(
     dict_expr, key_expr, value_expr, location, call_node, pair_block);
   loop_body.copy_to_operands(pair_block);
 
-  // Advance to the next source entry.
-  exprt next_index = plus_exprt(build_symbol(index_var), gen_one(size_type()));
+  // Advance to the next source entry (V.3: build index + 1 in IREP2).
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc idx2;
+  migrate_expr(build_symbol(index_var), idx2);
+  exprt next_index = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
   code_assignt index_update(build_symbol(index_var), next_index);
   index_update.location() = location;
   loop_body.copy_to_operands(index_update);

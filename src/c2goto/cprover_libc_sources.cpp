@@ -57,6 +57,8 @@ public:
       create_directory(headers + "/sys");
       create_directory(headers + "/sys/_types");
       create_directory(headers + "/sys/_pthread");
+      create_directory(headers + "/netinet");
+      create_directory(headers + "/arpa");
       create_directory(headers + "/ubuntu20.04");
       create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76");
       create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include");

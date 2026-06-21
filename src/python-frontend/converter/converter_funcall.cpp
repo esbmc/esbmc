@@ -807,7 +807,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (result->kind == PyConstValue::INT)
             return from_integer(result->int_val, long_long_int_type());
           if (result->kind == PyConstValue::BOOL)
-            return gen_boolean(result->bool_val);
+            // V.3: build the folded bool constant in IREP2.
+            return migrate_expr_back(
+              result->bool_val ? gen_true_expr() : gen_false_expr());
           // NONE and FLOAT fall through to normal call
         }
       }

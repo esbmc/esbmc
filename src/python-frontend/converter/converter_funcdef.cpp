@@ -12,10 +12,12 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/symbolic_types.h>
@@ -934,7 +936,8 @@ void python_converter::validate_return_paths(
   locationt loc = get_location_from_decl(function_node);
 
   code_assertt missing_return_assert;
-  missing_return_assert.assertion() = gen_boolean(false);
+  // V.3: build the always-fail assert condition in IREP2.
+  missing_return_assert.assertion() = migrate_expr_back(gen_false_expr());
   missing_return_assert.location() = loc;
   missing_return_assert.location().comment(
     "Missing return statement detected in function '" + current_func_name_ +
@@ -1317,25 +1320,53 @@ void python_converter::get_function_definition(
   // to a typed function pointer).
   if (type.return_type().is_empty())
   {
-    for (const auto &instr : function_body.operands())
-    {
-      if (!instr.is_code())
-        continue;
-      const codet &code_instr = to_code(instr);
-      if (code_instr.get_statement() == "return")
+    // First, the original top-level scan: a function with a fall-through
+    // `return` at the body's top level (e.g. an early `return -1` sentinel
+    // inside an `if`, followed by `return bin(...)` at the end) is typed from
+    // that top-level return -- the dominant exit. Picking a nested branch's
+    // type instead would narrow a heterogeneous function to the wrong branch
+    // and collapse the call-site cross-type `==` fold to constant False
+    // (GitHub #5157).
+    auto top_level_return_type = [&]() -> std::optional<typet> {
+      for (const auto &instr : function_body.operands())
       {
-        const code_returnt &ret = to_code_return(code_instr);
-        if (ret.has_return_value())
-        {
-          const typet &ret_type = ret.return_value().type();
-          if (!ret_type.is_empty())
-          {
-            type.return_type() = ret_type;
-            added_symbol->set_type(type);
-            break;
-          }
-        }
+        if (!instr.is_code() || to_code(instr).get_statement() != "return")
+          continue;
+        const code_returnt &ret = to_code_return(to_code(instr));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
       }
+      return std::nullopt;
+    };
+
+    // Fallback: when every `return` is nested inside a conditional (so the
+    // top-level scan finds nothing), recurse to find a typed RETURN. Otherwise
+    // an all-nested body (e.g. `if c: return s.split() else: return s.split()`)
+    // leaves the return type empty -> void -> the value is stripped by
+    // remove_returns and the call site reads nondet.
+    std::function<std::optional<typet>(const exprt &)> nested_return_type =
+      [&](const exprt &node) -> std::optional<typet> {
+      if (node.is_code() && to_code(node).get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(to_code(node));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
+      }
+      for (const auto &op : node.operands())
+      {
+        if (std::optional<typet> found = nested_return_type(op))
+          return found;
+      }
+      return std::nullopt;
+    };
+
+    std::optional<typet> ret_type = top_level_return_type();
+    if (!ret_type)
+      ret_type = nested_return_type(function_body);
+    if (ret_type)
+    {
+      type.return_type() = *ret_type;
+      added_symbol->set_type(type);
     }
   }
 

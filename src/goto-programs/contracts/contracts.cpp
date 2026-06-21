@@ -1,6 +1,8 @@
 #include <cstdlib>
 #include <algorithm>
+#include <map>
 #include <goto-programs/contracts/contracts.h>
+#include <util/type_byte_size.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
@@ -842,6 +844,25 @@ void code_contractst::enforce_contracts(
           if (comment == "contract::ensures" || comment == "contract::requires")
           {
             instructions_to_remove.insert(it);
+
+            // The GOTO pointer/arithmetic-safety pass emits auto-generated
+            // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
+            // clause expression, immediately preceding this ASSUME. They are
+            // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
+            // ensures clause they reference __ESBMC_return_value, which is
+            // unbound in the original body, yielding a spurious violation
+            // (#5043). The wrapper re-checks the clause with return_value
+            // properly bound, so drop the contiguous run of safety asserts
+            // belonging to this clause. Contract clauses precede the function
+            // body, so a real body assertion never sits directly before a
+            // clause ASSUME; walking back over asserts cannot reach body code.
+            for (auto p = it; p != renamed_body.instructions.begin();)
+            {
+              --p;
+              if (!p->is_assert())
+                break;
+              instructions_to_remove.insert(p);
+            }
           }
         }
       }
@@ -885,6 +906,34 @@ void code_contractst::enforce_contracts(
       {
         renamed_body.instructions.erase(it);
       }
+    }
+
+    // Recursive self-calls: under enforcement the function body is executed by
+    // the checking wrapper, and a self-call resolves to that same wrapper, so
+    // the real recursion is unwound unboundedly (OOM) instead of using the
+    // function's own contract (#5313). Replace each self-call in the original
+    // body with the contract (assert requires → havoc assigns → assume ensures),
+    // exactly as --replace-call-with-contract does. original_body_copy still
+    // carries the contract clauses (the renamed body has them stripped), so use
+    // it as the contract source.
+    {
+      goto_programt &self_body =
+        goto_functions.function_map[original_name_id].body;
+      std::vector<goto_programt::targett> self_calls;
+      Forall_goto_program_instructions (i_it, self_body)
+      {
+        if (!i_it->is_function_call() || !is_code_function_call2t(i_it->code))
+          continue;
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        if (
+          is_symbol2t(call.function) &&
+          to_symbol2t(call.function).get_symbol_name() ==
+            id2string(original_id))
+          self_calls.push_back(i_it);
+      }
+      for (auto call_it : self_calls)
+        generate_replacement_at_call(
+          *func_sym, original_body_copy, call_it, self_body);
     }
 
     // Extract is_fresh mappings from function body for ensures clause replacement
@@ -1010,6 +1059,11 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
 
+  // Records each is_fresh pointer's byte-size so the Phase 2B array-element
+  // witness index can be bounded by the real allocation rather than the default
+  // ARRAY_ALLOC_ELEMS (which only applies to validity-assumption allocations).
+  std::map<irep_idt, expr2tc> is_fresh_sizes;
+
   for (const auto &info : is_fresh_calls)
   {
     // Strip typecasts (e.g. (void*)(&hdr_len) → &hdr_len) to recover the
@@ -1069,6 +1123,11 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     // Remember the allocation so the wrapper can free it before returning.
     wrapper_heap_ptrs.push_back(ptr_var);
+
+    // Record the allocation size keyed by the pointer symbol so Phase 2B can
+    // bound its array-element witness index by the real allocation.
+    if (is_symbol2t(ptr_var))
+      is_fresh_sizes[to_symbol2t(ptr_var).thename] = info.size_expr;
 
     // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
     // valid memory block.  Without this, symex_mem's non-deterministic
@@ -1233,7 +1292,12 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     // 3b-v. Phase 2B: nondet-witness snapshot for array element assigns
     arr_elem_snaps = materialize_arr_elem_snapshots(
-      classified_assigns, assigns_targets, wrapper, location, func_name);
+      classified_assigns,
+      assigns_targets,
+      wrapper,
+      location,
+      func_name,
+      is_fresh_sizes);
     if (!arr_elem_snaps.empty())
     {
       log_debug(
@@ -2478,7 +2542,8 @@ code_contractst::materialize_arr_elem_snapshots(
   const std::vector<expr2tc> &assigns_targets,
   goto_programt &wrapper,
   const locationt &location,
-  const std::string &func_name)
+  const std::string &func_name,
+  const std::map<irep_idt, expr2tc> &is_fresh_sizes)
 {
   std::vector<arr_elem_snapshot_t> result;
 
@@ -2552,11 +2617,27 @@ code_contractst::materialize_arr_elem_snapshots(
     j_assign->location.comment("frame: nondet witness index (Phase 2B)");
 
     // Constrain j to the allocated range so that arr[j] is a valid access.
-    // The allocation in add_pointer_validity_assumptions uses ARRAY_ALLOC_ELEMS
-    // elements, so j must be in [0, ARRAY_ALLOC_ELEMS).
+    // Two allocation sources exist: __ESBMC_is_fresh(p, n) allocates exactly n
+    // bytes (n/sizeof(elem) elements), while add_pointer_validity_assumptions
+    // allocates ARRAY_ALLOC_ELEMS elements for the remaining array params.  Use
+    // the real is_fresh element count when known; otherwise fall back to
+    // ARRAY_ALLOC_ELEMS.  Over-bounding j here makes arr[j] read past the real
+    // allocation and trips a spurious "array bounds violated" (see #5314).
     {
       expr2tc j_lo = gen_zero(j_type);
       expr2tc j_hi = constant_int2tc(j_type, BigInt(ARRAY_ALLOC_ELEMS));
+      auto fresh_it = is_fresh_sizes.find(to_symbol2t(arr_ptr).thename);
+      if (fresh_it != is_fresh_sizes.end())
+      {
+        BigInt elem_sz = type_byte_size(elem_type, &ns);
+        if (elem_sz > 0)
+        {
+          expr2tc size_bytes = typecast2tc(j_type, fresh_it->second);
+          expr2tc elem_sz_e = constant_int2tc(j_type, elem_sz);
+          j_hi = div2tc(j_type, size_bytes, elem_sz_e);
+          simplify(j_hi);
+        }
+      }
       expr2tc in_range = and2tc(
         greaterthanequal2tc(witness_j, j_lo), lessthan2tc(witness_j, j_hi));
       goto_programt::targett range_assume = wrapper.add_instruction(ASSUME);
@@ -3030,6 +3111,32 @@ expr2tc code_contractst::fix_comparison_types(
             "contracts",
             "Fixed fractional comparison: cast constant to {}",
             get_type_id(*ret_val->type));
+        }
+      }
+      // Case 3: return_value is an integer compared with an integer operand of
+      // a different width — e.g. an `int` return value against a `long`
+      // constant that does not fit in `int`. remove_incorrect_casts above
+      // stripped the usual-arithmetic-conversion cast Clang inserted, leaving a
+      // width mismatch the SMT backend rejects (mk_bvsgt requires equal operand
+      // widths). Re-apply the conversion by widening the narrower side to the
+      // wider integer type. Issue #5312.
+      else if (side1_is_retval || side2_is_retval)
+      {
+        auto is_int = [](const type2tc &t) {
+          return is_signedbv_type(t) || is_unsignedbv_type(t);
+        };
+        if (
+          is_int((*side1)->type) && is_int((*side2)->type) &&
+          (*side1)->type->get_width() != (*side2)->type->get_width())
+        {
+          if ((*side1)->type->get_width() < (*side2)->type->get_width())
+            *side1 = typecast2tc((*side2)->type, *side1);
+          else
+            *side2 = typecast2tc((*side1)->type, *side2);
+          log_debug(
+            "contracts",
+            "Fixed integer comparison: widened return_value comparison to "
+            "matching width");
         }
       }
     }
