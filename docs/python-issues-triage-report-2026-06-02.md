@@ -384,3 +384,57 @@ robustness category, but with a sound value model rather than an "unsupported fe
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §11–§14 (PRs #5510/#5513/#5515/#5518) are all in flight and not yet on
+> `master`; this section is appended as §15 of the fifth 2026-06-21 sweep. When they land, the
+> maintainer orders §11 → §12 → §13 → §14 → §15.
+
+## 15. 2026-06-21 re-validation (fifth sweep) & dict-union SIGSEGV→diagnostic
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged; PRs #5510/#5513/#5515/#5518
+OPEN, awaiting review). KNOWNBUG classification unchanged. This sweep probed dict/set/int/float/
+list method idioms (fresh ground — the §11 string/cmath/numpy battery is drained).
+
+### 15a. New isolated, soundly-fixable defect found & fixed
+**Python dict union (`d1 | d2`) SIGSEGV'd in the SMT backend.**
+
+`{"a":1} | {"b":2}` (PEP 584 dict merge, Python 3.9+) crashed with `EXC_BAD_ACCESS` inside
+`bitwuzla_mk_term2` — the faulting address decoded to ASCII (`...tuple_`), i.e. a struct/type
+irep was handed to the solver as a term pointer. The crash reproduced for every key type; set
+union (`{1,2}|{3,4}`) and integer bitwise-or (`6|1`) were unaffected.
+
+**Root cause** (`src/python-frontend/converter/converter_binop.cpp`,
+`build_binary_operator_expr`). Set union and the difference/intersection ops are intercepted for
+list-typed (set) operands; integer `|` takes the proper bitvector path. But **two dict operands
+matched neither** — dict union is unmodeled — so they fell through to `build_binary_expression`,
+whose bitwise branch (`is_bitwise_op`) only type-adjusts bv/bool operands and then emitted a raw
+`BitOr` over the two dict structs. That malformed term crashed the Bitwuzla encoder.
+
+**Fix:** add a guard beside the existing set-operation handling that rejects bitwise ops
+(`BitOr`/`BitAnd`/`BitXor`) on dict operands with a clean
+`ERROR: dict union '|' and bitwise operations on dict are not supported`. Modelling dict merge
+properly (copy-then-update semantics with right-wins key precedence) is a feature for a dedicated
+change; this is the §5-item-5 crash→diagnostic robustness step, bounded and sound. Set/int
+bitwise ops and dict `==`/`.update()` are untouched. New regression pair
+`regression/python/dict_union_unsupported` (clean error — the **C-Live** liveness witness for the
+added guard) + `set_union_after_dict_fix` (set/int `|` still verify). Broad `regression/python/`
+sweep: **zero new failures** (only the pre-existing `--z3`/`--ir` environmental set).
+
+Bitwuzla-only build; the fix is a frontend dispatch guard with no SMT encoding, so the verdict is
+solver-agnostic.
+
+### 15b. Other fresh defects observed this sweep (catalogued, not yet fixed)
+The dict/int/float probe also surfaced (deferred — several are unmodeled-method feature gaps, and
+one is blocked behind an in-flight PR):
+- `int.bit_count()`, `int.from_bytes()`, `int.to_bytes()`, `float.is_integer()`, `float.hex()` —
+  **unmodeled methods**; ESBMC replaces the undefined function with `assert(false)`, so any program
+  calling them reports a spurious `FAILED`. Each is an isolated "add the model" candidate.
+- `set.isdisjoint()` — `ERROR: Object "" not found` (dispatch/model gap).
+- `len()` of a space-padded `str.center()` result still mis-verifies (noted in §14) — blocked
+  behind PR #5518, which must land first to make `center` return a concrete value.
+
+### 15c. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
