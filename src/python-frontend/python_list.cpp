@@ -4690,6 +4690,33 @@ exprt python_list::extract_pyobject_value(
   exprt obj_value =
     build_deref_member(pyobject_expr, "value", pointer_typet(empty_typet()));
 
+  // Element whose static type was erased to any_type() (void*): this happens
+  // when a dict/list crosses into an *unannotated* parameter, where keys()/
+  // values() reads have no compile-time element type (#5444). The generic
+  // "cast void* to T* and dereference" path below overruns a string element: a
+  // str is stored as a short char[] at item->value (e.g. a 2-byte key), so an
+  // 8-byte void* dereference reads past the array (array-bounds violation). The
+  // element's *runtime* type is recorded in item->type_id (stamped at push
+  // time), so when it marks a string, keep the stored pointer (== char*, the
+  // same value the annotated str path returns) with no dereference. Every other
+  // type keeps the proven dereference read, so numeric elements are unaffected.
+  // The dispatch key is the caller-stamped type, not a usage heuristic, so this
+  // stays sound.
+  if (elem_type.is_pointer() && elem_type.subtype().id() == "empty")
+  {
+    const size_t str_type_id = std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(pointer_typet(char_type())));
+    exprt type_id_member =
+      build_deref_member(pyobject_expr, "type_id", size_type());
+    // Default: cast void* to void** and dereference (the read that already
+    // works for numeric / pointer-by-value elements).
+    exprt as_default = build_dereference(
+      build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
+    equality_exprt is_str(
+      type_id_member, from_integer(str_type_id, size_type()));
+    return if_exprt(is_str, obj_value, as_default);
+  }
+
   // For array types, return pointer to element type instead of pointer to array
   // The dereference system doesn't support array types as target types
   if (elem_type.is_array())
