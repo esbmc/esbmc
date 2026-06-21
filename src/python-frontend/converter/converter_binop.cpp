@@ -167,8 +167,7 @@ std::string py_percent_format(
     }
     default:
       throw std::runtime_error(
-        std::string("unsupported conversion '%") + c +
-        "' in str % formatting");
+        std::string("unsupported conversion '%") + c + "' in str % formatting");
     }
   }
 
