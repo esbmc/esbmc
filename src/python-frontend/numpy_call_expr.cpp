@@ -2915,12 +2915,26 @@ exprt numpy_call_expr::get()
         }
         if (function == "round")
         {
-          // numpy.round(x, decimals): round to the given number of decimal
-          // places using round-half-to-even (the default FP rounding mode, so
-          // std::nearbyint matches numpy bit-for-bit). decimals may be zero or
-          // negative (e.g. round(12345, -2) == 12300).
-          const double scale = std::pow(10.0, right);
-          out = std::nearbyint(left * scale) / scale;
+          // numpy.round(x, decimals): round half to even (numpy semantics),
+          // for decimals zero or negative too (e.g. round(12345, -2) == 12300).
+          // This host fold must produce the SAME double on every platform, else
+          // the baked SMT constant diverges and the verdict flips (it did:
+          // passed on arm64, failed on x86-64). Two non-portable pitfalls are
+          // avoided: (1) std::pow(10.0, d) is not guaranteed to be the exact
+          // power of ten (glibc vs Apple libm differ), so build the scale by
+          // exact repeated multiplication; (2) std::nearbyint honours the
+          // ambient FP rounding mode, so decide half-to-even explicitly with
+          // std::floor, which ignores the mode.
+          const long long decimals = static_cast<long long>(right);
+          double pow10 = 1.0;
+          for (long long i = 0; i < std::llabs(decimals); ++i)
+            pow10 *= 10.0;
+          const double scaled = decimals >= 0 ? left * pow10 : left / pow10;
+          double r = std::floor(scaled);
+          const double frac = scaled - r;
+          if (frac > 0.5 || (frac == 0.5 && std::fmod(r, 2.0) != 0.0))
+            r += 1.0;
+          out = decimals >= 0 ? r / pow10 : r * pow10;
           return true;
         }
         return false;
@@ -2931,9 +2945,8 @@ exprt numpy_call_expr::get()
       // Fold the scalar-constant case here.
       // Symbolic and array operands are unsupported.
       if (
-        allow_numpy_fold &&
-        (function == "copysign" || function == "fmax" || function == "fmin" ||
-         function == "round"))
+        allow_numpy_fold && (function == "copysign" || function == "fmax" ||
+                             function == "fmin" || function == "round"))
       {
         double folded = 0.0;
         if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
