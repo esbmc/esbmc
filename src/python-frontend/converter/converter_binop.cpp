@@ -102,7 +102,7 @@ std::string py_percent_format(
       long long v;
       if (!py_const_int(next_arg(), v))
         throw std::runtime_error(
-          "unsupported: non-constant argument in str %% formatting");
+          "unsupported: non-constant argument in str % formatting");
       out += std::to_string(v);
       break;
     }
@@ -123,7 +123,7 @@ std::string py_percent_format(
         out += std::to_string(v);
       else
         throw std::runtime_error(
-          "unsupported: non-constant argument in str %% formatting");
+          "unsupported: non-constant argument in str % formatting");
       break;
     }
     case 'x':
@@ -133,10 +133,10 @@ std::string py_percent_format(
       long long v;
       if (!py_const_int(next_arg(), v))
         throw std::runtime_error(
-          "unsupported: non-constant argument in str %% formatting");
+          "unsupported: non-constant argument in str % formatting");
       if (v < 0)
         throw std::runtime_error(
-          "unsupported: negative argument in str %% %x/%o formatting");
+          "unsupported: negative argument in str % %x/%o formatting");
       std::ostringstream ss;
       if (c == 'o')
         ss << std::oct << v;
@@ -162,13 +162,13 @@ std::string py_percent_format(
         out += a["value"].get<std::string>();
       else
         throw std::runtime_error(
-          "unsupported: %c argument in str %% formatting");
+          "unsupported: %c argument in str % formatting");
       break;
     }
     default:
       throw std::runtime_error(
         std::string("unsupported conversion '%") + c +
-        "' in str %% formatting");
+        "' in str % formatting");
     }
   }
 
@@ -670,6 +670,40 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
+
+  // Python ``str % args`` is string formatting, not numeric modulo. The generic
+  // arithmetic path builds ``str_ptr % int``, mistypes the result, and crashes
+  // the SMT backend (#5495 for a literal format, #5499 for a str variable). It
+  // runs before the is_array() gate below because a ``str`` parameter is a char
+  // *pointer*, not an array, so it would otherwise miss handle_array_operations
+  // (whose gate requires an array operand). is_string_type covers both char
+  // arrays (literals) and char pointers (str variables),
+  // but not np.int8/np.uint8 arrays, whose ``% scalar`` keeps its numeric path.
+  if (op == "Mod" && type_utils::is_string_type(lhs.type()))
+  {
+    // Only a literal format string is constant-foldable; a variable format
+    // (#5499) is rejected with a clean diagnostic rather than crashing.
+    if (
+      left.value("_type", "") != "Constant" || !left.contains("value") ||
+      !left["value"].is_string())
+      throw std::runtime_error(
+        "unsupported: str % formatting requires a literal format string");
+
+    std::vector<nlohmann::json> args;
+    if (right.is_object() && right.value("_type", "") == "Tuple")
+      for (const auto &e : right["elts"])
+        args.push_back(e);
+    else
+      args.push_back(right);
+
+    // Re-enter conversion through a synthesised Constant node so the folded
+    // string flows through the exact same path as a string literal (e.g.
+    // len("ab")), which materialises it correctly when consumed inline by
+    // len()/==. Building the array directly left it unaddressable inline.
+    nlohmann::json folded = left;
+    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
+    return get_expr(folded);
+  }
 
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
@@ -1248,39 +1282,6 @@ exprt python_converter::handle_array_operations(
         msg << " at " << loc.get_file() << ":" << loc.get_line();
       throw std::runtime_error(msg.str());
     }
-  }
-
-  // Python ``str % args`` is string formatting, not numeric modulo. Falling
-  // through to the generic arithmetic path builds ``&"%d"[0] % 5`` (pointer
-  // modulo int), mistypes the result as ``char[0]``, and crashes the SMT
-  // backend on the bogus pointer arithmetic (#5495). Constant-fold the common
-  // printf-style conversions into a string literal; throw a clean diagnostic
-  // for anything not modelled (non-constant format/args, widths, floats).
-  if (op == "Mod" && type_utils::is_string_type(lhs.type()))
-  {
-    // Gate on the string type (char-element array), not the structural 8-bit
-    // test: np.int8/np.uint8 arrays are also 8-bit arrays but use a bv element,
-    // and their `% scalar` must keep flowing through the numeric path.
-    if (
-      left.value("_type", "") != "Constant" || !left.contains("value") ||
-      !left["value"].is_string())
-      throw std::runtime_error(
-        "unsupported: str %% formatting requires a literal format string");
-
-    std::vector<nlohmann::json> args;
-    if (right.is_object() && right.value("_type", "") == "Tuple")
-      for (const auto &e : right["elts"])
-        args.push_back(e);
-    else
-      args.push_back(right);
-
-    // Re-enter conversion through a synthesised Constant node so the folded
-    // string flows through the exact same path as a string literal (e.g.
-    // len("ab")), which materialises it correctly when consumed inline by
-    // len()/==. Building the array directly left it unaddressable inline.
-    nlohmann::json folded = left;
-    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
-    return get_expr(folded);
   }
 
   // Handle string concatenation -- only valid for char-arrays. Numeric
