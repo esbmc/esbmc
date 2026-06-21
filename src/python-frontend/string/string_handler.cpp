@@ -190,7 +190,18 @@ static std::optional<BigInt> get_constant_array_extent(const exprt &array_expr)
 static exprt
 make_binary_bool_expr(const irep_idt &id, const exprt &lhs, const exprt &rhs)
 {
-  exprt out(id, bool_type());
+  // V.3: build the boolean binop in IREP2 (the only ids used are =/and/or),
+  // back-migrated for the legacy callers.
+  expr2tc l2, r2;
+  migrate_expr(lhs, l2);
+  migrate_expr(rhs, r2);
+  if (id == "=")
+    return migrate_expr_back(equality2tc(l2, r2));
+  if (id == "and")
+    return migrate_expr_back(and2tc(l2, r2));
+  if (id == "or")
+    return migrate_expr_back(or2tc(l2, r2));
+  exprt out(id, bool_type()); // fallback for any other id
   out.copy_to_operands(lhs, rhs);
   return out;
 }
