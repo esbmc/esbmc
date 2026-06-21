@@ -290,8 +290,14 @@ exprt python_typechecking::build_none_check(const exprt &value_expr) const
       return build_member(deref, "is_none", bool_type());
     }
 
+    // V.3: build the `value == NULL` check in IREP2. Keep the legacy
+    // gen_zero(original_type) so the null-pointer constant is preserved
+    // exactly (round-tripped through migrate), then compare in IREP2.
     exprt null_expr = gen_zero(original_type);
-    return equality_exprt(value_expr, null_expr);
+    expr2tc ve2, null2;
+    migrate_expr(value_expr, ve2);
+    migrate_expr(null_expr, null2);
+    return migrate_expr_back(equality2tc(ve2, null2));
   }
 
   if (resolved_type == none_type())

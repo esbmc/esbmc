@@ -3155,7 +3155,10 @@ exprt python_list::compare(
 
     locationt loc = converter_.get_location_from_decl(list_value_);
     symbolt &eq_ret = converter_.create_tmp_symbol(
-      list_value_, "set_eq_tmp", bool_type(), gen_boolean(false));
+      list_value_,
+      "set_eq_tmp",
+      bool_type(),
+      migrate_expr_back(gen_false_expr())); // V.3
     code_declt eq_ret_decl(build_symbol(eq_ret));
     converter_.add_instruction(eq_ret_decl);
 
@@ -3174,14 +3177,11 @@ exprt python_list::compare(
     set_eq_call.location() = loc;
     converter_.add_instruction(set_eq_call);
 
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(eq_ret));
-    if (op == "Eq")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+    expr2tc er2;
+    migrate_expr(build_symbol(eq_ret), er2);
+    return migrate_expr_back(
+      equality2tc(er2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
   }
 
   // Fast path for list equality/inequality when we have concrete type-map
@@ -3422,7 +3422,7 @@ exprt python_list::compare(
     const symbolt *b_sym = swap ? lhs_symbol : rhs_symbol;
 
     symbolt &lt_ret = converter_.create_tmp_symbol(
-      list_value_, "lt_tmp", bool_type(), gen_boolean(false));
+      list_value_, "lt_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
     code_declt lt_ret_decl(build_symbol(lt_ret));
     converter_.add_instruction(lt_ret_decl);
 
@@ -3438,14 +3438,12 @@ exprt python_list::compare(
     converter_.add_instruction(lt_call);
 
     // Lt / Gt → lt_ret must be true; LtE / GtE → lt_ret must be false
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(lt_ret));
-    if (op == "Lt" || op == "Gt")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `lt_ret == (op is Lt/Gt)` in IREP2.
+    expr2tc ltr2;
+    migrate_expr(build_symbol(lt_ret), ltr2);
+    const bool want_true = (op == "Lt" || op == "Gt");
+    return migrate_expr_back(
+      equality2tc(ltr2, want_true ? gen_true_expr() : gen_false_expr()));
   }
 
   // ── Equality operators: Eq, NotEq ─────────────────────────────────────────
@@ -3459,7 +3457,7 @@ exprt python_list::compare(
     std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
 
   symbolt &eq_ret = converter_.create_tmp_symbol(
-    list_value_, "eq_tmp", bool_type(), gen_boolean(false));
+    list_value_, "eq_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
   code_declt eq_ret_decl(build_symbol(eq_ret));
   converter_.add_instruction(eq_ret_decl);
 
@@ -3528,14 +3526,11 @@ exprt python_list::compare(
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
 
-  exprt cond("=", bool_type());
-  cond.copy_to_operands(build_symbol(eq_ret));
-  if (op == "Eq")
-    cond.copy_to_operands(gen_boolean(true));
-  else
-    cond.copy_to_operands(gen_boolean(false));
-
-  return cond;
+  // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+  expr2tc leqr2;
+  migrate_expr(build_symbol(eq_ret), leqr2);
+  return migrate_expr_back(
+    equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
 exprt python_list::create_vla(
@@ -4697,10 +4692,16 @@ exprt python_list::extract_pyobject_value(
     exprt int_as_float = build_typecast(int_val, elem_type);
 
     // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
-    equality_exprt is_float(
-      member_of("type_id", size_type()),
-      from_integer(float_type_id, size_type()));
-    return if_exprt(is_float, float_val, int_as_float);
+    // V.3: built in IREP2 (both branches are elem_type, so the if2t types
+    // agree), back-migrated at the return.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, fv2, iaf2;
+    migrate_expr(member_of("type_id", size_type()), tid2);
+    migrate_expr(float_val, fv2);
+    migrate_expr(int_as_float, iaf2);
+    const expr2tc is_float =
+      equality2tc(tid2, from_integer(float_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_float, fv2, iaf2));
   }
 
   // Extract value from PyObject: (*pyobject_expr).value
