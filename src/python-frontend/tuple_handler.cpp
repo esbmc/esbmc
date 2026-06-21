@@ -618,7 +618,8 @@ exprt tuple_handler::handle_tuple_membership(
   const bool rhs_is_struct_literal =
     rhs.id() == "struct" && rhs.operands().size() == components.size();
 
-  exprt result;
+  // V.3: build the membership or-fold in IREP2, back-migrated at the return.
+  expr2tc result2;
   for (size_t i = 0; i < components.size(); i++)
   {
     std::string member_name = "element_" + std::to_string(i);
@@ -630,7 +631,7 @@ exprt tuple_handler::handle_tuple_membership(
     const bool comp_is_string =
       components[i].type().is_array() || components[i].type().is_pointer();
 
-    exprt equality;
+    expr2tc eq2;
     if (lhs_is_string && comp_is_string)
     {
       // String content equality via the shared comparison machinery, which
@@ -638,28 +639,32 @@ exprt tuple_handler::handle_tuple_membership(
       // (signalled by a nil return — assemble it like the binop caller does).
       exprt l = lhs;
       exprt r = member_access;
-      equality = converter_.handle_string_comparison("Eq", l, r, element);
+      exprt equality = converter_.handle_string_comparison("Eq", l, r, element);
       if (equality.is_nil())
       {
-        equality = exprt("=", bool_type());
-        equality.copy_to_operands(l, r);
+        expr2tc l2, r2;
+        migrate_expr(l, l2);
+        migrate_expr(r, r2);
+        eq2 = equality2tc(l2, r2);
       }
+      else
+        migrate_expr(equality, eq2);
     }
     else if (lhs_is_string != comp_is_string)
     {
       // Cross-type: a string is never == a non-string in Python.
-      equality = false_exprt();
+      eq2 = gen_false_expr();
     }
     else
     {
-      equality = equality_exprt(lhs, member_access);
+      expr2tc l2, m2;
+      migrate_expr(lhs, l2);
+      migrate_expr(member_access, m2);
+      eq2 = equality2tc(l2, m2);
     }
 
-    if (i == 0)
-      result = equality;
-    else
-      result = or_exprt(result, equality);
+    result2 = (i == 0) ? eq2 : or2tc(result2, eq2);
   }
 
-  return invert ? not_exprt(result) : result;
+  return migrate_expr_back(invert ? not2tc(result2) : result2);
 }
