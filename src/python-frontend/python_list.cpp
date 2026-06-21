@@ -3422,7 +3422,7 @@ exprt python_list::compare(
     const symbolt *b_sym = swap ? lhs_symbol : rhs_symbol;
 
     symbolt &lt_ret = converter_.create_tmp_symbol(
-      list_value_, "lt_tmp", bool_type(), gen_boolean(false));
+      list_value_, "lt_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
     code_declt lt_ret_decl(build_symbol(lt_ret));
     converter_.add_instruction(lt_ret_decl);
 
@@ -3438,14 +3438,12 @@ exprt python_list::compare(
     converter_.add_instruction(lt_call);
 
     // Lt / Gt → lt_ret must be true; LtE / GtE → lt_ret must be false
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(lt_ret));
-    if (op == "Lt" || op == "Gt")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `lt_ret == (op is Lt/Gt)` in IREP2.
+    expr2tc ltr2;
+    migrate_expr(build_symbol(lt_ret), ltr2);
+    const bool want_true = (op == "Lt" || op == "Gt");
+    return migrate_expr_back(
+      equality2tc(ltr2, want_true ? gen_true_expr() : gen_false_expr()));
   }
 
   // ── Equality operators: Eq, NotEq ─────────────────────────────────────────
@@ -3459,7 +3457,7 @@ exprt python_list::compare(
     std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
 
   symbolt &eq_ret = converter_.create_tmp_symbol(
-    list_value_, "eq_tmp", bool_type(), gen_boolean(false));
+    list_value_, "eq_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
   code_declt eq_ret_decl(build_symbol(eq_ret));
   converter_.add_instruction(eq_ret_decl);
 
@@ -3528,14 +3526,11 @@ exprt python_list::compare(
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
 
-  exprt cond("=", bool_type());
-  cond.copy_to_operands(build_symbol(eq_ret));
-  if (op == "Eq")
-    cond.copy_to_operands(gen_boolean(true));
-  else
-    cond.copy_to_operands(gen_boolean(false));
-
-  return cond;
+  // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+  expr2tc leqr2;
+  migrate_expr(build_symbol(eq_ret), leqr2);
+  return migrate_expr_back(
+    equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
 exprt python_list::create_vla(
