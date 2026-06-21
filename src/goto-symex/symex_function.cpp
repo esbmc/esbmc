@@ -11,6 +11,7 @@
 #include <util/i2string.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
+#include <util/python_types.h>
 #include <util/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
@@ -805,6 +806,23 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   return true;
 }
 
+bool goto_symext::is_python_gc_object(const symbolt *base) const
+{
+  if (!base || base->mode != "Python")
+    return false;
+
+  const typet &bt = ns.follow(base->get_type());
+  if (!bt.is_struct())
+    return false;
+
+  // Only user-defined class instances get GC lifetime. Internal Python model
+  // aggregates (tuples, dicts, Optional unions) manage their own
+  // representation/lifetime and must not have frame teardown skipped. The
+  // frontend stamps those aggregates with an explicit kind attribute at
+  // type-creation time; see util/python_types.h.
+  return !is_python_internal_aggregate(bt);
+}
+
 void goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
@@ -821,6 +839,13 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // Python objects are garbage-collected (issue #4773): keep user class
+    // instances alive past their defining frame so references captured into a
+    // returned/escaping aggregate stay valid. Skip tearing down their L2 and
+    // value-set bindings; is_live_variable() reports them live to match.
+    if (is_python_gc_object(ns.lookup(it.base_name)))
+      continue;
+
     type2tc ptr = pointer_type2tc(pointer_type2());
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);

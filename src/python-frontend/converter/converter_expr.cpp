@@ -82,6 +82,31 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+class get_expr_depth_guard
+{
+public:
+  explicit get_expr_depth_guard(python_converter &converter)
+    : converter(converter)
+  {
+    constexpr std::size_t kMaxGetExprDepth = 512;
+    if (++converter.get_expr_depth_ > kMaxGetExprDepth)
+    {
+      --converter.get_expr_depth_;
+      throw std::runtime_error(
+        "TypeError: Python expression nesting exceeded recursion limit of " +
+        std::to_string(kMaxGetExprDepth));
+    }
+  }
+
+  ~get_expr_depth_guard()
+  {
+    --converter.get_expr_depth_;
+  }
+
+private:
+  python_converter &converter;
+};
+
 // True when `method_name` is a method decorated with @property in `class_name`
 // or one of its (transitive) base classes. Reading `obj.prop` then invokes the
 // getter. A same-named non-property method in a derived class shadows a base
@@ -253,8 +278,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(value.get<long long>(), long_long_int_type());
 
   // Handle boolean literals (True/False)
+  // V.3: build the bool constant in IREP2, back-migrated for the legacy seam.
   if (value.is_boolean())
-    return gen_boolean(value.get<bool>());
+    return migrate_expr_back(
+      value.get<bool>() ? gen_true_expr() : gen_false_expr());
 
   // Handle floating-point literals (float)
   if (value.is_number_float())
@@ -381,6 +408,8 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
 
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
+  get_expr_depth_guard depth_guard(*this);
+
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
   // the expression-type map.

@@ -441,8 +441,14 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 **Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](./limitations#numpy-module))
 
-**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.arctan(x)`, `np.exp(x)` on scalar or literal list-backed 1D/2D inputs
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.arctan(x)`, `np.arccos(x)`, `np.exp(x)` on scalar or literal list-backed 1D/2D inputs. `np.arccos` additionally lowers a runtime 1D array through the libm operational model; a runtime 2D `arccos` is still rejected.
 
-**Additional stubs** (return constant placeholder values for type inference only): `np.arccos(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+**Modulo**: `np.fmod(x, y)` on scalars and on literal list-backed 1D/2D inputs with NumPy-style broadcasting. Operands wrapped in `np.array(...)` are rejected with `Unsupported operation: numpy.fmod on array operands` rather than mis-folded to a scalar.
 
-**Linear algebra** (`numpy.linalg`): `np.linalg.det(a)` for constant numeric 2x2 and 3x3 matrices
+**Element-wise float ufuncs**: `np.add`/`np.subtract`/`np.multiply`/`np.divide` on float arrays dispatch to a typed `*_double` operational model instead of reinterpreting IEEE-754 payloads as `int64`. The `--python-no-fold` flag suppresses the frontend's constant-folding paths and forces SMT encoding (useful for differential testing of the folder against the encoder).
+
+**Linear algebra**:
+
+- `np.dot(a, b)`, `np.matmul(a, b)`: 1D/2D inputs with both integer and float backends (via `linalg.c`), including symbolic elements
+- `np.transpose(a)`: 2D arrays, including runtime array variables (1D is the identity); higher-rank transpose is rejected
+- `np.linalg.det(a)`: constant numeric 2x2 and 3x3 matrices (complex-valued matrices are rejected)

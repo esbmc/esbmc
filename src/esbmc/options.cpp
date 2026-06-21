@@ -114,6 +114,9 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"python-no-fold",
+      NULL,
+      "Disable NumPy constant folding in the Python frontend"},
      {"nondet-str-length",
       boost::program_options::value<int>()->default_value(16)->value_name("nr"),
       "Set maximum length for non-deterministic strings (default is 16)"},

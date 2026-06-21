@@ -13,6 +13,7 @@
 #include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
+#include <util/python_types.h>
 #include <util/message.h>
 
 #include <cmath>
@@ -894,6 +895,7 @@ exprt python_math::handle_divmod(
 
       struct_typet tuple_type;
       tuple_type.tag("tag-tuple_divmod");
+      set_python_aggregate_kind(tuple_type, "tuple");
 
       struct_typet::componentt comp0;
       comp0.name("element_0");
@@ -941,6 +943,7 @@ exprt python_math::handle_divmod(
 
         struct_typet tuple_type;
         tuple_type.tag("tag-tuple_divmod");
+        set_python_aggregate_kind(tuple_type, "tuple");
 
         struct_typet::componentt comp0;
         comp0.name("element_0");
@@ -1003,6 +1006,7 @@ exprt python_math::handle_divmod(
   // Create a tuple struct to hold both values
   struct_typet tuple_type;
   tuple_type.tag("tag-tuple_divmod");
+  set_python_aggregate_kind(tuple_type, "tuple");
 
   struct_typet::componentt comp0;
   comp0.name("element_0");

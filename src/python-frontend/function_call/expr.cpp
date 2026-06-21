@@ -857,7 +857,10 @@ exprt function_call_expr::build_constant_from_arg() const
         codet throw_code("expression");
         throw_code.operands().push_back(raise);
         code_ifthenelset guard;
-        guard.cond() = not_exprt(valid);
+        // V.3: build the "not valid" guard condition in IREP2.
+        expr2tc valid2;
+        migrate_expr(valid, valid2);
+        guard.cond() = migrate_expr_back(not2tc(valid2));
         guard.then_case() = throw_code;
         guard.location() = loc;
         converter_.add_instruction(guard);
@@ -2438,9 +2441,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isnan_expr("isnan", bool_typet());
-         isnan_expr.copy_to_operands(arg_expr);
-         return isnan_expr;
+         // V.3: build isnan in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isnan2tc(arg2));
        }
        else // __ESBMC_isinf
        {
@@ -2452,9 +2456,10 @@ function_call_expr::get_dispatch_table()
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
            return complex_utils::raise_math_real_type_error_expr(converter_);
-         exprt isinf_expr("isinf", bool_typet());
-         isinf_expr.copy_to_operands(arg_expr);
-         return isinf_expr;
+         // V.3: build isinf in IREP2.
+         expr2tc arg2;
+         migrate_expr(arg_expr, arg2);
+         return migrate_expr_back(isinf2tc(arg2));
        }
      },
      "isnan/isinf"},
@@ -2577,7 +2582,11 @@ function_call_expr::get_dispatch_table()
        exprt zr = build_member(z, "real", double_type());
        exprt zi = build_member(z, "imag", double_type());
        exprt zero = from_double(0.0, double_type());
-       exprt fast_guard = equality_exprt(zr, zero);
+       // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
+       expr2tc zr2, zero2;
+       migrate_expr(zr, zr2);
+       migrate_expr(zero, zero2);
+       expr2tc fast_guard = equality2tc(zr2, zero2);
 
        // acos(i*y) and acosh(i*y) have a nonzero real part, but a closed form
        // valid for every real y, so their fast path covers all pure-imaginary
@@ -2595,8 +2604,10 @@ function_call_expr::get_dispatch_table()
            exprt asinh_zi = math.handle_asinh(zi, call_);
            if (is_cpp_throw_expr(asinh_zi))
              return asinh_zi;
-           exprt neg_asinh("unary-", double_type());
-           neg_asinh.copy_to_operands(asinh_zi);
+           expr2tc asinh_zi2;
+           migrate_expr(asinh_zi, asinh_zi2);
+           exprt neg_asinh =
+             migrate_expr_back(neg2tc(migrate_type(double_type()), asinh_zi2));
            fast_path = make_complex(half_pi, neg_asinh);
          }
          else
@@ -2612,7 +2623,7 @@ function_call_expr::get_dispatch_table()
              return imag_part;
            fast_path = make_complex(real_part, imag_part);
          }
-         return if_exprt(fast_guard, fast_path, model_call);
+         return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
        }
 
        // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
@@ -2641,14 +2652,16 @@ function_call_expr::get_dispatch_table()
            return abs_zi;
 
          exprt one = from_double(1.0, double_type());
-         exprt imag_guard =
-           func_name == "atan"
-             ? static_cast<exprt>(binary_relation_exprt(abs_zi, "<", one))
-             : static_cast<exprt>(binary_relation_exprt(abs_zi, "<=", one));
-         fast_guard = and_exprt(fast_guard, imag_guard);
+         expr2tc abs_zi2, one2;
+         migrate_expr(abs_zi, abs_zi2);
+         migrate_expr(one, one2);
+         expr2tc imag_guard = func_name == "atan"
+                                ? lessthan2tc(abs_zi2, one2)
+                                : lessthanequal2tc(abs_zi2, one2);
+         fast_guard = and2tc(fast_guard, imag_guard);
        }
 
-       return if_exprt(fast_guard, fast_path, model_call);
+       return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
      },
      "cmath inverse pure-imag fast path"},
 
@@ -2828,17 +2841,16 @@ function_call_expr::get_dispatch_table()
          }
          else
          {
-           exprt double_operand = arg_expr;
+           // V.3: build the "operand < 0" guard in IREP2.
+           expr2tc double_operand;
+           migrate_expr(arg_expr, double_operand);
            if (!arg_expr.type().is_floatbv())
-           {
-             double_operand =
-               exprt("typecast", type_handler_.get_typet("float", 0));
-             double_operand.copy_to_operands(arg_expr);
-           }
+             double_operand = typecast2tc(
+               migrate_type(type_handler_.get_typet("float", 0)),
+               double_operand);
 
-           exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-           domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-           domain_check.copy_to_operands(double_operand, zero);
+           domain_check = migrate_expr_back(
+             lessthan2tc(double_operand, gen_zero(double_operand->type)));
          }
 
          // Create the exception raise as a code expression
@@ -2875,16 +2887,14 @@ function_call_expr::get_dispatch_table()
              type_error.has_value())
 
            return *type_error;
-         // Domain check for log: operand must be > 0
-         exprt fp_operand = arg_expr;
+         // Domain check for log: operand must be > 0 (V.3: built in IREP2).
+         expr2tc fp_operand;
+         migrate_expr(arg_expr, fp_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           fp_operand = exprt("typecast", type_handler_.get_typet("float", 0));
-           fp_operand.copy_to_operands(arg_expr);
-         }
-         exprt zero = gen_zero(fp_operand.type());
-         exprt domain_check = exprt("<=", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(fp_operand, zero);
+           fp_operand = typecast2tc(
+             migrate_type(type_handler_.get_typet("float", 0)), fp_operand);
+         exprt domain_check = migrate_expr_back(
+           lessthanequal2tc(fp_operand, gen_zero(fp_operand->type)));
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
              "ValueError", "math domain error");
@@ -2908,27 +2918,20 @@ function_call_expr::get_dispatch_table()
 
            return *type_error;
          // Domain check for acos: operand must be in [-1.0, 1.0]
-         exprt double_operand = arg_expr;
+         // (V.3: built in IREP2).
+         const type2tc float_type2 =
+           migrate_type(type_handler_.get_typet("float", 0));
+         expr2tc double_operand;
+         migrate_expr(arg_expr, double_operand);
          if (!arg_expr.type().is_floatbv())
-         {
-           double_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
-         }
+           double_operand = typecast2tc(float_type2, double_operand);
 
-         typet float_type = type_handler_.get_typet("float", 0);
-         typet bool_t = type_handler_.get_typet("bool", 0);
+         expr2tc pos_one = gen_one(float_type2);
+         expr2tc neg_one = neg2tc(float_type2, pos_one);
 
-         exprt pos_one = gen_one(float_type);
-         exprt neg_one("unary-", float_type);
-         neg_one.copy_to_operands(pos_one);
-
-         exprt lt_neg = exprt("<", bool_t);
-         lt_neg.copy_to_operands(double_operand, neg_one);
-         exprt gt_pos = exprt(">", bool_t);
-         gt_pos.copy_to_operands(double_operand, pos_one);
-         exprt domain_check = exprt("or", bool_t);
-         domain_check.copy_to_operands(lt_neg, gt_pos);
+         exprt domain_check = migrate_expr_back(or2tc(
+           lessthan2tc(double_operand, neg_one),
+           greaterthan2tc(double_operand, pos_one)));
 
          exprt raise_expr =
            converter_.get_exception_handler().gen_exception_raise(
@@ -3843,7 +3846,9 @@ exprt function_call_expr::handle_general_function_call()
             if (inferred_classes_from_fallback)
             {
               locationt location = converter_.get_location_from_decl(call_);
-              exprt zero_fallback = gen_zero(any_type());
+              // V.3: build the void* null fallback via the IREP2 factory.
+              exprt zero_fallback =
+                migrate_expr_back(gen_zero(migrate_type(any_type())));
               zero_fallback.location() = location;
               zero_fallback.location().user_provided(true);
               return zero_fallback;
@@ -4002,9 +4007,9 @@ exprt function_call_expr::handle_general_function_call()
           nondet_expr.location().user_provided(true);
           nondet_expr.location().comment(
             "Unsupported function '" + func_name + "' called");
-          // Also add an assertion to the current block to flag this as an error
-          exprt false_expr = gen_boolean(false);
-          code_assertt assert_code(false_expr);
+          // Also add an assertion to the current block to flag this as an
+          // error (V.3: build the always-fail condition in IREP2).
+          code_assertt assert_code(migrate_expr_back(gen_false_expr()));
           assert_code.location() = location;
           assert_code.location().user_provided(true);
           assert_code.location().comment(
@@ -4208,8 +4213,9 @@ exprt function_call_expr::handle_general_function_call()
     else
     {
       // Passing a void pointer to the "cls" argument
+      // (V.3: build the void* null via the IREP2 factory).
       typet t = pointer_typet(empty_typet());
-      call.arguments().push_back(gen_zero(t));
+      call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
       // All methods for the int class without parameters acts solely on the encapsulated integer value.
@@ -4395,19 +4401,35 @@ exprt function_call_expr::handle_general_function_call()
       }
       else
       {
-        const typet list_type = type_handler_.get_list_type();
-        symbolt &tmp_list = converter_.create_tmp_symbol(
-          call_, "$obj_size_list_arg$", list_type, exprt());
+        // get_expr() may hand back an inline list-returning call -- e.g. the
+        // sorted(m) in len(sorted(m)) -- as a code_function_callt statement
+        // rather than a value. Assigning that statement to a temp discards the
+        // call's return value, leaving the temp at its NONDET decl and giving a
+        // wrong size (#5464). materialize_list_function_call() binds the return
+        // value into a temp and yields that symbol (the same path the
+        // sorted()[i] subscript sibling uses, #4807); non-call args pass
+        // through unchanged.
+        arg = converter_.materialize_list_function_call(
+          arg, call_, *converter_.current_block);
 
-        code_declt tmp_decl(build_symbol(tmp_list));
-        tmp_decl.location() = location;
-        converter_.current_block->copy_to_operands(tmp_decl);
+        if (arg.is_symbol())
+          list_symbol = converter_.find_symbol(arg.identifier().as_string());
+        else
+        {
+          const typet list_type = type_handler_.get_list_type();
+          symbolt &tmp_list = converter_.create_tmp_symbol(
+            call_, "$obj_size_list_arg$", list_type, exprt());
 
-        code_assignt tmp_assign(build_symbol(tmp_list), arg);
-        tmp_assign.location() = location;
-        converter_.current_block->copy_to_operands(tmp_assign);
+          code_declt tmp_decl(build_symbol(tmp_list));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
 
-        list_symbol = &tmp_list;
+          code_assignt tmp_assign(build_symbol(tmp_list), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+
+          list_symbol = &tmp_list;
+        }
       }
 
       assert(list_symbol);
@@ -5104,7 +5126,8 @@ exprt function_call_expr::generate_attribute_error(
 
   log_warning("{}", error_msg.str());
 
-  code_assertt assert_code(gen_boolean(false));
+  // V.3: build the always-fail assert condition in IREP2.
+  code_assertt assert_code(migrate_expr_back(gen_false_expr()));
   assert_code.location() = location;
   assert_code.location().user_provided(true);
   assert_code.location().comment(error_msg.str());
