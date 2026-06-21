@@ -1044,18 +1044,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class* in IREP2 (V.3).
+        // V.3: build the char* -> target_class* cast, the dereference, and
+        // the member access entirely in IREP2, back-migrated once at the
+        // legacy seam. Keeping the typecast and dereference as expr2tc avoids
+        // the back-migrate/re-migrate round-trip the staged legacy form paid.
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
         expr2tc expr2;
         migrate_expr(expr, expr2);
-        exprt casted_expr =
-          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
-        casted_expr.type() = target_ptr_type;
+        expr2tc casted2 = typecast2tc(migrate_type(target_ptr_type), expr2);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->get_type());
-        deref_expr.copy_to_operands(casted_expr);
+        expr2tc deref2 = dereference2tc(
+          migrate_type(target_class_symbol->get_type()), casted2);
 
         // Access the member on the object
         const struct_typet &target_struct =
@@ -1063,11 +1064,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        // V.3: IREP2 member access (exact round-trip of member_exprt).
-        expr2tc de2;
-        migrate_expr(deref_expr, de2);
         expr = migrate_expr_back(
-          member2tc(migrate_type(clean_type), de2, attr_name));
+          member2tc(migrate_type(clean_type), deref2, attr_name));
         break;
       }
 
