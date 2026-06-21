@@ -215,9 +215,12 @@ bool is_empty_literal(const nlohmann::json &node)
 
 exprt function_call_expr::combine_truthiness(exprt acc, exprt next, ReduceOp op)
 {
-  return (op == ReduceOp::Any)
-           ? exprt(or_exprt(std::move(acc), std::move(next)))
-           : exprt(and_exprt(std::move(acc), std::move(next)));
+  // V.3: build the any/all reduction fold in IREP2.
+  expr2tc a2, n2;
+  migrate_expr(acc, a2);
+  migrate_expr(next, n2);
+  return migrate_expr_back(
+    op == ReduceOp::Any ? or2tc(a2, n2) : and2tc(a2, n2));
 }
 
 exprt function_call_expr::handle_input() const
