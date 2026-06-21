@@ -2248,8 +2248,13 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   {
     std::ifstream in(arg, std::ios::in | std::ios::binary);
     unsigned char hdr[4] = {0, 0, 0, 0};
+    // Bounded read: capped at sizeof(hdr) into the fixed-size buffer, and the
+    // gcount() check confirms a full header before any byte is inspected
+    // (CWE-120/CWE-20). Flawfinder: ignore
     in.read(reinterpret_cast<char *>(hdr), sizeof(hdr));
-    if (in.gcount() >= 4 && is_cbmc_goto_magic(hdr))
+    if (
+      in.gcount() >= static_cast<std::streamsize>(sizeof(hdr)) &&
+      is_cbmc_goto_magic(hdr))
       return true;
   }
   return false;
