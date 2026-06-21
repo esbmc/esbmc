@@ -5332,7 +5332,7 @@ exprt python_list::build_remove_list_call(
 
   // Raise ValueError from the frontend so Python try/except can catch it.
   symbolt &remove_ret = converter_.create_tmp_symbol(
-    op, "remove_ret", bool_type(), gen_boolean(false));
+    op, "remove_ret", bool_type(), migrate_expr_back(gen_false_expr())); // V.3
   code_declt remove_ret_decl(build_symbol(remove_ret));
   converter_.add_instruction(remove_ret_decl);
 
@@ -5354,7 +5354,10 @@ exprt python_list::build_remove_list_call(
   throw_code.operands().push_back(raise);
 
   code_ifthenelset guard;
-  guard.cond() = not_exprt(build_symbol(remove_ret));
+  // V.3: build the "not removed" guard (x not in list) in IREP2.
+  expr2tc rr2;
+  migrate_expr(build_symbol(remove_ret), rr2);
+  guard.cond() = migrate_expr_back(not2tc(rr2));
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
   return guard;
