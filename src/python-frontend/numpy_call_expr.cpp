@@ -251,11 +251,8 @@ try_build_numpy_arange_list(const nlohmann::json &call)
   if (step == 0.0)
     return std::nullopt;
 
-  const bool any_float =
-    std::any_of(
-      args.begin(), args.end(), [](const numeric_value &v) {
-        return !v.is_int;
-      });
+  const bool any_float = std::any_of(
+    args.begin(), args.end(), [](const numeric_value &v) { return !v.is_int; });
 
   nlohmann::json out;
   out["_type"] = "List";
@@ -1409,16 +1406,15 @@ bool numpy_call_expr::is_math_function() const
           function == "sqrt" || function == "fmin") ||
          function == "fmax" || function == "trunc" || function == "round" ||
          function == "arccos" || function == "arcsin" ||
-         function == "copysign" || function == "arctan" ||
-         function == "tan" || function == "log" || function == "log2" ||
-         function == "log10" || function == "sinh" || function == "cosh" ||
-         function == "tanh" || function == "rint" ||
-         function == "remainder" || function == "nextafter" ||
-         function == "modf" || function == "frexp" || function == "isclose" ||
-         function == "dot" || function == "transpose" || function == "det" ||
-         function == "matmul" || function == "real" || function == "imag" ||
-         function == "conj" || function == "conjugate" ||
-         function == "angle" || function == "abs";
+         function == "copysign" || function == "arctan" || function == "tan" ||
+         function == "log" || function == "log2" || function == "log10" ||
+         function == "sinh" || function == "cosh" || function == "tanh" ||
+         function == "rint" || function == "remainder" ||
+         function == "nextafter" || function == "modf" || function == "frexp" ||
+         function == "isclose" || function == "dot" ||
+         function == "transpose" || function == "det" || function == "matmul" ||
+         function == "real" || function == "imag" || function == "conj" ||
+         function == "conjugate" || function == "angle" || function == "abs";
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -1586,7 +1582,8 @@ T get_constant_value(const nlohmann::json &node)
   // node["value"].get<T>() below would raise an opaque nlohmann type_error.
   // Surface the curated overflow diagnostic instead so the user sees the
   // same message they get from get_literal.
-  auto reject_bigint = [](const nlohmann::json &c) {
+  auto reject_bigint = [](const nlohmann::json &c)
+  {
     if (c.contains("_bigint"))
       throw python_int_overflow_excp(
         "Python int overflow: literal " + c["_bigint"].get<std::string>() +
@@ -1631,7 +1628,8 @@ exprt numpy_call_expr::create_expr_from_call()
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
   // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var) {
+  auto resolve_var = [this](nlohmann::json &var)
+  {
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
@@ -1653,14 +1651,16 @@ exprt numpy_call_expr::create_expr_from_call()
     }
   };
 
-  auto make_constant_expr = [this](const auto &value) {
+  auto make_constant_expr = [this](const auto &value)
+  {
     nlohmann::json out;
     out["_type"] = "Constant";
     out["value"] = value;
     return converter_.get_expr(out);
   };
 
-  auto extract_shape_dims = [](const nlohmann::json &shape_node) {
+  auto extract_shape_dims = [](const nlohmann::json &shape_node)
+  {
     std::vector<std::size_t> dims;
     if (
       shape_node.is_object() && shape_node.contains("_type") &&
@@ -1737,11 +1737,10 @@ exprt numpy_call_expr::create_expr_from_call()
         "ValueError: numpy." + function + "() arg is an empty sequence");
     }
 
-    const bool any_float =
-      std::any_of(
-        values.begin(), values.end(), [](const numeric_value &v) {
-          return !v.is_int;
-        });
+    const bool any_float = std::any_of(
+      values.begin(),
+      values.end(),
+      [](const numeric_value &v) { return !v.is_int; });
 
     if (function == "argmin" || function == "argmax")
     {
@@ -1750,8 +1749,9 @@ exprt numpy_call_expr::create_expr_from_call()
       for (std::size_t i = 1; i < values.size(); ++i)
       {
         const double current = to_double(values[i]);
-        if ((function == "argmin" && current < best) ||
-            (function == "argmax" && current > best))
+        if (
+          (function == "argmin" && current < best) ||
+          (function == "argmax" && current > best))
         {
           best = current;
           best_idx = i;
@@ -1833,9 +1833,8 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       const bool choose_x = cond_values[i].value.real() != 0.0;
       const nlohmann::json &chosen =
-        choose_x
-          ? (x["_type"] == "List" ? x["elts"][i] : x)
-          : (y["_type"] == "List" ? y["elts"][i] : y);
+        choose_x ? (x["_type"] == "List" ? x["elts"][i] : x)
+                 : (y["_type"] == "List" ? y["elts"][i] : y);
       out["elts"].push_back(chosen);
     }
     return converter_.get_expr(out);
@@ -1844,7 +1843,8 @@ exprt numpy_call_expr::create_expr_from_call()
   if (function == "logical_not")
   {
     if (call_["args"].empty())
-      throw std::runtime_error("TypeError: numpy.logical_not() missing argument");
+      throw std::runtime_error(
+        "TypeError: numpy.logical_not() missing argument");
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
@@ -1870,7 +1870,8 @@ exprt numpy_call_expr::create_expr_from_call()
   if (function == "arange")
   {
     if (call_["args"].empty() || call_["args"].size() > 3)
-      throw std::runtime_error("TypeError: numpy.arange() expects 1 to 3 arguments");
+      throw std::runtime_error(
+        "TypeError: numpy.arange() expects 1 to 3 arguments");
 
     std::vector<numeric_value> args;
     args.reserve(call_["args"].size());
@@ -1880,7 +1881,8 @@ exprt numpy_call_expr::create_expr_from_call()
       numeric_value value;
       if (!try_extract_numeric_constant(arg, value))
         throw std::runtime_error(
-          "TypeError: numpy.arange() currently supports constant numeric inputs only");
+          "TypeError: numpy.arange() currently supports constant numeric "
+          "inputs only");
       args.push_back(value);
     }
 
@@ -1900,13 +1902,13 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     if (step == 0.0)
-      throw std::runtime_error("ValueError: numpy.arange() step must not be zero");
+      throw std::runtime_error(
+        "ValueError: numpy.arange() step must not be zero");
 
-    const bool any_float =
-      std::any_of(
-        args.begin(), args.end(), [](const numeric_value &v) {
-          return !v.is_int;
-        });
+    const bool any_float = std::any_of(
+      args.begin(),
+      args.end(),
+      [](const numeric_value &v) { return !v.is_int; });
 
     std::vector<double> float_values;
     std::vector<int64_t> int_values;
@@ -1935,8 +1937,9 @@ exprt numpy_call_expr::create_expr_from_call()
     return converter_.get_expr(create_list(int_values));
   }
 
-  if (function == "full" || function == "eye" || function == "identity" ||
-      function == "linspace")
+  if (
+    function == "full" || function == "eye" || function == "identity" ||
+    function == "linspace")
   {
     if (function == "full")
     {
@@ -1956,7 +1959,8 @@ exprt numpy_call_expr::create_expr_from_call()
           shape["_type"] == "Constant" && shape.contains("value") &&
           shape["value"].is_number_integer())
         {
-          return converter_.get_expr(create_list(shape["value"].get<int>(), fill_value));
+          return converter_.get_expr(
+            create_list(shape["value"].get<int>(), fill_value));
         }
         throw std::runtime_error(
           "TypeError: numpy.full() shape must be an int or tuple/list of ints");
@@ -2011,7 +2015,8 @@ exprt numpy_call_expr::create_expr_from_call()
         row["_type"] = "List";
         row["elts"] = nlohmann::json::array();
         for (std::size_t j = 0; j < m; ++j)
-          row["elts"].push_back({{"_type", "Constant"}, {"value", i == j ? 1 : 0}});
+          row["elts"].push_back(
+            {{"_type", "Constant"}, {"value", i == j ? 1 : 0}});
         out["elts"].push_back(row);
       }
       const bool old_build_static_lists = converter_.build_static_lists;
@@ -2035,19 +2040,19 @@ exprt numpy_call_expr::create_expr_from_call()
         numeric_value value;
         if (!try_extract_numeric_constant(arg, value))
           throw std::runtime_error(
-            "TypeError: numpy.linspace() currently supports constant numeric inputs only");
+            "TypeError: numpy.linspace() currently supports constant numeric "
+            "inputs only");
         values.push_back(value);
       }
 
       const double start = to_double(values[0]);
       const double stop = to_double(values[1]);
-      const std::size_t num = values.size() == 3
-                                ? static_cast<std::size_t>(values[2].int_value)
-                                : 50;
+      const std::size_t num =
+        values.size() == 3 ? static_cast<std::size_t>(values[2].int_value) : 50;
       if (num == 0)
         return converter_.get_expr(create_list(std::vector<double>{}));
       if (num == 1)
-        return make_constant_expr(start);
+        return converter_.get_expr(create_list(std::vector<double>{start}));
 
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<double> samples;
@@ -3206,27 +3211,29 @@ exprt numpy_call_expr::create_expr_from_call()
         }
 
         auto as_dim =
-          [](const std::vector<std::size_t> &shape, std::size_t axis) {
-            if (shape.empty())
-              return from_integer(1, int_type());
-            if (shape.size() == 1)
-              return from_integer(
-                axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          [](const std::vector<std::size_t> &shape, std::size_t axis)
+        {
+          if (shape.empty())
+            return from_integer(1, int_type());
+          if (shape.size() == 1)
             return from_integer(
-              static_cast<int>(axis < shape.size() ? shape[axis] : 1),
-              int_type());
-          };
+              axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+          return from_integer(
+            static_cast<int>(axis < shape.size() ? shape[axis] : 1),
+            int_type());
+        };
 
         auto build_array_type =
-          [&](const std::vector<std::size_t> &shape, const typet &elem_type) {
-            if (shape.empty())
-              return elem_type;
+          [&](const std::vector<std::size_t> &shape, const typet &elem_type)
+        {
+          if (shape.empty())
+            return elem_type;
 
-            typet array_type = elem_type;
-            for (auto it = shape.rbegin(); it != shape.rend(); ++it)
-              array_type = type_handler_.build_array(array_type, *it);
-            return array_type;
-          };
+          typet array_type = elem_type;
+          for (auto it = shape.rbegin(); it != shape.rend(); ++it)
+            array_type = type_handler_.build_array(array_type, *it);
+          return array_type;
+        };
 
         typet lhs_scalar_type =
           get_array_scalar_type(type_handler_.get_typet(lhs));
@@ -3293,7 +3300,8 @@ exprt numpy_call_expr::get()
     function == "max" || function == "mean" || function == "argmin" ||
     function == "argmax" || function == "arange")
   {
-    auto resolve_var = [this](nlohmann::json &var) {
+    auto resolve_var = [this](nlohmann::json &var)
+    {
       if (var["_type"] == "Name")
       {
         var = json_utils::find_var_decl(
@@ -3371,8 +3379,9 @@ exprt numpy_call_expr::get()
       for (std::size_t i = 1; i < values.size(); ++i)
       {
         const double current = to_double(values[i]);
-        if ((function == "argmin" && current < best) ||
-            (function == "argmax" && current > best))
+        if (
+          (function == "argmin" && current < best) ||
+          (function == "argmax" && current > best))
         {
           best = current;
           best_idx = i;
@@ -3432,11 +3441,11 @@ exprt numpy_call_expr::get()
     function == "greater_equal" || function == "less_equal" ||
     function == "equal" || function == "not_equal" ||
     function == "logical_and" || function == "logical_or" ||
-    function == "logical_not" || function == "where" ||
-    function == "full" || function == "eye" || function == "identity" ||
-    function == "linspace")
+    function == "logical_not" || function == "where" || function == "full" ||
+    function == "eye" || function == "identity" || function == "linspace")
   {
-    auto resolve_var = [this](nlohmann::json &var) {
+    auto resolve_var = [this](nlohmann::json &var)
+    {
       if (var["_type"] == "Name")
       {
         var = json_utils::find_var_decl(
@@ -3460,14 +3469,16 @@ exprt numpy_call_expr::get()
       }
     };
 
-    auto make_constant = [](const auto &value) {
+    auto make_constant = [](const auto &value)
+    {
       nlohmann::json out;
       out["_type"] = "Constant";
       out["value"] = value;
       return out;
     };
 
-    auto to_list_expr = [this](const nlohmann::json &node) {
+    auto to_list_expr = [this](const nlohmann::json &node)
+    {
       const bool old_build_static_lists = converter_.build_static_lists;
       converter_.build_static_lists = false;
       exprt expr = converter_.get_expr(node);
@@ -3475,36 +3486,42 @@ exprt numpy_call_expr::get()
       return expr;
     };
 
-    auto to_expr = [this](const nlohmann::json &node) {
-      return converter_.get_expr(node);
-    };
+    auto to_expr = [this](const nlohmann::json &node)
+    { return converter_.get_expr(node); };
 
-    auto make_list = [](const std::vector<nlohmann::json> &elts) {
+    auto make_list = [](const std::vector<nlohmann::json> &elts)
+    {
       nlohmann::json out;
       out["_type"] = "List";
       out["elts"] = elts;
       return out;
     };
 
-    auto as_bool = [](const nlohmann::json &node) {
+    auto as_bool = [](const nlohmann::json &node)
+    {
       numeric_value value;
       if (try_extract_numeric_constant(node, value))
         return to_double(value) != 0.0;
       if (
-        node.is_object() && node.contains("value") && node["value"].is_boolean())
+        node.is_object() && node.contains("value") &&
+        node["value"].is_boolean())
         return node["value"].get<bool>();
       return false;
     };
 
-    auto as_double = [](const nlohmann::json &node) {
+    auto as_double = [](const nlohmann::json &node)
+    {
       numeric_value value;
       if (try_extract_numeric_constant(node, value))
         return to_double(value);
       return 0.0;
     };
 
-    auto compare_scalar = [&](const std::string &op, const nlohmann::json &lhs,
-                              const nlohmann::json &rhs) {
+    auto compare_scalar = [&](
+                            const std::string &op,
+                            const nlohmann::json &lhs,
+                            const nlohmann::json &rhs)
+    {
       const double left = as_double(lhs);
       const double right = as_double(rhs);
       bool result = false;
@@ -3523,7 +3540,8 @@ exprt numpy_call_expr::get()
       return make_constant(result);
     };
 
-    auto get_arg = [&](std::size_t index) {
+    auto get_arg = [&](std::size_t index)
+    {
       nlohmann::json arg = call_["args"][index];
       resolve_var(arg);
       return arg;
@@ -3543,9 +3561,9 @@ exprt numpy_call_expr::get()
         for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
         {
           const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item =
-            rhs.contains("elts") && rhs["elts"].is_array() ? rhs["elts"][i]
-                                                           : rhs;
+          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
+                                   ? rhs["elts"][i]
+                                   : rhs;
           out_elts.push_back(compare_scalar(function, lhs_item, rhs_item));
         }
         return to_list_expr(make_list(out_elts));
@@ -3566,7 +3584,8 @@ exprt numpy_call_expr::get()
     {
       auto lhs = get_arg(0);
       auto rhs = get_arg(1);
-      auto apply = [&](const nlohmann::json &a, const nlohmann::json &b) {
+      auto apply = [&](const nlohmann::json &a, const nlohmann::json &b)
+      {
         const bool left = as_bool(a);
         const bool right = as_bool(b);
         return make_constant(
@@ -3579,9 +3598,9 @@ exprt numpy_call_expr::get()
         for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
         {
           const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item =
-            rhs.contains("elts") && rhs["elts"].is_array() ? rhs["elts"][i]
-                                                           : rhs;
+          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
+                                   ? rhs["elts"][i]
+                                   : rhs;
           out_elts.push_back(apply(lhs_item, rhs_item));
         }
         return to_list_expr(make_list(out_elts));
@@ -3624,10 +3643,8 @@ exprt numpy_call_expr::get()
           const bool choose_x = as_bool(cond["elts"][i]);
           const auto &chosen =
             choose_x
-              ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i]
-                                                            : x)
-              : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i]
-                                                            : y);
+              ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
+              : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
           out_elts.push_back(chosen);
         }
         return to_list_expr(make_list(out_elts));
@@ -3635,7 +3652,8 @@ exprt numpy_call_expr::get()
       return as_bool(cond) ? converter_.get_expr(x) : converter_.get_expr(y);
     }
 
-    auto parse_shape = [&](const nlohmann::json &shape_node) {
+    auto parse_shape = [&](const nlohmann::json &shape_node)
+    {
       std::vector<std::size_t> dims;
       if (
         shape_node.is_object() && shape_node.contains("_type") &&
@@ -3692,7 +3710,8 @@ exprt numpy_call_expr::get()
         }
         return to_list_expr(make_list(rows));
       }
-      throw std::runtime_error("TypeError: numpy.full() currently supports up to 2D shapes");
+      throw std::runtime_error(
+        "TypeError: numpy.full() currently supports up to 2D shapes");
     }
 
     if (function == "eye" || function == "identity")
@@ -3722,7 +3741,7 @@ exprt numpy_call_expr::get()
       if (num == 0)
         return to_list_expr(make_list({}));
       if (num == 1)
-        return to_expr(make_constant(start));
+        return to_list_expr(make_list({make_constant(start)}));
       const double step = (stop - start) / static_cast<double>(num - 1);
       std::vector<nlohmann::json> elts;
       for (std::size_t i = 0; i < num; ++i)
@@ -3860,7 +3879,8 @@ exprt numpy_call_expr::get()
       exprt lhs_expr = converter_.get_expr(lhs);
       exprt rhs_expr = converter_.get_expr(rhs);
       const typet list_type = type_handler_.get_list_type();
-      auto is_container = [&list_type](const exprt &e) {
+      auto is_container = [&list_type](const exprt &e)
+      {
         return e.type().is_array() || e.type() == list_type ||
                (e.type().is_pointer() && e.type().subtype() == list_type);
       };
@@ -3871,7 +3891,8 @@ exprt numpy_call_expr::get()
         lhs_expr, rhs_expr, call_);
     }
 
-    auto is_scalar_node = [](const nlohmann::json &node) {
+    auto is_scalar_node = [](const nlohmann::json &node)
+    {
       const std::string type = node["_type"];
       return type == "Constant" || type == "UnaryOp";
     };
@@ -3886,7 +3907,8 @@ exprt numpy_call_expr::get()
       auto rhs = extract_value(call_["args"][1]);
 
       auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool {
+        [&](double left, double right, double &out) -> bool
+      {
         if (function == "add")
         {
           out = left + right;
