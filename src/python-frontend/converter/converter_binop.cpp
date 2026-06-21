@@ -988,9 +988,7 @@ exprt python_converter::handle_array_operations(
 
     // Element-wise modulo is only modelled for integer elements; float-array %
     // would need fmod-style lowering, so let it fall through to a clean reject.
-    if (
-      op == "Mod" &&
-      !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
+    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
       return nil_exprt();
 
     const exprt &size_expr = to_array_type(array_type).size();
