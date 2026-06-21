@@ -1087,7 +1087,7 @@ bool execution_statet::is_shared_var_access(const expr2tc &e)
 
   if (
     is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
-                        "__ESBMC_pthread_thread") != std::string::npos)
+                        "__ESBMC_pthread") != std::string::npos)
     return false;
 
   return true;
