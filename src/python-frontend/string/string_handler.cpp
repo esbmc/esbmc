@@ -190,7 +190,18 @@ static std::optional<BigInt> get_constant_array_extent(const exprt &array_expr)
 static exprt
 make_binary_bool_expr(const irep_idt &id, const exprt &lhs, const exprt &rhs)
 {
-  exprt out(id, bool_type());
+  // V.3: build the boolean binop in IREP2 (the only ids used are =/and/or),
+  // back-migrated for the legacy callers.
+  expr2tc l2, r2;
+  migrate_expr(lhs, l2);
+  migrate_expr(rhs, r2);
+  if (id == "=")
+    return migrate_expr_back(equality2tc(l2, r2));
+  if (id == "and")
+    return migrate_expr_back(and2tc(l2, r2));
+  if (id == "or")
+    return migrate_expr_back(or2tc(l2, r2));
+  exprt out(id, bool_type()); // fallback for any other id
   out.copy_to_operands(lhs, rhs);
   return out;
 }
@@ -208,15 +219,17 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const BigInt extent = *extent_opt;
+  // V.3: membership constant results built in IREP2.
   if (extent <= 0)
-    return gen_boolean(needle_values.empty());
+    return migrate_expr_back(
+      needle_values.empty() ? gen_true_expr() : gen_false_expr());
 
   const BigInt haystack_content_len = extent - 1;
   const BigInt needle_len = static_cast<unsigned long>(needle_values.size());
   if (needle_len == 0)
-    return gen_boolean(true);
+    return migrate_expr_back(gen_true_expr());
   if (needle_len > haystack_content_len)
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   // Keep this bounded to avoid path explosion in symbolic membership.
   if (
@@ -225,7 +238,7 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const long long max_start = (haystack_content_len - needle_len).to_int64();
-  exprt disjunction = gen_boolean(false);
+  exprt disjunction = migrate_expr_back(gen_false_expr()); // V.3
 
   for (long long start = 0; start <= max_start; ++start)
   {
@@ -1422,7 +1435,11 @@ exprt string_handler::handle_string_membership(
 
   if (needle_values.has_value() && haystack_values.has_value())
   {
-    return gen_boolean(contains_subsequence(*haystack_values, *needle_values));
+    // V.3: concrete-fold membership result built in IREP2.
+    return migrate_expr_back(
+      contains_subsequence(*haystack_values, *needle_values)
+        ? gen_true_expr()
+        : gen_false_expr());
   }
 
   // C strstr() is not null-aware for embedded '\0'. When one operand is

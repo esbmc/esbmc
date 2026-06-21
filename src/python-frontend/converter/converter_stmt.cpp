@@ -2191,7 +2191,8 @@ void python_converter::get_var_assign(
           !expected_base.empty() && !ctor_name.empty() &&
           !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
-          code_assertt ctor_assert(gen_boolean(false));
+          // V.3: build the always-fail assert condition in IREP2.
+          code_assertt ctor_assert(migrate_expr_back(gen_false_expr()));
           ctor_assert.location() = location_begin;
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
@@ -2230,7 +2231,8 @@ void python_converter::get_var_assign(
       rhs.type().is_array() && !lhs.type().is_array() &&
       !lhs.type().is_pointer())
     {
-      code_assertt type_assert(gen_boolean(false));
+      // V.3: build the always-fail assert condition in IREP2.
+      code_assertt type_assert(migrate_expr_back(gen_false_expr()));
       type_assert.location() = location_begin;
       type_assert.location().comment(
         "Type violation: incompatible types in assignment");
@@ -2684,12 +2686,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)
     {
-      overall_cond = exprt("not", bool_type());
-      overall_cond.copy_to_operands(cond_tmp);
+      // V.3: build the unary-not condition in IREP2.
+      expr2tc ct2;
+      migrate_expr(cond_tmp, ct2);
+      overall_cond = migrate_expr_back(not2tc(ct2));
     }
 
-    exprt break_cond("not", bool_type());
-    break_cond.copy_to_operands(overall_cond);
+    // V.3: build the break guard !cond in IREP2.
+    expr2tc oc2;
+    migrate_expr(overall_cond, oc2);
+    exprt break_cond = migrate_expr_back(not2tc(oc2));
 
     code_breakt break_stmt;
     break_stmt.location() = location;
@@ -2710,7 +2716,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     codet while_code;
     while_code.set_statement("while");
     while_code.location() = location;
-    while_code.copy_to_operands(gen_boolean(true), loop_body);
+    // V.3: build the `while True` condition in IREP2.
+    while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
 
     transformed.copy_to_operands(while_code);
     current_element_type = t;

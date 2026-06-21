@@ -554,7 +554,8 @@ void python_exception_handler::handle_function_call_assertion(
     block.move_to_operands(code_stmt);
 
     code_assertt assert_code;
-    assert_code.assertion() = false_exprt();
+    // V.3: build the always-fail assert condition in IREP2.
+    assert_code.assertion() = migrate_expr_back(gen_false_expr());
     assert_code.location() = location;
     assert_code.location().comment("Assertion on None-returning function");
     attach_assert_message(assert_code);
@@ -573,7 +574,10 @@ void python_exception_handler::handle_function_call_assertion(
   exprt assertion_expr;
   if (is_negated)
   {
-    assertion_expr = not_exprt(temp_var_expr);
+    // V.3: build `not <result>` in IREP2 (the temp is bool-typed).
+    expr2tc tv2;
+    migrate_expr(temp_var_expr, tv2);
+    assertion_expr = migrate_expr_back(not2tc(tv2));
   }
   else
   {

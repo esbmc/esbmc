@@ -1458,7 +1458,8 @@ exprt python_list::handle_range_slice(
   // already reported by the checker.
   if (literal_zero_step)
   {
-    code_assertt step_assert(gen_boolean(false));
+    // V.3: build the always-fail assert condition in IREP2.
+    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
     step_assert.location() = converter_.get_location_from_decl(slice_node);
     step_assert.location().comment("ValueError: slice step cannot be zero");
     converter_.add_instruction(step_assert);
@@ -2996,12 +2997,13 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
-    exprt still_neg("<", bool_type());
-    still_neg.copy_to_operands(build_symbol(idx_sym), from_integer(0, ll_type));
-
-    exprt idx_ge_len(">=", bool_type());
-    idx_ge_len.copy_to_operands(
-      build_symbol(idx_sym), build_typecast(build_symbol(len_sym), ll_type));
+    // V.3: built in IREP2, back-migrated for the legacy code_ifthenelset.
+    const type2tc oob_llt = migrate_type(ll_type);
+    expr2tc oob_idx, oob_len;
+    migrate_expr(build_symbol(idx_sym), oob_idx);
+    migrate_expr(build_typecast(build_symbol(len_sym), ll_type), oob_len);
+    expr2tc still_neg = lessthan2tc(oob_idx, gen_zero(oob_llt));
+    expr2tc idx_ge_len = greaterthanequal2tc(oob_idx, oob_len);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "string index out of range");
@@ -3009,7 +3011,7 @@ exprt python_list::handle_index_access(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset oob_guard;
-    oob_guard.cond() = or_exprt(still_neg, idx_ge_len);
+    oob_guard.cond() = migrate_expr_back(or2tc(still_neg, idx_ge_len));
     oob_guard.then_case() = throw_code;
     oob_guard.location() = loc;
     converter_.add_instruction(oob_guard);
@@ -3153,7 +3155,10 @@ exprt python_list::compare(
 
     locationt loc = converter_.get_location_from_decl(list_value_);
     symbolt &eq_ret = converter_.create_tmp_symbol(
-      list_value_, "set_eq_tmp", bool_type(), gen_boolean(false));
+      list_value_,
+      "set_eq_tmp",
+      bool_type(),
+      migrate_expr_back(gen_false_expr())); // V.3
     code_declt eq_ret_decl(build_symbol(eq_ret));
     converter_.add_instruction(eq_ret_decl);
 
@@ -3172,14 +3177,11 @@ exprt python_list::compare(
     set_eq_call.location() = loc;
     converter_.add_instruction(set_eq_call);
 
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(eq_ret));
-    if (op == "Eq")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+    expr2tc er2;
+    migrate_expr(build_symbol(eq_ret), er2);
+    return migrate_expr_back(
+      equality2tc(er2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
   }
 
   // Fast path for list equality/inequality when we have concrete type-map
@@ -3420,7 +3422,7 @@ exprt python_list::compare(
     const symbolt *b_sym = swap ? lhs_symbol : rhs_symbol;
 
     symbolt &lt_ret = converter_.create_tmp_symbol(
-      list_value_, "lt_tmp", bool_type(), gen_boolean(false));
+      list_value_, "lt_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
     code_declt lt_ret_decl(build_symbol(lt_ret));
     converter_.add_instruction(lt_ret_decl);
 
@@ -3436,14 +3438,12 @@ exprt python_list::compare(
     converter_.add_instruction(lt_call);
 
     // Lt / Gt → lt_ret must be true; LtE / GtE → lt_ret must be false
-    exprt cond("=", bool_type());
-    cond.copy_to_operands(build_symbol(lt_ret));
-    if (op == "Lt" || op == "Gt")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
-
-    return cond;
+    // V.3: build `lt_ret == (op is Lt/Gt)` in IREP2.
+    expr2tc ltr2;
+    migrate_expr(build_symbol(lt_ret), ltr2);
+    const bool want_true = (op == "Lt" || op == "Gt");
+    return migrate_expr_back(
+      equality2tc(ltr2, want_true ? gen_true_expr() : gen_false_expr()));
   }
 
   // ── Equality operators: Eq, NotEq ─────────────────────────────────────────
@@ -3457,7 +3457,7 @@ exprt python_list::compare(
     std::hash<std::string>{}(list_type_name), config.ansi_c.address_width));
 
   symbolt &eq_ret = converter_.create_tmp_symbol(
-    list_value_, "eq_tmp", bool_type(), gen_boolean(false));
+    list_value_, "eq_tmp", bool_type(), migrate_expr_back(gen_false_expr()));
   code_declt eq_ret_decl(build_symbol(eq_ret));
   converter_.add_instruction(eq_ret_decl);
 
@@ -3526,14 +3526,11 @@ exprt python_list::compare(
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);
 
-  exprt cond("=", bool_type());
-  cond.copy_to_operands(build_symbol(eq_ret));
-  if (op == "Eq")
-    cond.copy_to_operands(gen_boolean(true));
-  else
-    cond.copy_to_operands(gen_boolean(false));
-
-  return cond;
+  // V.3: build `eq_ret == (op == "Eq")` in IREP2.
+  expr2tc leqr2;
+  migrate_expr(build_symbol(eq_ret), leqr2);
+  return migrate_expr_back(
+    equality2tc(leqr2, op == "Eq" ? gen_true_expr() : gen_false_expr()));
 }
 
 exprt python_list::create_vla(
@@ -3947,7 +3944,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(
-    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr())); // V.3
   code_declt contains_ret_decl(build_symbol(contains_ret));
   converter_.add_instruction(contains_ret_decl);
 
@@ -4054,9 +4054,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   contains_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(contains_call);
 
-  exprt result("=", bool_type());
-  result.copy_to_operands(build_symbol(contains_ret));
-  result.copy_to_operands(gen_boolean(true));
+  // V.3: build `contains_ret == true` in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_ret), cr2);
+  exprt result = migrate_expr_back(equality2tc(cr2, gen_true_expr()));
 
   return result;
 }
@@ -4530,19 +4531,18 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // If we had filter conditions, wrap append in if statement
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
-    exprt combined_condition = gen_boolean(true);
+    // V.3: build the comprehension filter and-fold in IREP2. The outer guard
+    // guarantees at least one clause, so no `true` sentinel is needed.
+    expr2tc filt_combined;
+    bool filt_first = true;
     for (const auto &if_clause : generator["ifs"])
     {
-      exprt if_expr = converter_.get_expr(if_clause);
-      if (combined_condition.is_true())
-        combined_condition = if_expr;
-      else
-      {
-        exprt and_expr("and", bool_type());
-        and_expr.copy_to_operands(combined_condition, if_expr);
-        combined_condition = and_expr;
-      }
+      expr2tc filt_c;
+      migrate_expr(converter_.get_expr(if_clause), filt_c);
+      filt_combined = filt_first ? filt_c : and2tc(filt_combined, filt_c);
+      filt_first = false;
     }
+    exprt combined_condition = migrate_expr_back(filt_combined);
 
     codet if_stmt;
     if_stmt.set_statement("ifthenelse");
@@ -4551,9 +4551,11 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     loop_body.copy_to_operands(if_stmt);
   }
 
-  // 9. Increment index: i = i + 1
-  exprt increment("+", size_type());
-  increment.copy_to_operands(build_symbol(index_var), gen_one(size_type()));
+  // 9. Increment index: i = i + 1 (V.3: built in IREP2).
+  const type2tc inc_t2 = migrate_type(size_type());
+  expr2tc inc_idx;
+  migrate_expr(build_symbol(index_var), inc_idx);
+  exprt increment = migrate_expr_back(add2tc(inc_t2, inc_idx, gen_one(inc_t2)));
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
@@ -4690,10 +4692,16 @@ exprt python_list::extract_pyobject_value(
     exprt int_as_float = build_typecast(int_val, elem_type);
 
     // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
-    equality_exprt is_float(
-      member_of("type_id", size_type()),
-      from_integer(float_type_id, size_type()));
-    return if_exprt(is_float, float_val, int_as_float);
+    // V.3: built in IREP2 (both branches are elem_type, so the if2t types
+    // agree), back-migrated at the return.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, fv2, iaf2;
+    migrate_expr(member_of("type_id", size_type()), tid2);
+    migrate_expr(float_val, fv2);
+    migrate_expr(int_as_float, iaf2);
+    const expr2tc is_float =
+      equality2tc(tid2, from_integer(float_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_float, fv2, iaf2));
   }
 
   // Extract value from PyObject: (*pyobject_expr).value
@@ -5327,7 +5335,7 @@ exprt python_list::build_remove_list_call(
 
   // Raise ValueError from the frontend so Python try/except can catch it.
   symbolt &remove_ret = converter_.create_tmp_symbol(
-    op, "remove_ret", bool_type(), gen_boolean(false));
+    op, "remove_ret", bool_type(), migrate_expr_back(gen_false_expr())); // V.3
   code_declt remove_ret_decl(build_symbol(remove_ret));
   converter_.add_instruction(remove_ret_decl);
 
@@ -5349,7 +5357,10 @@ exprt python_list::build_remove_list_call(
   throw_code.operands().push_back(raise);
 
   code_ifthenelset guard;
-  guard.cond() = not_exprt(build_symbol(remove_ret));
+  // V.3: build the "not removed" guard (x not in list) in IREP2.
+  expr2tc rr2;
+  migrate_expr(build_symbol(remove_ret), rr2);
+  guard.cond() = migrate_expr_back(not2tc(rr2));
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
   return guard;

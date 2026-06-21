@@ -25,6 +25,159 @@
 #include <cctype>
 #include <sstream>
 
+namespace
+{
+// Parse a constant integer from a Python AST argument node: a Constant int or
+// bool, or a UnaryOp(USub) over one (the parser emits negative literals that
+// way). Returns false when the node is not a compile-time integer.
+bool py_const_int(const nlohmann::json &a, long long &out)
+{
+  if (!a.is_object())
+    return false;
+  const std::string t = a.value("_type", "");
+  if (t == "Constant" && a.contains("value"))
+  {
+    if (a["value"].is_number_integer())
+    {
+      out = a["value"].get<long long>();
+      return true;
+    }
+    if (a["value"].is_boolean())
+    {
+      out = a["value"].get<bool>() ? 1 : 0;
+      return true;
+    }
+    return false;
+  }
+  if (
+    t == "UnaryOp" && a.contains("operand") &&
+    a.value("op", nlohmann::json::object()).value("_type", "") == "USub")
+  {
+    long long v;
+    if (py_const_int(a["operand"], v))
+    {
+      out = -v;
+      return true;
+    }
+  }
+  return false;
+}
+
+// Constant-fold a printf-style ``str % args`` formatting, matching CPython for
+// the supported conversions. Throws std::runtime_error for any unsupported
+// conversion, flag/width/precision, or non-constant argument, so the caller
+// surfaces a clean diagnostic instead of mis-lowering ``str % x`` to pointer
+// arithmetic (which crashed the SMT backend, #5495).
+std::string py_percent_format(
+  const std::string &fmt,
+  const std::vector<nlohmann::json> &args)
+{
+  std::string out;
+  size_t argi = 0;
+  auto next_arg = [&]() -> const nlohmann::json & {
+    if (argi >= args.size())
+      throw std::runtime_error(
+        "TypeError: not enough arguments for format string");
+    return args[argi++];
+  };
+
+  for (size_t i = 0; i < fmt.size(); ++i)
+  {
+    if (fmt[i] != '%')
+    {
+      out.push_back(fmt[i]);
+      continue;
+    }
+    if (i + 1 >= fmt.size())
+      throw std::runtime_error("ValueError: incomplete format");
+    const char c = fmt[++i];
+    switch (c)
+    {
+    case '%':
+      out.push_back('%');
+      break;
+    case 'd':
+    case 'i':
+    {
+      long long v;
+      if (!py_const_int(next_arg(), v))
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      out += std::to_string(v);
+      break;
+    }
+    case 's':
+    {
+      const nlohmann::json &a = next_arg();
+      long long v;
+      if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_boolean())
+        // CPython renders bool via str(): "True"/"False", not "1"/"0".
+        out += a["value"].get<bool>() ? "True" : "False";
+      else if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_string())
+        out += a["value"].get<std::string>();
+      else if (py_const_int(a, v))
+        out += std::to_string(v);
+      else
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      break;
+    }
+    case 'x':
+    case 'X':
+    case 'o':
+    {
+      long long v;
+      if (!py_const_int(next_arg(), v))
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      if (v < 0)
+        throw std::runtime_error(
+          "unsupported: negative argument in str % %x/%o formatting");
+      std::ostringstream ss;
+      if (c == 'o')
+        ss << std::oct << v;
+      else
+        ss << (c == 'X' ? std::uppercase : std::nouppercase) << std::hex << v;
+      out += ss.str();
+      break;
+    }
+    case 'c':
+    {
+      const nlohmann::json &a = next_arg();
+      long long v;
+      if (py_const_int(a, v))
+      {
+        if (v < 0 || v > 255)
+          throw std::runtime_error(
+            "unsupported: %c code points above 255 (non-ASCII) not modelled");
+        out.push_back(static_cast<char>(v));
+      }
+      else if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_string() && a["value"].get<std::string>().size() == 1)
+        out += a["value"].get<std::string>();
+      else
+        throw std::runtime_error(
+          "unsupported: %c argument in str % formatting");
+      break;
+    }
+    default:
+      throw std::runtime_error(
+        std::string("unsupported conversion '%") + c + "' in str % formatting");
+    }
+  }
+
+  if (argi != args.size())
+    throw std::runtime_error(
+      "TypeError: not all arguments converted during string formatting");
+  return out;
+}
+} // namespace
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -366,7 +519,12 @@ exprt python_converter::handle_membership_operator(
   {
     python_list list(*this, element);
     exprt contains_expr = list.contains(lhs, rhs);
-    return invert ? not_exprt(contains_expr) : contains_expr;
+    if (!invert)
+      return contains_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc c2;
+    migrate_expr(contains_expr, c2);
+    return migrate_expr_back(not2tc(c2));
   }
 
   // Get string type identifiers
@@ -381,7 +539,12 @@ exprt python_converter::handle_membership_operator(
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);
-    return invert ? not_exprt(membership_expr) : membership_expr;
+    if (!invert)
+      return membership_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc m2;
+    migrate_expr(membership_expr, m2);
+    return migrate_expr_back(not2tc(m2));
   }
 
   throw std::runtime_error(
@@ -475,7 +638,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         nondet.location() = get_location_from_decl(element);
         return nondet;
       }
-      return gen_boolean(op == "NotEq");
+      // V.3: constant fold built in IREP2.
+      return migrate_expr_back(
+        op == "NotEq" ? gen_true_expr() : gen_false_expr());
     }
   }
 
@@ -517,6 +682,40 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
 
+  // Python ``str % args`` is string formatting, not numeric modulo. The generic
+  // arithmetic path builds ``str_ptr % int``, mistypes the result, and crashes
+  // the SMT backend (#5495 for a literal format, #5499 for a str variable). It
+  // runs before the is_array() gate below because a ``str`` parameter is a char
+  // *pointer*, not an array, so it would otherwise miss handle_array_operations
+  // (whose gate requires an array operand). is_string_type covers both char
+  // arrays (literals) and char pointers (str variables),
+  // but not np.int8/np.uint8 arrays, whose ``% scalar`` keeps its numeric path.
+  if (op == "Mod" && type_utils::is_string_type(lhs.type()))
+  {
+    // Only a literal format string is constant-foldable; a variable format
+    // (#5499) is rejected with a clean diagnostic rather than crashing.
+    if (
+      left.value("_type", "") != "Constant" || !left.contains("value") ||
+      !left["value"].is_string())
+      throw std::runtime_error(
+        "unsupported: str % formatting requires a literal format string");
+
+    std::vector<nlohmann::json> args;
+    if (right.is_object() && right.value("_type", "") == "Tuple")
+      for (const auto &e : right["elts"])
+        args.push_back(e);
+    else
+      args.push_back(right);
+
+    // Re-enter conversion through a synthesised Constant node so the folded
+    // string flows through the exact same path as a string literal (e.g.
+    // len("ab")), which materialises it correctly when consumed inline by
+    // len()/==. Building the array directly left it unaddressable inline.
+    nlohmann::json folded = left;
+    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
+    return get_expr(folded);
+  }
+
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -536,7 +735,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // --incremental-bmc, where each k iteration would otherwise re-symbolise
     // the comparison from scratch (issue #4623).
     if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
-      return gen_boolean(op == "NotEq" ? !*folded : *folded);
+    {
+      // V.3: constant fold built in IREP2.
+      const bool val = op == "NotEq" ? !*folded : *folded;
+      return migrate_expr_back(val ? gen_true_expr() : gen_false_expr());
+    }
     return dict_handler_->compare(lhs, rhs, op);
   }
 
@@ -952,7 +1155,8 @@ exprt python_converter::handle_array_operations(
     string_handler_.is_zero_length_array(lhs) &&
     string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
   {
-    return gen_boolean(op == "Eq");
+    // V.3: constant fold built in IREP2.
+    return migrate_expr_back(op == "Eq" ? gen_true_expr() : gen_false_expr());
   }
 
   auto is_numeric_type = [](const typet &t) {
@@ -1289,19 +1493,24 @@ exprt python_converter::handle_tuple_operations(
       migrate_expr(tb, b2);
 
       // Base: a proper prefix is strictly less than the longer tuple.
-      exprt result = gen_boolean(ca.size() < cb.size());
+      // V.3: build the lexicographic compare in IREP2.
+      expr2tc result =
+        ca.size() < cb.size() ? gen_true_expr() : gen_false_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = memb(a2, ca[k]);
         exprt bi = memb(b2, cb[k]);
 
-        exprt lt, eq;
+        expr2tc lt, eq;
         const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          lt = lex_lt(ai, bi);
-          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+          expr2tc ai2, bi2;
+          migrate_expr(lex_lt(ai, bi), lt);
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          eq = equality2tc(ai2, bi2); // native struct equality, element-wise
         }
         else if (is_num(ai.type()) && is_num(bi.type()))
         {
@@ -1311,23 +1520,22 @@ exprt python_converter::handle_tuple_operations(
             ai = typecast_exprt(ai, double_type());
             bi = typecast_exprt(bi, double_type());
           }
-          lt = exprt("<", bool_type());
-          lt.copy_to_operands(ai, bi);
-          eq = equality_exprt(ai, bi);
+          expr2tc ai2, bi2;
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          lt = lessthan2tc(ai2, bi2);
+          eq = equality2tc(ai2, bi2);
         }
         else
         {
           ok = false; // unsupported / mismatched component kinds
-          return gen_boolean(false);
+          return migrate_expr_back(gen_false_expr());
         }
 
-        exprt tail("and", bool_type());
-        tail.copy_to_operands(eq, result);
-        exprt head("or", bool_type());
-        head.copy_to_operands(lt, tail);
-        result = head;
+        // result = lt || (eq && result)
+        result = or2tc(lt, and2tc(eq, result));
       }
-      return result;
+      return migrate_expr_back(result);
     };
 
     const bool swap = (op == "Gt" || op == "LtE");
