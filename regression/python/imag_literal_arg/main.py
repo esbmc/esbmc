@@ -19,8 +19,9 @@ assert get_real(0.5j) == 0.0
 assert get_imag(1j) == 1.0
 assert get_real(1j) == 0.0
 
-# cmath functions with bare imaginary literals (all were crashing before)
-r1 = cmath.exp(0.5j)
-r2 = cmath.sqrt(0.5j)
-r3 = cmath.sin(0.5j)
-r4 = cmath.phase(0.5j)
+# cmath function with a bare imaginary literal (was crashing before): the
+# crash was at argument binding, before the callee runs, so one cheap call
+# (phase -> atan2) is enough to pin the cmath dispatch path without dragging
+# in the heavy libm series loops of exp/sqrt/sin.
+angle = cmath.phase(0.5j)
+assert angle > 0.0
