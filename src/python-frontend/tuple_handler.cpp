@@ -322,19 +322,21 @@ exprt tuple_handler::handle_tuple_subscript(
     const size_t n = components.size();
     typet idx_type = index_expr.type();
 
-    // Normalise negative indices: idx_norm = i < 0 ? i + n : i
-    exprt n_expr = from_integer(BigInt(n), idx_type);
-    exprt zero_idx = gen_zero(idx_type);
-    exprt is_neg = binary_relation_exprt(index_expr, "<", zero_idx);
-    exprt plus_n = plus_exprt(index_expr, n_expr);
-    plus_n.type() = idx_type;
-    if_exprt idx_norm(is_neg, plus_n, index_expr);
-    idx_norm.type() = idx_type;
+    // Normalise negative indices: idx_norm = i < 0 ? i + n : i.
+    // V.3: built in IREP2 (all operands are idx_type, so the if2t branch
+    // types agree); idx_norm is back-migrated for the legacy select chain.
+    const type2tc idx2t = migrate_type(idx_type);
+    expr2tc index2;
+    migrate_expr(index_expr, index2);
+    const expr2tc n2 = from_integer(BigInt(n), idx2t);
+    const expr2tc zero2 = gen_zero(idx2t);
+    const expr2tc idxnorm2 = if2tc(
+      idx2t, lessthan2tc(index2, zero2), add2tc(idx2t, index2, n2), index2);
+    exprt idx_norm = migrate_expr_back(idxnorm2);
 
     // Bounds: 0 <= idx_norm < n
-    exprt lo_ok = binary_relation_exprt(idx_norm, ">=", zero_idx);
-    exprt hi_ok = binary_relation_exprt(idx_norm, "<", n_expr);
-    exprt in_bounds = and_exprt(lo_ok, hi_ok);
+    exprt in_bounds = migrate_expr_back(
+      and2tc(greaterthanequal2tc(idxnorm2, zero2), lessthan2tc(idxnorm2, n2)));
     code_assertt bounds_assert(in_bounds);
     if (element.contains("lineno"))
       bounds_assert.location() = converter_.get_location_from_decl(element);
