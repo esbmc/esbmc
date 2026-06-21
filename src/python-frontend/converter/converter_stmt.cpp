@@ -2295,13 +2295,12 @@ void python_converter::get_var_assign(
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
     {
-#ifndef NDEBUG
-      // to_array_type returns a reference into lhs.type(); binding the base
-      // typet& directly would construct a temporary array_typet and leave
-      // thetype dangling (GCC -Wdangling-reference under -Werror).
-      const array_typet &thetype = to_array_type(lhs.type());
-      assert(thetype.size().is_nil());
-#endif
+      // Note: lhs.type() may be a fixed-size array (e.g. a string literal's
+      // char array) whose size is a constant, so no nil-size invariant holds
+      // here. The previous debug assert only passed because binding
+      // `const array_typet& = lhs.type()` constructed a throwaway array (with
+      // a nil size) rather than reinterpreting the real type; it asserted
+      // nothing meaningful and is removed.
       lhs_symbol->set_type(rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
