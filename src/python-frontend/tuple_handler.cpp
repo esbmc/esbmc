@@ -344,15 +344,33 @@ exprt tuple_handler::handle_tuple_subscript(
     converter_.add_instruction(bounds_assert);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
+    // V.3: build the index select chain in IREP2. This path is gated to
+    // base_type_eq-homogeneous tuples (checked above), so the if2t branch
+    // types normally agree; a defensive exact-type guard keeps any
+    // base_type_eq-but-not-identical component on the legacy builder.
+    const type2tc ft2 = migrate_type(first_type);
+    const type2tc idx2t = migrate_type(idx_type);
+    expr2tc idxnorm2;
+    migrate_expr(idx_norm, idxnorm2);
     exprt chain = get_tuple_element(array, tuple_type, 0);
     for (size_t k = 1; k < n; ++k)
     {
       exprt member = get_tuple_element(array, tuple_type, k);
-      exprt cond =
-        binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
-      if_exprt sel(cond, member, chain);
-      sel.type() = first_type;
-      chain = sel;
+      const expr2tc cond2 =
+        equality2tc(idxnorm2, from_integer(BigInt(k), idx2t));
+      if (member.type() == first_type && chain.type() == first_type)
+      {
+        expr2tc member2, chain2;
+        migrate_expr(member, member2);
+        migrate_expr(chain, chain2);
+        chain = migrate_expr_back(if2tc(ft2, cond2, member2, chain2));
+      }
+      else
+      {
+        if_exprt sel(migrate_expr_back(cond2), member, chain);
+        sel.type() = first_type;
+        chain = sel;
+      }
     }
 
     if (element.contains("lineno"))
