@@ -7,7 +7,6 @@
 # Python converter, even when the abstract body does not reference them.
 import math
 
-
 pi: float = math.pi
 e: float = math.e
 
@@ -66,6 +65,7 @@ def fabs(x: float) -> float:
 
 def sqrt(x: float) -> float:
     return math.sqrt(x)
+
 
 def trunc(x: float) -> float:
     return 0.2
@@ -186,9 +186,9 @@ def copysign(x: float, y: float) -> float:
 
 
 def fmin(x: float, y: float) -> float:
-    if x != x:
+    if math.isnan(x):
         return y
-    if y != y:
+    if math.isnan(y):
         return x
     if x < y:
         return x
@@ -196,9 +196,9 @@ def fmin(x: float, y: float) -> float:
 
 
 def fmax(x: float, y: float) -> float:
-    if x != x:
+    if math.isnan(x):
         return y
-    if y != y:
+    if math.isnan(y):
         return x
     if x > y:
         return x
@@ -206,15 +206,15 @@ def fmax(x: float, y: float) -> float:
 
 
 def greater(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] > rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -225,15 +225,15 @@ def greater(a: Any, b: Any) -> Any:
 
 
 def less(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] < rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -244,15 +244,15 @@ def less(a: Any, b: Any) -> Any:
 
 
 def greater_equal(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] >= rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -263,15 +263,15 @@ def greater_equal(a: Any, b: Any) -> Any:
 
 
 def less_equal(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] <= rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -282,15 +282,15 @@ def less_equal(a: Any, b: Any) -> Any:
 
 
 def equal(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] == rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -301,15 +301,15 @@ def equal(a: Any, b: Any) -> Any:
 
 
 def not_equal(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [a[i] != rhs]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -320,15 +320,15 @@ def not_equal(a: Any, b: Any) -> Any:
 
 
 def logical_and(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [bool(a[i]) and bool(rhs)]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -339,15 +339,15 @@ def logical_and(a: Any, b: Any) -> Any:
 
 
 def logical_or(a: Any, b: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            rhs = b[i] if isinstance(b, list) else b
+            rhs = b[i] if type(b) == list else b
             out = out + [bool(a[i]) or bool(rhs)]
             i = i + 1
         return out
-    if isinstance(b, list):
+    if type(b) == list:
         out = []
         i = 0
         while i < len(b):
@@ -358,7 +358,7 @@ def logical_or(a: Any, b: Any) -> Any:
 
 
 def logical_not(a: Any) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         out: list[Any] = []
         i = 0
         while i < len(a):
@@ -369,7 +369,7 @@ def logical_not(a: Any) -> Any:
 
 
 def sum(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         total = 0
         i = 0
         while i < len(a):
@@ -380,7 +380,7 @@ def sum(a: Any, axis: int = -1) -> Any:
 
 
 def prod(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         result = 1
         i = 0
         while i < len(a):
@@ -391,7 +391,7 @@ def prod(a: Any, axis: int = -1) -> Any:
 
 
 def min(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         if len(a) == 0:
             raise ValueError("min() arg is an empty sequence")
         result = a[0]
@@ -405,7 +405,7 @@ def min(a: Any, axis: int = -1) -> Any:
 
 
 def max(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         if len(a) == 0:
             raise ValueError("max() arg is an empty sequence")
         result = a[0]
@@ -419,7 +419,7 @@ def max(a: Any, axis: int = -1) -> Any:
 
 
 def mean(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         total = 0
         i = 0
         while i < len(a):
@@ -430,7 +430,7 @@ def mean(a: Any, axis: int = -1) -> Any:
 
 
 def argmin(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         if len(a) == 0:
             raise ValueError("argmin() arg is an empty sequence")
         best_idx = 0
@@ -446,7 +446,7 @@ def argmin(a: Any, axis: int = -1) -> Any:
 
 
 def argmax(a: Any, axis: int = -1) -> Any:
-    if isinstance(a, list):
+    if type(a) == list:
         if len(a) == 0:
             raise ValueError("argmax() arg is an empty sequence")
         best_idx = 0
@@ -462,12 +462,12 @@ def argmax(a: Any, axis: int = -1) -> Any:
 
 
 def where(cond: Any, x: Any, y: Any) -> Any:
-    if isinstance(cond, list):
+    if type(cond) == list:
         out = []
         i = 0
         while i < len(cond):
-            x_item = x[i] if isinstance(x, list) else x
-            y_item = y[i] if isinstance(y, list) else y
+            x_item = x[i] if type(x) == list else x
+            y_item = y[i] if type(y) == list else y
             out = out + [x_item if cond[i] else y_item]
             i = i + 1
         return out
@@ -500,7 +500,7 @@ def arange(start: int, stop: int = 0, step: int = 1) -> list[int]:
 
 
 def full(shape: Any, fill_value: Any) -> Any:
-    if isinstance(shape, list):
+    if type(shape) == list:
         rows = shape[0]
         cols = shape[1]
         out: list[Any] = []
@@ -514,7 +514,7 @@ def full(shape: Any, fill_value: Any) -> Any:
             out = out + [row]
             i = i + 1
         return out
-    if isinstance(shape, tuple):
+    if type(shape) == tuple:
         rows = shape[0]
         cols = shape[1]
         out: list[Any] = []
