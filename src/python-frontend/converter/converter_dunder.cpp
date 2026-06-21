@@ -5,6 +5,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/migrate.h>
+#include <util/python_types.h>
 
 #include <map>
 
@@ -143,12 +144,12 @@ nlohmann::json python_converter::build_dunder_call(
   return call_node;
 }
 
-static bool is_excluded_struct_tag(const std::string &tag)
+// Internal Python model aggregates (tuple, dict, Optional) must not be treated
+// as user classes for dunder-operator dispatch. The kind is read from the
+// attribute stamped at type-creation time; see util/python_types.h.
+static bool is_excluded_struct_tag(const struct_typet &st)
 {
-  return tag.find("dict_") != std::string::npos ||
-         tag.find("tag-dict") != std::string::npos ||
-         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-         tag == "__python_dict__";
+  return is_python_internal_aggregate(st);
 }
 
 static typet resolve_operand_type(
@@ -211,7 +212,7 @@ exprt python_converter::dispatch_dunder_operator(
     const struct_typet &lhs_struct = to_struct_type(lhs_type);
     std::string lhs_tag = lhs_struct.tag().as_string();
 
-    if (!is_excluded_struct_tag(lhs_tag))
+    if (!is_excluded_struct_tag(lhs_struct))
     {
       std::string dunder = op_to_dunder(op);
       if (!dunder.empty())
@@ -241,7 +242,7 @@ exprt python_converter::dispatch_dunder_operator(
     const struct_typet &rhs_struct = to_struct_type(rhs_type);
     std::string rhs_tag = rhs_struct.tag().as_string();
 
-    if (!is_excluded_struct_tag(rhs_tag))
+    if (!is_excluded_struct_tag(rhs_struct))
     {
       std::string rdunder = op_to_rdunder(op);
       if (!rdunder.empty())
@@ -289,11 +290,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   const struct_typet &struct_type = to_struct_type(operand_type);
   std::string tag = struct_type.tag().as_string();
 
-  if (
-    tag.find("dict_") != std::string::npos ||
-    tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-    tag == "__python_dict__")
+  if (is_excluded_struct_tag(struct_type))
     return nil_exprt();
 
   static const std::map<std::string, std::string> unary_dunder_map = {

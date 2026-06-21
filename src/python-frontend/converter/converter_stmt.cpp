@@ -23,6 +23,7 @@
 #include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/encoding.h>
 #include <util/expr_util.h>
 #include <util/irep.h>
@@ -64,6 +65,28 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
 {
   return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
          (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
+}
+
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
 }
 
 // RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
@@ -2168,7 +2191,8 @@ void python_converter::get_var_assign(
           !expected_base.empty() && !ctor_name.empty() &&
           !get_typechecker().class_derives_from(ctor_name, expected_base))
         {
-          code_assertt ctor_assert(gen_boolean(false));
+          // V.3: build the always-fail assert condition in IREP2.
+          code_assertt ctor_assert(migrate_expr_back(gen_false_expr()));
           ctor_assert.location() = location_begin;
           ctor_assert.location().comment(
             "Constructor '" + ctor_name +
@@ -2207,7 +2231,8 @@ void python_converter::get_var_assign(
       rhs.type().is_array() && !lhs.type().is_array() &&
       !lhs.type().is_pointer())
     {
-      code_assertt type_assert(gen_boolean(false));
+      // V.3: build the always-fail assert condition in IREP2.
+      code_assertt type_assert(migrate_expr_back(gen_false_expr()));
       type_assert.location() = location_begin;
       type_assert.location().comment(
         "Type violation: incompatible types in assignment");
@@ -2682,12 +2707,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)
     {
-      overall_cond = exprt("not", bool_type());
-      overall_cond.copy_to_operands(cond_tmp);
+      // V.3: build the unary-not condition in IREP2.
+      expr2tc ct2;
+      migrate_expr(cond_tmp, ct2);
+      overall_cond = migrate_expr_back(not2tc(ct2));
     }
 
-    exprt break_cond("not", bool_type());
-    break_cond.copy_to_operands(overall_cond);
+    // V.3: build the break guard !cond in IREP2.
+    expr2tc oc2;
+    migrate_expr(overall_cond, oc2);
+    exprt break_cond = migrate_expr_back(not2tc(oc2));
 
     code_breakt break_stmt;
     break_stmt.location() = location;
@@ -2708,7 +2737,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     codet while_code;
     while_code.set_statement("while");
     while_code.location() = location;
-    while_code.copy_to_operands(gen_boolean(true), loop_body);
+    // V.3: build the `while True` condition in IREP2.
+    while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
 
     transformed.copy_to_operands(while_code);
     current_element_type = t;
@@ -3403,6 +3433,35 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
     case StatementType::ASSERT:
     {
+      // Fold whole-assertion tests that provably evaluate to True at
+      // conversion time (e.g. `f(GLOBAL) == [literal]` for a pure f). This
+      // bypasses operational-model loops (strlen/str-slice) whose unwinding
+      // would otherwise scale with the data size. Gated on the test containing
+      // a function call so plain symbolic asserts stay on the solver path;
+      // only a constant True short-circuits — False/unknown fall through so
+      // the solver still detects genuine violations. Disabled under any
+      // coverage mode, where the original assert/branches must be instrumented.
+      const bool coverage_active =
+        is_coverage_mode() ||
+        config.options.get_bool_option("assertion-coverage") ||
+        config.options.get_bool_option("assertion-coverage-claims");
+      if (
+        !coverage_active && element.contains("test") &&
+        ast_contains_call(element["test"]))
+      {
+        python_consteval evaluator(*ast_json);
+        auto folded = evaluator.try_eval_global_expr(element["test"]);
+        if (folded && folded->kind == PyConstValue::BOOL && folded->bool_val)
+        {
+          code_assertt proven;
+          proven.assertion() = gen_boolean(true);
+          proven.location() = get_location_from_decl(element);
+          proven.location().comment("assertion proven by constant evaluation");
+          block.move_to_operands(proven);
+          break;
+        }
+      }
+
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
       if (test.statement() == "cpp-throw")

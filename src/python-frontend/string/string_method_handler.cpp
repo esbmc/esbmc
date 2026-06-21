@@ -1804,8 +1804,11 @@ exprt string_handler::build_string_index_result(
   assign.location() = location;
   converter_.add_instruction(assign);
 
-  exprt not_found =
-    equality_exprt(build_symbol(find_result), from_integer(-1, int_type()));
+  // V.3: build the `find_result == -1` not-found check in IREP2.
+  expr2tc fr2;
+  migrate_expr(build_symbol(find_result), fr2);
+  exprt not_found = migrate_expr_back(
+    equality2tc(fr2, from_integer(BigInt(-1), migrate_type(int_type()))));
   exprt raise = python_exception_utils::make_exception_raise(
     type_handler_, "ValueError", "substring not found", &location);
 
@@ -2565,6 +2568,7 @@ exprt string_handler::handle_string_partition(
       tag += "_" + elems[i]->type().to_string();
     }
     tuple_type.tag(tag);
+    set_python_aggregate_kind(tuple_type, "tuple");
 
     struct_exprt tuple_expr(tuple_type);
     tuple_expr.operands() = {a, b, c};

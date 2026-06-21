@@ -215,9 +215,12 @@ bool is_empty_literal(const nlohmann::json &node)
 
 exprt function_call_expr::combine_truthiness(exprt acc, exprt next, ReduceOp op)
 {
-  return (op == ReduceOp::Any)
-           ? exprt(or_exprt(std::move(acc), std::move(next)))
-           : exprt(and_exprt(std::move(acc), std::move(next)));
+  // V.3: build the any/all reduction fold in IREP2.
+  expr2tc a2, n2;
+  migrate_expr(acc, a2);
+  migrate_expr(next, n2);
+  return migrate_expr_back(
+    op == ReduceOp::Any ? or2tc(a2, n2) : and2tc(a2, n2));
 }
 
 exprt function_call_expr::handle_input() const
@@ -1315,14 +1318,21 @@ exprt function_call_expr::handle_complex() const
 
             if (true_complex && false_complex)
             {
-              exprt real_part = if_exprt(
-                cond,
-                from_double(true_complex->first, double_type()),
-                from_double(false_complex->first, double_type()));
-              exprt imag_part = if_exprt(
-                cond,
-                from_double(true_complex->second, double_type()),
-                from_double(false_complex->second, double_type()));
+              // V.3: build the per-part conditional selects in IREP2 (both
+              // branches are double constants, so the if2t types agree).
+              const type2tc dbl2 = double_type2();
+              expr2tc cond2, tr2, fr2, ti2, fi2;
+              migrate_expr(cond, cond2);
+              migrate_expr(
+                from_double(true_complex->first, double_type()), tr2);
+              migrate_expr(
+                from_double(false_complex->first, double_type()), fr2);
+              migrate_expr(
+                from_double(true_complex->second, double_type()), ti2);
+              migrate_expr(
+                from_double(false_complex->second, double_type()), fi2);
+              exprt real_part = migrate_expr_back(if2tc(dbl2, cond2, tr2, fr2));
+              exprt imag_part = migrate_expr_back(if2tc(dbl2, cond2, ti2, fi2));
               return make_complex(real_part, imag_part);
             }
 
@@ -1522,14 +1532,30 @@ exprt function_call_expr::handle_min_max(
           exprt elem =
             build_member(arg, components[i].get_name(), components[i].type());
 
-          // Create comparison: elem < result (for min) or elem > result (for max)
-          exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-          condition.copy_to_operands(elem, result);
-
-          // result = (elem < result) ? elem : result
-          if_exprt update(condition, elem, result);
-          update.type() = components[i].type();
-          result = update;
+          // result = (elem < result) ? elem : result  (> for max).
+          // V.3: build the select in IREP2 when both branches share the
+          // result type; mixed-type tuple components keep the legacy builder
+          // (if2t asserts type-id equality).
+          const typet &ut = components[i].type();
+          if (elem.type() == ut && result.type() == ut)
+          {
+            const type2tc ut2 = migrate_type(ut);
+            expr2tc elem2, result2;
+            migrate_expr(elem, elem2);
+            migrate_expr(result, result2);
+            expr2tc cond = comparison_op == exprt::i_lt
+                             ? lessthan2tc(elem2, result2)
+                             : greaterthan2tc(elem2, result2);
+            result = migrate_expr_back(if2tc(ut2, cond, elem2, result2));
+          }
+          else
+          {
+            exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+            condition.copy_to_operands(elem, result);
+            if_exprt update(condition, elem, result);
+            update.type() = ut;
+            result = update;
+          }
         }
 
         return result;
@@ -1577,17 +1603,21 @@ exprt function_call_expr::handle_min_max(
       e = build_typecast(e, result_type);
 
   // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
-  exprt result = exprs[0];
+  // V.3: build the min/max selection chain in IREP2. All args are already
+  // promoted to result_type, so the if2t branch types agree.
+  const type2tc rt2 = migrate_type(result_type);
+  expr2tc result2;
+  migrate_expr(exprs[0], result2);
   for (size_t i = 1; i < exprs.size(); ++i)
   {
-    exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-    condition.copy_to_operands(exprs[i], result);
-    if_exprt update(condition, exprs[i], result);
-    update.type() = result_type;
-    result = update;
+    expr2tc e2;
+    migrate_expr(exprs[i], e2);
+    expr2tc cond = comparison_op == exprt::i_lt ? lessthan2tc(e2, result2)
+                                                : greaterthan2tc(e2, result2);
+    result2 = if2tc(rt2, cond, e2, result2);
   }
 
-  return result;
+  return migrate_expr_back(result2);
 }
 
 exprt function_call_expr::handle_print() const
@@ -1627,8 +1657,9 @@ exprt function_call_expr::handle_print() const
 
 exprt function_call_expr::compute_element_truthiness(const exprt &element) const
 {
+  // V.3: build the scalar truthiness predicate in IREP2.
   if (element.type() == none_type())
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   if (element.type().is_bool())
     return element;
@@ -1636,13 +1667,18 @@ exprt function_call_expr::compute_element_truthiness(const exprt &element) const
   if (
     element.type().id() == "signedbv" || element.type().id() == "unsignedbv" ||
     element.type().id() == "floatbv" || element.type().is_pointer())
-    return not_exprt(equality_exprt(element, gen_zero(element.type())));
+  {
+    // element != 0
+    expr2tc el2;
+    migrate_expr(element, el2);
+    return migrate_expr_back(not2tc(equality2tc(el2, gen_zero(el2->type))));
+  }
 
   if (is_complex_type(element.type()))
     return complex_to_bool_expr(element);
 
   // For other types, assume truthy (conservative)
-  return gen_boolean(true);
+  return migrate_expr_back(gen_true_expr());
 }
 
 exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
@@ -1707,13 +1743,15 @@ exprt function_call_expr::reduce_iterable_literal_truthiness(
   const auto &elts = iterable_arg["elts"];
 
   if (elts.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &elt : elts)
   {
     exprt is_truthy = is_empty_literal(elt)
-                        ? gen_boolean(false)
+                        ? migrate_expr_back(gen_false_expr()) // V.3
                         : compute_element_truthiness(converter_.get_expr(elt));
     result = result ? combine_truthiness(std::move(*result), is_truthy, op)
                     : is_truthy;
@@ -1729,7 +1767,9 @@ exprt function_call_expr::reduce_tuple_expr_truthiness(
   const auto &components = tuple_type.components();
 
   if (components.empty())
-    return gen_boolean(op == ReduceOp::All);
+    // V.3: empty reduction -> all()=True, any()=False (built in IREP2).
+    return migrate_expr_back(
+      op == ReduceOp::All ? gen_true_expr() : gen_false_expr());
 
   std::optional<exprt> result;
   for (const auto &component : components)

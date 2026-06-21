@@ -71,14 +71,33 @@ void ir_ieee_convt::propagate_nan_pred(smt_astt lhs, smt_astt rhs)
     ir_ieee_nan_map[lhs] = it->second;
 }
 
+smt_astt ir_ieee_convt::combine_nan_preds(smt_astt a, smt_astt b) const
+{
+  if (!a && !b)
+    return nullptr;
+  if (!a)
+    return b;
+  if (!b)
+    return a;
+  return ctx->mk_or(a, b);
+}
+
+void ir_ieee_convt::store_combined_nan_pred(
+  smt_astt result,
+  smt_astt s1,
+  smt_astt s2)
+{
+  smt_astt nan_p = combine_nan_preds(get_nan_pred(s1), get_nan_pred(s2));
+  if (nan_p)
+    store_nan_pred(result, nan_p);
+}
+
 smt_astt
 ir_ieee_convt::apply_nan_cmp(smt_astt cmp, smt_astt a, smt_astt b, bool is_neq)
 {
-  smt_astt na = get_nan_pred(a);
-  smt_astt nb = get_nan_pred(b);
-  if (!na && !nb)
+  smt_astt either_nan = combine_nan_preds(get_nan_pred(a), get_nan_pred(b));
+  if (!either_nan)
     return cmp;
-  smt_astt either_nan = (na && nb) ? ctx->mk_or(na, nb) : (na ? na : nb);
   return ctx->mk_ite(either_nan, ctx->mk_smt_bool(is_neq), cmp);
 }
 
@@ -418,6 +437,7 @@ smt_astt ir_ieee_convt::encode_ieee_add(const expr2tc &expr)
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     store_interval(real_result, bounds.first, bounds.second);
+    store_combined_nan_pred(real_result, side1, side2);
     return real_result;
   }
   return ctx->apply_ieee754_semantics(
@@ -443,6 +463,7 @@ smt_astt ir_ieee_convt::encode_ieee_sub(const expr2tc &expr)
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     store_interval(real_result, bounds.first, bounds.second);
+    store_combined_nan_pred(real_result, side1, side2);
     return real_result;
   }
   return ctx->apply_ieee754_semantics(
@@ -493,6 +514,7 @@ smt_astt ir_ieee_convt::encode_ieee_mul(const expr2tc &expr)
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     store_interval(real_result, bounds.first, bounds.second);
+    store_combined_nan_pred(real_result, side1, side2);
     return real_result;
   }
   return ctx->apply_ieee754_semantics(
@@ -573,6 +595,13 @@ smt_astt ir_ieee_convt::encode_ieee_div(const expr2tc &expr)
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     smt_astt a = ctx->mk_ite(div_by_zero, inf_result, real_result);
     store_interval(a, bounds.first, bounds.second);
+    smt_astt zero_div_zero_nan =
+      ctx->mk_and(ctx->mk_eq(side1, zero), div_by_zero);
+    store_nan_pred(
+      a,
+      combine_nan_preds(
+        combine_nan_preds(get_nan_pred(side1), get_nan_pred(side2)),
+        zero_div_zero_nan));
     return a;
   }
 
@@ -633,6 +662,11 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
     auto bounds =
       apply_enclosure(real_result, lo_r, hi_r, fbv_type, rounding_mode);
     store_interval(real_result, bounds.first, bounds.second);
+    smt_astt nan_p = combine_nan_preds(
+      combine_nan_preds(get_nan_pred(val1), get_nan_pred(val2)),
+      get_nan_pred(val3));
+    if (nan_p)
+      store_nan_pred(real_result, nan_p);
     return real_result;
   }
 
