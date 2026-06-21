@@ -1246,19 +1246,24 @@ exprt python_converter::handle_tuple_operations(
       migrate_expr(tb, b2);
 
       // Base: a proper prefix is strictly less than the longer tuple.
-      exprt result = gen_boolean(ca.size() < cb.size());
+      // V.3: build the lexicographic compare in IREP2.
+      expr2tc result =
+        ca.size() < cb.size() ? gen_true_expr() : gen_false_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = memb(a2, ca[k]);
         exprt bi = memb(b2, cb[k]);
 
-        exprt lt, eq;
+        expr2tc lt, eq;
         const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          lt = lex_lt(ai, bi);
-          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+          expr2tc ai2, bi2;
+          migrate_expr(lex_lt(ai, bi), lt);
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          eq = equality2tc(ai2, bi2); // native struct equality, element-wise
         }
         else if (is_num(ai.type()) && is_num(bi.type()))
         {
@@ -1268,23 +1273,22 @@ exprt python_converter::handle_tuple_operations(
             ai = typecast_exprt(ai, double_type());
             bi = typecast_exprt(bi, double_type());
           }
-          lt = exprt("<", bool_type());
-          lt.copy_to_operands(ai, bi);
-          eq = equality_exprt(ai, bi);
+          expr2tc ai2, bi2;
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          lt = lessthan2tc(ai2, bi2);
+          eq = equality2tc(ai2, bi2);
         }
         else
         {
           ok = false; // unsupported / mismatched component kinds
-          return gen_boolean(false);
+          return migrate_expr_back(gen_false_expr());
         }
 
-        exprt tail("and", bool_type());
-        tail.copy_to_operands(eq, result);
-        exprt head("or", bool_type());
-        head.copy_to_operands(lt, tail);
-        result = head;
+        // result = lt || (eq && result)
+        result = or2tc(lt, and2tc(eq, result));
       }
-      return result;
+      return migrate_expr_back(result);
     };
 
     const bool swap = (op == "Gt" || op == "LtE");
