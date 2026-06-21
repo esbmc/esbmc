@@ -1098,12 +1098,13 @@ exprt string_handler::handle_char_isspace(
   exprt call = build_call_expr(func_symbol_id, int_type(), {char_as_int});
   call.location() = location;
 
-  // Convert result to boolean (isspace returns non-zero for whitespace)
-  exprt result("notequal", bool_type());
-  result.copy_to_operands(call);
-  result.copy_to_operands(from_integer(0, int_type()));
-
-  return result;
+  // V.3: convert the C isspace() result to a boolean in IREP2 (isspace
+  // returns non-zero for whitespace), back-migrating once. Operand order
+  // (call != 0) and the bool result type match the legacy node.
+  expr2tc call2, zero2;
+  migrate_expr(call, call2);
+  migrate_expr(from_integer(0, int_type()), zero2);
+  return migrate_expr_back(notequal2tc(call2, zero2));
 }
 
 exprt string_handler::handle_string_lstrip(
