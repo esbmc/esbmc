@@ -4697,10 +4697,16 @@ exprt python_list::extract_pyobject_value(
     exprt int_as_float = build_typecast(int_val, elem_type);
 
     // item->type_id == float_type_id ? float_buf[float_idx] : (double)int
-    equality_exprt is_float(
-      member_of("type_id", size_type()),
-      from_integer(float_type_id, size_type()));
-    return if_exprt(is_float, float_val, int_as_float);
+    // V.3: built in IREP2 (both branches are elem_type, so the if2t types
+    // agree), back-migrated at the return.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, fv2, iaf2;
+    migrate_expr(member_of("type_id", size_type()), tid2);
+    migrate_expr(float_val, fv2);
+    migrate_expr(int_as_float, iaf2);
+    const expr2tc is_float =
+      equality2tc(tid2, from_integer(float_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_float, fv2, iaf2));
   }
 
   // Extract value from PyObject: (*pyobject_expr).value
