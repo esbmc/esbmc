@@ -2997,12 +2997,13 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
-    exprt still_neg("<", bool_type());
-    still_neg.copy_to_operands(build_symbol(idx_sym), from_integer(0, ll_type));
-
-    exprt idx_ge_len(">=", bool_type());
-    idx_ge_len.copy_to_operands(
-      build_symbol(idx_sym), build_typecast(build_symbol(len_sym), ll_type));
+    // V.3: built in IREP2, back-migrated for the legacy code_ifthenelset.
+    const type2tc oob_llt = migrate_type(ll_type);
+    expr2tc oob_idx, oob_len;
+    migrate_expr(build_symbol(idx_sym), oob_idx);
+    migrate_expr(build_typecast(build_symbol(len_sym), ll_type), oob_len);
+    expr2tc still_neg = lessthan2tc(oob_idx, gen_zero(oob_llt));
+    expr2tc idx_ge_len = greaterthanequal2tc(oob_idx, oob_len);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "string index out of range");
@@ -3010,7 +3011,7 @@ exprt python_list::handle_index_access(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset oob_guard;
-    oob_guard.cond() = or_exprt(still_neg, idx_ge_len);
+    oob_guard.cond() = migrate_expr_back(or2tc(still_neg, idx_ge_len));
     oob_guard.then_case() = throw_code;
     oob_guard.location() = loc;
     converter_.add_instruction(oob_guard);
