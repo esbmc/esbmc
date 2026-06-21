@@ -52,7 +52,7 @@ jobs:
 
       - name: Fix RPATH and bundle Z3 library
         run: |
-          apt-get install -y patchelf
+          sudo apt-get install -y patchelf
           Z3_LIB=$(find build/Z3 -name "libz3.so" | head -1)
           echo "Found Z3 lib: $Z3_LIB"
           cp "$Z3_LIB" libz3.so
