@@ -844,6 +844,25 @@ void code_contractst::enforce_contracts(
           if (comment == "contract::ensures" || comment == "contract::requires")
           {
             instructions_to_remove.insert(it);
+
+            // The GOTO pointer/arithmetic-safety pass emits auto-generated
+            // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
+            // clause expression, immediately preceding this ASSUME. They are
+            // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
+            // ensures clause they reference __ESBMC_return_value, which is
+            // unbound in the original body, yielding a spurious violation
+            // (#5043). The wrapper re-checks the clause with return_value
+            // properly bound, so drop the contiguous run of safety asserts
+            // belonging to this clause. Contract clauses precede the function
+            // body, so a real body assertion never sits directly before a
+            // clause ASSUME; walking back over asserts cannot reach body code.
+            for (auto p = it; p != renamed_body.instructions.begin();)
+            {
+              --p;
+              if (!p->is_assert())
+                break;
+              instructions_to_remove.insert(p);
+            }
           }
         }
       }
@@ -887,6 +906,34 @@ void code_contractst::enforce_contracts(
       {
         renamed_body.instructions.erase(it);
       }
+    }
+
+    // Recursive self-calls: under enforcement the function body is executed by
+    // the checking wrapper, and a self-call resolves to that same wrapper, so
+    // the real recursion is unwound unboundedly (OOM) instead of using the
+    // function's own contract (#5313). Replace each self-call in the original
+    // body with the contract (assert requires → havoc assigns → assume ensures),
+    // exactly as --replace-call-with-contract does. original_body_copy still
+    // carries the contract clauses (the renamed body has them stripped), so use
+    // it as the contract source.
+    {
+      goto_programt &self_body =
+        goto_functions.function_map[original_name_id].body;
+      std::vector<goto_programt::targett> self_calls;
+      Forall_goto_program_instructions (i_it, self_body)
+      {
+        if (!i_it->is_function_call() || !is_code_function_call2t(i_it->code))
+          continue;
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        if (
+          is_symbol2t(call.function) &&
+          to_symbol2t(call.function).get_symbol_name() ==
+            id2string(original_id))
+          self_calls.push_back(i_it);
+      }
+      for (auto call_it : self_calls)
+        generate_replacement_at_call(
+          *func_sym, original_body_copy, call_it, self_body);
     }
 
     // Extract is_fresh mappings from function body for ensures clause replacement

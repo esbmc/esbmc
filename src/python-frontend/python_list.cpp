@@ -173,12 +173,12 @@ exprt build_dereference(const exprt &ptr, const typet &t)
 // Default depth for list comparison if option not set
 static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
 
-static bool is_excluded_struct_tag_for_object_ref(const std::string &tag)
+static bool is_excluded_struct_tag_for_object_ref(const struct_typet &st)
 {
-  return tag.find("dict_") != std::string::npos ||
-         tag.find("tag-dict") != std::string::npos ||
-         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-         tag == "__python_dict__";
+  // Internal Python model aggregates (tuple, dict, Optional) are not user class
+  // instances; the kind is read from the attribute stamped at type-creation
+  // time. See util/python_types.h.
+  return is_python_internal_aggregate(st);
 }
 
 static bool
@@ -200,7 +200,7 @@ is_empty_user_class_object_type(const typet &type, const namespacet &ns)
     tag.rfind("tag-struct __ESBMC_", 0) == 0)
     return false;
 
-  if (is_excluded_struct_tag_for_object_ref(tag))
+  if (is_excluded_struct_tag_for_object_ref(to_struct_type(resolved)))
     return false;
 
   // Empty user-defined classes (no data fields) should be stored as object
@@ -1031,26 +1031,30 @@ exprt python_list::build_list_at_call(
   exprt index_as_size = build_typecast(index, size_type());
 
   // Create: actual_index = (index < 0) ? (size + index) : index
-  exprt is_negative("<", bool_type());
-  is_negative.copy_to_operands(index, gen_zero(index.type()));
+  // (V.3: build the negative-index normalization in IREP2.)
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc index2, index_as_size2, size_var2;
+  migrate_expr(index, index2);
+  migrate_expr(index_as_size, index_as_size2);
+  migrate_expr(build_symbol(size_var), size_var2);
 
-  // For negative: size + index (since index is negative, this is size - abs(index))
-  exprt positive_index("+", size_type());
-  positive_index.copy_to_operands(build_symbol(size_var), index_as_size);
-
-  // Choose between positive conversion or original
-  if_exprt converted_index(is_negative, positive_index, index_as_size);
-  converted_index.type() = size_type();
+  expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+  // For negative: size + index (since index is negative, this is
+  // size - abs(index)).
+  expr2tc positive_index = add2tc(size_t2, size_var2, index_as_size2);
+  // Choose between positive conversion or original.
+  expr2tc converted_index2 =
+    if2tc(size_t2, is_negative, positive_index, index_as_size2);
+  exprt converted_index = migrate_expr_back(converted_index2);
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
     // Runtime guard only for negative-index normalization. This prevents
     // underflowed indices (e.g., [] [-1]) from reaching the backend while
     // preserving legacy behavior for non-negative accesses.
-    exprt oob_cond(">=", bool_type());
-    oob_cond.copy_to_operands(converted_index, build_symbol(size_var));
-    exprt negative_oob("and", bool_type());
-    negative_oob.copy_to_operands(is_negative, oob_cond);
+    // negative_oob = is_negative && (converted_index >= size) (V.3: IREP2).
+    expr2tc negative_oob =
+      and2tc(is_negative, greaterthanequal2tc(converted_index2, size_var2));
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -1058,7 +1062,7 @@ exprt python_list::build_list_at_call(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = negative_oob;
+    guard.cond() = migrate_expr_back(negative_oob);
     guard.then_case() = throw_code;
     guard.location() = location;
     converter_.add_instruction(guard);
@@ -1454,7 +1458,8 @@ exprt python_list::handle_range_slice(
   // already reported by the checker.
   if (literal_zero_step)
   {
-    code_assertt step_assert(gen_boolean(false));
+    // V.3: build the always-fail assert condition in IREP2.
+    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
     step_assert.location() = converter_.get_location_from_decl(slice_node);
     step_assert.location().comment("ValueError: slice step cannot be zero");
     converter_.add_instruction(step_assert);
@@ -1567,11 +1572,15 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
-        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow)
-        exprt overflow(">", bool_type());
-        overflow.copy_to_operands(abs_value, logical_len);
-        exprt converted = size_sub(logical_len, abs_value);
-        return if_exprt(overflow, gen_zero(size_type()), converted);
+        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow).
+        // (V.3: built in IREP2.)
+        const type2tc size_t2 = migrate_type(size_type());
+        expr2tc abs2, len2, converted2;
+        migrate_expr(abs_value, abs2);
+        migrate_expr(logical_len, len2);
+        migrate_expr(size_sub(logical_len, abs_value), converted2);
+        return migrate_expr_back(if2tc(
+          size_t2, greaterthan2tc(abs2, len2), gen_zero(size_t2), converted2));
       }
 
       exprt e = converter_.get_expr(bound);
@@ -1598,17 +1607,19 @@ exprt python_list::handle_range_slice(
     // Clamp bounds to [0, logical_len] to match Python semantics.
     if (!negative_step)
     {
-      // lower = max(0, min(lower, logical_len))
-      exprt lower_ge_len(">=", bool_type());
-      lower_ge_len.copy_to_operands(lower_expr, logical_len);
-      lower_expr = if_exprt(lower_ge_len, logical_len, lower_expr);
-      lower_expr.type() = size_type();
-
-      // upper = max(0, min(upper, logical_len))
-      exprt upper_ge_len(">=", bool_type());
-      upper_ge_len.copy_to_operands(upper_expr, logical_len);
-      upper_expr = if_exprt(upper_ge_len, logical_len, upper_expr);
-      upper_expr.type() = size_type();
+      // bound = (bound >= logical_len) ? logical_len : bound
+      // (V.3: built in IREP2.)
+      const type2tc size_t2 = migrate_type(size_type());
+      expr2tc len2;
+      migrate_expr(logical_len, len2);
+      auto clamp_to_len = [&](exprt &bound) {
+        expr2tc b2;
+        migrate_expr(bound, b2);
+        bound = migrate_expr_back(
+          if2tc(size_t2, greaterthanequal2tc(b2, len2), len2, b2));
+      };
+      clamp_to_len(lower_expr);
+      clamp_to_len(upper_expr);
     }
 
     // Calculate slice length
@@ -1765,6 +1776,7 @@ exprt python_list::handle_range_slice(
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
+    const type2tc signed_t2 = migrate_type(signed_t); // V.3: for IREP2 selects
 
     // Step 1: produce a signed `resolved` value.
     //   - missing bound → step-direction default
@@ -1784,10 +1796,12 @@ exprt python_list::handle_range_slice(
       exprt val_signed =
         build_typecast(converter_.get_expr(slice_node[name]), signed_t);
       exprt size_plus_val = signed_add(size_signed, val_signed);
-      exprt is_neg("<", bool_type());
-      is_neg.copy_to_operands(val_signed, zero_s);
-      resolved = if_exprt(is_neg, size_plus_val, val_signed);
-      resolved.type() = signed_t;
+      // val < 0 ? size + val : val  (V.3: built in IREP2).
+      expr2tc val2, spv2;
+      migrate_expr(val_signed, val2);
+      migrate_expr(size_plus_val, spv2);
+      resolved = migrate_expr_back(
+        if2tc(signed_t2, lessthan2tc(val2, gen_zero(signed_t2)), spv2, val2));
     }
 
     // Step 2: clamp to the CPython-defined window for this step direction.
@@ -1800,17 +1814,17 @@ exprt python_list::handle_range_slice(
     const exprt over =
       negative_step ? signed_sub(size_signed, one_s) : size_signed;
 
-    exprt is_under("<", bool_type());
-    is_under.copy_to_operands(resolved, under);
-    exprt c1 = if_exprt(is_under, under, resolved);
-    c1.type() = signed_t;
+    // c1 = max(resolved, under); c2 = min(c1, over)  (V.3: built in IREP2).
+    expr2tc resolved2, under2, over2;
+    migrate_expr(resolved, resolved2);
+    migrate_expr(under, under2);
+    migrate_expr(over, over2);
+    expr2tc c1 =
+      if2tc(signed_t2, lessthan2tc(resolved2, under2), under2, resolved2);
+    expr2tc c2 = if2tc(signed_t2, greaterthan2tc(c1, over2), over2, c1);
+    exprt c2_legacy = migrate_expr_back(c2);
 
-    exprt is_over(">", bool_type());
-    is_over.copy_to_operands(c1, over);
-    exprt c2 = if_exprt(is_over, over, c1);
-    c2.type() = signed_t;
-
-    return negative_step ? c2 : build_typecast(c2, size_type());
+    return negative_step ? c2_legacy : build_typecast(c2_legacy, size_type());
   };
 
   exprt lower_expr = resolve_bound("lower", false);
@@ -3282,7 +3296,7 @@ exprt python_list::compare(
 
         if (lhs_n == rhs_n && lhs_n <= 64)
         {
-          exprt all_equal = gen_boolean(true);
+          expr2tc all_equal = gen_true_expr(); // V.3: accumulate in IREP2
           bool comparable = true;
 
           for (size_t i = 0; i < lhs_n; ++i)
@@ -3311,20 +3325,18 @@ exprt python_list::compare(
             exprt lhs_val = extract_pyobject_value(lhs_at, lhs_elem_type);
             exprt rhs_val = extract_pyobject_value(rhs_at, rhs_elem_type);
 
-            exprt eq_elem;
-            if (lhs_elem_type == rhs_elem_type && is_numeric(lhs_elem_type))
+            // Same-type numeric/bool compares directly; mixed numeric promotes
+            // both sides to double first. (V.3: built in IREP2.)
+            if (
+              lhs_elem_type == rhs_elem_type &&
+              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)))
             {
-              eq_elem = equality_exprt(lhs_val, rhs_val);
-            }
-            else if (lhs_elem_type == rhs_elem_type && is_bool(lhs_elem_type))
-            {
-              eq_elem = equality_exprt(lhs_val, rhs_val);
+              // direct compare
             }
             else if (is_numeric(lhs_elem_type) && is_numeric(rhs_elem_type))
             {
               lhs_val = build_typecast(lhs_val, double_type());
               rhs_val = build_typecast(rhs_val, double_type());
-              eq_elem = equality_exprt(lhs_val, rhs_val);
             }
             else
             {
@@ -3332,16 +3344,17 @@ exprt python_list::compare(
               break;
             }
 
-            exprt and_expr("and", bool_type());
-            and_expr.copy_to_operands(all_equal, eq_elem);
-            all_equal = and_expr;
+            expr2tc lhs_val2, rhs_val2;
+            migrate_expr(lhs_val, lhs_val2);
+            migrate_expr(rhs_val, rhs_val2);
+            all_equal = and2tc(all_equal, equality2tc(lhs_val2, rhs_val2));
           }
 
           if (comparable)
           {
             if (op == "NotEq")
-              return not_exprt(all_equal);
-            return all_equal;
+              return migrate_expr_back(not2tc(all_equal));
+            return migrate_expr_back(all_equal);
           }
         }
       }
@@ -3955,7 +3968,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
 
   // Create a temporary variable to store the result
   symbolt &contains_ret = converter_.create_tmp_symbol(
-    list_value_, "contains_tmp", bool_type(), gen_boolean(false));
+    list_value_,
+    "contains_tmp",
+    bool_type(),
+    migrate_expr_back(gen_false_expr())); // V.3
   code_declt contains_ret_decl(build_symbol(contains_ret));
   converter_.add_instruction(contains_ret_decl);
 
@@ -4062,9 +4078,10 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   contains_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(contains_call);
 
-  exprt result("=", bool_type());
-  result.copy_to_operands(build_symbol(contains_ret));
-  result.copy_to_operands(gen_boolean(true));
+  // V.3: build `contains_ret == true` in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_ret), cr2);
+  exprt result = migrate_expr_back(equality2tc(cr2, gen_true_expr()));
 
   return result;
 }

@@ -8,6 +8,17 @@
 #include <util/migrate.h>
 #include <util/python_types.h>
 
+namespace
+{
+// V.3: build a boolean constant in IREP2, back-migrated for the legacy
+// callers (the comparison fold results consumed as exprt). Exact migrate of
+// gen_bool(v) modulo the cosmetic #cpp_type hint.
+exprt gen_bool(bool v)
+{
+  return migrate_expr_back(v ? gen_true_expr() : gen_false_expr());
+}
+} // namespace
+
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   const exprt &lhs,
   const exprt &rhs)
@@ -59,7 +70,7 @@ exprt python_converter::compare_constants_internal(
     (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
     bool equal = (lhs == rhs);
-    return gen_boolean((op == "Eq") ? equal : !equal);
+    return gen_bool((op == "Eq") ? equal : !equal);
   }
 
   // Array vs array comparisons (string literal comparison)
@@ -77,7 +88,7 @@ exprt python_converter::compare_constants_internal(
       bool lhs_is_type_id = lhs.operands().empty();
       bool rhs_is_type_id = rhs.operands().empty();
       if (lhs_is_type_id != rhs_is_type_id)
-        return gen_boolean(op == "NotEq");
+        return gen_bool(op == "NotEq");
 
       // Extract string values
       std::string lhs_str =
@@ -87,7 +98,7 @@ exprt python_converter::compare_constants_internal(
 
       // Compare strings
       bool equal = (lhs_str == rhs_str);
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
   }
 
@@ -101,9 +112,9 @@ exprt python_converter::compare_constants_internal(
     {
       bool equal =
         (lhs == rhs_ops[0]) || (lhs.get("value") == rhs_ops[0].get("value"));
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   if (
@@ -115,9 +126,9 @@ exprt python_converter::compare_constants_internal(
     {
       bool equal =
         (lhs_ops[0] == rhs) || (lhs_ops[0].get("value") == rhs.get("value"));
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   return nil_exprt();
@@ -165,7 +176,7 @@ exprt python_converter::handle_indexed_comparison_internal(
     std::string lhs_str =
       string_handler_.extract_string_from_array_operands(string_element);
     bool strings_equal = (lhs_str == rhs_str);
-    return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
+    return gen_bool((op == "Eq") ? strings_equal : !strings_equal);
   }
 
   return nil_exprt();
@@ -205,7 +216,7 @@ exprt python_converter::handle_type_mismatches(
 
     // If one is a string array and the other is not, they're different types
     if (lhs_is_string_array != rhs_is_string_array)
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     // Both are string arrays: compare based on content
     bool lhs_empty = string_handler_.is_zero_length_array(lhs) ||
@@ -214,10 +225,10 @@ exprt python_converter::handle_type_mismatches(
                      (rhs.is_constant() && rhs.operands().size() <= 1);
 
     if (lhs_empty != rhs_empty)
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     if (lhs.size() != rhs.size())
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     return nil_exprt();
   }
@@ -245,7 +256,7 @@ exprt python_converter::handle_string_comparison(
   if (
     string_handler_.is_zero_length_array(resolved_lhs) &&
     string_handler_.is_zero_length_array(resolved_rhs))
-    return gen_boolean(op == "Eq");
+    return gen_bool(op == "Eq");
 
   // Fast-path for comparisons against single-character string literals.
   // This avoids introducing strcmp() calls that can inflate branch coverage counts.
@@ -469,7 +480,7 @@ exprt python_converter::handle_none_comparison(
       // None is never equal to non-None constant values
       // For == or is: return False
       // For != or is not: return True
-      return gen_boolean(!is_eq);
+      return gen_bool(!is_eq);
     }
   }
 
@@ -558,7 +569,7 @@ exprt python_converter::handle_string_type_mismatch(
     // Python allows this comparison but it always returns False for Eq and True for NotEq
     // For verification purposes, we model this as returning the expected constant value
     // This represents Python's behavior: str == int always evaluates to False
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   return nil_exprt(); // No action taken for other operators

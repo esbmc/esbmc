@@ -1407,14 +1407,42 @@ void goto_symext::add_memory_leak_checks()
     for (int i = 0; !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
+      /* A symbol can be reached at this frontier level through several pointers
+       * with different preconditions (e.g. a node inserted into a list chosen
+       * by a non-deterministic index is, in the value-set, reachable from every
+       * list head). Merge those entries by symbol, OR-ing their path conditions,
+       * before expanding each symbol once. Expanding under only the first
+       * incoming path — as the old per-symbol 'visited' cull did — gives the
+       * symbol's outgoing edges a guard that is false on the executions taking
+       * the other paths, under-approximating reachability and producing spurious
+       * "forgotten memory" leaks (#2335). The single expansion per symbol keeps
+       * termination on circular data structures. */
+      std::unordered_map<std::string, std::pair<expr2tc, value_sett::entryt>>
+        merged;
+      std::vector<std::string> order;
       for (const auto &[path_to_e, g] : globals)
         for (const value_sett::entryt &e : g)
         {
-          /* Skip if already visited
-           *
-           * TODO: this is possibly wrongly culling paths that have different
-           *       preconditions; should take path_to_e into account. */
-          if (!visited.emplace(e.identifier + e.suffix).second)
+          std::string key = e.identifier + e.suffix;
+          auto [mit, ins] = merged.emplace(key, std::make_pair(path_to_e, e));
+          if (ins)
+            order.push_back(std::move(key));
+          else
+          {
+            /* An empty path stands for 'true' and absorbs everything. */
+            expr2tc &p = mit->second.first;
+            if (p)
+              p = path_to_e ? or2tc(p, path_to_e) : path_to_e;
+          }
+        }
+
+      for (const std::string &key : order)
+      {
+        const auto &[path_to_e, e] = merged.at(key);
+        {
+          /* Each globally reachable symbol is expanded only once, even for
+           * circular data structures. */
+          if (!visited.emplace(key).second)
             continue;
 
           /* Unfortunately, we just have the symbol id and a suffix that's only
@@ -1647,6 +1675,7 @@ void goto_symext::add_memory_leak_checks()
             tmp.emplace_back(is_e, std::move(root_points_to));
           }
         }
+      }
       globals = std::move(tmp);
     }
 
@@ -1666,20 +1695,24 @@ void goto_symext::add_memory_leak_checks()
       // Iterate over each (expression, condition) pair in tgts
       for (const auto &[e, g] : tgts)
       {
-        /* XXX: 'obj' is the address of a statically known dynamic object,
-           *      couldn't we just statically check whether the symbol 'e'
-           *      addresses is the same as 'obj' directly?
-           *
-           * Explanation:
-           * - 'g' acts as a guard condition, determining whether 'e' should be considered.
-           * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
-           * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
-           *   then 'g' is combined with 'same_object2tc(obj, e)'.
-           * - Otherwise, we directly use 'same_object2tc(obj, e)'.
-           */
-        expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                         ? and2tc(g, same_object2tc(obj, e))
-                         : same_object2tc(obj, e);
+        /* 'obj' is the address of a statically known dynamic object; 'e' is
+         * the address of an object found reachable from a global, and 'g' is
+         * the condition under which 'e' is actually reachable. The object is
+         * globally reachable here iff some reachable 'e' is the same object as
+         * 'obj', i.e. the contribution of this target is g ∧ same_object(obj,e).
+         *
+         * The guard 'g' must ALWAYS be conjoined. Dropping it (as was done for
+         * guards that are neither an and2t nor a bare same_object2t, e.g. the
+         * or2t built when an object is reachable via more than one path) makes
+         * same_object(obj,e) unconditional. Since 'obj' itself appears among
+         * the targets, same_object(obj,obj) is trivially true, so 'targeted'
+         * collapses to true and the object's leak claim becomes vacuous — a
+         * missed leak (false VERIFICATION SUCCESSFUL) for memory that is in
+         * fact orphaned on some path. See issue #5400.
+         *
+         * 'g' is non-null by construction: every entry recorded in 'tgts' above
+         * carries the non-null reachability condition 'is_e'. */
+        expr2tc same = and2tc(g, same_object2tc(obj, e));
         is_any = is_any ? or2tc(is_any, same) : same;
       }
       return is_any ? is_any : gen_false_expr();

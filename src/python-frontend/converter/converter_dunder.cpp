@@ -6,6 +6,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/migrate.h>
+#include <util/python_types.h>
 
 #include <map>
 
@@ -144,17 +145,21 @@ nlohmann::json python_converter::build_dunder_call(
   return call_node;
 }
 
-static bool is_excluded_struct_tag(const std::string &tag)
+// Internal Python model aggregates (tuple, dict, Optional) must not be treated
+// as user classes for dunder-operator dispatch. The kind is read from the
+// attribute stamped at type-creation time; see util/python_types.h.
+static bool is_excluded_struct_tag(const struct_typet &st)
 {
-  return tag.find("dict_") != std::string::npos ||
-         tag.find("tag-dict") != std::string::npos ||
-         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-         // list/object/slice model structs (`tag-struct __ESBMC_Py...`): under
-         // the object-model migration these are pointer-to-struct like a class
-         // instance, but they own their own operator paths and must not be
-         // routed through user-dunder dispatch.
-         tag.find("__ESBMC_Py") != std::string::npos ||
-         tag == "__python_dict__";
+  // tuple/dict/Optional model structs carry the python-aggregate kind stamped
+  // at type-creation time; see util/python_types.h.
+  if (is_python_internal_aggregate(st))
+    return true;
+  // list/object/slice model structs (`tag-struct __ESBMC_Py...`): under the
+  // object-model migration these are pointer-to-struct like a class instance,
+  // but they own their own operator paths and must not be routed through
+  // user-dunder dispatch. They are not stamped with the aggregate kind, so
+  // exclude them by tag here.
+  return st.tag().as_string().find("__ESBMC_Py") != std::string::npos;
 }
 
 static typet resolve_operand_type(
@@ -261,7 +266,7 @@ exprt python_converter::dispatch_dunder_operator(
     const struct_typet &lhs_struct = to_struct_type(lhs_type);
     std::string lhs_tag = lhs_struct.tag().as_string();
 
-    if (!is_excluded_struct_tag(lhs_tag))
+    if (!is_excluded_struct_tag(lhs_struct))
     {
       std::string dunder = op_to_dunder(op);
       if (!dunder.empty())
@@ -291,7 +296,7 @@ exprt python_converter::dispatch_dunder_operator(
     const struct_typet &rhs_struct = to_struct_type(rhs_type);
     std::string rhs_tag = rhs_struct.tag().as_string();
 
-    if (!is_excluded_struct_tag(rhs_tag))
+    if (!is_excluded_struct_tag(rhs_struct))
     {
       std::string rdunder = op_to_rdunder(op);
       if (!rdunder.empty())
@@ -335,7 +340,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   const struct_typet &struct_type = to_struct_type(operand_type);
   std::string tag = struct_type.tag().as_string();
 
-  if (is_excluded_struct_tag(tag))
+  if (is_excluded_struct_tag(struct_type))
     return nil_exprt();
 
   static const std::map<std::string, std::string> unary_dunder_map = {

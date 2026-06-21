@@ -91,6 +91,11 @@ public:
    *  Returns cmp unchanged when no NaN predicate is known. */
   smt_astt apply_nan_cmp(smt_astt cmp, smt_astt a, smt_astt b, bool is_neq);
 
+  /** Combine two NaN predicates with OR.
+   *  Returns nullptr if neither is set; the non-null one if only one is set;
+   *  mk_or(a, b) if both are set. */
+  smt_astt combine_nan_preds(smt_astt a, smt_astt b) const;
+
   /** Interval-lifted RNE enclosure helper.
    *  Input: exact real result and pre-computed interval endpoints [lo_r, hi_r].
    *  Returns {ra_lo, ra_hi} for storage in the interval map. */
@@ -144,6 +149,10 @@ private:
   /** Set of symbol names that have already received integer range assertions,
    *  preventing duplicate constraints for the same SSA variable. */
   std::unordered_set<std::string> ir_ieee_ranged_syms;
+
+  /** Store combine_nan_preds(get_nan_pred(s1), get_nan_pred(s2)) on result.
+   *  No-op if neither operand has a known NaN predicate. */
+  void store_combined_nan_pred(smt_astt result, smt_astt s1, smt_astt s2);
 
   /** Dispatch the appropriate five-way rounding-mode enclosure. */
   std::pair<smt_astt, smt_astt> apply_enclosure(

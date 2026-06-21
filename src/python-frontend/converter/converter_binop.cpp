@@ -116,19 +116,40 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
       return logical_expr;
-    // Result expression starts from last operand as default else branch
+    // Result expression starts from last operand as default else branch.
+    const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
       const exprt &current = logical_expr.operands()[i];
       exprt current_cond = get_truthy_condition(current);
-      exprt if_expr("if", t);
-      if (logical_expr.is_and())
-        if_expr.copy_to_operands(current_cond, result_expr, current);
+      // V.3: build the short-circuit select in IREP2 when both branches
+      // share the result type-id. A mixed-type BoolOp keeps the result type
+      // as any_type() while the operands stay concrete (extract_type_from_
+      // boolean_op's "fall back to Any" path); if2t asserts type-id equality,
+      // so those reconcile post-conversion via the legacy adjuster as before.
+      expr2tc cond2, current2, result2;
+      migrate_expr(current_cond, cond2);
+      migrate_expr(current, current2);
+      migrate_expr(result_expr, result2);
+      if (
+        current2->type->type_id == t2->type_id &&
+        result2->type->type_id == t2->type_id)
+      {
+        // and: cond ? result : current  /  or: cond ? current : result
+        result_expr = migrate_expr_back(
+          logical_expr.is_and() ? if2tc(t2, cond2, result2, current2)
+                                : if2tc(t2, cond2, current2, result2));
+      }
       else
-        if_expr.copy_to_operands(current_cond, current, result_expr);
-
-      result_expr = if_expr;
+      {
+        exprt if_expr("if", t);
+        if (logical_expr.is_and())
+          if_expr.copy_to_operands(current_cond, result_expr, current);
+        else
+          if_expr.copy_to_operands(current_cond, current, result_expr);
+        result_expr = if_expr;
+      }
     }
     return result_expr;
   }
@@ -322,16 +343,14 @@ exprt python_converter::handle_membership_operator(
   if (rhs_resolved_type.is_struct())
   {
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
-    std::string tag = struct_type.tag().as_string();
+    const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (
-      tag.find("dict_") != std::string::npos ||
-      tag.find("tag-dict") != std::string::npos)
+    if (kind == "dict")
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
 
-    if (tag.starts_with("tag-tuple"))
+    if (kind == "tuple")
     {
       // `x in (a, b, c)` is element-wise equality, with string elements
       // compared by content. handle_tuple_membership builds the OR chain.
@@ -347,7 +366,12 @@ exprt python_converter::handle_membership_operator(
   {
     python_list list(*this, element);
     exprt contains_expr = list.contains(lhs, rhs);
-    return invert ? not_exprt(contains_expr) : contains_expr;
+    if (!invert)
+      return contains_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc c2;
+    migrate_expr(contains_expr, c2);
+    return migrate_expr_back(not2tc(c2));
   }
 
   // Get string type identifiers
@@ -362,7 +386,12 @@ exprt python_converter::handle_membership_operator(
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);
-    return invert ? not_exprt(membership_expr) : membership_expr;
+    if (!invert)
+      return membership_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc m2;
+    migrate_expr(membership_expr, m2);
+    return migrate_expr_back(not2tc(m2));
   }
 
   throw std::runtime_error(
@@ -456,7 +485,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         nondet.location() = get_location_from_decl(element);
         return nondet;
       }
-      return gen_boolean(op == "NotEq");
+      // V.3: constant fold built in IREP2.
+      return migrate_expr_back(
+        op == "NotEq" ? gen_true_expr() : gen_false_expr());
     }
   }
 
@@ -517,7 +548,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // --incremental-bmc, where each k iteration would otherwise re-symbolise
     // the comparison from scratch (issue #4623).
     if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
-      return gen_boolean(op == "NotEq" ? !*folded : *folded);
+    {
+      // V.3: constant fold built in IREP2.
+      const bool val = op == "NotEq" ? !*folded : *folded;
+      return migrate_expr_back(val ? gen_true_expr() : gen_false_expr());
+    }
     return dict_handler_->compare(lhs, rhs, op);
   }
 
@@ -961,7 +996,8 @@ exprt python_converter::handle_array_operations(
     string_handler_.is_zero_length_array(lhs) &&
     string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
   {
-    return gen_boolean(op == "Eq");
+    // V.3: constant fold built in IREP2.
+    return migrate_expr_back(op == "Eq" ? gen_true_expr() : gen_false_expr());
   }
 
   auto is_numeric_type = [](const typet &t) {
@@ -1255,19 +1291,24 @@ exprt python_converter::handle_tuple_operations(
       migrate_expr(tb, b2);
 
       // Base: a proper prefix is strictly less than the longer tuple.
-      exprt result = gen_boolean(ca.size() < cb.size());
+      // V.3: build the lexicographic compare in IREP2.
+      expr2tc result =
+        ca.size() < cb.size() ? gen_true_expr() : gen_false_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = memb(a2, ca[k]);
         exprt bi = memb(b2, cb[k]);
 
-        exprt lt, eq;
+        expr2tc lt, eq;
         const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          lt = lex_lt(ai, bi);
-          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+          expr2tc ai2, bi2;
+          migrate_expr(lex_lt(ai, bi), lt);
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          eq = equality2tc(ai2, bi2); // native struct equality, element-wise
         }
         else if (is_num(ai.type()) && is_num(bi.type()))
         {
@@ -1277,23 +1318,22 @@ exprt python_converter::handle_tuple_operations(
             ai = typecast_exprt(ai, double_type());
             bi = typecast_exprt(bi, double_type());
           }
-          lt = exprt("<", bool_type());
-          lt.copy_to_operands(ai, bi);
-          eq = equality_exprt(ai, bi);
+          expr2tc ai2, bi2;
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          lt = lessthan2tc(ai2, bi2);
+          eq = equality2tc(ai2, bi2);
         }
         else
         {
           ok = false; // unsupported / mismatched component kinds
-          return gen_boolean(false);
+          return migrate_expr_back(gen_false_expr());
         }
 
-        exprt tail("and", bool_type());
-        tail.copy_to_operands(eq, result);
-        exprt head("or", bool_type());
-        head.copy_to_operands(lt, tail);
-        result = head;
+        // result = lt || (eq && result)
+        result = or2tc(lt, and2tc(eq, result));
       }
-      return result;
+      return migrate_expr_back(result);
     };
 
     const bool swap = (op == "Gt" || op == "LtE");

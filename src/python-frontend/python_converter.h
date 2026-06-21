@@ -32,6 +32,7 @@ class python_typechecking;
 class python_class_builder;
 class python_lambda;
 class python_exception_handler;
+class get_expr_depth_guard;
 
 /**
  * @class python_converter
@@ -276,6 +277,7 @@ private:
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class get_expr_depth_guard;
   friend class python_converter_test_access;
 
   template <typename Func>
@@ -1059,6 +1061,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  std::size_t get_expr_depth_ = 0;
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
