@@ -43,7 +43,8 @@ jobs:
             -DENABLE_SOLIDITY_FRONTEND=Off \
             -DENABLE_JIMPLE_FRONTEND=Off \
             -DENABLE_PYTHON_FRONTEND=Off \
-            -DENABLE_CSMITH=Off
+            -DENABLE_CSMITH=Off \
+            -DENABLE_LD_FRONTEND=On
 
       - name: Build ESBMC
         run: cmake --build build --target esbmc -j$(nproc)
