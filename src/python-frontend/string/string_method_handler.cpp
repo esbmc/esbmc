@@ -95,7 +95,12 @@ static bool get_constant_int(const exprt &expr, long long &out)
   if (expr.is_nil())
     return false;
   BigInt tmp;
-  if (!to_integer(expr, tmp))
+  // to_integer() returns false on success (CBMC convention), so the guard must
+  // bail when it returns true. The earlier `!to_integer(...)` was inverted: it
+  // rejected every valid integer constant (and accepted non-constants with an
+  // unset value), so width/fill string methods — center/ljust/rjust/zfill and
+  // expandtabs's tabsize — silently fell back to a nondet/default result.
+  if (to_integer(expr, tmp))
     return false;
   out = tmp.to_int64();
   return true;
