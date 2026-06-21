@@ -522,11 +522,22 @@ exprt complex_handler::handle_binary_op(
     const exprt c = complex_member(rhs_complex, "real", dt);
     const exprt d = complex_member(rhs_complex, "imag", dt);
 
-    if (op == "Eq")
-      return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
-    if (op == "NotEq")
-      return or_exprt(
-        not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
+    if (op == "Eq" || op == "NotEq")
+    {
+      // V.3: build complex (in)equality in IREP2.
+      // Eq:    (a == c) && (b == d)
+      // NotEq: (a != c) || (b != d)
+      expr2tc lre, lim, rre, rim;
+      migrate_expr(a, lre);
+      migrate_expr(b, lim);
+      migrate_expr(c, rre);
+      migrate_expr(d, rim);
+      const expr2tc re_eq = equality2tc(lre, rre);
+      const expr2tc im_eq = equality2tc(lim, rim);
+      if (op == "Eq")
+        return migrate_expr_back(and2tc(re_eq, im_eq));
+      return migrate_expr_back(or2tc(not2tc(re_eq), not2tc(im_eq)));
+    }
 
     if (op == "Add")
       return make_complex(
