@@ -1218,6 +1218,11 @@ exprt python_converter::handle_array_operations(
     if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
       return nil_exprt();
 
+    // Element-wise modulo is only modelled for integer elements; float-array %
+    // would need fmod-style lowering, so let it fall through to a clean reject.
+    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
+      return nil_exprt();
+
     const exprt &size_expr = to_array_type(array_type).size();
     if (!size_expr.is_constant())
       return nil_exprt();
@@ -1252,6 +1257,12 @@ exprt python_converter::handle_array_operations(
       exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
+      // Python/NumPy integer % is floored (sign of the divisor), unlike C's
+      // truncated remainder; correct each element the same way the scalar path
+      // does (#5498). bin_elem currently holds the raw C remainder.
+      if (op == "Mod")
+        bin_elem =
+          math_handler_.handle_int_modulo(array_item, casted_scalar, bin_elem);
       expr2tc bin_elem2;
       migrate_expr(bin_elem, bin_elem2);
       result2 = with2tc(result2->type, result2, ix2, bin_elem2);
@@ -1321,6 +1332,38 @@ exprt python_converter::handle_array_operations(
       std::ostringstream msg;
       msg << "TypeError: arithmetic on numeric arrays is not supported "
              "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // NumPy element-wise integer modulo. `ndarray % scalar` previously fell
+  // through to generic arithmetic (pointer-modulo on the array) and crashed the
+  // SMT backend (#5498). Model `numeric_array % scalar` with per-element
+  // floored modulo; reject the broadcasting forms that are not modelled
+  // (scalar % array, array % array, non-constant-size or float arrays) cleanly.
+  if (op == "Mod")
+  {
+    const bool lhs_numeric_array = lhs.type().is_array() &&
+                                   is_numeric_type(lhs.type().subtype()) &&
+                                   !is_char_array(lhs.type());
+    const bool rhs_numeric_array = rhs.type().is_array() &&
+                                   is_numeric_type(rhs.type().subtype()) &&
+                                   !is_char_array(rhs.type());
+
+    if (lhs_numeric_array && !rhs.type().is_array())
+    {
+      exprt lowered = build_scalar_broadcast(lhs, rhs);
+      if (!lowered.is_nil())
+        return lowered;
+    }
+
+    if (lhs_numeric_array || rhs_numeric_array)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: NumPy array modulo broadcasting is not modelled";
       const locationt loc = get_location_from_decl(element);
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();

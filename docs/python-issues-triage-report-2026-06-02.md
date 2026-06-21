@@ -384,3 +384,74 @@ robustness category, but with a sound value model rather than an "unsupported fe
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+## 11. 2026-06-21 re-validation & bare-imaginary-literal argument crash fix
+
+Re-test against current `master` (tip `4a5b002c26`), after the **83 commits** since §10's tip
+`79c8b93eb0` — predominantly the V.3 IREP2 frontend rebuild (`#5454`/`#5459`/`#5472`–`#5493`
+build comparison constant-folds, list/tuple/set/slice/string-index guards, any()/all()
+reductions, complex div-by-zero and numpy-overflow asserts, pointer is-None checks, etc.) plus
+`#5502` (reject str-variable `%` formatting instead of crashing). A `ctest` flip-check over the
+39 KNOWNBUG `humaneval`/`quixbugs` tests reproduced **zero KNOWNBUG→CORE flips** — every test
+that completed (including the design-cluster cases `depth_first_search`, `detect_cycle`,
+`minimum_spanning_tree(_fail)`, and the perf-timeout cases `humaneval_33`/`37`/`39`/`93`/`158`,
+which genuinely ran 120–240 s against their own TIMEOUT property) still misses its expected
+verdict; the §3 classification holds. None of the 83 commits touches the bare-imaginary-literal
+argument path, and the fix below lives entirely in the general call-argument lowering in
+`function_call/expr.cpp`, so it cannot move any KNOWNBUG verdict.
+
+### 11a. New isolated, soundly-fixable defect found & fixed
+**A bare pure-imaginary literal passed directly as a by-value `complex` argument crashed
+(SIGABRT, "got pointer, expected struct").**
+
+`f(0.5j)` — where `f` takes a `complex` parameter — aborted with
+
+```
+ERROR: function call: argument "…@F@f@z" type mismatch: got pointer, expected struct
+```
+
+This is the **root** of the `got pointer, expected struct` argument-binding family the prior
+sweeps repeatedly hit (§8/§9 `depth_first_search`, §10 `cmath.acos`/`acosh`): §10 (PR #5415)
+only *worked around* it for `acos`/`acosh` via a pure-imaginary fast path that bypasses the
+model call. Probing the rest of the surface showed it is **general** — every cmath model
+function crashes on a bare imaginary literal (`cmath.exp(0.5j)`, `sqrt`, `sin`, `cos`, `tan`,
+`sinh`, `cosh`, `tanh`, `phase`, `polar`), and so does any plain user function
+`def f(z: complex)`. The crash fires **only** for a bare imaginary `ast.Constant` used
+*directly* as an argument; every other form already worked: `f(1+1j)`, `f(0+0.5j)` (BinOp),
+`w = 0.5j; f(w)` (variable), `f(complex(0, 0.5))` (ctor) — none crashed.
+
+**Root cause** (`src/python-frontend/function_call/expr.cpp`,
+`function_call_expr::handle_general_function_call`). `ast2json` serialises a Python complex
+value as its `str()` representation (`"0.5j"`), so a complex `Constant`'s JSON `value` field is
+a **string**. `get_literal` correctly reads the `esbmc_type_annotation == "complex"` /
+`real_value` / `imag_value` fields and returns a proper `complex` struct. But a post-`get_expr`
+override unconditionally replaced *any* `Constant` whose JSON `value` is a string with a string
+literal — clobbering the complex struct, which then fell into `build_address_of`, yielding
+`&"0.5j"` (a `pointer`) bound to the by-value `complex` (`struct`) parameter → the symex abort.
+A BinOp/Name/Call argument has a different `_type`, so the override never fired — hence those
+forms worked.
+
+**Fix:** guard the string-literal override to skip complex-annotated constants
+(`!arg_is_complex_literal && _type == "Constant" && value.is_string()`). Minimal, general (no
+per-function workaround), and confined to the Python frontend — it only narrows a frontend
+override that was already wrong for complex constants. New regression pair
+`regression/python/imag_literal_arg{,_fail}` (`imag_literal_arg` is the **C-Live** liveness
+witness for the added guard: without the fix its `f(0.5j)` call took the clobbering path and
+SIGABRT'd; with the fix it takes the new guarded path and verifies). After the fix, the full
+user-function + cmath repro set returns `VERIFICATION SUCCESSFUL`; the six already-working forms
+are unchanged; the cmath/complex regression subset (174 tests) is 100% green; CPython sanity
+(`check_python_tests.sh imag_literal_arg`) passes.
+
+Unlike §6a/§7a, and like §10a, this fix **restores working behaviour** (every cmath function and
+every user function now accepts a bare imaginary literal) rather than only converting a crash to
+a diagnostic — §5-item-5 robustness, but with a sound value model. This sweep ran a
+Bitwuzla-only `esbmc` (this build has `ENABLE_Z3=OFF`, as the §7/§8 sweeps also ran
+single-solver); the fix is a purely syntactic JSON-field guard with no SMT encoding, so the
+verdict is solver-agnostic.
+
+### 11b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
+on current `master` without the §5 architectural work; the §5 priority order stands.
