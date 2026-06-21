@@ -2272,8 +2272,10 @@ void python_converter::get_var_assign(
       !rhs.type().is_code())
     {
 #ifndef NDEBUG
-      const array_typet &thetype = lhs.type();
-      thetype.size().is_constant();
+      // to_array_type returns a reference into lhs.type(); binding the base
+      // typet& directly would construct a temporary array_typet and leave
+      // thetype dangling (GCC -Wdangling-reference under -Werror).
+      const array_typet &thetype = to_array_type(lhs.type());
       assert(thetype.size().is_nil());
 #endif
       lhs_symbol->set_type(rhs.type());
