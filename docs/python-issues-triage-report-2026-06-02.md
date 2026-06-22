@@ -645,3 +645,57 @@ encoding, so the verdict is solver-agnostic.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
+> §18 (PR #5532, `float.is_integer()`), and §19 (PR #5536, `int.conjugate()`) are in flight and
+> not yet on `master`; this section is appended as §20 so the in-flight PRs do not collide on the
+> section number. The maintainer orders §16 → §17 → §18 → §19 → §20.
+
+## 20. 2026-06-22 re-validation (tenth sweep) & set union/intersection/difference methods
+
+Re-test against current `master` (tip `44b2605c1c`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery (dict/list/set/str/numeric methods) found most already modelled; the
+isolated unmodelled one fixed below.
+
+### 20a. New isolated, soundly-fixable defect found & fixed
+**`set.union()` / `set.intersection()` / `set.difference()` (method forms) were unmodeled.**
+
+The *operator* forms `a | b`, `a & b`, `a - b` already verify (via
+`python_set::build_set_{union,intersection,difference}_call`), but the equivalent *method* forms
+reported `Unsupported function 'union'/'intersection'/'difference' is reached → VERIFICATION
+FAILED`. Only the method-call dispatch was missing — the builders exist and are the ones the
+operators already use.
+
+**Fix:** add the three names to `is_set_method_call` and route them in
+`python_set::build_set_method_call` to the **same builders** the `|`/`&`/`-` operators call
+(`build_symbol(self)` as lhs, the method argument as rhs). Each returns a fresh set and leaves the
+receiver unchanged. The set/set equivalence to the trusted operator path is the correctness
+guarantee; verified against CPython for union/intersection/difference membership, the
+non-mutating property (`a` unchanged), a `frozenset` receiver, and a list-iterable argument
+(`a.union([3,4])`, which Python permits and which works because sets are modelled as lists).
+
+**Documented limitations (sound — clean errors, never wrong verdicts):** the existing
+single-argument arity guard in `handle_set_method` means the zero-arg copy form `a.union()` and
+the variadic form `a.union(b, c)` produce a clean `ERROR: union() takes exactly one argument`
+rather than a verdict (Python allows both; supporting them is a follow-up). A non-iterable scalar
+argument `a.union(5)` — itself a `TypeError` in CPython — yields a clean `address_of` ERROR, a
+pre-existing exposure shared by the already-shipped `update`/`symmetric_difference` methods, not
+introduced here.
+
+Like §16a–§19a this **restores a working feature**. New regression pair
+`regression/python/set_union_methods{,_fail}` (CORE); the positive test is the liveness witness for
+the three added dispatch branches (pre-fix they hit the unsupported-function stub). Focused
+`regression/python/set*` ctest subset shows zero new failures (the two failing — `set_difference`,
+`set_intersection` — are `--ir`-pinned, environmental on this Bitwuzla-only `ENABLE_Z3=OFF`
+build). CPython sanity passes; code-reviewed (0 critical/major). The change is frontend dispatch
+reusing proven builders with no SMT-encoding change, so the verdict is solver-agnostic.
+
+### 20b. Everything else: unchanged disposition
+Deferred candidates from earlier sweeps stand: `int.to_bytes()` (args + variable-length bytes
+return), `float.hex()` (infeasible exact repr, like `hashlib`), `str.isascii()` (string-soundness,
+§5-#2), `str.encode()` (bytes return), and the numeric-tower *properties* `int.numerator`/
+`denominator`, `float.real`/`imag` (attribute access, not method calls). The §3 design-level
+blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.

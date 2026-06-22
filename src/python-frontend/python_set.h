@@ -81,11 +81,13 @@ public:
 
   /**
    * @brief Emit the IR for a binary set method (issubset / issuperset /
-   *        update / symmetric_difference) called on @p self with @p other.
+   *        update / symmetric_difference / union / intersection / difference)
+   *        called on @p self with @p other.
    *
    * - issubset / issuperset return a bool expression.
    * - update mutates @p self in place and returns nil.
-   * - symmetric_difference returns a fresh set expression.
+   * - symmetric_difference / union / intersection / difference return a fresh
+   *   set expression and leave @p self unchanged.
    *
    * Reuses the same loop / contains / push primitives as
    * build_set_union_call to keep encoding consistent.
