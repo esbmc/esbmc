@@ -4139,8 +4139,18 @@ exprt python_list::build_extend_list_call(
     if (other_list.type().is_array())
     {
       const array_typet &arr_type = to_array_type(other_list.type());
-      // Subtract 1 for null terminator
-      str_len = minus_exprt(arr_type.size(), gen_one(size_type()));
+      // Subtract 1 for null terminator. V.3: build the (size - 1) subtraction
+      // in IREP2. The legacy 2-arg minus_exprt leaves the result type nil for
+      // downstream inference; here we set it explicitly to the array-size type
+      // (size_type), which is exactly what that inference yields, and restore
+      // it after the round-trip since migrate_type drops attributes (#cpp_type).
+      const exprt &arr_size = arr_type.size();
+      expr2tc size2, one2;
+      migrate_expr(arr_size, size2);
+      migrate_expr(gen_one(size_type()), one2);
+      str_len =
+        migrate_expr_back(sub2tc(migrate_type(arr_size.type()), size2, one2));
+      str_len.type() = arr_size.type();
     }
     else // pointer type - use strlen
     {
