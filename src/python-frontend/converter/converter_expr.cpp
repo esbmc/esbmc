@@ -538,16 +538,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
-            exprt optional_base = base_expr;
-            if (optional_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = optional_base.type().subtype();
-              deref.move_to_operands(optional_base);
-              optional_base = std::move(deref);
-            }
+            // V.3: build the (optional) dereference of the base directly in
+            // IREP2 instead of staging a legacy "dereference" node and
+            // re-migrating it; byte-identical (migrate of the legacy node is
+            // exactly dereference2tc(migrate_type(subtype), migrate(base))).
             expr2tc ob2;
-            migrate_expr(optional_base, ob2);
+            migrate_expr(base_expr, ob2);
+            if (base_expr.type().is_pointer())
+              ob2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), ob2);
             base_expr = migrate_expr_back(
               member2tc(migrate_type(inner_raw), ob2, "value"));
             base_type = inner_raw;
@@ -625,20 +624,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type =
               struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
             // V.1k step-2 hypothesis: build member2t with the (possibly
             // symbol-typed) source permitted by the step-1 relaxation, then
             // back-migrate to the legacy body so the EXISTING adjust + goto
             // -convert resolves it as today. No converter-side ns.follow.
+            // V.3: the (optional) base dereference is built directly in IREP2
+            // rather than staged as a legacy "dereference" node and re-migrated
+            // (byte-identical to migrate of that node).
             expr2tc src2;
-            migrate_expr(member_base, src2);
+            migrate_expr(base_expr, src2);
+            if (base_expr.type().is_pointer())
+              src2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), src2);
             return migrate_expr_back(
               member2tc(migrate_type(clean_type), src2, attr_name));
           }
@@ -1044,18 +1041,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class* in IREP2 (V.3).
+        // V.3: build the char* -> target_class* cast, the dereference, and
+        // the member access entirely in IREP2, back-migrated once at the
+        // legacy seam. Keeping the typecast and dereference as expr2tc avoids
+        // the back-migrate/re-migrate round-trip the staged legacy form paid.
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
         expr2tc expr2;
         migrate_expr(expr, expr2);
-        exprt casted_expr =
-          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
-        casted_expr.type() = target_ptr_type;
+        expr2tc casted2 = typecast2tc(migrate_type(target_ptr_type), expr2);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->get_type());
-        deref_expr.copy_to_operands(casted_expr);
+        expr2tc deref2 = dereference2tc(
+          migrate_type(target_class_symbol->get_type()), casted2);
 
         // Access the member on the object
         const struct_typet &target_struct =
@@ -1063,11 +1061,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        // V.3: IREP2 member access (exact round-trip of member_exprt).
-        expr2tc de2;
-        migrate_expr(deref_expr, de2);
         expr = migrate_expr_back(
-          member2tc(migrate_type(clean_type), de2, attr_name));
+          member2tc(migrate_type(clean_type), deref2, attr_name));
         break;
       }
 

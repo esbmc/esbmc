@@ -4378,8 +4378,18 @@ exprt function_call_expr::handle_general_function_call()
     }
 
     // Handle string literal constants
-    // Ensure they are proper null-terminated arrays
-    if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+    // Ensure they are proper null-terminated arrays.
+    // Guard: skip complex literals whose JSON "value" field is a string
+    // representation of the complex number (e.g. "0.5j") — get_expr already
+    // returned the correct complex struct via get_literal's annotation check.
+    // Overwriting it with a string literal here would produce an
+    // address-of-string argument ("got pointer, expected struct" crash).
+    const bool arg_is_complex_literal =
+      arg_node["_type"] == "Constant" &&
+      arg_node.value("esbmc_type_annotation", std::string()) == "complex";
+    if (
+      !arg_is_complex_literal && arg_node["_type"] == "Constant" &&
+      arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);

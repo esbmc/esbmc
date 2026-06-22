@@ -343,16 +343,20 @@ bool python_typechecking::build_type_assertion(
   if (checks.empty())
     return false;
 
-  exprt assertion_expr = checks.front();
+  // V.3: build the OR-fold of the type checks in IREP2, back-migrated once
+  // at the legacy code_assertt seam. Each check is migrated forward and the
+  // disjunction is composed with or2tc; operand order (assertion-so-far on
+  // the left, next check on the right) is preserved from the legacy fold.
+  expr2tc assertion2;
+  migrate_expr(checks.front(), assertion2);
   for (size_t i = 1; i < checks.size(); ++i)
   {
-    exprt or_expr("or", typet("bool"));
-    or_expr.move_to_operands(assertion_expr);
-    or_expr.move_to_operands(checks[i]);
-    assertion_expr = or_expr;
+    expr2tc check2;
+    migrate_expr(checks[i], check2);
+    assertion2 = or2tc(assertion2, check2);
   }
 
-  out_assert = code_assertt(assertion_expr);
+  out_assert = code_assertt(migrate_expr_back(assertion2));
   out_assert.location() = location;
 
   if (!context_name.empty())
