@@ -1,9 +1,9 @@
 # SV-COMP Issue Triage & Fix Plan
 
 **Last updated:** 2026-06-22 (Pass 8 — reconcile #5395/#5400 closures; **x86_64 Linux host removes
-the aarch64 parse blocker** for the ldv-linux-3.14-races drivers: #5396/#5397 reproduced and
-root-caused (one shared `platform_get_drvdata` device-model gap), #5398/#5399 now parse, #5142
-re-classified to a clang `-Wint-conversion` blocker; see §12. Pass 7 in §11)
+the aarch64 parse blocker** for the ldv-linux-3.14-races drivers: all four #5396–#5399 reproduced and
+root-caused (a shared unmodeled-LDV-kernel-environment pointer/device gap), #5142 re-classified to a
+clang `-Wint-conversion` blocker; see §12. Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1091,14 +1091,27 @@ same class as #4439/#4427/#5142), not a localized patch, and not validatable aga
 SV-COMP set in this environment. **No PR.** Disposition corrected from "x86 parse blocker" to
 "reproduced on x86 — precision/incompleteness from the unmodeled `platform_get_drvdata` device API."
 
-### 12.4 #5398 / #5399 — cafe_ccic: now PARSE on x86 (full verification deferred)
+### 12.4 #5398 / #5399 — cafe_ccic: REPRODUCED on x86 (invalid-pointer-free in the LDV scenario)
 
-`marvell-ccic--cafe_ccic.ko.cil-{1,2}.i` (valid-memsafety) also parse on x86_64 Linux —
-`--goto-functions-only` emits a complete GOTO program (no parse error), so the Pass-7 aarch64 blocker is
-likewise removed. Full memsafety verification under the issue's `--memory-leak-check
---no-reachable-memory-leak` flags is deferred to a follow-up iteration; the expectation is the same
-unmodeled-device-API class as #5397 (the drivers share the `platform_get_drvdata`/`*_probe` idiom).
-Disposition: **unblocked, triage in progress.**
+`marvell-ccic--cafe_ccic.ko.cil-{1,2}.i` (valid-memsafety) parse on x86_64 Linux —
+`--goto-functions-only` emits a complete GOTO program (no parse error), removing the Pass-7 aarch64
+blocker — and, run to a verdict under the issue's exact flags (`--memory-leak-check
+--no-reachable-memory-leak --malloc-zero-is-null --incremental-bmc`), **both reproduce identically**:
+
+```
+Violated property: … function ldv_free   dereference failure: invalid pointer freed
+VERIFICATION FAILED / Bug found (k = 1)
+```
+
+at `ldv_free` (`free(s)`, cil-1 line 10798 / cil-2 line 10799), reached through `cafe_smbus_setup`
+(`adap = kzalloc(1904UL, 208U)`) inside the multi-threaded LDV **interrupt scenario** (`cafe_irq`,
+`ldv_dispatch_irq_register_*`, thread 2/3). The freed pointer flows from the LDV environment model
+rather than a single API call, but the failure is the **same precision/incompleteness class as #5397**:
+an over-approximated pointer in the unmodeled LDV kernel environment reaches a memory operation (here a
+`free`, there a deref) and is flagged `invalid` at the base case. Ground truth is `true`, the
+over-approximation is **sound**, and no localized fix exists — the same research-grade LDV-environment
+modelling gap (#4439/#4427/#5397). **No PR.** Disposition corrected from "parse blocker" to
+"reproduced on x86 — invalid-pointer-free from LDV-environment pointer imprecision."
 
 ### 12.5 #5142 — imon: re-classified — clang `-Wint-conversion`, *not* inline asm
 
@@ -1114,28 +1127,26 @@ blocker.
 
 ### 12.6 Pass-8 running report
 
-**Analysed.** #5396, #5397 (reproduced on x86), #5398/#5399 (parse confirmed), #5142 (re-classified);
-plus reconciliation of #5395 and #5400 closures.
+**Analysed.** #5396, #5397, #5398, #5399 (all four ldv-linux-3.14-races drivers reproduced on x86),
+#5142 (re-classified); plus reconciliation of #5395 and #5400 closures.
 
 **PRs opened.** None code — every reproduced item is a sound over-approximation with no localized fix
 (research-grade), consistent with the correctness-first mandate. This pass is the recurring triage-doc
 update (the established cadence: Pass 4 → #5234, Pass 6 → #5389, Pass 7 → #5405).
 
-**Duplicated work avoided.** #5396/#5397 not patched — the `platform_get_drvdata` device-model gap is the
-#4439/#4427 research-grade class. #5400 not re-fixed — closed-with-RCA; the value-set under-/over-approx
-trade-off is the #5145/#5138 project.
+**Duplicated work avoided.** #5396–#5399 not patched — the unmodeled-LDV-kernel-environment pointer/device
+gap is the #4439/#4427 research-grade class. #5400 not re-fixed — closed-with-RCA; the value-set
+under-/over-approx trade-off is the #5145/#5138 project.
 
 **Remaining work (priority order, updated 2026-06-22).**
-1. **#5398/#5399** — run the cafe_ccic memsafety benchmarks to a verdict on x86 (next iteration);
-   confirm the shared `platform_get_drvdata` root cause.
-2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
-3. **#5400 / #5138** — value-set reachability for `valid-memtrack`: a sound under-approximation of
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack`: a sound under-approximation of
    "reachable" (the two horns of the same allocation-site/`unknown`-skip imprecision).
-4. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
-5. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
-6. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
-7. **#5142** — clang `-Wint-conversion` relaxation / integer→pointer initializer fix-up for CIL inputs.
-8. **Device-API model** for `platform_get_drvdata` & friends — the shared blocker behind #5396/#5397
-   (and likely #5398/#5399); research-grade, would close the ldv-linux-3.14-races overflow/memsafety
-   cluster.
-9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5142** — clang `-Wint-conversion` relaxation / integer→pointer initializer fix-up for CIL inputs.
+7. **Device-API / LDV-environment model** for `platform_get_drvdata` & the LDV interrupt-scenario
+   pointers — the shared blocker behind all four #5396–#5399; research-grade, would close the
+   ldv-linux-3.14-races overflow/memsafety cluster.
+8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
