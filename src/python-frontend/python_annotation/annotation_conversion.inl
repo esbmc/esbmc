@@ -355,7 +355,7 @@ std::string python_annotation<Json>::get_string_method_return_type(
   if (method == "find" || method == "rfind")
     return "int";
 
-  if (method == "split")
+  if (method == "split" || method == "rsplit")
     return "list";
 
   // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
@@ -2305,7 +2305,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
   {
     if (
       obj_type == "str" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "split")
+      (call["func"]["attr"] == "split" || call["func"]["attr"] == "rsplit"))
       return "list";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.

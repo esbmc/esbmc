@@ -31,19 +31,23 @@ public:
   {
   }
 
+  // @p from_right selects rsplit() semantics (split at the rightmost @p count
+  // separators) over split() (the leftmost). Defaults to split().
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const std::string &input,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const exprt &input_expr,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   exprt get();
 
