@@ -1,0 +1,64 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: b67a8cee-8fb3-4051-af7b-19961086a746
+    creation_time: "2024-04-29T13:13:07+02:00"
+    producer:
+      name: "Paulina"
+      version: "thesis"
+    task:
+      input_files:
+      - "ternary.c"
+      input_file_hashes:
+        ternary.c: 700f5515174f00b2790872ceb0af94c2ac959e7c1bd5185c72960eac5557f1f6
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "avoid"
+        constraint:
+          value: "true"
+        location:
+          file_name: "ternary.c"
+          line: 14
+          column: 41
+    - waypoint:
+        type: "branching"
+        action: "avoid"
+        constraint:
+          value: "true"
+        location:
+          file_name: "ternary.c"
+          line: 15
+          column: 41
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "ternary.c"
+          line: 15
+          column: 55
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "ternary.c"
+          line: 17
+          column: 5
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "ternary.c"
+          line: 18
+          column: 9
+

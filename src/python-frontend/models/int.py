@@ -65,6 +65,29 @@ class int:
         return length
 
     @classmethod
+    # bit_count() returns the number of ones in the binary representation
+    # of the absolute value of the integer (Python 3.10+). `n` is annotated
+    # `IntWide` for the same bignum reason as bit_length; narrow inputs
+    # sign-extend on entry, so negatives are folded to their magnitude
+    # before counting. The loop is bounded by a literal 512-shift counter
+    # (matching the --ir bignum IntWide width) rather than by the symbolic
+    # input, so the unwinder has a termination bound; narrow callsites exit
+    # at n == 0 well before that. The literal 512 shares bit_length's
+    # soundness contract (>= kPythonBitLengthCap in type_handler.cpp, tied to
+    # kPythonBignumWidth by a static_assert) — bump both together when
+    # widening Python int. Issues #1964 / #4642.
+    def bit_count(cls, n: IntWide) -> int:
+        if n < 0:
+            n: IntWide = -n
+        count: int = 0
+        shifts: int = 0
+        while shifts < 512 and n > 0:
+            count = count + (n & 1)
+            n: IntWide = n >> 1
+            shifts = shifts + 1
+        return count
+
+    @classmethod
     # conjugate() returns the integer unchanged: the complex conjugate of a
     # real number is itself (int implements the numeric-tower API). Like the
     # other no-argument int methods, the caller's value is passed as `n`.
