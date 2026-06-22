@@ -889,22 +889,27 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const symbolt *strcmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
       if (strcmp_symbol)
       {
-        // Normalise each side to char*: cast void*, take base address of arrays.
+        // Normalise each side to char* in IREP2: cast void*, take base address
+        // of arrays. Building the typecast as typecast2tc is byte-identical to
+        // migrating the legacy typecast_exprt, and lets the strcmp call below
+        // be built without a separate forward migration of each side.
         const typet char_ptr = pointer_typet(char_type());
-        auto as_char_ptr = [&](const exprt &e) -> exprt {
-          if (is_void_ptr(e.type()))
-            return typecast_exprt(e, char_ptr);
+        auto as_char_ptr = [&](const exprt &e) -> expr2tc {
+          expr2tc e2;
           if (e.type().is_array())
-            return string_handler_.get_array_base_address(e);
-          return e;
+            migrate_expr(string_handler_.get_array_base_address(e), e2);
+          else
+            migrate_expr(e, e2);
+          if (is_void_ptr(e.type()))
+            return typecast2tc(migrate_type(char_ptr), e2);
+          return e2;
         };
 
         // V.3: build `strcmp(a, b) op 0` (op is Eq/NotEq) in IREP2, back
         // -migrating once. Exact round-trip of the legacy side-effect strcmp
         // call compared against zero via equality/notequal.
-        expr2tc lhs2, rhs2;
-        migrate_expr(as_char_ptr(lhs), lhs2);
-        migrate_expr(as_char_ptr(rhs), rhs2);
+        expr2tc lhs2 = as_char_ptr(lhs);
+        expr2tc rhs2 = as_char_ptr(rhs);
         expr2tc strcmp_call2 = side_effect_function_call2tc(
           migrate_type(int_type()),
           symbol_expr2tc(*strcmp_symbol),
