@@ -648,6 +648,57 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) and §17 (PR #5531,
+> `set.isdisjoint()` model) are in flight and not yet on `master`; this section is appended as
+> §18 of the next sweep so the in-flight PRs do not collide on the section number. The maintainer
+> orders §16 → §17 → §18.
+
+## 18. 2026-06-22 re-validation (eighth sweep) & float.is_integer() model
+
+Re-test against current `master` (tip `38fd6daaa1`). KNOWNBUG classification unchanged — §3
+holds. This sweep drained the `float.is_integer()` entry from the §15b backlog.
+
+### 18a. New isolated, soundly-fixable defect found & fixed
+**`float.is_integer()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`(5.0).is_integer()` reported `Unsupported function 'is_integer' is reached → VERIFICATION
+FAILED`. Unlike `int`, the Python frontend had **no `float` operational model at all**, and the
+int instance-method receiver-passing dispatch (`x.bit_length()` → `bit_length(x)`) only fired for
+`int` receivers, so a float method call could never reach a model even if one existed.
+
+**Fix** (three coordinated, minimal parts):
+1. New `src/python-frontend/models/float.py` — a `float` class with `is_integer(cls, x)` returning
+   `x == int(x)`, mirroring `models/int.py`'s classmethod-with-value-parameter convention. `int(x)`
+   truncates toward zero, so a finite float equals its truncation exactly iff it is integral —
+   sound for positive, negative, zero, and non-integral values across the range the bounded checks
+   explore.
+2. `src/python-frontend/python_converter.cpp` — register `"float"` in the hardcoded model-loader
+   list so `float.json` is generated and loaded alongside `int`.
+3. `src/python-frontend/function_call/expr.cpp` — broaden the two zero-arg receiver-passing
+   dispatch sites from `int`-only to `int`-or-`float`, so `x.is_integer()` lowers to
+   `is_integer(x)`. Purely additive; int methods are untouched, and the gate stays zero-arg-only so
+   no other float call is mis-routed.
+
+Like §16a/§17a, this **restores a working feature** rather than converting a crash to a
+diagnostic. Verified against CPython for `5.0`/`5.5`/`-2.0`/`-2.5`/`0.0` and an expression
+receiver (`(4.0+0.5).is_integer()`). New regression pair `regression/python/float_is_integer{,_fail}`
+(CORE); the positive test is the liveness witness for the added dispatch branch — without it the
+call lowers to the unsupported-function stub and the test would report `FAILED`. A broad
+int/float/math/builtin regression subset (247 tests) is 100% green — the shared dispatch broadening
+introduces no int-method regressions; CPython sanity (`scripts/check_python_tests.sh
+float_is_integer`) passes; error-level pylint on the model is clean. Code-reviewed: 0
+critical/major findings. Bitwuzla-only build (`ENABLE_Z3=OFF`); the change is frontend lowering
+plus a value model with no SMT-encoding change, so the verdict is solver-agnostic. **Build note:**
+adding a new `models/*.py` or `regression/python/*` directory requires re-running `cmake` (the
+FLAIL `WILDCARD *.py` glob and ctest discovery are evaluated at configure time) before the model
+or test is visible.
+
+### 18b. Everything else: unchanged disposition
+The remaining §15b candidates — `int.to_bytes()` (needs receiver-passing for an int method that
+*takes arguments*, plus a bytes-array return model) and `float.hex()` (a string-formatting model
+on the now-established `float` OM) — stand as the next "add the model" entries. The §3
+design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) is in flight and not yet on
 > `master`; this section is appended as §17 of the next sweep so the two PRs do not collide on
 > the section number. The maintainer orders §16 before §17.

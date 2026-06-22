@@ -4262,13 +4262,17 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
-      // All methods for the int class without parameters acts solely on the encapsulated integer value.
-      // Therefore, we always pass the caller (obj) as a parameter in these functions.
-      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      // All methods for the int/float classes without parameters act solely
+      // on the encapsulated scalar value. Therefore, we always pass the caller
+      // (obj) as a parameter in these functions. For example, if x is an int
+      // instance, x.bit_length() call becomes bit_length(x); likewise a float
+      // instance's x.is_integer() becomes is_integer(x).
+      const std::string recv_type =
+        obj_symbol ? type_handler_.get_var_type(obj_symbol->name.as_string())
+                   : std::string();
       if (
-        obj_symbol &&
-        type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
-        call_["args"].empty())
+        obj_symbol && call_["args"].empty() &&
+        (recv_type == "int" || recv_type == "float"))
       {
         call.arguments().push_back(build_symbol(*obj_symbol));
       }
@@ -4650,7 +4654,7 @@ exprt function_call_expr::handle_general_function_call()
       std::string var_type =
         type_handler_.get_var_type(obj_symbol->name.as_string());
 
-      if (var_type == "int")
+      if (var_type == "int" || var_type == "float")
         will_add_object = true;
     }
 
