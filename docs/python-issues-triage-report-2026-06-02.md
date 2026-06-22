@@ -645,3 +645,50 @@ encoding, so the verdict is solver-agnostic.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §16–§22 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543) are in
+> flight and not yet on `master`; this section is appended as §23.
+
+## 23. 2026-06-22 re-validation (thirteenth sweep) & str.startswith/endswith tuple support
+
+Re-test against current `master` (tip `f23d79805d`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery surfaced a **wrong-verdict** bug (the highest-value class).
+
+### 23a. New isolated, soundly-fixable defect found & fixed
+**`str.startswith(tuple)` / `str.endswith(tuple)` reported a spurious `VERIFICATION FAILED`.**
+
+Python's `startswith`/`endswith` accept a *tuple of affixes* and return `True` iff the string
+matches **any** element (`"abc".startswith(("x", "ab"))` is `True`). ESBMC's handlers took a single
+affix and fed the tuple **struct** straight into `ensure_null_terminated_string`, mis-evaluating it
+as a string → a silently wrong `False`.
+
+**Fix:** guard the top of `handle_string_startswith`/`handle_string_endswith` — when the affix
+argument is a tuple type, delegate to a new `build_affix_tuple_match`, which ORs the per-element
+single-affix match (recursively reusing the scalar handlers over `affix_tuple.operands()`, the
+correct way to read an inline tuple literal's elements — the same direct-operand strategy
+`tuple_handler::get_tuple_element` uses to avoid the non-addressable-struct-member pitfall #5185).
+A tuple passed *by symbol* (no inline operands) throws a clean `runtime_error` rather than silently
+returning `False` — sound: an honest unsupported-error, never a wrong verdict. The single-string
+path is a byte-for-byte unchanged suffix of the guard, so there is no scalar-path regression.
+
+This **fixes a wrong verdict**, the highest-value class in this report. New regression pair
+`regression/python/str_startswith_tuple{,_fail}` (CORE) covering tuple match / no-match / both
+`startswith` and `endswith` / single-string forms; the positive test is the liveness witness for
+the added guard (pre-fix it produced the wrong `FAILED`). Verified bit-for-bit against CPython;
+CPython sanity passes; the focused `regression/python/{str,string,startswith,endswith}*` ctest
+subset (436 tests) shows zero new failures (the 12 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build). Code-reviewed (0 critical/major/minor; scalar-path
+non-regression diff-confirmed). Solver-agnostic (frontend disjunction over existing strncmp/strlen
+matches, no SMT-encoding change).
+
+### 23b. Everything else: unchanged disposition
+Other fresh wrong-verdicts catalogued this sweep but **not** isolated point fixes: `max`/`min` with
+a `key=` function (ignores the key — needs function application over each element), and
+`list.index()` of an absent value inside `try/except ValueError` (exception-model interaction).
+Deferred method candidates stand: `str.rsplit()` (right-side `split` — two `build_split_list`
+overloads + maxsplit-from-right), `int.to_bytes()`, `bytes.hex()`/`decode()`/`str.encode()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), `str.isascii()` (string-soundness), and the
+numeric-tower *properties*. The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
