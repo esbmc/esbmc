@@ -309,6 +309,7 @@ else()
                     loop-invariants
                     function_contract
                     witnesses_validate
+                    witnesses_validate/reachsafety-violationwitness
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
