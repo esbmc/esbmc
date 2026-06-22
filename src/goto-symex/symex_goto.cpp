@@ -106,81 +106,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
-  // Violation-witness: steer branch direction if a branching waypoint in the
-  // current segment matches this location.  Skip backward GOTOs (loop back
-  // edges).  'avoid' waypoints are persistent (no advance); 'follow' waypoints
-  // consume the segment on match.  Non-matching 'follow' entries stop the scan.
-  if (
-    validate_witness && forward && !is_constant(old_guard) &&
-    cur_state->cur_seg < cur_state->witness_segs.size())
-  {
-    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    const auto &loc = cur_state->source.pc->location;
-
-    // Forces new_guard direction and immediately adds the path constraint so
-    // the SMT solver rejects spurious witnesses on infeasible paths.
-    auto force_goto = [&](bool taken) {
-      new_guard_true = taken;
-      new_guard_false = !taken;
-      expr2tc dir_cond = taken ? new_guard : not2tc(new_guard);
-      do_simplify(dir_cond);
-      if (!is_true(dir_cond))
-        assume(dir_cond);
-    };
-
-    for (const auto &wp : seg)
-    {
-      if (wp.type != waypoint::branching)
-        continue;
-
-      const bool is_avoid = (wp.action == waypoint::avoid);
-      const bool loc_matches =
-        !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-        (wp.column_id.empty() || wp.column_id == loc.get_column());
-
-      if (!loc_matches)
-      {
-        if (!is_avoid)
-          break; // ordered follow waypoints: stop scanning past a non-match
-        continue;
-      }
-
-      if (wp.value != "true" && wp.value != "false")
-      {
-        // Integer-valued waypoint: switch-case selector.
-        bool case_matches = false;
-        for (const auto &id : instruction.switch_case_ids)
-          if (id == wp.value)
-          {
-            case_matches = true;
-            break;
-          }
-
-        if (is_avoid)
-        {
-          if (!case_matches)
-            continue; // not the avoided case; scan for the next waypoint
-          force_goto(false);
-        }
-        else
-        {
-          force_goto(case_matches);
-          if (case_matches)
-            cur_state->advance_witness_position();
-        }
-        break;
-      }
-
-      // Boolean waypoint ("true" / "false").
-      const bool direction_true = (wp.value == "true") ^ is_avoid;
-      const bool goto_taken =
-        instruction.flipped_guard ? direction_true : !direction_true;
-      force_goto(goto_taken);
-      if (!is_avoid)
-        cur_state->advance_witness_position();
-      break;
-    }
-  }
+  symex_witness_branching(
+    old_guard, new_guard, forward, new_guard_true, new_guard_false, instruction);
 
   if (new_guard_false)
   {
