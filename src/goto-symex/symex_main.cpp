@@ -251,7 +251,6 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
     target, total_claims, remaining_claims, simplified_claims);
 }
 
-
 void goto_symext::symex_step(reachability_treet &art)
 {
   assert(!cur_state->call_stack.empty());
@@ -410,8 +409,7 @@ void goto_symext::symex_step(reachability_treet &art)
 
     if (validate_witness)
     {
-      const irep_idt call_line =
-        cur_state->source.pc->location.get_line();
+      const irep_idt call_line = cur_state->source.pc->location.get_line();
       if (symex_witness_function_enter(call_line))
         return;
     }

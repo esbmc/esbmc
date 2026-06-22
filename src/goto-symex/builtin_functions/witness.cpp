@@ -77,8 +77,7 @@ bool goto_symext::symex_witness_function_enter(const irep_idt &call_line)
     if (wp.type != waypoint::function_enter)
       continue;
 
-    const bool loc_matches =
-      !wp.line_id.empty() && wp.line_id == call_line;
+    const bool loc_matches = !wp.line_id.empty() && wp.line_id == call_line;
 
     if (loc_matches)
     {

@@ -107,7 +107,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // tracking loop counters.
 
   symex_witness_branching(
-    old_guard, new_guard, forward, new_guard_true, new_guard_false, instruction);
+    old_guard,
+    new_guard,
+    forward,
+    new_guard_true,
+    new_guard_false,
+    instruction);
 
   if (new_guard_false)
   {
