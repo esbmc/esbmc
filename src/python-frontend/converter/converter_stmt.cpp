@@ -3016,9 +3016,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         size_call.type() = size_type();
         size_call.location() = location;
 
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(size_call, gen_zero(size_type()));
+        // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating
+        // once (mirrors the list-condition path at converter_binop.cpp:208).
+        // The round-trip drops the call operand's location, so re-attach it.
+        expr2tc size_call2;
+        migrate_expr(size_call, size_call2);
+        cond = migrate_expr_back(
+          notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
 
       // Python treats strings in conditions by their length: "" is falsy.
@@ -3036,9 +3042,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         strlen_call.type() = size_type();
         strlen_call.location() = location;
 
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(strlen_call, gen_zero(size_type()));
+        // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
+        // the string-truthiness path at converter_unop.cpp). Re-attach the
+        // call operand's location that the round-trip drops.
+        expr2tc strlen_call2;
+        migrate_expr(strlen_call, strlen_call2);
+        cond = migrate_expr_back(
+          notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
     }
   }
