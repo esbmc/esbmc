@@ -136,9 +136,8 @@ static void collect_address_taken(
   if (is_address_of2t(e))
     collect_object_globals(to_address_of2t(e).ptr_obj, ns, out);
 
-  e->foreach_operand([&](const expr2tc &sub) {
-    collect_address_taken(sub, ns, out);
-  });
+  e->foreach_operand(
+    [&](const expr2tc &sub) { collect_address_taken(sub, ns, out); });
 }
 
 void reachability_treet::scan_program_writes()
