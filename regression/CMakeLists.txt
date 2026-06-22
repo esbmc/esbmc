@@ -308,7 +308,6 @@ else()
                     parallel-solving
                     loop-invariants
                     function_contract
-                    witnesses_validate
                     witnesses_validate/reachsafety-violationwitness
        )
   else()
