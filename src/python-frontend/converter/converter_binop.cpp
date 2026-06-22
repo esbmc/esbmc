@@ -656,6 +656,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return set_result;
   }
 
+  // Python dict union (PEP 584: `d1 | d2`) and bitwise operations on dicts are
+  // not modeled. Reject them with a clean diagnostic: otherwise both dict
+  // structs fall through to build_binary_expression's bitwise path, which emits
+  // a bitvector BitOr over struct operands and SIGSEGVs in the SMT backend
+  // (a struct irep is handed to bitwuzla_mk_term2 as a term pointer).
+  if (
+    (op == "BitOr" || op == "BitAnd" || op == "BitXor") &&
+    lhs.type().is_struct() && rhs.type().is_struct() &&
+    dict_handler_->is_dict_type(lhs.type()) &&
+    dict_handler_->is_dict_type(rhs.type()))
+    throw std::runtime_error(
+      "dict union '|' and bitwise operations on dict are not supported");
+
   // Handle membership operators
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
