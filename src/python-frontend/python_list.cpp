@@ -3205,6 +3205,115 @@ exprt python_list::compare(
       return has_int && has_float;
     };
 
+    // Concrete nested lists (notably NumPy matrix constructors) can be
+    // compared without the recursive __ESBMC_list_eq operational model.
+    // Materialize direct element comparisons for each row instead.
+    const typet list_model_type = converter_.get_type_handler().get_list_type();
+    std::function<bool(
+      const symbolt *, const symbolt *, std::size_t, expr2tc &)>
+      build_nested_equality;
+    build_nested_equality = [&](
+                              const symbolt *lhs_list,
+                              const symbolt *rhs_list,
+                              std::size_t depth,
+                              expr2tc &result) -> bool {
+      if (!lhs_list || !rhs_list || depth > 8)
+        return false;
+
+      const std::string lhs_list_id = resolve_map_id(lhs_list);
+      const std::string rhs_list_id = resolve_map_id(rhs_list);
+      auto lhs_it = list_type_map.find(lhs_list_id);
+      auto rhs_it = list_type_map.find(rhs_list_id);
+      if (lhs_it == list_type_map.end() || rhs_it == list_type_map.end())
+        return false;
+
+      const std::size_t lhs_size = lhs_it->second.size();
+      const std::size_t rhs_size = rhs_it->second.size();
+      if (lhs_size != rhs_size)
+      {
+        result = gen_false_expr();
+        return true;
+      }
+      if (lhs_size > 64)
+        return false;
+
+      result = gen_true_expr();
+      for (std::size_t i = 0; i < lhs_size; ++i)
+      {
+        const std::string lhs_elem_id = get_list_element_id(lhs_list_id, i);
+        const std::string rhs_elem_id = get_list_element_id(rhs_list_id, i);
+        const symbolt *lhs_elem_sym = converter_.find_symbol(lhs_elem_id);
+        const symbolt *rhs_elem_sym = converter_.find_symbol(rhs_elem_id);
+        if (!lhs_elem_sym || !rhs_elem_sym)
+          return false;
+
+        const typet &lhs_elem_type = lhs_elem_sym->get_type();
+        const typet &rhs_elem_type = rhs_elem_sym->get_type();
+        const bool lhs_is_list = lhs_elem_type == list_model_type;
+        const bool rhs_is_list = rhs_elem_type == list_model_type;
+        expr2tc elem_equal;
+
+        if (lhs_is_list || rhs_is_list)
+        {
+          if (!(lhs_is_list && rhs_is_list))
+            elem_equal = gen_false_expr();
+          else
+          {
+            const std::string lhs_nested_id = resolve_map_id(lhs_elem_sym);
+            const std::string rhs_nested_id = resolve_map_id(rhs_elem_sym);
+            const symbolt *lhs_nested = converter_.find_symbol(lhs_nested_id);
+            const symbolt *rhs_nested = converter_.find_symbol(rhs_nested_id);
+            if (!build_nested_equality(
+                  lhs_nested, rhs_nested, depth + 1, elem_equal))
+              return false;
+          }
+        }
+        else
+        {
+          if (
+            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)) ||
+            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type)))
+            return false;
+
+          const exprt index = from_integer(BigInt(i), size_type());
+          exprt lhs_at =
+            build_list_at_call(build_symbol(*lhs_list), index, list_value_);
+          exprt rhs_at =
+            build_list_at_call(build_symbol(*rhs_list), index, list_value_);
+          exprt lhs_value = extract_pyobject_value(lhs_at, lhs_elem_type);
+          exprt rhs_value = extract_pyobject_value(rhs_at, rhs_elem_type);
+          if (lhs_elem_type != rhs_elem_type)
+          {
+            if (!(is_numeric(lhs_elem_type) && is_numeric(rhs_elem_type)))
+              return false;
+            lhs_value = build_typecast(lhs_value, double_type());
+            rhs_value = build_typecast(rhs_value, double_type());
+          }
+
+          expr2tc lhs_value2, rhs_value2;
+          migrate_expr(lhs_value, lhs_value2);
+          migrate_expr(rhs_value, rhs_value2);
+          elem_equal = equality2tc(lhs_value2, rhs_value2);
+        }
+
+        result = and2tc(result, elem_equal);
+      }
+      return true;
+    };
+
+    const typet lhs_first_type = get_list_element_type(lhs_id, 0);
+    const typet rhs_first_type = get_list_element_type(rhs_id, 0);
+    if (lhs_first_type == list_model_type && rhs_first_type == list_model_type)
+    {
+      expr2tc nested_equal;
+      if (build_nested_equality(lhs_symbol, rhs_symbol, 0, nested_equal))
+      {
+        if (op == "NotEq")
+          nested_equal = not2tc(nested_equal);
+        return migrate_expr_back(nested_equal);
+      }
+    }
+
     if (is_concrete_map(lhs_id) && is_concrete_map(rhs_id))
     {
       if (has_mixed_int_float(lhs_id) || has_mixed_int_float(rhs_id))
