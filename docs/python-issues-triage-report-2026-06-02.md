@@ -387,6 +387,54 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §11 (PR #5510), §12 (PR #5513), and §13 (PR #5515) are all in flight and
+> not yet on `master`; this section is appended as §14 of the fourth 2026-06-21 sweep so the
+> four same-day PRs do not collide on the section number. When they land, the maintainer orders
+> §11 → §12 → §13 → §14.
+
+## 14. 2026-06-21 re-validation (fourth sweep) & inverted constant-int soundness fix
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged; PRs #5510/#5513/#5515 OPEN,
+awaiting review). KNOWNBUG classification unchanged. With the §11 crash backlog drained, this
+sweep probed string-method idioms and found a **soundness** defect (false verdicts), not just a
+crash — the highest-value class.
+
+### 14a. New isolated, soundly-fixable defect found & fixed
+**An inverted constant-int guard silently broke `str.center`/`ljust`/`rjust`/`zfill` and
+`expandtabs`, proving false assertions.**
+
+`"42".zfill(5) == "00042"`, `"hi".center(6,"*") == "**hi**"`, `"hi".ljust(5,".")`,
+`"hi".rjust(5,".")`, and `"a\tb".expandtabs(4)` all gave wrong verdicts: a *correct* assertion on
+the result reported `VERIFICATION FAILED`, and the result's value/length was effectively nondet
+(`expandtabs(4)` silently used the default tabsize 8, giving length 9 instead of 5). `bytes`,
+`upper`, `replace`, and `find` were unaffected.
+
+**Root cause** (`src/python-frontend/string/string_method_handler.cpp`, `get_constant_int`). The
+helper guarded on `if (!to_integer(expr, tmp)) return false;` — but `to_integer()` returns
+**false on success** (CBMC convention). The `!` inverted it: every valid integer constant was
+rejected (treated as non-constant), and non-constants were *accepted* with an unset value. Each
+width/fill method then hit its `get_constant_int(width_arg, …)` check, concluded the width was
+non-constant, and returned `build_nondet_string_fallback()` — so the assignment target became a
+nondet string. `find`/`upper` were spared because they are folded by `python_consteval` and never
+reach this helper; `bytes`/`replace` take string (not int) arguments.
+
+**Fix:** drop the inverted `!` (`if (to_integer(expr, tmp)) return false;`). One token. All five
+methods now compute exact CPython-matching values (verified `"00042"`, `"**hi**"`, `"hi..."`,
+`"...hi"`, `"a   b"`), and a wrong-value assertion now correctly `FAILED`. This is a condition
+correction (literal change), not a structural branch change; the new regression pair
+`regression/python/str_width_methods{,_fail}` pins the corrected value/length contract. A broad
+`regression/python/` sweep shows **zero new failures** — the only failures are the pre-existing
+Bitwuzla-only environmental set (`--z3`/`--ir`-pinned), none touching these methods.
+
+Unlike §13's crash→diagnostic, this is a true **soundness** fix: ESBMC was proving false
+assertions about string-method results, which is worse than a crash. Bitwuzla-only build; the fix
+is a frontend constant-folding guard with no SMT encoding, so the verdict is solver-agnostic.
+
+A separate, narrower issue remains visible but out of scope here: `len()` of a space-padded
+method result (`len("x".center(7))`) still mis-verifies even though the value (`"   x   "`)
+compares equal — a distinct `len`/`strlen` concern on the padded array, tracked for a later sweep.
+
+### 14b. Everything else: unchanged disposition
 > **Note on numbering.** §11–§14 (PRs #5510/#5513/#5515/#5518) are all in flight and not yet on
 > `master`; this section is appended as §15 of the fifth 2026-06-21 sweep. When they land, the
 > maintainer orders §11 → §12 → §13 → §14 → §15.
