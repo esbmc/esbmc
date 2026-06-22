@@ -63,3 +63,10 @@ class int:
             n: IntWide = n >> 1
             length = length + 1
         return length
+
+    @classmethod
+    # conjugate() returns the integer unchanged: the complex conjugate of a
+    # real number is itself (int implements the numeric-tower API). Like the
+    # other no-argument int methods, the caller's value is passed as `n`.
+    def conjugate(cls, n: int) -> int:
+        return n
