@@ -314,6 +314,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   {
     const auto &list_arg = element["args"][0];
 
+    // list((a, b, ...)) — a tuple literal: lower to a List literal so it routes
+    // through the well-tested `[]` path with full element-type tracking. (A
+    // tuple held in a variable is handled below, after get_expr.)
+    if (list_arg["_type"] == "Tuple")
+    {
+      nlohmann::json list_node = list_arg;
+      list_node["_type"] = "List";
+      return get_expr(list_node);
+    }
+
     // Handle list(range(...))
     if (
       list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
@@ -329,6 +339,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     exprt arg_expr = get_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
       return arg_expr;
+
+    // list(tuple) — materialise the tuple's components into a real list.
+    // Without this the tuple struct flows into the generic builder, which
+    // mistypes it as a list (wrong elements / out-of-bounds dereference).
+    if (get_tuple_handler().is_tuple_type(arg_expr.type()))
+      return python_list::build_list_from_tuple(*this, arg_expr, element);
     // Fall through to the generic function-call builder below for non-list
     // iterables (e.g. list("abc") or list(42)).
   }
