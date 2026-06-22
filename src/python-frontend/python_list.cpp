@@ -4771,9 +4771,18 @@ exprt python_list::extract_pyobject_value(
     // works for numeric / pointer-by-value elements).
     exprt as_default = build_dereference(
       build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
-    equality_exprt is_str(
-      type_id_member, from_integer(str_type_id, size_type()));
-    return if_exprt(is_str, obj_value, as_default);
+    // item->type_id == str_type_id ? obj_value : *(T*)obj_value
+    // V.3: built in IREP2 (both branches are elem_type/void*, so the if2t
+    // types agree), back-migrated at the return. Mirrors the float-dispatch
+    // if2t above.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, ov2, def2;
+    migrate_expr(type_id_member, tid2);
+    migrate_expr(obj_value, ov2);
+    migrate_expr(as_default, def2);
+    const expr2tc is_str =
+      equality2tc(tid2, from_integer(str_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_str, ov2, def2));
   }
 
   // For array types, return pointer to element type instead of pointer to array
