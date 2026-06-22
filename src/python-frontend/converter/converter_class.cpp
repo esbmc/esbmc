@@ -114,23 +114,24 @@ exprt python_converter::create_member_expression(
 {
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.get_type());
-  if (source.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = source.type().subtype();
-    deref.move_to_operands(source);
-    source = std::move(deref);
-  }
+
+  // V.3: build the (optional) pointer dereference and the member access in
+  // IREP2, back-migrated once at the legacy seam. Building dereference2tc
+  // directly is byte-identical to migrating a staged legacy "dereference"
+  // node, and avoids the extra round-trip.
+  expr2tc s2;
+  migrate_expr(source, s2);
   typet source_type = source.type();
+  if (source_type.is_pointer())
+  {
+    source_type = source_type.subtype();
+    s2 = dereference2tc(migrate_type(source_type), s2);
+  }
   if (source_type.id() == "symbol")
     source_type = ns.follow(source_type);
   if (!source_type.is_struct() && !source_type.is_union())
     return gen_zero(clean_type);
 
-  // V.3: IREP2 member access (exact round-trip of member_exprt). `source` is
-  // struct/union (checked above) or a by-name symbol; both are valid sources.
-  expr2tc s2;
-  migrate_expr(source, s2);
   return migrate_expr_back(member2tc(migrate_type(clean_type), s2, attr_name));
 }
 

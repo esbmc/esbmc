@@ -95,7 +95,12 @@ static bool get_constant_int(const exprt &expr, long long &out)
   if (expr.is_nil())
     return false;
   BigInt tmp;
-  if (!to_integer(expr, tmp))
+  // to_integer() returns false on success (CBMC convention), so the guard must
+  // bail when it returns true. The earlier `!to_integer(...)` was inverted: it
+  // rejected every valid integer constant (and accepted non-constants with an
+  // unset value), so width/fill string methods — center/ljust/rjust/zfill and
+  // expandtabs's tabsize — silently fell back to a nondet/default result.
+  if (to_integer(expr, tmp))
     return false;
   out = tmp.to_int64();
   return true;
@@ -881,22 +886,22 @@ exprt string_handler::handle_string_startswith(
     *strncmp_symbol, int_type(), {str_addr, prefix_addr, actual_len});
   strncmp_call.location() = location;
 
-  // Check if result == 0 (strings match)
-  exprt zero = gen_zero(int_type());
-  exprt equal("=", bool_type());
-  equal.copy_to_operands(strncmp_call, zero);
+  // V.3: build `(actual_len == 0) || (strncmp(...) == 0)` in IREP2, back
+  // -migrating once. Python treats the empty string as a prefix of every
+  // string, so s.startswith("") is always True; the empty-prefix guard keeps
+  // the result correct for a symbolic empty prefix and is robust to
+  // strncmp(_,_,0), which the operational model evaluates to a non-zero value.
+  expr2tc strncmp2, zero2;
+  migrate_expr(strncmp_call, strncmp2);
+  migrate_expr(gen_zero(int_type()), zero2);
+  expr2tc equal2 = equality2tc(strncmp2, zero2);
 
-  // Python treats the empty string as a prefix of every string, so
-  // s.startswith("") is always True. Guard this case explicitly: it keeps the
-  // result correct for a symbolic empty prefix and is robust to strncmp(_,_,0),
-  // which the operational model evaluates to a non-zero value.
-  exprt is_empty("=", bool_type());
-  is_empty.copy_to_operands(actual_len, gen_zero(actual_len.type()));
+  expr2tc len2, len_zero2;
+  migrate_expr(actual_len, len2);
+  migrate_expr(gen_zero(actual_len.type()), len_zero2);
+  expr2tc is_empty2 = equality2tc(len2, len_zero2);
 
-  exprt result("or", bool_type());
-  result.copy_to_operands(is_empty, equal);
-
-  return result;
+  return migrate_expr_back(or2tc(is_empty2, equal2));
 }
 
 exprt string_handler::handle_string_endswith(
@@ -963,19 +968,18 @@ exprt string_handler::handle_string_endswith(
     *strncmp_symbol, int_type(), {offset_ptr, suffix_addr, suffix_strlen_call});
   strncmp_call.location() = location;
 
-  // Check if result == 0 (strings match)
-  exprt zero = gen_zero(int_type());
-  exprt strings_equal("=", bool_type());
-  strings_equal.copy_to_operands(strncmp_call, zero);
+  // V.3: build `!(suffix_len > str_len) && (strncmp(...) == 0)` in IREP2,
+  // back-migrating once. Order and operands match the legacy nodes exactly.
+  expr2tc strncmp2, zero2;
+  migrate_expr(strncmp_call, strncmp2);
+  migrate_expr(gen_zero(int_type()), zero2);
+  expr2tc strings_equal2 = equality2tc(strncmp2, zero2);
 
-  // Return: (suffix_len <= str_len) && (strncmp(...) == 0)
-  exprt len_ok("not", bool_type());
-  len_ok.copy_to_operands(len_check);
+  expr2tc len_check2;
+  migrate_expr(len_check, len_check2);
+  expr2tc len_ok2 = not2tc(len_check2);
 
-  exprt result("and", bool_type());
-  result.copy_to_operands(len_ok, strings_equal);
-
-  return result;
+  return migrate_expr_back(and2tc(len_ok2, strings_equal2));
 }
 
 exprt string_handler::handle_string_isdigit(
@@ -1098,12 +1102,13 @@ exprt string_handler::handle_char_isspace(
   exprt call = build_call_expr(func_symbol_id, int_type(), {char_as_int});
   call.location() = location;
 
-  // Convert result to boolean (isspace returns non-zero for whitespace)
-  exprt result("notequal", bool_type());
-  result.copy_to_operands(call);
-  result.copy_to_operands(from_integer(0, int_type()));
-
-  return result;
+  // V.3: convert the C isspace() result to a boolean in IREP2 (isspace
+  // returns non-zero for whitespace), back-migrating once. Operand order
+  // (call != 0) and the bool result type match the legacy node.
+  expr2tc call2, zero2;
+  migrate_expr(call, call2);
+  migrate_expr(from_integer(0, int_type()), zero2);
+  return migrate_expr_back(notequal2tc(call2, zero2));
 }
 
 exprt string_handler::handle_string_lstrip(

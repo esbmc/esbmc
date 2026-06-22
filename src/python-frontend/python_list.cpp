@@ -2603,8 +2603,10 @@ exprt python_list::handle_index_access(
     }
 
     // For variable indices, prefer compile-time list element type information
-    // when available.
-    if (elem_type == typet() && array.is_symbol())
+    // when available.  Also fire when elem_type is empty_typet(): that is the
+    // sentinel returned by get_typet("tuple"), meaning "don't use the
+    // annotation as-is; resolve the concrete struct type via list_type_map."
+    if ((elem_type == typet() || elem_type.is_empty()) && array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
       auto type_map_it = list_type_map.find(list_name);
@@ -2872,6 +2874,26 @@ exprt python_list::handle_index_access(
     if (mixed_numeric)
       elem_type = double_type();
 
+    // A heap-migrated user-class instance is stored in a list as a `Class*`
+    // pointer: the push path records a pointer-sized element (type_size 8), not
+    // the full struct. If the element type resolved to a by-value user-class
+    // struct, read it back as the pointer it actually is so
+    // extract_pyobject_value dereferences a single `Class*` instead of copying
+    // sizeof(struct) bytes off an 8-byte pointer slot, which overruns it
+    // (#4805). ESBMC-internal model helper classes (reserved `__ESBMC_` prefix,
+    // e.g. the dataclasses `__ESBMC_DataclassField`) are stored by value by
+    // their hand-written models and must be left as structs.
+    if (converter_.is_user_class_struct_type(elem_type))
+    {
+      const std::string tag =
+        elem_type.id() == "symbol"
+          ? to_symbol_type(elem_type).get_identifier().as_string()
+          : to_struct_type(elem_type).tag().as_string();
+      const std::string cls = converter_.extract_class_name_from_tag(tag);
+      if (cls.rfind("__ESBMC", 0) != 0)
+        elem_type = gen_pointer_type(elem_type);
+    }
+
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
@@ -2895,8 +2917,11 @@ exprt python_list::handle_index_access(
       list_at_call = build_symbol(elem_obj);
     }
 
-    // Extract and dereference PyObject value
-    return extract_pyobject_value(list_at_call, elem_type, mixed_numeric);
+    // Extract and dereference PyObject value. string_safe: a subscript read is
+    // value-context (assigned to the target), so an any_type string element may
+    // be returned by pointer without overrunning its short char[] storage.
+    return extract_pyobject_value(
+      list_at_call, elem_type, mixed_numeric, /*string_safe=*/true);
   }
 
   // Handle static string indexing with IndexError on out-of-bounds
@@ -4649,7 +4674,8 @@ exprt python_list::build_pop_list_call(
 exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
   const typet &elem_type,
-  bool mixed_numeric)
+  bool mixed_numeric,
+  bool string_safe)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
   // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
@@ -4707,6 +4733,38 @@ exprt python_list::extract_pyobject_value(
   // Extract value from PyObject: (*pyobject_expr).value
   exprt obj_value =
     build_deref_member(pyobject_expr, "value", pointer_typet(empty_typet()));
+
+  // Element whose static type was erased to any_type() (void*): this happens
+  // when a dict/list crosses into an *unannotated* parameter, where keys()/
+  // values() reads have no compile-time element type (#5444). The generic
+  // "cast void* to T* and dereference" path below overruns a string element: a
+  // str is stored as a short char[] at item->value (e.g. a 2-byte key), so an
+  // 8-byte void* dereference reads past the array (array-bounds violation). The
+  // element's *runtime* type is recorded in item->type_id (stamped at push
+  // time), so when it marks a string, keep the stored pointer (== char*, the
+  // same value the annotated str path returns) with no dereference. Every other
+  // type keeps the proven dereference read, so numeric elements are unaffected.
+  // The dispatch key is the caller-stamped type, not a usage heuristic, so this
+  // stays sound. Gated on string_safe because the result is an if-expression
+  // (rvalue): callers that take its address (membership/find on heaps, queues,
+  // sets) need the plain dereference lvalue, so only value-context reads
+  // (subscript) opt in.
+  if (
+    string_safe && elem_type.is_pointer() &&
+    elem_type.subtype().id() == "empty")
+  {
+    const size_t str_type_id = std::hash<std::string>{}(
+      converter_.get_type_handler().type_to_string(pointer_typet(char_type())));
+    exprt type_id_member =
+      build_deref_member(pyobject_expr, "type_id", size_type());
+    // Default: cast void* to void** and dereference (the read that already
+    // works for numeric / pointer-by-value elements).
+    exprt as_default = build_dereference(
+      build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
+    equality_exprt is_str(
+      type_id_member, from_integer(str_type_id, size_type()));
+    return if_exprt(is_str, obj_value, as_default);
+  }
 
   // For array types, return pointer to element type instead of pointer to array
   // The dereference system doesn't support array types as target types

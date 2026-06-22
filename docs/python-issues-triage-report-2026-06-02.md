@@ -387,6 +387,149 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §11 (PR #5510), §12 (PR #5513), and §13 (PR #5515) are all in flight and
+> not yet on `master`; this section is appended as §14 of the fourth 2026-06-21 sweep so the
+> four same-day PRs do not collide on the section number. When they land, the maintainer orders
+> §11 → §12 → §13 → §14.
+
+## 14. 2026-06-21 re-validation (fourth sweep) & inverted constant-int soundness fix
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged; PRs #5510/#5513/#5515 OPEN,
+awaiting review). KNOWNBUG classification unchanged. With the §11 crash backlog drained, this
+sweep probed string-method idioms and found a **soundness** defect (false verdicts), not just a
+crash — the highest-value class.
+
+### 14a. New isolated, soundly-fixable defect found & fixed
+**An inverted constant-int guard silently broke `str.center`/`ljust`/`rjust`/`zfill` and
+`expandtabs`, proving false assertions.**
+
+`"42".zfill(5) == "00042"`, `"hi".center(6,"*") == "**hi**"`, `"hi".ljust(5,".")`,
+`"hi".rjust(5,".")`, and `"a\tb".expandtabs(4)` all gave wrong verdicts: a *correct* assertion on
+the result reported `VERIFICATION FAILED`, and the result's value/length was effectively nondet
+(`expandtabs(4)` silently used the default tabsize 8, giving length 9 instead of 5). `bytes`,
+`upper`, `replace`, and `find` were unaffected.
+
+**Root cause** (`src/python-frontend/string/string_method_handler.cpp`, `get_constant_int`). The
+helper guarded on `if (!to_integer(expr, tmp)) return false;` — but `to_integer()` returns
+**false on success** (CBMC convention). The `!` inverted it: every valid integer constant was
+rejected (treated as non-constant), and non-constants were *accepted* with an unset value. Each
+width/fill method then hit its `get_constant_int(width_arg, …)` check, concluded the width was
+non-constant, and returned `build_nondet_string_fallback()` — so the assignment target became a
+nondet string. `find`/`upper` were spared because they are folded by `python_consteval` and never
+reach this helper; `bytes`/`replace` take string (not int) arguments.
+
+**Fix:** drop the inverted `!` (`if (to_integer(expr, tmp)) return false;`). One token. All five
+methods now compute exact CPython-matching values (verified `"00042"`, `"**hi**"`, `"hi..."`,
+`"...hi"`, `"a   b"`), and a wrong-value assertion now correctly `FAILED`. This is a condition
+correction (literal change), not a structural branch change; the new regression pair
+`regression/python/str_width_methods{,_fail}` pins the corrected value/length contract. A broad
+`regression/python/` sweep shows **zero new failures** — the only failures are the pre-existing
+Bitwuzla-only environmental set (`--z3`/`--ir`-pinned), none touching these methods.
+
+Unlike §13's crash→diagnostic, this is a true **soundness** fix: ESBMC was proving false
+assertions about string-method results, which is worse than a crash. Bitwuzla-only build; the fix
+is a frontend constant-folding guard with no SMT encoding, so the verdict is solver-agnostic.
+
+A separate, narrower issue remains visible but out of scope here: `len()` of a space-padded
+method result (`len("x".center(7))`) still mis-verifies even though the value (`"   x   "`)
+compares equal — a distinct `len`/`strlen` concern on the padded array, tracked for a later sweep.
+
+### 14b. Everything else: unchanged disposition
+> **Note on numbering.** §11–§14 (PRs #5510/#5513/#5515/#5518) are all in flight and not yet on
+> `master`; this section is appended as §15 of the fifth 2026-06-21 sweep. When they land, the
+> maintainer orders §11 → §12 → §13 → §14 → §15.
+
+## 15. 2026-06-21 re-validation (fifth sweep) & dict-union SIGSEGV→diagnostic
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged; PRs #5510/#5513/#5515/#5518
+OPEN, awaiting review). KNOWNBUG classification unchanged. This sweep probed dict/set/int/float/
+list method idioms (fresh ground — the §11 string/cmath/numpy battery is drained).
+
+### 15a. New isolated, soundly-fixable defect found & fixed
+**Python dict union (`d1 | d2`) SIGSEGV'd in the SMT backend.**
+
+`{"a":1} | {"b":2}` (PEP 584 dict merge, Python 3.9+) crashed with `EXC_BAD_ACCESS` inside
+`bitwuzla_mk_term2` — the faulting address decoded to ASCII (`...tuple_`), i.e. a struct/type
+irep was handed to the solver as a term pointer. The crash reproduced for every key type; set
+union (`{1,2}|{3,4}`) and integer bitwise-or (`6|1`) were unaffected.
+
+**Root cause** (`src/python-frontend/converter/converter_binop.cpp`,
+`build_binary_operator_expr`). Set union and the difference/intersection ops are intercepted for
+list-typed (set) operands; integer `|` takes the proper bitvector path. But **two dict operands
+matched neither** — dict union is unmodeled — so they fell through to `build_binary_expression`,
+whose bitwise branch (`is_bitwise_op`) only type-adjusts bv/bool operands and then emitted a raw
+`BitOr` over the two dict structs. That malformed term crashed the Bitwuzla encoder.
+
+**Fix:** add a guard beside the existing set-operation handling that rejects bitwise ops
+(`BitOr`/`BitAnd`/`BitXor`) on dict operands with a clean
+`ERROR: dict union '|' and bitwise operations on dict are not supported`. Modelling dict merge
+properly (copy-then-update semantics with right-wins key precedence) is a feature for a dedicated
+change; this is the §5-item-5 crash→diagnostic robustness step, bounded and sound. Set/int
+bitwise ops and dict `==`/`.update()` are untouched. New regression pair
+`regression/python/dict_union_unsupported` (clean error — the **C-Live** liveness witness for the
+added guard) + `set_union_after_dict_fix` (set/int `|` still verify). Broad `regression/python/`
+sweep: **zero new failures** (only the pre-existing `--z3`/`--ir` environmental set).
+
+Bitwuzla-only build; the fix is a frontend dispatch guard with no SMT encoding, so the verdict is
+solver-agnostic.
+
+### 15b. Other fresh defects observed this sweep (catalogued, not yet fixed)
+The dict/int/float probe also surfaced (deferred — several are unmodeled-method feature gaps, and
+one is blocked behind an in-flight PR):
+- `int.bit_count()`, `int.from_bytes()`, `int.to_bytes()`, `float.is_integer()`, `float.hex()` —
+  **unmodeled methods**; ESBMC replaces the undefined function with `assert(false)`, so any program
+  calling them reports a spurious `FAILED`. Each is an isolated "add the model" candidate.
+- `set.isdisjoint()` — `ERROR: Object "" not found` (dispatch/model gap).
+- `len()` of a space-padded `str.center()` result still mis-verifies (noted in §14) — blocked
+  behind PR #5518, which must land first to make `center` return a concrete value.
+
+### 15c. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
+> **Note on numbering.** §11 (the first 2026-06-21 sweep — the bare imaginary-literal
+> complex-argument crash) is in flight as PR #5510 and not yet on `master`; this section is
+> appended as §12 of the same day's second sweep so the two PRs do not collide on the section
+> number. When both land, the maintainer orders §11 before §12.
+
+## 12. 2026-06-21 re-validation (second sweep) & numpy round(x, decimals) crash fix
+
+Re-test against current `master` (tip `4a5b002c26`, unchanged since §11's sweep — zero new
+commits). The open KNOWNBUG classification is therefore identical to §11's: zero
+KNOWNBUG→CORE flips, §3 holds. With no master movement, this sweep instead drained the
+isolated-crash backlog surfaced by §11's idiom-probing battery.
+
+### 12a. New isolated, soundly-fixable defect found & fixed
+**`np.round(x, decimals)` — the 2-argument form — aborted on scalar-constant operands.**
+
+`np.round(2.567, 1)` crashed (`WARNING: Unknown operator: round`, then SIGABRT). The 1-argument
+form (`np.round(2.567)`) and `np.around` (clean "unsupported" error) were fine; only the 2-arg
+`round` crashed.
+
+**Root cause** (`src/python-frontend/numpy_call_expr.cpp`). `round` is registered in
+`is_math_function()`, so a 2-arg scalar-constant call enters the scalar-fold block — but `round`
+was **absent from the `compute_scalar_result` table and has no `operator_map()` entry**, so it
+fell through to the generic `create_binary_op("round", …)` BinOp path, which has no rule for
+`round` → "Unknown operator" → `migrate_expr` abort. This is the **exact** trap the code already
+special-cased two lines above for `copysign`/`fmax`/`fmin` ("have no operator_map() entry and no
+handler, so the BinOp path below crashes migrate_expr").
+
+**Fix:** add `round` to the scalar-fold table and to the special-case fold guard, folding the
+scalar-constant case as `std::nearbyint(x * 10^d) / 10^d`. Under the default FP rounding mode
+this is round-half-to-even, so it matches numpy bit-for-bit — verified for positive decimals
+(`round(2.567,1)==2.6`, `round(2.567,2)==2.57`), zero decimals, **negative** decimals
+(`round(12345,-2)==12300`), and banker's rounding (`round(2.5,0)==2.0`, `round(3.5,0)==4.0`).
+The symbolic-operand case already degrades to a clean `Unsupported Numpy call: round` diagnostic
+(same as `copysign`/`fmax`/`fmin`, which also fold only constants), so no crash path remains.
+
+New regression pair `regression/numpy/round_decimals{,_fail}` (CORE, `--incremental-bmc`); the
+positive test is the **C-Live** liveness witness for the added `round` branch (it SIGABRT'd
+pre-fix). Full `regression/numpy/` suite **368/368 green**; the change mirrors an established,
+already-shipped precedent in the same function. Like §10a/§11a this **restores a working feature**
+(2-arg `np.round` now verifies with exact values) rather than only converting a crash to a
+diagnostic. Bitwuzla-only build (`ENABLE_Z3=OFF`), as §11; the fix is compile-time scalar
+constant-folding in the frontend with no SMT encoding, so the verdict is solver-agnostic.
+
+### 12b. Everything else: unchanged disposition
 ## 11. 2026-06-21 re-validation & bare-imaginary-literal argument crash fix
 
 Re-test against current `master` (tip `4a5b002c26`), after the **83 commits** since §10's tip
@@ -455,3 +598,97 @@ verdict is solver-agnostic.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §11 (PR #5510, bare imaginary-literal complex-argument crash) has landed
+> on `master`; §12 (PR #5513, `np.round(x, decimals)` crash) is still in flight and not yet on
+> `master`. This section is appended as §13 of the third 2026-06-21 sweep so the same-day PRs do
+> not collide on the section number. The maintainer orders §11 → §12 → §13.
+
+## 13. 2026-06-21 re-validation (third sweep) & bytearray crash→diagnostic
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged — zero new commits since §11;
+PRs #5510 and #5513 OPEN, awaiting review). KNOWNBUG classification identical to §11/§12: zero
+flips, §3 holds. This sweep drained the last isolated crash from §11's idiom-probing battery.
+
+### 13a. New isolated, soundly-fixable defect found & fixed
+**`bytearray` crashed ESBMC with an uncaught C++ exception (SIGABRT).**
+
+`bytearray([1,2,3]); b[0]=9` and `bytearray(3)` aborted with `terminating due to uncaught
+exception type2t::symbolic_type_excp`; `bytearray([1,2,3])` followed by a read returned a bogus
+verdict. `bytes(...)` (the immutable form) was and remains fine.
+
+**Root cause** (`src/python-frontend/type_handler.cpp::get_typet`). `bytes` is modeled (array of
+int8); `bytearray` (its mutable counterpart) is not, so it reached the unsupported-but-defined
+fall-through that merely `log_warning`s and returns `empty_typet()`. That empty type then
+propagated into symex and was migrated to IREP2, where the empty type id raised
+`type2t::symbolic_type_excp` — uncaught → SIGABRT (on `bytearray(n)` / item assignment) or a
+silently wrong verdict (on plain construction+read).
+
+**Fix:** add an explicit `bytearray` case beside the `bytes` handler that throws a clean
+`std::runtime_error` — ESBMC's established mechanism for "unsupported feature," reported as
+`ERROR: bytearray is not supported; use bytes for an immutable byte sequence` (clean exit 254).
+All three crashing/wrong-verdict cases now produce the same deterministic diagnostic; `bytes` is
+untouched. This is §5-item-5 robustness (crash → clean diagnostic) and, like #5042/§6a, **does not
+flip a KNOWNBUG** — it removes a crash on an unsupported feature rather than enabling one.
+
+New regression pair: `regression/python/bytearray_unsupported` (asserts the clean diagnostic) and
+`regression/python/bytes_after_bytearray_fix` (guards that the adjacent `bytes` path still
+verifies). Both green via `ctest`; CPython sanity passes; a broad `regression/python/` sweep shows
+**zero new failures** attributable to the change (the only failures are the pre-existing
+Bitwuzla-only environmental set: `--z3`-pinned and `--ir`-pinned tests, none touching `bytearray`).
+Bitwuzla-only build (`ENABLE_Z3=OFF`); the fix is a frontend type-resolution guard with no SMT
+encoding, so the verdict is solver-agnostic.
+
+### 13b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
+on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+## 16. 2026-06-22 re-validation (sixth sweep) & int.bit_count() model
+
+Re-test against current `master` (tip `38fd6daaa1`, with §11–§15's PRs now landed:
+`#5518` width string methods, `#5519` chained-comparison fold, `#5520` dict-union diagnostic,
+`#5516` strcmp normalisation, `#5521` startswith/endswith). KNOWNBUG classification unchanged —
+§3 holds. This sweep drained the next entry from the §15b "unmodeled method" backlog.
+
+### 16a. New isolated, soundly-fixable defect found & fixed
+**`int.bit_count()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`x = 13; x.bit_count()` (Python 3.10+ population count) reported
+`Unsupported function 'bit_count' is reached → VERIFICATION FAILED` even though `13 == 0b1101`
+has three ones. `bit_count` had no operational model, so ESBMC lowered the call to the
+unsupported-function stub. The no-argument int instance-method dispatch already works
+(`expr.cpp` passes the receiver as the value argument, exactly as for `bit_length`); only the
+model body was missing.
+
+**Fix** (`src/python-frontend/models/int.py`): add a `bit_count` classmethod mirroring the
+existing `bit_length` template — fold negatives to their magnitude (`bit_count` operates on the
+absolute value), then accumulate `n & 1` while right-shifting, bounded by a literal 512-shift
+counter (the `--ir` bignum `IntWide` width) so the unwinder has a termination bound and narrow
+callsites exit at `n == 0` well before it. Modelling `bit_count` as an eager popcount is sound
+in every context (it has no side effects and depends only on the receiver's value), verified
+bit-for-bit against CPython for `0`, `255`, `1024`, a negative (`-3 → 2`), an expression
+receiver (`(4-1) → 2`), and `13 → 3`.
+
+Unlike the §6a/§7a/§13a crash→diagnostic fixes, this **restores a working feature** (any program
+calling `int.bit_count()` now verifies with the exact count) — like §10a/§11a/§12a it adds a
+sound value model. New regression pair `regression/python/int_bit_count{,_fail}` (CORE); the
+positive test is the **Py-Live** liveness witness for the new model branch (it reported the
+unsupported-function `FAILED` pre-fix and `SUCCESSFUL` after). The full `regression/python/`
+suite shows zero new failures (only the pre-existing Bitwuzla-only `--z3`/`--ir` environmental
+set, e.g. `github_1964_bit_length_bignum` which is `--ir`-pinned and needs Z3). The fix is
+FLAIL-mangled into the binary, so the OM rebuild requirement was honoured before testing.
+Bitwuzla-only build (`ENABLE_Z3=OFF`); the model is a frontend lowering with no SMT encoding, so
+the verdict is solver-agnostic.
+
+### 16b. Everything else: unchanged disposition
+The remaining §15b unmodeled-method candidates (`int.from_bytes`/`to_bytes` instance-method
+dispatch, `float.is_integer()`/`float.hex()`, `set.isdisjoint()`) stand as the next "add the
+model" entries. The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand. No further isolated, soundly-fixable
+point fix beyond those candidates is available on current `master` without the §5 architectural
+work; the §5 priority order stands.
