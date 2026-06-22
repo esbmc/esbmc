@@ -20,6 +20,7 @@
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
+#include <util/c_sizeof.h>
 #include <util/string_constant.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
@@ -4084,7 +4085,46 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     else if (converter_.current_lhs)
     {
-      call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+      // Stage 1 object-model migration (#3067/#4773): when the LHS has been
+      // typed as a pointer-to-class reference, allocate the instance as a
+      // typed, non-expiring object and pass the pointer itself as `self`, so
+      // the object survives escaping its defining function. Otherwise keep the
+      // legacy in-place struct construction (self = &lhs). `__ESBMC_new_object`
+      // is intercepted in symex (symex_mem_inf): the LHS pointer type carries
+      // the class type, so the object is sized symbolically by the struct at
+      // symex time — robust to the class struct still gaining fields after this
+      // construction (which a byte-sized allocation cannot handle).
+      // If the lvalue is `object`/Any (a pointer to void/empty), the
+      // new_object interception cannot size the allocation — the pointee type
+      // has no width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any slot legitimately holds the resulting
+      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      if (
+        converter_.current_lhs->type().is_pointer() &&
+        (converter_.current_lhs->type().subtype().id() == "empty" ||
+         converter_.current_lhs->type().subtype().id().empty()))
+      {
+        const typet class_ptr = gen_pointer_type(call.type());
+        converter_.current_lhs->type() = class_ptr;
+        if (converter_.current_lhs->is_symbol())
+          if (
+            symbolt *s = converter_.symbol_table().find_symbol(
+              converter_.current_lhs->identifier()))
+            s->set_type(class_ptr);
+      }
+      if (converter_.current_lhs->type().is_pointer())
+      {
+        const symbolt *new_obj_sym =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+        assert(new_obj_sym && "__ESBMC_new_object model required");
+        code_function_callt alloc_call;
+        alloc_call.lhs() = *converter_.current_lhs;
+        alloc_call.function() = symbol_expr(*new_obj_sym);
+        converter_.add_instruction(alloc_call);
+        call.arguments().push_back(*converter_.current_lhs);
+      }
+      else
+        call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
     }
     else
