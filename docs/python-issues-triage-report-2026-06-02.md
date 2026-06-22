@@ -645,3 +645,52 @@ encoding, so the verdict is solver-agnostic.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §16–§25 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555) are in flight and not yet on `master`; this section is appended as §26.
+
+## 26. 2026-06-22 re-validation (sixteenth sweep) & list.extend(tuple)
+
+Re-test against current `master` (tip `d23bfa2728`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery surfaced another **wrong-verdict / memory-corruption** bug.
+
+### 26a. New isolated, soundly-fixable defect found & fixed
+**`list.extend(tuple)` crashed with an out-of-bounds dereference.**
+
+`a = [1]; a.extend((2, 3))` reported `dereference failure: Access to object out of bounds` at
+`__ESBMC_list_extend` (`list.c:610`). Python's `list.extend()` accepts any iterable, but the
+frontend passed the **tuple struct** straight to the list-extend model, which dereferenced it as
+a `PyListObject` — the same struct-as-list confusion class as the §21 `dict.clear()` bug. Extend
+already special-cased function-call results and strings, but not tuples.
+
+**Fix** (`python_list::build_extend_list_call`): add a tuple branch — when the operand is a tuple
+(detected via the canonical `tuple_handler::is_tuple_type`), materialise its components into a
+fresh list (`create_list` + a per-component `build_push_list_call` + `add_type_info`), then extend
+from that real `PyListObject*`. A small `build_member` IREP2 helper (non-deref struct member
+access, the rvalue counterpart of the existing `build_deref_member`) reads each component. The
+branch is gated on tuple-struct type and placed after the function-call/string branches (which
+rewrite the operand to a list pointer), so list/string/function-call extend are untouched.
+
+This **fixes a wrong verdict / memory-corruption**, the highest-value class. Both tuple literals
+(`a.extend((2, 3))`) and tuple variables (`t = (2, 3); a.extend(t)`) work, since both carry tuple
+struct type after `get_expr`. New regression pair `regression/python/list_extend_tuple{,_fail}`
+(CORE) covering a two-element literal, a single-element tuple, a tuple variable, a mixed-type
+tuple, and the unaffected list-extend path; the positive test is the liveness witness (pre-fix the
+tuple cases OOB-crashed). Verified against CPython; CPython sanity passes; the focused
+`regression/python/{list,extend,tuple}*` ctest subset (287 tests) shows zero new failures (the 38
+failing are `--z3`/`--ir`/`--boolector` environmental on this Bitwuzla-only build); list/str/
+function-call extend unaffected. Code-reviewed (0 critical/major; applied the suggestion to reuse
+`tuple_handler::is_tuple_type` instead of an inlined tag check). Solver-agnostic (frontend
+materialisation + the existing list-extend model, no SMT-encoding change).
+
+### 26b. Everything else: unchanged disposition
+A sibling defect was catalogued but **not** fixed here: `list(tuple)` (the `list()` constructor over
+a tuple) is broken on a *different* code path and remains open. Other deferred candidates stand:
+`str.startswith`/`endswith` with start/end position arguments (clean "requires one argument" error
+today), `zip()` (unmodelled), symbolic/user-function `max`/`min(key=)`, `list.index()`-in-
+`try/except`, `int.to_bytes()`, the bytes/encoding family, `float.hex()` (infeasible), `str.isascii()`
+(string-soundness), and the numeric-tower *properties*. The §3 design-level blockers, §3c timeouts,
+§3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order
+stands.

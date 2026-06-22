@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -153,6 +154,18 @@ exprt build_deref_member(
   migrate_expr(obj, obj2);
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
+
+// Build obj.field : field_type in IREP2 (V.3). `obj` is a struct rvalue (e.g. a
+// tuple struct), so member2t's struct-source precondition holds directly.
+exprt build_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), obj2, field));
 }
 
 // Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
@@ -4229,6 +4242,25 @@ exprt python_list::build_extend_list_call(
     list_type_map[temp_list.id.as_string()].push_back(
       std::make_pair(char_elem.id.as_string(), char_arr_type));
 
+    actual_list = build_symbol(temp_list);
+  }
+
+  // A tuple operand: Python's extend() accepts any iterable. Materialise the
+  // tuple's components into a fresh list so the list model sees a
+  // PyListObject* rather than the tuple struct, which __ESBMC_list_extend
+  // would otherwise dereference out of bounds.
+  if (converter_.get_tuple_handler().is_tuple_type(actual_list.type()))
+  {
+    const typet &other_type = converter_.ns.follow(actual_list.type());
+    symbolt &temp_list = create_list();
+    const std::string &temp_id = temp_list.id.as_string();
+    for (const auto &comp : to_struct_type(other_type).components())
+    {
+      exprt elem = build_member(actual_list, comp.get_name(), comp.type());
+      exprt push = build_push_list_call(temp_list, op, elem);
+      converter_.add_instruction(push);
+      add_type_info(temp_id, std::string(), comp.type());
+    }
     actual_list = build_symbol(temp_list);
   }
 
