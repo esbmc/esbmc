@@ -107,6 +107,19 @@ exprt build_greater_equal(const exprt &a, const exprt &b)
   return migrate_expr_back(greaterthanequal2tc(a2, b2));
 }
 
+// `(t)(a + b)` over synthetic operands of result type `t` (loop-counter
+// increments). migrate lowers a legacy "+" node to add2tc(migrate_type(t),
+// migrate(a), migrate(b)) (util/migrate.cpp i_add path), so this is the
+// byte-identical round-trip. The result type and both operands MUST share
+// bit-width: add2t asserts arithmetic-operand consistency.
+exprt build_add(const exprt &a, const exprt &b, const typet &t)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(add2tc(migrate_type(t), a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -1909,8 +1922,7 @@ exprt python_list::handle_range_slice(
   // counter += step_val. step_val is signed; for positive step it's >0 and
   // converts to size_type cleanly via from_integer.
   exprt step_const = from_integer(step_val, counter_type);
-  exprt increment("+", counter_type);
-  increment.copy_to_operands(build_symbol(counter), step_const);
+  exprt increment = build_add(build_symbol(counter), step_const, counter_type);
   code_assignt counter_update(build_symbol(counter), increment);
   loop_body.copy_to_operands(counter_update);
 
@@ -3034,9 +3046,10 @@ exprt python_list::handle_index_access(
     exprt idx_lt_zero =
       build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
 
-    exprt idx_plus_len("+", ll_type);
-    idx_plus_len.copy_to_operands(
-      build_symbol(idx_sym), build_typecast(build_symbol(len_sym), ll_type));
+    exprt idx_plus_len = build_add(
+      build_symbol(idx_sym),
+      build_typecast(build_symbol(len_sym), ll_type),
+      ll_type);
 
     code_assignt normalize(build_symbol(idx_sym), idx_plus_len);
     normalize.location() = loc;
@@ -3070,8 +3083,8 @@ exprt python_list::handle_index_access(
     // --- 5. __python_str_slice(array, idx, idx+1, 1) ---
     // idx is now a normalized, in-bounds positive index; the slice helper
     // produces a fresh alloca'd single-char null-terminated string.
-    exprt end_expr("+", ll_type);
-    end_expr.copy_to_operands(build_symbol(idx_sym), from_integer(1, ll_type));
+    exprt end_expr =
+      build_add(build_symbol(idx_sym), from_integer(1, ll_type), ll_type);
 
     exprt slice_call = build_call_expr(
       get_str_slice_sym(),
@@ -3623,9 +3636,8 @@ exprt python_list::create_vla(
   for (const auto &list_elem : list_elems)
     then.copy_to_operands(build_push_list_call(result, element, list_elem));
 
-  exprt incr("+", int_type());
-  incr.copy_to_operands(build_symbol(counter));
-  incr.copy_to_operands(gen_one(int_type()));
+  exprt incr =
+    build_add(build_symbol(counter), gen_one(int_type()), int_type());
   code_assignt update(build_symbol(counter), incr);
   then.copy_to_operands(update);
 
@@ -5750,8 +5762,8 @@ void python_list::handle_list_var_unpacking(
       converter_.convert_expression_to_code(push_call));
 
     // loop_idx++
-    exprt inc("+", size_type());
-    inc.copy_to_operands(build_symbol(loop_idx), gen_one(size_type()));
+    exprt inc =
+      build_add(build_symbol(loop_idx), gen_one(size_type()), size_type());
     code_assignt inc_assign(build_symbol(loop_idx), inc);
     loop_body.copy_to_operands(inc_assign);
 
