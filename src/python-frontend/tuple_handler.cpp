@@ -324,7 +324,8 @@ exprt tuple_handler::handle_tuple_subscript(
 
     // Normalise negative indices: idx_norm = i < 0 ? i + n : i.
     // V.3: built in IREP2 (all operands are idx_type, so the if2t branch
-    // types agree); idxnorm2 is reused by the bounds check and select chain.
+    // types agree). idx2t/idxnorm2 are reused by the bounds check and the
+    // select chain below.
     const type2tc idx2t = migrate_type(idx_type);
     expr2tc index2;
     migrate_expr(index_expr, index2);
