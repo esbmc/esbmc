@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^Violated property:$
+^\s*v is 0xdead, not 0 -- must fail$
+^VERIFICATION FAILED$
