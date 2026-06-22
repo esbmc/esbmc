@@ -554,6 +554,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return build_array(long_long_int_type(), type_size);
   }
 
+  // bytearray — the mutable counterpart of bytes — is not modeled. Reject it
+  // with a clean diagnostic: the unsupported-type fall-through below returns an
+  // empty_typet() that later crashes symex with an uncaught
+  // type2t::symbolic_type_excp (SIGABRT) on item assignment / bytearray(n).
+  if (ast_type == "bytearray")
+    throw std::runtime_error(
+      "bytearray is not supported; use bytes for an immutable byte sequence");
+
   // divmod() — returns tuple of (quotient, remainder)
   // The return type is determined dynamically based on operands
   // Let handle_divmod create the proper type
