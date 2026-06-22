@@ -195,7 +195,8 @@ public:
   exprt extract_pyobject_value(
     const exprt &pyobject_expr,
     const typet &elem_type,
-    bool mixed_numeric = false);
+    bool mixed_numeric = false,
+    bool string_safe = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
