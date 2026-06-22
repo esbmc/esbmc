@@ -498,37 +498,39 @@ exprt python_converter::handle_none_comparison(
   return isnone_expr;
 }
 
+/// Build the Python 'is' identity equality in IREP2. The operands are the
+/// raw values, or the arrays' base addresses when both sides are arrays.
+expr2tc python_converter::build_is_equality(const exprt &lhs, const exprt &rhs)
+{
+  expr2tc lhs2, rhs2;
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Compare base addresses of the arrays
+    migrate_expr(string_handler_.get_array_base_address(lhs), lhs2);
+    migrate_expr(string_handler_.get_array_base_address(rhs), rhs2);
+  }
+  else
+  {
+    // Default identity comparison
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+  }
+
+  return equality2tc(lhs2, rhs2);
+}
+
 /// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
   const exprt &rhs)
 {
-  typet bool_type_result = bool_type();
-  exprt is_expr("=", bool_type_result);
-
-  if (lhs.type().is_array() && rhs.type().is_array())
-  {
-    // Compare base addresses of the arrays
-    is_expr.copy_to_operands(
-      string_handler_.get_array_base_address(lhs),
-      string_handler_.get_array_base_address(rhs));
-  }
-  else
-  {
-    // Default identity comparison
-    is_expr.copy_to_operands(lhs, rhs);
-  }
-
-  return is_expr;
+  return migrate_expr_back(build_is_equality(lhs, rhs));
 }
 
 /// Construct the negation of an 'is' expression, used for 'is not'
 exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
 {
-  exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
-  exprt not_expr("not", bool_type());
-  not_expr.copy_to_operands(is_expr);
-  return not_expr;
+  return migrate_expr_back(not2tc(build_is_equality(lhs, rhs)));
 }
 
 exprt python_converter::handle_string_type_mismatch(
