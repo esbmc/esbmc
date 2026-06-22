@@ -474,6 +474,24 @@ std::optional<exprt> dispatch_one_arg_string_methods(
     {"partition", "sep", &string_handler::handle_string_partition},
   }};
 
+  // startswith()/endswith() accept optional start/end position arguments:
+  // s.startswith(prefix, start[, end]). Handle the 2/3-arg forms before the
+  // single-argument table below.
+  if (
+    (method_name == "startswith" || method_name == "endswith") &&
+    args.size() >= 2)
+  {
+    if (args.size() > 3)
+      throw std::runtime_error(
+        method_name + "() takes at most 3 arguments");
+    return self.handle_startswith_endswith_with_pos(
+      get_receiver_expr(),
+      args,
+      converter,
+      get_location(),
+      method_name == "endswith");
+  }
+
   for (const auto &[name, arg_name, handler] : one_arg_handlers)
   {
     if (method_name != name)
@@ -832,6 +850,67 @@ std::optional<exprt> dispatch_format_methods(
   return std::nullopt;
 }
 } // namespace string_method_dispatch
+
+exprt string_handler::handle_startswith_endswith_with_pos(
+  const exprt &string_obj,
+  const nlohmann::json &args,
+  python_converter &converter,
+  const locationt &location,
+  bool is_suffix)
+{
+  const char *name = is_suffix ? "endswith" : "startswith";
+
+  // s.startswith(prefix, start[, end]) == s[start:end].startswith(prefix)
+  // (and likewise for endswith). Compute the s[start:end] substring on a
+  // constant receiver and run the base method on it. start/end must be
+  // constant ints; a non-constant receiver is rejected cleanly (matching the
+  // constant-only support of the other string methods).
+  std::string s;
+  if (!try_extract_const_string_expr(string_obj, s))
+    throw std::runtime_error(
+      std::string(name) +
+      "() with start/end is only supported on a constant string");
+
+  const long long len = static_cast<long long>(s.size());
+  const long long start = string_call_utils::required_constant_int_arg(
+    args[1], std::string(name) + "() start must be a constant int", converter);
+  const long long end =
+    (args.size() == 3)
+      ? string_call_utils::required_constant_int_arg(
+          args[2],
+          std::string(name) + "() end must be a constant int",
+          converter)
+      : len;
+
+  // CPython: once the raw start runs past the end of the string, both methods
+  // return False even for an empty affix. Without this guard the start would
+  // clamp to len, yielding an empty slice that the base handler's empty-affix
+  // short-circuit would wrongly report as a match. (start == len still matches
+  // an empty affix, so the comparison is strict.)
+  if (start > len)
+    return gen_boolean(false);
+
+  // Python slice clamping for s[start:end].
+  auto clamp = [len](long long i) {
+    if (i < 0)
+      i += len;
+    if (i < 0)
+      i = 0;
+    if (i > len)
+      i = len;
+    return i;
+  };
+  const long long lo = clamp(start);
+  const long long hi = clamp(end);
+  const std::string sub =
+    (lo < hi) ? s.substr(static_cast<size_t>(lo), static_cast<size_t>(hi - lo))
+              : std::string();
+
+  exprt sub_expr = string_builder_->build_string_literal(sub);
+  exprt affix_expr = converter.get_expr(args[0]);
+  return is_suffix ? handle_string_endswith(sub_expr, affix_expr, location)
+                   : handle_string_startswith(sub_expr, affix_expr, location);
+}
 
 exprt string_handler::handle_string_startswith(
   const exprt &string_obj,

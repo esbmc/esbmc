@@ -286,6 +286,19 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.startswith/endswith with optional start/end position
+   *        arguments: s.startswith(prefix, start[, end]) is evaluated as
+   *        s[start:end].startswith(prefix). @p is_suffix selects endswith.
+   *        Constant receiver and constant start/end only.
+   */
+  exprt handle_startswith_endswith_with_pos(
+    const exprt &string_obj,
+    const nlohmann::json &args,
+    python_converter &converter,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
    * @brief Handle str.isdigit() method
    * @param string_obj String object
    * @param location Source location
