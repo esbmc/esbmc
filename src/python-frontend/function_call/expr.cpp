@@ -1933,7 +1933,8 @@ bool function_call_expr::is_set_method_call() const
   if (
     method_name != "add" && method_name != "discard" &&
     method_name != "issubset" && method_name != "issuperset" &&
-    method_name != "update" && method_name != "symmetric_difference")
+    method_name != "isdisjoint" && method_name != "update" &&
+    method_name != "symmetric_difference")
     return false;
 
   // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
@@ -1959,12 +1960,15 @@ exprt function_call_expr::handle_set_method() const
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
 
-  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
-  // which cannot change a subset/superset verdict. Use the iterable directly
-  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
-  // inside a loop would otherwise rebuild the set (one push plus one
-  // containment scan per element) on every iteration (#4805).
-  if (method_name == "issubset" || method_name == "issuperset")
+  // set(<iterable>).issubset/issuperset/isdisjoint(y): set() here only
+  // deduplicates, which cannot change a subset/superset/disjoint verdict. Use
+  // the iterable directly and skip materializing the set — a guard like
+  // `set(xs).issuperset(...)` inside a loop would otherwise rebuild the set
+  // (one push plus one containment scan per element) on every iteration
+  // (#4805).
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
   {
     const auto &receiver = call_["func"]["value"];
     if (
@@ -1999,8 +2003,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / issuperset / update / symmetric_difference take another
-  // set/iterable.
+  // issubset / issuperset / isdisjoint / update / symmetric_difference take
+  // another set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(

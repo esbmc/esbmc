@@ -648,6 +648,52 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) is in flight and not yet on
+> `master`; this section is appended as §17 of the next sweep so the two PRs do not collide on
+> the section number. The maintainer orders §16 before §17.
+
+## 17. 2026-06-22 re-validation (seventh sweep) & set.isdisjoint() model
+
+Re-test against current `master` (tip `38fd6daaa1`). KNOWNBUG classification unchanged — §3
+holds. This sweep drained the `set.isdisjoint()` entry from the §15b backlog.
+
+### 17a. New isolated, soundly-fixable defect found & fixed
+**`set.isdisjoint()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`{1,2,3}.isdisjoint({4,5,6})` reported `Unsupported function 'isdisjoint' is reached →
+VERIFICATION FAILED` even though the two sets share no elements. `isdisjoint` had no dispatch
+entry, so ESBMC lowered the call to the unsupported-function stub. The sibling relations
+`issubset`/`issuperset` were already modeled by `python_set::build_set_relation_call`, which
+iterates one list and clears a `true`-initialised bool when the per-element predicate fails.
+
+**Fix:** `A.isdisjoint(B)` is the exact dual of `A.issubset(B)` — iterate `A`, but clear the
+result when an element **is** present in `B` (a shared element means the sets are not disjoint)
+rather than when it is absent. Extend `build_set_relation_call` with a `disjoint` flag selecting
+the `in` trigger over `not in`, and add `isdisjoint` to the three dispatch sites
+(`is_set_method_call`, the `set(<iterable>)` constructor fast path in `handle_set_method`, and
+`build_set_method_call`). The empty-set and any-iterable cases fall out of the existing
+list-based model for free (empty receiver → loop body never runs → stays disjoint; the argument
+is consumed as a list via `__ESBMC_list_contains`). Verified against CPython for disjoint,
+overlapping, empty-receiver, `frozenset`, and `set(<list>)`-receiver cases.
+
+Like §16a, this **restores a working feature** (any program calling `set.isdisjoint()` now
+verifies with the correct boolean) rather than converting a crash to a diagnostic. New regression
+pair `regression/python/set-isdisjoint{,_fail}` (CORE); the positive test is the **C-Live**
+liveness witness for the added branches — without the dispatch branch the call lowers to the
+unsupported-function stub and `set-isdisjoint` would report `FAILED`, so its `SUCCESSFUL` verdict
+proves the new path executes (the per-report convention used for §11a/§12a/§15a/§16a). The full
+`regression/python/` suite shows zero new failures (only the pre-existing Bitwuzla-only
+`--z3`/`--ir` environmental set). Code-reviewed: 0 critical/major/medium findings. Bitwuzla-only
+build (`ENABLE_Z3=OFF`); the change is frontend IR lowering with no SMT-encoding change, so the
+verdict is solver-agnostic.
+
+### 17b. Everything else: unchanged disposition
+The remaining §15b unmodeled-method candidates (`int.from_bytes`/`to_bytes` instance-method
+dispatch — note the `int.from_bytes` *classmethod* form already verifies — and `float.is_integer()`
+/ `float.hex()`, which both need a `float` operational model plus float instance-method
+receiver-passing wiring) stand as the next "add the model" entries. The §3 design-level blockers,
+§3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all
+stand; the §5 priority order stands.
 ## 16. 2026-06-22 re-validation (sixth sweep) & int.bit_count() model
 
 Re-test against current `master` (tip `38fd6daaa1`, with §11–§15's PRs now landed:
