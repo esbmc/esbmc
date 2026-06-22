@@ -1,6 +1,7 @@
 #include "irep2/irep2_expr.h"
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_fp_rounding_utils.h>
+#include <solvers/smt/fp/ir_ieee_conv.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/message.h>
@@ -561,8 +562,21 @@ smt_astt smt_solver_baset::convert_is_nan(const expr2tc &expr)
   const isnan2t &isnan = to_isnan2t(expr);
 
   // Anything other than floats will never be NaNs
-  if (!is_floatbv_type(isnan.value) || int_encoding)
+  if (!is_floatbv_type(isnan.value))
     return mk_smt_bool(false);
+
+  if (int_encoding)
+  {
+    // Under --ir-ieee the operand is a known NaN iff its tracked NaN
+    // predicate holds; values with no tracked predicate are assumed
+    // non-NaN. Plain --int-encoding (without --ir-ieee) has no predicate
+    // tracking at all, so it conservatively reports false.
+    if (!ir_ieee)
+      return mk_smt_bool(false);
+    smt_astt operand = convert_ast(isnan.value);
+    smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+    return nan_pred ? nan_pred : mk_smt_bool(false);
+  }
 
   smt_astt operand = convert_ast(isnan.value);
   return fp_api->mk_smt_fpbv_is_nan(operand);

@@ -82,6 +82,7 @@
 
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 class python_converter;
 class type_handler;
@@ -467,6 +468,18 @@ public:
    */
   static bool is_value_returning_method(const std::string &method_name);
 
+  /// Return the keys-list or values-list symbol id for dict_sym_id.
+  /// Returns an empty string when the dict was not created via a literal
+  /// (e.g. it is a function parameter).
+  static const std::string &
+  get_internal_list_id(const std::string &dict_sym_id, bool keys)
+  {
+    static const std::string empty;
+    auto &m = keys ? dict_keys_list_id_ : dict_vals_list_id_;
+    auto it = m.find(dict_sym_id);
+    return it != m.end() ? it->second : empty;
+  }
+
   /**
    * @brief Handles dict.update() method calls.
    * Implements Python's dict.update(other) semantics:
@@ -580,6 +593,14 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
+
+  /// Maps dict struct symbol id to its internal keys-list symbol id.
+  /// Populated in create_dict_from_literal; queried when lowering
+  /// ESBMC_keys_N = d.keys() to propagate list_type_map entries.
+  static std::unordered_map<std::string, std::string> dict_keys_list_id_;
+
+  /// Maps dict struct symbol id to its internal values-list symbol id.
+  static std::unordered_map<std::string, std::string> dict_vals_list_id_;
 
   /**
    * @brief Extract key type from dict type annotation.

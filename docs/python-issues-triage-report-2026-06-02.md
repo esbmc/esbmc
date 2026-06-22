@@ -435,6 +435,213 @@ method result (`len("x".center(7))`) still mis-verifies even though the value (`
 compares equal — a distinct `len`/`strlen` concern on the padded array, tracked for a later sweep.
 
 ### 14b. Everything else: unchanged disposition
+> **Note on numbering.** §11–§14 (PRs #5510/#5513/#5515/#5518) are all in flight and not yet on
+> `master`; this section is appended as §15 of the fifth 2026-06-21 sweep. When they land, the
+> maintainer orders §11 → §12 → §13 → §14 → §15.
+
+## 15. 2026-06-21 re-validation (fifth sweep) & dict-union SIGSEGV→diagnostic
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged; PRs #5510/#5513/#5515/#5518
+OPEN, awaiting review). KNOWNBUG classification unchanged. This sweep probed dict/set/int/float/
+list method idioms (fresh ground — the §11 string/cmath/numpy battery is drained).
+
+### 15a. New isolated, soundly-fixable defect found & fixed
+**Python dict union (`d1 | d2`) SIGSEGV'd in the SMT backend.**
+
+`{"a":1} | {"b":2}` (PEP 584 dict merge, Python 3.9+) crashed with `EXC_BAD_ACCESS` inside
+`bitwuzla_mk_term2` — the faulting address decoded to ASCII (`...tuple_`), i.e. a struct/type
+irep was handed to the solver as a term pointer. The crash reproduced for every key type; set
+union (`{1,2}|{3,4}`) and integer bitwise-or (`6|1`) were unaffected.
+
+**Root cause** (`src/python-frontend/converter/converter_binop.cpp`,
+`build_binary_operator_expr`). Set union and the difference/intersection ops are intercepted for
+list-typed (set) operands; integer `|` takes the proper bitvector path. But **two dict operands
+matched neither** — dict union is unmodeled — so they fell through to `build_binary_expression`,
+whose bitwise branch (`is_bitwise_op`) only type-adjusts bv/bool operands and then emitted a raw
+`BitOr` over the two dict structs. That malformed term crashed the Bitwuzla encoder.
+
+**Fix:** add a guard beside the existing set-operation handling that rejects bitwise ops
+(`BitOr`/`BitAnd`/`BitXor`) on dict operands with a clean
+`ERROR: dict union '|' and bitwise operations on dict are not supported`. Modelling dict merge
+properly (copy-then-update semantics with right-wins key precedence) is a feature for a dedicated
+change; this is the §5-item-5 crash→diagnostic robustness step, bounded and sound. Set/int
+bitwise ops and dict `==`/`.update()` are untouched. New regression pair
+`regression/python/dict_union_unsupported` (clean error — the **C-Live** liveness witness for the
+added guard) + `set_union_after_dict_fix` (set/int `|` still verify). Broad `regression/python/`
+sweep: **zero new failures** (only the pre-existing `--z3`/`--ir` environmental set).
+
+Bitwuzla-only build; the fix is a frontend dispatch guard with no SMT encoding, so the verdict is
+solver-agnostic.
+
+### 15b. Other fresh defects observed this sweep (catalogued, not yet fixed)
+The dict/int/float probe also surfaced (deferred — several are unmodeled-method feature gaps, and
+one is blocked behind an in-flight PR):
+- `int.bit_count()`, `int.from_bytes()`, `int.to_bytes()`, `float.is_integer()`, `float.hex()` —
+  **unmodeled methods**; ESBMC replaces the undefined function with `assert(false)`, so any program
+  calling them reports a spurious `FAILED`. Each is an isolated "add the model" candidate.
+- `set.isdisjoint()` — `ERROR: Object "" not found` (dispatch/model gap).
+- `len()` of a space-padded `str.center()` result still mis-verifies (noted in §14) — blocked
+  behind PR #5518, which must land first to make `center` return a concrete value.
+
+### 15c. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
+> **Note on numbering.** §11 (the first 2026-06-21 sweep — the bare imaginary-literal
+> complex-argument crash) is in flight as PR #5510 and not yet on `master`; this section is
+> appended as §12 of the same day's second sweep so the two PRs do not collide on the section
+> number. When both land, the maintainer orders §11 before §12.
+
+## 12. 2026-06-21 re-validation (second sweep) & numpy round(x, decimals) crash fix
+
+Re-test against current `master` (tip `4a5b002c26`, unchanged since §11's sweep — zero new
+commits). The open KNOWNBUG classification is therefore identical to §11's: zero
+KNOWNBUG→CORE flips, §3 holds. With no master movement, this sweep instead drained the
+isolated-crash backlog surfaced by §11's idiom-probing battery.
+
+### 12a. New isolated, soundly-fixable defect found & fixed
+**`np.round(x, decimals)` — the 2-argument form — aborted on scalar-constant operands.**
+
+`np.round(2.567, 1)` crashed (`WARNING: Unknown operator: round`, then SIGABRT). The 1-argument
+form (`np.round(2.567)`) and `np.around` (clean "unsupported" error) were fine; only the 2-arg
+`round` crashed.
+
+**Root cause** (`src/python-frontend/numpy_call_expr.cpp`). `round` is registered in
+`is_math_function()`, so a 2-arg scalar-constant call enters the scalar-fold block — but `round`
+was **absent from the `compute_scalar_result` table and has no `operator_map()` entry**, so it
+fell through to the generic `create_binary_op("round", …)` BinOp path, which has no rule for
+`round` → "Unknown operator" → `migrate_expr` abort. This is the **exact** trap the code already
+special-cased two lines above for `copysign`/`fmax`/`fmin` ("have no operator_map() entry and no
+handler, so the BinOp path below crashes migrate_expr").
+
+**Fix:** add `round` to the scalar-fold table and to the special-case fold guard, folding the
+scalar-constant case as `std::nearbyint(x * 10^d) / 10^d`. Under the default FP rounding mode
+this is round-half-to-even, so it matches numpy bit-for-bit — verified for positive decimals
+(`round(2.567,1)==2.6`, `round(2.567,2)==2.57`), zero decimals, **negative** decimals
+(`round(12345,-2)==12300`), and banker's rounding (`round(2.5,0)==2.0`, `round(3.5,0)==4.0`).
+The symbolic-operand case already degrades to a clean `Unsupported Numpy call: round` diagnostic
+(same as `copysign`/`fmax`/`fmin`, which also fold only constants), so no crash path remains.
+
+New regression pair `regression/numpy/round_decimals{,_fail}` (CORE, `--incremental-bmc`); the
+positive test is the **C-Live** liveness witness for the added `round` branch (it SIGABRT'd
+pre-fix). Full `regression/numpy/` suite **368/368 green**; the change mirrors an established,
+already-shipped precedent in the same function. Like §10a/§11a this **restores a working feature**
+(2-arg `np.round` now verifies with exact values) rather than only converting a crash to a
+diagnostic. Bitwuzla-only build (`ENABLE_Z3=OFF`), as §11; the fix is compile-time scalar
+constant-folding in the frontend with no SMT encoding, so the verdict is solver-agnostic.
+
+### 12b. Everything else: unchanged disposition
+## 11. 2026-06-21 re-validation & bare-imaginary-literal argument crash fix
+
+Re-test against current `master` (tip `4a5b002c26`), after the **83 commits** since §10's tip
+`79c8b93eb0` — predominantly the V.3 IREP2 frontend rebuild (`#5454`/`#5459`/`#5472`–`#5493`
+build comparison constant-folds, list/tuple/set/slice/string-index guards, any()/all()
+reductions, complex div-by-zero and numpy-overflow asserts, pointer is-None checks, etc.) plus
+`#5502` (reject str-variable `%` formatting instead of crashing). A `ctest` flip-check over the
+39 KNOWNBUG `humaneval`/`quixbugs` tests reproduced **zero KNOWNBUG→CORE flips** — every test
+that completed (including the design-cluster cases `depth_first_search`, `detect_cycle`,
+`minimum_spanning_tree(_fail)`, and the perf-timeout cases `humaneval_33`/`37`/`39`/`93`/`158`,
+which genuinely ran 120–240 s against their own TIMEOUT property) still misses its expected
+verdict; the §3 classification holds. None of the 83 commits touches the bare-imaginary-literal
+argument path, and the fix below lives entirely in the general call-argument lowering in
+`function_call/expr.cpp`, so it cannot move any KNOWNBUG verdict.
+
+### 11a. New isolated, soundly-fixable defect found & fixed
+**A bare pure-imaginary literal passed directly as a by-value `complex` argument crashed
+(SIGABRT, "got pointer, expected struct").**
+
+`f(0.5j)` — where `f` takes a `complex` parameter — aborted with
+
+```
+ERROR: function call: argument "…@F@f@z" type mismatch: got pointer, expected struct
+```
+
+This is the **root** of the `got pointer, expected struct` argument-binding family the prior
+sweeps repeatedly hit (§8/§9 `depth_first_search`, §10 `cmath.acos`/`acosh`): §10 (PR #5415)
+only *worked around* it for `acos`/`acosh` via a pure-imaginary fast path that bypasses the
+model call. Probing the rest of the surface showed it is **general** — every cmath model
+function crashes on a bare imaginary literal (`cmath.exp(0.5j)`, `sqrt`, `sin`, `cos`, `tan`,
+`sinh`, `cosh`, `tanh`, `phase`, `polar`), and so does any plain user function
+`def f(z: complex)`. The crash fires **only** for a bare imaginary `ast.Constant` used
+*directly* as an argument; every other form already worked: `f(1+1j)`, `f(0+0.5j)` (BinOp),
+`w = 0.5j; f(w)` (variable), `f(complex(0, 0.5))` (ctor) — none crashed.
+
+**Root cause** (`src/python-frontend/function_call/expr.cpp`,
+`function_call_expr::handle_general_function_call`). `ast2json` serialises a Python complex
+value as its `str()` representation (`"0.5j"`), so a complex `Constant`'s JSON `value` field is
+a **string**. `get_literal` correctly reads the `esbmc_type_annotation == "complex"` /
+`real_value` / `imag_value` fields and returns a proper `complex` struct. But a post-`get_expr`
+override unconditionally replaced *any* `Constant` whose JSON `value` is a string with a string
+literal — clobbering the complex struct, which then fell into `build_address_of`, yielding
+`&"0.5j"` (a `pointer`) bound to the by-value `complex` (`struct`) parameter → the symex abort.
+A BinOp/Name/Call argument has a different `_type`, so the override never fired — hence those
+forms worked.
+
+**Fix:** guard the string-literal override to skip complex-annotated constants
+(`!arg_is_complex_literal && _type == "Constant" && value.is_string()`). Minimal, general (no
+per-function workaround), and confined to the Python frontend — it only narrows a frontend
+override that was already wrong for complex constants. New regression pair
+`regression/python/imag_literal_arg{,_fail}` (`imag_literal_arg` is the **C-Live** liveness
+witness for the added guard: without the fix its `f(0.5j)` call took the clobbering path and
+SIGABRT'd; with the fix it takes the new guarded path and verifies). After the fix, the full
+user-function + cmath repro set returns `VERIFICATION SUCCESSFUL`; the six already-working forms
+are unchanged; the cmath/complex regression subset (174 tests) is 100% green; CPython sanity
+(`check_python_tests.sh imag_literal_arg`) passes.
+
+Unlike §6a/§7a, and like §10a, this fix **restores working behaviour** (every cmath function and
+every user function now accepts a bare imaginary literal) rather than only converting a crash to
+a diagnostic — §5-item-5 robustness, but with a sound value model. This sweep ran a
+Bitwuzla-only `esbmc` (this build has `ENABLE_Z3=OFF`, as the §7/§8 sweeps also ran
+single-solver); the fix is a purely syntactic JSON-field guard with no SMT encoding, so the
+verdict is solver-agnostic.
+
+### 11b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
+on current `master` without the §5 architectural work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §11 (PR #5510, bare imaginary-literal complex-argument crash) has landed
+> on `master`; §12 (PR #5513, `np.round(x, decimals)` crash) is still in flight and not yet on
+> `master`. This section is appended as §13 of the third 2026-06-21 sweep so the same-day PRs do
+> not collide on the section number. The maintainer orders §11 → §12 → §13.
+
+## 13. 2026-06-21 re-validation (third sweep) & bytearray crash→diagnostic
+
+Re-test against current `master` (tip `4a5b002c26`, still unchanged — zero new commits since §11;
+PRs #5510 and #5513 OPEN, awaiting review). KNOWNBUG classification identical to §11/§12: zero
+flips, §3 holds. This sweep drained the last isolated crash from §11's idiom-probing battery.
+
+### 13a. New isolated, soundly-fixable defect found & fixed
+**`bytearray` crashed ESBMC with an uncaught C++ exception (SIGABRT).**
+
+`bytearray([1,2,3]); b[0]=9` and `bytearray(3)` aborted with `terminating due to uncaught
+exception type2t::symbolic_type_excp`; `bytearray([1,2,3])` followed by a read returned a bogus
+verdict. `bytes(...)` (the immutable form) was and remains fine.
+
+**Root cause** (`src/python-frontend/type_handler.cpp::get_typet`). `bytes` is modeled (array of
+int8); `bytearray` (its mutable counterpart) is not, so it reached the unsupported-but-defined
+fall-through that merely `log_warning`s and returns `empty_typet()`. That empty type then
+propagated into symex and was migrated to IREP2, where the empty type id raised
+`type2t::symbolic_type_excp` — uncaught → SIGABRT (on `bytearray(n)` / item assignment) or a
+silently wrong verdict (on plain construction+read).
+
+**Fix:** add an explicit `bytearray` case beside the `bytes` handler that throws a clean
+`std::runtime_error` — ESBMC's established mechanism for "unsupported feature," reported as
+`ERROR: bytearray is not supported; use bytes for an immutable byte sequence` (clean exit 254).
+All three crashing/wrong-verdict cases now produce the same deterministic diagnostic; `bytes` is
+untouched. This is §5-item-5 robustness (crash → clean diagnostic) and, like #5042/§6a, **does not
+flip a KNOWNBUG** — it removes a crash on an unsupported feature rather than enabling one.
+
+New regression pair: `regression/python/bytearray_unsupported` (asserts the clean diagnostic) and
+`regression/python/bytes_after_bytearray_fix` (guards that the adjacent `bytes` path still
+verifies). Both green via `ctest`; CPython sanity passes; a broad `regression/python/` sweep shows
+**zero new failures** attributable to the change (the only failures are the pre-existing
+Bitwuzla-only environmental set: `--z3`-pinned and `--ir`-pinned tests, none touching `bytearray`).
+Bitwuzla-only build (`ENABLE_Z3=OFF`); the fix is a frontend type-resolution guard with no SMT
+encoding, so the verdict is solver-agnostic.
+
+### 13b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. No further isolated, soundly-fixable point fix is available
 on current `master` without the §5 architectural work; the §5 priority order stands.

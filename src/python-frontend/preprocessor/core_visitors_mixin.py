@@ -351,16 +351,20 @@ class CoreVisitorsMixin:
         return result
 
     def _maybe_lower_dictcomp_over_items(self, node):
-        """Lower ``x = {key: val for k, v in d.items()}`` into ``x = {}``
-        followed by a population loop ``for k, v in d.items(): x[key] = val``.
+        """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
+        followed by a population loop, e.g.
+        ``x = {key: val for k, v in d.items()}`` ->
+        ``x = {}; for k, v in d.items(): x[key] = val``, and
+        ``x = {v: val for u, v in d}`` -> ``x = {}; for u, v in d: x[v] = val``.
 
         The converter's dict-comprehension handler models a list-of-tuples
-        iterable but not a ``dict.items()`` view (items() returns the keys list
-        as a placeholder, so the (k, v) tuple target cannot be unpacked).
-        Reusing the for-loop items() lowering (visit_For -> _transform_items_for)
-        gives the comprehension the (key, value) bindings it needs. Scoped to
-        ``.items()`` iterables so list-of-tuples dict comprehensions keep their
-        existing converter path.
+        iterable but not a dict view: ``d.items()`` returns the keys list as a
+        placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
+        dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
+        for-loop lowering (visit_For -> _transform_items_for / dict-key
+        iteration) gives the comprehension the bindings it needs. Scoped to dict
+        iterables so list-of-tuples dict comprehensions keep their existing
+        converter path.
         """
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
             return None
@@ -372,7 +376,14 @@ class CoreVisitorsMixin:
         outer = comp.generators[0].iter
         is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
                          and outer.func.attr == "items")
-        if not is_items_call:
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        if not (is_items_call or is_dict_iter or is_keys_call):
             return None
 
         target_id = node.targets[0].id
@@ -879,6 +890,28 @@ class CoreVisitorsMixin:
                 param_type = self._extract_type_from_annotation(arg.annotation)
                 self.known_variable_types[arg.arg] = param_type
                 self.variable_annotations[arg.arg] = arg.annotation
+        self._infer_dict_params_structurally(node)
+
+    def _infer_dict_params_structurally(self, node):
+        """Recover the container *kind* of unannotated parameters.
+
+        An unannotated parameter carries no static type, so a dict passed into
+        it is treated as a list: iterating it (`for k, v in p`) or comprehending
+        over it then fails. Only dicts expose .items()/.keys()/.values(), so a
+        parameter on which any of those is called in the body is a dict. This
+        recovers the kind, not the element type (which would be unsound to
+        guess), and unblocks iteration/comprehension over a parameter dict
+        (#5444).
+        """
+        # Unannotated parameters only; annotated ones are recorded above.
+        all_args = (list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs))
+        candidates = {arg.arg for arg in all_args if arg.annotation is None}
+        dict_methods = {"items", "keys", "values"}
+        for n in ast.walk(node):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in dict_methods and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id in candidates):
+                self.known_variable_types[n.func.value.id] = "dict"
 
     def _build_qualified_function_name(self, node):
         if hasattr(self, "current_class_name") and self.current_class_name:
@@ -1083,6 +1116,10 @@ class CoreVisitorsMixin:
         # restore on exit so a dict named `d` in one function does not make a
         # same-named plain parameter in another function look like a dict.
         saved_dict_vars = set(self.dict_literal_vars)
+        # Parameter/local variable kinds are scope-local for the same reason:
+        # an unannotated dict parameter recorded in one function must not make a
+        # same-named plain parameter in another function look like a dict (#5444).
+        saved_known_types = dict(self.known_variable_types)
         # Per-function scope for call-origin tracking and the eq-only set.
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
@@ -1119,5 +1156,6 @@ class CoreVisitorsMixin:
             return return_nodes
         finally:
             self.dict_literal_vars = saved_dict_vars
+            self.known_variable_types = saved_known_types
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
