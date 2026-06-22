@@ -387,6 +387,50 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §11 (the first 2026-06-21 sweep — the bare imaginary-literal
+> complex-argument crash) is in flight as PR #5510 and not yet on `master`; this section is
+> appended as §12 of the same day's second sweep so the two PRs do not collide on the section
+> number. When both land, the maintainer orders §11 before §12.
+
+## 12. 2026-06-21 re-validation (second sweep) & numpy round(x, decimals) crash fix
+
+Re-test against current `master` (tip `4a5b002c26`, unchanged since §11's sweep — zero new
+commits). The open KNOWNBUG classification is therefore identical to §11's: zero
+KNOWNBUG→CORE flips, §3 holds. With no master movement, this sweep instead drained the
+isolated-crash backlog surfaced by §11's idiom-probing battery.
+
+### 12a. New isolated, soundly-fixable defect found & fixed
+**`np.round(x, decimals)` — the 2-argument form — aborted on scalar-constant operands.**
+
+`np.round(2.567, 1)` crashed (`WARNING: Unknown operator: round`, then SIGABRT). The 1-argument
+form (`np.round(2.567)`) and `np.around` (clean "unsupported" error) were fine; only the 2-arg
+`round` crashed.
+
+**Root cause** (`src/python-frontend/numpy_call_expr.cpp`). `round` is registered in
+`is_math_function()`, so a 2-arg scalar-constant call enters the scalar-fold block — but `round`
+was **absent from the `compute_scalar_result` table and has no `operator_map()` entry**, so it
+fell through to the generic `create_binary_op("round", …)` BinOp path, which has no rule for
+`round` → "Unknown operator" → `migrate_expr` abort. This is the **exact** trap the code already
+special-cased two lines above for `copysign`/`fmax`/`fmin` ("have no operator_map() entry and no
+handler, so the BinOp path below crashes migrate_expr").
+
+**Fix:** add `round` to the scalar-fold table and to the special-case fold guard, folding the
+scalar-constant case as `std::nearbyint(x * 10^d) / 10^d`. Under the default FP rounding mode
+this is round-half-to-even, so it matches numpy bit-for-bit — verified for positive decimals
+(`round(2.567,1)==2.6`, `round(2.567,2)==2.57`), zero decimals, **negative** decimals
+(`round(12345,-2)==12300`), and banker's rounding (`round(2.5,0)==2.0`, `round(3.5,0)==4.0`).
+The symbolic-operand case already degrades to a clean `Unsupported Numpy call: round` diagnostic
+(same as `copysign`/`fmax`/`fmin`, which also fold only constants), so no crash path remains.
+
+New regression pair `regression/numpy/round_decimals{,_fail}` (CORE, `--incremental-bmc`); the
+positive test is the **C-Live** liveness witness for the added `round` branch (it SIGABRT'd
+pre-fix). Full `regression/numpy/` suite **368/368 green**; the change mirrors an established,
+already-shipped precedent in the same function. Like §10a/§11a this **restores a working feature**
+(2-arg `np.round` now verifies with exact values) rather than only converting a crash to a
+diagnostic. Bitwuzla-only build (`ENABLE_Z3=OFF`), as §11; the fix is compile-time scalar
+constant-folding in the frontend with no SMT encoding, so the verdict is solver-agnostic.
+
+### 12b. Everything else: unchanged disposition
 ## 11. 2026-06-21 re-validation & bare-imaginary-literal argument crash fix
 
 Re-test against current `master` (tip `4a5b002c26`), after the **83 commits** since §10's tip
