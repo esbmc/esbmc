@@ -154,6 +154,14 @@ public:
   void update_hash_collision_set();
 
   /**
+   *  Remove the current state's hash from the seen set. Used when a transition
+   *  is pruned by MPOR after its state hash has already been recorded, so that
+   *  the seen set reflects the state explored before the pruned transition
+   *  rather than the pruned state itself.
+   */
+  void remove_hash_collision_entry();
+
+  /**
    *  Perform context switch operation triggered elsewhere.
    *  The analyse_* functions make a decision on whether or not to take a
    *  context switch, but defer the actual taking of this switch until later,

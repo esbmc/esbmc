@@ -245,7 +245,7 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -297,7 +297,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+      if not validate:
+        command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check-only --no-assertions "
@@ -325,7 +327,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   return command_line
 
 def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "

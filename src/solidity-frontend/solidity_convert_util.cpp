@@ -10,6 +10,7 @@
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/c_sizeof.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
@@ -465,14 +466,25 @@ bool solidity_convertert::is_dyn_array(const nlohmann::json &ast_node)
 
 void solidity_convertert::get_size_of_expr(const typet &t, exprt &size_of_expr)
 {
-  size_of_expr = exprt("sizeof", size_type());
+  // Emit a `sizeof` node carrying the measured type as the type of its first
+  // operand (a type_exprt) and the byte size as a second operand, mirroring the
+  // C frontend; the type lets get_alloc_type recover the allocated type and the
+  // value gives a sound, fully-evaluated size (esbmc/esbmc#5337).
   typet elem_type = t;
   if (elem_type.is_struct())
   {
     struct_union_typet st = to_struct_union_type(elem_type);
     elem_type = symbol_typet(prefix + st.tag().as_string());
   }
-  size_of_expr.set("#c_sizeof_type", elem_type);
+  exprt value = c_sizeof(elem_type, ns);
+  if (value.is_nil())
+  {
+    log_error("sizeof: type has no size, {}", elem_type.name());
+    abort();
+  }
+  size_of_expr = exprt("sizeof", size_type());
+  size_of_expr.copy_to_operands(type_exprt(elem_type));
+  size_of_expr.copy_to_operands(value);
 }
 
 // check if the abi.encodedSignature is the same

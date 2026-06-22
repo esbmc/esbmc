@@ -2,12 +2,13 @@
 #define CPROVER_GOTO_SYMEX_CTEST_H
 
 #include <goto-symex/symex_target_equation.h>
-#include <solvers/smt/smt_conv.h>
 #include <util/namespace.h>
 #include <string>
 #include <vector>
 #include <mutex>
 #include "witnesses.h"
+
+class smt_convt;
 
 /// This generates CTest test-cases for C programs
 class ctest_generator

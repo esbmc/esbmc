@@ -11,6 +11,7 @@
 #include <util/i2string.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
+#include <util/python_types.h>
 #include <util/std_expr.h>
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
@@ -271,10 +272,109 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+bool goto_symext::symex_uninterpreted_function(
+  const code_function_call2t &call,
+  const irep_idt &identifier)
+{
+  // A function whose name begins "__ESBMC_uninterpreted_" (ESBMC's native
+  // namespace) or "__CPROVER_uninterpreted_" (CBMC compatibility) is modelled
+  // as an uninterpreted function: its value is an arbitrary but *fixed*
+  // function of its arguments (functional congruence). Any concrete body,
+  // including its side effects, is deliberately discarded. The mangled
+  // identifier looks like "c:@F@__ESBMC_uninterpreted_equals"; the C-level name
+  // (used only for the prefix test) is the suffix after the last '@'.
+  //
+  // Both prefixes are always recognised: the "__CPROVER_uninterpreted_" alias
+  // maps onto the native semantics, matching CBMC (which likewise ignores any
+  // body). Both namespaces are reserved, so no legitimate program relies on
+  // such a body executing.
+  const std::string &mangled = identifier.as_string();
+  std::string name = mangled.substr(mangled.rfind('@') + 1);
+  if (
+    !has_prefix(name, "__ESBMC_uninterpreted_") &&
+    !has_prefix(name, "__CPROVER_uninterpreted_"))
+    return false;
+
+  // On a dead branch the call is still "handled" (its body stays uninterpreted),
+  // but it must contribute no fresh result or congruence history: those would be
+  // vacuous here yet pollute every later live call to the same function. This
+  // matters because the native prefix reaches us via run_intrinsic, which runs
+  // even under a false guard, and a function-pointer call can reach the CPROVER
+  // path the same way.
+  if (cur_state->guard.is_false())
+    return true;
+
+  // A void uninterpreted function has no observable result to constrain; the
+  // body is still skipped so it stays uninterpreted.
+  if (is_nil_expr(call.ret))
+    return true;
+
+  // Read and rename the arguments to their current SSA terms.
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  // A native uninterpreted-function symbol can only be declared over scalar
+  // (number/bool) argument and result sorts. A pointer or aggregate operand
+  // lowers to a tuple sort, which mk_smt_uninterpreted_function cannot encode
+  // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
+  // harnesses hit this with a `const void *` hasher/equals argument). When any
+  // argument or the result is non-scalar, fall back to a fresh nondeterministic
+  // result. This is a sound over-approximation: it drops only the functional-
+  // congruence constraint (equal arguments need no longer imply an equal
+  // result), never adding behaviour, and the body is still discarded.
+  bool uf_encodable = is_number_type(call.ret->type);
+  for (const expr2tc &argument : arguments)
+    uf_encodable = uf_encodable && is_number_type(argument->type);
+
+  expr2tc result;
+  if (uf_encodable)
+  {
+    // Emit an uninterpreted-function application and assign it to the return.
+    // Functional congruence (equal arguments imply an equal result) is enforced
+    // downstream by the SMT backend's native uninterpreted-function support
+    // (with a generic Ackermannisation fallback for solvers that lack it), so
+    // no congruence history is tracked here. Key the function on the full
+    // mangled identifier so two genuinely distinct symbols that share a C-level
+    // name are never tied together by congruence.
+    result = uninterpreted_func2tc(call.ret->type, mangled, arguments);
+  }
+  else
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has a non-scalar signature; modelling its "
+      "result as unconstrained nondet (no functional congruence)",
+      name);
+    result = sideeffect2tc(
+      call.ret->type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(result);
+  }
+
+  symex_assign(code_assign2tc(call.ret, result));
+  return true;
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
   const irep_idt &identifier = to_symbol2t(call.function).thename;
+
+  // Intercept "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*" calls
+  // before inlining any body.
+  if (symex_uninterpreted_function(call, identifier))
+  {
+    cur_state->source.pc++;
+    return;
+  }
 
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =
@@ -706,6 +806,23 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   return true;
 }
 
+bool goto_symext::is_python_gc_object(const symbolt *base) const
+{
+  if (!base || base->mode != "Python")
+    return false;
+
+  const typet &bt = ns.follow(base->get_type());
+  if (!bt.is_struct())
+    return false;
+
+  // Only user-defined class instances get GC lifetime. Internal Python model
+  // aggregates (tuples, dicts, Optional unions) manage their own
+  // representation/lifetime and must not have frame teardown skipped. The
+  // frontend stamps those aggregates with an explicit kind attribute at
+  // type-creation time; see util/python_types.h.
+  return !is_python_internal_aggregate(bt);
+}
+
 void goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
@@ -722,6 +839,13 @@ void goto_symext::pop_frame()
   // clear locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // Python objects are garbage-collected (issue #4773): keep user class
+    // instances alive past their defining frame so references captured into a
+    // returned/escaping aggregate stay valid. Skip tearing down their L2 and
+    // value-set bindings; is_live_variable() reports them live to match.
+    if (is_python_gc_object(ns.lookup(it.base_name)))
+      continue;
+
     type2tc ptr = pointer_type2tc(pointer_type2());
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);

@@ -25,6 +25,159 @@
 #include <cctype>
 #include <sstream>
 
+namespace
+{
+// Parse a constant integer from a Python AST argument node: a Constant int or
+// bool, or a UnaryOp(USub) over one (the parser emits negative literals that
+// way). Returns false when the node is not a compile-time integer.
+bool py_const_int(const nlohmann::json &a, long long &out)
+{
+  if (!a.is_object())
+    return false;
+  const std::string t = a.value("_type", "");
+  if (t == "Constant" && a.contains("value"))
+  {
+    if (a["value"].is_number_integer())
+    {
+      out = a["value"].get<long long>();
+      return true;
+    }
+    if (a["value"].is_boolean())
+    {
+      out = a["value"].get<bool>() ? 1 : 0;
+      return true;
+    }
+    return false;
+  }
+  if (
+    t == "UnaryOp" && a.contains("operand") &&
+    a.value("op", nlohmann::json::object()).value("_type", "") == "USub")
+  {
+    long long v;
+    if (py_const_int(a["operand"], v))
+    {
+      out = -v;
+      return true;
+    }
+  }
+  return false;
+}
+
+// Constant-fold a printf-style ``str % args`` formatting, matching CPython for
+// the supported conversions. Throws std::runtime_error for any unsupported
+// conversion, flag/width/precision, or non-constant argument, so the caller
+// surfaces a clean diagnostic instead of mis-lowering ``str % x`` to pointer
+// arithmetic (which crashed the SMT backend, #5495).
+std::string py_percent_format(
+  const std::string &fmt,
+  const std::vector<nlohmann::json> &args)
+{
+  std::string out;
+  size_t argi = 0;
+  auto next_arg = [&]() -> const nlohmann::json & {
+    if (argi >= args.size())
+      throw std::runtime_error(
+        "TypeError: not enough arguments for format string");
+    return args[argi++];
+  };
+
+  for (size_t i = 0; i < fmt.size(); ++i)
+  {
+    if (fmt[i] != '%')
+    {
+      out.push_back(fmt[i]);
+      continue;
+    }
+    if (i + 1 >= fmt.size())
+      throw std::runtime_error("ValueError: incomplete format");
+    const char c = fmt[++i];
+    switch (c)
+    {
+    case '%':
+      out.push_back('%');
+      break;
+    case 'd':
+    case 'i':
+    {
+      long long v;
+      if (!py_const_int(next_arg(), v))
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      out += std::to_string(v);
+      break;
+    }
+    case 's':
+    {
+      const nlohmann::json &a = next_arg();
+      long long v;
+      if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_boolean())
+        // CPython renders bool via str(): "True"/"False", not "1"/"0".
+        out += a["value"].get<bool>() ? "True" : "False";
+      else if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_string())
+        out += a["value"].get<std::string>();
+      else if (py_const_int(a, v))
+        out += std::to_string(v);
+      else
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      break;
+    }
+    case 'x':
+    case 'X':
+    case 'o':
+    {
+      long long v;
+      if (!py_const_int(next_arg(), v))
+        throw std::runtime_error(
+          "unsupported: non-constant argument in str % formatting");
+      if (v < 0)
+        throw std::runtime_error(
+          "unsupported: negative argument in str % %x/%o formatting");
+      std::ostringstream ss;
+      if (c == 'o')
+        ss << std::oct << v;
+      else
+        ss << (c == 'X' ? std::uppercase : std::nouppercase) << std::hex << v;
+      out += ss.str();
+      break;
+    }
+    case 'c':
+    {
+      const nlohmann::json &a = next_arg();
+      long long v;
+      if (py_const_int(a, v))
+      {
+        if (v < 0 || v > 255)
+          throw std::runtime_error(
+            "unsupported: %c code points above 255 (non-ASCII) not modelled");
+        out.push_back(static_cast<char>(v));
+      }
+      else if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_string() && a["value"].get<std::string>().size() == 1)
+        out += a["value"].get<std::string>();
+      else
+        throw std::runtime_error(
+          "unsupported: %c argument in str % formatting");
+      break;
+    }
+    default:
+      throw std::runtime_error(
+        std::string("unsupported conversion '%") + c + "' in str % formatting");
+    }
+  }
+
+  if (argi != args.size())
+    throw std::runtime_error(
+      "TypeError: not all arguments converted during string formatting");
+  return out;
+}
+} // namespace
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -53,12 +206,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
           "__ESBMC_list_size not found for list condition check");
 
       // Build len(x) != 0 in IREP2, back-migrating once (V.3).
-      expr2tc arg2, zero2;
-      if (value_expr.type().is_pointer())
-        migrate_expr(value_expr, arg2);
-      else
-        migrate_expr(address_of_exprt(value_expr), arg2);
-      migrate_expr(gen_zero(size_type()), zero2);
+      expr2tc arg2;
+      migrate_expr(value_expr, arg2);
+      if (!is_pointer_type(arg2->type))
+        arg2 = address_of2tc(arg2->type, arg2);
+      expr2tc zero2 = gen_zero(migrate_type(size_type()));
 
       expr2tc size_call2 = side_effect_function_call2tc(
         migrate_type(size_type()), symbol_expr2tc(*size_func), {arg2});
@@ -117,19 +269,40 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
       return logical_expr;
-    // Result expression starts from last operand as default else branch
+    // Result expression starts from last operand as default else branch.
+    const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
     for (int i = logical_expr.operands().size() - 2; i >= 0; i--)
     {
       const exprt &current = logical_expr.operands()[i];
       exprt current_cond = get_truthy_condition(current);
-      exprt if_expr("if", t);
-      if (logical_expr.is_and())
-        if_expr.copy_to_operands(current_cond, result_expr, current);
+      // V.3: build the short-circuit select in IREP2 when both branches
+      // share the result type-id. A mixed-type BoolOp keeps the result type
+      // as any_type() while the operands stay concrete (extract_type_from_
+      // boolean_op's "fall back to Any" path); if2t asserts type-id equality,
+      // so those reconcile post-conversion via the legacy adjuster as before.
+      expr2tc cond2, current2, result2;
+      migrate_expr(current_cond, cond2);
+      migrate_expr(current, current2);
+      migrate_expr(result_expr, result2);
+      if (
+        current2->type->type_id == t2->type_id &&
+        result2->type->type_id == t2->type_id)
+      {
+        // and: cond ? result : current  /  or: cond ? current : result
+        result_expr = migrate_expr_back(
+          logical_expr.is_and() ? if2tc(t2, cond2, result2, current2)
+                                : if2tc(t2, cond2, current2, result2));
+      }
       else
-        if_expr.copy_to_operands(current_cond, current, result_expr);
-
-      result_expr = if_expr;
+      {
+        exprt if_expr("if", t);
+        if (logical_expr.is_and())
+          if_expr.copy_to_operands(current_cond, result_expr, current);
+        else
+          if_expr.copy_to_operands(current_cond, current, result_expr);
+        result_expr = if_expr;
+      }
     }
     return result_expr;
   }
@@ -323,16 +496,14 @@ exprt python_converter::handle_membership_operator(
   if (rhs_resolved_type.is_struct())
   {
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
-    std::string tag = struct_type.tag().as_string();
+    const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (
-      tag.find("dict_") != std::string::npos ||
-      tag.find("tag-dict") != std::string::npos)
+    if (kind == "dict")
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
 
-    if (tag.starts_with("tag-tuple"))
+    if (kind == "tuple")
     {
       // `x in (a, b, c)` is element-wise equality, with string elements
       // compared by content. handle_tuple_membership builds the OR chain.
@@ -348,7 +519,12 @@ exprt python_converter::handle_membership_operator(
   {
     python_list list(*this, element);
     exprt contains_expr = list.contains(lhs, rhs);
-    return invert ? not_exprt(contains_expr) : contains_expr;
+    if (!invert)
+      return contains_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc c2;
+    migrate_expr(contains_expr, c2);
+    return migrate_expr_back(not2tc(c2));
   }
 
   // Get string type identifiers
@@ -363,7 +539,12 @@ exprt python_converter::handle_membership_operator(
   {
     exprt membership_expr =
       string_handler_.handle_string_membership(lhs, rhs, element);
-    return invert ? not_exprt(membership_expr) : membership_expr;
+    if (!invert)
+      return membership_expr;
+    // V.3: build the "not in" negation in IREP2.
+    expr2tc m2;
+    migrate_expr(membership_expr, m2);
+    return migrate_expr_back(not2tc(m2));
   }
 
   throw std::runtime_error(
@@ -457,7 +638,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         nondet.location() = get_location_from_decl(element);
         return nondet;
       }
-      return gen_boolean(op == "NotEq");
+      // V.3: constant fold built in IREP2.
+      return migrate_expr_back(
+        op == "NotEq" ? gen_true_expr() : gen_false_expr());
     }
   }
 
@@ -499,6 +682,40 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
 
+  // Python ``str % args`` is string formatting, not numeric modulo. The generic
+  // arithmetic path builds ``str_ptr % int``, mistypes the result, and crashes
+  // the SMT backend (#5495 for a literal format, #5499 for a str variable). It
+  // runs before the is_array() gate below because a ``str`` parameter is a char
+  // *pointer*, not an array, so it would otherwise miss handle_array_operations
+  // (whose gate requires an array operand). is_string_type covers both char
+  // arrays (literals) and char pointers (str variables),
+  // but not np.int8/np.uint8 arrays, whose ``% scalar`` keeps its numeric path.
+  if (op == "Mod" && type_utils::is_string_type(lhs.type()))
+  {
+    // Only a literal format string is constant-foldable; a variable format
+    // (#5499) is rejected with a clean diagnostic rather than crashing.
+    if (
+      left.value("_type", "") != "Constant" || !left.contains("value") ||
+      !left["value"].is_string())
+      throw std::runtime_error(
+        "unsupported: str % formatting requires a literal format string");
+
+    std::vector<nlohmann::json> args;
+    if (right.is_object() && right.value("_type", "") == "Tuple")
+      for (const auto &e : right["elts"])
+        args.push_back(e);
+    else
+      args.push_back(right);
+
+    // Re-enter conversion through a synthesised Constant node so the folded
+    // string flows through the exact same path as a string literal (e.g.
+    // len("ab")), which materialises it correctly when consumed inline by
+    // len()/==. Building the array directly left it unaddressable inline.
+    nlohmann::json folded = left;
+    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
+    return get_expr(folded);
+  }
+
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -518,7 +735,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // --incremental-bmc, where each k iteration would otherwise re-symbolise
     // the comparison from scratch (issue #4623).
     if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
-      return gen_boolean(op == "NotEq" ? !*folded : *folded);
+    {
+      // V.3: constant fold built in IREP2.
+      const bool val = op == "NotEq" ? !*folded : *folded;
+      return migrate_expr_back(val ? gen_true_expr() : gen_false_expr());
+    }
     return dict_handler_->compare(lhs, rhs, op);
   }
 
@@ -555,7 +776,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
-      struct_side = gen_address_of(struct_side);
+    {
+      // V.3: take the struct's address in IREP2 — exact round-trip of the
+      // legacy gen_address_of (a plain address_of of the struct value).
+      expr2tc ss2;
+      migrate_expr(struct_side, ss2);
+      struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+    }
   }
 
   // Python reference-identity when one operand is a by-value class instance and
@@ -602,9 +829,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         // ESBMC's object/offset pointer model decides identity. Casting both
         // to the integer handle instead would lose the distinct-object
         // guarantee and spuriously satisfy `a != b` for distinct instances.
+        // V.3: built in IREP2 — exact round-trip of the legacy
+        // gen_address_of + typecast_exprt (migrate's typecast defaults the
+        // same rounding-mode symbol the 2-arg typecast2tc uses).
         typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
-        struct_side = typecast_exprt(gen_address_of(struct_side), ptr_t);
-        handle_side = typecast_exprt(handle_side, ptr_t);
+        const type2tc ptr_t2 = migrate_type(ptr_t);
+        expr2tc ss2;
+        migrate_expr(struct_side, ss2);
+        struct_side =
+          migrate_expr_back(typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        expr2tc hs2;
+        migrate_expr(handle_side, hs2);
+        handle_side = migrate_expr_back(typecast2tc(ptr_t2, hs2));
       }
     }
   }
@@ -663,16 +899,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           return e;
         };
 
-        side_effect_expr_function_callt strcmp_call;
-        strcmp_call.function() = symbol_expr(*strcmp_symbol);
-        strcmp_call.arguments() = {as_char_ptr(lhs), as_char_ptr(rhs)};
-        strcmp_call.location() = get_location_from_decl(element);
-        strcmp_call.type() = int_type();
+        // V.3: build `strcmp(a, b) op 0` (op is Eq/NotEq) in IREP2, back
+        // -migrating once. Exact round-trip of the legacy side-effect strcmp
+        // call compared against zero via equality/notequal.
+        expr2tc lhs2, rhs2;
+        migrate_expr(as_char_ptr(lhs), lhs2);
+        migrate_expr(as_char_ptr(rhs), rhs2);
+        expr2tc strcmp_call2 = side_effect_function_call2tc(
+          migrate_type(int_type()),
+          symbol_expr2tc(*strcmp_symbol),
+          {lhs2, rhs2});
+        expr2tc zero2 = gen_zero(migrate_type(int_type()));
+        expr2tc cmp2 = (op == "Eq") ? equality2tc(strcmp_call2, zero2)
+                                    : notequal2tc(strcmp_call2, zero2);
 
-        exprt result(
-          python_frontend::map_operator(op, bool_type()), bool_type());
-        result.copy_to_operands(strcmp_call, gen_zero(int_type()));
-        result.location() = get_location_from_decl(element);
+        exprt result = migrate_expr_back(cmp2);
+        const locationt loc = get_location_from_decl(element);
+        result.location() = loc;
+        result.op0().location() = loc; // re-attach the strcmp call location
         return result;
       }
     }
@@ -911,7 +1155,8 @@ exprt python_converter::handle_array_operations(
     string_handler_.is_zero_length_array(lhs) &&
     string_handler_.is_zero_length_array(rhs) && (op == "Eq" || op == "NotEq"))
   {
-    return gen_boolean(op == "Eq");
+    // V.3: constant fold built in IREP2.
+    return migrate_expr_back(op == "Eq" ? gen_true_expr() : gen_false_expr());
   }
 
   auto is_numeric_type = [](const typet &t) {
@@ -945,6 +1190,11 @@ exprt python_converter::handle_array_operations(
     if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
       return nil_exprt();
 
+    // Element-wise modulo is only modelled for integer elements; float-array %
+    // would need fmod-style lowering, so let it fall through to a clean reject.
+    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
+      return nil_exprt();
+
     const exprt &size_expr = to_array_type(array_type).size();
     if (!size_expr.is_constant())
       return nil_exprt();
@@ -962,24 +1212,34 @@ exprt python_converter::handle_array_operations(
                             ? scalar_expr
                             : typecast_exprt(scalar_expr, elem_type);
 
-    exprt result_array = array_expr;
-    // V.3: build the array element access in IREP2 (index2tc), the exact
-    // round-trip of index_exprt (behaviour-preserving). The array and element
-    // type are loop-invariant, so migrate them once.
+    // V.3: build the per-element index in IREP2 and accumulate the array update
+    // with with2tc. The +/* element op stays a legacy node so map_operator +
+    // migrate_expr select the correct integer (add/mul) or IEEE-float
+    // (ieee_add/ieee_mul + rounding mode) form per element type; the array is
+    // back-migrated once at the end.
     expr2tc ar2;
     migrate_expr(array_expr, ar2);
     const type2tc elem_t2 = migrate_type(elem_type);
+    const type2tc index_t2 = migrate_type(size_type());
+
+    expr2tc result2 = ar2;
     for (long long i = 0; i < array_size; ++i)
     {
-      exprt index = from_integer(i, size_type());
-      expr2tc ix2;
-      migrate_expr(index, ix2);
+      expr2tc ix2 = from_integer(BigInt(i), index_t2);
       exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
-      result_array = with_exprt(result_array, index, bin_elem);
+      // Python/NumPy integer % is floored (sign of the divisor), unlike C's
+      // truncated remainder; correct each element the same way the scalar path
+      // does (#5498). bin_elem currently holds the raw C remainder.
+      if (op == "Mod")
+        bin_elem =
+          math_handler_.handle_int_modulo(array_item, casted_scalar, bin_elem);
+      expr2tc bin_elem2;
+      migrate_expr(bin_elem, bin_elem2);
+      result2 = with2tc(result2->type, result2, ix2, bin_elem2);
     }
-    return result_array;
+    return migrate_expr_back(result2);
   };
 
   // For direct Python binary operators over arrays, keep behaviour explicit
@@ -1044,6 +1304,38 @@ exprt python_converter::handle_array_operations(
       std::ostringstream msg;
       msg << "TypeError: arithmetic on numeric arrays is not supported "
              "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // NumPy element-wise integer modulo. `ndarray % scalar` previously fell
+  // through to generic arithmetic (pointer-modulo on the array) and crashed the
+  // SMT backend (#5498). Model `numeric_array % scalar` with per-element
+  // floored modulo; reject the broadcasting forms that are not modelled
+  // (scalar % array, array % array, non-constant-size or float arrays) cleanly.
+  if (op == "Mod")
+  {
+    const bool lhs_numeric_array = lhs.type().is_array() &&
+                                   is_numeric_type(lhs.type().subtype()) &&
+                                   !is_char_array(lhs.type());
+    const bool rhs_numeric_array = rhs.type().is_array() &&
+                                   is_numeric_type(rhs.type().subtype()) &&
+                                   !is_char_array(rhs.type());
+
+    if (lhs_numeric_array && !rhs.type().is_array())
+    {
+      exprt lowered = build_scalar_broadcast(lhs, rhs);
+      if (!lowered.is_nil())
+        return lowered;
+    }
+
+    if (lhs_numeric_array || rhs_numeric_array)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: NumPy array modulo broadcasting is not modelled";
       const locationt loc = get_location_from_decl(element);
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();
@@ -1201,19 +1493,24 @@ exprt python_converter::handle_tuple_operations(
       migrate_expr(tb, b2);
 
       // Base: a proper prefix is strictly less than the longer tuple.
-      exprt result = gen_boolean(ca.size() < cb.size());
+      // V.3: build the lexicographic compare in IREP2.
+      expr2tc result =
+        ca.size() < cb.size() ? gen_true_expr() : gen_false_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = memb(a2, ca[k]);
         exprt bi = memb(b2, cb[k]);
 
-        exprt lt, eq;
+        expr2tc lt, eq;
         const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          lt = lex_lt(ai, bi);
-          eq = equality_exprt(ai, bi); // native struct equality, element-wise
+          expr2tc ai2, bi2;
+          migrate_expr(lex_lt(ai, bi), lt);
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          eq = equality2tc(ai2, bi2); // native struct equality, element-wise
         }
         else if (is_num(ai.type()) && is_num(bi.type()))
         {
@@ -1223,23 +1520,22 @@ exprt python_converter::handle_tuple_operations(
             ai = typecast_exprt(ai, double_type());
             bi = typecast_exprt(bi, double_type());
           }
-          lt = exprt("<", bool_type());
-          lt.copy_to_operands(ai, bi);
-          eq = equality_exprt(ai, bi);
+          expr2tc ai2, bi2;
+          migrate_expr(ai, ai2);
+          migrate_expr(bi, bi2);
+          lt = lessthan2tc(ai2, bi2);
+          eq = equality2tc(ai2, bi2);
         }
         else
         {
           ok = false; // unsupported / mismatched component kinds
-          return gen_boolean(false);
+          return migrate_expr_back(gen_false_expr());
         }
 
-        exprt tail("and", bool_type());
-        tail.copy_to_operands(eq, result);
-        exprt head("or", bool_type());
-        head.copy_to_operands(lt, tail);
-        result = head;
+        // result = lt || (eq && result)
+        result = or2tc(lt, and2tc(eq, result));
       }
-      return result;
+      return migrate_expr_back(result);
     };
 
     const bool swap = (op == "Gt" || op == "LtE");

@@ -82,6 +82,31 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+class get_expr_depth_guard
+{
+public:
+  explicit get_expr_depth_guard(python_converter &converter)
+    : converter(converter)
+  {
+    constexpr std::size_t kMaxGetExprDepth = 512;
+    if (++converter.get_expr_depth_ > kMaxGetExprDepth)
+    {
+      --converter.get_expr_depth_;
+      throw std::runtime_error(
+        "TypeError: Python expression nesting exceeded recursion limit of " +
+        std::to_string(kMaxGetExprDepth));
+    }
+  }
+
+  ~get_expr_depth_guard()
+  {
+    --converter.get_expr_depth_;
+  }
+
+private:
+  python_converter &converter;
+};
+
 // True when `method_name` is a method decorated with @property in `class_name`
 // or one of its (transitive) base classes. Reading `obj.prop` then invokes the
 // getter. A same-named non-property method in a derived class shadows a base
@@ -253,8 +278,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(value.get<long long>(), long_long_int_type());
 
   // Handle boolean literals (True/False)
+  // V.3: build the bool constant in IREP2, back-migrated for the legacy seam.
   if (value.is_boolean())
-    return gen_boolean(value.get<bool>());
+    return migrate_expr_back(
+      value.get<bool>() ? gen_true_expr() : gen_false_expr());
 
   // Handle floating-point literals (float)
   if (value.is_number_float())
@@ -381,6 +408,8 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
 
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
+  get_expr_depth_guard depth_guard(*this);
+
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
   // the expression-type map.
@@ -509,16 +538,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
-            exprt optional_base = base_expr;
-            if (optional_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = optional_base.type().subtype();
-              deref.move_to_operands(optional_base);
-              optional_base = std::move(deref);
-            }
+            // V.3: build the (optional) dereference of the base directly in
+            // IREP2 instead of staging a legacy "dereference" node and
+            // re-migrating it; byte-identical (migrate of the legacy node is
+            // exactly dereference2tc(migrate_type(subtype), migrate(base))).
             expr2tc ob2;
-            migrate_expr(optional_base, ob2);
+            migrate_expr(base_expr, ob2);
+            if (base_expr.type().is_pointer())
+              ob2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), ob2);
             base_expr = migrate_expr_back(
               member2tc(migrate_type(inner_raw), ob2, "value"));
             base_type = inner_raw;
@@ -577,10 +605,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
             // (int)__ESBMC_list_size(&base_expr), built in IREP2 (V.3).
             expr2tc base2;
-            migrate_expr(
-              base_expr.type().is_pointer() ? base_expr
-                                            : address_of_exprt(base_expr),
-              base2);
+            migrate_expr(base_expr, base2);
+            if (!is_pointer_type(base2->type))
+              base2 = address_of2tc(base2->type, base2);
             expr2tc size_call = side_effect_function_call2tc(
               migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
             exprt list_len = migrate_expr_back(
@@ -597,20 +624,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type =
               struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
             // V.1k step-2 hypothesis: build member2t with the (possibly
             // symbol-typed) source permitted by the step-1 relaxation, then
             // back-migrate to the legacy body so the EXISTING adjust + goto
             // -convert resolves it as today. No converter-side ns.follow.
+            // V.3: the (optional) base dereference is built directly in IREP2
+            // rather than staged as a legacy "dereference" node and re-migrated
+            // (byte-identical to migrate of that node).
             expr2tc src2;
-            migrate_expr(member_base, src2);
+            migrate_expr(base_expr, src2);
+            if (base_expr.type().is_pointer())
+              src2 =
+                dereference2tc(migrate_type(base_expr.type().subtype()), src2);
             return migrate_expr_back(
               member2tc(migrate_type(clean_type), src2, attr_name));
           }
@@ -957,8 +982,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
           // (int)__ESBMC_list_size(&expr), built in IREP2 (V.3).
           expr2tc base2;
-          migrate_expr(
-            expr.type().is_pointer() ? expr : address_of_exprt(expr), base2);
+          migrate_expr(expr, base2);
+          if (!is_pointer_type(base2->type))
+            base2 = address_of2tc(base2->type, base2);
           expr2tc size_call = side_effect_function_call2tc(
             migrate_type(size_type()), symbol_expr2tc(*size_func), {base2});
           exprt list_len =
@@ -1015,18 +1041,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "' on union type: no class with this attribute found");
         }
 
-        // Create a typecast from char* to target_class* in IREP2 (V.3).
+        // V.3: build the char* -> target_class* cast, the dereference, and
+        // the member access entirely in IREP2, back-migrated once at the
+        // legacy seam. Keeping the typecast and dereference as expr2tc avoids
+        // the back-migrate/re-migrate round-trip the staged legacy form paid.
         typet target_ptr_type =
           gen_pointer_type(target_class_symbol->get_type());
         expr2tc expr2;
         migrate_expr(expr, expr2);
-        exprt casted_expr =
-          migrate_expr_back(typecast2tc(migrate_type(target_ptr_type), expr2));
-        casted_expr.type() = target_ptr_type;
+        expr2tc casted2 = typecast2tc(migrate_type(target_ptr_type), expr2);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->get_type());
-        deref_expr.copy_to_operands(casted_expr);
+        expr2tc deref2 = dereference2tc(
+          migrate_type(target_class_symbol->get_type()), casted2);
 
         // Access the member on the object
         const struct_typet &target_struct =
@@ -1034,11 +1061,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
-        // V.3: IREP2 member access (exact round-trip of member_exprt).
-        expr2tc de2;
-        migrate_expr(deref_expr, de2);
         expr = migrate_expr_back(
-          member2tc(migrate_type(clean_type), de2, attr_name));
+          member2tc(migrate_type(clean_type), deref2, attr_name));
         break;
       }
 
@@ -1134,16 +1158,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           base.type() = bt; // restore #cpp_type that migrate_type drops
         }
 
-        if (base.type().is_pointer())
-        {
-          exprt deref("dereference");
-          deref.type() = base.type().subtype();
-          deref.move_to_operands(base);
-          base = std::move(deref);
-        }
-
+        // V.3: dereference (when base is a pointer) and member access built in
+        // IREP2; exact round-trip of the legacy dereference + member_exprt.
         expr2tc b2;
         migrate_expr(base, b2);
+        if (base.type().is_pointer())
+          b2 = dereference2tc(migrate_type(base.type().subtype()), b2);
         return migrate_expr_back(
           member2tc(migrate_type(clean_type), b2, attr_name));
       };

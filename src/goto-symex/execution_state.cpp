@@ -74,9 +74,6 @@ execution_statet::execution_statet(
         for (const auto &wp : wps)
           state.witness_segs[wp.segment_idx].push_back(wp);
       }
-      waypoint target;
-      if (yaml_parser::get_target_waypoint(witness_path, target))
-        witness_target_line = target.line_id;
     }
   }
 

@@ -317,6 +317,14 @@ void reachability_treet::update_hash_collision_set()
   hit_hashes.insert(hash);
 }
 
+void reachability_treet::remove_hash_collision_entry()
+{
+  execution_statet &ex_state = get_cur_state();
+
+  std::size_t hash = ex_state.generate_hash();
+  hit_hashes.erase(hash);
+}
+
 void reachability_treet::create_next_state()
 {
   execution_statet &ex_state = get_cur_state();
@@ -593,13 +601,6 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
            get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
 
-    if (por)
-    {
-      get_cur_state().calculate_mpor_constraints();
-      if (get_cur_state().is_transition_blocked_by_mpor())
-        break;
-    }
-
     if (state_hashing)
     {
       if (check_for_hash_collision())
@@ -609,6 +610,20 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
       }
 
       update_hash_collision_set();
+    }
+
+    if (por)
+    {
+      get_cur_state().calculate_mpor_constraints();
+      if (get_cur_state().is_transition_blocked_by_mpor())
+      {
+        // This transition is pruned by MPOR. If we already recorded its state
+        // hash above, drop it again so the seen set reflects the state explored
+        // before this transition rather than the pruned state.
+        if (state_hashing)
+          remove_hash_collision_entry();
+        break;
+      }
     }
     next_thread_id = decide_ileave_direction(get_cur_state());
 

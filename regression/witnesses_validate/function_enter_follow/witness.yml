@@ -22,7 +22,7 @@
           format: "c_expression"
         location:
           file_name: "main.c"
-          line: 13
+          line: 14
           function: "main"
   - segment:
     - waypoint:

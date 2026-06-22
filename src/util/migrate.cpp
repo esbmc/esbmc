@@ -740,6 +740,26 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "sizeof")
+  {
+    // sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
+    // eagerly-computed byte-size value. Both become reflected sizeof2t fields,
+    // replacing the legacy sizeof-type side channel (esbmc/esbmc#5337). The
+    // frontends always produce both operands (the C adjust pass fills the value
+    // for VLAs); fail closed rather than over-read op1 in a release build.
+    if (expr.operands().size() != 2)
+    {
+      log_error("sizeof node must carry a type operand and a value operand");
+      abort();
+    }
+    type = migrate_type(expr.type());
+    type2tc measured = migrate_type(expr.op0().type());
+    expr2tc value;
+    migrate_expr(expr.op1(), value);
+    new_expr_ref = sizeof2tc(type, value, measured);
+    return;
+  }
+
   if (
     expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
     expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
@@ -755,17 +775,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    // Preserve the `#c_sizeof_type` of a folded sizeof(T) constant (clang stores
-    // the element type T here, e.g. for malloc(sizeof(T))). constant_int2t has
-    // no irept named-subs, so without this the type is lost on the
-    // --irep2-bodies round-trip and the allocated object degrades to char
-    // (esbmc/esbmc#4715).
-    type2tc sizeof_type;
-    const irept &szt = expr.c_sizeof_type();
-    if (szt.is_not_nil())
-      sizeof_type = migrate_type(static_cast<const typet &>(szt));
-
-    new_expr_ref = constant_int2tc(type, val, sizeof_type);
+    new_expr_ref = constant_int2tc(type, val);
     return;
   }
 
@@ -973,7 +983,21 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), true_val);
     migrate_expr(expr.op2(), false_val);
 
-    new_expr_ref = if2tc(type, cond, true_val, false_val);
+    // A legacy ternary used as a discarded statement -- notably the C `assert`
+    // idiom `cond ? 0 : __assert_fail()` -- carries a void (empty) result type
+    // with branch types that differ from it and from each other. if2t requires
+    // both branches to share the result type's kind, so coerce any branch whose
+    // type id diverges. The conditional's value is discarded, so the cast is
+    // semantics-preserving and the round-trip stays equivalent. Well-typed
+    // ternaries already have matching branch types, so no cast is added on the
+    // common path. Matching on type_id (not full structural type) keeps this to
+    // exactly the cases the if2t invariant rejects.
+    if (true_val->type->type_id != type->type_id)
+      true_val = typecast2tc(type, true_val);
+    if (false_val->type->type_id != type->type_id)
+      false_val = typecast2tc(type, false_val);
+
+    new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
   }
 
@@ -2298,7 +2322,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         ops.push_back(o);
       }
     }
-    new_expr_ref = code_block2tc(ops, expr.location());
+    new_expr_ref = code_block2tc(
+      ops,
+      expr.location(),
+      static_cast<const locationt &>(expr.end_location()));
     return;
   }
 
@@ -2393,8 +2420,26 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "code" && expr.statement() == "label")
   {
+    // A label whose body is a single-declaration decl-block (e.g. the C++ OM's
+    // `__ESBMC_HIDE: char *s = ...;`) must not gain a scope boundary on the
+    // round-trip. code("decl-block") forward-migrates to code_block2t, which
+    // back-migrates to code("block"); convert_block then unwinds the decl's
+    // destructor at the block end -- a premature DEAD that kills the variable
+    // before its later uses (esbmc/esbmc#4715). convert_decl_block introduces
+    // no such scope, so flatten the single-decl labeled decl-block to the bare
+    // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
+    // the enclosing scope, matching the legacy path. A label labels exactly one
+    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case has
+    // no flat label(decl) form and is left on the standalone decl-block arm
+    // below -- it is not exercised by the operational models this fix targets.
+    const exprt &body = expr.op0();
+    const exprt &labelled =
+      (body.id() == "code" && body.statement() == "decl-block" &&
+       body.operands().size() == 1)
+        ? body.op0()
+        : body;
     expr2tc code;
-    migrate_expr(expr.op0(), code);
+    migrate_expr(labelled, code);
     new_expr_ref = code_label2tc(expr.get("label"), code, expr.location());
     return;
   }
@@ -2886,10 +2931,16 @@ exprt migrate_expr_back(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    // Restore the folded sizeof(T) element type so malloc/alloca lowering can
-    // recover the allocated object's type (esbmc/esbmc#4715).
-    if (!is_nil_type(ref2.sizeof_type))
-      theexpr.c_sizeof_type(migrate_type_back(ref2.sizeof_type));
+    return theexpr;
+  }
+  case expr2t::sizeof_id:
+  {
+    // Rebuild the legacy `sizeof` exprt: op0 a type_exprt carrying the measured
+    // type T, op1 the byte-size value (esbmc/esbmc#5337).
+    const sizeof2t &ref2 = to_sizeof2t(ref);
+    exprt theexpr("sizeof", migrate_type_back(ref->type));
+    theexpr.copy_to_operands(type_exprt(migrate_type_back(ref2.sizeof_type)));
+    theexpr.copy_to_operands(migrate_expr_back(ref2.value));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
@@ -3038,6 +3089,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       migrate_expr_back(ref2.true_value),
       migrate_expr_back(ref2.false_value));
     theif.type() = thetype;
+    if (ref2.location.is_not_nil())
+      theif.location() = ref2.location;
     return theif;
   }
   case expr2t::equality_id:
@@ -4035,6 +4088,8 @@ exprt migrate_expr_back(const expr2tc &ref)
       block.copy_to_operands(migrate_expr_back(op));
     if (ref2.location.is_not_nil())
       block.location() = ref2.location;
+    if (ref2.end_location.is_not_nil())
+      block.end_location(ref2.end_location);
     return block;
   }
   // V.4 structured control-flow code kinds (esbmc/esbmc#4715). Reproduce the

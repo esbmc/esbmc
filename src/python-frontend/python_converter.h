@@ -32,6 +32,7 @@ class python_typechecking;
 class python_class_builder;
 class python_lambda;
 class python_exception_handler;
+class get_expr_depth_guard;
 
 /**
  * @class python_converter
@@ -88,6 +89,22 @@ public:
     return *ast_json;
   }
   exprt get_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Handles tuple `+`/`*` operators and lexicographic ordering.
+   *
+   * Concatenation builds a new tuple struct; repetition with a constant int
+   * builds an n-fold repeat; `Lt`/`LtE`/`Gt`/`GtE` lower to element-wise
+   * lexicographic comparisons. Returns nil_exprt for non-tuple operands or
+   * unsupported variants. Public so the sorted()/reversed() lowering can reuse
+   * the comparator for a convert-time sorting network over tuples.
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   std::string get_op(const std::string &op, const typet &type) const;
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -125,7 +142,7 @@ public:
     return string_handler_;
   }
 
-  tuple_handler &get_tuple_handler()
+  tuple_handler &get_tuple_handler() const
   {
     return *tuple_handler_;
   }
@@ -260,6 +277,7 @@ private:
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class get_expr_depth_guard;
   friend class python_converter_test_access;
 
   template <typename Func>
@@ -318,6 +336,10 @@ private:
   std::string get_python_type_category(const typet &t) const;
 
   bool is_bytes_literal(const nlohmann::json &element);
+
+  // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
+  // `is not` paths); the public wrappers back-migrate once at the legacy seam.
+  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
 
@@ -874,20 +896,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
-   *
-   * Concatenation builds a new tuple struct whose components are the
-   * concatenation of the operand tuples; repetition with a constant int
-   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
-   * unsupported variants (e.g. variable repeat count).
-   */
-  exprt handle_tuple_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &element);
-
-  /**
    * @brief Handles type mismatches in relational operations.
    *
    * Processes single-character comparisons and float-vs-string comparisons.
@@ -1039,6 +1047,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  std::size_t get_expr_depth_ = 0;
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;

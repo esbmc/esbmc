@@ -164,6 +164,66 @@ TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
   require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
 }
 
+TEST_CASE(
+  "migrate coerces mismatched ternary branches to the result type",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: the C `assert` macro lowers to a discarded statement-level
+  // ternary `cond ? 0 : __assert_fail()` whose result type is void (empty) and
+  // whose branch types differ from it (int and void). if2t requires both
+  // branches to share the result type, so the forward migration must coerce the
+  // divergent branch -- otherwise the if2t constructor's type invariant trips.
+  // Under --irep2-bodies the whole body is migrated before goto_convert lowers
+  // the ternary, so this shape reaches migrate_expr directly.
+  use_test_ns();
+  typet voidt = migrate_type_back(get_empty_type());
+  typet boolt = migrate_type_back(get_bool_type());
+  typet intt = migrate_type_back(get_int_type(32));
+
+  exprt tern("if", voidt);
+  tern.copy_to_operands(
+    from_integer(1, boolt), // cond
+    from_integer(0, intt),  // true: int, differs from the void result type
+    from_integer(0, intt)); // false: int, differs from the void result type
+
+  expr2tc m;
+  migrate_expr(tern, m);
+  REQUIRE(is_if2t(m));
+  // The if2t and both arms share the (void) result type id.
+  const if2t &i = to_if2t(m);
+  REQUIRE(i.type->type_id == i.true_value->type->type_id);
+  REQUIRE(i.type->type_id == i.false_value->type->type_id);
+}
+
+TEST_CASE(
+  "migrate flattens a single-decl labeled decl-block",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: `lbl: char *s = p;` is legacy label(decl-block(decl)). The
+  // decl-block must NOT migrate to a code_block -- code_block back-migrates to
+  // code("block"), whose scope boundary makes convert_block emit a premature
+  // DEAD for the declared variable right after its init (killing it before its
+  // uses). A decl-block introduces no scope (convert_decl_block), so a
+  // single-decl labeled decl-block flattens to the bare decl: the label's body
+  // round-trips as a code_decl, deferring the DEAD to the enclosing scope.
+  use_test_ns();
+  typet ct = migrate_type_back(get_int_type(32));
+
+  codet decl("decl");
+  decl.copy_to_operands(symbol_exprt("x", ct), from_integer(7, ct));
+  codet declblock("decl-block");
+  declblock.copy_to_operands(decl);
+  codet label("label");
+  label.set("label", "lbl");
+  label.copy_to_operands(declblock);
+
+  expr2tc m;
+  migrate_expr(label, m);
+  REQUIRE(is_code_label2t(m));
+  // The labeled body is the bare decl, not a scope-introducing block.
+  REQUIRE(is_code_decl2t(to_code_label2t(m).code));
+}
+
 // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
 // gaps in the migration layer (no back-arm, or no forward-arm, or neither).
 // These tests pin the round-trip property -- migrate_expr_back followed by
@@ -378,33 +438,65 @@ TEST_CASE(
   REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
 }
 
+TEST_CASE("migrate preserves code_block end_location", "[migrate][v4-cf]")
+{
+  // W1 (esbmc#4715): code_block2t carries a non-reflected end_location (the
+  // closing-brace location) so it survives the --irep2-bodies round-trip.
+  // convert_block stamps it onto the destructor-unwind instructions at scope
+  // exit; without it those instructions are unlocated. Equality ignores it, so
+  // assert on it explicitly.
+  use_test_ns();
+  locationt loc, end_loc;
+  loc.set_file("contract.sol");
+  loc.set_line(3);
+  end_loc.set_file("contract.sol");
+  end_loc.set_line(9);
+
+  codet block("code");
+  block.statement("block");
+  block.location() = loc;
+  block.end_location(end_loc);
+
+  expr2tc m;
+  migrate_expr(block, m);
+  REQUIRE(is_code_block2t(m));
+  REQUIRE(to_code_block2t(m).end_location.get_line() == "9");
+
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_line() == "3");
+  REQUIRE(
+    static_cast<const locationt &>(back.end_location()).get_line() == "9");
+}
+
 TEST_CASE(
-  "migrate preserves #c_sizeof_type on folded sizeof constants",
+  "migrate round-trips sizeof(T) carrying the measured type",
   "[migrate][v4-cf]")
 {
-  // esbmc#4715: clang folds malloc(sizeof(T)) to a bare size_t constant whose
-  // only record of the element type T is the #c_sizeof_type attribute.
-  // constant_int2t carries a non-reflected sizeof_type so T survives the
-  // --irep2-bodies body round-trip; without it get_alloc_type falls back to
-  // char and the allocated object degrades to a byte blob. Equality ignores
-  // sizeof_type, so assert on it explicitly rather than via the round-trip
-  // helper.
+  // esbmc#5337: sizeof(T) is an unfolded `sizeof` node whose single type_exprt
+  // operand carries the measured type T. migrate maps it to a first-class
+  // sizeof2t with a reflected sizeof_type field (no side-channel attribute on a
+  // folded constant), and back to the legacy operand-typed form. get_alloc_type
+  // reads T off this node so malloc(sizeof(T)) allocates a struct T, not char.
   use_test_ns();
 
-  exprt sz = from_integer(8, size_type());
-  sz.c_sizeof_type(symbol_typet("tag-s"));
+  exprt sz("sizeof", size_type());
+  sz.copy_to_operands(type_exprt(symbol_typet("tag-s")));
+  sz.copy_to_operands(from_integer(16, size_type()));
   expr2tc m;
   migrate_expr(sz, m);
-  REQUIRE(is_constant_int2t(m));
-  REQUIRE(!is_nil_type(to_constant_int2t(m).sizeof_type));
-  exprt back = migrate_expr_back(m);
-  REQUIRE(back.c_sizeof_type().is_not_nil());
-  REQUIRE(back.c_sizeof_type().id() == "symbol");
+  REQUIRE(is_sizeof2t(m));
+  REQUIRE(!is_nil_type(to_sizeof2t(m).sizeof_type));
+  REQUIRE(is_constant_int2t(to_sizeof2t(m).value));
 
-  // A plain integer constant carries no sizeof type and must not gain one.
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() == "sizeof");
+  REQUIRE(back.operands().size() == 2);
+  REQUIRE(back.op0().type().id() == "symbol");
+
+  // A plain integer constant is unaffected and stays a constant_int2t.
   expr2tc plain = constant_int2tc(get_uint_type(32), BigInt(8));
-  REQUIRE(is_nil_type(to_constant_int2t(plain).sizeof_type));
-  REQUIRE(migrate_expr_back(plain).c_sizeof_type().is_nil());
+  REQUIRE(is_constant_int2t(plain));
+  REQUIRE(migrate_expr_back(plain).id() == "constant");
 }
 
 TEST_CASE(

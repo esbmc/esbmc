@@ -146,3 +146,12 @@ IREP2_EXPR(sideeffect_assign,     "sideeffect_assign")
 // Appears in temporary_object initializers; replaced by replace_new_object
 // before goto_convert processes the body.
 IREP2_EXPR(new_object,            "new_object")
+// sizeof(T) carrying the measured type T as a first-class reflected field,
+// replacing the legacy sizeof-type irep attribute side channel
+// (esbmc/esbmc#5337). Folds lazily to the byte size of T via do_simplify().
+IREP2_EXPR(sizeof,                "sizeof")
+// Uninterpreted-function application. Created during symbolic execution to
+// model a call to a "__ESBMC_uninterpreted_*" / "__CPROVER_uninterpreted_*"
+// function, and consumed only at SMT conversion time, where the solver's
+// native uninterpreted-function support enforces functional congruence.
+IREP2_EXPR(uninterpreted_func,    "uninterpreted_func")

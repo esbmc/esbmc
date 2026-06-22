@@ -908,28 +908,17 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
   {
     dest.make_typecast(type);
 
-    if (dest.op0().is_constant())
+    if (dest.op0().is_constant() && !no_simplify)
     {
-      // preserve #c_sizeof_type -- don't make it a reference!
-      const irept c_sizeof_type = dest.op0().c_sizeof_type();
-
-      if (!no_simplify)
-      {
-        // Fold the typecast-of-constant via the IREP2 simplifier (the legacy
-        // CBMC simplify_typecast is retired in Phase 2.2). dest is
-        // typecast(const, type); typecast2t::do_simplify applies the cast
-        // (int->int with truncation, int->bool, enum casts) identically to the
-        // legacy path. The fold builds a fresh constant, which drops
-        // #c_sizeof_type (migrate now preserves it on a constant round-trip, but
-        // the simplifier does not), so it is restored just below.
-        expr2tc d2;
-        migrate_expr(dest, d2);
-        simplify(d2);
-        dest = migrate_expr_back(d2);
-      }
-
-      if (c_sizeof_type.is_not_nil())
-        dest.c_sizeof_type(c_sizeof_type);
+      // Fold the typecast-of-constant via the IREP2 simplifier (the legacy
+      // CBMC simplify_typecast is retired in Phase 2.2). dest is
+      // typecast(const, type); typecast2t::do_simplify applies the cast
+      // (int->int with truncation, int->bool, enum casts) identically to the
+      // legacy path.
+      expr2tc d2;
+      migrate_expr(dest, d2);
+      simplify(d2);
+      dest = migrate_expr_back(d2);
     }
   }
 }

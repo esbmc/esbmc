@@ -114,6 +114,7 @@ public:
   BigInt column = c_nonset;
   std::string function;
   irep_idt line_id;
+  irep_idt column_id;
   irep_idt function_id;
   parsed_constraintt parsed_cond;
 };

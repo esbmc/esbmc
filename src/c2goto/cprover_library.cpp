@@ -129,6 +129,7 @@ const static std::vector<std::string> python_c_extern_deps = {
   // libm / umath entry points and helpers (not defined under library/python)
   "ceil",
   "__ceil_array",
+  "__arccos_array",
   "fegetround",
   "fesetround",
   "rint",
@@ -490,8 +491,6 @@ void add_cprover_library(contextt &context, const languaget *language)
   else
 #endif
   {
-    if (language && language->id() == "python")
-      goto_reader.set_functions_to_read(python_c_models);
     lib_start = clib->start;
     lib_size = clib->size;
   }

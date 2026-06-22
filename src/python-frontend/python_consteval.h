@@ -16,7 +16,8 @@ struct PyConstValue
     INT,
     FLOAT,
     STRING,
-    TUPLE
+    TUPLE,
+    LIST
   };
 
   Kind kind = NONE;
@@ -24,6 +25,8 @@ struct PyConstValue
   long long int_val = 0;
   double float_val = 0.0;
   std::string string_val;
+  // Element storage for both TUPLE and LIST values; `kind` disambiguates so
+  // that (1,) and [1] never compare equal (Python semantics).
   std::vector<PyConstValue> tuple_val;
 
   static PyConstValue make_none()
@@ -50,6 +53,10 @@ struct PyConstValue
   {
     return {TUPLE, false, 0, 0.0, "", values};
   }
+  static PyConstValue make_list(const std::vector<PyConstValue> &values)
+  {
+    return {LIST, false, 0, 0.0, "", values};
+  }
 
   bool is_truthy() const;
 };
@@ -72,11 +79,26 @@ public:
     const std::string &func_name,
     const std::vector<PyConstValue> &args);
 
+  /// Try to evaluate an arbitrary expression at module scope, seeding the
+  /// environment with module-level constant globals first. Used to fold whole
+  /// assertion tests such as `f(GLOBAL) == [literal]` whose operands reference
+  /// module globals (which try_eval_call alone cannot see). Returns
+  /// std::nullopt if any sub-expression is not constant-foldable.
+  std::optional<PyConstValue> try_eval_global_expr(const nlohmann::json &expr);
+
 private:
   const nlohmann::json &ast_;
   int iteration_budget_;
   int call_depth_ = 0;
   static constexpr int MAX_CALL_DEPTH = 30;
+
+  // When false (the default, used by the call-site pre-scan in converter_funcall
+  // that folds f(literal) in expression position), functions containing control
+  // flow (If/For/While) are NOT folded, so their branches stay in the GOTO
+  // program for coverage/branch analysis. The whole-assertion folder
+  // (try_eval_global_expr) sets this true: an assert over fully-constant
+  // operands has a deterministic single path, so folding it loses no coverage.
+  bool allow_control_flow_ = false;
 
   using Env = std::unordered_map<std::string, PyConstValue>;
 
@@ -93,8 +115,30 @@ private:
     PyConstValue value;
   };
 
+  // Seed `env` with module-level constant globals (best-effort; non-foldable
+  // assignments are simply skipped).
+  void seed_globals(Env &env);
+
   std::optional<StmtResult> exec_block(const nlohmann::json &body, Env &env);
   std::optional<StmtResult> exec_stmt(const nlohmann::json &stmt, Env &env);
+
+  // Bind an assignment target (Name, or Tuple/List for unpacking) to a value.
+  // Returns false on an unsupported target shape or arity mismatch.
+  bool bind_target(
+    const nlohmann::json &target,
+    const PyConstValue &value,
+    Env &env);
+
+  // Resolve the optional (start, end) window arguments of a str method
+  // (args[1], args[2]) for a string of length `sz`, applying Python's
+  // negative-index and clamping rules. Defaults: start=0, end=sz. Returns
+  // false if a present window argument is not a constant int.
+  bool resolve_str_window(
+    const nlohmann::json &args,
+    const Env &env,
+    long long sz,
+    long long &start,
+    long long &end);
   std::optional<PyConstValue>
   eval_expr(const nlohmann::json &node, const Env &env);
 

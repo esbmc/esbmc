@@ -8,6 +8,17 @@
 #include <util/migrate.h>
 #include <util/python_types.h>
 
+namespace
+{
+// V.3: build a boolean constant in IREP2, back-migrated for the legacy
+// callers (the comparison fold results consumed as exprt). Exact migrate of
+// gen_bool(v) modulo the cosmetic #cpp_type hint.
+exprt gen_bool(bool v)
+{
+  return migrate_expr_back(v ? gen_true_expr() : gen_false_expr());
+}
+} // namespace
+
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   const exprt &lhs,
   const exprt &rhs)
@@ -59,7 +70,7 @@ exprt python_converter::compare_constants_internal(
     (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
     bool equal = (lhs == rhs);
-    return gen_boolean((op == "Eq") ? equal : !equal);
+    return gen_bool((op == "Eq") ? equal : !equal);
   }
 
   // Array vs array comparisons (string literal comparison)
@@ -77,7 +88,7 @@ exprt python_converter::compare_constants_internal(
       bool lhs_is_type_id = lhs.operands().empty();
       bool rhs_is_type_id = rhs.operands().empty();
       if (lhs_is_type_id != rhs_is_type_id)
-        return gen_boolean(op == "NotEq");
+        return gen_bool(op == "NotEq");
 
       // Extract string values
       std::string lhs_str =
@@ -87,7 +98,7 @@ exprt python_converter::compare_constants_internal(
 
       // Compare strings
       bool equal = (lhs_str == rhs_str);
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
   }
 
@@ -101,9 +112,9 @@ exprt python_converter::compare_constants_internal(
     {
       bool equal =
         (lhs == rhs_ops[0]) || (lhs.get("value") == rhs_ops[0].get("value"));
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   if (
@@ -115,9 +126,9 @@ exprt python_converter::compare_constants_internal(
     {
       bool equal =
         (lhs_ops[0] == rhs) || (lhs_ops[0].get("value") == rhs.get("value"));
-      return gen_boolean((op == "Eq") ? equal : !equal);
+      return gen_bool((op == "Eq") ? equal : !equal);
     }
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   return nil_exprt();
@@ -165,7 +176,7 @@ exprt python_converter::handle_indexed_comparison_internal(
     std::string lhs_str =
       string_handler_.extract_string_from_array_operands(string_element);
     bool strings_equal = (lhs_str == rhs_str);
-    return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
+    return gen_bool((op == "Eq") ? strings_equal : !strings_equal);
   }
 
   return nil_exprt();
@@ -205,7 +216,7 @@ exprt python_converter::handle_type_mismatches(
 
     // If one is a string array and the other is not, they're different types
     if (lhs_is_string_array != rhs_is_string_array)
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     // Both are string arrays: compare based on content
     bool lhs_empty = string_handler_.is_zero_length_array(lhs) ||
@@ -214,10 +225,10 @@ exprt python_converter::handle_type_mismatches(
                      (rhs.is_constant() && rhs.operands().size() <= 1);
 
     if (lhs_empty != rhs_empty)
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     if (lhs.size() != rhs.size())
-      return gen_boolean(op == "NotEq");
+      return gen_bool(op == "NotEq");
 
     return nil_exprt();
   }
@@ -245,7 +256,7 @@ exprt python_converter::handle_string_comparison(
   if (
     string_handler_.is_zero_length_array(resolved_lhs) &&
     string_handler_.is_zero_length_array(resolved_rhs))
-    return gen_boolean(op == "Eq");
+    return gen_bool(op == "Eq");
 
   // Fast-path for comparisons against single-character string literals.
   // This avoids introducing strcmp() calls that can inflate branch coverage counts.
@@ -414,17 +425,15 @@ exprt python_converter::try_lower_slice_member_is_none(
     return nil_exprt();
   const typet flag_type = slice_struct.get_component(flag_name).type();
 
-  // V.3: IREP2 member access (exact round-trip of member_exprt).
+  // V.3: build the flag member access and the is/is-not-None check in IREP2,
+  // back-migrated once at the return.
   expr2tc fb2;
   migrate_expr(member_side->op0(), fb2);
-  exprt flag_access =
-    migrate_expr_back(member2tc(migrate_type(flag_type), fb2, flag_name));
+  const expr2tc flag2 = member2tc(migrate_type(flag_type), fb2, flag_name);
   // `sl.start is None` ⇔ flag is zero (bound was absent).
   // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
-  equality_exprt eq(flag_access, gen_zero(flag_type));
-  if (op == "Is")
-    return eq;
-  return not_exprt(eq);
+  const expr2tc eq2 = equality2tc(flag2, gen_zero(flag2->type));
+  return migrate_expr_back(op == "Is" ? eq2 : not2tc(eq2));
 }
 
 exprt python_converter::handle_none_comparison(
@@ -469,7 +478,7 @@ exprt python_converter::handle_none_comparison(
       // None is never equal to non-None constant values
       // For == or is: return False
       // For != or is not: return True
-      return gen_boolean(!is_eq);
+      return gen_bool(!is_eq);
     }
   }
 
@@ -489,37 +498,39 @@ exprt python_converter::handle_none_comparison(
   return isnone_expr;
 }
 
+/// Build the Python 'is' identity equality in IREP2. The operands are the
+/// raw values, or the arrays' base addresses when both sides are arrays.
+expr2tc python_converter::build_is_equality(const exprt &lhs, const exprt &rhs)
+{
+  expr2tc lhs2, rhs2;
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Compare base addresses of the arrays
+    migrate_expr(string_handler_.get_array_base_address(lhs), lhs2);
+    migrate_expr(string_handler_.get_array_base_address(rhs), rhs2);
+  }
+  else
+  {
+    // Default identity comparison
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+  }
+
+  return equality2tc(lhs2, rhs2);
+}
+
 /// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
   const exprt &rhs)
 {
-  typet bool_type_result = bool_type();
-  exprt is_expr("=", bool_type_result);
-
-  if (lhs.type().is_array() && rhs.type().is_array())
-  {
-    // Compare base addresses of the arrays
-    is_expr.copy_to_operands(
-      string_handler_.get_array_base_address(lhs),
-      string_handler_.get_array_base_address(rhs));
-  }
-  else
-  {
-    // Default identity comparison
-    is_expr.copy_to_operands(lhs, rhs);
-  }
-
-  return is_expr;
+  return migrate_expr_back(build_is_equality(lhs, rhs));
 }
 
 /// Construct the negation of an 'is' expression, used for 'is not'
 exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
 {
-  exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
-  exprt not_expr("not", bool_type());
-  not_expr.copy_to_operands(is_expr);
-  return not_expr;
+  return migrate_expr_back(not2tc(build_is_equality(lhs, rhs)));
 }
 
 exprt python_converter::handle_string_type_mismatch(
@@ -558,7 +569,7 @@ exprt python_converter::handle_string_type_mismatch(
     // Python allows this comparison but it always returns False for Eq and True for NotEq
     // For verification purposes, we model this as returning the expected constant value
     // This represents Python's behavior: str == int always evaluates to False
-    return gen_boolean(op == "NotEq");
+    return gen_bool(op == "NotEq");
   }
 
   return nil_exprt(); // No action taken for other operators
