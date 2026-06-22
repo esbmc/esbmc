@@ -95,6 +95,18 @@ exprt build_less_than(const exprt &a, const exprt &b)
   return migrate_expr_back(lessthan2tc(a2, b2));
 }
 
+// `a >= b` over synthetic same-width operands. migrate lowers a legacy ">="
+// node to greaterthanequal2tc(migrate(a), migrate(b)) (util/migrate.cpp i_ge
+// path) with no coercion, so this is the byte-identical round-trip; operands
+// must share bit-width (greaterthanequal2t asserts it).
+exprt build_greater_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(greaterthanequal2tc(a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -2953,8 +2965,9 @@ exprt python_list::handle_index_access(
     str_len.copy_to_operands(array_size, one);
 
     // Emit: if (idx >= str_len) throw IndexError("string index out of range")
-    exprt oob_cond(">=", bool_type());
-    oob_cond.copy_to_operands(idx, str_len);
+    // (idx is typecast to size_type above; str_len is a size_type subtraction —
+    // both operands share width.)
+    exprt oob_cond = build_greater_equal(idx, str_len);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "string index out of range");
