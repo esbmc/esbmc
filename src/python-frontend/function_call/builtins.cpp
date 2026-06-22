@@ -377,6 +377,16 @@ exprt function_call_expr::handle_isinstance() const
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
 
+    // Lists use a dedicated pointer-backed operational model. Resolve this
+    // check from the static frontend type instead of emitting a generic
+    // isinstance expression with incompatible operand widths.
+    if (type_name == "list")
+    {
+      if (obj_expr.type() == type_handler_.get_list_type())
+        return true_exprt();
+      return false_exprt();
+    }
+
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array
     // constant. simplify_python_builtins then has to recover the answer
