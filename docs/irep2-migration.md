@@ -3424,6 +3424,49 @@ expression-builder census in `src/python-frontend` → 0 except body shells;
 verdict + text unchanged; asserts cross-check silent. *This is the
 "comparatively mechanical" bulk — but only after V.1k.*
 
+#### V.3 status (2026-06-22) — the "unblocked" premise holds **only** for synthetic-operand subtrees; that surface is now ~drained
+
+> The "now **unblocked**" framing above is premised on V.1k (resolve-then-build,
+> removes W2) having landed. **It has not** — Phase V.1k is still a design spike
+> (§V.1k: "two designs to prototype and compare"). So the §16.1 / F-P11
+> resolved-type wall is **still in force**: a converter-stage `migrate_expr` of an
+> operand that is/contains a `member`/`index` over a still-`symbol`-typed Python
+> object aborts at `irep2_expr.h:1502/1576`. General converter construction (the
+> ~842 `symbol_expr`, the `member`/`index`/arithmetic/`BoolOp` builders over
+> arbitrary user operands) **cannot** migrate until V.1k lands.
+
+**What has actually shipped under V.3 is the *synthetic-operand subtree* surface
+only** — constructions every one of whose forward-migrated operands is a
+fully-synthetic concrete-typed value (OM-call results like `__ESBMC_list_size`/
+`strlen`, `size_type`/`bool` temporaries, freshly-built constants, and
+already-built comparison results). These are exactly what §16.1 permits. ~25 such
+PRs merged (the `[python] V.3: build … in IREP2` series, #5454–#5522), covering
+the truthiness checks, list/set/tuple/string/complex result-bools, is/identity
+equality, the deref/member *sandwich* collapses, chained-comparison and-folds, and
+the generic unary operators (#5527). Two more are open at the time of writing
+(#5527 unary, #5528 conditional truthiness).
+
+**That surface is now largely drained in the core converter.** A worked attempt to
+fold the `and`/`or` `BoolOp` n-ary node (`get_logical_operator_expr`,
+`converter_binop.cpp`) into `and2tc`/`or2tc` — the natural sibling of the merged
+chained-comparison fold (#5519) — **reproduced the §16.1 abort** (`index2t`,
+`irep2_expr.h:1638`) even on a pure all-boolean `(a>0) and (b>0)` input, because
+the `BoolOp` operands come straight from `get_expr` and carry unresolved member/
+index sub-expressions. Reverted, not shipped. This is the **third independent
+confirmation** of the F-P11 wall (after member/index in `converter_expr.cpp` §16
+and integer arithmetic in `build_binary_expression` §16.1).
+
+**Consequence — the productive next step is V.1k, not more subtree mining.** The
+remaining un-migrated converter builders are either (a) general-operand
+constructions (`BoolOp`, arithmetic over user operands, member/index) that are
+F-P11-blocked until V.1k, or (b) synthetic-operand *leaves that feed a legacy
+call/`code` shell* (e.g. `python_list` size arithmetic feeding `build_list_at_call`,
+the `cpp-throw` struct operands) — migratable in isolation but **no net gain**
+under the subtree rule (they back-migrate immediately into a legacy consumer). The
+honest status mirrors §16.1's go/stop: the synthetic-subtree bulk is done; the next
+real unlock is the **V.1k keystone** (resolve-then-build), a P2-class architectural
+change, not a mechanical per-file pass.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
