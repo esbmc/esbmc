@@ -4,6 +4,18 @@
 #include <string.h>
 #include "python_types.h"
 
+// Allocate a Python object instance. The frontend emits a call to this for
+// `ClassName(...)` so class instances get CPython reference semantics (a
+// pointer to a non-expiring object) and survive escaping their defining
+// function, instead of dangling as expired stack locals. This body is a
+// placeholder: symex intercepts the call (symex_mem_inf) and allocates a typed,
+// non-expiring infinite object of the class struct carried by the call's
+// result pointer type.
+void *__ESBMC_new_object()
+{
+  return 0;
+}
+
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;

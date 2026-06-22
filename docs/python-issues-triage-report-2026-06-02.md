@@ -699,3 +699,93 @@ The remaining §15b candidates — `int.to_bytes()` (needs receiver-passing for 
 on the now-established `float` OM) — stand as the next "add the model" entries. The §3
 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
 `hashlib` case all stand; the §5 priority order stands.
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) is in flight and not yet on
+> `master`; this section is appended as §17 of the next sweep so the two PRs do not collide on
+> the section number. The maintainer orders §16 before §17.
+
+## 17. 2026-06-22 re-validation (seventh sweep) & set.isdisjoint() model
+
+Re-test against current `master` (tip `38fd6daaa1`). KNOWNBUG classification unchanged — §3
+holds. This sweep drained the `set.isdisjoint()` entry from the §15b backlog.
+
+### 17a. New isolated, soundly-fixable defect found & fixed
+**`set.isdisjoint()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`{1,2,3}.isdisjoint({4,5,6})` reported `Unsupported function 'isdisjoint' is reached →
+VERIFICATION FAILED` even though the two sets share no elements. `isdisjoint` had no dispatch
+entry, so ESBMC lowered the call to the unsupported-function stub. The sibling relations
+`issubset`/`issuperset` were already modeled by `python_set::build_set_relation_call`, which
+iterates one list and clears a `true`-initialised bool when the per-element predicate fails.
+
+**Fix:** `A.isdisjoint(B)` is the exact dual of `A.issubset(B)` — iterate `A`, but clear the
+result when an element **is** present in `B` (a shared element means the sets are not disjoint)
+rather than when it is absent. Extend `build_set_relation_call` with a `disjoint` flag selecting
+the `in` trigger over `not in`, and add `isdisjoint` to the three dispatch sites
+(`is_set_method_call`, the `set(<iterable>)` constructor fast path in `handle_set_method`, and
+`build_set_method_call`). The empty-set and any-iterable cases fall out of the existing
+list-based model for free (empty receiver → loop body never runs → stays disjoint; the argument
+is consumed as a list via `__ESBMC_list_contains`). Verified against CPython for disjoint,
+overlapping, empty-receiver, `frozenset`, and `set(<list>)`-receiver cases.
+
+Like §16a, this **restores a working feature** (any program calling `set.isdisjoint()` now
+verifies with the correct boolean) rather than converting a crash to a diagnostic. New regression
+pair `regression/python/set-isdisjoint{,_fail}` (CORE); the positive test is the **C-Live**
+liveness witness for the added branches — without the dispatch branch the call lowers to the
+unsupported-function stub and `set-isdisjoint` would report `FAILED`, so its `SUCCESSFUL` verdict
+proves the new path executes (the per-report convention used for §11a/§12a/§15a/§16a). The full
+`regression/python/` suite shows zero new failures (only the pre-existing Bitwuzla-only
+`--z3`/`--ir` environmental set). Code-reviewed: 0 critical/major/medium findings. Bitwuzla-only
+build (`ENABLE_Z3=OFF`); the change is frontend IR lowering with no SMT-encoding change, so the
+verdict is solver-agnostic.
+
+### 17b. Everything else: unchanged disposition
+The remaining §15b unmodeled-method candidates (`int.from_bytes`/`to_bytes` instance-method
+dispatch — note the `int.from_bytes` *classmethod* form already verifies — and `float.is_integer()`
+/ `float.hex()`, which both need a `float` operational model plus float instance-method
+receiver-passing wiring) stand as the next "add the model" entries. The §3 design-level blockers,
+§3c policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all
+stand; the §5 priority order stands.
+## 16. 2026-06-22 re-validation (sixth sweep) & int.bit_count() model
+
+Re-test against current `master` (tip `38fd6daaa1`, with §11–§15's PRs now landed:
+`#5518` width string methods, `#5519` chained-comparison fold, `#5520` dict-union diagnostic,
+`#5516` strcmp normalisation, `#5521` startswith/endswith). KNOWNBUG classification unchanged —
+§3 holds. This sweep drained the next entry from the §15b "unmodeled method" backlog.
+
+### 16a. New isolated, soundly-fixable defect found & fixed
+**`int.bit_count()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`x = 13; x.bit_count()` (Python 3.10+ population count) reported
+`Unsupported function 'bit_count' is reached → VERIFICATION FAILED` even though `13 == 0b1101`
+has three ones. `bit_count` had no operational model, so ESBMC lowered the call to the
+unsupported-function stub. The no-argument int instance-method dispatch already works
+(`expr.cpp` passes the receiver as the value argument, exactly as for `bit_length`); only the
+model body was missing.
+
+**Fix** (`src/python-frontend/models/int.py`): add a `bit_count` classmethod mirroring the
+existing `bit_length` template — fold negatives to their magnitude (`bit_count` operates on the
+absolute value), then accumulate `n & 1` while right-shifting, bounded by a literal 512-shift
+counter (the `--ir` bignum `IntWide` width) so the unwinder has a termination bound and narrow
+callsites exit at `n == 0` well before it. Modelling `bit_count` as an eager popcount is sound
+in every context (it has no side effects and depends only on the receiver's value), verified
+bit-for-bit against CPython for `0`, `255`, `1024`, a negative (`-3 → 2`), an expression
+receiver (`(4-1) → 2`), and `13 → 3`.
+
+Unlike the §6a/§7a/§13a crash→diagnostic fixes, this **restores a working feature** (any program
+calling `int.bit_count()` now verifies with the exact count) — like §10a/§11a/§12a it adds a
+sound value model. New regression pair `regression/python/int_bit_count{,_fail}` (CORE); the
+positive test is the **Py-Live** liveness witness for the new model branch (it reported the
+unsupported-function `FAILED` pre-fix and `SUCCESSFUL` after). The full `regression/python/`
+suite shows zero new failures (only the pre-existing Bitwuzla-only `--z3`/`--ir` environmental
+set, e.g. `github_1964_bit_length_bignum` which is `--ir`-pinned and needs Z3). The fix is
+FLAIL-mangled into the binary, so the OM rebuild requirement was honoured before testing.
+Bitwuzla-only build (`ENABLE_Z3=OFF`); the model is a frontend lowering with no SMT encoding, so
+the verdict is solver-agnostic.
+
+### 16b. Everything else: unchanged disposition
+The remaining §15b unmodeled-method candidates (`int.from_bytes`/`to_bytes` instance-method
+dispatch, `float.is_integer()`/`float.hex()`, `set.isdisjoint()`) stand as the next "add the
+model" entries. The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand. No further isolated, soundly-fixable
+point fix beyond those candidates is available on current `master` without the §5 architectural
+work; the §5 priority order stands.

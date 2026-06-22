@@ -89,20 +89,27 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
-// RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
-// top-level (module/imported-module) statement; anything deeper is nested in a
-// function or a conditionally-executed body, where straight-line retyping is
-// unsound (see #4770/#4774).
+// RAII bump of the get_block() nesting depth, and optionally the function-body
+// depth. Depth 1 is an unconditional top-level (module) statement; anything
+// deeper is nested in a function or a conditional body. Straight-line retyping
+// (#4770/#4774) is sound on the unconditional spine (module body plus enclosing
+// function bodies): exactly block_nesting_ == function_body_depth_ + 1.
 struct block_nesting_guard
 {
   unsigned &depth;
-  explicit block_nesting_guard(unsigned &d) : depth(d)
+  unsigned *fb_depth;
+  explicit block_nesting_guard(unsigned &d, unsigned *fb = nullptr)
+    : depth(d), fb_depth(fb)
   {
     ++depth;
+    if (fb_depth)
+      ++*fb_depth;
   }
   ~block_nesting_guard()
   {
     --depth;
+    if (fb_depth)
+      --*fb_depth;
   }
 };
 } // namespace
@@ -111,6 +118,24 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
+
+  // Case 0: assigning a migrated class pointer (`Class*`) into a by-value
+  // class lvalue (`Class`). After the object-model migration a class
+  // parameter/return is a pointer, but a struct field declared with the class
+  // type is still by-value (e.g. `self.value: Tile`). Dereference the pointer
+  // so the field receives the pointee struct rather than the address; without
+  // this the GOTO carries a `struct = pointer` assignment that crashes SMT
+  // encoding. Guarded by pointee/lvalue struct identity so genuine pointer
+  // fields are untouched.
+  if (rhs_type.is_pointer())
+  {
+    const typet lhs_follow = ns.follow(lhs_type);
+    if (lhs_follow.is_struct() && ns.follow(rhs_type.subtype()) == lhs_follow)
+    {
+      rhs = dereference_exprt(rhs, lhs_type);
+      return;
+    }
+  }
 
   // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
@@ -530,9 +555,19 @@ void python_converter::handle_assignment_type_adjustments(
     }
     else if (rhs.type() == none_type())
     {
-      // Adjust pointer_type() to pointer_typet(empty_typet())
-      lhs_symbol->set_type(rhs.type());
-      lhs.type() = rhs.type();
+      // None/Optional unification (#4796), step C: when the lvalue is already a
+      // class reference (`Class*` — a migrated instance), keep that type and
+      // store a typed NULL, so a later `x = Class(...)` construction allocates
+      // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
+      // would shrink the pointee and corrupt the allocation.
+      if (is_user_class_pointer(lhs.type()))
+        rhs = typecast_exprt(rhs, lhs.type());
+      else
+      {
+        // Adjust pointer_type() to pointer_typet(empty_typet())
+        lhs_symbol->set_type(rhs.type());
+        lhs.type() = rhs.type();
+      }
     }
     // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
     else if (
@@ -1413,6 +1448,46 @@ python_converter::extract_target_name(const nlohmann::json &target) const
     "Unsupported assignment target type: " + target_type.get<std::string>());
 }
 
+std::string python_converter::annotated_optional_class(
+  const nlohmann::json &annotation) const
+{
+  if (!annotation.is_object() || annotation.is_null())
+    return "";
+
+  std::string cls;
+  // Optional[Class] : Subscript(value=Name("Optional"), slice=Name(Class))
+  if (
+    annotation.value("_type", "") == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id") &&
+    annotation["value"]["id"] == "Optional" && annotation.contains("slice") &&
+    annotation["slice"].contains("id"))
+    cls = annotation["slice"]["id"].get<std::string>();
+  // `Class | None` (PEP 604) : BinOp(BitOr, left, right) with one side None.
+  else if (
+    annotation.value("_type", "") == "BinOp" && annotation.contains("op") &&
+    annotation["op"].value("_type", "") == "BitOr" &&
+    annotation.contains("left") && annotation.contains("right"))
+  {
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    auto name_id = [](const nlohmann::json &n) -> std::string {
+      return n.value("_type", "") == "Name" && n.contains("id")
+               ? n["id"].get<std::string>()
+               : std::string();
+    };
+    if (is_none(annotation["right"]))
+      cls = name_id(annotation["left"]);
+    else if (is_none(annotation["left"]))
+      cls = name_id(annotation["right"]);
+  }
+
+  if (cls.empty() || !json_utils::is_class(cls, *ast_json))
+    return "";
+  return cls;
+}
+
 void python_converter::preregister_global_variables(
   const nlohmann::json &ast_body)
 {
@@ -1459,22 +1534,64 @@ void python_converter::preregister_global_variables(
       continue;
 
     typet var_type;
-    try
+    // None/Optional unification (#4653/#4796), step B: a global annotated
+    // `Optional[Class]` / `Class | None` is a nullable class reference; register
+    // it as `Class*` (a zeroable NULL pointer) so it unifies with the pointer
+    // instances assigned to it, instead of the legacy pointer-width None handle.
+    // The class struct is completed by the main class-build loop; the global's
+    // own value (NULL) needs no complete struct, so no build is required here.
+    std::string opt_cls;
+    if (element.contains("annotation"))
+      opt_cls = annotated_optional_class(element["annotation"]);
+    if (!opt_cls.empty())
     {
-      var_type = extract_type_info(element).second;
+      typet st = type_handler_.get_typet(opt_cls);
+      if (st.id() == "symbol" || st.is_struct())
+        var_type = gen_pointer_type(st);
     }
-    catch (const std::exception &e)
+    // A default-constructed typet has an empty id (""), which is neither "nil"
+    // nor "empty"; the Optional path above only sets var_type for nullable
+    // class annotations. For every other annotated global, resolve its real
+    // type with extract_type_info so the symbol is pre-registered correctly:
+    // a method that references a module global declared later in the file
+    // (Python LEGB) must resolve to this symbol (e.g. `counter: int =
+    // nondet_int()` — github_3851_4), and a `str` global must be char[N], not
+    // an empty placeholder that later decays to char* and forces a runtime
+    // strlen on subscript (github_2885).
+    if (var_type.is_nil() || var_type.id().empty())
     {
-      // Type not yet resolvable (e.g., from an unprocessed import). Skip for
-      // now; the variable will be registered when the assignment is processed
-      // after imports are loaded.
-      log_warning(
-        "preregister_global_variables: skipping '{}' ({})",
-        element["target"].value("id", "<unknown>"),
-        e.what());
+      try
+      {
+        var_type = extract_type_info(element).second;
+      }
+      catch (const std::exception &e)
+      {
+        // Type not yet resolvable (e.g., from an unprocessed import). Skip for
+        // now; the variable will be registered when the assignment is processed
+        // after imports are loaded.
+        log_warning(
+          "preregister_global_variables: skipping '{}' ({})",
+          element["target"].value("id", "<unknown>"),
+          e.what());
+        continue;
+      }
+    }
+
+    // Object-model migration (#3067/#4773): a plain user-class global
+    // (`m: C`, whose value is a constructor/call/alias) is registered as a
+    // migrated `C*` reference by get_var_assign, NOT here. Pre-registering a
+    // speculative `C*` corrupts that construction — it surfaces as
+    // "Unexpected type in int/ptr typecast" at SMT encoding
+    // (github_4541/github_2997). Skip user-class structs and let get_var_assign
+    // register them. An Optional[C] global took the opt_cls pointer path above
+    // and is intentionally kept: it is a pointer, not a struct, so it is not
+    // caught here.
+    if (is_user_class_struct_type(var_type))
       continue;
-    }
-    if (var_type.is_nil() || var_type.is_empty())
+    // Skip when no usable type resolved (empty/nil placeholder, e.g. a bare
+    // annotation whose type is not yet known); get_var_assign registers it
+    // later with the real type.
+    if (var_type.is_nil() || var_type.is_empty() || var_type.id().empty())
       continue;
 
     locationt location = get_location_from_decl(element);
@@ -1565,6 +1682,64 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+
+  // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
+  // a class instance — either a constructor call `o = ClassName(...)` or an
+  // alias `b = a` of an existing instance — becomes a *reference* (pointer) to
+  // the object, matching CPython's reference semantics. This makes escaping
+  // objects survive their defining function and makes `b = a` a pointer copy
+  // (shared object) rather than a struct copy. Type the LHS as pointer-to-class
+  // up front, before the declaration is emitted below; function_call_expr then
+  // allocates the object and passes the pointer as `self`.
+  if (
+    ast_node.contains("value") && !ast_node["value"].is_null() &&
+    target.contains("_type") && target["_type"] == "Name")
+  {
+    std::string cls;
+    if (
+      type_handler_.is_constructor_call(ast_node["value"]) &&
+      ast_node["value"]["func"].contains("id"))
+      cls = ast_node["value"]["func"]["id"].get<std::string>();
+    else
+      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+    if (!cls.empty())
+    {
+      typet st = type_handler_.get_typet(cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
+    }
+  }
+
+  // None/Optional unification (#4653/#4796), step B: a local target annotated
+  // `Optional[Class]` / `Class | None` is a nullable class reference — type it
+  // `Class*` (NULL for None) so it unifies with the pointer instances assigned
+  // to it. Build the class on demand first (process_forward_reference) so its
+  // struct symbol is complete, not a null/incomplete stub. Scoped to nullable
+  // annotations of user classes only, so non-Optional class variables and the
+  // object-lifetime flip are unaffected.
+  if (
+    target.contains("_type") && target["_type"] == "Name" &&
+    !current_element_type.is_pointer() && ast_node.contains("annotation"))
+  {
+    const std::string opt_cls =
+      annotated_optional_class(ast_node["annotation"]);
+    if (!opt_cls.empty())
+    {
+      nlohmann::json cls_ref;
+      cls_ref["_type"] = "Name";
+      cls_ref["id"] = opt_cls;
+      process_forward_reference(cls_ref, target_block);
+      typet st = type_handler_.get_typet(opt_cls);
+      if (st.id() == "symbol" || st.is_struct())
+      {
+        current_element_type = gen_pointer_type(st);
+        element_type = current_element_type;
+      }
+    }
+  }
 
   // Flow-sensitive class tracking (#4771/#4772): at an unconditional top-level
   // (depth-1) assignment, record the class most recently assigned to the target
@@ -2039,20 +2214,21 @@ void python_converter::get_var_assign(
     // Straight-line dynamic retyping (#4770, #4774). A variable whose current
     // static type is a numeric scalar is being reassigned a string value (or
     // vice versa). The GOTO IR binds one type per symbol, so the new value
-    // cannot be stored in the old slot. At block_nesting_ == 1 (an
-    // unconditional top-level statement) there is no control-flow join that
-    // could leave the runtime type ambiguous, so we model the rebinding
-    // soundly: mint a fresh symbol of the new type, declare it, and redirect
-    // later loads of the name to it via retype_aliases_. We then fall through
-    // to the normal assignment path with the new, correctly typed symbol,
-    // reusing its function-call/type-adjustment handling. Deeper statements
-    // (function bodies, conditional bodies) are left to the existing fallback.
-    // Class bodies are also converted at nesting 1 (via python_class_builder)
-    // but their attribute symbols are managed separately, so exclude them: only
-    // module/imported-module top-level statements qualify.
+    // cannot be stored in the old slot. On the unconditional spine (the module
+    // body plus the chain of enclosing function bodies, i.e. block_nesting_ ==
+    // function_body_depth_ + 1) there is no control-flow join that could leave
+    // the runtime type ambiguous, so we model the rebinding soundly: mint a
+    // fresh symbol of the new type, declare it, and redirect later loads of the
+    // name to it via retype_aliases_ (keyed by the function-qualified symbol
+    // id, so aliases never leak between functions). We then fall through to the
+    // normal assignment path with the new, correctly typed symbol. Statements
+    // inside any if/while/for/try body add a block_nesting_ frame without a
+    // function_body_depth_ frame, so the equality fails and they fall to the
+    // existing fallback. Class bodies are excluded via current_class_name_:
+    // their attribute symbols are managed separately by python_class_builder.
     if (
-      block_nesting_ == 1 && current_class_name_.empty() && lhs_symbol &&
-      lhs.is_symbol())
+      block_nesting_ == function_body_depth_ + 1 &&
+      current_class_name_.empty() && lhs_symbol && lhs.is_symbol())
     {
       // The LHS lookup above returns the ORIGINAL symbol. If this variable was
       // already retyped, its live value lives in the alias target; resolve to
@@ -2128,7 +2304,12 @@ void python_converter::get_var_assign(
        lhs.type().is_unsignedbv() || lhs.type().is_bool()))
     {
       // Still emit the RHS as a void call so exceptions/side-effects are
-      // preserved (e.g. chr() out-of-range ValueError).
+      // preserved (e.g. chr() out-of-range ValueError, or a method that mutates
+      // `self` while returning a string that does not fit the annotated scalar
+      // slot, as in `n: int = obj.method_returning_str()`). The call reaches
+      // here either as a side_effect_function_call expression or as an
+      // already-lowered code_function_call statement (nil result); handle both,
+      // otherwise the call — and its side effects — would be dropped entirely.
       if (
         rhs.id() == "sideeffect" &&
         rhs.statement() == irep_idt("function_call"))
@@ -2138,6 +2319,15 @@ void python_converter::get_var_assign(
         code_function_callt void_call;
         void_call.function() = se.function();
         void_call.arguments() = se.arguments();
+        void_call.location() = rhs.location();
+        add_instruction(void_call);
+      }
+      else if (rhs.is_code() && rhs.statement() == irep_idt("function_call"))
+      {
+        const code_function_callt &cc = to_code_function_call(to_code(rhs));
+        code_function_callt void_call;
+        void_call.function() = cc.function();
+        void_call.arguments() = cc.arguments();
         void_call.location() = rhs.location();
         add_instruction(void_call);
       }
@@ -2974,8 +3164,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           if (symbolt *bool_method = find_dunder_method(class_name, "__bool__"))
           {
             exprt bool_object = cond;
-            // __bool__ expects self by address, so the condition must be an object.
-            if (!bool_object.is_symbol())
+            // __bool__ expects self by reference. A migrated instance is
+            // already a `Class*` pointer (pass it through); a by-value struct
+            // must be a named object whose address we take.
+            const bool object_is_ptr = bool_object.type().is_pointer();
+            if (!object_is_ptr && !bool_object.is_symbol())
               bool_object =
                 store_call_result(bool_object, location, "cond_obj");
             const code_typet &method_type =
@@ -2984,7 +3177,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
             bool_call.function() = symbol_expr(*bool_method);
             bool_call.type() = method_type.return_type();
             bool_call.location() = location;
-            bool_call.arguments().push_back(gen_address_of(bool_object));
+            bool_call.arguments().push_back(
+              object_is_ptr ? bool_object : gen_address_of(bool_object));
             cond = store_call_result(bool_call, location, "cond_bool");
             cond.location() = location;
           }
@@ -3016,9 +3210,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         size_call.type() = size_type();
         size_call.location() = location;
 
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(size_call, gen_zero(size_type()));
+        // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating
+        // once (mirrors the list-condition path at converter_binop.cpp:208).
+        // The round-trip drops the call operand's location, so re-attach it.
+        expr2tc size_call2;
+        migrate_expr(size_call, size_call2);
+        cond = migrate_expr_back(
+          notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
 
       // Python treats strings in conditions by their length: "" is falsy.
@@ -3036,9 +3236,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         strlen_call.type() = size_type();
         strlen_call.location() = location;
 
-        cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(strlen_call, gen_zero(size_type()));
+        // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
+        // the string-truthiness path at converter_unop.cpp). Re-attach the
+        // call operand's location that the round-trip drops.
+        expr2tc strlen_call2;
+        migrate_expr(strlen_call, strlen_call2);
+        cond = migrate_expr_back(
+          notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
+        cond.op0().location() = location;
       }
     }
   }
@@ -3370,13 +3576,17 @@ void python_converter::get_return_statements(
   }
 }
 
-exprt python_converter::get_block(const nlohmann::json &ast_block)
+exprt python_converter::get_block(
+  const nlohmann::json &ast_block,
+  bool is_function_body)
 {
-  // Track block nesting so straight-line retyping (#4770/#4774) only fires for
-  // unconditional top-level statements (depth 1). Every nested body -- function
-  // bodies, if/while/for bodies, try/except handlers -- is converted through a
-  // deeper get_block(), so this single guard covers them all.
-  block_nesting_guard nesting_guard(block_nesting_);
+  // Track block nesting (and, for a function body, function-body depth) so
+  // straight-line retyping (#4770/#4774) fires on the unconditional spine (the
+  // module body plus enclosing function bodies, block_nesting_ ==
+  // function_body_depth_ + 1) but not inside any if/while/for/try body, which
+  // adds a block_nesting_ frame without a function_body_depth_ frame.
+  block_nesting_guard nesting_guard(
+    block_nesting_, is_function_body ? &function_body_depth_ : nullptr);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so

@@ -187,8 +187,35 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // `or` nodes are bool-typed, and consumers that migrate eagerly (e.g.
   // build_typecast) would otherwise abort before the C adjuster normalises it.
   const typet result_type = (op == "Not") ? bool_type() : type;
-  exprt unary_expr(python_frontend::map_operator(op, result_type), result_type);
-  unary_expr.operands().push_back(unary_sub);
+  const std::string op_id = python_frontend::map_operator(op, result_type);
 
-  return unary_expr;
+  // V.3: build the generic unary node directly in IREP2, back-migrating once.
+  // The Python AST has exactly four unary operators and map_operator covers
+  // each: Not→"not", USub→"unary-", Invert→"bitnot", UAdd→"unary+". The
+  // factories below reproduce migrate_expr's lowering of those ids verbatim
+  // (not2t fixes a bool result; neg2t/bitnot2t take the node type; unary plus
+  // is the identity, dropping the wrapper exactly as migrate_expr does at
+  // util/migrate.cpp:1676), so this is behaviour-preserving under the
+  // mandatory --irep2-bodies round-trip.
+  expr2tc operand2;
+  migrate_expr(unary_sub, operand2);
+
+  expr2tc unary2;
+  if (op_id == "not")
+    unary2 = not2tc(operand2);
+  else if (op_id == "unary-")
+    unary2 = neg2tc(migrate_type(result_type), operand2);
+  else if (op_id == "bitnot")
+    unary2 = bitnot2tc(migrate_type(result_type), operand2);
+  else if (op_id == "unary+")
+    unary2 = operand2; // unary plus is the identity
+  else
+  {
+    // Unknown operator: preserve the legacy (malformed-node + warning) path.
+    exprt unary_expr(op_id, result_type);
+    unary_expr.operands().push_back(unary_sub);
+    return unary_expr;
+  }
+
+  return migrate_expr_back(unary2);
 }
