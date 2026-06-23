@@ -1,0 +1,26 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: "33ee4552-3990-4e4b-8d09-c371c7edbfba"
+    creation_time: "2024-09-17T09:35:16+0000"
+    producer:
+      name: "Handcrafted"
+      version: ""
+    task:
+      input_files:
+      - "./linear-inequality-inv-d.c"
+      input_file_hashes:
+        "./linear-inequality-inv-d.c": "87519343d07fb680fe2f0e8c357c18ba883357d08bc5bf0ec4a3dc8f1cac4329"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - invariant:
+        type: loop_invariant
+        location:
+          file_name: "linear-inequality-inv-d.c"
+          line: 19
+          column: 3
+          function: main
+        value: "s <= i*4294967295 && 0 <= i && i <= 4294967295 && n <= 4294967295"
+        format: c_expression
