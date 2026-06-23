@@ -1188,6 +1188,18 @@ exprt python_set::build_set_method_call(
     return build_symbol(result);
   }
 
+  // The non-mutating union/intersection/difference methods reuse the same
+  // builders as the |, & and - operators; each returns a fresh set and leaves
+  // self unchanged.
+  if (method_name == "union")
+    return build_set_union_call(build_symbol(self), other, element);
+
+  if (method_name == "intersection")
+    return build_set_intersection_call(build_symbol(self), other, element);
+
+  if (method_name == "difference")
+    return build_set_difference_call(build_symbol(self), other, element);
+
   throw std::runtime_error("unsupported set method: " + method_name);
 }
 
