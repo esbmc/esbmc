@@ -1214,6 +1214,17 @@ class LoopMixin:
                     and isinstance(_v_elt, ast.Name)
                     and self._uses_string_subscript(_v_elt.id, node.body)):
                 val_ann = ast.Name(id="dict", ctx=ast.Load())
+            # val added to a float accumulator in the body => value is float.
+            # An unannotated-parameter dict erases the value type to void*, so a
+            # float value is read as `*(void**)item->value` and the accumulate
+            # lowers to `s = IEEE_ADD(s, (double)w)` -- a numeric cast of a
+            # pointer-typed term that produces an ill-sorted floating-point node
+            # (#5501). Typing the value as float routes the read through the
+            # float_buf path, which yields a real-sorted double.
+            if (isinstance(val_ann, ast.Name) and val_ann.id == "Any"
+                    and isinstance(_v_elt, ast.Name)
+                    and self._value_used_in_float_arith(_v_elt.id, node.body)):
+                val_ann = ast.Name(id="float", ctx=ast.Load())
 
         # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
         # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
@@ -1313,6 +1324,42 @@ class LoopMixin:
             if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name)
                     and node.slice.id == var_name):
                 return True
+        return False
+
+    def _value_used_in_float_arith(self, var_name, body):
+        """Return True if var_name is combined with a float operand in arithmetic.
+
+        Detects `acc += var` (and `-=`, `*=`, ...) where acc is float, and
+        `acc + var` / `var * f` where the other operand is a float literal or a
+        name known to hold a float. Used to recover the value element type of an
+        unannotated-parameter dict whose values are floats (#5501): the loop
+        variable is otherwise erased to void*, and reading a float through void*
+        produces an ill-sorted IEEE node.
+        """
+        arith_ops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
+                     ast.Pow)
+
+        def is_float_operand(operand):
+            if isinstance(operand, ast.Constant):
+                return isinstance(operand.value, float)
+            if isinstance(operand, ast.Name):
+                return self.known_variable_types.get(operand.id) == "float"
+            return False
+
+        def mentions_var(operand):
+            return any(isinstance(n, ast.Name) and n.id == var_name
+                       for n in ast.walk(operand))
+
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.AugAssign) and isinstance(node.op, arith_ops)
+                    and is_float_operand(node.target) and mentions_var(node.value)):
+                return True
+            if isinstance(node, ast.BinOp) and isinstance(node.op, arith_ops):
+                left, right = node.left, node.right
+                if ((mentions_var(left) and is_float_operand(right))
+                        or (mentions_var(right) and is_float_operand(left))):
+                    return True
         return False
 
     def _kv_types_from_annotation(self, annotation):

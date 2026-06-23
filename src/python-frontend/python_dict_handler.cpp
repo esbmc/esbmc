@@ -894,11 +894,15 @@ exprt python_dict_handler::create_dict_from_literal(
     }
     else
     {
-      // Regular value: store value directly (value semantics).
-      // Disable float path so dict comparisons via *(void**)item->value use
-      // the integer bit-pattern copy instead of the float_buf pointer.
-      exprt push_value = list_handler.build_push_list_call(
-        values_list, element, value_expr, false);
+      // Regular value: store value directly (value semantics). Keep the float
+      // path enabled (as for keys) so a float value is copied into the
+      // real-sorted __ESBMC_float_buf and its float_idx is recorded; reading it
+      // back through .values()/.items() then yields the correct value instead
+      // of float_buf[0] (#5501). Equality still holds: __ESBMC_values_equal
+      // dereferences item->value, so equal doubles compare equal whether the
+      // value lives in float_buf or an alloca'd buffer.
+      exprt push_value =
+        list_handler.build_push_list_call(values_list, element, value_expr);
       converter_.add_instruction(push_value);
     }
   }
@@ -1328,10 +1332,18 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
+  // float_type_id: route a float value into the real-sorted __ESBMC_float_buf
+  // (and record its float_idx) so .values()/.items() reads it back correctly
+  // rather than as float_buf[0] (#5501). Mirrors the dict-literal value push.
+  exprt value_float_type_id =
+    value_info.elem_symbol->get_type().is_floatbv()
+      ? static_cast<exprt>(build_symbol(*value_info.elem_type_sym))
+      : static_cast<exprt>(from_integer(BigInt(0), size_type()));
+
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(build_symbol(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
-  set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  set_value_call.arguments().push_back(value_float_type_id);
   set_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
       value_info.elem_symbol->get_type())),
@@ -1372,7 +1384,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(
     build_symbol(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
-  push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_value_call.arguments().push_back(value_float_type_id);
   push_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
       value_info.elem_symbol->get_type())),
