@@ -7,20 +7,21 @@
 
 extern int __VERIFIER_nondet_int();
 
-int main() {
+int main()
+{
+  int x = __VERIFIER_nondet_int();
+  int y = __VERIFIER_nondet_int();
+  int tmp;
 
-    int x = __VERIFIER_nondet_int();
-    int y = __VERIFIER_nondet_int();
-    int tmp;
+  while (x != y)
+  {
+    tmp = x;
+    x = y;
+    y = tmp;
 
-    while(x != y) {
-        tmp = x;
-        x = y;
-        y = tmp;
+    if (__VERIFIER_nondet_int())
+      break;
+  }
 
-        if (__VERIFIER_nondet_int())
-            break;
-    }
-
-    return 0;
+  return 0;
 }
