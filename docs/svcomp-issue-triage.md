@@ -1103,15 +1103,42 @@ Violated property: … function ldv_free   dereference failure: invalid pointer 
 VERIFICATION FAILED / Bug found (k = 1)
 ```
 
-at `ldv_free` (`free(s)`, cil-1 line 10798 / cil-2 line 10799), reached through `cafe_smbus_setup`
-(`adap = kzalloc(1904UL, 208U)`) inside the multi-threaded LDV **interrupt scenario** (`cafe_irq`,
-`ldv_dispatch_irq_register_*`, thread 2/3). The freed pointer flows from the LDV environment model
-rather than a single API call, but the failure is the **same precision/incompleteness class as #5397**:
-an over-approximated pointer in the unmodeled LDV kernel environment reaches a memory operation (here a
-`free`, there a deref) and is flagged `invalid` at the base case. Ground truth is `true`, the
-over-approximation is **sound**, and no localized fix exists — the same research-grade LDV-environment
-modelling gap (#4439/#4427/#5397). **No PR.** Disposition corrected from "parse blocker" to
-"reproduced on x86 — invalid-pointer-free from LDV-environment pointer imprecision."
+at `ldv_free`/`kfree` (which both reduce to `free(s)`, cil-1 line 10798 / cil-2 line 10799), reached
+through the multi-threaded LDV PCI/interrupt scenario (`ldv_pci_scenario_3`,
+`ldv_dispatch_irq_register_*`, thread 2/3). **Exact mechanism (source-pinned on cil-2):**
+
+* `cafe_pci_remove(pdev)` recovers the camera object from driver-data and frees it:
+  ```c
+  tmp  = ldv_dev_get_drvdata_84(&pdev->dev);     // pdev->dev.p ? pdev->dev.p->driver_data : NULL
+  cam  = to_cam((struct v4l2_device *)tmp);        // container_of: cam = (char*)tmp - 0xD8
+  if (cam == NULL) { /* print */ return; }         // guard cannot catch a wild offset pointer
+  cafe_shutdown(cam);
+  kfree((void const *)cam);                          // <-- "invalid pointer freed"
+  ```
+* The link that should make `dev_get_drvdata` return `&cam->v4l2_dev` is
+  `v4l2_device_register(cam->dev, &cam->v4l2_dev)` in probe. **But the benchmark stubs that function
+  as a pure no-op** (cil-2 line 12120: `int v4l2_device_register(...){ return __VERIFIER_nondet_int(); }`)
+  — it never performs the kernel's implicit `dev_set_drvdata`. `pdev` is also allocated with the
+  **non-zeroing** `ldv_xmalloc`, so `pdev->dev.p` is an uninitialised (nondet) field.
+* ESBMC therefore finds a sound path with `pdev->dev.p == NULL` → `get_drvdata` returns `NULL` →
+  `to_cam(NULL)` = `NULL − 0xD8` = a **wild, non-NULL** pointer (`0x…FF28`) that the `cam == NULL`
+  guard does not catch → `kfree` of that wild pointer is a genuine invalid free *in the benchmark as
+  written*. The same `container_of`-on-unmodelled-environment pattern recurs (e.g. the
+  `mcam_vb_buffer` list walk, `__mptr − 840`, over `cam->buffers`; the run also names
+  `invalid_object22` / `invalid_object45`), so it is a class, not a one-off.
+
+**Why no sound localized fix.** ESBMC is here *more precise* than the benchmark's bundled environment
+model supports: SV-COMP labels the task `true` only under the assumption of a faithful kernel
+environment in which `v4l2_device_register` sets drvdata. Any ESBMC-side change that let this `kfree`
+pass would be **unsound** (it would suppress a real wild-pointer free on the program as written), and an
+ESBMC operational model cannot help because the benchmark *defines* `v4l2_device_register` itself and so
+shadows any library model. The genuinely-correct fix is upstream — model `v4l2_device_register` to call
+`dev_set_drvdata(arg0, arg1)` (and/or zero-initialise `pdev`) in `sosy-lab/sv-benchmarks` — so the
+drvdata round-trips and the recovered `cam` is valid. This is the **same precision/incompleteness class
+as #5397** and the research-grade LDV-environment modelling gap (#4439/#4427); umbrella #2513/#1447.
+Ground truth is `true`, the over-approximation is **sound**. **No PR.** Disposition: "reproduced on
+x86 — sound invalid-pointer-free from the benchmark's incomplete LDV environment model (no-op
+`v4l2_device_register` + non-zeroed `pdev` + unguarded `to_cam` `container_of`); closed-with-RCA."
 
 ### 12.5 #5142 — imon: re-classified — clang `-Wint-conversion`, *not* inline asm
 

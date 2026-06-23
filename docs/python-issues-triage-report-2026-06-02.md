@@ -701,6 +701,50 @@ the §3 design-level blockers, §3c policy-banned timeouts, §3d questionable ex
 infeasible `hashlib` case all stand; the §5 priority order stands.
 ---
 
+> §18 (PR #5532, `float.is_integer()`), §19 (PR #5536, `int.conjugate()`), §20 (PR #5537, `set`
+> union/intersection/difference methods), and §21 (PR #5540, `dict.clear()`) are in flight and not
+> yet on `master`; this section is appended as §22.
+
+## 22. 2026-06-22 re-validation (twelfth sweep) & str.rpartition()
+
+Re-test against current `master` (tip `44b2605c1c`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery confirmed the list/set/dict mutators (remove/insert/reverse/sort/pop/del,
+set.clear/remove/pop/add) all verify; the isolated unmodelled method fixed below.
+
+### 22a. New isolated, soundly-fixable defect found & fixed
+**`str.rpartition()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`str.partition()` already verifies, but its right-hand mirror `str.rpartition()` reported
+`Unsupported function 'rpartition' is reached`. **Fix:** refactor `handle_string_partition`'s body
+into a shared `build_partition_tuple(string_obj, sep_arg, location, bool from_right)`;
+`handle_string_partition` delegates with `from_right=false`, the new `handle_string_rpartition`
+with `from_right=true`. The shared helper searches with `rfind` instead of `find` when
+`from_right`, and on a missing separator returns `("", "", input)` (rpartition's shape — the
+unmatched receiver lands in the *last* element) versus partition's `(input, "", "")`. Register
+`rpartition` in the one-arg string-method dispatch table and map it (like `partition`) to the
+`"tuple"` return type in `annotation_conversion.inl` so the 3-tuple is typed correctly (the
+`#5114` mistyping guard). Constant-receiver/separator only, matching `partition`; the non-constant
+path keeps partition's `("", "", "")` GOTO-no-abort fallback (#4807).
+
+The `from_right=false` path is byte-identical to the prior `partition` implementation (verified by
+diff and by the unchanged partition regression behaviour). Like §16a–§20a this **restores a working
+feature**. New regression pair `regression/python/str_rpartition{,_fail}` (CORE) covering
+last-occurrence split, the not-found `("", "", input)` shape, a **multi-character separator**
+(`"xxabxxcd".rpartition("xx")` — the subtlest `pos + sep.size()` path), an empty receiver, and
+`len == 3`; the positive test is the liveness witness for the added dispatch entry. Verified
+bit-for-bit against CPython for every case; CPython sanity passes; the focused
+`regression/python/{str,string,partition}*` ctest subset (436 tests) shows zero new failures (the
+12 failing are all `--z3`/`--ir`/`--boolector` environmental on this Bitwuzla-only build).
+Code-reviewed (0 critical/major/minor; partition-preservation diff-confirmed). Solver-agnostic
+(constant-fold in the frontend, no SMT-encoding change).
+
+### 22b. Everything else: unchanged disposition
+Deferred candidates stand: `str.rsplit()` (right-side `split`), `int.to_bytes()` (args +
+bytes-array return), `bytes.hex()`/`bytes.decode()`/`str.encode()` (bytes/encoding models),
+`str.maketrans`/`str.translate`, `float.hex()` (infeasible, like `hashlib`), `str.isascii()`
+(string-soundness, §5-#2), and the numeric-tower *properties* (`int.numerator`/`denominator`,
+`float.real`/`imag`). The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) and §17 (PR #5531,
 > `set.isdisjoint()` model) are in flight and not yet on `master`; this section is appended as
 > §18 of the next sweep so the in-flight PRs do not collide on the section number. The maintainer
