@@ -694,6 +694,195 @@ Deferred candidates stand: `max`/`min(key=...)` with **symbolic** elements or a 
 `str.isascii()` (string-soundness), and the numeric-tower *properties*. The §3 design-level
 blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand;
 the §5 priority order stands.
+> **Note on numbering.** §16–§26 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556) are in flight and not yet on `master`; this section is appended as §27.
+
+## 27. 2026-06-22 re-validation (seventeenth sweep) & list(tuple)
+
+Re-test against current `master` (tip `d23bfa2728`). KNOWNBUG classification unchanged — §3 holds.
+This sweep fixed the `list(tuple)` sibling defect catalogued in §26b — a second **wrong-verdict /
+crash** on the same tuple-as-list confusion, on a *different* code path than `list.extend`.
+
+### 27a. New isolated, soundly-fixable defect found & fixed
+**`list(tuple)` (the `list()` constructor over a tuple) gave a wrong list / OOB crash.**
+
+`list((2, 3))` produced a wrong list (incorrect elements) and `t = (2, 3); list(t)` crashed with a
+dereference failure. The `list()` constructor handled empty, `range`, and list-typed arguments,
+but a tuple argument fell through to the generic function-call builder, which mistyped the tuple
+struct as a list.
+
+**Fix** (two complementary branches in `converter_funcall.cpp`'s `list(...)` block, plus a reusable
+helper):
+- **Tuple literal** `list((a, b, ...))`: lower the `Tuple` AST node to a `List` node and recurse,
+  routing through the well-tested `[]` list-literal path with full element-type tracking.
+- **Tuple variable** `list(t)`: after the existing list-typed check, when the evaluated argument is
+  a tuple struct (`tuple_handler::is_tuple_type`), call the new
+  `python_list::build_list_from_tuple`, which materialises the tuple's components into a fresh list
+  (delegating to the existing `build_list_from_exprs`, with a new non-deref `build_member` IREP2
+  helper reading each component). The variable branch generalises to any non-literal whose
+  `get_expr` yields a tuple struct (`Name`, `Subscript`, a `Call` returning a tuple).
+
+The two branches are cleanly partitioned (the literal branch intercepts `_type == "Tuple"` before
+`get_expr`; the variable branch only sees non-`Tuple` nodes), with no overlap or gap, and
+`list(list)`/`list(range)`/`list()`/`list("abc")` are untouched. This **fixes a wrong verdict /
+memory-corruption**. New regression pair `regression/python/list_from_tuple{,_fail}` (CORE)
+covering a two-element literal, a tuple variable, a single-element tuple, mutate-after-construction,
+an empty tuple, and the unaffected `list(list)` path; the positive test is the liveness witness.
+Verified against CPython; CPython sanity passes; the focused `regression/python/{list,tuple}*`
+ctest subset (287 tests) shows zero new failures (the 38 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build). Code-reviewed (0 critical/major; consolidated
+`build_list_from_tuple` onto the existing `build_list_from_exprs` per the review). Solver-agnostic
+(frontend materialisation + the existing list-literal path, no SMT-encoding change).
+
+### 27b. Everything else: unchanged disposition
+Deferred candidates stand: `str.startswith`/`endswith` with start/end position arguments (clean
+"requires one argument" error today), `zip()` (unmodelled), `list("abc")` (string→list, a separate
+"requires constant" error), symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`,
+`int.to_bytes()`, the bytes/encoding family, `float.hex()` (infeasible), `str.isascii()`
+(string-soundness), and the numeric-tower *properties*. The §3 design-level blockers, §3c timeouts,
+§3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order
+stands.
+> **Note on numbering.** §16–§22 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543) are in
+> flight and not yet on `master`; this section is appended as §23.
+
+## 23. 2026-06-22 re-validation (thirteenth sweep) & str.startswith/endswith tuple support
+
+Re-test against current `master` (tip `f23d79805d`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery surfaced a **wrong-verdict** bug (the highest-value class).
+
+### 23a. New isolated, soundly-fixable defect found & fixed
+**`str.startswith(tuple)` / `str.endswith(tuple)` reported a spurious `VERIFICATION FAILED`.**
+
+Python's `startswith`/`endswith` accept a *tuple of affixes* and return `True` iff the string
+matches **any** element (`"abc".startswith(("x", "ab"))` is `True`). ESBMC's handlers took a single
+affix and fed the tuple **struct** straight into `ensure_null_terminated_string`, mis-evaluating it
+as a string → a silently wrong `False`.
+
+**Fix:** guard the top of `handle_string_startswith`/`handle_string_endswith` — when the affix
+argument is a tuple type, delegate to a new `build_affix_tuple_match`, which ORs the per-element
+single-affix match (recursively reusing the scalar handlers over `affix_tuple.operands()`, the
+correct way to read an inline tuple literal's elements — the same direct-operand strategy
+`tuple_handler::get_tuple_element` uses to avoid the non-addressable-struct-member pitfall #5185).
+A tuple passed *by symbol* (no inline operands) throws a clean `runtime_error` rather than silently
+returning `False` — sound: an honest unsupported-error, never a wrong verdict. The single-string
+path is a byte-for-byte unchanged suffix of the guard, so there is no scalar-path regression.
+
+This **fixes a wrong verdict**, the highest-value class in this report. New regression pair
+`regression/python/str_startswith_tuple{,_fail}` (CORE) covering tuple match / no-match / both
+`startswith` and `endswith` / single-string forms; the positive test is the liveness witness for
+the added guard (pre-fix it produced the wrong `FAILED`). Verified bit-for-bit against CPython;
+CPython sanity passes; the focused `regression/python/{str,string,startswith,endswith}*` ctest
+subset (436 tests) shows zero new failures (the 12 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build). Code-reviewed (0 critical/major/minor; scalar-path
+non-regression diff-confirmed). Solver-agnostic (frontend disjunction over existing strncmp/strlen
+matches, no SMT-encoding change).
+
+### 23b. Everything else: unchanged disposition
+Other fresh wrong-verdicts catalogued this sweep but **not** isolated point fixes: `max`/`min` with
+a `key=` function (ignores the key — needs function application over each element), and
+`list.index()` of an absent value inside `try/except ValueError` (exception-model interaction).
+Deferred method candidates stand: `str.rsplit()` (right-side `split` — two `build_split_list`
+overloads + maxsplit-from-right), `int.to_bytes()`, `bytes.hex()`/`decode()`/`str.encode()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), `str.isascii()` (string-soundness), and the
+numeric-tower *properties*. The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
+> and §18 (PR #5532, `float.is_integer()`) have landed on `master`; this section is §19.
+
+## 19. 2026-06-22 re-validation (ninth sweep) & int.conjugate() model
+
+Re-test against current `master` (tip `38fd6daaa1`). KNOWNBUG classification unchanged — §3 holds.
+This sweep probed the remaining §15b candidates and shipped `int.conjugate()`.
+
+### 19a. Candidates triaged this sweep
+A fresh idiom battery over int/float/str/list/dict methods found most already modelled. The
+genuinely unmodelled, isolated ones:
+- **`int.conjugate()` / `float.conjugate()`** — returns the value unchanged (the complex
+  conjugate of a real number is itself). Cleanest sound fix; shipped below (int only — `float`
+  has no OM on `master` yet; the `float` OM lands with §18/PR #5532, after which `float.conjugate`
+  is a one-line follow-up).
+- **`str.isascii()`** — *attempted and withdrawn this sweep.* It is **not** an isolated fix: the
+  constant-string `consteval` path drops non-ASCII bytes (so a literal `"café"` is seen as `"caf"`)
+  while the symbolic path uses a C runtime model, and the two interact context-dependently (bare
+  `assert s.isascii()` vs `== True`/`not`), risking an *unsound* `True` on non-ASCII literals.
+  Doing it correctly needs the constant-string representation to preserve raw bytes — a
+  string-soundness item (§5-#2), not a method-add. Reverted in full; deferred.
+- **`int.to_bytes()`** — needs receiver-passing for an int method that *takes arguments* plus a
+  variable-length bytes-array return model; deferred as a larger feature.
+- **`float.hex()`** — reproduces CPython's exact hex-float repr; like `hashlib` (§3b), effectively
+  infeasible to model soundly. Deferred/declined.
+
+### 19b. New isolated, soundly-fixable defect found & fixed
+**`int.conjugate()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`(5).conjugate()` reported `Unsupported function 'conjugate' is reached → VERIFICATION FAILED`
+even though `int.conjugate()` returns the integer unchanged. **Fix:** add a `conjugate(cls, n)`
+classmethod to `models/int.py` returning `n` (mirroring the zero-arg `bit_length` dispatch), and —
+critically — register `conjugate` in `type_utils::is_python_model_func`. The latter was found by
+code review: without it, verifying a function that calls `x.conjugate()` under `--function` tries
+to resolve `conjugate` as a *user* function and aborts with an uncaught `nlohmann::json` type_error
+(reproduced; the empty `find_function` result is dereferenced in `converter_funcall.cpp`). The
+complex-number `conjugate` handler already guards on `is_complex_type`, so int receivers fall
+through cleanly with no collision.
+
+Like §16a/§17a/§18a this **restores a working feature**. New regression tests
+`regression/python/int_conjugate{,_fail}` (CORE) plus `int_conjugate_func` (the `--function`
+crash-regression witness for the `is_python_model_func` registration — it aborted pre-fix).
+Verified for positive/negative/zero and a BinOp receiver against CPython; CPython sanity passes; a
+19-test int-method ctest subset is 100% green; code-reviewed (the `--function` MAJOR finding was
+caught and fixed before commit). Bitwuzla-only build (`ENABLE_Z3=OFF`); the change is a value model
+plus a frontend allowlist entry with no SMT-encoding change, so the verdict is solver-agnostic.
+
+### 19c. Everything else: unchanged disposition
+The deferred §19a candidates (`str.isascii()` string-soundness, `int.to_bytes()`, `float.hex()`),
+the §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand; the §5 priority order stands.
+---
+
+> §18 (PR #5532, `float.is_integer()`), §19 (PR #5536, `int.conjugate()`), §20 (PR #5537, `set`
+> union/intersection/difference methods), and §21 (PR #5540, `dict.clear()`) are in flight and not
+> yet on `master`; this section is appended as §22.
+
+## 22. 2026-06-22 re-validation (twelfth sweep) & str.rpartition()
+
+Re-test against current `master` (tip `44b2605c1c`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery confirmed the list/set/dict mutators (remove/insert/reverse/sort/pop/del,
+set.clear/remove/pop/add) all verify; the isolated unmodelled method fixed below.
+
+### 22a. New isolated, soundly-fixable defect found & fixed
+**`str.rpartition()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`str.partition()` already verifies, but its right-hand mirror `str.rpartition()` reported
+`Unsupported function 'rpartition' is reached`. **Fix:** refactor `handle_string_partition`'s body
+into a shared `build_partition_tuple(string_obj, sep_arg, location, bool from_right)`;
+`handle_string_partition` delegates with `from_right=false`, the new `handle_string_rpartition`
+with `from_right=true`. The shared helper searches with `rfind` instead of `find` when
+`from_right`, and on a missing separator returns `("", "", input)` (rpartition's shape — the
+unmatched receiver lands in the *last* element) versus partition's `(input, "", "")`. Register
+`rpartition` in the one-arg string-method dispatch table and map it (like `partition`) to the
+`"tuple"` return type in `annotation_conversion.inl` so the 3-tuple is typed correctly (the
+`#5114` mistyping guard). Constant-receiver/separator only, matching `partition`; the non-constant
+path keeps partition's `("", "", "")` GOTO-no-abort fallback (#4807).
+
+The `from_right=false` path is byte-identical to the prior `partition` implementation (verified by
+diff and by the unchanged partition regression behaviour). Like §16a–§20a this **restores a working
+feature**. New regression pair `regression/python/str_rpartition{,_fail}` (CORE) covering
+last-occurrence split, the not-found `("", "", input)` shape, a **multi-character separator**
+(`"xxabxxcd".rpartition("xx")` — the subtlest `pos + sep.size()` path), an empty receiver, and
+`len == 3`; the positive test is the liveness witness for the added dispatch entry. Verified
+bit-for-bit against CPython for every case; CPython sanity passes; the focused
+`regression/python/{str,string,partition}*` ctest subset (436 tests) shows zero new failures (the
+12 failing are all `--z3`/`--ir`/`--boolector` environmental on this Bitwuzla-only build).
+Code-reviewed (0 critical/major/minor; partition-preservation diff-confirmed). Solver-agnostic
+(constant-fold in the frontend, no SMT-encoding change).
+
+### 22b. Everything else: unchanged disposition
+Deferred candidates stand: `str.rsplit()` (right-side `split`), `int.to_bytes()` (args +
+bytes-array return), `bytes.hex()`/`bytes.decode()`/`str.encode()` (bytes/encoding models),
+`str.maketrans`/`str.translate`, `float.hex()` (infeasible, like `hashlib`), `str.isascii()`
+(string-soundness, §5-#2), and the numeric-tower *properties* (`int.numerator`/`denominator`,
+`float.real`/`imag`). The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()` model) and §17 (PR #5531,
 > `set.isdisjoint()` model) are in flight and not yet on `master`; this section is appended as
 > §18 of the next sweep so the in-flight PRs do not collide on the section number. The maintainer
