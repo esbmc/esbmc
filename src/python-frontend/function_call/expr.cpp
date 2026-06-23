@@ -1933,7 +1933,8 @@ bool function_call_expr::is_set_method_call() const
   if (
     method_name != "add" && method_name != "discard" &&
     method_name != "issubset" && method_name != "issuperset" &&
-    method_name != "update" && method_name != "symmetric_difference")
+    method_name != "isdisjoint" && method_name != "update" &&
+    method_name != "symmetric_difference")
     return false;
 
   // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
@@ -1959,12 +1960,15 @@ exprt function_call_expr::handle_set_method() const
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
 
-  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
-  // which cannot change a subset/superset verdict. Use the iterable directly
-  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
-  // inside a loop would otherwise rebuild the set (one push plus one
-  // containment scan per element) on every iteration (#4805).
-  if (method_name == "issubset" || method_name == "issuperset")
+  // set(<iterable>).issubset/issuperset/isdisjoint(y): set() here only
+  // deduplicates, which cannot change a subset/superset/disjoint verdict. Use
+  // the iterable directly and skip materializing the set — a guard like
+  // `set(xs).issuperset(...)` inside a loop would otherwise rebuild the set
+  // (one push plus one containment scan per element) on every iteration
+  // (#4805).
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
   {
     const auto &receiver = call_["func"]["value"];
     if (
@@ -1999,8 +2003,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / issuperset / update / symmetric_difference take another
-  // set/iterable.
+  // issubset / issuperset / isdisjoint / update / symmetric_difference take
+  // another set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
@@ -4258,13 +4262,17 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
-      // All methods for the int class without parameters acts solely on the encapsulated integer value.
-      // Therefore, we always pass the caller (obj) as a parameter in these functions.
-      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      // All methods for the int/float classes without parameters act solely
+      // on the encapsulated scalar value. Therefore, we always pass the caller
+      // (obj) as a parameter in these functions. For example, if x is an int
+      // instance, x.bit_length() call becomes bit_length(x); likewise a float
+      // instance's x.is_integer() becomes is_integer(x).
+      const std::string recv_type =
+        obj_symbol ? type_handler_.get_var_type(obj_symbol->name.as_string())
+                   : std::string();
       if (
-        obj_symbol &&
-        type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
-        call_["args"].empty())
+        obj_symbol && call_["args"].empty() &&
+        (recv_type == "int" || recv_type == "float"))
       {
         call.arguments().push_back(build_symbol(*obj_symbol));
       }
@@ -4646,7 +4654,7 @@ exprt function_call_expr::handle_general_function_call()
       std::string var_type =
         type_handler_.get_var_type(obj_symbol->name.as_string());
 
-      if (var_type == "int")
+      if (var_type == "int" || var_type == "float")
         will_add_object = true;
     }
 
