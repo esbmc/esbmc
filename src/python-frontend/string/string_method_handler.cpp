@@ -6,6 +6,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -834,11 +835,45 @@ std::optional<exprt> dispatch_format_methods(
 }
 } // namespace string_method_dispatch
 
+exprt string_handler::build_affix_tuple_match(
+  const exprt &string_obj,
+  const exprt &affix_tuple,
+  const locationt &location,
+  bool is_suffix)
+{
+  // Python: s.startswith(t) / s.endswith(t) where t is a tuple of strings is
+  // True iff s matches ANY element. Build the disjunction over the per-element
+  // single-affix matches. Only tuple literals (a struct_exprt whose operands
+  // are the elements) are supported; a tuple passed by symbol has no inline
+  // operands here, and silently treating it as a string would be unsound, so
+  // we reject it with a clean error instead.
+  if (affix_tuple.operands().empty())
+    throw std::runtime_error(
+      std::string(is_suffix ? "endswith" : "startswith") +
+      "() with a tuple argument is only supported for tuple literals");
+
+  exprt result = gen_boolean(false);
+  for (const exprt &elem : affix_tuple.operands())
+  {
+    exprt one = is_suffix
+                  ? handle_string_endswith(string_obj, elem, location)
+                  : handle_string_startswith(string_obj, elem, location);
+    exprt disjunction("or", bool_type());
+    disjunction.copy_to_operands(result, one);
+    result = disjunction;
+  }
+  return result;
+}
+
 exprt string_handler::handle_string_startswith(
   const exprt &string_obj,
   const exprt &prefix_arg,
   const locationt &location)
 {
+  // A tuple of prefixes: True if the string starts with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(prefix_arg.type()))
+    return build_affix_tuple_match(string_obj, prefix_arg, location, false);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt prefix_copy = prefix_arg;
@@ -910,6 +945,10 @@ exprt string_handler::handle_string_endswith(
   const exprt &suffix_arg,
   const locationt &location)
 {
+  // A tuple of suffixes: True if the string ends with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(suffix_arg.type()))
+    return build_affix_tuple_match(string_obj, suffix_arg, location, true);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt suffix_copy = suffix_arg;
