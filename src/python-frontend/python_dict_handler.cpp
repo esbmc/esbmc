@@ -94,6 +94,18 @@ exprt build_less_than(const exprt &a, const exprt &b)
   return migrate_expr_back(lessthan2tc(a2, b2));
 }
 
+// `(t)(a - b)` over synthetic same-width operands. migrate lowers a legacy "-"
+// node to sub2tc(migrate_type(t), migrate(a), migrate(b)) (util/migrate.cpp
+// i_sub path) with no coercion, so this is the byte-identical round-trip. The
+// result type and both operands MUST share bit-width (sub2t asserts it).
+exprt build_sub(const exprt &a, const exprt &b, const typet &t)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
+}
+
 // Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
 // (V.3). SIZE_MAX is the dict lookup's not-found sentinel.
 exprt build_key_found(const symbolt &index_var)
@@ -3193,9 +3205,9 @@ exprt python_dict_handler::handle_dict_popitem(
     last_idx_decl.location() = location;
     nonempty_block.copy_to_operands(last_idx_decl);
 
-    exprt last_idx_expr("-", size_type());
-    last_idx_expr.copy_to_operands(
-      build_symbol(size_var), gen_one(size_type()));
+    // size_var and the 1 literal are both size_type — same width.
+    exprt last_idx_expr =
+      build_sub(build_symbol(size_var), gen_one(size_type()), size_type());
     code_assignt last_idx_assign(build_symbol(last_idx_var), last_idx_expr);
     last_idx_assign.location() = location;
     nonempty_block.copy_to_operands(last_idx_assign);
