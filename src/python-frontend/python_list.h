@@ -287,6 +287,17 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Materialise a tuple value into a fresh list, pushing each component
+   * in order. Used by list(tuple) (and any context that converts a tuple to a
+   * list), so the list model sees a real PyListObject* rather than the tuple
+   * struct. @p tuple_expr must have tuple struct type.
+   */
+  static exprt build_list_from_tuple(
+    python_converter &converter,
+    const exprt &tuple_expr,
+    const nlohmann::json &element);
+
+  /**
    * @brief Build a list copy operation
    * @param list The list symbol to copy from
    * @param element The AST node for location information

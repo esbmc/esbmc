@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 6
-^ERROR: tuple\(\) is only supported over list and tuple arguments$
+^VERIFICATION SUCCESSFUL$

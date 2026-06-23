@@ -29,6 +29,17 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic OM operands (loop counters / sizes). migrate lowers a
+// legacy "<" node to lessthan2tc(migrate(a), migrate(b)) (util/migrate.cpp,
+// i_lt path) with no coercion, so this is the byte-identical round-trip.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // The one call site indexes an is_array()-guarded char array, so the index2t
 // array-source precondition holds.
 exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
@@ -284,7 +295,10 @@ exprt python_set::get_from_iterable(
   idx_init.location() = loc;
   converter_.add_instruction(idx_init);
 
-  // Loop condition: i < length
+  // Loop condition: i < length. Kept legacy: idx_sym (size_type) and
+  // length_expr can have mismatched bit-widths here (the .lower()/runtime-string
+  // path), which the legacy "<" node tolerates and clang_cpp_adjust reconciles;
+  // lessthan2t asserts width consistency, so building it pre-adjust would abort.
   exprt cond("<", bool_type());
   cond.copy_to_operands(build_symbol(idx_sym), length_expr);
 
@@ -549,8 +563,7 @@ exprt python_set::build_set_difference_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -677,8 +690,7 @@ exprt python_set::build_set_intersection_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -815,8 +827,7 @@ exprt python_set::build_set_union_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -943,8 +954,7 @@ void python_set::emit_filtered_extend(
   converter.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -1069,8 +1079,7 @@ exprt python_set::build_set_relation_call(
   converter_.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 

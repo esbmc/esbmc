@@ -6,6 +6,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -478,12 +479,13 @@ std::optional<exprt> dispatch_one_arg_string_methods(
     const char *arg_name;
     one_arg_handler_t handler;
   };
-  static constexpr std::array<one_arg_handler_entryt, 5> one_arg_handlers = {{
+  static constexpr std::array<one_arg_handler_entryt, 6> one_arg_handlers = {{
     {"startswith", "prefix", &string_handler::handle_string_startswith},
     {"endswith", "suffix", &string_handler::handle_string_endswith},
     {"removeprefix", "prefix", &string_handler::handle_string_removeprefix},
     {"removesuffix", "suffix", &string_handler::handle_string_removesuffix},
     {"partition", "sep", &string_handler::handle_string_partition},
+    {"rpartition", "sep", &string_handler::handle_string_rpartition},
   }};
 
   for (const auto &[name, arg_name, handler] : one_arg_handlers)
@@ -845,11 +847,45 @@ std::optional<exprt> dispatch_format_methods(
 }
 } // namespace string_method_dispatch
 
+exprt string_handler::build_affix_tuple_match(
+  const exprt &string_obj,
+  const exprt &affix_tuple,
+  const locationt &location,
+  bool is_suffix)
+{
+  // Python: s.startswith(t) / s.endswith(t) where t is a tuple of strings is
+  // True iff s matches ANY element. Build the disjunction over the per-element
+  // single-affix matches. Only tuple literals (a struct_exprt whose operands
+  // are the elements) are supported; a tuple passed by symbol has no inline
+  // operands here, and silently treating it as a string would be unsound, so
+  // we reject it with a clean error instead.
+  if (affix_tuple.operands().empty())
+    throw std::runtime_error(
+      std::string(is_suffix ? "endswith" : "startswith") +
+      "() with a tuple argument is only supported for tuple literals");
+
+  exprt result = gen_boolean(false);
+  for (const exprt &elem : affix_tuple.operands())
+  {
+    exprt one = is_suffix
+                  ? handle_string_endswith(string_obj, elem, location)
+                  : handle_string_startswith(string_obj, elem, location);
+    exprt disjunction("or", bool_type());
+    disjunction.copy_to_operands(result, one);
+    result = disjunction;
+  }
+  return result;
+}
+
 exprt string_handler::handle_string_startswith(
   const exprt &string_obj,
   const exprt &prefix_arg,
   const locationt &location)
 {
+  // A tuple of prefixes: True if the string starts with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(prefix_arg.type()))
+    return build_affix_tuple_match(string_obj, prefix_arg, location, false);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt prefix_copy = prefix_arg;
@@ -921,6 +957,10 @@ exprt string_handler::handle_string_endswith(
   const exprt &suffix_arg,
   const locationt &location)
 {
+  // A tuple of suffixes: True if the string ends with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(suffix_arg.type()))
+    return build_affix_tuple_match(string_obj, suffix_arg, location, true);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt suffix_copy = suffix_arg;
@@ -2566,6 +2606,24 @@ exprt string_handler::handle_string_partition(
   const exprt &sep_arg,
   const locationt &location)
 {
+  return build_partition_tuple(string_obj, sep_arg, location, false);
+}
+
+exprt string_handler::handle_string_rpartition(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location)
+{
+  return build_partition_tuple(string_obj, sep_arg, location, true);
+}
+
+exprt string_handler::build_partition_tuple(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location,
+  bool from_right)
+{
+  const char *method_name = from_right ? "rpartition" : "partition";
   // Build a 3-tuple (before, sep, after) as a struct tagged like a regular
   // Python tuple ("tag-tuple_..."). The tag is what lets the assignment target
   // fixup, len(), and subscript recognise the result as a tuple rather than a
@@ -2607,27 +2665,42 @@ exprt string_handler::handle_string_partition(
     // report VFAILED, but GOTO conversion no longer aborts (#4807).
     log_debug(
       "python-string",
-      "partition() on non-constant receiver/separator: empty-tuple "
-      "fallback");
+      "{}() on non-constant receiver/separator: empty-tuple fallback",
+      method_name);
     if (!string_builder_)
-      throw std::runtime_error("string_builder not set for partition()");
+      throw std::runtime_error(
+        std::string("string_builder not set for ") + method_name + "()");
     exprt empty_a = string_builder_->build_string_literal("");
     exprt empty_b = string_builder_->build_string_literal("");
     exprt empty_c = string_builder_->build_string_literal("");
     return make_tuple3(empty_a, empty_b, empty_c);
   }
   if (sep.empty())
-    throw std::runtime_error("partition() separator cannot be empty");
+    throw std::runtime_error(
+      std::string(method_name) + "() separator cannot be empty");
 
   std::string before;
   std::string after;
   std::string mid;
-  size_t pos = input.find(sep);
+  // partition() splits at the first occurrence of sep; rpartition() at the
+  // last. When sep is absent, partition() returns (input, "", "") and
+  // rpartition() returns ("", "", input) — the unmatched receiver goes in the
+  // first vs. the last element respectively.
+  size_t pos = from_right ? input.rfind(sep) : input.find(sep);
   if (pos == std::string::npos)
   {
-    before = input;
-    mid = "";
-    after = "";
+    if (from_right)
+    {
+      before = "";
+      mid = "";
+      after = input;
+    }
+    else
+    {
+      before = input;
+      mid = "";
+      after = "";
+    }
   }
   else
   {
@@ -2637,7 +2710,8 @@ exprt string_handler::handle_string_partition(
   }
 
   if (!string_builder_)
-    throw std::runtime_error("string_builder not set for partition()");
+    throw std::runtime_error(
+      std::string("string_builder not set for ") + method_name + "()");
 
   exprt before_expr = string_builder_->build_string_literal(before);
   exprt mid_expr = string_builder_->build_string_literal(mid);

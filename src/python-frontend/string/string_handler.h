@@ -286,6 +286,17 @@ public:
     const locationt &location);
 
   /**
+   * @brief Shared implementation for startswith()/endswith() with a tuple of
+   *        affixes: True iff the string matches any element. @p is_suffix
+   *        selects endswith (true) vs startswith (false).
+   */
+  exprt build_affix_tuple_match(
+    const exprt &string_obj,
+    const exprt &affix_tuple,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
    * @brief Handle str.isdigit() method
    * @param string_obj String object
    * @param location Source location
@@ -569,6 +580,27 @@ public:
     const exprt &string_obj,
     const exprt &sep_arg,
     const locationt &location);
+
+  /**
+   * @brief Handle str.rpartition() method (constant-only support).
+   *
+   * Like partition() but splits at the last occurrence of the separator.
+   */
+  exprt handle_string_rpartition(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location);
+
+  /**
+   * @brief Shared implementation of partition()/rpartition(): builds the
+   *        3-tuple (before, sep, after), searching from the left when
+   *        @p from_right is false and from the right when true.
+   */
+  exprt build_partition_tuple(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location,
+    bool from_right);
 
   /**
    * @brief Handle str.isalnum() method
