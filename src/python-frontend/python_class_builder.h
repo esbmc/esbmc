@@ -31,7 +31,7 @@ private:
 
   bool get_bases(struct_typet &st);
 
-  void get_members(struct_typet &st, codet &out);
+  void get_members(struct_typet &st, codet &out, bool has_ud_base);
 
   void add_self_attrs(struct_typet &st);
 

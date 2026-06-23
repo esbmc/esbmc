@@ -332,8 +332,14 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     return expr;
 
   // A character from string indexing is an 8-bit int tagged #cpp_type==char.
+  // V.3: build the char->int cast in IREP2, back-migrating once (mirrors the
+  // build_typecast helper; typecast2t round-trips byte-identically).
   if (type_utils::is_char_type(expr.type()))
-    return typecast_exprt(expr, int_type());
+  {
+    expr2tc expr2;
+    migrate_expr(expr, expr2);
+    return migrate_expr_back(typecast2tc(migrate_type(int_type()), expr2));
+  }
 
   // A runtime string: return the code point of its first character.
   if (type_utils::is_string_type(expr.type()))
