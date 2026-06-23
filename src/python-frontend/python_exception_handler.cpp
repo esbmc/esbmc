@@ -63,6 +63,18 @@ exprt build_address_of(const exprt &obj)
   migrate_expr(obj, obj2);
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
+
+// `a > b` over synthetic same-width operands. migrate lowers a legacy ">" node
+// to greaterthan2tc(migrate(a), migrate(b)) (util/migrate.cpp i_gt path) with
+// no coercion, so this is the byte-identical round-trip; operands must share
+// bit-width (greaterthan2t asserts it).
+exprt build_greater_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(greaterthan2tc(a2, b2));
+}
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -525,9 +537,9 @@ void python_exception_handler::handle_list_assertion(
   size_func_call.location() = location;
   block.move_to_operands(size_func_call);
 
-  // Assert size > 0
-  exprt assertion(">", bool_type());
-  assertion.copy_to_operands(build_symbol(size_result), gen_zero(size_type()));
+  // Assert size > 0 (size_result and the 0 literal are both size_type).
+  exprt assertion =
+    build_greater_than(build_symbol(size_result), gen_zero(size_type()));
 
   code_assertt assert_code;
   assert_code.assertion() = assertion;
