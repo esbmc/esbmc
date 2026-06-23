@@ -648,6 +648,49 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16–§28 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556, #5558, #5562) are in flight and not yet on `master`; this section is
+> appended as §29.
+
+## 29. 2026-06-22 re-validation (nineteenth sweep) & tuple(str)
+
+Re-test against current `master` (tip `b2f1ff2beb`). KNOWNBUG classification unchanged — §3 holds.
+This sweep implemented the `tuple(str)` conversion catalogued in §27b/§28b.
+
+### 29a. New isolated, soundly-fixable defect found & fixed
+**`tuple(str)` errored "only supported over list and tuple arguments".**
+
+`tuple("ab")` (and `tuple(s)` for a constant-string variable) was rejected; CPython yields
+`('a', 'b')`. **Fix** (`function_call/expr.cpp`): in the `tuple()` handler, before the final
+throw, fold a constant string operand to a `Tuple` AST of single-character string `Constant`s and
+recurse through the proven tuple-literal path (new file-local `build_char_sequence_node` helper).
+Non-constant strings keep the clean error (sound).
+
+**Code review caught a critical soundness regression before commit.** `ast2json` decodes a bytes
+literal to a JSON string identical to a str Constant, so the naive `extract_constant_string` gate
+folded `tuple(b"ab")` to `('a', 'b')` — but CPython gives `(97, 98)` (a tuple of ints). That turned
+a previously-clean error into a **wrong verdict**. The operand's *type* still distinguishes them
+(bytes is an `int` array, str a `char` array), so the fold is now gated on
+`et.subtype() == char_type()`; `tuple(b"ab")` correctly falls through to the clean error again.
+
+This **restores a working feature** (`tuple(str)` verifies with the right elements) while keeping
+`tuple(bytes)` a sound clean error. New regression tests `regression/python/tuple_from_str{,_fail}`
+(CORE) and `tuple_from_bytes_unsupported` (pins the bytes boundary the review exposed); the
+pre-existing `tuple-arg-unsupported` test — which asserted the now-implemented `tuple("ab")` error
+and whose own comment admitted the program is valid CPython — was repurposed to verify the correct
+result. CPython sanity passes; the focused `regression/python/{tuple,list,str,string,bytes}*` ctest
+subset (735 tests) shows zero new failures (the 50 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build); `tuple(list)`/`tuple(tuple)`/`tuple(int)` are
+unaffected. Solver-agnostic (constant-fold in the frontend, no SMT-encoding change).
+
+### 29b. Everything else: unchanged disposition
+The sibling `list("abc")` (string→list, a "requires constant" error today) is the obvious next
+candidate — the same char-sequence lowering applies on the `list()` constructor path. Other
+deferred candidates stand: `zip()` (unmodelled), symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `int.to_bytes()`, the bytes/encoding family, `float.hex()`
+(infeasible), `str.isascii()` (string-soundness), and the numeric-tower *properties*. The §3
+design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
 > **Note on numbering.** §16–§24 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554) are in flight and not yet on `master`; this section is appended as §25.
 
