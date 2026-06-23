@@ -648,6 +648,54 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16–§26 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556) are in flight and not yet on `master`; this section is appended as §27.
+
+## 27. 2026-06-22 re-validation (seventeenth sweep) & list(tuple)
+
+Re-test against current `master` (tip `d23bfa2728`). KNOWNBUG classification unchanged — §3 holds.
+This sweep fixed the `list(tuple)` sibling defect catalogued in §26b — a second **wrong-verdict /
+crash** on the same tuple-as-list confusion, on a *different* code path than `list.extend`.
+
+### 27a. New isolated, soundly-fixable defect found & fixed
+**`list(tuple)` (the `list()` constructor over a tuple) gave a wrong list / OOB crash.**
+
+`list((2, 3))` produced a wrong list (incorrect elements) and `t = (2, 3); list(t)` crashed with a
+dereference failure. The `list()` constructor handled empty, `range`, and list-typed arguments,
+but a tuple argument fell through to the generic function-call builder, which mistyped the tuple
+struct as a list.
+
+**Fix** (two complementary branches in `converter_funcall.cpp`'s `list(...)` block, plus a reusable
+helper):
+- **Tuple literal** `list((a, b, ...))`: lower the `Tuple` AST node to a `List` node and recurse,
+  routing through the well-tested `[]` list-literal path with full element-type tracking.
+- **Tuple variable** `list(t)`: after the existing list-typed check, when the evaluated argument is
+  a tuple struct (`tuple_handler::is_tuple_type`), call the new
+  `python_list::build_list_from_tuple`, which materialises the tuple's components into a fresh list
+  (delegating to the existing `build_list_from_exprs`, with a new non-deref `build_member` IREP2
+  helper reading each component). The variable branch generalises to any non-literal whose
+  `get_expr` yields a tuple struct (`Name`, `Subscript`, a `Call` returning a tuple).
+
+The two branches are cleanly partitioned (the literal branch intercepts `_type == "Tuple"` before
+`get_expr`; the variable branch only sees non-`Tuple` nodes), with no overlap or gap, and
+`list(list)`/`list(range)`/`list()`/`list("abc")` are untouched. This **fixes a wrong verdict /
+memory-corruption**. New regression pair `regression/python/list_from_tuple{,_fail}` (CORE)
+covering a two-element literal, a tuple variable, a single-element tuple, mutate-after-construction,
+an empty tuple, and the unaffected `list(list)` path; the positive test is the liveness witness.
+Verified against CPython; CPython sanity passes; the focused `regression/python/{list,tuple}*`
+ctest subset (287 tests) shows zero new failures (the 38 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build). Code-reviewed (0 critical/major; consolidated
+`build_list_from_tuple` onto the existing `build_list_from_exprs` per the review). Solver-agnostic
+(frontend materialisation + the existing list-literal path, no SMT-encoding change).
+
+### 27b. Everything else: unchanged disposition
+Deferred candidates stand: `str.startswith`/`endswith` with start/end position arguments (clean
+"requires one argument" error today), `zip()` (unmodelled), `list("abc")` (string→list, a separate
+"requires constant" error), symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`,
+`int.to_bytes()`, the bytes/encoding family, `float.hex()` (infeasible), `str.isascii()`
+(string-soundness), and the numeric-tower *properties*. The §3 design-level blockers, §3c timeouts,
+§3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order
+stands.
 > **Note on numbering.** §16–§22 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543) are in
 > flight and not yet on `master`; this section is appended as §23.
 

@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -166,6 +167,18 @@ exprt build_deref_member(
   migrate_expr(obj, obj2);
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
+
+// Build obj.field : field_type in IREP2 (V.3). `obj` is a struct rvalue (e.g. a
+// tuple struct), so member2t's struct-source precondition holds directly.
+exprt build_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), obj2, field));
 }
 
 // Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
@@ -5086,6 +5099,22 @@ exprt python_list::build_list_from_range(
 
   // All arguments are constant
   return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::build_list_from_tuple(
+  python_converter &converter,
+  const exprt &tuple_expr,
+  const nlohmann::json &element)
+{
+  python_list helper(converter, element);
+  const typet &tuple_type = converter.name_space().follow(tuple_expr.type());
+
+  std::vector<exprt> components;
+  for (const auto &comp : to_struct_type(tuple_type).components())
+    components.push_back(
+      build_member(tuple_expr, comp.get_name(), comp.type()));
+
+  return helper.build_list_from_exprs(components);
 }
 
 exprt python_list::handle_symbolic_range(
