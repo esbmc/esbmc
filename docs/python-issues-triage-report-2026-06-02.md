@@ -648,6 +648,51 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16–§27 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556, #5558) are in flight and not yet on `master`; this section is appended as
+> §28.
+
+## 28. 2026-06-22 re-validation (eighteenth sweep) & startswith/endswith position args
+
+Re-test against current `master` (tip `9d429fb23b`). KNOWNBUG classification unchanged — §3 holds.
+This sweep added the optional position arguments catalogued in §27b.
+
+### 28a. New isolated, soundly-fixable defect found & fixed
+**`str.startswith`/`endswith` rejected the optional start/end position arguments.**
+
+`"abcabc".startswith("bc", 1)` reported `ERROR: startswith() requires one argument` — the
+two/three-argument forms `s.startswith(prefix, start[, end])` were unimplemented (a clean error,
+not a wrong verdict, hence catalogued as a feature gap).
+
+**Fix** (`string_method_handler.cpp`): before the single-argument dispatch table, route
+`startswith`/`endswith` with ≥2 args to a new `handle_startswith_endswith_with_pos`, which
+evaluates the call as `s[start:end].startswith(prefix)` — it extracts the constant receiver
+string, reads constant `start`/`end` (default `len`), applies Python slice clamping (negative
+`+= len`, clamp to `[0, len]`), builds the `s[start:end]` substring literal, and delegates to the
+base `handle_string_startswith`/`endswith`. A non-constant receiver/`start`/`end` raises a clean
+unsupported-feature error (sound, matching the constant-only support of the other string methods);
+`>3` args raises "takes at most 3 arguments".
+
+**Code-review caught a soundness bug before commit:** an empty affix with a *raw* `start > len`
+(e.g. `"abc".startswith("", 4)`) must be `False` in CPython, but the over-clamped empty slice plus
+the base handler's empty-affix short-circuit would wrongly report `True` — a false `SUCCESSFUL`.
+Added a `if (start > len) return False` guard (strict, so `start == len` still matches an empty
+affix). Verified bit-for-bit against CPython for start, start+end, negative indices, `start > end`
+(empty window), `start > len`, the empty-affix edge, and both methods. New regression pair
+`regression/python/str_startswith_pos{,_fail}` (CORE), including the empty-affix `start > len` edge
+that the fix pins; the positive test is the liveness witness. CPython sanity passes; the focused
+`regression/python/{str,string,startswith,endswith}*` ctest subset (436 tests) shows zero new
+failures (the 12 failing are `--z3`/`--ir`/`--boolector` environmental); single-argument
+`startswith`/`endswith` and the other one-arg methods are untouched. Solver-agnostic (constant-fold
+in the frontend, no SMT-encoding change).
+
+### 28b. Everything else: unchanged disposition
+Deferred candidates stand: `zip()` (unmodelled), `list("abc")` (string→list, a "requires constant"
+error), symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.to_bytes()`,
+the bytes/encoding family, `float.hex()` (infeasible), `str.isascii()` (string-soundness), and the
+numeric-tower *properties*. The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
 > §18 (PR #5532, `float.is_integer()`), and §19 (PR #5536, `int.conjugate()`) are in flight and
 > not yet on `master`; this section is appended as §20 so the in-flight PRs do not collide on the

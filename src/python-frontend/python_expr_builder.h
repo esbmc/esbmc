@@ -64,6 +64,10 @@ exprt build_less_equal(const exprt &a, const exprt &b);
 // `a > b` over same-width operands (greaterthan2t asserts width consistency).
 exprt build_greater_than(const exprt &a, const exprt &b);
 
+// `a >= b` over same-width operands (greaterthanequal2t asserts width
+// consistency).
+exprt build_greater_equal(const exprt &a, const exprt &b);
+
 // `a + b : t` over same-width operands (add2t asserts width consistency).
 exprt build_add(const exprt &a, const exprt &b, const typet &t);
 
