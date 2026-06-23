@@ -648,6 +648,52 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16–§24 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554) are in flight and not yet on `master`; this section is appended as §25.
+
+## 25. 2026-06-22 re-validation (fifteenth sweep) & min/max key=abs/len
+
+Re-test against current `master` (tip `d23bfa2728`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took on one of the catalogued **wrong-verdict** candidates that needs key-function
+handling.
+
+### 25a. New isolated, soundly-fixable defect found & fixed
+**`max`/`min` with a `key=` builtin returned a spurious `VERIFICATION FAILED`.**
+
+`max([1, -5, 3], key=abs)` returned the plain maximum `3` (key `=` silently dropped) instead of
+the key-maximum `-5`. The Python preprocessor already lowered `min`/`max(list, key=lambda x: x[K])`
+over tuple literals (`_lower_min_max_with_key_call`), but a builtin key such as `abs`/`len` fell
+through and the keyword was ignored.
+
+**Fix** (`src/python-frontend/preprocessor/generator_mixin.py`, run by `python3` at parse time and
+FLAIL-mangled into the binary): factor the per-element key extraction into
+`_eval_min_max_key_values`, which now supports both the existing `lambda x: x[K]` form **and**
+`key=abs`/`key=len` over **constant** elements — the key is computed with Python's own `abs`/`len`
+at preprocess time, so it matches CPython by construction. A new `_const_scalar_value` helper reads
+a constant through a unary `+`/`-` wrapper (Python parses `-5` as `UnaryOp(USub, Constant(5))`,
+which is why negative ints initially failed). The winning **element** (not its key) is returned,
+ties breaking toward the first occurrence (CPython semantics: strict `<`/`>` in
+`_select_min_max_index`).
+
+**Soundness:** the fold fires only when every key is a provable constant; any other form (symbolic
+elements, a user function/complex lambda, a non-constant key) returns `None` and the caller defers
+to the regular dispatch — the pre-existing "key dropped" behaviour, never a *wrong* substituted
+element. Verified bit-for-bit against CPython for `max`/`min` × `key=abs` (incl. negatives and
+abs-ties) and `key=len` over strings. The existing `lambda x: x[K]` path and plain `min`/`max`
+(no key) are unchanged. New regression pair `regression/python/min_max_key{,_fail}` (CORE); the
+positive test is the liveness witness (pre-fix the `key=abs` assertions produced the wrong
+`FAILED`). CPython sanity passes; the focused `regression/python/{min,max,sorted,list,builtin}*`
+ctest subset (304 tests) shows zero new failures (the 38 failing are `--z3`/`--ir`/`--boolector`
+environmental on this Bitwuzla-only build). Code-reviewed (0 critical/major/minor). Solver-agnostic
+(constant-fold in the preprocessor, no SMT-encoding change).
+
+### 25b. Everything else: unchanged disposition
+Deferred candidates stand: `max`/`min(key=...)` with **symbolic** elements or a user-defined key
+(needs general function application), `list.index()`-in-`try/except` (exception model), `int.to_bytes()`,
+`bytes.hex()`/`decode()`/`str.encode()`, `str.maketrans`/`translate`, `float.hex()` (infeasible),
+`str.isascii()` (string-soundness), and the numeric-tower *properties*. The §3 design-level
+blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand;
+the §5 priority order stands.
 > **Note on numbering.** §16–§26 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554, #5555, #5556) are in flight and not yet on `master`; this section is appended as §27.
 
