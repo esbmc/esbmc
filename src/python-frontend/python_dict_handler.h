@@ -506,6 +506,18 @@ public:
   handle_dict_copy(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict.clear() method calls.
+   *
+   * Empties the dictionary in place by clearing both backing lists (keys and
+   * values). Returns nil; dict.clear() has no return value in Python.
+   * @param dict_expr The dictionary expression to clear
+   * @param call_node The function call AST node
+   * @return nil_exprt (the method returns None).
+   */
+  exprt
+  handle_dict_clear(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Handles dict.fromkeys() class method calls.
    *
    * Implements dict.fromkeys(iterable, value=None):

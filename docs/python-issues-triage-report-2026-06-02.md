@@ -648,6 +648,56 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
+> §18 (PR #5532, `float.is_integer()`), §19 (PR #5536, `int.conjugate()`), and §20 (PR #5537,
+> `set` union/intersection/difference methods) are in flight and not yet on `master`; this section
+> is appended as §21 so the in-flight PRs do not collide on the section number.
+
+## 21. 2026-06-22 re-validation (eleventh sweep) & dict.clear() wrong-verdict fix
+
+Re-test against current `master` (tip `44b2605c1c`). KNOWNBUG classification unchanged — §3 holds.
+A fresh idiom battery (tuple/dict/str/bytes/builtin) surfaced a **wrong-verdict** bug — higher
+severity than the prior unmodelled-method additions.
+
+### 21a. New isolated, soundly-fixable defect found & fixed
+**`dict.clear()` reported a spurious `VERIFICATION FAILED` (out-of-bounds dereference).**
+
+`d = {"a": 1}; d.clear()` reported a dereference-failure at `list.c:632` (`__ESBMC_list_clear`)
+— a wrong verdict on a common, valid operation. **Root cause:** the method dispatch order is
+set → list → dict, and `is_list_method_call` ends in a catch-all `return true` that claimed
+`clear` (and the other mutators) for *any* receiver — including a dict. `handle_list_clear` then
+passed the dict **struct** (a `{keys, values}` pair, tag `__python_dict__`) to
+`__ESBMC_list_clear`, which dereferenced it as a `PyListObject` (`l->size = 0`) at the wrong
+offset → out-of-bounds.
+
+**Fix:** add a `clear` guard in `is_list_method_call` mirroring the existing `pop`/`copy`/`count`/
+`index` pattern — claim `clear` as `list.clear()` only when the receiver resolves to a
+`list_type` symbol (or is a BinOp), otherwise fall through to the dict path. Allow `clear` through
+the `is_dict_method_call` gate, route it in `handle_dict_method`, and add
+`python_dict_handler::handle_dict_clear`, which empties the dict in place by calling
+`__ESBMC_list_clear` on both backing lists (`keys`, `values`). The members are `PyListObject*`
+(`get_list_type()` is a pointer), so they pass directly; the dict has no separate size field
+(`len()` reads list size), so zeroing both lists fully empties it and the dict stays usable
+(verified: `d["c"]=3` after clear gives `len==1`).
+
+This **fixes a wrong verdict / memory-corruption**, the highest-value class in this report. Sets
+are unaffected (set receivers are `list_type` symbols → still routed to the list path; `clear`
+is not in `is_set_method_call`). `list.clear()` is unchanged (still claimed when the receiver is
+a list). New regression pair `regression/python/dict_clear{,_fail}` (CORE); the positive test —
+which exercises empty-after-clear, key-absence, and re-use — is the liveness witness for the added
+`clear` dispatch branch (pre-fix it produced the OOB `FAILED`). CPython sanity passes; the focused
+`regression/python/{dict,list}*` ctest subset (449 tests) shows zero new failures (the 47 failing
+are all `--z3`/`--ir`/`--boolector` environmental on this Bitwuzla-only `ENABLE_Z3=OFF` build).
+Code-reviewed (0 critical/major/minor). Discriminator purity preserved (the guard only reads the
+AST / symbol table). Solver-agnostic (frontend dispatch + a void list-clear call, no SMT-encoding
+change).
+
+### 21b. Everything else: unchanged disposition
+Deferred candidates stand: `int.to_bytes()` (args + bytes-array return), `bytes.hex()`/
+`bytes.decode()`/`str.encode()` (bytes/encoding models), `str.maketrans`/`str.translate`,
+`float.hex()` (infeasible, like `hashlib`), `str.isascii()` (string-soundness, §5-#2), and the
+numeric-tower *properties* (`int.numerator`/`denominator`, `float.real`/`imag` — attribute access,
+not methods). The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable
 > **Note on numbering.** §16–§25 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554, #5555) are in flight and not yet on `master`; this section is appended as §26.
 
