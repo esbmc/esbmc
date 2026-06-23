@@ -247,12 +247,19 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
-#if ESBMC_SVCOMP
-  compiler_args.push_back("-D__ESBMC_SVCOMP");
-  // No longer show compiler warnings for SV-COMP
-  compiler_args.push_back("-w");
-  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-#endif
+  if (config.options.get_bool_option("sv-comp"))
+  {
+    compiler_args.push_back("-D__ESBMC_SVCOMP");
+    // No longer show compiler warnings for SV-COMP
+    compiler_args.push_back("-w");
+    compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+    // clang 15+ promotes -Wint-conversion to a hard error by default, which
+    // rejects GCC-acceptable implicit int<->pointer conversions common in
+    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
+    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
+    // typecast logic, so downgrading the diagnostic does not affect semantics.
+    compiler_args.push_back("-Wno-int-conversion");
+  }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
@@ -264,15 +271,6 @@ void clang_c_languaget::build_compiler_args(
   // Suppress incompatible-pointer-types universally; became a hard error in
   // LLVM 22 and trips on system headers across all platforms.
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
-
-  // Suppress int-conversion universally; clang made it a hard error by default
-  // (clang 15+), which rejects GCC-acceptable implicit int<->pointer
-  // conversions that are common in preprocessed kernel/CIL inputs (e.g. the
-  // sentinel pointers CIL emits as (void *)0xffffffffffffffffUL). ESBMC models
-  // the conversion in its typecast logic, so downgrading the diagnostic does
-  // not affect verification. Mirrors -Wno-incompatible-pointer-types above;
-  // previously only set under ESBMC_SVCOMP.
-  compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */

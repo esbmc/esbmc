@@ -605,7 +605,8 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       CLANG_VERSION="$OPTARG"
       ;;
     C)
-      BASE_ARGS+=("-DESBMC_SVCOMP=ON")
+      # SV-COMP behaviour is now a runtime flag (--sv-comp, set by the
+      # competition wrapper), so this only selects the competition solver set.
       SOLVER_FLAGS=(
         "-DENABLE_BOOLECTOR=On"
         "-DENABLE_YICES=On"
