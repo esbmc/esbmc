@@ -649,6 +649,58 @@ on current `master` without the §5 architectural work; the §5 priority order s
 ---
 
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
+> and §18 (PR #5532, `float.is_integer()`) have landed on `master`; this section is §19.
+
+## 19. 2026-06-22 re-validation (ninth sweep) & int.conjugate() model
+
+Re-test against current `master` (tip `38fd6daaa1`). KNOWNBUG classification unchanged — §3 holds.
+This sweep probed the remaining §15b candidates and shipped `int.conjugate()`.
+
+### 19a. Candidates triaged this sweep
+A fresh idiom battery over int/float/str/list/dict methods found most already modelled. The
+genuinely unmodelled, isolated ones:
+- **`int.conjugate()` / `float.conjugate()`** — returns the value unchanged (the complex
+  conjugate of a real number is itself). Cleanest sound fix; shipped below (int only — `float`
+  has no OM on `master` yet; the `float` OM lands with §18/PR #5532, after which `float.conjugate`
+  is a one-line follow-up).
+- **`str.isascii()`** — *attempted and withdrawn this sweep.* It is **not** an isolated fix: the
+  constant-string `consteval` path drops non-ASCII bytes (so a literal `"café"` is seen as `"caf"`)
+  while the symbolic path uses a C runtime model, and the two interact context-dependently (bare
+  `assert s.isascii()` vs `== True`/`not`), risking an *unsound* `True` on non-ASCII literals.
+  Doing it correctly needs the constant-string representation to preserve raw bytes — a
+  string-soundness item (§5-#2), not a method-add. Reverted in full; deferred.
+- **`int.to_bytes()`** — needs receiver-passing for an int method that *takes arguments* plus a
+  variable-length bytes-array return model; deferred as a larger feature.
+- **`float.hex()`** — reproduces CPython's exact hex-float repr; like `hashlib` (§3b), effectively
+  infeasible to model soundly. Deferred/declined.
+
+### 19b. New isolated, soundly-fixable defect found & fixed
+**`int.conjugate()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`(5).conjugate()` reported `Unsupported function 'conjugate' is reached → VERIFICATION FAILED`
+even though `int.conjugate()` returns the integer unchanged. **Fix:** add a `conjugate(cls, n)`
+classmethod to `models/int.py` returning `n` (mirroring the zero-arg `bit_length` dispatch), and —
+critically — register `conjugate` in `type_utils::is_python_model_func`. The latter was found by
+code review: without it, verifying a function that calls `x.conjugate()` under `--function` tries
+to resolve `conjugate` as a *user* function and aborts with an uncaught `nlohmann::json` type_error
+(reproduced; the empty `find_function` result is dereferenced in `converter_funcall.cpp`). The
+complex-number `conjugate` handler already guards on `is_complex_type`, so int receivers fall
+through cleanly with no collision.
+
+Like §16a/§17a/§18a this **restores a working feature**. New regression tests
+`regression/python/int_conjugate{,_fail}` (CORE) plus `int_conjugate_func` (the `--function`
+crash-regression witness for the `is_python_model_func` registration — it aborted pre-fix).
+Verified for positive/negative/zero and a BinOp receiver against CPython; CPython sanity passes; a
+19-test int-method ctest subset is 100% green; code-reviewed (the `--function` MAJOR finding was
+caught and fixed before commit). Bitwuzla-only build (`ENABLE_Z3=OFF`); the change is a value model
+plus a frontend allowlist entry with no SMT-encoding change, so the verdict is solver-agnostic.
+
+### 19c. Everything else: unchanged disposition
+The deferred §19a candidates (`str.isascii()` string-soundness, `int.to_bytes()`, `float.hex()`),
+the §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand; the §5 priority order stands.
+---
+
 > §18 (PR #5532, `float.is_integer()`), §19 (PR #5536, `int.conjugate()`), §20 (PR #5537, `set`
 > union/intersection/difference methods), and §21 (PR #5540, `dict.clear()`) are in flight and not
 > yet on `master`; this section is appended as §22.
