@@ -81,6 +81,19 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic same-width operands (loop counter / size). migrate
+// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
+// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
+// round-trip. Operands MUST share bit-width: lessthan2t asserts width
+// consistency, which the legacy "<" node defers to clang_cpp_adjust.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
 // (V.3). SIZE_MAX is the dict lookup's not-found sentinel.
 exprt build_key_found(const symbolt &index_var)
@@ -3519,8 +3532,9 @@ exprt python_dict_handler::handle_dict_update(
   index_init.location() = location;
   converter_.add_instruction(index_init);
 
-  exprt loop_cond("<", bool_type());
-  loop_cond.copy_to_operands(build_symbol(index_var), build_symbol(size_var));
+  // (both $dict_update_iter$ and $dict_update_size$ are size_type — same width)
+  exprt loop_cond =
+    build_less_than(build_symbol(index_var), build_symbol(size_var));
 
   // Rebuild the current key/value pair from the source lists.
   code_blockt loop_body;
