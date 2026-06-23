@@ -1683,8 +1683,9 @@ exprt python_list::handle_range_slice(
     code_assignt idx_init(build_symbol(idx), gen_zero(size_type()));
     converter_.add_instruction(idx_init);
 
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(build_symbol(idx), slice_len);
+    // idx is size_type; slice_len is built via size_add/sub/div (size_type),
+    // so both operands share width.
+    exprt cond = build_less_than(build_symbol(idx), slice_len);
 
     code_blockt body;
 
@@ -5696,8 +5697,9 @@ void python_list::handle_list_var_unpacking(
       build_symbol(loop_idx), from_integer(before_star, size_type()));
     target_block.copy_to_operands(idx_init);
 
-    exprt loop_cond("<", bool_type());
-    loop_cond.copy_to_operands(build_symbol(loop_idx), upper_expr);
+    // loop_idx is size_type; upper_expr is a size_type symbol/literal, so both
+    // operands share width.
+    exprt loop_cond = build_less_than(build_symbol(loop_idx), upper_expr);
 
     code_blockt loop_body;
 
