@@ -4287,6 +4287,25 @@ exprt python_list::build_extend_list_call(
     actual_list = build_symbol(temp_list);
   }
 
+  // A tuple operand: Python's extend() accepts any iterable. Materialise the
+  // tuple's components into a fresh list so the list model sees a
+  // PyListObject* rather than the tuple struct, which __ESBMC_list_extend
+  // would otherwise dereference out of bounds.
+  if (converter_.get_tuple_handler().is_tuple_type(actual_list.type()))
+  {
+    const typet &other_type = converter_.ns.follow(actual_list.type());
+    symbolt &temp_list = create_list();
+    const std::string &temp_id = temp_list.id.as_string();
+    for (const auto &comp : to_struct_type(other_type).components())
+    {
+      exprt elem = build_member(actual_list, comp.get_name(), comp.type());
+      exprt push = build_push_list_call(temp_list, op, elem);
+      converter_.add_instruction(push);
+      add_type_info(temp_id, std::string(), comp.type());
+    }
+    actual_list = build_symbol(temp_list);
+  }
+
   // Update list_type_map: copy type info from actual_list to list
   const std::string &list_name = list.id.as_string();
   const std::string &other_list_name = actual_list.identifier().as_string();
