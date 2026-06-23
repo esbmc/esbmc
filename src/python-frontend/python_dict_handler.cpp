@@ -3127,9 +3127,9 @@ exprt python_dict_handler::handle_dict_popitem(
     last_idx_decl.location() = location;
     nonempty_block.copy_to_operands(last_idx_decl);
 
-    exprt last_idx_expr("-", size_type());
-    last_idx_expr.copy_to_operands(
-      build_symbol(size_var), gen_one(size_type()));
+    // size_var and the 1 literal are both size_type — same width.
+    exprt last_idx_expr =
+      build_sub(build_symbol(size_var), gen_one(size_type()), size_type());
     code_assignt last_idx_assign(build_symbol(last_idx_var), last_idx_expr);
     last_idx_assign.location() = location;
     nonempty_block.copy_to_operands(last_idx_assign);
