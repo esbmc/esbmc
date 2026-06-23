@@ -1,6 +1,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -942,10 +943,20 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const std::string &input,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   if (separator.empty())
   {
+    // rsplit() with no separator (whitespace) and an explicit maxsplit has
+    // subtle leading/trailing-whitespace asymmetry vs split() and is not
+    // supported; reject it cleanly rather than risk a wrong result. Without a
+    // maxsplit, rsplit(None) == split(None) (same tokens, same order), so a
+    // negative count falls through to the shared whitespace logic below.
+    if (from_right && count >= 0)
+      throw std::runtime_error(
+        "rsplit() with maxsplit and no separator is not supported");
+
     // Whitespace split: split on any whitespace and collapse runs.
     auto is_space = [](char c) {
       return std::isspace(static_cast<unsigned char>(c)) != 0;
@@ -1069,25 +1080,63 @@ exprt python_list::build_split_list(
   }
 
   std::vector<std::string> parts;
-  size_t start = 0;
-  long long splits = 0;
-  while (true)
+  if (from_right && count >= 1)
   {
-    if (count >= 0 && splits >= count)
+    // rsplit(sep, count): keep the rightmost `count` splits. Compute the full
+    // split, then merge the surplus leftmost parts back together with the
+    // separator — this yields exactly Python's rsplit result and avoids
+    // backward-scan boundary fiddliness. (count == 0 returned [input] above;
+    // count < 0 is the unlimited case, identical to split, handled below.)
+    std::vector<std::string> all;
+    size_t s = 0;
+    while (true)
     {
-      parts.push_back(input.substr(start));
-      break;
+      size_t pos = input.find(separator, s);
+      if (pos == std::string::npos)
+      {
+        all.push_back(input.substr(s));
+        break;
+      }
+      all.push_back(input.substr(s, pos - s));
+      s = pos + separator.size();
     }
 
-    size_t pos = input.find(separator, start);
-    if (pos == std::string::npos)
+    const long long total_splits = static_cast<long long>(all.size()) - 1;
+    if (total_splits <= count)
+      parts = all;
+    else
     {
-      parts.push_back(input.substr(start));
-      break;
+      const size_t merge_upto = all.size() - static_cast<size_t>(count);
+      std::string merged = all[0];
+      for (size_t k = 1; k < merge_upto; ++k)
+        merged += separator + all[k];
+      parts.push_back(merged);
+      for (size_t k = merge_upto; k < all.size(); ++k)
+        parts.push_back(all[k]);
     }
-    parts.push_back(input.substr(start, pos - start));
-    start = pos + separator.size();
-    ++splits;
+  }
+  else
+  {
+    size_t start = 0;
+    long long splits = 0;
+    while (true)
+    {
+      if (count >= 0 && splits >= count)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+
+      size_t pos = input.find(separator, start);
+      if (pos == std::string::npos)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+      parts.push_back(input.substr(start, pos - start));
+      start = pos + separator.size();
+      ++splits;
+    }
   }
 
   nlohmann::json list_node;
@@ -1113,10 +1162,19 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const exprt &input_expr,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   // For symbolic strings, we create a runtime call to __python_str_split
   // This function will handle the splitting at runtime with symbolic constraints
+
+  // The runtime model splits left-to-right, so it only models rsplit() when no
+  // maxsplit limits the result (rsplit() == split() then). A right-anchored
+  // maxsplit on a non-constant string would need a dedicated model; reject it
+  // cleanly rather than return a wrong result.
+  if (from_right && count >= 0)
+    throw std::runtime_error(
+      "rsplit() with maxsplit on a non-constant string is not supported");
 
   locationt location = converter.get_location_from_decl(call_node);
 
@@ -4120,6 +4178,25 @@ exprt python_list::build_extend_list_call(
     actual_list = build_symbol(temp_list);
   }
 
+  // A tuple operand: Python's extend() accepts any iterable. Materialise the
+  // tuple's components into a fresh list so the list model sees a
+  // PyListObject* rather than the tuple struct, which __ESBMC_list_extend
+  // would otherwise dereference out of bounds.
+  if (converter_.get_tuple_handler().is_tuple_type(actual_list.type()))
+  {
+    const typet &other_type = converter_.ns.follow(actual_list.type());
+    symbolt &temp_list = create_list();
+    const std::string &temp_id = temp_list.id.as_string();
+    for (const auto &comp : to_struct_type(other_type).components())
+    {
+      exprt elem = build_member(actual_list, comp.get_name(), comp.type());
+      exprt push = build_push_list_call(temp_list, op, elem);
+      converter_.add_instruction(push);
+      add_type_info(temp_id, std::string(), comp.type());
+    }
+    actual_list = build_symbol(temp_list);
+  }
+
   // Update list_type_map: copy type info from actual_list to list
   const std::string &list_name = list.id.as_string();
   const std::string &other_list_name = actual_list.identifier().as_string();
@@ -4629,9 +4706,18 @@ exprt python_list::extract_pyobject_value(
     // works for numeric / pointer-by-value elements).
     exprt as_default = build_dereference(
       build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
-    equality_exprt is_str(
-      type_id_member, from_integer(str_type_id, size_type()));
-    return if_exprt(is_str, obj_value, as_default);
+    // item->type_id == str_type_id ? obj_value : *(T*)obj_value
+    // V.3: built in IREP2 (both branches are elem_type/void*, so the if2t
+    // types agree), back-migrated at the return. Mirrors the float-dispatch
+    // if2t above.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, ov2, def2;
+    migrate_expr(type_id_member, tid2);
+    migrate_expr(obj_value, ov2);
+    migrate_expr(as_default, def2);
+    const expr2tc is_str =
+      equality2tc(tid2, from_integer(str_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_str, ov2, def2));
   }
 
   // For array types, return pointer to element type instead of pointer to array
@@ -4923,6 +5009,22 @@ exprt python_list::build_list_from_range(
 
   // All arguments are constant
   return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::build_list_from_tuple(
+  python_converter &converter,
+  const exprt &tuple_expr,
+  const nlohmann::json &element)
+{
+  python_list helper(converter, element);
+  const typet &tuple_type = converter.name_space().follow(tuple_expr.type());
+
+  std::vector<exprt> components;
+  for (const auto &comp : to_struct_type(tuple_type).components())
+    components.push_back(
+      build_member(tuple_expr, comp.get_name(), comp.type()));
+
+  return helper.build_list_from_exprs(components);
 }
 
 exprt python_list::handle_symbolic_range(

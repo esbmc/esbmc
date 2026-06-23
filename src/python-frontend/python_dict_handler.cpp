@@ -2685,6 +2685,39 @@ exprt python_dict_handler::handle_dict_copy(
   return build_symbol(new_dict_sym);
 }
 
+exprt python_dict_handler::handle_dict_clear(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("dict.clear() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  // dict.clear() empties the dict in place by clearing both backing lists.
+  // The keys/values members are PyListObject* (get_list_type() is a pointer),
+  // so they pass directly to __ESBMC_list_clear, which sets the list size to 0.
+  const symbolt *clear_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_clear");
+  if (!clear_func)
+    throw std::runtime_error("__ESBMC_list_clear not found");
+
+  auto clear_list_member = [&](const irep_idt &name) {
+    code_function_callt clear_call;
+    clear_call.function() = build_symbol(*clear_func);
+    clear_call.arguments().push_back(build_member(dict_expr, name, list_type));
+    clear_call.type() = empty_typet();
+    clear_call.location() = location;
+    converter_.add_instruction(clear_call);
+  };
+
+  clear_list_member("keys");
+  clear_list_member("values");
+
+  return nil_exprt();
+}
+
 bool python_dict_handler::is_value_returning_method(
   const std::string &method_name)
 {

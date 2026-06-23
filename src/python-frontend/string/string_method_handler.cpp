@@ -7,6 +7,7 @@
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -266,21 +267,26 @@ std::optional<exprt> dispatch_split_method(
   const std::function<exprt()> &get_receiver_expr,
   python_converter &converter)
 {
-  if (method_name != "split")
+  if (method_name != "split" && method_name != "rsplit")
     return std::nullopt;
+
+  // rsplit() differs from split() only in the direction maxsplit counts from
+  // (the rightmost separators rather than the leftmost).
+  const bool from_right = (method_name == "rsplit");
 
   ensure_allowed_keywords(method_name, keyword_values, {"sep", "maxsplit"});
   if (args.size() > 2)
   {
     throw std::runtime_error(
-      "split() requires zero, one, or two arguments in minimal support");
+      method_name +
+      "() requires zero, one, or two arguments in minimal support");
   }
 
   split_method_argst parsed;
   const nlohmann::json *sep_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "sep", 0, false);
+    method_name, args, keyword_values, "sep", 0, false);
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "maxsplit", 1, false);
+    method_name, args, keyword_values, "maxsplit", 1, false);
 
   if (sep_node == nullptr || is_none_literal_json(*sep_node))
   {
@@ -290,19 +296,21 @@ std::optional<exprt> dispatch_split_method(
              *sep_node, converter, parsed.separator))
   {
     throw std::runtime_error(
-      "split() only supports constant sep in minimal support");
+      method_name + "() only supports constant sep in minimal support");
   }
 
   if (maxsplit_node != nullptr)
   {
     parsed.maxsplit = required_constant_int_arg(
       *maxsplit_node,
-      "split() only supports constant maxsplit in minimal support",
+      method_name + "() only supports constant maxsplit in minimal support",
       converter);
   }
 
+  // The BinOp fast path splits at the FIRST separator (split semantics); it is
+  // unsound for rsplit, which would split at the last, so skip it there.
   if (
-    !parsed.separator.empty() && parsed.maxsplit == 1 &&
+    !from_right && !parsed.separator.empty() && parsed.maxsplit == 1 &&
     receiver_json.contains("_type") && receiver_json["_type"] == "BinOp" &&
     receiver_json.contains("op") && receiver_json["op"].contains("_type") &&
     receiver_json["op"]["_type"] == "Add")
@@ -350,11 +358,16 @@ std::optional<exprt> dispatch_split_method(
   {
     exprt obj_expr = get_receiver_expr();
     return python_list::build_split_list(
-      converter, call_json, obj_expr, parsed.separator, parsed.maxsplit);
+      converter,
+      call_json,
+      obj_expr,
+      parsed.separator,
+      parsed.maxsplit,
+      from_right);
   }
 
   return python_list::build_split_list(
-    converter, call_json, input, parsed.separator, parsed.maxsplit);
+    converter, call_json, input, parsed.separator, parsed.maxsplit, from_right);
 }
 
 std::optional<exprt> dispatch_no_arg_string_methods(
@@ -783,11 +796,45 @@ std::optional<exprt> dispatch_format_methods(
 }
 } // namespace string_method_dispatch
 
+exprt string_handler::build_affix_tuple_match(
+  const exprt &string_obj,
+  const exprt &affix_tuple,
+  const locationt &location,
+  bool is_suffix)
+{
+  // Python: s.startswith(t) / s.endswith(t) where t is a tuple of strings is
+  // True iff s matches ANY element. Build the disjunction over the per-element
+  // single-affix matches. Only tuple literals (a struct_exprt whose operands
+  // are the elements) are supported; a tuple passed by symbol has no inline
+  // operands here, and silently treating it as a string would be unsound, so
+  // we reject it with a clean error instead.
+  if (affix_tuple.operands().empty())
+    throw std::runtime_error(
+      std::string(is_suffix ? "endswith" : "startswith") +
+      "() with a tuple argument is only supported for tuple literals");
+
+  exprt result = gen_boolean(false);
+  for (const exprt &elem : affix_tuple.operands())
+  {
+    exprt one = is_suffix
+                  ? handle_string_endswith(string_obj, elem, location)
+                  : handle_string_startswith(string_obj, elem, location);
+    exprt disjunction("or", bool_type());
+    disjunction.copy_to_operands(result, one);
+    result = disjunction;
+  }
+  return result;
+}
+
 exprt string_handler::handle_string_startswith(
   const exprt &string_obj,
   const exprt &prefix_arg,
   const locationt &location)
 {
+  // A tuple of prefixes: True if the string starts with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(prefix_arg.type()))
+    return build_affix_tuple_match(string_obj, prefix_arg, location, false);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt prefix_copy = prefix_arg;
@@ -859,6 +906,10 @@ exprt string_handler::handle_string_endswith(
   const exprt &suffix_arg,
   const locationt &location)
 {
+  // A tuple of suffixes: True if the string ends with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(suffix_arg.type()))
+    return build_affix_tuple_match(string_obj, suffix_arg, location, true);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt suffix_copy = suffix_arg;
