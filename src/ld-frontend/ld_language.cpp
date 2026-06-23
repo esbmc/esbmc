@@ -178,10 +178,10 @@ void ld_languaget::show_parse(std::ostream &out)
         }
         else if (elem.kind == RungElementKind::Coil)
         {
-          std::string kind = elem.coil.kind == CoilKind::Set
-                               ? "SET"
-                               : (elem.coil.kind == CoilKind::Reset ? "RESET"
-                                                                     : "=");
+          std::string kind =
+            elem.coil.kind == CoilKind::Set
+              ? "SET"
+              : (elem.coil.kind == CoilKind::Reset ? "RESET" : "=");
           coils.emplace_back(kind, elem.coil.variable);
         }
       }
