@@ -6,6 +6,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -34,62 +35,10 @@
 
 #include <util/message.h>
 
+using namespace python_expr;
+
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-static exprt build_call_impl(
-  const expr2tc &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(
-    side_effect_function_call2tc(migrate_type(return_type), fn, args2));
-}
-
-// Callee resolved from a symbol-table entry (legacy symbol_expr(symbolt)).
-static exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  return build_call_impl(symbol_expr2tc(fn), return_type, args);
-}
-
-// Callee referenced by name with a placeholder code type (legacy
-// symbol_exprt(id, code_typet())); round-tripped through migrate_expr.
-static exprt build_call_expr(
-  const irep_idt &fn_id,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  expr2tc fn2;
-  migrate_expr(symbol_exprt(fn_id, code_typet()), fn2);
-  return build_call_impl(fn2, return_type, args);
-}
-
-static exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-static exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
 static bool get_constant_int(const exprt &expr, long long &out)
 {
   if (expr.is_nil())

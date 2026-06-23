@@ -1,5 +1,6 @@
 #include <python-frontend/python_set.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_list.h>
 #include <c2goto/library/python/python_types.h>
 #include <util/arith_tools.h>
@@ -11,76 +12,10 @@
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 
+using namespace python_expr;
+
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving -- migrate_expr already lowers the legacy nodes through these
-// same paths downstream). Back-migrated for the legacy adjust/goto-convert
-// seam; the caller sets .location() where it did before.
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// `a < b` over synthetic OM operands (loop counters / sizes). migrate lowers a
-// legacy "<" node to lessthan2tc(migrate(a), migrate(b)) (util/migrate.cpp,
-// i_lt path) with no coercion, so this is the byte-identical round-trip.
-exprt build_less_than(const exprt &a, const exprt &b)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(lessthan2tc(a2, b2));
-}
-
-// The one call site indexes an is_array()-guarded char array, so the index2t
-// array-source precondition holds.
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-}
-
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
-// a pointer to a PyObject struct, so the dereferenced struct is the resolved
-// member source and member2t's source precondition holds.
-exprt build_deref_member(
-  const exprt &obj,
-  const irep_idt &field,
-  const typet &field_type)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
-  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
-}
-
 // Build v + 1 : size_type in IREP2, back-migrated once (V.3).
 exprt build_size_inc(const exprt &v)
 {

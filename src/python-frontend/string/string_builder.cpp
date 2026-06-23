@@ -1,9 +1,8 @@
 #include "string_builder.h"
 #include "python_converter.h"
 #include "type_handler.h"
-#include <irep2/irep2_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
-#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/expr_util.h>
 #include <python-frontend/python_frontend_limits.h>
@@ -11,43 +10,7 @@
 #include <stdexcept>
 #include <limits>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 string_builder::string_builder(python_converter &conv, string_handler *handler)
   : converter_(conv), str_handler_(handler)

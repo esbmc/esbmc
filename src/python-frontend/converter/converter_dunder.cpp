@@ -1,64 +1,15 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
-#include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/migrate.h>
 #include <util/python_types.h>
 
 #include <map>
 
-namespace
-{
-// V.3: IREP2 expression-context call `fn(args...)` returning return_type
-// (side_effect_function_call2tc + symbol_expr2tc), back-migrated for the legacy
-// adjust/goto-convert seam; behaviour-preserving. Caller sets .location().
-// Falls back to the legacy node for a dyn-sized-array return/argument type.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  bool dyn = contains_dyn_array(return_type);
-  for (const exprt &a : args)
-    dyn = dyn || contains_dyn_array(a.type());
-  if (dyn)
-  {
-    side_effect_expr_function_callt call;
-    call.function() = symbol_expr(fn);
-    for (const exprt &a : args)
-      call.arguments().push_back(a);
-    call.type() = return_type;
-    return call;
-  }
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-} // namespace
+using namespace python_expr;
 
 std::string python_converter::op_to_dunder(const std::string &op)
 {

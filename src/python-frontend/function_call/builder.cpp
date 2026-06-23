@@ -10,106 +10,12 @@
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/std_expr.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
-// guards the dyn-sized-array round-trip hazard (fall back to legacy), and the
-// member/index/typecast variants restore the exact result type (#cpp_type that
-// migrate_type drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
-  // so legacy typecast_exprt(from, t) is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
-// Expression-context call `callee(args...)` returning return_type, where the
-// callee is an already-built function expression (here a by-name symbol_exprt
-// carrying a code_typet). Falls back to the legacy node for a dyn-sized-array
-// return/argument type.
-exprt build_call(
-  const exprt &callee,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  bool dyn = contains_dyn_array(return_type);
-  for (const exprt &a : args)
-    dyn = dyn || contains_dyn_array(a.type());
-  if (dyn)
-  {
-    side_effect_expr_function_callt call(return_type);
-    call.function() = callee;
-    for (const exprt &a : args)
-      call.arguments().push_back(a);
-    return call;
-  }
-  expr2tc callee2;
-  migrate_expr(callee, callee2);
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(
-    side_effect_function_call2tc(migrate_type(return_type), callee2, args2));
-}
-} // namespace
+using namespace python_expr;
 
 static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
 {
