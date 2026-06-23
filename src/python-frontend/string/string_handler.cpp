@@ -2002,7 +2002,15 @@ exprt string_handler::handle_ord_conversion(
   exprt str_addr = get_array_base_address(str_expr);
 
   // Code point of the single character: (int) *str_addr.
-  exprt first_char = dereference_exprt(str_addr, char_type());
+  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
+  // carries only (type, value) — no offset/guard — so the round-trip is
+  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
+  // build_dereference). Restore the exact element type migrate_type may drop.
+  expr2tc str_addr2;
+  migrate_expr(str_addr, str_addr2);
+  exprt first_char =
+    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
+  first_char.type() = char_type();
   first_char.location() = location;
   return build_typecast(first_char, int_type());
 }
