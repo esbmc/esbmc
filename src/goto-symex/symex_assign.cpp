@@ -534,10 +534,16 @@ void goto_symext::symex_assign(
     {
       irep_idt call_line;
       if (cur_state->source.pc->is_return())
+      {
         call_line = cur_state->top().calling_location.pc->location.get_line();
+        symex_witness_function_return(original_lhs, call_line);
+      }
       else
+      {
         call_line = cur_state->source.pc->location.get_line();
-      symex_witness_function_return(original_lhs, call_line);
+        symex_witness_function_enter(call_line);
+        symex_witness_function_return(original_lhs, call_line);
+      }
     }
   }
 
