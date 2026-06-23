@@ -48,6 +48,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
   witness_target_reached = state.witness_target_reached;
+  cycle_branch_map = state.cycle_branch_map;
   return *this;
 }
 
