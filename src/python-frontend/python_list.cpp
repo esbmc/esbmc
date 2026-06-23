@@ -1109,10 +1109,20 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const std::string &input,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   if (separator.empty())
   {
+    // rsplit() with no separator (whitespace) and an explicit maxsplit has
+    // subtle leading/trailing-whitespace asymmetry vs split() and is not
+    // supported; reject it cleanly rather than risk a wrong result. Without a
+    // maxsplit, rsplit(None) == split(None) (same tokens, same order), so a
+    // negative count falls through to the shared whitespace logic below.
+    if (from_right && count >= 0)
+      throw std::runtime_error(
+        "rsplit() with maxsplit and no separator is not supported");
+
     // Whitespace split: split on any whitespace and collapse runs.
     auto is_space = [](char c) {
       return std::isspace(static_cast<unsigned char>(c)) != 0;
@@ -1236,25 +1246,63 @@ exprt python_list::build_split_list(
   }
 
   std::vector<std::string> parts;
-  size_t start = 0;
-  long long splits = 0;
-  while (true)
+  if (from_right && count >= 1)
   {
-    if (count >= 0 && splits >= count)
+    // rsplit(sep, count): keep the rightmost `count` splits. Compute the full
+    // split, then merge the surplus leftmost parts back together with the
+    // separator — this yields exactly Python's rsplit result and avoids
+    // backward-scan boundary fiddliness. (count == 0 returned [input] above;
+    // count < 0 is the unlimited case, identical to split, handled below.)
+    std::vector<std::string> all;
+    size_t s = 0;
+    while (true)
     {
-      parts.push_back(input.substr(start));
-      break;
+      size_t pos = input.find(separator, s);
+      if (pos == std::string::npos)
+      {
+        all.push_back(input.substr(s));
+        break;
+      }
+      all.push_back(input.substr(s, pos - s));
+      s = pos + separator.size();
     }
 
-    size_t pos = input.find(separator, start);
-    if (pos == std::string::npos)
+    const long long total_splits = static_cast<long long>(all.size()) - 1;
+    if (total_splits <= count)
+      parts = all;
+    else
     {
-      parts.push_back(input.substr(start));
-      break;
+      const size_t merge_upto = all.size() - static_cast<size_t>(count);
+      std::string merged = all[0];
+      for (size_t k = 1; k < merge_upto; ++k)
+        merged += separator + all[k];
+      parts.push_back(merged);
+      for (size_t k = merge_upto; k < all.size(); ++k)
+        parts.push_back(all[k]);
     }
-    parts.push_back(input.substr(start, pos - start));
-    start = pos + separator.size();
-    ++splits;
+  }
+  else
+  {
+    size_t start = 0;
+    long long splits = 0;
+    while (true)
+    {
+      if (count >= 0 && splits >= count)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+
+      size_t pos = input.find(separator, start);
+      if (pos == std::string::npos)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+      parts.push_back(input.substr(start, pos - start));
+      start = pos + separator.size();
+      ++splits;
+    }
   }
 
   nlohmann::json list_node;
@@ -1280,10 +1328,19 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const exprt &input_expr,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   // For symbolic strings, we create a runtime call to __python_str_split
   // This function will handle the splitting at runtime with symbolic constraints
+
+  // The runtime model splits left-to-right, so it only models rsplit() when no
+  // maxsplit limits the result (rsplit() == split() then). A right-anchored
+  // maxsplit on a non-constant string would need a dedicated model; reject it
+  // cleanly rather than return a wrong result.
+  if (from_right && count >= 0)
+    throw std::runtime_error(
+      "rsplit() with maxsplit on a non-constant string is not supported");
 
   locationt location = converter.get_location_from_decl(call_node);
 

@@ -318,21 +318,26 @@ std::optional<exprt> dispatch_split_method(
   const std::function<exprt()> &get_receiver_expr,
   python_converter &converter)
 {
-  if (method_name != "split")
+  if (method_name != "split" && method_name != "rsplit")
     return std::nullopt;
+
+  // rsplit() differs from split() only in the direction maxsplit counts from
+  // (the rightmost separators rather than the leftmost).
+  const bool from_right = (method_name == "rsplit");
 
   ensure_allowed_keywords(method_name, keyword_values, {"sep", "maxsplit"});
   if (args.size() > 2)
   {
     throw std::runtime_error(
-      "split() requires zero, one, or two arguments in minimal support");
+      method_name +
+      "() requires zero, one, or two arguments in minimal support");
   }
 
   split_method_argst parsed;
   const nlohmann::json *sep_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "sep", 0, false);
+    method_name, args, keyword_values, "sep", 0, false);
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "maxsplit", 1, false);
+    method_name, args, keyword_values, "maxsplit", 1, false);
 
   if (sep_node == nullptr || is_none_literal_json(*sep_node))
   {
@@ -342,19 +347,21 @@ std::optional<exprt> dispatch_split_method(
              *sep_node, converter, parsed.separator))
   {
     throw std::runtime_error(
-      "split() only supports constant sep in minimal support");
+      method_name + "() only supports constant sep in minimal support");
   }
 
   if (maxsplit_node != nullptr)
   {
     parsed.maxsplit = required_constant_int_arg(
       *maxsplit_node,
-      "split() only supports constant maxsplit in minimal support",
+      method_name + "() only supports constant maxsplit in minimal support",
       converter);
   }
 
+  // The BinOp fast path splits at the FIRST separator (split semantics); it is
+  // unsound for rsplit, which would split at the last, so skip it there.
   if (
-    !parsed.separator.empty() && parsed.maxsplit == 1 &&
+    !from_right && !parsed.separator.empty() && parsed.maxsplit == 1 &&
     receiver_json.contains("_type") && receiver_json["_type"] == "BinOp" &&
     receiver_json.contains("op") && receiver_json["op"].contains("_type") &&
     receiver_json["op"]["_type"] == "Add")
@@ -402,11 +409,16 @@ std::optional<exprt> dispatch_split_method(
   {
     exprt obj_expr = get_receiver_expr();
     return python_list::build_split_list(
-      converter, call_json, obj_expr, parsed.separator, parsed.maxsplit);
+      converter,
+      call_json,
+      obj_expr,
+      parsed.separator,
+      parsed.maxsplit,
+      from_right);
   }
 
   return python_list::build_split_list(
-    converter, call_json, input, parsed.separator, parsed.maxsplit);
+    converter, call_json, input, parsed.separator, parsed.maxsplit, from_right);
 }
 
 std::optional<exprt> dispatch_no_arg_string_methods(

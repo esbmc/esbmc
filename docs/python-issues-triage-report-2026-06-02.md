@@ -648,6 +648,55 @@ on current `master` without the §5 architectural work; the §5 priority order s
 
 ---
 
+> **Note on numbering.** §16–§23 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548) are
+> in flight and not yet on `master`; this section is appended as §24.
+
+## 24. 2026-06-22 re-validation (fourteenth sweep) & str.rsplit()
+
+Re-test against current `master` (tip `f23d79805d`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took on the largest of the deferred candidates, `str.rsplit()`.
+
+### 24a. New isolated, soundly-fixable defect found & fixed
+**`str.rsplit()` was unmodeled, producing a spurious `VERIFICATION FAILED`.**
+
+`str.split()` already verifies; `rsplit()` differs only in the direction `maxsplit` counts from
+(the rightmost separators rather than the leftmost) and was unsupported. **Fix:** thread a
+`bool from_right` flag through both `python_list::build_split_list` overloads (constant-fold and
+symbolic-runtime) and `dispatch_split_method`.
+
+- **Constant separator case:** for `from_right && maxsplit >= 1`, compute the *full* split, then
+  **merge the surplus leftmost parts** back together with the separator — this yields exactly
+  Python's rsplit result (the rightmost `maxsplit` splits survive) and avoids error-prone
+  backward-scan boundary logic. `maxsplit == 0` returns `[input]` (shared with split); `maxsplit < 0`
+  (unlimited) falls through to the existing forward loop, which produces an identical token
+  sequence in identical order. Verified bit-for-bit against CPython for full split, `maxsplit`
+  1/2/≥count/0, separator-absent, multi-character separators, the empty string, and
+  leading/trailing/consecutive separators (`"a..b".rsplit(".",1) == ["a.","b"]`).
+- **Sound clean-error limitations (never wrong verdicts):** whitespace `rsplit(None, maxsplit)` —
+  whose leading/trailing-whitespace asymmetry vs `split()` is subtle — and `rsplit(sep, maxsplit)`
+  on a *non-constant* string both raise a clean unsupported-feature error. Without a `maxsplit`,
+  `rsplit(None)` == `split(None)`, so that path is handled exactly. The split-specific BinOp
+  fast-path (which splits at the *first* separator) is skipped for rsplit.
+
+The `split` (`from_right=false`) path is byte-for-byte behaviour-preserving (the original loop,
+relocated into an `else`). `rsplit` is mapped to the `"list"` return type at **both**
+type-inference sites (string-literal/BinOp receivers *and* typed-variable receivers — the second
+site was caught in code review). Like the other §16a–§23a fixes this **restores a working
+feature**. New regression pair `regression/python/str_rsplit{,_fail}` (CORE) covering no-maxsplit,
+right-anchored `maxsplit`, `maxsplit == 0`, a consecutive-separator edge, and a typed-variable
+receiver; the positive test is the liveness witness. CPython sanity passes; the focused
+`regression/python/{str,string,split}*` ctest subset (436 tests) shows zero new failures (the 12
+failing are `--z3`/`--ir`/`--boolector` environmental); the existing `split` tests are unaffected.
+Code-reviewed (0 critical/major; one minor type-inference parity gap found and fixed before
+commit). Solver-agnostic (constant-fold in the frontend, no SMT-encoding change).
+
+### 24b. Everything else: unchanged disposition
+Deferred candidates stand: `max`/`min` with a `key=` function and `list.index()`-in-`try/except`
+(both wrong-verdicts needing function-application / exception-model machinery, not point fixes);
+`int.to_bytes()`, `bytes.hex()`/`decode()`/`str.encode()`, `str.maketrans`/`translate`,
+`float.hex()` (infeasible), `str.isascii()` (string-soundness), and the numeric-tower *properties*.
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §16 (PR #5526, `int.bit_count()`), §17 (PR #5531, `set.isdisjoint()`),
 > §18 (PR #5532, `float.is_integer()`), §19 (PR #5536, `int.conjugate()`), and §20 (PR #5537,
 > `set` union/intersection/difference methods) are in flight and not yet on `master`; this section
