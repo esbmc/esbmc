@@ -120,6 +120,18 @@ exprt build_add(const exprt &a, const exprt &b, const typet &t)
   return migrate_expr_back(add2tc(migrate_type(t), a2, b2));
 }
 
+// `(t)(a - b)` over synthetic same-width operands. migrate lowers a legacy "-"
+// node to sub2tc(migrate_type(t), migrate(a), migrate(b)) (util/migrate.cpp
+// i_sub path) with no coercion, so this is the byte-identical round-trip. The
+// result type and both operands MUST share bit-width (sub2t asserts it).
+exprt build_sub(const exprt &a, const exprt &b, const typet &t)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -1525,11 +1537,11 @@ exprt python_list::handle_range_slice(
         if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
         {
           exprt abs_value = converter_.get_expr(bound["operand"]);
-          exprt neg("-", signedbv_typet(64));
-          neg.copy_to_operands(
+          // 0 - (int64)abs_value: both operands are signedbv64 (same width).
+          return build_sub(
             from_integer(0, signedbv_typet(64)),
-            build_typecast(abs_value, signedbv_typet(64)));
-          return neg;
+            build_typecast(abs_value, signedbv_typet(64)),
+            signedbv_typet(64));
         }
         exprt e = converter_.get_expr(bound);
         e = remove_function_calls_recursive(e, slice_node);
