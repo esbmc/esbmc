@@ -39,7 +39,19 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     }
 
     value_setst::valuest value_set;
-    cur_state->value_set.get_value_set(value, value_set);
+    // The value-set map is keyed by the L1 symbol name (e.g. "...@x?1!0"); the
+    // isinstance operand arrives as an L0 symbol, so an unrenamed lookup misses
+    // and the points-to set comes back empty/unknown. Rename to L1 first. This
+    // matters for the object-model migration (#3067): a class instance is a
+    // `Class*` allocated by `new_object`; when that allocation is guarded
+    // (e.g. inside `if c:`), constant propagation cannot recover the concrete
+    // object from the renamed pointer, so the value-set is the only way to find
+    // the pointed-to struct and resolve the type. The L1 rename keeps the
+    // symbol shape (cur_state->rename may wrap it in a typecast), so we can
+    // index the map directly.
+    expr2tc l1_value = value;
+    cur_state->top().level1.rename(l1_value);
+    cur_state->value_set.get_value_set(l1_value, value_set);
 
     // Find the last value from the value set
     for (const auto &obj : value_set)

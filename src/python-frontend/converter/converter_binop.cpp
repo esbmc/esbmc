@@ -794,7 +794,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs.type().is_pointer() != rhs.type().is_pointer())
   {
     exprt &struct_side = lhs.type().is_pointer() ? rhs : lhs;
-    const exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
+    exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
     auto class_tag = [&](const typet &t) -> irep_idt {
       typet r = t;
       if (r.id() == "symbol")
@@ -804,11 +804,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
     {
-      // V.3: take the struct's address in IREP2 — exact round-trip of the
-      // legacy gen_address_of (a plain address_of of the struct value).
-      expr2tc ss2;
-      migrate_expr(struct_side, ss2);
-      struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+      // struct_side is a by-value instance of the same class as *ptr_side.
+      // Normally take its address so both compare as references (github #4116).
+      // But a constant-struct rvalue — e.g. an Enum member like `Color.RED`,
+      // which has no storage — cannot be addressed: gen_address_of would emit
+      // address-of-constant, which the SMT backend rejects ("Unrecognized
+      // address_of operand"). Dereference the pointer instead and compare the
+      // two structs by value, the correct semantics for Enum singletons
+      // (github_3642).
+      if (struct_side.is_constant() || struct_side.id() == "struct")
+        ptr_side = dereference_exprt(ptr_side, ptr_side.type());
+      else
+      {
+        // V.3: take the struct's address in IREP2 — exact round-trip of the
+        // legacy gen_address_of (a plain address_of of the struct value).
+        expr2tc ss2;
+        migrate_expr(struct_side, ss2);
+        struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+      }
     }
   }
 
@@ -843,28 +856,43 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
              !tuple_handler_->is_tuple_type(r);
     };
 
+    // A class *reference*: a pointer to a user-defined class struct. Under the
+    // object-model migration (#3067/#4773) instances are heap pointers, so the
+    // non-handle side of `instance == None-handle` is `Class*`, not a by-value
+    // struct.
+    auto is_user_class_ptr = [&](const typet &t) {
+      return t.is_pointer() && is_user_class_struct(t.subtype());
+    };
+
     const bool lhs_handle = is_object_handle(lhs.type());
     const bool rhs_handle = is_object_handle(rhs.type());
     if (lhs_handle != rhs_handle)
     {
       exprt &struct_side = lhs_handle ? rhs : lhs;
       exprt &handle_side = lhs_handle ? lhs : rhs;
-      if (is_user_class_struct(struct_side.type()))
+      const bool side_is_struct = is_user_class_struct(struct_side.type());
+      const bool side_is_ptr = is_user_class_ptr(struct_side.type());
+      if (side_is_struct || side_is_ptr)
       {
-        // Compare as pointers, not integers: take the struct's address and
-        // reinterpret the integer handle as a pointer to the same class, so
-        // ESBMC's object/offset pointer model decides identity. Casting both
-        // to the integer handle instead would lose the distinct-object
-        // guarantee and spuriously satisfy `a != b` for distinct instances.
+        // Compare as pointers, not integers: reinterpret the integer handle as
+        // a pointer to the same class so ESBMC's object/offset pointer model
+        // decides identity. Casting both to the integer handle instead would
+        // lose the distinct-object guarantee and spuriously satisfy `a != b`
+        // for distinct instances. A by-value instance needs its address taken;
+        // a class reference is already a pointer.
         // V.3: built in IREP2 — exact round-trip of the legacy
-        // gen_address_of + typecast_exprt (migrate's typecast defaults the
-        // same rounding-mode symbol the 2-arg typecast2tc uses).
-        typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
+        // gen_address_of + typecast_exprt.
+        typet ptr_t = side_is_ptr
+                        ? struct_side.type()
+                        : gen_pointer_type(ns.follow(struct_side.type()));
         const type2tc ptr_t2 = migrate_type(ptr_t);
-        expr2tc ss2;
-        migrate_expr(struct_side, ss2);
-        struct_side =
-          migrate_expr_back(typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        if (side_is_struct)
+        {
+          expr2tc ss2;
+          migrate_expr(struct_side, ss2);
+          struct_side = migrate_expr_back(
+            typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        }
         expr2tc hs2;
         migrate_expr(handle_side, hs2);
         handle_side = migrate_expr_back(typecast2tc(ptr_t2, hs2));
