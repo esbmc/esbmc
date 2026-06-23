@@ -1030,9 +1030,13 @@ exprt python_set::build_set_relation_call(
   };
 
   // A.issubset(B) holds iff every element of A is in B; issuperset is the
-  // mirror (every element of B is in A). Iterate one list, clear a bool
-  // result initialised to true when an element is missing from the other.
+  // mirror (every element of B is in A). A.isdisjoint(B) holds iff no element
+  // of A is in B. Iterate one list, clear a bool result initialised to true
+  // when the per-element predicate fails (an element missing from the other
+  // set for subset/superset; an element present in the other set for
+  // disjoint).
   const bool superset = method_name == "issuperset";
+  const bool disjoint = method_name == "isdisjoint";
   const exprt iterated = superset ? as_ptr(other) : as_ptr(self);
   const exprt container = superset ? as_ptr(self) : as_ptr(other);
 
@@ -1104,14 +1108,21 @@ exprt python_set::build_set_relation_call(
   contains_call.location() = loc;
   body.copy_to_operands(contains_call);
 
-  exprt not_in("not", bool_type());
-  not_in.copy_to_operands(build_symbol(in));
+  // disjoint clears on presence (`in`); subset/superset clear on absence.
+  exprt trigger;
+  if (disjoint)
+    trigger = build_symbol(in);
+  else
+  {
+    trigger = exprt("not", bool_type());
+    trigger.copy_to_operands(build_symbol(in));
+  }
   code_blockt then_block;
   then_block.copy_to_operands(
     code_assignt(build_symbol(result), gen_boolean(false)));
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
-  if_stmt.copy_to_operands(not_in, then_block);
+  if_stmt.copy_to_operands(trigger, then_block);
   body.copy_to_operands(if_stmt);
 
   exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
@@ -1131,7 +1142,9 @@ exprt python_set::build_set_method_call(
   const nlohmann::json &element,
   const std::string &method_name)
 {
-  if (method_name == "issubset" || method_name == "issuperset")
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
     return build_set_relation_call(
       build_symbol(self), other, element, method_name);
 
