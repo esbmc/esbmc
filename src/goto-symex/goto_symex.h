@@ -213,6 +213,15 @@ protected:
   void symex_return(const expr2tc &code);
   void
   symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
+  bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_branching(
+    const expr2tc &old_guard,
+    const expr2tc &new_guard,
+    bool forward,
+    bool &new_guard_true,
+    bool &new_guard_false,
+    const goto_programt::instructiont &instruction);
+  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
 
   /**
    *  Interpret an OTHER instruction.

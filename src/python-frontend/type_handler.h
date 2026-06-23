@@ -4,6 +4,8 @@
 #include <util/arith_tools.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
+#include <util/migrate.h>
+#include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
 
 class python_converter;
@@ -76,12 +78,20 @@ inline exprt promote_to_complex(const exprt &value)
 inline exprt complex_to_bool_expr(const exprt &complex_expr)
 {
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(complex_expr, "real", dt);
-  exprt imag = member_exprt(complex_expr, "imag", dt);
-  exprt zero = from_double(0.0, dt);
-  return or_exprt(
-    not_exprt(equality_exprt(real, zero)),
-    not_exprt(equality_exprt(imag, zero)));
+  // V.3: build `z.real != 0.0 || z.imag != 0.0` in IREP2, back-migrating once.
+  // member2t over a complex source is exactly the node migrate_expr builds for
+  // the legacy member access at goto-convert (util/migrate.cpp:1580), and the
+  // not(equal) shape mirrors the legacy or_exprt(not_exprt(equality_exprt(...)))
+  // verbatim, so the back-migrated tree is byte-identical to the old one.
+  const type2tc dt2 = migrate_type(dt);
+  expr2tc complex2;
+  migrate_expr(complex_expr, complex2);
+  expr2tc zero2;
+  migrate_expr(from_double(0.0, dt), zero2);
+
+  expr2tc real_nz = not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
+  expr2tc imag_nz = not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
+  return migrate_expr_back(or2tc(real_nz, imag_nz));
 }
 
 class type_handler

@@ -349,6 +349,7 @@ exprt tuple_handler::handle_tuple_subscript(
     // types normally agree; a defensive exact-type guard keeps any
     // base_type_eq-but-not-identical component on the legacy builder.
     const type2tc ft2 = migrate_type(first_type);
+    // idx2t and idxnorm2 are already in scope from the index-norm block above.
     exprt chain = get_tuple_element(array, tuple_type, 0);
     for (size_t k = 1; k < n; ++k)
     {
