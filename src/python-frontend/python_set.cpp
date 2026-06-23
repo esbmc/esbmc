@@ -198,8 +198,8 @@ exprt python_set::get_from_iterable(
 
     // Ensure bounded strlen doesn't exceed the configured limit.
     // If it does, the model would silently truncate, so assert to make it explicit.
-    exprt bound_check("<=", bool_type());
-    bound_check.copy_to_operands(
+    // (len_sym and the bound literal are both size_type — same width.)
+    exprt bound_check = build_less_equal(
       build_symbol(len_sym),
       from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
     code_assertt bound_assert(bound_check);
@@ -1105,6 +1105,18 @@ exprt python_set::build_set_method_call(
       converter_, other, build_symbol(self), result, false, element);
     return build_symbol(result);
   }
+
+  // The non-mutating union/intersection/difference methods reuse the same
+  // builders as the |, & and - operators; each returns a fresh set and leaves
+  // self unchanged.
+  if (method_name == "union")
+    return build_set_union_call(build_symbol(self), other, element);
+
+  if (method_name == "intersection")
+    return build_set_intersection_call(build_symbol(self), other, element);
+
+  if (method_name == "difference")
+    return build_set_difference_call(build_symbol(self), other, element);
 
   throw std::runtime_error("unsupported set method: " + method_name);
 }

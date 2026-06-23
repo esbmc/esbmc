@@ -58,6 +58,9 @@ exprt build_index(const exprt &arr, const exprt &idx);
 // `a < b` over same-width operands (lessthan2t asserts width consistency).
 exprt build_less_than(const exprt &a, const exprt &b);
 
+// `a <= b` over same-width operands (lessthanequal2t asserts width consistency).
+exprt build_less_equal(const exprt &a, const exprt &b);
+
 // `a > b` over same-width operands (greaterthan2t asserts width consistency).
 exprt build_greater_than(const exprt &a, const exprt &b);
 

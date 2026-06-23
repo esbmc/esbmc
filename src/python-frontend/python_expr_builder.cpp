@@ -137,6 +137,14 @@ exprt build_less_than(const exprt &a, const exprt &b)
   return migrate_expr_back(lessthan2tc(a2, b2));
 }
 
+exprt build_less_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthanequal2tc(a2, b2));
+}
+
 exprt build_greater_than(const exprt &a, const exprt &b)
 {
   expr2tc a2, b2;

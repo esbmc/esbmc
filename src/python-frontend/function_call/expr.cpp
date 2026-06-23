@@ -1919,7 +1919,8 @@ bool function_call_expr::is_set_method_call() const
     method_name != "add" && method_name != "discard" &&
     method_name != "issubset" && method_name != "issuperset" &&
     method_name != "isdisjoint" && method_name != "update" &&
-    method_name != "symmetric_difference")
+    method_name != "symmetric_difference" && method_name != "union" &&
+    method_name != "intersection" && method_name != "difference")
     return false;
 
   // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
