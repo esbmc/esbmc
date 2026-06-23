@@ -82,6 +82,19 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic same-width operands (loop counters / bounds). migrate
+// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
+// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
+// round-trip. Operands MUST share bit-width: lessthan2t asserts width
+// consistency, which the legacy "<" node defers to clang_cpp_adjust.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -792,9 +805,8 @@ void python_list::emit_list_copy(
   converter_.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  // condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  // condition: i < n (both $i$/$n$ are size_type — same width)
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   // body
   code_blockt body;
@@ -1671,8 +1683,9 @@ exprt python_list::handle_range_slice(
     code_assignt idx_init(build_symbol(idx), gen_zero(size_type()));
     converter_.add_instruction(idx_init);
 
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(build_symbol(idx), slice_len);
+    // idx is size_type; slice_len is built via size_add/sub/div (size_type),
+    // so both operands share width.
+    exprt cond = build_less_than(build_symbol(idx), slice_len);
 
     code_blockt body;
 
@@ -2874,6 +2887,26 @@ exprt python_list::handle_index_access(
     if (mixed_numeric)
       elem_type = double_type();
 
+    // A heap-migrated user-class instance is stored in a list as a `Class*`
+    // pointer: the push path records a pointer-sized element (type_size 8), not
+    // the full struct. If the element type resolved to a by-value user-class
+    // struct, read it back as the pointer it actually is so
+    // extract_pyobject_value dereferences a single `Class*` instead of copying
+    // sizeof(struct) bytes off an 8-byte pointer slot, which overruns it
+    // (#4805). ESBMC-internal model helper classes (reserved `__ESBMC_` prefix,
+    // e.g. the dataclasses `__ESBMC_DataclassField`) are stored by value by
+    // their hand-written models and must be left as structs.
+    if (converter_.is_user_class_struct_type(elem_type))
+    {
+      const std::string tag =
+        elem_type.id() == "symbol"
+          ? to_symbol_type(elem_type).get_identifier().as_string()
+          : to_struct_type(elem_type).tag().as_string();
+      const std::string cls = converter_.extract_class_name_from_tag(tag);
+      if (cls.rfind("__ESBMC", 0) != 0)
+        elem_type = gen_pointer_type(elem_type);
+    }
+
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
@@ -2984,9 +3017,9 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(idx_init);
 
     // --- 3. Normalize negative index: if (idx < 0) idx += (ll)len ---
-    exprt idx_lt_zero("<", bool_type());
-    idx_lt_zero.copy_to_operands(
-      build_symbol(idx_sym), from_integer(0, ll_type));
+    // ($str_idx$ and the 0 literal are both ll_type — same width)
+    exprt idx_lt_zero =
+      build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
 
     exprt idx_plus_len("+", ll_type);
     idx_plus_len.copy_to_operands(
@@ -3570,9 +3603,8 @@ exprt python_list::create_vla(
   converter_.add_instruction(counter_code);
 
   // while (counter < bound) { push each elem in order; counter += 1; }
-  exprt cond("<", bool_type());
-  cond.operands().push_back(build_symbol(counter));
-  cond.operands().push_back(build_symbol(bound));
+  // (counter and bound are both int_type — same width)
+  exprt cond = build_less_than(build_symbol(counter), build_symbol(bound));
 
   code_blockt then;
   for (const auto &list_elem : list_elems)
@@ -4119,8 +4151,18 @@ exprt python_list::build_extend_list_call(
     if (other_list.type().is_array())
     {
       const array_typet &arr_type = to_array_type(other_list.type());
-      // Subtract 1 for null terminator
-      str_len = minus_exprt(arr_type.size(), gen_one(size_type()));
+      // Subtract 1 for null terminator. V.3: build the (size - 1) subtraction
+      // in IREP2. The legacy 2-arg minus_exprt leaves the result type nil for
+      // downstream inference; here we set it explicitly to the array-size type
+      // (size_type), which is exactly what that inference yields, and restore
+      // it after the round-trip since migrate_type drops attributes (#cpp_type).
+      const exprt &arr_size = arr_type.size();
+      expr2tc size2, one2;
+      migrate_expr(arr_size, size2);
+      migrate_expr(gen_one(size_type()), one2);
+      str_len =
+        migrate_expr_back(sub2tc(migrate_type(arr_size.type()), size2, one2));
+      str_len.type() = arr_size.type();
     }
     else // pointer type - use strlen
     {
@@ -5665,8 +5707,9 @@ void python_list::handle_list_var_unpacking(
       build_symbol(loop_idx), from_integer(before_star, size_type()));
     target_block.copy_to_operands(idx_init);
 
-    exprt loop_cond("<", bool_type());
-    loop_cond.copy_to_operands(build_symbol(loop_idx), upper_expr);
+    // loop_idx is size_type; upper_expr is a size_type symbol/literal, so both
+    // operands share width.
+    exprt loop_cond = build_less_than(build_symbol(loop_idx), upper_expr);
 
     code_blockt loop_body;
 

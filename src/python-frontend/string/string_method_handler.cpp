@@ -467,12 +467,13 @@ std::optional<exprt> dispatch_one_arg_string_methods(
     const char *arg_name;
     one_arg_handler_t handler;
   };
-  static constexpr std::array<one_arg_handler_entryt, 5> one_arg_handlers = {{
+  static constexpr std::array<one_arg_handler_entryt, 6> one_arg_handlers = {{
     {"startswith", "prefix", &string_handler::handle_string_startswith},
     {"endswith", "suffix", &string_handler::handle_string_endswith},
     {"removeprefix", "prefix", &string_handler::handle_string_removeprefix},
     {"removesuffix", "suffix", &string_handler::handle_string_removesuffix},
     {"partition", "sep", &string_handler::handle_string_partition},
+    {"rpartition", "sep", &string_handler::handle_string_rpartition},
   }};
 
   for (const auto &[name, arg_name, handler] : one_arg_handlers)
@@ -2593,6 +2594,24 @@ exprt string_handler::handle_string_partition(
   const exprt &sep_arg,
   const locationt &location)
 {
+  return build_partition_tuple(string_obj, sep_arg, location, false);
+}
+
+exprt string_handler::handle_string_rpartition(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location)
+{
+  return build_partition_tuple(string_obj, sep_arg, location, true);
+}
+
+exprt string_handler::build_partition_tuple(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location,
+  bool from_right)
+{
+  const char *method_name = from_right ? "rpartition" : "partition";
   // Build a 3-tuple (before, sep, after) as a struct tagged like a regular
   // Python tuple ("tag-tuple_..."). The tag is what lets the assignment target
   // fixup, len(), and subscript recognise the result as a tuple rather than a
@@ -2634,27 +2653,42 @@ exprt string_handler::handle_string_partition(
     // report VFAILED, but GOTO conversion no longer aborts (#4807).
     log_debug(
       "python-string",
-      "partition() on non-constant receiver/separator: empty-tuple "
-      "fallback");
+      "{}() on non-constant receiver/separator: empty-tuple fallback",
+      method_name);
     if (!string_builder_)
-      throw std::runtime_error("string_builder not set for partition()");
+      throw std::runtime_error(
+        std::string("string_builder not set for ") + method_name + "()");
     exprt empty_a = string_builder_->build_string_literal("");
     exprt empty_b = string_builder_->build_string_literal("");
     exprt empty_c = string_builder_->build_string_literal("");
     return make_tuple3(empty_a, empty_b, empty_c);
   }
   if (sep.empty())
-    throw std::runtime_error("partition() separator cannot be empty");
+    throw std::runtime_error(
+      std::string(method_name) + "() separator cannot be empty");
 
   std::string before;
   std::string after;
   std::string mid;
-  size_t pos = input.find(sep);
+  // partition() splits at the first occurrence of sep; rpartition() at the
+  // last. When sep is absent, partition() returns (input, "", "") and
+  // rpartition() returns ("", "", input) — the unmatched receiver goes in the
+  // first vs. the last element respectively.
+  size_t pos = from_right ? input.rfind(sep) : input.find(sep);
   if (pos == std::string::npos)
   {
-    before = input;
-    mid = "";
-    after = "";
+    if (from_right)
+    {
+      before = "";
+      mid = "";
+      after = input;
+    }
+    else
+    {
+      before = input;
+      mid = "";
+      after = "";
+    }
   }
   else
   {
@@ -2664,7 +2698,8 @@ exprt string_handler::handle_string_partition(
   }
 
   if (!string_builder_)
-    throw std::runtime_error("string_builder not set for partition()");
+    throw std::runtime_error(
+      std::string("string_builder not set for ") + method_name + "()");
 
   exprt before_expr = string_builder_->build_string_literal(before);
   exprt mid_expr = string_builder_->build_string_literal(mid);
