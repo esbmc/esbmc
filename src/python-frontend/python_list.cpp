@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -166,6 +167,18 @@ exprt build_deref_member(
   migrate_expr(obj, obj2);
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
+
+// Build obj.field : field_type in IREP2 (V.3). `obj` is a struct rvalue (e.g. a
+// tuple struct), so member2t's struct-source precondition holds directly.
+exprt build_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), obj2, field));
 }
 
 // Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
@@ -4274,6 +4287,25 @@ exprt python_list::build_extend_list_call(
     actual_list = build_symbol(temp_list);
   }
 
+  // A tuple operand: Python's extend() accepts any iterable. Materialise the
+  // tuple's components into a fresh list so the list model sees a
+  // PyListObject* rather than the tuple struct, which __ESBMC_list_extend
+  // would otherwise dereference out of bounds.
+  if (converter_.get_tuple_handler().is_tuple_type(actual_list.type()))
+  {
+    const typet &other_type = converter_.ns.follow(actual_list.type());
+    symbolt &temp_list = create_list();
+    const std::string &temp_id = temp_list.id.as_string();
+    for (const auto &comp : to_struct_type(other_type).components())
+    {
+      exprt elem = build_member(actual_list, comp.get_name(), comp.type());
+      exprt push = build_push_list_call(temp_list, op, elem);
+      converter_.add_instruction(push);
+      add_type_info(temp_id, std::string(), comp.type());
+    }
+    actual_list = build_symbol(temp_list);
+  }
+
   // Update list_type_map: copy type info from actual_list to list
   const std::string &list_name = list.id.as_string();
   const std::string &other_list_name = actual_list.identifier().as_string();
@@ -4783,9 +4815,18 @@ exprt python_list::extract_pyobject_value(
     // works for numeric / pointer-by-value elements).
     exprt as_default = build_dereference(
       build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
-    equality_exprt is_str(
-      type_id_member, from_integer(str_type_id, size_type()));
-    return if_exprt(is_str, obj_value, as_default);
+    // item->type_id == str_type_id ? obj_value : *(T*)obj_value
+    // V.3: built in IREP2 (both branches are elem_type/void*, so the if2t
+    // types agree), back-migrated at the return. Mirrors the float-dispatch
+    // if2t above.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, ov2, def2;
+    migrate_expr(type_id_member, tid2);
+    migrate_expr(obj_value, ov2);
+    migrate_expr(as_default, def2);
+    const expr2tc is_str =
+      equality2tc(tid2, from_integer(str_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_str, ov2, def2));
   }
 
   // For array types, return pointer to element type instead of pointer to array
@@ -5077,6 +5118,22 @@ exprt python_list::build_list_from_range(
 
   // All arguments are constant
   return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::build_list_from_tuple(
+  python_converter &converter,
+  const exprt &tuple_expr,
+  const nlohmann::json &element)
+{
+  python_list helper(converter, element);
+  const typet &tuple_type = converter.name_space().follow(tuple_expr.type());
+
+  std::vector<exprt> components;
+  for (const auto &comp : to_struct_type(tuple_type).components())
+    components.push_back(
+      build_member(tuple_expr, comp.get_name(), comp.type()));
+
+  return helper.build_list_from_exprs(components);
 }
 
 exprt python_list::handle_symbolic_range(

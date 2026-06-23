@@ -299,6 +299,17 @@ public:
     bool is_suffix);
 
   /**
+   * @brief Shared implementation for startswith()/endswith() with a tuple of
+   *        affixes: True iff the string matches any element. @p is_suffix
+   *        selects endswith (true) vs startswith (false).
+   */
+  exprt build_affix_tuple_match(
+    const exprt &string_obj,
+    const exprt &affix_tuple,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
    * @brief Handle str.isdigit() method
    * @param string_obj String object
    * @param location Source location
