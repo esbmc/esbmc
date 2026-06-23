@@ -4056,17 +4056,10 @@ exprt python_list::build_extend_list_call(
     {
       const array_typet &arr_type = to_array_type(other_list.type());
       // Subtract 1 for null terminator. V.3: build the (size - 1) subtraction
-      // in IREP2. The legacy 2-arg minus_exprt leaves the result type nil for
-      // downstream inference; here we set it explicitly to the array-size type
-      // (size_type), which is exactly what that inference yields, and restore
-      // it after the round-trip since migrate_type drops attributes (#cpp_type).
+      // in IREP2 with the result type set explicitly to the array-size type
+      // (what the legacy 2-arg minus_exprt's downstream inference yields).
       const exprt &arr_size = arr_type.size();
-      expr2tc size2, one2;
-      migrate_expr(arr_size, size2);
-      migrate_expr(gen_one(size_type()), one2);
-      str_len =
-        migrate_expr_back(sub2tc(migrate_type(arr_size.type()), size2, one2));
-      str_len.type() = arr_size.type();
+      str_len = build_sub(arr_size, gen_one(size_type()), arr_size.type());
     }
     else // pointer type - use strlen
     {
@@ -4522,10 +4515,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   }
 
   // 9. Increment index: i = i + 1 (V.3: built in IREP2).
-  const type2tc inc_t2 = migrate_type(size_type());
-  expr2tc inc_idx;
-  migrate_expr(build_symbol(index_var), inc_idx);
-  exprt increment = migrate_expr_back(add2tc(inc_t2, inc_idx, gen_one(inc_t2)));
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);

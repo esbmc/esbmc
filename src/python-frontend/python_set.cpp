@@ -16,13 +16,10 @@ using namespace python_expr;
 
 namespace
 {
-// Build v + 1 : size_type in IREP2, back-migrated once (V.3).
+// Build v + 1 : size_type via the shared add helper (V.3).
 exprt build_size_inc(const exprt &v)
 {
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc v2;
-  migrate_expr(v, v2);
-  return migrate_expr_back(add2tc(size_t2, v2, gen_one(size_t2)));
+  return build_add(v, gen_one(size_type()), size_type());
 }
 } // namespace
 
@@ -437,10 +434,8 @@ exprt python_set::get_from_iterable(
     }
 
     // Increment index: i = i + 1 (V.3: built in IREP2).
-    const type2tc size_t2 = migrate_type(size_type());
-    expr2tc idx2;
-    migrate_expr(build_symbol(idx_sym), idx2);
-    exprt idx_inc = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
+    exprt idx_inc =
+      build_add(build_symbol(idx_sym), gen_one(size_type()), size_type());
     code_assignt idx_update(build_symbol(idx_sym), idx_inc);
     loop_body.copy_to_operands(idx_update);
   }

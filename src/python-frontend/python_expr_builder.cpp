@@ -145,6 +145,28 @@ exprt build_greater_than(const exprt &a, const exprt &b)
   return migrate_expr_back(greaterthan2tc(a2, b2));
 }
 
+exprt build_add(const exprt &a, const exprt &b, const typet &t)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  exprt result = migrate_expr_back(add2tc(migrate_type(t), a2, b2));
+  // migrate_type does not round-trip #cpp_type; restore the exact result type.
+  result.type() = t;
+  return result;
+}
+
+exprt build_sub(const exprt &a, const exprt &b, const typet &t)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  exprt result = migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
+  // migrate_type does not round-trip #cpp_type; restore the exact result type.
+  result.type() = t;
+  return result;
+}
+
 // Expression-context call `fn(args...)` returning return_type. If the return
 // type or any argument type contains a dyn-sized array (which does not
 // round-trip), build the legacy side_effect_expr_function_callt instead.

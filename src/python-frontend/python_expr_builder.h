@@ -61,6 +61,12 @@ exprt build_less_than(const exprt &a, const exprt &b);
 // `a > b` over same-width operands (greaterthan2t asserts width consistency).
 exprt build_greater_than(const exprt &a, const exprt &b);
 
+// `a + b : t` over same-width operands (add2t asserts width consistency).
+exprt build_add(const exprt &a, const exprt &b, const typet &t);
+
+// `a - b : t` over same-width operands (sub2t asserts width consistency).
+exprt build_sub(const exprt &a, const exprt &b, const typet &t);
+
 // Expression-context call `fn(args...) : return_type`, fn a function symbol.
 exprt build_call_expr(
   const symbolt &fn,
