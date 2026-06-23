@@ -355,16 +355,16 @@ std::string python_annotation<Json>::get_string_method_return_type(
   if (method == "find" || method == "rfind")
     return "int";
 
-  if (method == "split")
+  if (method == "split" || method == "rsplit")
     return "list";
 
-  // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
-  // which resolves to an empty type so the concrete struct type of the 3-tuple
-  // produced by handle_string_partition is copied onto the target symbol.
-  // Mapping it to the default "str" mistypes the target as a scalar char, which
-  // makes len()/subscript on the result wrong (unsound — proves false
-  // assertions, #5114).
-  if (method == "partition")
+  // partition()/rpartition() return a 3-tuple (before, sep, after). Map to
+  // "tuple", which resolves to an empty type so the concrete struct type of the
+  // 3-tuple produced by handle_string_partition is copied onto the target
+  // symbol. Mapping it to the default "str" mistypes the target as a scalar
+  // char, which makes len()/subscript on the result wrong (unsound — proves
+  // false assertions, #5114).
+  if (method == "partition" || method == "rpartition")
     return "tuple";
 
   // Keep previous behavior for unmapped string methods.
@@ -2305,7 +2305,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
   {
     if (
       obj_type == "str" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "split")
+      (call["func"]["attr"] == "split" || call["func"]["attr"] == "rsplit"))
       return "list";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.

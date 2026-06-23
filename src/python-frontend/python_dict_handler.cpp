@@ -81,6 +81,19 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic same-width operands (loop counter / size). migrate
+// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
+// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
+// round-trip. Operands MUST share bit-width: lessthan2t asserts width
+// consistency, which the legacy "<" node defers to clang_cpp_adjust.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
 // (V.3). SIZE_MAX is the dict lookup's not-found sentinel.
 exprt build_key_found(const symbolt &index_var)
@@ -2733,6 +2746,39 @@ exprt python_dict_handler::handle_dict_copy(
   return build_symbol(new_dict_sym);
 }
 
+exprt python_dict_handler::handle_dict_clear(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("dict.clear() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  // dict.clear() empties the dict in place by clearing both backing lists.
+  // The keys/values members are PyListObject* (get_list_type() is a pointer),
+  // so they pass directly to __ESBMC_list_clear, which sets the list size to 0.
+  const symbolt *clear_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_clear");
+  if (!clear_func)
+    throw std::runtime_error("__ESBMC_list_clear not found");
+
+  auto clear_list_member = [&](const irep_idt &name) {
+    code_function_callt clear_call;
+    clear_call.function() = build_symbol(*clear_func);
+    clear_call.arguments().push_back(dict_member(dict_expr, name, list_type));
+    clear_call.type() = empty_typet();
+    clear_call.location() = location;
+    converter_.add_instruction(clear_call);
+  };
+
+  clear_list_member("keys");
+  clear_list_member("values");
+
+  return nil_exprt();
+}
+
 bool python_dict_handler::is_value_returning_method(
   const std::string &method_name)
 {
@@ -3486,8 +3532,9 @@ exprt python_dict_handler::handle_dict_update(
   index_init.location() = location;
   converter_.add_instruction(index_init);
 
-  exprt loop_cond("<", bool_type());
-  loop_cond.copy_to_operands(build_symbol(index_var), build_symbol(size_var));
+  // (both $dict_update_iter$ and $dict_update_size$ are size_type — same width)
+  exprt loop_cond =
+    build_less_than(build_symbol(index_var), build_symbol(size_var));
 
   // Rebuild the current key/value pair from the source lists.
   code_blockt loop_body;

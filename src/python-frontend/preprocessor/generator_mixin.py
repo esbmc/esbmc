@@ -952,11 +952,15 @@ class GeneratorMixin:
         return [], folded_sorted
 
     def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
-        """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
+        """Lower min/max(iterable, key=...) for literal-list iterables with a
+        constant-foldable key.
 
-        Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
-        a list literal of tuples plus a one-arg lambda body of the form
-        ``param[K]`` with a constant integer index. Returns (prefix, expr) on
+        Two key forms are supported over a list literal whose relevant values
+        are constants: a one-arg ``lambda x: x[K]`` (constant index) over a
+        list of tuples, and the ``abs``/``len`` builtins over a list of
+        constant scalars/strings. The key is evaluated at preprocess time and
+        the winning *element* (not its key) is returned, breaking ties toward
+        the first occurrence (CPython semantics). Returns (prefix, expr) on
         success, or None when the pattern does not apply (caller falls back to
         the regular dispatch, which today drops the key= keyword).
         """
@@ -965,7 +969,6 @@ class GeneratorMixin:
             return None
 
         key_kw = None
-        default_kw = None
         for kw in call_node.keywords:
             if kw.arg == "key":
                 if key_kw is not None:
@@ -974,51 +977,88 @@ class GeneratorMixin:
             elif kw.arg == "default":
                 # default= is honoured by the typed _default model variants
                 # added in #4360; keep it on the call so the regular dispatch
-                # forwards it.
-                default_kw = kw
+                # forwards it. It only matters for an empty iterable, which we
+                # defer below.
+                pass
             else:
                 return None
 
-        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+        if key_kw is None:
             return None
 
-        key_lambda = key_kw.value
-        key_index = self._extract_min_max_key_index(key_lambda)
-        if key_index is None:
-            return None
-        iterable_expr = call_node.args[0]
-        iterable_literal = self._resolve_list_literal_iterable(iterable_expr)
-
-        if iterable_literal is None:
+        iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if iterable_literal is None or not iterable_literal.elts:
+            # Missing literal / empty iterable — defer to the regular dispatch
+            # so the empty case (default= or ValueError) is handled uniformly.
             return None
 
-        if not iterable_literal.elts:
-            # Empty iterable — defer to the regular dispatch so the empty
-            # case (default= or ValueError) is handled uniformly.
+        key_values = self._eval_min_max_key_values(key_kw.value, iterable_literal.elts)
+        if key_values is None:
             return None
-
-        key_values = []
-        for elt in iterable_literal.elts:
-            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                return None
-            key_node = elt.elts[key_index]
-            if not isinstance(key_node, ast.Constant):
-                return None
-            key_values.append(key_node.value)
 
         is_min = call_node.func.id == "min"
         # Pick the index whose key is the minimum / maximum, breaking ties
         # toward the first occurrence (matches CPython semantics).
         best_idx = self._select_min_max_index(key_values, is_min)
 
-        # Suppress the unused default_kw warning while keeping the variable
-        # available for future extension (e.g. empty iterable + default=).
-        del default_kw
-
         result = copy.deepcopy(iterable_literal.elts[best_idx])
         self.ensure_all_locations(result, call_node)
         ast.fix_missing_locations(result)
         return [], result
+
+    def _eval_min_max_key_values(self, key_node, elts):
+        """Return the list of constant key values for `key=` applied to each
+        element, or None when the key form or elements are not constant-
+        foldable. Supports ``lambda x: x[K]`` over tuple literals and the
+        ``abs``/``len`` builtins over constant scalar/string elements."""
+        if isinstance(key_node, ast.Lambda):
+            key_index = self._extract_min_max_key_index(key_node)
+            if key_index is None:
+                return None
+            values = []
+            for elt in elts:
+                if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
+                    return None
+                kn = elt.elts[key_index]
+                if not isinstance(kn, ast.Constant):
+                    return None
+                values.append(kn.value)
+            return values
+
+        # Matched by name: assumes abs/len are the builtins (ESBMC does not
+        # model user code shadowing them, consistent with the rest of the
+        # frontend).
+        if isinstance(key_node, ast.Name) and key_node.id in ("abs", "len"):
+            fn = abs if key_node.id == "abs" else len
+            values = []
+            for elt in elts:
+                value = self._const_scalar_value(elt)
+                if value is None:
+                    return None
+                try:
+                    values.append(fn(value))
+                except TypeError:
+                    return None
+            return values
+
+        return None
+
+    @staticmethod
+    def _const_scalar_value(node):
+        """Return the constant value of a literal `node`, handling unary +/-
+        over a numeric constant (Python parses ``-5`` as UnaryOp(USub, 5)), or
+        None when the node is not a constant literal."""
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+            if isinstance(node.op, ast.USub):
+                try:
+                    return -node.operand.value
+                except TypeError:
+                    return None
+            if isinstance(node.op, ast.UAdd):
+                return node.operand.value
+        return None
 
     def _lower_tuple_sorted_pair_call(self, call_node):  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.

@@ -100,6 +100,37 @@ exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
   result.type() = t;
   return result;
 }
+
+// Build a List/Tuple AST node whose elements are the single-character strings
+// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
+// list/tuple-literal path. Location fields are copied from @p loc_src.
+nlohmann::json build_char_sequence_node(
+  const char *kind,
+  const std::string &chars,
+  const nlohmann::json &loc_src)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto copy_loc = [&](nlohmann::json &node) {
+    for (const char *k : loc_keys)
+      if (loc_src.contains(k))
+        node[k] = loc_src[k];
+  };
+
+  nlohmann::json node;
+  node["_type"] = kind;
+  node["elts"] = nlohmann::json::array();
+  for (const char ch : chars)
+  {
+    nlohmann::json elt;
+    elt["_type"] = "Constant";
+    elt["value"] = std::string(1, ch);
+    copy_loc(elt);
+    node["elts"].push_back(elt);
+  }
+  copy_loc(node);
+  return node;
+}
 } // namespace
 
 namespace
@@ -531,6 +562,20 @@ exprt function_call_expr::build_constant_from_arg() const
       python_list list_handler(converter_, call_);
       return list_handler.build_shallow_copy_call(expr, call_);
     }
+    // tuple("...") — a constant string yields a tuple of single-character
+    // strings (CPython: tuple("ab") == ('a', 'b')). Lower to a tuple literal so
+    // it routes through the proven tuple-literal path. Gate on a genuine string
+    // (char-element) operand: a bytes literal serialises to an identical
+    // Constant JSON, but tuple(b"ab") is (97, 98) in CPython — its operand type
+    // is an int array (not char), so it correctly falls through to the error.
+    const bool is_string_operand =
+      (et.is_array() || et.is_pointer()) && et.subtype() == char_type();
+    std::string str_val;
+    if (
+      is_string_operand &&
+      string_handler::extract_constant_string(arg, converter_, str_val))
+      return converter_.get_expr(
+        build_char_sequence_node("Tuple", str_val, call_));
     throw std::runtime_error(
       "tuple() is only supported over list and tuple arguments");
   }
@@ -1592,7 +1637,7 @@ bool function_call_expr::is_dict_method_call() const
 
   if (
     !python_dict_handler::is_value_returning_method(method_name) &&
-    method_name != "update")
+    method_name != "update" && method_name != "clear")
     return false;
 
   // A receiver that resolves to a non-dict object (e.g. a class instance whose
@@ -1702,6 +1747,9 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "copy")
     return converter_.get_dict_handler()->handle_dict_copy(dict_expr, call_);
+
+  if (method_name == "clear")
+    return converter_.get_dict_handler()->handle_dict_clear(dict_expr, call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
@@ -2066,6 +2114,26 @@ bool function_call_expr::is_list_method_call() const
   {
     // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
     // not support arithmetic operators.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
+  }
+
+  // "clear" is shared between list and dict. Treat as list.clear() only when
+  // the receiver resolves to a list symbol; otherwise fall through to
+  // handle_dict_method(). Without this guard a dict receiver was claimed by
+  // the catch-all below and passed to __ESBMC_list_clear, which dereferenced
+  // the dict struct as a PyListObject and reported a spurious out-of-bounds
+  // (VERIFICATION FAILED).
+  if (method_name == "clear")
+  {
     if (
       call_["func"].contains("value") &&
       call_["func"]["value"].contains("_type") &&

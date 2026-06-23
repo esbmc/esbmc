@@ -1,5 +1,6 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
@@ -82,6 +83,19 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic same-width operands (loop counters / bounds). migrate
+// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
+// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
+// round-trip. Operands MUST share bit-width: lessthan2t asserts width
+// consistency, which the legacy "<" node defers to clang_cpp_adjust.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -153,6 +167,18 @@ exprt build_deref_member(
   migrate_expr(obj, obj2);
   expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
   return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+}
+
+// Build obj.field : field_type in IREP2 (V.3). `obj` is a struct rvalue (e.g. a
+// tuple struct), so member2t's struct-source precondition holds directly.
+exprt build_member(
+  const exprt &obj,
+  const irep_idt &field,
+  const typet &field_type)
+{
+  expr2tc obj2;
+  migrate_expr(obj, obj2);
+  return migrate_expr_back(member2tc(migrate_type(field_type), obj2, field));
 }
 
 // Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
@@ -792,9 +818,8 @@ void python_list::emit_list_copy(
   converter_.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  // condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  // condition: i < n (both $i$/$n$ are size_type — same width)
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   // body
   code_blockt body;
@@ -1084,10 +1109,20 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const std::string &input,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   if (separator.empty())
   {
+    // rsplit() with no separator (whitespace) and an explicit maxsplit has
+    // subtle leading/trailing-whitespace asymmetry vs split() and is not
+    // supported; reject it cleanly rather than risk a wrong result. Without a
+    // maxsplit, rsplit(None) == split(None) (same tokens, same order), so a
+    // negative count falls through to the shared whitespace logic below.
+    if (from_right && count >= 0)
+      throw std::runtime_error(
+        "rsplit() with maxsplit and no separator is not supported");
+
     // Whitespace split: split on any whitespace and collapse runs.
     auto is_space = [](char c) {
       return std::isspace(static_cast<unsigned char>(c)) != 0;
@@ -1211,25 +1246,63 @@ exprt python_list::build_split_list(
   }
 
   std::vector<std::string> parts;
-  size_t start = 0;
-  long long splits = 0;
-  while (true)
+  if (from_right && count >= 1)
   {
-    if (count >= 0 && splits >= count)
+    // rsplit(sep, count): keep the rightmost `count` splits. Compute the full
+    // split, then merge the surplus leftmost parts back together with the
+    // separator — this yields exactly Python's rsplit result and avoids
+    // backward-scan boundary fiddliness. (count == 0 returned [input] above;
+    // count < 0 is the unlimited case, identical to split, handled below.)
+    std::vector<std::string> all;
+    size_t s = 0;
+    while (true)
     {
-      parts.push_back(input.substr(start));
-      break;
+      size_t pos = input.find(separator, s);
+      if (pos == std::string::npos)
+      {
+        all.push_back(input.substr(s));
+        break;
+      }
+      all.push_back(input.substr(s, pos - s));
+      s = pos + separator.size();
     }
 
-    size_t pos = input.find(separator, start);
-    if (pos == std::string::npos)
+    const long long total_splits = static_cast<long long>(all.size()) - 1;
+    if (total_splits <= count)
+      parts = all;
+    else
     {
-      parts.push_back(input.substr(start));
-      break;
+      const size_t merge_upto = all.size() - static_cast<size_t>(count);
+      std::string merged = all[0];
+      for (size_t k = 1; k < merge_upto; ++k)
+        merged += separator + all[k];
+      parts.push_back(merged);
+      for (size_t k = merge_upto; k < all.size(); ++k)
+        parts.push_back(all[k]);
     }
-    parts.push_back(input.substr(start, pos - start));
-    start = pos + separator.size();
-    ++splits;
+  }
+  else
+  {
+    size_t start = 0;
+    long long splits = 0;
+    while (true)
+    {
+      if (count >= 0 && splits >= count)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+
+      size_t pos = input.find(separator, start);
+      if (pos == std::string::npos)
+      {
+        parts.push_back(input.substr(start));
+        break;
+      }
+      parts.push_back(input.substr(start, pos - start));
+      start = pos + separator.size();
+      ++splits;
+    }
   }
 
   nlohmann::json list_node;
@@ -1255,10 +1328,19 @@ exprt python_list::build_split_list(
   const nlohmann::json &call_node,
   const exprt &input_expr,
   const std::string &separator,
-  long long count)
+  long long count,
+  bool from_right)
 {
   // For symbolic strings, we create a runtime call to __python_str_split
   // This function will handle the splitting at runtime with symbolic constraints
+
+  // The runtime model splits left-to-right, so it only models rsplit() when no
+  // maxsplit limits the result (rsplit() == split() then). A right-anchored
+  // maxsplit on a non-constant string would need a dedicated model; reject it
+  // cleanly rather than return a wrong result.
+  if (from_right && count >= 0)
+    throw std::runtime_error(
+      "rsplit() with maxsplit on a non-constant string is not supported");
 
   locationt location = converter.get_location_from_decl(call_node);
 
@@ -1671,8 +1753,9 @@ exprt python_list::handle_range_slice(
     code_assignt idx_init(build_symbol(idx), gen_zero(size_type()));
     converter_.add_instruction(idx_init);
 
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(build_symbol(idx), slice_len);
+    // idx is size_type; slice_len is built via size_add/sub/div (size_type),
+    // so both operands share width.
+    exprt cond = build_less_than(build_symbol(idx), slice_len);
 
     code_blockt body;
 
@@ -3004,9 +3087,9 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(idx_init);
 
     // --- 3. Normalize negative index: if (idx < 0) idx += (ll)len ---
-    exprt idx_lt_zero("<", bool_type());
-    idx_lt_zero.copy_to_operands(
-      build_symbol(idx_sym), from_integer(0, ll_type));
+    // ($str_idx$ and the 0 literal are both ll_type — same width)
+    exprt idx_lt_zero =
+      build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
 
     exprt idx_plus_len("+", ll_type);
     idx_plus_len.copy_to_operands(
@@ -3590,9 +3673,8 @@ exprt python_list::create_vla(
   converter_.add_instruction(counter_code);
 
   // while (counter < bound) { push each elem in order; counter += 1; }
-  exprt cond("<", bool_type());
-  cond.operands().push_back(build_symbol(counter));
-  cond.operands().push_back(build_symbol(bound));
+  // (counter and bound are both int_type — same width)
+  exprt cond = build_less_than(build_symbol(counter), build_symbol(bound));
 
   code_blockt then;
   for (const auto &list_elem : list_elems)
@@ -4139,8 +4221,18 @@ exprt python_list::build_extend_list_call(
     if (other_list.type().is_array())
     {
       const array_typet &arr_type = to_array_type(other_list.type());
-      // Subtract 1 for null terminator
-      str_len = minus_exprt(arr_type.size(), gen_one(size_type()));
+      // Subtract 1 for null terminator. V.3: build the (size - 1) subtraction
+      // in IREP2. The legacy 2-arg minus_exprt leaves the result type nil for
+      // downstream inference; here we set it explicitly to the array-size type
+      // (size_type), which is exactly what that inference yields, and restore
+      // it after the round-trip since migrate_type drops attributes (#cpp_type).
+      const exprt &arr_size = arr_type.size();
+      expr2tc size2, one2;
+      migrate_expr(arr_size, size2);
+      migrate_expr(gen_one(size_type()), one2);
+      str_len =
+        migrate_expr_back(sub2tc(migrate_type(arr_size.type()), size2, one2));
+      str_len.type() = arr_size.type();
     }
     else // pointer type - use strlen
     {
@@ -4249,6 +4341,25 @@ exprt python_list::build_extend_list_call(
     list_type_map[temp_list.id.as_string()].push_back(
       std::make_pair(char_elem.id.as_string(), char_arr_type));
 
+    actual_list = build_symbol(temp_list);
+  }
+
+  // A tuple operand: Python's extend() accepts any iterable. Materialise the
+  // tuple's components into a fresh list so the list model sees a
+  // PyListObject* rather than the tuple struct, which __ESBMC_list_extend
+  // would otherwise dereference out of bounds.
+  if (converter_.get_tuple_handler().is_tuple_type(actual_list.type()))
+  {
+    const typet &other_type = converter_.ns.follow(actual_list.type());
+    symbolt &temp_list = create_list();
+    const std::string &temp_id = temp_list.id.as_string();
+    for (const auto &comp : to_struct_type(other_type).components())
+    {
+      exprt elem = build_member(actual_list, comp.get_name(), comp.type());
+      exprt push = build_push_list_call(temp_list, op, elem);
+      converter_.add_instruction(push);
+      add_type_info(temp_id, std::string(), comp.type());
+    }
     actual_list = build_symbol(temp_list);
   }
 
@@ -4761,9 +4872,18 @@ exprt python_list::extract_pyobject_value(
     // works for numeric / pointer-by-value elements).
     exprt as_default = build_dereference(
       build_typecast(obj_value, pointer_typet(elem_type)), elem_type);
-    equality_exprt is_str(
-      type_id_member, from_integer(str_type_id, size_type()));
-    return if_exprt(is_str, obj_value, as_default);
+    // item->type_id == str_type_id ? obj_value : *(T*)obj_value
+    // V.3: built in IREP2 (both branches are elem_type/void*, so the if2t
+    // types agree), back-migrated at the return. Mirrors the float-dispatch
+    // if2t above.
+    const type2tc et2 = migrate_type(elem_type);
+    expr2tc tid2, ov2, def2;
+    migrate_expr(type_id_member, tid2);
+    migrate_expr(obj_value, ov2);
+    migrate_expr(as_default, def2);
+    const expr2tc is_str =
+      equality2tc(tid2, from_integer(str_type_id, migrate_type(size_type())));
+    return migrate_expr_back(if2tc(et2, is_str, ov2, def2));
   }
 
   // For array types, return pointer to element type instead of pointer to array
@@ -5055,6 +5175,22 @@ exprt python_list::build_list_from_range(
 
   // All arguments are constant
   return build_concrete_range(converter, range_args, element, arg0, arg1, arg2);
+}
+
+exprt python_list::build_list_from_tuple(
+  python_converter &converter,
+  const exprt &tuple_expr,
+  const nlohmann::json &element)
+{
+  python_list helper(converter, element);
+  const typet &tuple_type = converter.name_space().follow(tuple_expr.type());
+
+  std::vector<exprt> components;
+  for (const auto &comp : to_struct_type(tuple_type).components())
+    components.push_back(
+      build_member(tuple_expr, comp.get_name(), comp.type()));
+
+  return helper.build_list_from_exprs(components);
 }
 
 exprt python_list::handle_symbolic_range(
@@ -5685,8 +5821,9 @@ void python_list::handle_list_var_unpacking(
       build_symbol(loop_idx), from_integer(before_star, size_type()));
     target_block.copy_to_operands(idx_init);
 
-    exprt loop_cond("<", bool_type());
-    loop_cond.copy_to_operands(build_symbol(loop_idx), upper_expr);
+    // loop_idx is size_type; upper_expr is a size_type symbol/literal, so both
+    // operands share width.
+    exprt loop_cond = build_less_than(build_symbol(loop_idx), upper_expr);
 
     code_blockt loop_body;
 
