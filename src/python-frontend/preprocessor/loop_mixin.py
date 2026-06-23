@@ -1336,8 +1336,7 @@ class LoopMixin:
         variable is otherwise erased to void*, and reading a float through void*
         produces an ill-sorted IEEE node.
         """
-        arith_ops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod,
-                     ast.Pow)
+        arith_ops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
 
         def is_float_operand(operand):
             if isinstance(operand, ast.Constant):
@@ -1347,8 +1346,7 @@ class LoopMixin:
             return False
 
         def mentions_var(operand):
-            return any(isinstance(n, ast.Name) and n.id == var_name
-                       for n in ast.walk(operand))
+            return any(isinstance(n, ast.Name) and n.id == var_name for n in ast.walk(operand))
 
         module = ast.Module(body=list(body), type_ignores=[])
         for node in ast.walk(module):
