@@ -40,6 +40,18 @@ exprt build_less_than(const exprt &a, const exprt &b)
   return migrate_expr_back(lessthan2tc(a2, b2));
 }
 
+// `a <= b` over synthetic same-width operands. migrate lowers a legacy "<="
+// node to lessthanequal2tc(migrate(a), migrate(b)) (util/migrate.cpp i_le
+// path) with no coercion, so this is the byte-identical round-trip; operands
+// must share bit-width (lessthanequal2t asserts it).
+exprt build_less_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthanequal2tc(a2, b2));
+}
+
 // The one call site indexes an is_array()-guarded char array, so the index2t
 // array-source precondition holds.
 exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
@@ -266,8 +278,8 @@ exprt python_set::get_from_iterable(
 
     // Ensure bounded strlen doesn't exceed the configured limit.
     // If it does, the model would silently truncate, so assert to make it explicit.
-    exprt bound_check("<=", bool_type());
-    bound_check.copy_to_operands(
+    // (len_sym and the bound literal are both size_type — same width.)
+    exprt bound_check = build_less_equal(
       build_symbol(len_sym),
       from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
     code_assertt bound_assert(bound_check);
