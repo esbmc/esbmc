@@ -1,6 +1,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/json_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
@@ -149,7 +150,16 @@ nlohmann::json python_converter::build_dunder_call(
 // attribute stamped at type-creation time; see util/python_types.h.
 static bool is_excluded_struct_tag(const struct_typet &st)
 {
-  return is_python_internal_aggregate(st);
+  // tuple/dict/Optional model structs carry the python-aggregate kind stamped
+  // at type-creation time; see util/python_types.h.
+  if (is_python_internal_aggregate(st))
+    return true;
+  // list/object/slice model structs (`tag-struct __ESBMC_Py...`): under the
+  // object-model migration these are pointer-to-struct like a class instance,
+  // but they own their own operator paths and must not be routed through
+  // user-dunder dispatch. They are not stamped with the aggregate kind, so
+  // exclude them by tag here.
+  return st.tag().as_string().find("__ESBMC_Py") != std::string::npos;
 }
 
 static typet resolve_operand_type(
@@ -166,7 +176,29 @@ static typet resolve_operand_type(
   }
   if (t.id() == "symbol")
     t = ns.follow(t);
+  // Object-model migration (#3067/#4773): a class instance is a `Class*`
+  // pointer. Dispatch dunder operators on the pointee struct so user methods
+  // (__eq__, __add__, ...) are still found; the call sites pass the pointer
+  // itself as the (already-by-reference) self/other argument.
+  if (t.is_pointer())
+  {
+    typet sub = t.subtype();
+    if (sub.id() == "symbol")
+      sub = ns.follow(sub);
+    if (sub.is_struct())
+      t = sub;
+  }
   return t;
+}
+
+// self/other argument for a dunder call. A migrated instance is already a
+// `Class*` pointer, which is exactly the by-reference argument the method
+// expects; a by-value struct operand needs its address taken.
+static exprt dunder_ref_arg(const exprt &operand)
+{
+  if (operand.type().is_pointer())
+    return operand;
+  return gen_address_of(operand);
 }
 
 // Check whether the argument type matches the "other" parameter type.
@@ -195,6 +227,28 @@ static bool is_other_param_compatible(
              to_struct_type(operand_type).tag();
   }
   return true;
+}
+
+bool python_converter::is_user_class_struct_type(const typet &t)
+{
+  // Read the class tag directly from a struct or an unresolved `tag-<Class>`
+  // symbol reference — do not require the struct to be built yet (function
+  // signatures are typed before some referenced classes are completed).
+  std::string tag;
+  if (t.id() == "symbol")
+    tag = to_symbol_type(t).get_identifier().as_string();
+  else if (t.is_struct())
+    tag = to_struct_type(t).tag().as_string();
+  else
+    return false;
+
+  const std::string cls = extract_class_name_from_tag(tag);
+  return !cls.empty() && json_utils::is_class(cls, *ast_json);
+}
+
+bool python_converter::is_user_class_pointer(const typet &t)
+{
+  return t.is_pointer() && is_user_class_struct_type(t.subtype());
 }
 
 exprt python_converter::dispatch_dunder_operator(
@@ -227,7 +281,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {gen_address_of(lhs), gen_address_of(rhs)});
+              {dunder_ref_arg(lhs), dunder_ref_arg(rhs)});
             call.location() = loc;
             return call;
           }
@@ -257,7 +311,7 @@ exprt python_converter::dispatch_dunder_operator(
             exprt call = build_call_expr(
               *method,
               method_type.return_type(),
-              {gen_address_of(rhs), gen_address_of(lhs)});
+              {dunder_ref_arg(rhs), dunder_ref_arg(lhs)});
             call.location() = loc;
             return call;
           }
@@ -274,15 +328,11 @@ exprt python_converter::dispatch_unary_dunder_operator(
   exprt &operand,
   const locationt &loc)
 {
-  typet operand_type = operand.type();
-  if (operand.is_symbol())
-  {
-    const symbolt *sym = symbol_table_.find_symbol(operand.identifier());
-    if (sym)
-      operand_type = sym->get_type();
-  }
-  if (operand_type.id() == "symbol")
-    operand_type = ns.follow(operand_type);
+  // Resolve the operand to its (pointee) struct. Under the object-model
+  // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
+  // it to the struct exactly as the binary dispatch does — otherwise str(obj),
+  // abs(obj), -obj, … would not find the user dunder on a pointer instance.
+  typet operand_type = resolve_operand_type(operand, symbol_table_, ns);
 
   if (!operand_type.is_struct())
     return nil_exprt();
@@ -311,8 +361,10 @@ exprt python_converter::dispatch_unary_dunder_operator(
     return nil_exprt();
 
   const code_typet &method_type = to_code_type(method->get_type());
+  // A migrated instance is already a `Class*` self argument (pass through); a
+  // by-value struct operand needs its address taken.
   exprt call = build_call_expr(
-    *method, method_type.return_type(), {gen_address_of(operand)});
+    *method, method_type.return_type(), {dunder_ref_arg(operand)});
   call.location() = loc;
   return call;
 }

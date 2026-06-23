@@ -3424,6 +3424,52 @@ expression-builder census in `src/python-frontend` → 0 except body shells;
 verdict + text unchanged; asserts cross-check silent. *This is the
 "comparatively mechanical" bulk — but only after V.1k.*
 
+#### V.3 status (2026-06-22) — two migratable surfaces (synthetic-operand + guarded member/index round-trip) are now ~drained; general-operand construction stays blocked
+
+Per the **V.1k breakthrough** above, V.1k's keystone — the `member2t`/`index2t`
+construction-assert **relaxation** (now permitting a transient
+`struct`/`union`/`complex`/`symbol` member source and `array`/`vector`/`symbol`
+index source, `irep2_expr.h` ~1553/~1637) — **has landed on master**. The separate
+(b) IREP2-native adjuster is *not* needed for V.3; it moves to V.4+. So **two**
+converter surfaces are migratable today, and both are now largely drained:
+
+1. **Synthetic-operand subtrees** — constructions every forward-migrated operand of
+   which is a fully-synthetic concrete-typed value (OM-call results like
+   `__ESBMC_list_size`/`strlen`, `size_type`/`bool` temporaries, constants, already
+   -built comparisons). ~25 PRs merged (the `[python] V.3: build … in IREP2` series,
+   #5454–#5522): truthiness checks, list/set/tuple/string/complex result-bools,
+   is/identity equality, deref/member *sandwich* collapses, chained-comparison
+   and-folds, generic unary operators.
+2. **Guarded member/index/deref round-trips** — `migrate_expr_back(member2tc/
+   index2tc/dereference2tc(migrate_type(t), migrate(base), …))`, which is the
+   *byte-identical* round-trip of the legacy node (`member`/`index`/`dereference`
+   lower uniformly in `migrate_expr`, `util/migrate.cpp:1580`), guarded on the
+   source type (`is_struct/union/symbol` for member, `is_array/vector/symbol` for
+   index) with a legacy fallback otherwise. The `build_member`/`build_index`/
+   `build_dereference`/`build_typecast`/`build_symbol` helpers across the frontend
+   are all migrated this way; the last clean *returned* raw sites — complex
+   truthiness (#5533) and `ord()`'s char load (#5534) — followed.
+
+**What is still blocked (the genuine F-P11 residue).** General-operand construction
+over *arbitrary user expressions* — `BoolOp` (`and`/`or`), arithmetic in
+`build_binary_expression`, and member/index whose source's type is **neither a
+resolved struct/array nor a `symbol`** — cannot use the migrate-forward recipe. A
+worked attempt to fold the `and`/`or` `BoolOp` node into `and2tc`/`or2tc` (the
+sibling of the merged chained-comparison fold #5519) **reproduced an `index2t`
+abort** (`irep2_expr.h:1638`) even on pure-boolean `(a>0) and (b>0)`: the operand
+carried an unresolved `index` whose source matched *none* of the relaxed disjuncts.
+The relaxation widened the migratable surface but did **not** remove the wall for
+operands the converter has not yet typed — those still need the full (b) adjuster
+(V.4+). Reverted, not shipped.
+
+**Consequence.** Both clean surfaces (synthetic-operand subtrees and guarded
+member/index round-trips at *returned/composed* seams) are ~drained in the core
+converter. The remaining raw member/index/deref sites all **feed legacy consumers**
+(`code_assignt` LHS, `tuple`/`dict_handler` args) — migratable in isolation but
+**no net gain** under the subtree rule. The next structural unlock is the **(b)
+IREP2-native adjuster at V.4+**, which retires the residual general-operand wall and
+W3 together; pre-V.4 the migratable V.3 bulk is essentially complete.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,

@@ -369,6 +369,7 @@ void python_converter::convert()
       "builtins",
       "range",
       "int",
+      "float",
       "consensus",
       "random",
       "exceptions",

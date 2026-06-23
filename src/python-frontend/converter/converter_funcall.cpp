@@ -1045,13 +1045,17 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             const symbolt *arg_symbol =
               symbol_table_.find_symbol(arg.identifier());
             if (arg_symbol)
-            {
               arg_actual_type = arg_symbol->get_type();
-              // Follow symbol type references using namespace
-              if (arg_actual_type.id() == "symbol")
-                arg_actual_type = ns.follow(arg_actual_type);
-            }
           }
+          // Follow a `symbol_typet` (`tag-Class`) to the struct it names. This
+          // must run for ANY argument, not just symbol expressions: a by-value
+          // class instance produced by a call (e.g. `use(make())` where
+          // `make() -> C`) arrives as a side_effect whose *type* is the
+          // unfollowed `tag-C` symbol — without following it, is_struct() below
+          // is false and the struct-to-`Class*`-parameter coercion is skipped,
+          // so a struct is passed to a pointer parameter (#4558/#4564).
+          if (arg_actual_type.id() == "symbol")
+            arg_actual_type = ns.follow(arg_actual_type);
           // Handle union types: if param is pointer and arg is struct (or symbol
           // to struct), take address. This is the post-processing pass for
           // general pointer-to-struct coercion.
@@ -1065,9 +1069,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             !arg.is_address_of() && !arg_actual_type.is_pointer())
           {
             // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
-            // by `a[i:j]`) cannot be the operand of `address_of` at the SMT
-            // level. Materialise them in a temp symbol first so the address
-            // we hand to the callee points at a real lvalue.
+            // by `a[i:j]`, or a call returning a by-value class instance)
+            // cannot be the operand of `address_of` at the SMT level.
+            // Materialise them in a temp symbol first so the address we hand to
+            // the callee points at a real lvalue.
             if (!arg.is_symbol())
             {
               assert(
@@ -1076,7 +1081,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
                 "materialise into");
               locationt loc = get_location_from_decl(element);
               symbolt &tmp = create_tmp_symbol(
-                element, "$struct_arg$", arg.type(), gen_zero(arg.type()));
+                element,
+                "$struct_arg$",
+                arg_actual_type,
+                gen_zero(arg_actual_type));
               code_declt tmp_decl(symbol_expr(tmp));
               tmp_decl.location() = loc;
               current_block->copy_to_operands(tmp_decl);
