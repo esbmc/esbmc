@@ -82,6 +82,19 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+// `a < b` over synthetic same-width operands (loop counters / bounds). migrate
+// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
+// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
+// round-trip. Operands MUST share bit-width: lessthan2t asserts width
+// consistency, which the legacy "<" node defers to clang_cpp_adjust.
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(lessthan2tc(a2, b2));
+}
+
 // index2t requires an array/vector/symbol source; a pointer source (e.g. the
 // array/pointer iterable branch) and dyn-sized arrays (slice results) fall
 // back to the legacy node. dyn-array types are checked first to avoid
@@ -792,9 +805,8 @@ void python_list::emit_list_copy(
   converter_.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  // condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  // condition: i < n (both $i$/$n$ are size_type — same width)
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   // body
   code_blockt body;
@@ -3004,9 +3016,9 @@ exprt python_list::handle_index_access(
     converter_.add_instruction(idx_init);
 
     // --- 3. Normalize negative index: if (idx < 0) idx += (ll)len ---
-    exprt idx_lt_zero("<", bool_type());
-    idx_lt_zero.copy_to_operands(
-      build_symbol(idx_sym), from_integer(0, ll_type));
+    // ($str_idx$ and the 0 literal are both ll_type — same width)
+    exprt idx_lt_zero =
+      build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
 
     exprt idx_plus_len("+", ll_type);
     idx_plus_len.copy_to_operands(
@@ -3590,9 +3602,8 @@ exprt python_list::create_vla(
   converter_.add_instruction(counter_code);
 
   // while (counter < bound) { push each elem in order; counter += 1; }
-  exprt cond("<", bool_type());
-  cond.operands().push_back(build_symbol(counter));
-  cond.operands().push_back(build_symbol(bound));
+  // (counter and bound are both int_type — same width)
+  exprt cond = build_less_than(build_symbol(counter), build_symbol(bound));
 
   code_blockt then;
   for (const auto &list_elem : list_elems)
