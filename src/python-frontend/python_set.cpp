@@ -345,9 +345,8 @@ exprt python_set::get_from_iterable(
       // a synthetic size_type, so build the pointer arithmetic in IREP2 (V.3).
       exprt ptr_add =
         build_add(iterable, build_symbol(idx_sym), iterable.type());
-      dereference_exprt deref(char_type());
-      deref.op0() = ptr_add;
-      elem_expr = deref;
+      // ptr_add is a synthetic char* value, so build the dereference in IREP2.
+      elem_expr = build_dereference(ptr_add, char_type());
       list_helper.add_type_info(set_id, std::string(), elem_expr.type());
 
       // Break if we hit the null terminator (V.3: built in IREP2).
