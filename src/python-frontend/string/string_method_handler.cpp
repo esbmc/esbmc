@@ -1024,17 +1024,15 @@ exprt string_handler::handle_string_endswith(
     build_call_expr(*strlen_symbol, size_type(), {suffix_addr});
   suffix_strlen_call.location() = location;
 
-  // Check if suffix is longer than string
-  exprt len_check(">", bool_type());
-  len_check.copy_to_operands(suffix_strlen_call, str_strlen_call);
+  // Check if suffix is longer than string. Both operands are synthetic
+  // size_type strlen() results, so build the comparison in IREP2 (V.3).
+  exprt len_check = build_greater_than(suffix_strlen_call, str_strlen_call);
 
   // Calculate offset: strlen(str) - strlen(suffix)
-  exprt offset("-", size_type());
-  offset.copy_to_operands(str_strlen_call, suffix_strlen_call);
+  exprt offset = build_sub(str_strlen_call, suffix_strlen_call, size_type());
 
   // Get pointer to the position: str + offset
-  exprt offset_ptr("+", gen_pointer_type(char_type()));
-  offset_ptr.copy_to_operands(str_addr, offset);
+  exprt offset_ptr = build_add(str_addr, offset, gen_pointer_type(char_type()));
 
   // Find strncmp symbol
   symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
