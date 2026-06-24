@@ -22,6 +22,7 @@
 #include <util/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -53,6 +54,44 @@ static bool get_constant_int(const exprt &expr, long long &out)
   if (to_integer(expr, tmp))
     return false;
   out = tmp.to_int64();
+  return true;
+}
+
+// Extract the constant byte values of a bytes receiver (literal or a variable
+// resolved to its literal). Bytes are modelled as a non-char int array, which
+// distinguishes them from a str (char array). Returns false for a non-constant
+// or non-bytes receiver.
+static bool extract_constant_bytes(
+  python_converter &converter,
+  const nlohmann::json &node,
+  std::vector<uint8_t> &out)
+{
+  exprt recv = converter.get_expr(node);
+  if (recv.is_symbol())
+  {
+    const symbolt *s =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (s && !s->get_value().is_nil())
+      recv = s->get_value();
+  }
+  // An unresolved variable (e.g. a bytes parameter, or a value not stored as a
+  // constant) stays a bare symbol with the array type but no operands; folding
+  // it would silently yield an empty result. Reject so the caller falls through
+  // to the runtime model. A genuine b"" literal is a constant array (not a
+  // symbol), so empty-bytes folding is preserved.
+  if (recv.is_symbol())
+    return false;
+  const typet &rt = recv.type();
+  if (!rt.is_array() || rt.subtype() == char_type())
+    return false;
+  out.clear();
+  for (const exprt &op : recv.operands())
+  {
+    BigInt v;
+    if (to_integer(op, v)) // true == not a constant integer
+      return false;
+    out.push_back(static_cast<uint8_t>(v.to_int64() & 0xff));
+  }
   return true;
 }
 
@@ -660,6 +699,50 @@ std::optional<exprt> dispatch_decode_join_method(
       {
         return converter.get_expr(receiver_json["func"]["value"]);
       }
+    }
+
+    // Standalone b"...".decode(): a constant bytes object decodes to the str
+    // of its byte values as characters. ASCII only — UTF-8 multi-byte decoding
+    // is deferred, so non-ASCII bytes fall through to the clean error.
+    std::vector<uint8_t> bytes;
+    if (decode_utf8 && extract_constant_bytes(converter, receiver_json, bytes))
+    {
+      if (std::all_of(
+            bytes.begin(), bytes.end(), [](uint8_t b) { return b < 0x80; }))
+        return converter.get_string_builder().build_string_literal(
+          std::string(bytes.begin(), bytes.end()));
+    }
+    return nil_exprt();
+  }
+
+  if (method_name == "encode")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {"encoding"});
+    if (args.size() > 1)
+      throw std::runtime_error("encode() takes at most one argument");
+
+    bool encode_utf8 = args.empty();
+    if (args.size() == 1)
+      encode_utf8 = is_utf8_literal_json(args[0]);
+    if (
+      const nlohmann::json *encoding_kw =
+        find_keyword_value(keyword_values, "encoding"))
+      encode_utf8 = is_utf8_literal_json(*encoding_kw);
+
+    // Standalone "...".encode(): a constant str encodes to its bytes. The
+    // UTF-8 encoding of an ASCII string is the identical byte sequence; a
+    // non-ASCII character needs multi-byte UTF-8 (deferred), so it falls
+    // through to the clean error.
+    std::string s;
+    if (
+      encode_utf8 &&
+      string_handler::extract_constant_string(receiver_json, converter, s))
+    {
+      if (std::all_of(s.begin(), s.end(), [](char c) {
+            return static_cast<unsigned char>(c) < 0x80;
+          }))
+        return converter.get_string_builder().build_raw_byte_array(
+          std::vector<uint8_t>(s.begin(), s.end()));
     }
     return nil_exprt();
   }
