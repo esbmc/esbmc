@@ -45,6 +45,14 @@ class PreprocessorStateMixin:
         # Names currently bound to a dict literal (any key types). Used to
         # rewrite list(d)/sorted(d) into the correctly-typed d.keys() path.
         self.dict_literal_vars = set()
+        # Pre-pass results for unannotated parameter-dict element recovery
+        # (#5444): function name -> list of per-call positional shape lists,
+        # where each entry is the inferred dict[K, V] annotation of that
+        # argument (or None when unknown). Argument names are resolved within
+        # the scope of their call site so a function-local dict never poisons a
+        # same-named module global. Recovery succeeds only when every call site
+        # agrees (see _recover_param_dict_annotation).
+        self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
         self.called_names = set()
         self.list_literal_values = {}

@@ -913,6 +913,87 @@ class CoreVisitorsMixin:
                     and n.func.value.id in candidates):
                 self.known_variable_types[n.func.value.id] = "dict"
 
+        # Recover the concrete key/value types of each structurally-inferred
+        # parameter dict from its call sites, so iteration/comprehension over it
+        # resolves tuple/scalar element types instead of erasing them (#5444).
+        positional = list(node.args.posonlyargs) + list(node.args.args)
+        for idx, arg in enumerate(positional):
+            name = arg.arg
+            if (arg.annotation is None and name not in self.variable_annotations
+                    and self.known_variable_types.get(name) == "dict"):
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if recovered is not None:
+                    self.variable_annotations[name] = recovered
+
+    def _recover_param_dict_annotation(self, func_name, param_index):
+        """Recover a parameter dict's dict[K, V] annotation from its call sites.
+
+        Returns the inferred annotation node only when every direct call to
+        ``func_name`` passes, at ``param_index``, a dict literal or a name bound
+        to a dict literal whose inferred dict[K, V] type is identical. If any
+        call site is unknown or the shapes disagree, returns None so the
+        parameter stays untyped (a sound refusal rather than a wrong guess).
+        """
+        calls = self._dict_param_call_shapes.get(func_name, [])
+        candidates = []
+        for shapes in calls:
+            # A call that does not supply this parameter positionally (keyword
+            # arg, splat, too few args) leaves its shape unknown, which forces a
+            # refusal rather than silently trusting the remaining call sites.
+            candidates.append(shapes[param_index] if param_index < len(shapes) else None)
+        if not candidates or any(c is None for c in candidates):
+            return None
+        dumps = {ast.dump(c) for c in candidates}
+        return candidates[0] if len(dumps) == 1 else None
+
+    def _build_dict_annotation_from_literal(self, dict_node):
+        """Build a concrete dict[K, V] annotation node from a dict literal.
+
+        Returns None when either the key or value type cannot be inferred from
+        the literal's first entry, so callers treat the shape as unknown.
+        """
+        if not dict_node.keys or not dict_node.values or dict_node.keys[0] is None:
+            return None
+        key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        val_ann = self._infer_dict_value_annotation(dict_node.values[0])
+        if key_ann is None or val_ann is None:
+            return None
+        return ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+
+    def _infer_dict_key_annotation(self, key_node):
+        """Build a full key-type annotation node (preserving tuple element types).
+
+        Unlike _infer_dict_key_type, a tuple key yields the nested
+        tuple[A, B, ...] annotation rather than the bare name 'tuple', so the
+        recovered parameter dict carries the concrete struct shape. Returns None
+        for anything not statically known.
+        """
+        if isinstance(key_node, ast.Constant):
+            value = key_node.value
+            if isinstance(value, bool):
+                return ast.Name(id="bool", ctx=ast.Load())
+            if isinstance(value, float):
+                return ast.Name(id="float", ctx=ast.Load())
+            if isinstance(value, int):
+                return ast.Name(id="int", ctx=ast.Load())
+            if isinstance(value, str):
+                return ast.Name(id="str", ctx=ast.Load())
+            return None
+        if isinstance(key_node, ast.Tuple):
+            elt_anns = [self._infer_dict_key_annotation(e) for e in key_node.elts]
+            if not elt_anns or any(e is None for e in elt_anns):
+                return None
+            return ast.Subscript(
+                value=ast.Name(id="tuple", ctx=ast.Load()),
+                slice=ast.Tuple(elts=elt_anns, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        return None
+
     def _build_qualified_function_name(self, node):
         if hasattr(self, "current_class_name") and self.current_class_name:
             return f"{self.current_class_name}.{node.name}"
@@ -1042,7 +1123,15 @@ class CoreVisitorsMixin:
             # means the name was rebound away from a dict; do not treat a stale
             # dict-literal binding as a dict.
             return False
-        return name in self.dict_literal_vars
+        if name in self.dict_literal_vars:
+            return True
+        # An unannotated parameter recovered as a dict by structural inference
+        # (a .items()/.keys()/.values() call on it in the body — see
+        # _infer_dict_params_structurally) is a reliable dict too, so dict-view
+        # comprehensions and bare-dict iteration over a parameter dict desugar
+        # through the for-loop key-iteration path instead of reaching the C++
+        # dict-comp handler, which cannot consume a dict struct (#5444).
+        return self.known_variable_types.get(name) == "dict"
 
     def _maybe_rewrite_dict_to_list_call(self, node):
         """Rewrite list(d) -> d.keys() and sorted(d, ...) -> sorted(d.keys(), ...).
@@ -1120,6 +1209,10 @@ class CoreVisitorsMixin:
         # an unannotated dict parameter recorded in one function must not make a
         # same-named plain parameter in another function look like a dict (#5444).
         saved_known_types = dict(self.known_variable_types)
+        # Recovered parameter-dict annotations (#5444) are scope-local too: a
+        # synthesized dict[K, V] for a parameter in one function must not leak
+        # onto a same-named parameter elsewhere.
+        saved_var_anns = dict(self.variable_annotations)
         # Per-function scope for call-origin tracking and the eq-only set.
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
@@ -1157,5 +1250,6 @@ class CoreVisitorsMixin:
         finally:
             self.dict_literal_vars = saved_dict_vars
             self.known_variable_types = saved_known_types
+            self.variable_annotations = saved_var_anns
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
