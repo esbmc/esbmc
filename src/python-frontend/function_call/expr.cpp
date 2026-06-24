@@ -598,6 +598,65 @@ exprt function_call_expr::build_constant_from_arg() const
       base_expr = converter_.get_expr(arguments[1]);
     }
 
+    // Evaluate the operand once so that method-call arguments (e.g.
+    // int(d.copy_abs())) are not lowered twice by the branches below.
+    exprt operand_expr = converter_.get_expr(first_arg);
+
+    // Dispatch int() to the operand's __int__ when the operand is a class
+    // instance (e.g. Decimal). Under the object-model migration (#3067/#4773)
+    // an instance is a `Class*` pointer, so resolve through it to the pointee
+    // struct before dispatching; int() of strings and numbers has no struct
+    // operand and falls through to the conversions below.
+    if (base_expr.is_nil())
+    {
+      // Recover the operand's value type. A method-call operand
+      // (e.g. int(x.negate())) is returned as a statement-form call carrying
+      // no value type, so fall back to the callee's declared return type.
+      const bool operand_is_call = operand_expr.is_function_call();
+      typet value_type = operand_expr.type();
+      if (operand_is_call && (value_type.is_nil() || value_type.is_empty()))
+      {
+        typet fn_type =
+          to_code_function_call(to_code(operand_expr)).function().type();
+        if (fn_type.id() == "symbol")
+          fn_type = converter_.ns.follow(fn_type);
+        if (fn_type.id() == "code")
+          value_type = to_code_type(fn_type).return_type();
+      }
+
+      // Resolve through the object-model `Class*` pointer (#3067/#4773) to the
+      // pointee struct. Only a class instance has a __int__ to dispatch to;
+      // int() of strings/numbers has no struct operand and falls through to
+      // the conversions below.
+      typet resolved = value_type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.ns.follow(resolved);
+      if (resolved.is_pointer())
+      {
+        typet sub = resolved.subtype();
+        if (sub.id() == "symbol")
+          sub = converter_.ns.follow(sub);
+        resolved = sub;
+      }
+
+      if (resolved.is_struct())
+      {
+        // Materialise an rvalue call result into a typed temp (emitted once)
+        // so its address can feed the dunder self argument.
+        exprt int_object = operand_expr;
+        if (operand_is_call)
+        {
+          int_object.type() = value_type;
+          int_object = converter_.store_call_result(
+            int_object, converter_.get_location_from_decl(call_), "int_obj");
+        }
+        exprt dunder = converter_.dispatch_unary_dunder_operator(
+          "int", int_object, converter_.get_location_from_decl(call_));
+        if (!dunder.is_nil())
+          return dunder;
+      }
+    }
+
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
@@ -628,8 +687,8 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       else
       {
-        // Try to get the expression type directly
-        exprt expr = converter_.get_expr(first_arg);
+        // Reuse the already-evaluated operand (see hoist above).
+        exprt expr = operand_expr;
 
         if (base_expr.is_nil())
         {
@@ -649,7 +708,8 @@ exprt function_call_expr::build_constant_from_arg() const
     // Handle other types (Constant, etc.)
     else
     {
-      exprt value_expr = converter_.get_expr(first_arg);
+      // Reuse the already-evaluated operand (see hoist above).
+      exprt value_expr = operand_expr;
 
       // If it's a constant string, we need to ensure proper conversion
       if (
