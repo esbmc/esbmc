@@ -933,10 +933,10 @@ exprt string_handler::handle_string_startswith(
     const array_typet &prefix_type = to_array_type(prefix_expr.type());
     exprt prefix_len = prefix_type.size();
 
-    // Subtract 1 for null terminator
-    exprt one = from_integer(1, prefix_len.type());
-    actual_len = exprt("-", prefix_len.type());
-    actual_len.copy_to_operands(prefix_len, one);
+    // Subtract 1 for null terminator. prefix_len (the array dimension) and the
+    // literal share prefix_len.type(), so build it in IREP2 (V.3).
+    actual_len = build_sub(
+      prefix_len, from_integer(1, prefix_len.type()), prefix_len.type());
   }
   else
   {
