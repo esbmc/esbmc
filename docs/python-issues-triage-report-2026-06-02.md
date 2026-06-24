@@ -1308,3 +1308,57 @@ model" entries. The §3 design-level blockers, §3c policy-banned timeouts, §3d
 expectation, and the infeasible `hashlib` case all stand. No further isolated, soundly-fixable
 point fix beyond those candidates is available on current `master` without the §5 architectural
 work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
+> §32 (PR #5585, `bytes.hex()`), and §33 (PR #5588, `str.encode()`/`bytes.decode()`) are in flight
+> and not yet on `master`; this sweep is appended as §34. Its fix is in flight as PR #5592. When
+> all land, the maintainer orders §30 → §31 → §32 → §33 → §34.
+
+## 34. 2026-06-24 re-validation (twenty-fourth sweep) & int.to_bytes() receiver forms
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.to_bytes()`/`int.from_bytes()` candidate from §33b and found `to_bytes`
+already partly implemented but broken outside one receiver form.
+
+### 34a. New isolated, soundly-fixable defect found & fixed
+**`int.to_bytes()` gave wrong results for the instance form and the literal-receiver form.**
+
+The value handler `handle_int_to_bytes` (`function_call/str_conv.cpp`) builds a correct bytes array,
+and the `int.to_bytes(x, ...)` *class* form verified. But (a) the dispatch predicate
+(`function_call/expr.cpp`) only fired for a `Name` receiver, so an int *literal* receiver
+`(258).to_bytes(2, "big")` fell through to `Unsupported function`; and (b) the *instance* form
+`x.to_bytes(...)` inferred the assignment target as `int` (the receiver's type), so the bytes result
+was mistyped as a scalar int and `b[0]`/`len(b)` failed with `TypeError: 'int' object is not
+subscriptable`.
+
+**Fix:** extend the dispatch predicate to accept a constant-integer literal receiver
+(`is_number_integer()`, which excludes bool/float/str literals — consistent with `get_type_from_constant`
+mapping a JSON bool to `"bool"`), and map `int.to_bytes → bytes` in `get_type_from_method` at the
+Constant-receiver site (literal form) and the builtin/variable site (instance form). The class form
+is mapped earlier in `get_type_from_call`, which is consulted first, so it is untouched (the `#5114`
+mistyping-guard pattern). The value handler is unchanged.
+
+Like §30a/§32a this **fixes a wrong verdict / mistyping**. New regression pair
+`regression/python/int_to_bytes{,_fail}` (CORE) covering instance big/little-endian, the literal
+receiver, the class form, zero-padding, and indexing/len; the positive test is the liveness witness.
+Verified bit-for-bit against CPython; CPython sanity passes; focused
+`regression/python/(int|bytes|str|annotation)` ctest subsets (37 + 39 tests) show zero new failures
+(the `--z3`/`--ir`/`--boolector` environmental set excepted, on this Bitwuzla-only build).
+Code-reviewed (0 critical/major/minor). Solver-agnostic (frontend type-inference + dispatch, no SMT
+encoding).
+
+### 34b. Next candidate & everything else: unchanged disposition
+**`int.from_bytes()` returns a wrong value** and is the obvious **next candidate** — a *separate*
+operational-model bug: the `models/int.py` `from_bytes(cls, bytes_data, big_endian, signed)`
+classmethod's big-endian loop reads `bytes_data[index]`, and despite logic that looks correct
+(`int.from_bytes(bytes([1,2]),"big")` should give 258) it verifies `FAILED`. The fault is in the OM
+model's bytes indexing / the `signed` default supplied by `_fill_missing_args_with_defaults`, not in
+frontend type inference — a model-level fix, distinct from the `to_bytes` dispatch work here.
+Smaller adjacent entries: `bytes.hex(sep)` separator arguments, multi-byte (non-ASCII) UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands.
+Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
