@@ -72,6 +72,11 @@ exprt build_greater_than(const exprt &a, const exprt &b);
 // consistency).
 exprt build_greater_equal(const exprt &a, const exprt &b);
 
+// Boolean disjunction `a || b`, both operands bool-typed. migrate lowers a
+// legacy binary "or" node to or2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip.
+exprt build_or(const exprt &a, const exprt &b);
+
 // `a + b : t` over same-width operands (add2t asserts width consistency).
 exprt build_add(const exprt &a, const exprt &b, const typet &t);
 

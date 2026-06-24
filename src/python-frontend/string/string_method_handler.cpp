@@ -896,9 +896,9 @@ exprt string_handler::build_affix_tuple_match(
     exprt one = is_suffix
                   ? handle_string_endswith(string_obj, elem, location)
                   : handle_string_startswith(string_obj, elem, location);
-    exprt disjunction("or", bool_type());
-    disjunction.copy_to_operands(result, one);
-    result = disjunction;
+    // result and one are synthetic bools (constant / startswith-endswith
+    // results), so build the disjunction in IREP2 (V.3).
+    result = build_or(result, one);
   }
   return result;
 }
