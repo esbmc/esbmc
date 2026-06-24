@@ -3544,6 +3544,47 @@ verdict + counterexample parity holds (dual-solver Bitwuzla + Z3). With these,
 the clean V.3 surface is drained; the residual is exactly the two
 permanently-blocked classes above.
 
+#### V.3 residual reclassified (2026-06-24) — the (b) adjuster route is pinned by the closed W1 boundary
+
+The notes above repeatedly hand the F-P11 + width-hazard residual to "the
+**V.1k/V.4 IREP2-native adjuster** … at V.4+". A read-only spike against the
+post-V.4 tree shows that escape route is **itself closed**, by the same wall
+that made W1 a `RETAIN_BOUNDARY`. The residual is therefore reclassified from
+*pending (needs the V.4+ adjuster)* to **boundary-pinned**, with the evidence:
+
+1. **Adjust runs on legacy `codet`, before goto-convert.**
+   `python_languaget::final` constructs `clang_cpp_adjust adjuster(context)` and
+   calls `adjuster.adjust()` (`python_language.cpp:249-250`); the entry is
+   `clang_cpp_adjust::adjust_code(codet&)` (`clang_cpp_adjust.h:32`) — a
+   **legacy `codet`** walk over the symbol values. This is where the converter's
+   unresolved `member`/`index` sources get followed (the P2/W2 resolution), and
+   it happens on legacy bodies.
+2. **V.4 retained the legacy body as the source of truth.** The *V.4 outcome*
+   section concluded W1 is a **closed boundary**: bodies round-trip through
+   IREP2 only *transiently inside* `goto_convert` and are restored to legacy
+   because IREP2 value nodes carry **no per-node source location** (W1-loc) and
+   verification-visible fidelity depends on it. So V.4 did **not** deliver
+   symbol-value IREP2 bodies.
+3. **The (b) adjuster's stated precondition is unmet and closed.** The *V.1k
+   breakthrough* deferred the separate IREP2-native adjuster to "V.4+" on the
+   explicit ground that "a separate adjuster … cannot run until function
+   **bodies** are IREP2 — which is V.4." V.4's actual outcome is that bodies
+   stay legacy (point 2). A separate IREP2-native adjuster therefore has **no
+   IREP2 body to operate on** at adjust time, and the converter cannot emit a
+   *whole* IREP2 body pre-adjust both because of the resolved-source
+   chicken-and-egg (the relaxed assert only lets individual nodes round-trip)
+   and the W1-loc value-node location wall.
+
+**Consequence.** Draining the V.3 residual is not a focused phase blocked on one
+keystone; it requires the **same large, rejected initiative** as the deeper W1
+removal — native IREP2 bodies *plus* native value-node location carriage
+through both `clang_cpp_adjust` and `goto_convert`. Until that is taken (its
+own umbrella, well beyond Python), the F-P11 + width-hazard residual is
+**retained by design**, exactly like W1/W3/W4. The converter-side V.3
+construction work is therefore **complete**; the remaining Part V tracks that do
+*not* depend on this boundary are **V.5** (IREP2-native counterexample printer,
+independent — Part II §2.7, own issue) and the eventual **V.6** flip.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
