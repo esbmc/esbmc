@@ -2279,6 +2279,63 @@ exprt string_handler::handle_string_attribute_call(
       return nil_exprt();
   }
 
+  // str.translate(str.maketrans(x, y[, z])): fold a constant string through a
+  // constant translation table. CPython maps each x[i] to y[i] and deletes the
+  // characters in z. Only the two/three-string maketrans form over constant
+  // operands is modelled; a dict table or a non-constant operand falls through
+  // to the regular (unsupported) dispatch.
+  if (method_name == "translate" && args.size() == 1)
+  {
+    const nlohmann::json &mk = args[0];
+    if (
+      mk.is_object() && mk.value("_type", std::string()) == "Call" &&
+      mk.contains("func") &&
+      mk["func"].value("_type", std::string()) == "Attribute" &&
+      mk["func"].value("attr", std::string()) == "maketrans" &&
+      mk["func"].contains("value") &&
+      mk["func"]["value"].value("_type", std::string()) == "Name" &&
+      mk["func"]["value"].value("id", std::string()) == "str" &&
+      mk.contains("args") && mk["args"].is_array())
+    {
+      const nlohmann::json &mkargs = mk["args"];
+      std::string from_chars, to_chars, del_chars, recv;
+      auto all_ascii = [](const std::string &s) {
+        for (unsigned char ch : s)
+          if (ch >= 0x80)
+            return false;
+        return true;
+      };
+      if (
+        (mkargs.size() == 2 || mkargs.size() == 3) &&
+        extract_constant_string(mkargs[0], converter_, from_chars) &&
+        extract_constant_string(mkargs[1], converter_, to_chars) &&
+        (mkargs.size() == 2 ||
+         extract_constant_string(mkargs[2], converter_, del_chars)) &&
+        extract_constant_string(receiver_json, converter_, recv) &&
+        // The fold is byte-wise; restrict it to ASCII so a multi-byte UTF-8
+        // sequence cannot be remapped/deleted one byte at a time (which would
+        // corrupt the string). Non-ASCII operands fall through to the regular
+        // (unsupported) dispatch — sound, never a wrong verdict.
+        all_ascii(from_chars) && all_ascii(to_chars) && all_ascii(del_chars) &&
+        all_ascii(recv))
+      {
+        if (from_chars.size() != to_chars.size())
+          throw std::runtime_error(
+            "str.maketrans() arguments must have equal length");
+        std::string result;
+        result.reserve(recv.size());
+        for (char c : recv)
+        {
+          if (del_chars.find(c) != std::string::npos)
+            continue;
+          const std::size_t pos = from_chars.find(c);
+          result.push_back(pos == std::string::npos ? c : to_chars[pos]);
+        }
+        return string_builder_->build_string_literal(result);
+      }
+    }
+  }
+
   std::optional<locationt> cached_location;
   auto get_location = [&]() -> locationt {
     if (!cached_location.has_value())
