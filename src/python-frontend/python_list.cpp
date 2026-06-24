@@ -689,8 +689,9 @@ void python_list::emit_list_copy(
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  // i = i + 1
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  // i = i + 1 (V.3: synthetic size_type increment, built in IREP2)
+  exprt i_inc =
+    build_add(build_symbol(i_sym), gen_one(size_type()), size_type());
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   // while (i < n) { ... }
@@ -1626,8 +1627,9 @@ exprt python_list::handle_range_slice(
     code_assignt assign(dst, src);
     body.copy_to_operands(assign);
 
-    // i++
-    plus_exprt incr(build_symbol(idx), gen_one(size_type()));
+    // i++ (V.3: synthetic size_type increment, built in IREP2)
+    exprt incr =
+      build_add(build_symbol(idx), gen_one(size_type()), size_type());
     code_assignt update(build_symbol(idx), incr);
     body.copy_to_operands(update);
 
@@ -4161,8 +4163,9 @@ exprt python_list::build_extend_list_call(
     push_call.location() = location;
     loop_body.copy_to_operands(push_call);
 
-    // Increment index: idx++
-    plus_exprt idx_inc(build_symbol(idx), gen_one(size_type()));
+    // Increment index: idx++ (V.3: synthetic size_type increment in IREP2)
+    exprt idx_inc =
+      build_add(build_symbol(idx), gen_one(size_type()), size_type());
     code_assignt idx_update(build_symbol(idx), idx_inc);
     loop_body.copy_to_operands(idx_update);
 
