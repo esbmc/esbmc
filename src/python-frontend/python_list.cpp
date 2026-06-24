@@ -4103,17 +4103,25 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   // Pass the list directly
   contains_call.arguments().push_back(list);
 
-  // For pointer types (e.g., string parameters), use the pointer directly
-  // For value types, take the address
+  // The model (__ESBMC_list_contains) compares *item against *elem->value, i.e.
+  // it expects `item` to *point to* the search value. A string/None element is
+  // stored as the pointer value itself in elem->value, so a char*/_Bool* item
+  // is passed by value to match. But a user-class instance is stored as a
+  // `Class*` slot (8 bytes), so the search value IS that pointer: passing the
+  // `Class*` by value would make the model dereference it and compare the
+  // pointee struct's first word instead, so `obj in [obj]` wrongly returns
+  // False (#4805). Pass its address, like the value-type path, so *item
+  // recovers the stored `Class*`.
+  const typet &item_type = item_info.elem_symbol->get_type();
   exprt item_arg;
-  if (item_info.elem_symbol->get_type().is_pointer())
+  if (item_type.is_pointer() && !converter_.is_user_class_pointer(item_type))
   {
-    // String parameters are pointers - use the pointer value directly
+    // String/None and other non-class pointers: pass the pointer value direct.
     item_arg = build_symbol(*item_info.elem_symbol);
   }
   else
   {
-    // For arrays or other value types, take the address
+    // Value types and user-class references: take the address.
     item_arg = build_address_of(build_symbol(*item_info.elem_symbol));
   }
 
