@@ -1311,6 +1311,52 @@ work; the §5 priority order stands.
 
 ---
 
+> **Note on numbering.** §30–§36 (PRs #5577/#5579/#5585/#5588/#5592/#5597 and the #5599 triage
+> finding) are in flight and not yet on `master`; this sweep is appended as §37. Its fix is in
+> flight as PR #5601.
+
+## 37. 2026-06-24 (twenty-seventh sweep) & int.from_bytes signed=True sign-byte fix
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the cleaner `signed=True` candidate named in §36b (avoiding the §36a literal-arg
+lowering work by using variable receivers).
+
+### 37a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, "big", signed=True)` crashed and was logically wrong for big-endian.**
+
+The two's-complement path reported `dereference failure: array bounds violated`, and even the cases
+that did not crash were wrong for big-endian. The model located the sign bit with `bytes_data[-1]`:
+(1) Python **negative indexing** is not supported by the OM — `bytes_data[-1]` read out of bounds
+(the crash); (2) the most-significant byte, which carries the sign, is **byte 0** for big-endian, not
+the last byte, so `bytes([255, 0])` big-endian (CPython `-256`) was mis-evaluated independently of the
+crash.
+
+**Fix** (`models/int.py`): index the sign byte directly — `0` for big-endian, `bytes_len - 1` for
+little-endian — via a ternary (no new branch, so Mode C is not engaged), and reuse the already-computed
+`bytes_len`. This **restores a working feature** (signed `from_bytes` now matches CPython) and removes
+the crash. New regression pair `regression/python/int_from_bytes_signed{,_fail}` (CORE) covering
+big/little endian, positive/negative, single/multi-byte, the big-endian sign-in-first-byte case, and
+the unaffected `signed=False` path; the positive test is the liveness witness. Verified bit-for-bit
+against CPython for all seven cases; CPython sanity passes; pylint clean on the model; the focused
+`regression/python/(int_|from_bytes|bytes)` ctest subset (30 tests) shows zero new failures, and the
+existing `int_from_bytes` (signed=False) test still passes. Independent of the in-flight `from_bytes`
+PRs (#5597 default-signed, #5599 literal-arg triage): the tests use the explicit `signed=` keyword and
+variable receivers, so it verifies on `master` as-is.
+
+### 37b. Next candidate & everything else: unchanged disposition
+With `to_bytes` (§34), the `signed` default (§35) and now signed `from_bytes` (§37) done, the
+remaining `from_bytes` work is the §36a bytes-**literal-argument** lowering (deferred; needs the
+frontend `get_literal` context fix) and the `byteorder=` keyword form (model parameter named
+`big_endian`). A cleaner adjacent candidate is **`bytes.hex(sep)`** (the optional separator /
+`bytes_per_sep` arguments, extending §32's `bytes.hex`, stacked on PR #5585). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `str.maketrans`/`translate`,
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness). The §3 design-level blockers, §3c
+timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+---
+
 > **Note on numbering.** §16–§29 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554, #5555, #5556, #5558, #5562, #5563) precede this section; this sweep is appended as §30.
 > Its fix is in flight as PR #5577 and not yet on `master`.
