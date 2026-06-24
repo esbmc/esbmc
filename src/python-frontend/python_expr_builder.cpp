@@ -183,6 +183,17 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
   return result;
 }
 
+// `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
+// notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
+// is the byte-identical round-trip.
+exprt build_notequal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(notequal2tc(a2, b2));
+}
+
 // Expression-context call `fn(args...)` returning return_type. If the return
 // type or any argument type contains a dyn-sized array (which does not
 // round-trip), build the legacy side_effect_expr_function_callt instead.
