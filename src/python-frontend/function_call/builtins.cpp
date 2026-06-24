@@ -377,13 +377,19 @@ exprt function_call_expr::handle_isinstance() const
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
 
-    // Lists use a dedicated pointer-backed operational model. Resolve this
-    // check from the static frontend type instead of emitting a generic
-    // isinstance expression with incompatible operand widths.
+    // Lists use a dedicated pointer-backed operational model. The generic
+    // isinstance expression cannot be used here because its operand widths
+    // are incompatible. When the static type is a list pointer, emit a
+    // runtime null check so that Optional[list] parameters (None at runtime)
+    // correctly return False.
     if (type_name == "list")
     {
       if (obj_expr.type() == type_handler_.get_list_type())
-        return true_exprt();
+      {
+        expr2tc obj2;
+        migrate_expr(obj_expr, obj2);
+        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+      }
       return false_exprt();
     }
 
