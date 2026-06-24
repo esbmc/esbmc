@@ -1,4 +1,5 @@
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple_handler.h>
 #include <util/c_types.h>
@@ -27,211 +28,7 @@
 #include <string>
 #include <functional>
 
-namespace
-{
-// A dynamically-sized array type (array with a non-constant size) does not
-// survive the migrate_type round-trip faithfully -- get_width() throws
-// (array_type2t::dyn_sized_array_excp) downstream. The list slice/reverse
-// paths build nodes over such types, so the IREP2 helpers below fall back to
-// the legacy constructor when the relevant type contains one.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving -- migrate_expr already lowers the legacy nodes through these
-// same paths downstream). Back-migrated for the legacy adjust/goto-convert
-// seam.
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
-  // so legacy typecast_exprt(from, t) is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
-// address_of2t's sources here are lvalues (symbols/members/indices), never a
-// constant_int or nested address_of, so no guard is needed beyond dyn-array.
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// `a < b` over synthetic same-width operands (loop counters / bounds). migrate
-// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
-// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
-// round-trip. Operands MUST share bit-width: lessthan2t asserts width
-// consistency, which the legacy "<" node defers to clang_cpp_adjust.
-exprt build_less_than(const exprt &a, const exprt &b)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(lessthan2tc(a2, b2));
-}
-
-// `a >= b` over synthetic same-width operands. migrate lowers a legacy ">="
-// node to greaterthanequal2tc(migrate(a), migrate(b)) (util/migrate.cpp i_ge
-// path) with no coercion, so this is the byte-identical round-trip; operands
-// must share bit-width (greaterthanequal2t asserts it).
-exprt build_greater_equal(const exprt &a, const exprt &b)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(greaterthanequal2tc(a2, b2));
-}
-
-// `(t)(a + b)` over synthetic operands of result type `t` (loop-counter
-// increments). migrate lowers a legacy "+" node to add2tc(migrate_type(t),
-// migrate(a), migrate(b)) (util/migrate.cpp i_add path), so this is the
-// byte-identical round-trip. The result type and both operands MUST share
-// bit-width: add2t asserts arithmetic-operand consistency.
-exprt build_add(const exprt &a, const exprt &b, const typet &t)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(add2tc(migrate_type(t), a2, b2));
-}
-
-// `(t)(a - b)` over synthetic same-width operands. migrate lowers a legacy "-"
-// node to sub2tc(migrate_type(t), migrate(a), migrate(b)) (util/migrate.cpp
-// i_sub path) with no coercion, so this is the byte-identical round-trip. The
-// result type and both operands MUST share bit-width (sub2t asserts it).
-exprt build_sub(const exprt &a, const exprt &b, const typet &t)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
-}
-
-// index2t requires an array/vector/symbol source; a pointer source (e.g. the
-// array/pointer iterable branch) and dyn-sized arrays (slice results) fall
-// back to the legacy node. dyn-array types are checked first to avoid
-// migrating an expr whose type would not round-trip.
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
-    return index_exprt(arr, idx, t);
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  if (
-    is_array_type(arr2->type) || is_vector_type(arr2->type) ||
-    is_symbol_type(arr2->type))
-  {
-    exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-    // migrate_type does not round-trip type attributes such as #cpp_type
-    // (load-bearing here: it distinguishes a 1-char string element from an
-    // 8-bit int). Restore the exact element type so legacy index_exprt(arr,
-    // idx, t) is reproduced faithfully.
-    result.type() = t;
-    return result;
-  }
-  return index_exprt(arr, idx, t);
-}
-
-// Expression-context call `fn(args...)` returning return_type. If the return
-// type or any argument type contains a dyn-sized array (which does not
-// round-trip), build the legacy side_effect_expr_function_callt instead.
-// Caller sets .location() on the result where it did before.
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  bool dyn = contains_dyn_array(return_type);
-  for (const exprt &a : args)
-    dyn = dyn || contains_dyn_array(a.type());
-  if (dyn)
-  {
-    side_effect_expr_function_callt call;
-    call.function() = build_symbol(fn);
-    for (const exprt &a : args)
-      call.arguments().push_back(a);
-    call.type() = return_type;
-    return call;
-  }
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
-// a pointer to a PyObject struct, so the dereferenced struct is the resolved
-// member source and member2t's source precondition holds.
-exprt build_deref_member(
-  const exprt &obj,
-  const irep_idt &field,
-  const typet &field_type)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
-  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
-}
-
-// Build obj.field : field_type in IREP2 (V.3). `obj` is a struct rvalue (e.g. a
-// tuple struct), so member2t's struct-source precondition holds directly.
-exprt build_member(
-  const exprt &obj,
-  const irep_idt &field,
-  const typet &field_type)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(member2tc(migrate_type(field_type), obj2, field));
-}
-
-// Dereference `ptr` to a value of type `t` (exact round-trip of the single-arg
-// dereference_exprt(t) + op0=ptr form, which sets the result type to `t`
-// directly). Back-migrated once (V.3).
-exprt build_dereference(const exprt &ptr, const typet &t)
-{
-  expr2tc ptr2;
-  migrate_expr(ptr, ptr2);
-  exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-  // migrate_type does not round-trip #cpp_type; restore the exact target type
-  // so legacy dereference_exprt(t)+op0=ptr is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-} // namespace
+using namespace python_expr;
 
 // Default depth for list comparison if option not set
 static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
@@ -4267,17 +4064,10 @@ exprt python_list::build_extend_list_call(
     {
       const array_typet &arr_type = to_array_type(other_list.type());
       // Subtract 1 for null terminator. V.3: build the (size - 1) subtraction
-      // in IREP2. The legacy 2-arg minus_exprt leaves the result type nil for
-      // downstream inference; here we set it explicitly to the array-size type
-      // (size_type), which is exactly what that inference yields, and restore
-      // it after the round-trip since migrate_type drops attributes (#cpp_type).
+      // in IREP2 with the result type set explicitly to the array-size type
+      // (what the legacy 2-arg minus_exprt's downstream inference yields).
       const exprt &arr_size = arr_type.size();
-      expr2tc size2, one2;
-      migrate_expr(arr_size, size2);
-      migrate_expr(gen_one(size_type()), one2);
-      str_len =
-        migrate_expr_back(sub2tc(migrate_type(arr_size.type()), size2, one2));
-      str_len.type() = arr_size.type();
+      str_len = build_sub(arr_size, gen_one(size_type()), arr_size.type());
     }
     else // pointer type - use strlen
     {
@@ -4733,10 +4523,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   }
 
   // 9. Increment index: i = i + 1 (V.3: built in IREP2).
-  const type2tc inc_t2 = migrate_type(size_type());
-  expr2tc inc_idx;
-  migrate_expr(build_symbol(index_var), inc_idx);
-  exprt increment = migrate_expr_back(add2tc(inc_t2, inc_idx, gen_one(inc_t2)));
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);

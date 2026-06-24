@@ -5,69 +5,10 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <unordered_set>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. The
-// member/dereference variants guard the dyn-sized-array round-trip hazard and
-// restore the exact result type (#cpp_type that migrate_type drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_dereference(const exprt &ptr, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return dereference_exprt(ptr, t);
-  expr2tc ptr2;
-  migrate_expr(ptr, ptr2);
-  exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-  result.type() = t;
-  return result;
-}
-
-// member2t needs a struct/union/symbol source (the is_none access here is over
-// an Optional struct or a dereference of one). Falls back to legacy otherwise.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-} // namespace
+using namespace python_expr;
 
 python_typechecking::python_typechecking(python_converter &converter)
   : converter_(converter)

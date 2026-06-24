@@ -7,6 +7,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
@@ -38,59 +39,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-// 2-arg index: element type is the source array's subtype (matches the legacy
-// index_exprt(arr, idx) ctor). Reached only on array sources here.
-exprt build_index(const exprt &arr, const exprt &idx)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(
-    index2tc(migrate_type(arr.type().subtype()), arr2, idx2));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 string_handler::string_handler(
   python_converter &converter,

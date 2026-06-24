@@ -13,69 +13,9 @@
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <python-frontend/python_expr_builder.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
-// guards the dyn-sized-array round-trip hazard (fall back to legacy), and
-// build_typecast restores the exact target type (#cpp_type that migrate_type
-// drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// `a > b` over synthetic same-width operands. migrate lowers a legacy ">" node
-// to greaterthan2tc(migrate(a), migrate(b)) (util/migrate.cpp i_gt path) with
-// no coercion, so this is the byte-identical round-trip; operands must share
-// bit-width (greaterthan2t asserts it).
-exprt build_greater_than(const exprt &a, const exprt &b)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(greaterthan2tc(a2, b2));
-}
-} // namespace
+using namespace python_expr;
 
 // ---------------------------------------------------------------------------
 // Constructor

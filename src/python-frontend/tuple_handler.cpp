@@ -1,5 +1,6 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
@@ -9,37 +10,8 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/python_types.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-// member2t needs a struct/union/symbol source (tuple component access here is
-// always over a tuple struct). Restore the exact component type
-// (result.type() = t) so the #cpp_type attribute migrate_type drops is
-// preserved; fall back to legacy for any non-matching source.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-} // namespace
+using namespace python_expr;
 
 tuple_handler::tuple_handler(
   python_converter &converter,

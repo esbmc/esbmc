@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
@@ -18,6 +19,8 @@
 #include <functional>
 #include <sstream>
 
+using namespace python_expr;
+
 namespace
 {
 // True when `node` is a call to the built-in range(): range(stop),
@@ -28,82 +31,6 @@ bool is_range_call(const nlohmann::json &node)
          node.contains("func") && node["func"].contains("_type") &&
          node["func"]["_type"] == "Name" && node["func"].contains("id") &&
          node["func"]["id"] == "range" && node.contains("args");
-}
-
-// V.3: IREP2 member access (exact round-trip of member_exprt;
-// behaviour-preserving -- migrate_expr already lowers the legacy node through
-// this same path downstream). Back-migrated for the legacy adjust/goto-convert
-// seam.
-//
-// member2t requires a struct/union/symbol source. In this handler a few member
-// sites have a source whose type is still a pointer at construction time (the
-// dict/PyObject layout is resolved later by the adjuster), which legacy
-// member_exprt tolerates but eager member2tc cannot. For those we fall back to
-// the legacy node, leaving the downstream migration to lower it as before.
-exprt dict_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-    return migrate_expr_back(member2tc(migrate_type(t), base2, name));
-  return member_exprt(base, name, t);
-}
-
-// V.3: IREP2 symbol/typecast/dereference/address-of construction (exact
-// round-trip; behaviour-preserving). Back-migrated for the legacy seam.
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_dereference(const exprt &ptr, const typet &t)
-{
-  expr2tc ptr2;
-  migrate_expr(ptr, ptr2);
-  return migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-}
-
-// address_of2t's source here is an lvalue (symbol/member/deref), never a
-// constant_int or nested address_of, so no guard is needed.
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// `a < b` over synthetic same-width operands (loop counter / size). migrate
-// lowers a legacy "<" node to lessthan2tc(migrate(a), migrate(b)) with no
-// coercion (util/migrate.cpp i_lt path), so this is the byte-identical
-// round-trip. Operands MUST share bit-width: lessthan2t asserts width
-// consistency, which the legacy "<" node defers to clang_cpp_adjust.
-exprt build_less_than(const exprt &a, const exprt &b)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(lessthan2tc(a2, b2));
-}
-
-// `(t)(a - b)` over synthetic same-width operands. migrate lowers a legacy "-"
-// node to sub2tc(migrate_type(t), migrate(a), migrate(b)) (util/migrate.cpp
-// i_sub path) with no coercion, so this is the byte-identical round-trip. The
-// result type and both operands MUST share bit-width (sub2t asserts it).
-exprt build_sub(const exprt &a, const exprt &b, const typet &t)
-{
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
 }
 
 // Build "key found" = !(index_var == SIZE_MAX) in IREP2, back-migrated once
@@ -672,16 +599,13 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   }
 
   // V.3: build index + 1 and index < length in IREP2.
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc idx2, len2;
-  migrate_expr(build_symbol(index_var), idx2);
-  migrate_expr(length_expr, len2);
-  exprt increment = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
   code_assignt index_increment(build_symbol(index_var), increment);
   index_increment.location() = location;
   loop_body.copy_to_operands(index_increment);
 
-  exprt loop_condition = migrate_expr_back(lessthan2tc(idx2, len2));
+  exprt loop_condition = build_less_than(build_symbol(index_var), length_expr);
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -802,17 +726,15 @@ exprt python_dict_handler::build_range_dict_comprehension(
 
   // loop_var = loop_var + 1
   // V.3: build loop_var + 1 and loop_var < stop in IREP2.
-  const type2tc idx_t2 = migrate_type(idx_type);
-  expr2tc lv2, stop2;
-  migrate_expr(build_symbol(*loop_var), lv2);
-  migrate_expr(build_symbol(stop_var), stop2);
-  exprt increment = migrate_expr_back(add2tc(idx_t2, lv2, gen_one(idx_t2)));
+  exprt increment =
+    build_add(build_symbol(*loop_var), gen_one(idx_type), idx_type);
   code_assignt loop_inc(build_symbol(*loop_var), increment);
   loop_inc.location() = location;
   loop_body.copy_to_operands(loop_inc);
 
   // while (loop_var < stop)
-  exprt loop_condition = migrate_expr_back(lessthan2tc(lv2, stop2));
+  exprt loop_condition =
+    build_less_than(build_symbol(*loop_var), build_symbol(stop_var));
 
   codet while_stmt;
   while_stmt.set_statement("while");
@@ -916,12 +838,12 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   // Assign keys and values to target dict struct members
-  exprt keys_member = dict_member(dict_target, "keys", list_type);
+  exprt keys_member = build_member(dict_target, "keys", list_type);
   code_assignt keys_assign(keys_member, build_symbol(keys_list));
   keys_assign.location() = location;
   converter_.add_instruction(keys_assign);
 
-  exprt values_member = dict_member(dict_target, "values", list_type);
+  exprt values_member = build_member(dict_target, "values", list_type);
   code_assignt values_assign(values_member, build_symbol(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
@@ -960,8 +882,8 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   // Use try_find_index so a missing key returns SIZE_MAX instead of asserting.
   // We then emit a cpp-throw KeyError for the not-found case, which allows
@@ -1098,7 +1020,7 @@ exprt python_dict_handler::handle_dict_subscript(
   exprt deref_obj = build_dereference(build_symbol(obj_var), element_type);
   deref_obj.type() = element_type;
   exprt obj_value =
-    dict_member(deref_obj, "value", pointer_typet(empty_typet()));
+    build_member(deref_obj, "value", pointer_typet(empty_typet()));
 
   // Handle dict types
   if (!resolved_type.is_nil() && is_dict_type(resolved_type))
@@ -1266,8 +1188,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 {
   typet list_type = type_handler_.get_list_type();
 
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   // Check if key exists using membership test
   nlohmann::json dummy_json;
@@ -1409,7 +1331,7 @@ exprt python_dict_handler::handle_dict_membership(
   bool negated)
 {
   typet list_type = type_handler_.get_list_type();
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
 
   nlohmann::json dummy_json;
   python_list list_handler(converter_, dummy_json);
@@ -1438,8 +1360,8 @@ void python_dict_handler::handle_dict_delete(
   exprt key_expr = get_key_expr(slice_node);
 
   // Get dict.keys and dict.values
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   // First, check if key exists using membership test
   // This avoids calling __ESBMC_list_find_index on empty dict or missing key
@@ -2241,8 +2163,8 @@ exprt python_dict_handler::handle_dict_get(
                  : normalized_result_type;
 
   // Get dict members
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2315,7 +2237,7 @@ exprt python_dict_handler::handle_dict_get(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  exprt obj_value = dict_member(
+  exprt obj_value = build_member(
     build_dereference(
       build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -2468,8 +2390,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   const bool is_list_result = (result_type == list_type);
 
   // Get dict members
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2542,7 +2464,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  exprt obj_value = dict_member(
+  exprt obj_value = build_member(
     build_dereference(
       build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -2741,8 +2663,8 @@ exprt python_dict_handler::handle_dict_copy(
   // Copy each list independently so mutating the copy leaves the source
   // untouched.
   auto copy_list_member = [&](const irep_idt &name) {
-    exprt src = dict_member(dict_expr, name, list_type);
-    exprt dst = dict_member(build_symbol(new_dict_sym), name, list_type);
+    exprt src = build_member(dict_expr, name, list_type);
+    exprt dst = build_member(build_symbol(new_dict_sym), name, list_type);
     code_function_callt copy_call;
     copy_call.function() = build_symbol(*list_copy_func);
     copy_call.arguments().push_back(src);
@@ -2779,7 +2701,7 @@ exprt python_dict_handler::handle_dict_clear(
   auto clear_list_member = [&](const irep_idt &name) {
     code_function_callt clear_call;
     clear_call.function() = build_symbol(*clear_func);
-    clear_call.arguments().push_back(dict_member(dict_expr, name, list_type));
+    clear_call.arguments().push_back(build_member(dict_expr, name, list_type));
     clear_call.type() = empty_typet();
     clear_call.location() = location;
     converter_.add_instruction(clear_call);
@@ -2856,8 +2778,8 @@ exprt python_dict_handler::handle_dict_pop(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   const symbolt *try_find_func =
     symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
@@ -2934,7 +2856,7 @@ exprt python_dict_handler::handle_dict_pop(
   at_call.location() = location;
   then_block.copy_to_operands(at_call);
 
-  exprt obj_value = dict_member(
+  exprt obj_value = build_member(
     build_dereference(
       build_symbol(obj_var), type_handler_.get_list_element_type()),
     "value",
@@ -3110,8 +3032,8 @@ exprt python_dict_handler::handle_dict_popitem(
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
 
-  exprt keys_member = dict_member(dict_expr, "keys", list_type);
-  exprt values_member = dict_member(dict_expr, "values", list_type);
+  exprt keys_member = build_member(dict_expr, "keys", list_type);
+  exprt values_member = build_member(dict_expr, "values", list_type);
 
   typet tuple_type = get_popitem_tuple_type(dict_expr);
   const struct_typet &tuple_struct = to_struct_type(tuple_type);
@@ -3231,13 +3153,13 @@ exprt python_dict_handler::handle_dict_popitem(
     nonempty_block.copy_to_operands(key_at_call);
 
     // Assign key into tuple before removing from list
-    exprt key_obj_value = dict_member(
+    exprt key_obj_value = build_member(
       build_dereference(
         build_symbol(key_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
     exprt key_field =
-      dict_member(build_symbol(result_var), "element_0", key_type);
+      build_member(build_symbol(result_var), "element_0", key_type);
     code_assignt key_assign(
       key_field, retrieve_list_value(key_obj_value, key_type));
     key_assign.location() = location;
@@ -3260,13 +3182,13 @@ exprt python_dict_handler::handle_dict_popitem(
     nonempty_block.copy_to_operands(val_at_call);
 
     // Assign value into tuple before removing from list.
-    exprt val_obj_value = dict_member(
+    exprt val_obj_value = build_member(
       build_dereference(
         build_symbol(val_obj_var), type_handler_.get_list_element_type()),
       "value",
       pointer_typet(empty_typet()));
     exprt val_field =
-      dict_member(build_symbol(result_var), "element_1", val_type);
+      build_member(build_symbol(result_var), "element_1", val_type);
     code_assignt val_assign(
       val_field, retrieve_list_value(val_obj_value, val_type));
     val_assign.location() = location;
@@ -3502,8 +3424,8 @@ exprt python_dict_handler::handle_dict_update(
   // Read entries from the source dict through its internal keys/values lists.
   locationt location = converter_.get_location_from_decl(call_node);
   typet list_type = type_handler_.get_list_type();
-  exprt keys_member = dict_member(other_dict, "keys", list_type);
-  exprt values_member = dict_member(other_dict, "values", list_type);
+  exprt keys_member = build_member(other_dict, "keys", list_type);
+  exprt values_member = build_member(other_dict, "values", list_type);
 
   // Get the helper used to determine how many entries need to be copied.
   const symbolt *size_func =
@@ -3564,10 +3486,8 @@ exprt python_dict_handler::handle_dict_update(
   loop_body.copy_to_operands(pair_block);
 
   // Advance to the next source entry (V.3: build index + 1 in IREP2).
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc idx2;
-  migrate_expr(build_symbol(index_var), idx2);
-  exprt next_index = migrate_expr_back(add2tc(size_t2, idx2, gen_one(size_t2)));
+  exprt next_index =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
   code_assignt index_update(build_symbol(index_var), next_index);
   index_update.location() = location;
   loop_body.copy_to_operands(index_update);
@@ -3593,10 +3513,10 @@ exprt python_dict_handler::compare(
   typet list_type = type_handler_.get_list_type();
 
   // Get keys and values from both dicts
-  exprt lhs_keys = dict_member(lhs, "keys", list_type);
-  exprt lhs_values = dict_member(lhs, "values", list_type);
-  exprt rhs_keys = dict_member(rhs, "keys", list_type);
-  exprt rhs_values = dict_member(rhs, "values", list_type);
+  exprt lhs_keys = build_member(lhs, "keys", list_type);
+  exprt lhs_values = build_member(lhs, "values", list_type);
+  exprt rhs_keys = build_member(rhs, "keys", list_type);
+  exprt rhs_values = build_member(rhs, "values", list_type);
 
   // Find __ESBMC_dict_eq function
   const symbolt *dict_eq_func =

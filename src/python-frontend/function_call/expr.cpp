@@ -12,6 +12,7 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
@@ -33,74 +34,10 @@
 #include <unordered_set>
 
 using namespace json_utils;
+using namespace python_expr;
+
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-//
-// A dynamically-sized array type (non-constant size) does not survive the
-// migrate_type round-trip (get_width throws downstream), so the helpers fall
-// back to the legacy constructor when the relevant type contains one.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip type attributes such as #cpp_type;
-  // restore the exact target type so legacy typecast_exprt(from, t) is
-  // reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// Struct member access base.field : t (V.3). `base` must be a struct/union/
-// complex value (member2t's source precondition); the callers here pass a
-// tuple or complex struct whose component is named `name`.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(base.type()))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-  // migrate_type does not round-trip #cpp_type; restore the exact member type
-  // so legacy member_exprt(base, name, t) is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
 // Build a List/Tuple AST node whose elements are the single-character strings
 // of @p chars. Used to lower list("abc") / tuple("abc") to the proven
 // list/tuple-literal path. Location fields are copied from @p loc_src.
