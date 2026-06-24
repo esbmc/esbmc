@@ -3520,7 +3520,29 @@ pre-V.4:
    subtracting, so a blind migrate is unsound.)
 
 Both classes need the **V.1k/V.4 IREP2-native adjuster** (resolve-then-build),
-not site-by-site migration. Pre-V.4, the clean V.3 surface is **fully drained**.
+not site-by-site migration.
+
+#### V.3 follow-up (2026-06-24) — truthiness/membership stragglers drained
+
+A re-census after the pass above found the "fully drained" claim was slightly
+overstated: five clean synthetic-operand sites — each a *byte-identical
+round-trip* analog of an already-merged migration — were still building legacy
+`exprt("notequal"/…)` nodes. All were drained to the
+`migrate_expr_back(notequal2tc/equality2tc(…))` pattern:
+
+- `converter_stmt.cpp` list-condition `__ESBMC_list_size(xs) != 0` (analog of the
+  already-migrated truthiness path at the same file ~3216);
+- `converter_stmt.cpp` dict-truthiness `$dict_size$ != 0`;
+- `string_handler.cpp` `strchr(...) != NULL` and `strstr(...) != NULL` membership
+  (analog of the merged `strcmp(...) op 0` at `converter_binop.cpp:973`);
+- `python_exception_handler.cpp` non-negated assertion `(int)<bool-temp> == 1`
+  (sibling of the already-migrated `not <temp>` branch).
+
+Operands are all fully-synthetic concrete-typed (OM-call results, `size_type`
+temps, constants), so each is the exact IREP2 round-trip of the legacy node —
+verdict + counterexample parity holds (dual-solver Bitwuzla + Z3). With these,
+the clean V.3 surface is drained; the residual is exactly the two
+permanently-blocked classes above.
 
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,

@@ -1296,8 +1296,15 @@ exprt string_handler::handle_string_membership(
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    exprt not_equal("notequal", bool_type());
-    not_equal.copy_to_operands(strchr_call, null_ptr);
+    // V.3: build `strchr(...) != NULL` in IREP2, back-migrating once (mirrors
+    // the strcmp membership path at converter_binop.cpp:973). The round-trip
+    // drops the call operand's location, so re-attach it.
+    expr2tc strchr_call2;
+    migrate_expr(strchr_call, strchr_call2);
+    expr2tc null2;
+    migrate_expr(null_ptr, null2);
+    exprt not_equal = migrate_expr_back(notequal2tc(strchr_call2, null2));
+    not_equal.op0().location() = strchr_call.location();
 
     return not_equal;
   }
@@ -1441,8 +1448,15 @@ exprt string_handler::handle_string_membership(
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  exprt not_equal("notequal", bool_type());
-  not_equal.copy_to_operands(strstr_call, null_ptr);
+  // V.3: build `strstr(...) != NULL` in IREP2, back-migrating once (mirrors
+  // the strchr membership path above). The round-trip drops the call operand's
+  // location, so re-attach it.
+  expr2tc strstr_call2;
+  migrate_expr(strstr_call, strstr_call2);
+  expr2tc null2;
+  migrate_expr(null_ptr, null2);
+  exprt not_equal = migrate_expr_back(notequal2tc(strstr_call2, null2));
+  not_equal.op0().location() = strstr_call.location();
 
   return not_equal;
 }
