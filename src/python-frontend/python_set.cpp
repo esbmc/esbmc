@@ -341,9 +341,10 @@ exprt python_set::get_from_iterable(
     }
     else
     {
-      // char* case: *(iterable + i)
-      exprt ptr_add("+", iterable.type());
-      ptr_add.copy_to_operands(iterable, build_symbol(idx_sym));
+      // char* case: *(iterable + i). iterable is a resolved char* and idx_sym
+      // a synthetic size_type, so build the pointer arithmetic in IREP2 (V.3).
+      exprt ptr_add =
+        build_add(iterable, build_symbol(idx_sym), iterable.type());
       dereference_exprt deref(char_type());
       deref.op0() = ptr_add;
       elem_expr = deref;
