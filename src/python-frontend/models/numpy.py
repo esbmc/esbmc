@@ -165,17 +165,7 @@ def nextafter(x: float, y: float) -> float:
 
 
 def modf(x: float) -> tuple[float, float]:
-    fraction = x
-    integer = 0
-    if fraction >= 0.0:
-        while fraction >= 1.0:
-            fraction = fraction - 1.0
-            integer = integer + 1
-    else:
-        while fraction <= -1.0:
-            fraction = fraction + 1.0
-            integer = integer - 1
-    return fraction, integer + 0.0
+    return math.modf(x)
 
 
 def frexp(x: float) -> tuple[float, int]:

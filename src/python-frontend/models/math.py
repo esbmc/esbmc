@@ -40,6 +40,10 @@ def __ESBMC_atanh(x: float) -> float:
     ...
 
 
+def __ESBMC_trunc(x: float) -> float:
+    ...
+
+
 def __ESBMC_hypot(x: float, y: float) -> float:
     ...
 
@@ -502,16 +506,8 @@ def modf(x: float) -> tuple[float, float]:
     """
     Split x into fractional and integer parts
     """
-    frac_part: float = x
-    int_part: float = 0.0
-    if frac_part >= 0.0:
-        while frac_part >= 1.0:
-            frac_part = frac_part - 1.0
-            int_part = int_part + 1.0
-    else:
-        while frac_part <= -1.0:
-            frac_part = frac_part + 1.0
-            int_part = int_part - 1.0
+    int_part: float = __ESBMC_trunc(x)
+    frac_part: float = x - int_part
     return (frac_part, int_part)
 
 
