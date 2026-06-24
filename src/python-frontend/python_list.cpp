@@ -3205,9 +3205,9 @@ exprt python_list::compare(
       return has_int && has_float;
     };
 
-    // Concrete nested lists (notably NumPy matrix constructors) can be
-    // compared without the recursive __ESBMC_list_eq operational model.
-    // Materialize direct element comparisons for each row instead.
+    // Concrete nested lists can be compared directly without forcing the
+    // recursive list operational model. This keeps matrix-style comparisons
+    // from blowing up into large __ESBMC_list_eq trees.
     const typet list_model_type = converter_.get_type_handler().get_list_type();
     std::function<bool(
       const symbolt *, const symbolt *, std::size_t, expr2tc &)>
