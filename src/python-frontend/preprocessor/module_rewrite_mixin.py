@@ -311,6 +311,89 @@ class ModuleRewriteMixin:
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
+        self._scan_dict_literal_bindings_and_calls(node)
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    def _scan_dict_literal_bindings_and_calls(self, node):
+        """Collect evidence for parameter-dict element recovery (#5444).
+
+        For each scope (the module body and every function body, independently)
+        records its dict-literal name bindings, then resolves each direct
+        ``name(...)`` call's positional arguments against that scope's bindings
+        (falling back to the module scope for free names). The result maps a
+        function name to its per-call list of argument dict[K, V] shapes, which
+        _recover_param_dict_annotation collapses only when every call agrees —
+        keeping the inference sound and scope-correct (a function-local dict
+        never poisons a same-named module global).
+        """
+        self._dict_param_call_shapes = {}
+        module_binds, module_locals = self._collect_scope_dict_binds(node.body)
+        self._record_scope_calls(node.body, module_binds, module_locals, module_binds)
+        for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                local_binds, local_names = self._collect_scope_dict_binds(n.body)
+                self._record_scope_calls(n.body, local_binds, local_names, module_binds)
+
+    @staticmethod
+    def _walk_scope(stmts):
+        """Yield AST nodes within ``stmts`` without crossing into a nested
+        function/class/lambda scope (which binds its own names)."""
+        stack = list(stmts)
+        while stack:
+            n = stack.pop()
+            yield n
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            stack.extend(ast.iter_child_nodes(n))
+
+    def _collect_scope_dict_binds(self, stmts):
+        """Map names bound to a dict literal in this scope to their dict[K, V]
+        annotation. A name reassigned to a conflicting shape or to a non-dict is
+        poisoned (dropped) so it is never used as recovery evidence. Returns
+        (bindings, all-assigned-names)."""
+        binds = {}
+        poisoned = set()
+        assigned = set()
+        for n in self._walk_scope(stmts):
+            if isinstance(n, ast.Assign):
+                names = [t.id for t in n.targets if isinstance(t, ast.Name)]
+                value = n.value
+            elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+                names = [n.target.id]
+                value = n.value
+            else:
+                continue
+            ann = (self._build_dict_annotation_from_literal(value)
+                   if isinstance(value, ast.Dict) else None)
+            for name in names:
+                assigned.add(name)
+                if name in poisoned:
+                    continue
+                if ann is None or (name in binds and ast.dump(binds[name]) != ast.dump(ann)):
+                    poisoned.add(name)
+                    binds.pop(name, None)
+                else:
+                    binds[name] = ann
+        return binds, assigned
+
+    def _record_scope_calls(self, stmts, local_binds, local_names, module_binds):
+        """Record the per-call positional dict shapes for every direct call in
+        this scope, resolving Name arguments against the local bindings (or the
+        module bindings for free names)."""
+        for n in self._walk_scope(stmts):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+                continue
+            shapes = []
+            for arg in n.args:
+                if isinstance(arg, ast.Dict):
+                    shapes.append(self._build_dict_annotation_from_literal(arg))
+                elif isinstance(arg, ast.Name):
+                    if arg.id in local_names:
+                        shapes.append(local_binds.get(arg.id))
+                    else:
+                        shapes.append(module_binds.get(arg.id))
+                else:
+                    shapes.append(None)
+            self._dict_param_call_shapes.setdefault(n.func.id, []).append(shapes)

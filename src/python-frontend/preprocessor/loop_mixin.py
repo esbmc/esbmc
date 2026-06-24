@@ -1326,6 +1326,14 @@ class LoopMixin:
             return annotation.slice.elts[0], annotation.slice.elts[1]
         return self._any_ann(), self._any_ann()
 
+    def _is_concrete_tuple_ann(self, ann_node):
+        """True for a full tuple[A, B, ...] annotation node (not the bare name
+        'tuple'). Such annotations must be preserved end-to-end so the C++ list
+        subscript read rebuilds the concrete tuple struct instead of erasing it
+        to void* (#5444)."""
+        return (isinstance(ann_node, ast.Subscript)
+                and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
+
     def _get_base_type_name(self, ann_node):
         """Return the base type name string from an annotation node.
 
@@ -1397,10 +1405,19 @@ class LoopMixin:
         (produced by _create_var_subscript_assign).
         """
         base_name = self._get_base_type_name(elem_ann)
-        actual_base = base_name if base_name and base_name != "Any" else "Any"
+        # Tuple element types must keep their FULL annotation (list[tuple[A, B]]),
+        # not flatten to the base name 'tuple', so the C++ list subscript read
+        # rebuilds the concrete tuple struct instead of erasing it to void* and
+        # crashing on the unpack (#5444). Other element types (dict, scalars)
+        # keep the base-name form so get_typet(base) resolves correctly.
+        if self._is_concrete_tuple_ann(elem_ann):
+            slice_node = elem_ann
+        else:
+            actual_base = base_name if base_name and base_name != "Any" else "Any"
+            slice_node = ast.Name(id=actual_base, ctx=ast.Load())
         annotation = ast.Subscript(
             value=ast.Name(id="list", ctx=ast.Load()),
-            slice=ast.Name(id=actual_base, ctx=ast.Load()),
+            slice=slice_node,
             ctx=ast.Load(),
         )
         method_call = ast.Call(
@@ -1462,7 +1479,10 @@ class LoopMixin:
             return
 
         tmp_name = f"ESBMC_items_elt_{list_var}"
-        tuple_ann = ast.Name(id="tuple", ctx=ast.Load())
+        # Keep the full tuple annotation (tuple[A, B]) for the temp when known,
+        # so the key/value struct type is concrete instead of erased (#5444).
+        tuple_ann = (elem_ann if self._is_concrete_tuple_ann(elem_ann) else ast.Name(
+            id="tuple", ctx=ast.Load()))
         body.append(
             self._create_var_subscript_assign(node, tmp_name, list_var, index_var, tuple_ann))
         unpack = ast.Assign(
@@ -1761,6 +1781,40 @@ class LoopMixin:
 
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
+
+        # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
+        # are tuples, so materialize d.keys() into an annotated
+        # list[<key_ann>] intermediate first. That lets the C++ list subscript
+        # read recover the concrete tuple element type from the list annotation
+        # (the working list-of-tuples path) instead of erasing it to void* and
+        # crashing on the unpack (#5444). Scoped to dicts whose key annotation
+        # is concrete; a bare/unknown key type falls through to the existing
+        # scalar-key handling below.
+        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
+                and isinstance(node.iter, ast.Name)):
+            key_ann, _ = self._get_dict_kv_types(node.iter.id)
+            if self._get_base_type_name(key_ann) not in ("Any", None):
+                keys_var = f"ESBMC_keys_{loop_id}"
+                list_ann = ast.Subscript(value=ast.Name(id="list", ctx=ast.Load()),
+                                         slice=key_ann,
+                                         ctx=ast.Load())
+                keys_assign = ast.AnnAssign(
+                    target=ast.Name(id=keys_var, ctx=ast.Store()),
+                    annotation=list_ann,
+                    value=ast.Call(func=ast.Attribute(value=node.iter, attr="keys", ctx=ast.Load()),
+                                   args=[],
+                                   keywords=[]),
+                    simple=1,
+                )
+                self.ensure_all_locations(keys_assign, node)
+                ast.fix_missing_locations(keys_assign)
+                self.variable_annotations[keys_var] = list_ann
+                node.iter = ast.Name(id=keys_var, ctx=ast.Load())
+                self.ensure_all_locations(node.iter, node)
+                inner = self._transform_iterable_for(node)
+                if not isinstance(inner, list):
+                    inner = [inner]
+                return [keys_assign] + inner
 
         # Handle dict iteration
         if annotation_id in ["dict", "Dict"]:
