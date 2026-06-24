@@ -377,11 +377,12 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     strlen_call.location() = location;
     converter_.add_instruction(strlen_call);
 
-    // Add 1 for null terminator: size = strlen(s) + 1
-    // Use strlen_result.type to ensure exact type match
-    exprt one_const = from_integer(1, strlen_result.get_type());
-    elem_size = exprt("+", strlen_result.get_type());
-    elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+    // Add 1 for null terminator: size = strlen(s) + 1. strlen_result is a
+    // synthetic size_type symbol, so build the addition in IREP2 (V.3).
+    elem_size = build_add(
+      build_symbol(strlen_result),
+      from_integer(1, strlen_result.get_type()),
+      strlen_result.get_type());
   }
   else
   {
@@ -3984,10 +3985,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             strlen_call.location() = item_info.location;
             converter_.add_instruction(strlen_call);
 
-            // Add 1 for null terminator: size = strlen(s) + 1
-            exprt one_const = from_integer(1, strlen_result.get_type());
-            elem_size = exprt("+", strlen_result.get_type());
-            elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+            // Add 1 for null terminator: size = strlen(s) + 1. strlen_result
+            // is a synthetic size_type symbol, so build it in IREP2 (V.3).
+            elem_size = build_add(
+              build_symbol(strlen_result),
+              from_integer(1, strlen_result.get_type()),
+              strlen_result.get_type());
           }
 
           break; // Found string array type, use it
