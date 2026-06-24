@@ -1311,6 +1311,59 @@ work; the §5 priority order stands.
 
 ---
 
+> **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
+> §32 (PR #5585, `bytes.hex()`), §33 (PR #5588, `str.encode()`/`bytes.decode()`), and §34 (PR
+> #5592, `int.to_bytes()` receiver forms) are in flight and not yet on `master`; this sweep is
+> appended as §35. Its fix is in flight as PR #5597. When all land, the maintainer orders
+> §30 → §31 → §32 → §33 → §34 → §35.
+
+## 35. 2026-06-24 re-validation (twenty-fifth sweep) & int.from_bytes default signed
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.from_bytes()` defect catalogued in §34b.
+
+### 35a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, "big")` (the common 2-argument form) raised an uncaught `TypeError`.**
+
+The counterexample was an uncaught exception, not a wrong value: the `int.py` operational model's
+`from_bytes(cls, bytes_data, big_endian, signed)` had no default for `signed`, so the preprocessor's
+missing-argument check rejected the 2-argument call before the model ran. CPython's signature is
+`int.from_bytes(bytes, byteorder, *, signed=False)`; the model's arithmetic was already correct (the
+*explicit*-signed form `int.from_bytes(b, "big", False)`, exercised by the pre-existing
+`int_from_bytes` regression test, verified).
+
+**Fix** (`models/int.py`): give the model's `signed` parameter the matching `False` default. One
+line; the preprocessor's `functionDefaults` mechanism then supplies it for the 2-argument form. No
+arithmetic change — a trivial literal (default-value) change, so no Mode C is required. The model is
+FLAIL-mangled, so the binary was rebuilt before testing.
+
+New regression pair `regression/python/int_from_bytes_default_signed{,_fail}` (CORE) covering the
+2-argument default form, the `signed=False` keyword, big/little endian, a leading zero, and a single
+byte; the positive test is the liveness witness (uncaught-exception `FAILED` pre-fix). Verified
+bit-for-bit against CPython; the existing `int_from_bytes` (explicit-signed) test still passes;
+pylint clean on the model; the focused `regression/python/(int_|bytes|from_bytes|to_bytes)` ctest
+subset (31 tests) shows zero new failures.
+
+(Methodology note: the V.3 `python_expr` IREP2 expr-builder module was considered for this fix, but
+the defect turned out to be a missing argument default — an uncaught `TypeError` — not an
+expr-construction problem, so no new exprs are built and the builder does not apply here.)
+
+### 35b. Next candidate & everything else: unchanged disposition
+Two `from_bytes` sub-defects surfaced once the exception was removed and are the obvious **next
+candidates**: (1) a bytes **literal passed directly as the argument** — `int.from_bytes(b"\x00\xff",
+"big")` — still fails because the constant byte-array argument is not materialized for the model
+call (the variable form works); this is the constant-array-arg materialization path, where the
+`python_expr` IREP2 builders (`build_symbol`/`build_address_of`) *would* apply. (2) The `signed=True`
+two's-complement negative path and the `byteorder=` keyword form (the model parameter is named
+`big_endian`). Smaller adjacent entries: `bytes.hex(sep)` separator arguments, multi-byte (non-ASCII)
+UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still
+stands. Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
 > **Note on numbering.** §16–§29 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554, #5555, #5556, #5558, #5562, #5563) precede this section; this sweep is appended as §30.
 > Its fix is in flight as PR #5577 and not yet on `master`.
