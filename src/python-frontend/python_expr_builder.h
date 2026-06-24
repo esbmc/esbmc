@@ -55,6 +55,10 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t);
 // `arr[idx]` with element type taken from the source array's subtype.
 exprt build_index(const exprt &arr, const exprt &idx);
 
+// Boolean negation `not op`, `op` a bool-typed value. migrate lowers a legacy
+// "not" node to not2tc(migrate(op)), so this is the byte-identical round-trip.
+exprt build_not(const exprt &op);
+
 // `a < b` over same-width operands (lessthan2t asserts width consistency).
 exprt build_less_than(const exprt &a, const exprt &b);
 

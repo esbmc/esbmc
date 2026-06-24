@@ -126,6 +126,16 @@ exprt build_index(const exprt &arr, const exprt &idx)
   return build_index(arr, idx, arr.type().subtype());
 }
 
+// `not op`, `op` a bool-typed value. migrate lowers a legacy "not" node to
+// not2tc(migrate(op)) (util/migrate.cpp i_not path), so this is the
+// byte-identical round-trip.
+exprt build_not(const exprt &op)
+{
+  expr2tc op2;
+  migrate_expr(op, op2);
+  return migrate_expr_back(not2tc(op2));
+}
+
 // `a < b` over synthetic same-width operands. migrate lowers a legacy "<" node
 // to lessthan2tc(migrate(a), migrate(b)) with no coercion (util/migrate.cpp
 // i_lt path), so this is the byte-identical round-trip.
