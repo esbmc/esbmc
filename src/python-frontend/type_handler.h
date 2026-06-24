@@ -89,8 +89,10 @@ inline exprt complex_to_bool_expr(const exprt &complex_expr)
   expr2tc zero2;
   migrate_expr(from_double(0.0, dt), zero2);
 
-  expr2tc real_nz = not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
-  expr2tc imag_nz = not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
+  expr2tc real_nz =
+    not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
+  expr2tc imag_nz =
+    not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
   return migrate_expr_back(or2tc(real_nz, imag_nz));
 }
 
