@@ -86,14 +86,14 @@ def round(x: float, decimals: int = 0) -> float:
 
     scaled: float = x * scale
     integer: int = math.floor(scaled)
-    fraction: float = scaled - float(integer)
+    fraction: float = scaled - (integer + 0.0)
     if fraction < 0.5:
-        return float(integer) / scale
+        return (integer + 0.0) / scale
     if fraction > 0.5:
-        return float(integer + 1) / scale
+        return (integer + 1.0) / scale
     if integer % 2 == 0:
-        return float(integer) / scale
-    return float(integer + 1) / scale
+        return (integer + 0.0) / scale
+    return (integer + 1.0) / scale
 
 
 def sin(x: float) -> float:
@@ -153,7 +153,7 @@ def tanh(x: float) -> float:
 
 
 def rint(x: float) -> float:
-    return float(round(x))
+    return round(x) + 0.0
 
 
 def remainder(x: float, y: float) -> float:
@@ -165,11 +165,41 @@ def nextafter(x: float, y: float) -> float:
 
 
 def modf(x: float) -> tuple[float, float]:
-    return math.modf(x)
+    fraction = x
+    integer = 0
+    if fraction >= 0.0:
+        while fraction >= 1.0:
+            fraction = fraction - 1.0
+            integer = integer + 1
+    else:
+        while fraction <= -1.0:
+            fraction = fraction + 1.0
+            integer = integer - 1
+    return fraction, integer + 0.0
 
 
 def frexp(x: float) -> tuple[float, int]:
-    return math.frexp(x)
+    if x == 0.0:
+        return 0.0, 0
+
+    exponent = 0
+    fraction = x
+    abs_fraction = fraction
+    if fraction < 0.0:
+        abs_fraction = 0.0 - fraction
+    while abs_fraction >= 1.0:
+        fraction = fraction / 2.0
+        exponent = exponent + 1
+        abs_fraction = fraction
+        if fraction < 0.0:
+            abs_fraction = 0.0 - fraction
+    while abs_fraction < 0.5:
+        fraction = fraction * 2.0
+        exponent = exponent - 1
+        abs_fraction = fraction
+        if fraction < 0.0:
+            abs_fraction = 0.0 - fraction
+    return fraction, exponent
 
 
 def isclose(
@@ -362,16 +392,23 @@ def logical_not(a: Any) -> Any:
         out: list[Any] = []
         i = 0
         while i < len(a):
-            out = out + [not bool(a[i])]
+            if bool(a[i]):
+                out = out + [False]
+            else:
+                out = out + [True]
             i = i + 1
         return out
-    return not bool(a)
+    if bool(a):
+        return False
+    return True
 
 
 def sum(a: Any, axis: int = -1) -> Any:
     if isinstance(a, list):
-        total = 0
-        i = 0
+        if len(a) == 0:
+            return 0
+        total = a[0]
+        i = 1
         while i < len(a):
             total = total + a[i]
             i = i + 1
@@ -381,10 +418,12 @@ def sum(a: Any, axis: int = -1) -> Any:
 
 def prod(a: Any, axis: int = -1) -> Any:
     if isinstance(a, list):
-        result = 1
-        i = 0
+        if len(a) == 0:
+            return 1
+        result = a[0] + 0.0
+        i = 1
         while i < len(a):
-            result = result * a[i]
+            result = result * (a[i] + 0.0)
             i = i + 1
         return result
     return a
@@ -420,12 +459,14 @@ def max(a: Any, axis: int = -1) -> Any:
 
 def mean(a: Any, axis: int = -1) -> Any:
     if isinstance(a, list):
-        total = 0
-        i = 0
+        if len(a) == 0:
+            return 0.0
+        total = a[0] + 0.0
+        i = 1
         while i < len(a):
-            total = total + a[i]
+            total = total + (a[i] + 0.0)
             i = i + 1
-        return total / float(len(a))
+        return total / (len(a) + 0.0)
     return a
 
 
@@ -468,7 +509,7 @@ def where(cond: Any, x: Any, y: Any) -> Any:
         while i < len(cond):
             x_item = x[i] if isinstance(x, list) else x
             y_item = y[i] if isinstance(y, list) else y
-            out = out + [x_item if cond[i] else y_item]
+            out = out + [x_item if bool(cond[i]) else y_item]
             i = i + 1
         return out
     if cond:
@@ -572,11 +613,11 @@ def linspace(start: float, stop: float, num: int = 50) -> list[float]:
     if num == 1:
         return [start]
 
-    step = (stop - start) / float(num - 1)
+    step = (stop - start) / (num - 1 + 0.0)
     out: list[float] = []
     i: int = 0
     while i < num:
-        out = out + [start + (step * float(i))]
+        out = out + [start + (step * (i + 0.0))]
         i = i + 1
     return out
 
