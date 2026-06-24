@@ -344,8 +344,7 @@ class ModuleRewriteMixin:
         while stack:
             n = stack.pop()
             yield n
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                              ast.ClassDef)):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
                 continue
             stack.extend(ast.iter_child_nodes(n))
 

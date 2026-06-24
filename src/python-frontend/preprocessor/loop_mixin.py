@@ -1481,8 +1481,8 @@ class LoopMixin:
         tmp_name = f"ESBMC_items_elt_{list_var}"
         # Keep the full tuple annotation (tuple[A, B]) for the temp when known,
         # so the key/value struct type is concrete instead of erased (#5444).
-        tuple_ann = (elem_ann if self._is_concrete_tuple_ann(elem_ann)
-                     else ast.Name(id="tuple", ctx=ast.Load()))
+        tuple_ann = (elem_ann if self._is_concrete_tuple_ann(elem_ann) else ast.Name(
+            id="tuple", ctx=ast.Load()))
         body.append(
             self._create_var_subscript_assign(node, tmp_name, list_var, index_var, tuple_ann))
         unpack = ast.Assign(
@@ -1790,20 +1790,20 @@ class LoopMixin:
         # crashing on the unpack (#5444). Scoped to dicts whose key annotation
         # is concrete; a bare/unknown key type falls through to the existing
         # scalar-key handling below.
-        if (annotation_id in ["dict", "Dict"]
-                and isinstance(node.target, (ast.Tuple, ast.List))
+        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
                 and isinstance(node.iter, ast.Name)):
             key_ann, _ = self._get_dict_kv_types(node.iter.id)
             if self._get_base_type_name(key_ann) not in ("Any", None):
                 keys_var = f"ESBMC_keys_{loop_id}"
                 list_ann = ast.Subscript(value=ast.Name(id="list", ctx=ast.Load()),
-                                         slice=key_ann, ctx=ast.Load())
+                                         slice=key_ann,
+                                         ctx=ast.Load())
                 keys_assign = ast.AnnAssign(
                     target=ast.Name(id=keys_var, ctx=ast.Store()),
                     annotation=list_ann,
-                    value=ast.Call(
-                        func=ast.Attribute(value=node.iter, attr="keys", ctx=ast.Load()),
-                        args=[], keywords=[]),
+                    value=ast.Call(func=ast.Attribute(value=node.iter, attr="keys", ctx=ast.Load()),
+                                   args=[],
+                                   keywords=[]),
                     simple=1,
                 )
                 self.ensure_all_locations(keys_assign, node)
