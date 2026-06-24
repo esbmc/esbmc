@@ -4341,17 +4341,18 @@ exprt function_call_expr::handle_general_function_call()
         temp_decl.location() = location;
         converter_.current_block->copy_to_operands(temp_decl);
 
-        // Assign the character to the first element
+        // Assign the character to the first element. temp_array is a synthetic
+        // resolved char array, so build the subscripts in IREP2 (V.3).
         exprt temp_array = build_symbol(temp_symbol);
         exprt first_element =
-          index_exprt(temp_array, from_integer(0, size_type()));
+          build_index(temp_array, from_integer(0, size_type()));
         code_assignt assign_char(first_element, arg);
         assign_char.location() = location;
         converter_.current_block->copy_to_operands(assign_char);
 
         // Assign null terminator to the second element
         exprt second_element =
-          index_exprt(temp_array, from_integer(1, size_type()));
+          build_index(temp_array, from_integer(1, size_type()));
         code_assignt assign_null(second_element, from_integer(0, char_type()));
         assign_null.location() = location;
         converter_.current_block->copy_to_operands(assign_null);
