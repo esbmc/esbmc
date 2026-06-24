@@ -5634,18 +5634,16 @@ void python_list::handle_list_var_unpacking(
     size_call.location() = loc;
     target_block.copy_to_operands(size_call);
 
-    // upper = size - after_star
+    // upper = size - after_star. size_var and the literal are both size_type
+    // (synthetic), so build the subtraction in IREP2 (V.3).
     exprt upper_expr;
     if (after_star > 0)
-    {
-      upper_expr = exprt("-", size_type());
-      upper_expr.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star, size_type()));
-    }
+      upper_expr = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star, size_type()),
+        size_type());
     else
-    {
       upper_expr = build_symbol(size_var);
-    }
 
     // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
     symbolt &loop_idx = converter_.create_tmp_symbol(
@@ -5722,10 +5720,12 @@ void python_list::handle_list_var_unpacking(
     for (size_t j = 0; j < after_star; j++)
     {
       size_t target_idx = static_cast<size_t>(star_idx) + 1 + j;
-      // index = size - after_star + j
-      exprt after_idx = exprt("-", size_type());
-      after_idx.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star - j, size_type()));
+      // index = size - (after_star - j). size_var and the literal are both
+      // size_type (synthetic), so build the subtraction in IREP2 (V.3).
+      exprt after_idx = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star - j, size_type()),
+        size_type());
       exprt list_at = build_list_at_call(list_expr, after_idx, list_value_);
       exprt val = extract_pyobject_value(list_at, elem_type);
       assign_to_target(targets[target_idx], val);
