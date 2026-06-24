@@ -897,6 +897,12 @@ exprt python_dict_handler::create_dict_from_literal(
     // expressions, f-strings, comprehensions). Treat any such case — and any
     // non-float result — as "not all float": the integer/void* path is the
     // safe default, so declining the float optimization here is sound.
+    // Catch (...) rather than (const std::exception &): on macOS/clang a
+    // std::runtime_error thrown by get_typet escaped a base-class catch across
+    // the translation-unit boundary, crashing convert() with "ERROR: Invalid
+    // type" (a homogeneous-key dict with a lambda value, e.g. github_3690).
+    // The catch-all matches via the unwinder without consulting type_info, so
+    // it always intercepts the throw and falls back to the integer path.
     try
     {
       if (!type_handler_.get_typet(value_node).is_floatbv())
@@ -905,7 +911,7 @@ exprt python_dict_handler::create_dict_from_literal(
         break;
       }
     }
-    catch (const std::exception &)
+    catch (...)
     {
       all_values_float = false;
       break;
