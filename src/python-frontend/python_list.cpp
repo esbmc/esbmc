@@ -5085,9 +5085,10 @@ void python_list::set_list_symbolic_size(
   {
     if (comp.get_name() == "size")
     {
-      // Create assignment: list->size = n
-      dereference_exprt deref(list_expr, pointee_type);
-      member_exprt size_member(deref, comp.get_name(), comp.type());
+      // Create assignment: list->size = n. pointee_type is a resolved struct
+      // (followed and checked above), so build *(list).size in IREP2 (V.3).
+      exprt deref = build_dereference(list_expr, pointee_type);
+      exprt size_member = build_member(deref, comp.get_name(), comp.type());
       exprt size_value = build_typecast(size_expr, comp.type());
       code_assignt size_assignment(size_member, size_value);
 
