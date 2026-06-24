@@ -2851,9 +2851,10 @@ exprt python_list::handle_index_access(
     exprt array_size = to_array_type(resolved_array_type).size();
     if (array_size.type() != size_type())
       array_size = build_typecast(array_size, size_type());
-    exprt one = from_integer(1, size_type());
-    exprt str_len = exprt("-", size_type());
-    str_len.copy_to_operands(array_size, one);
+    // str_len = array_size - 1. array_size is typecast to size_type above, so
+    // both operands share width; build the subtraction in IREP2 (V.3).
+    exprt str_len =
+      build_sub(array_size, from_integer(1, size_type()), size_type());
 
     // Emit: if (idx >= str_len) throw IndexError("string index out of range")
     // (idx is typecast to size_type above; str_len is a size_type subtraction —
