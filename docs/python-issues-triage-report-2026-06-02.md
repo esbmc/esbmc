@@ -1308,3 +1308,57 @@ model" entries. The §3 design-level blockers, §3c policy-banned timeouts, §3d
 expectation, and the infeasible `hashlib` case all stand. No further isolated, soundly-fixable
 point fix beyond those candidates is available on current `master` without the §5 architectural
 work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §16–§29 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556, #5558, #5562, #5563) precede this section; this sweep is appended as §30.
+> Its fix is in flight as PR #5577 and not yet on `master`.
+
+## 30. 2026-06-24 re-validation (twentieth sweep) & list(str) constructor
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep implemented the `list("abc")` candidate named in §29b — the direct sibling of §29's
+`tuple(str)`, on the `list()` constructor path.
+
+### 30a. New isolated, soundly-fixable defect found & fixed
+**`list("abc")` (the `list()` constructor over a constant string) crashed with `migrate expr
+failed`.**
+
+CPython yields `list("ab") == ['a', 'b']`, but ESBMC crashed: the string array fell through the
+`list()` operand dispatch (which handled empty / `range` / list-typed / tuple operands) into the
+generic call builder, which mistyped the `char` array as a `PyListObject` pointer.
+
+**Fix** (`converter/converter_funcall.cpp`): in the `list(...)` handler, fold a constant-string
+operand to a `List` AST of single-character `Constant`s and recurse through the proven `[]`
+list-literal path (reusing `build_char_sequence_node`, hoisted from §29's `tuple(str)` fix in
+`function_call/expr.cpp` into the dependency-free `json_utils.h` as a template — a net
+de-duplication). The fold is gated on a char-element operand (`subtype() == char_type()`), so a
+`bytes` literal — modelled as a 64-bit int array (`type_handler.cpp` `build_array(long_long_int
+_type())`) — is excluded: CPython `list(b"ab") == [97, 98]` (ints), not chars.
+
+**Code review (the same boundary §29 flagged) recommended pinning the bytes case.** `list(b"ab")`
+previously fell through to the generic builder and *crashed* (`migrate expr failed`); it is now
+rejected with a clean `ERROR: list() over a bytes object is not supported; bytes elements are
+integers, not characters` (exit 254) — a §5-item-5 crash→diagnostic that also pins the str-only
+soundness boundary of the fold, mirroring §29's `tuple_from_bytes_unsupported`.
+
+This **restores a working feature** (`list(str)` now verifies with the right elements) and removes
+an adjacent crash. New regression tests `regression/python/list_from_str{,_fail}` (CORE) and
+`list_from_bytes_unsupported`; the positive `list_from_str` test is the **Py-Live** liveness
+witness for both added branches (pre-fix it crashed). Verified bit-for-bit against CPython for
+literal/variable/empty-string and the `list(list)`/`list(tuple)` non-regression; CPython sanity
+passes; the focused `regression/python/{list,tuple,str,string}*` ctest subset (739 tests) shows
+zero new failures (the 50 failing are the pre-existing `--z3`/`--ir`/`--boolector` environmental
+set on this Bitwuzla-only `ENABLE_Z3=OFF` build). Code-reviewed (0 critical/major). Solver-agnostic
+(constant-fold + dispatch guard in the frontend, no SMT-encoding change).
+
+### 30b. Next candidate & everything else: unchanged disposition
+The `list(str)`/`tuple(str)` char-sequence lowering is now complete on both constructor paths. The
+obvious **next candidate** is `str.encode()` / `bytes.decode()` / `bytes.hex()` — the bytes/encoding
+family deferred since §22b–§29b (the now-clean `list(bytes)`/`tuple(bytes)` boundaries make a proper
+bytes-iteration model the natural next step). Other deferred candidates stand: `zip()` (unmodelled),
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.to_bytes()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), `str.isascii()` (string-soundness), and the
+numeric-tower *properties*. The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
