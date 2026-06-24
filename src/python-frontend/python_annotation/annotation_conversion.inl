@@ -1778,6 +1778,12 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return get_string_method_return_type(method);
     }
 
+    // bytes.hex() returns a str (hex digits), not bytes.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "hex")
+      return "str";
+
     return obj_type;
   }
 
@@ -2307,6 +2313,11 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "str" && call["func"].contains("attr") &&
       (call["func"]["attr"] == "split" || call["func"]["attr"] == "rsplit"))
       return "list";
+    // bytes.hex() returns a str (hex digits), not bytes.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "hex")
+      return "str";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.
     // When that fails (no default arg supplied, e.g. ``d.get(key)``),
