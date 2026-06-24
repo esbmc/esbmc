@@ -3,6 +3,7 @@
 #include <json_utils.h>
 #include <python_class_builder.h>
 #include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/python_expr_builder.h>
 #include <type_utils.h>
 #include <util/std_expr.h>
 #include <util/expr_util.h>
@@ -10,6 +11,8 @@
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/symbol.h>
+
+using namespace python_expr;
 
 // Extracts the last identifier in a dotted name, e.g. "pkg.sub.Base" → "Base"
 std::string python_class_builder::leaf(const std::string &dotted)
@@ -269,8 +272,10 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
       continue;
 
     const typet &comp_type = st.get_component(attr).type();
-    dereference_exprt deref(symbol_expr(self_sym), st);
-    member_exprt member(deref, attr, comp_type);
+    // st is a resolved struct (the class type), so build *(self).attr in
+    // IREP2 (V.3).
+    exprt deref = build_dereference(symbol_expr(self_sym), st);
+    exprt member = build_member(deref, attr, comp_type);
 
     exprt value = conv_.get_expr(n["value"]);
     if (value.type() != comp_type)
