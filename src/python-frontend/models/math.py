@@ -502,8 +502,16 @@ def modf(x: float) -> tuple[float, float]:
     """
     Split x into fractional and integer parts
     """
-    int_part: float = float(int(x))
-    frac_part: float = x - int_part
+    frac_part: float = x
+    int_part: float = 0.0
+    if frac_part >= 0.0:
+        while frac_part >= 1.0:
+            frac_part = frac_part - 1.0
+            int_part = int_part + 1.0
+    else:
+        while frac_part <= -1.0:
+            frac_part = frac_part + 1.0
+            int_part = int_part - 1.0
     return (frac_part, int_part)
 
 
