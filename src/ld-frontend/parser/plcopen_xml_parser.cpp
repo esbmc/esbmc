@@ -1,7 +1,10 @@
 #include <ld-frontend/parser/plcopen_xml_parser.h>
 #include <pugixml.hpp>
 #include <cassert>
+#include <iostream>
 #include <unordered_map>
+#include <functional>
+#include <set>
 
 // -----------------------------------------------------------------------
 // Internal helpers
@@ -108,6 +111,20 @@ VarDecl PlcopenXmlParser::parse_var_decl(const void *node_ptr)
     type_str = "BOOL";
   v.kind = var_kind_from_string(type_str);
   v.loc = loc_from_node(n, source_file_);
+
+  // OpenPLC / CONTROLLINO export all variables as <localVars> with hardware
+  // addresses: %IX... = physical input, %QX... = physical output.
+  // Use the address attribute to set is_input / is_output when the parent
+  // tag does not already encode direction (inputVars / outputVars).
+  std::string addr = n.attribute("address").as_string("");
+  if (!addr.empty())
+  {
+    if (addr.rfind("%I", 0) == 0 || addr.rfind("%i", 0) == 0)
+      v.is_input = true;
+    else if (addr.rfind("%Q", 0) == 0 || addr.rfind("%q", 0) == 0)
+      v.is_output = true;
+  }
+
   return v;
 }
 
@@ -228,6 +245,231 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
   }
   return rung;
 }
+// -----------------------------------------------------------------------
+// Graphical LD (tc6_0201) resolver
+// -----------------------------------------------------------------------
+// In graphical PLCopen XML the ladder logic is encoded as a connection
+// graph: each element carries a localId and its inputs are listed as
+// <connection refLocalId="..."/> children.  The textual <rung> wrapper
+// is absent.  We resolve the graph with a DFS from every leftPowerRail
+// to every coil, convert each rail-to-coil path into a series contact
+// chain (AND), and combine parallel paths to the same coil with OR by
+// emitting multiple single-element rungs (the GOTO-IR emitter already
+// OR-combines multiple rungs that write the same output coil).
+//
+// Returns true if the LD body contained graphical elements and rungs
+// were successfully extracted; false if this is a textual LD body.
+
+struct GNode
+{
+  std::string tag;        // "contact", "coil", "leftPowerRail", "block", ...
+  std::string var;        // variable name (contacts and coils)
+  bool negated = false;   // normally-closed contact
+  std::string storage;    // "set", "reset", or "" for normal coil
+  std::vector<int> feeds; // forward edges (this node feeds these localIds)
+};
+
+static bool parse_graphical_ld(
+  const pugi::xml_node &ld_body,
+  NetworkNode &net,
+  const std::string &source_file)
+{
+  // Step 1: collect all top-level elements and detect graphical format.
+  // A graphical LD body has <contact>, <coil>, <leftPowerRail> as direct
+  // children; a textual LD body has <rung> children.
+  bool has_rung = false;
+  bool has_graphical = false;
+  for (auto child : ld_body.children())
+  {
+    std::string t = child.name();
+    if (t == "rung" || t == "Rung")
+      has_rung = true;
+    if (t == "leftPowerRail" || t == "contact" || t == "coil")
+      has_graphical = true;
+  }
+  if (has_rung || !has_graphical)
+    return false; // textual or empty — handled by existing parse_rung path
+
+  // Step 2: build node table indexed by localId.
+  std::unordered_map<int, GNode> nodes;
+  for (auto child : ld_body.children())
+  {
+    std::string t = child.name();
+    int lid = child.attribute("localId").as_int(-1);
+    if (lid < 0)
+      continue;
+
+    GNode g;
+    g.tag = t;
+    // Variable name
+    if (auto v = child.child("variable"))
+      g.var = v.child_value();
+    // Negated contact
+    std::string neg_attr = child.attribute("negated").as_string("");
+    g.negated = (neg_attr == "true" || neg_attr == "negated");
+    // Coil storage kind
+    std::string storage_attr = child.attribute("storage").as_string("");
+    if (storage_attr.empty())
+    {
+      if (t == "SetCoil")
+        storage_attr = "set";
+      if (t == "ResetCoil")
+        storage_attr = "reset";
+    }
+    g.storage = storage_attr;
+    // Back-edges: <connection refLocalId="X"/> means X feeds this node
+    // We collect them now and build forward edges below.
+    nodes[lid] = g;
+  }
+
+  // Step 3: build forward edges from backward (refLocalId) edges.
+  // <connection refLocalId="X"/> is nested inside <connectionPointIn>,
+  // so we use select_nodes to find all <connection> descendants.
+  for (auto child : ld_body.children())
+  {
+    int lid = child.attribute("localId").as_int(-1);
+    if (lid < 0 || nodes.find(lid) == nodes.end())
+      continue;
+    for (auto conn_node : child.select_nodes(".//connection"))
+    {
+      auto conn = conn_node.node();
+      int src = conn.attribute("refLocalId").as_int(-1);
+      if (src >= 0 && nodes.count(src))
+        nodes[src].feeds.push_back(lid);
+    }
+  }
+
+  // Step 4: DFS from every leftPowerRail to every coil.
+  // Each path becomes one RungNode with one contact per step + one coil.
+  int rung_counter = 0;
+
+  std::function<void(int, int, std::vector<int> &, std::set<int> &)> dfs =
+    [&](int cur, int target, std::vector<int> &path, std::set<int> &visited) {
+      if (cur == target)
+      {
+        // Emit one RungNode for this path.
+        // path contains nodes from leftRail up to (not including) target.
+        // We append target here so the coil is included.
+        RungNode rung;
+        rung.id = "g" + std::to_string(rung_counter++);
+        rung.loc = {source_file, 0, 0};
+
+        // Refuse paths containing unsupported non-contact elements (e.g. timer
+        // or FB outputs). Silently skipping them would produce a weaker, vacuous
+        // model; emitting a diagnostic and dropping the path is safer.
+        for (int nid : path)
+        {
+          const GNode &g = nodes.at(nid);
+          if (g.tag != "contact" && g.tag != "leftPowerRail")
+          {
+            std::cerr << "warning: graphical LD: rung path contains "
+                      << "unsupported element '" << g.tag << "'"
+                      << (g.var.empty() ? "" : " (var=" + g.var + ")")
+                      << " — FB/timer outputs on rail→coil paths are not yet "
+                      << "modelled; skipping path to avoid a vacuous model.\n";
+            return;
+          }
+        }
+
+        // Emit contacts from the path
+        for (int nid : path)
+        {
+          const GNode &g = nodes.at(nid);
+          if (g.tag != "contact")
+            continue;
+          RungElement elem;
+          elem.loc = {source_file, 0, 0};
+          elem.kind = RungElementKind::Contact;
+          elem.contact.kind =
+            g.negated ? ContactKind::NormallyClosed : ContactKind::NormallyOpen;
+          elem.contact.variable = g.var;
+          elem.contact.loc = elem.loc;
+          rung.elements.push_back(elem);
+        }
+
+        // Emit the coil (target node)
+        {
+          const GNode &g = nodes.at(target);
+          RungElement elem;
+          elem.loc = {source_file, 0, 0};
+          elem.kind = RungElementKind::Coil;
+          if (g.storage == "set")
+            elem.coil.kind = CoilKind::Set;
+          else if (g.storage == "reset")
+            elem.coil.kind = CoilKind::Reset;
+          else
+            elem.coil.kind = CoilKind::Output;
+          elem.coil.variable = g.var;
+          elem.coil.loc = elem.loc;
+          rung.elements.push_back(elem);
+        }
+
+        if (!rung.elements.empty())
+          net.rungs.push_back(rung);
+        return;
+      }
+
+      if (visited.count(cur))
+        return;
+      visited.insert(cur);
+      path.push_back(cur);
+
+      for (int nxt : nodes.at(cur).feeds)
+        dfs(nxt, target, path, visited);
+
+      path.pop_back();
+      visited.erase(cur);
+    };
+
+  // Find all left rails
+  std::vector<int> left_rails;
+  for (auto &[lid, g] : nodes)
+    if (g.tag == "leftPowerRail")
+      left_rails.push_back(lid);
+
+  // Collect coils in rightPowerRail order (defines scan execution order).
+  // The rightPowerRail's <connectionPointIn> children list the coils in order.
+  std::vector<int> coils;
+  std::set<int> coils_seen;
+  for (auto rpr : ld_body.children("rightPowerRail"))
+  {
+    for (auto cpi : rpr.select_nodes(".//connection"))
+    {
+      int cid = cpi.node().attribute("refLocalId").as_int(-1);
+      if (
+        cid >= 0 && nodes.count(cid) &&
+        (nodes.at(cid).tag == "coil" || nodes.at(cid).tag == "SetCoil" ||
+         nodes.at(cid).tag == "ResetCoil") &&
+        !coils_seen.count(cid))
+      {
+        coils.push_back(cid);
+        coils_seen.insert(cid);
+      }
+    }
+  }
+  // Add any coils not connected to rightPowerRail
+  for (auto &[lid, g] : nodes)
+    if (
+      (g.tag == "coil" || g.tag == "SetCoil" || g.tag == "ResetCoil") &&
+      !coils_seen.count(lid))
+      coils.push_back(lid);
+
+  // NOTE: the DFS enumerates all simple paths from each leftPowerRail to each
+  // coil. The number of paths is exponential in the number of parallel branches.
+  // This is tractable for the small graphical LD programs evaluated here; larger
+  // vendor exports with many parallel rungs may need a path-count guard.
+  for (int rail : left_rails)
+    for (int coil : coils)
+    {
+      std::vector<int> path;
+      std::set<int> visited;
+      // Start from each node that the rail feeds
+      for (int nxt : nodes.at(rail).feeds)
+        dfs(nxt, coil, path, visited);
+    }
+
+  return true;
+}
 
 NetworkNode PlcopenXmlParser::parse_network(const void *node_ptr)
 {
@@ -240,6 +482,12 @@ NetworkNode PlcopenXmlParser::parse_network(const void *node_ptr)
     net.rungs.push_back(parse_rung(&rung));
   for (auto rung : n.children("Rung"))
     net.rungs.push_back(parse_rung(&rung));
+
+  // Graphical LD (tc6_0201): if no textual <rung> children were found,
+  // attempt to extract rung logic from the connection graph.
+  if (net.rungs.empty())
+    parse_graphical_ld(n, net, source_file_);
+
   return net;
 }
 
@@ -327,22 +575,71 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     }
   }
 
-  // Parse networks (one per POU body)
-  for (auto xpath_node : root.select_nodes("//pou/body/LD"))
+  // Parse networks (one per POU body, plus one per SFC/transition action
+  // body). Beremiz and other vendor tools commonly place the rung-bearing
+  // <LD> network inside <pou><actions><action><body><LD>, not directly
+  // under <pou><body>, when the LD logic is invoked from an SFC step
+  // action rather than forming the POU's own top-level body. Both
+  // locations must be searched, or the action-nested rungs are silently
+  // skipped and the program verifies vacuously (no rung assignments,
+  // all variables at their zero-initialised default).
+  for (auto xpath_node :
+       root.select_nodes("//pou/body/LD | //pou/actions/action/body/LD"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
     if (net.name.empty())
-      net.name = "main";
+    {
+      pugi::xml_node action_node = body_node.parent().parent();
+      std::string action_name = (std::string)action_node.name() == "action"
+                                  ? text_or_attr(action_node, "name", "name")
+                                  : "";
+      net.name = action_name.empty() ? "main" : action_name;
+    }
     ast.networks.push_back(std::move(net));
   }
-  for (auto xpath_node : root.select_nodes("//pou/body/ladderDiagram"))
+  for (auto xpath_node :
+       root.select_nodes("//pou/body/ladderDiagram | "
+                         "//pou/actions/action/body/ladderDiagram"))
   {
     pugi::xml_node body_node = xpath_node.node();
     NetworkNode net = parse_network(&body_node);
     if (net.name.empty())
-      net.name = "main";
+    {
+      pugi::xml_node action_node = body_node.parent().parent();
+      std::string action_name = (std::string)action_node.name() == "action"
+                                  ? text_or_attr(action_node, "name", "name")
+                                  : "";
+      net.name = action_name.empty() ? "main" : action_name;
+    }
     ast.networks.push_back(std::move(net));
+  }
+
+  // Heuristic I/O inference for graphical LD programs without hardware
+  // addresses (%IX/%QX). Variables that appear only as contacts across all
+  // networks are treated as inputs; variables that appear only as coils are
+  // treated as outputs. This covers tutorial and simulation programs that
+  // declare all variables as <localVars> without address attributes.
+  {
+    std::set<std::string> contact_vars, coil_vars;
+    for (const auto &net : ast.networks)
+      for (const auto &rung : net.rungs)
+        for (const auto &elem : rung.elements)
+        {
+          if (elem.kind == RungElementKind::Contact)
+            contact_vars.insert(elem.contact.variable);
+          if (elem.kind == RungElementKind::Coil)
+            coil_vars.insert(elem.coil.variable);
+        }
+    for (auto &v : ast.variables)
+    {
+      if (v.is_input || v.is_output)
+        continue;
+      if (contact_vars.count(v.name) && !coil_vars.count(v.name))
+        v.is_input = true;
+      else if (coil_vars.count(v.name) && !contact_vars.count(v.name))
+        v.is_output = true;
+    }
   }
 
   return ast;

@@ -38,40 +38,6 @@ using namespace python_expr;
 
 namespace
 {
-// Build a List/Tuple AST node whose elements are the single-character strings
-// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
-// list/tuple-literal path. Location fields are copied from @p loc_src.
-nlohmann::json build_char_sequence_node(
-  const char *kind,
-  const std::string &chars,
-  const nlohmann::json &loc_src)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto copy_loc = [&](nlohmann::json &node) {
-    for (const char *k : loc_keys)
-      if (loc_src.contains(k))
-        node[k] = loc_src[k];
-  };
-
-  nlohmann::json node;
-  node["_type"] = kind;
-  node["elts"] = nlohmann::json::array();
-  for (const char ch : chars)
-  {
-    nlohmann::json elt;
-    elt["_type"] = "Constant";
-    elt["value"] = std::string(1, ch);
-    copy_loc(elt);
-    node["elts"].push_back(elt);
-  }
-  copy_loc(node);
-  return node;
-}
-} // namespace
-
-namespace
-{
 // Constants for UTF-8 encoding
 
 // Constants for symbol parsing

@@ -1,0 +1,25 @@
+\begin{table}[t]
+\centering
+\caption{ESBMC-PLC+ vs NuXmv BDD and IC3 — performance comparison on IEC~61131-3 LD benchmarks. ESBMC uses \textit{k}-induction with Z3; NuXmv BDD uses CUDD-based BDD reachability; NuXmv IC3 uses the IC3/PDR algorithm. Timeout: 120\,s. INT columns show the number of integer-valued timer/counter state variables.}
+\label{tab:nuxmv_comparison}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrr|rr|rr|rr}
+\toprule
+\multirow{2}{*}{\textbf{Benchmark}} & \multirow{2}{*}{\textbf{INT}} & \multirow{2}{*}{\textbf{Rungs}} & \multirow{2}{*}{\textbf{Props}} &
+\multicolumn{2}{c|}{\textbf{ESBMC-PLC+ ($k$-ind)}} &
+\multicolumn{2}{c|}{\textbf{NuXmv BDD}} &
+\multicolumn{2}{c}{\textbf{NuXmv IC3}} \\
+ & & & & \textbf{Result} & \textbf{Time} & \textbf{Result} & \textbf{Time} & \textbf{Result} & \textbf{Time} \\
+\midrule
+\textsc{TankLevel} (safe) & 0 & 4 & 5 & \cellcolor{green!20}\checkmark SAFE & 0.051s & \cellcolor{green!20}\checkmark SAFE & 0.040s & \cellcolor{green!20}\checkmark SAFE & 0.064s \\
+\textsc{TankLevel} (unsafe) & 0 & 4 & 5 & \cellcolor{green!20}\checkmark VIOLATION & 0.036s & \cellcolor{green!20}\checkmark VIOLATION & 0.043s & \cellcolor{green!20}\checkmark VIOLATION & 0.050s \\
+\textsc{BottleFill} (safe) & 2 & 10 & 6 & \cellcolor{green!20}\checkmark SAFE & 0.042s & \cellcolor{green!20}\checkmark SAFE & 85.663s & \cellcolor{green!20}\checkmark SAFE & 102.294s \\
+\textsc{BottleFill} (unsafe) & 2 & 9 & 6 & \cellcolor{green!20}\checkmark VIOLATION & 0.196s & \cellcolor{green!20}\checkmark VIOLATION & 86.268s & \cellcolor{green!20}\checkmark VIOLATION & 102.959s \\
+\textsc{Elevator} (safe) & 2 & 16 & 8 & \cellcolor{green!20}\checkmark SAFE & 0.185s & \cellcolor{green!20}\checkmark SAFE & 85.984s & \cellcolor{green!20}\checkmark SAFE & 106.823s \\
+\textsc{Elevator} (unsafe) & 2 & 14 & 6 & \cellcolor{green!20}\checkmark VIOLATION & 0.044s & \cellcolor{green!20}\checkmark VIOLATION & 87.780s & \cellcolor{green!20}\checkmark VIOLATION & 102.265s \\
+\textsc{TrafLight} (safe) & 8 & 21 & 8 & \cellcolor{green!20}\checkmark SAFE & 0.187s & \textbf{TIMEOUT} & $>$120s & \textbf{TIMEOUT} & $>$120s \\
+\textsc{TrafLight} (unsafe) & 8 & 20 & 8 & \cellcolor{green!20}\checkmark VIOLATION & 0.014s & \textbf{TIMEOUT} & $>$120s & \textbf{TIMEOUT} & $>$120s \\
+\bottomrule
+\end{tabular}
+}
+\end{table}

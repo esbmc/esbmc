@@ -159,7 +159,37 @@ void ld_languaget::show_parse(std::ostream &out)
   {
     out << "Network '" << net.name << "': " << net.rungs.size() << " rungs\n";
     for (const auto &rung : net.rungs)
+    {
       out << "  Rung " << rung.id << ": " << rung.elements.size()
-          << " elements\n";
+          << " elements : ";
+      std::string contacts;
+      std::vector<std::pair<std::string, std::string>> coils;
+      bool first = true;
+      for (const auto &elem : rung.elements)
+      {
+        if (elem.kind == RungElementKind::Contact)
+        {
+          if (!first)
+            contacts += " && ";
+          first = false;
+          if (elem.contact.kind == ContactKind::NormallyClosed)
+            contacts += "!";
+          contacts += elem.contact.variable;
+        }
+        else if (elem.kind == RungElementKind::Coil)
+        {
+          std::string kind =
+            elem.coil.kind == CoilKind::Set
+              ? "SET"
+              : (elem.coil.kind == CoilKind::Reset ? "RESET" : "=");
+          coils.emplace_back(kind, elem.coil.variable);
+        }
+      }
+      if (coils.empty())
+        out << contacts << "  ->  (no coil)\n";
+      else
+        for (const auto &[kind, var] : coils)
+          out << contacts << "  ->  " << kind << " " << var << "\n";
+    }
   }
 }

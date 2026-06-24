@@ -55,6 +55,10 @@ exprt build_index(const exprt &arr, const exprt &idx, const typet &t);
 // `arr[idx]` with element type taken from the source array's subtype.
 exprt build_index(const exprt &arr, const exprt &idx);
 
+// Boolean negation `not op`, `op` a bool-typed value. migrate lowers a legacy
+// "not" node to not2tc(migrate(op)), so this is the byte-identical round-trip.
+exprt build_not(const exprt &op);
+
 // `a < b` over same-width operands (lessthan2t asserts width consistency).
 exprt build_less_than(const exprt &a, const exprt &b);
 
@@ -67,6 +71,11 @@ exprt build_greater_than(const exprt &a, const exprt &b);
 // `a >= b` over same-width operands (greaterthanequal2t asserts width
 // consistency).
 exprt build_greater_equal(const exprt &a, const exprt &b);
+
+// Boolean disjunction `a || b`, both operands bool-typed. migrate lowers a
+// legacy binary "or" node to or2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip.
+exprt build_or(const exprt &a, const exprt &b);
 
 // `a + b : t` over same-width operands (add2t asserts width consistency).
 exprt build_add(const exprt &a, const exprt &b, const typet &t);
