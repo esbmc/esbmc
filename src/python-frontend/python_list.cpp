@@ -3217,7 +3217,9 @@ exprt python_list::compare(
                               const symbolt *rhs_list,
                               std::size_t depth,
                               expr2tc &result) -> bool {
-      if (!lhs_list || !rhs_list || depth > 8)
+      if (
+        !lhs_list || !rhs_list ||
+        depth >= static_cast<std::size_t>(get_list_compare_depth()))
         return false;
 
       const std::string lhs_list_id = resolve_map_id(lhs_list);
