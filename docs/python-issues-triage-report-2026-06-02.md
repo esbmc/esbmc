@@ -1308,3 +1308,56 @@ model" entries. The §3 design-level blockers, §3c policy-banned timeouts, §3d
 expectation, and the infeasible `hashlib` case all stand. No further isolated, soundly-fixable
 point fix beyond those candidates is available on current `master` without the §5 architectural
 work; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §30 (PR #5577, `list(str)` constructor) is in flight and not yet on
+> `master`; this sweep is appended as §31. Its fix is in flight as PR #5579. When both land, the
+> maintainer orders §30 → §31.
+
+## 31. 2026-06-24 re-validation (twenty-first sweep) & int/float numeric-tower properties
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep implemented the numeric-tower *properties* deferred since §22b — the attribute-access
+(not method-call) members of the int/float numeric tower.
+
+### 31a. New isolated, soundly-fixable defect found & fixed
+**`int.numerator`/`denominator`/`real`/`imag` and `float.real`/`imag` raised a spurious
+`AttributeError`.**
+
+`(5).numerator`, `(5).denominator`, `(5).real`, `(5).imag`, `(2.5).real`, `(2.5).imag` all failed
+with `AttributeError: '<x>' has no attribute '<attr>'`: int/float symbol types are not class
+structs, so attribute access fell through to the not-a-class error path (`converter_expr.cpp`). A
+program reading any of these properties errored out rather than verifying.
+
+**Fix** (`converter/converter_expr.cpp`): intercept in the instance-attribute branch, beside the
+existing complex `.real`/`.imag` delegation. For an int/float-typed symbol, return the known
+constant — `real`/`numerator` give the value unchanged (a real number is its own real part; an int
+is the ratio n/1), `imag` is `0` (`0.0` for float), `denominator` is `1` (int only). `float.numera
+tor`/`denominator` deliberately fall through to a clean `AttributeError` — `float` is not a
+`Rational` in CPython. `bool` (type id `bool`, not `signedbv`) is intentionally excluded and stays
+a clean `AttributeError`.
+
+Like §16a–§20a/§30a this **restores a working feature** (the values are trivially sound — self/0/1)
+rather than only converting a crash to a diagnostic. New regression tests
+`regression/python/numeric_tower_properties{,_fail}` (CORE; the positive test is the liveness
+witness — it errored pre-fix) and `numeric_tower_float_no_numerator_fail` (pins the float
+boundary). Verified bit-for-bit against CPython for int/float, negatives, and the wrong-value
+FAILED case; expression/chained receivers (`(4-1).numerator`, `x.real.numerator`) remain
+pre-existing clean errors (general attribute-on-BinOp / nested-attribute limitations, out of
+scope). CPython sanity passes; the focused
+`regression/python/(int|float|complex|numeric|conjugate|attr|class|real|imag|bit_)` ctest subset
+(194 tests) is 100% green — zero regressions in the attribute-access path. Code-reviewed (0
+critical/major). Solver-agnostic (a frontend constant-fold in attribute resolution, no SMT
+encoding).
+
+### 31b. Next candidate & everything else: unchanged disposition
+The numeric-tower **properties** are now complete; the remaining numeric-tower work is the
+bytes/encoding family — `str.encode()` / `bytes.decode()` / `bytes.hex()` — the obvious **next
+candidate** (a wrong-verdict cluster needing a bytes-iteration model; `bytes.hex()` over a constant
+bytes literal is the most isolated entry, foldable to a constant hex string). Other deferred
+candidates stand: `zip()` (unmodelled — confirmed still `SUCCESSFUL` only on simple forms),
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.to_bytes()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
