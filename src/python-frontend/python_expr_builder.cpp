@@ -161,6 +161,17 @@ exprt build_greater_equal(const exprt &a, const exprt &b)
   return migrate_expr_back(greaterthanequal2tc(a2, b2));
 }
 
+// `a || b`, both operands bool-typed. migrate lowers a legacy binary "or" node
+// to or2tc(migrate(a), migrate(b)) (util/migrate.cpp i_or path), so this is the
+// byte-identical round-trip.
+exprt build_or(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(or2tc(a2, b2));
+}
+
 exprt build_add(const exprt &a, const exprt &b, const typet &t)
 {
   expr2tc a2, b2;
