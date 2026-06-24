@@ -3550,8 +3550,7 @@ exprt python_dict_handler::compare(
 
   if (op == "NotEq")
   {
-    exprt negated("not", bool_type());
-    negated.move_to_operands(result);
+    exprt negated = build_not(result);
     negated.location() = location;
     return negated;
   }
