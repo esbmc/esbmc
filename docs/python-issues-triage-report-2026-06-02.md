@@ -1364,6 +1364,97 @@ The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
 
 ---
 
+> **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
+> and §32 (PR #5585, `bytes.hex()`) are in flight and not yet on `master`; this sweep is appended
+> as §33. Its fix is in flight as PR #5588. When all land, the maintainer orders §30 → §31 → §32 →
+> §33.
+
+## 33. 2026-06-24 re-validation (twenty-third sweep) & str.encode()/bytes.decode()
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep continued the bytes/encoding family from §32b with the str↔bytes codec round-trip.
+
+### 33a. New isolated, soundly-fixable defect found & fixed
+**Standalone `str.encode()` and `bytes.decode()` reported a spurious `VERIFICATION FAILED`.**
+
+Only the round-trip `s.encode().decode()` was modelled (it returns the original string expr);
+`"abc".encode()` and `b"abc".decode()` used standalone were unmodelled → lowered to the
+unsupported-function `assert(false)` → `FAILED` (wrong-verdict class).
+
+**Fix** (`string/string_method_handler.cpp`, in `dispatch_decode_join_method`): fold a constant str
+to its UTF-8/ASCII bytes (`encode`) and a constant bytes object to its str (`decode`), gated on
+**ASCII** (`< 0x80`) where the byte sequence equals the characters in both directions. Non-ASCII /
+non-UTF-8 falls through to the existing clean error — CPython raises `UnicodeDecodeError` / needs
+multi-byte encoding there too, so no wrong value is produced. A new `extract_constant_bytes` helper
+resolves a bytes *variable* to its literal and **rejects an unresolved symbol** (a `bytes`
+parameter, or a value not stored as a constant) so it cannot silently mis-fold to `""` — a
+soundness gap caught in code review; a genuine `b""` literal is a constant array (not a symbol), so
+empty-bytes folding is preserved. `get_type_from_method` maps `str.encode → bytes` and
+`bytes.decode → str` at all three receiver sites (Constant, BinOp via `get_string_method_return_type`,
+builtin/variable) so the assignment target is typed correctly (the `#5114` mistyping guard).
+
+Like §16a–§20a/§30a/§32a this **restores a working feature**. The existing `s.encode().decode()`
+round-trip is unchanged (its block returns before the new standalone code). New regression pair
+`regression/python/bytes_encode_decode{,_fail}` (CORE); the positive test is the liveness witness
+(FAILED pre-fix) and covers literal/variable receivers, `len`/index, the explicit `utf-8` argument,
+and the round-trip. Verified bit-for-bit against CPython; a `bytes` parameter receiver correctly
+falls through (no silent `""`); CPython sanity passes; the focused
+`regression/python/(str|string|bytes|encode|decode)` ctest subset (457 tests) shows zero new
+failures (the 12 failing are the pre-existing `--z3`/`--ir`/`--boolector` environmental set on this
+Bitwuzla-only build). Code-reviewed (1 medium soundness finding fixed before commit; 0 remaining).
+Solver-agnostic (a frontend constant-fold, no SMT encoding).
+
+### 33b. Next candidate & everything else: unchanged disposition
+The str↔bytes ASCII codec is now complete (`hex`/`encode`/`decode`). The obvious continuations are
+**`bytes.hex(sep)`** (the optional separator/`bytes_per_sep` arguments) and **`int.to_bytes()` /
+`int.from_bytes()`** (variable-length byte arrays — the **next candidate**, the last sizeable
+bytes-family entry). Multi-byte (non-ASCII) UTF-8 encode/decode is a larger follow-up. A
+separately-tracked, out-of-scope `len`/`strlen` concern remains: `len()` of an *inline* string
+method result (`len(b"..".decode())`, `len("..".replace(...))`) mis-measures even though the value
+is correct (§14b). Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
+> **Note on numbering.** §30–§36 (PRs #5577/#5579/#5585/#5588/#5592/#5597 and the #5599 triage
+> finding) are in flight and not yet on `master`; this sweep is appended as §37. Its fix is in
+> flight as PR #5601.
+
+## 37. 2026-06-24 (twenty-seventh sweep) & int.from_bytes signed=True sign-byte fix
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the cleaner `signed=True` candidate named in §36b (avoiding the §36a literal-arg
+lowering work by using variable receivers).
+
+### 37a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, "big", signed=True)` crashed and was logically wrong for big-endian.**
+
+The two's-complement path reported `dereference failure: array bounds violated`, and even the cases
+that did not crash were wrong for big-endian. The model located the sign bit with `bytes_data[-1]`:
+(1) Python **negative indexing** is not supported by the OM — `bytes_data[-1]` read out of bounds
+(the crash); (2) the most-significant byte, which carries the sign, is **byte 0** for big-endian, not
+the last byte, so `bytes([255, 0])` big-endian (CPython `-256`) was mis-evaluated independently of the
+crash.
+
+**Fix** (`models/int.py`): index the sign byte directly — `0` for big-endian, `bytes_len - 1` for
+little-endian — via a ternary (no new branch, so Mode C is not engaged), and reuse the already-computed
+`bytes_len`. This **restores a working feature** (signed `from_bytes` now matches CPython) and removes
+the crash. New regression pair `regression/python/int_from_bytes_signed{,_fail}` (CORE) covering
+big/little endian, positive/negative, single/multi-byte, the big-endian sign-in-first-byte case, and
+the unaffected `signed=False` path; the positive test is the liveness witness. Verified bit-for-bit
+against CPython for all seven cases; CPython sanity passes; pylint clean on the model; the focused
+`regression/python/(int_|from_bytes|bytes)` ctest subset (30 tests) shows zero new failures, and the
+existing `int_from_bytes` (signed=False) test still passes. Independent of the in-flight `from_bytes`
+PRs (#5597 default-signed, #5599 literal-arg triage): the tests use the explicit `signed=` keyword and
+variable receivers, so it verifies on `master` as-is.
+
+### 37b. Next candidate & everything else: unchanged disposition
+With `to_bytes` (§34), the `signed` default (§35) and now signed `from_bytes` (§37) done, the
+remaining `from_bytes` work is the §36a bytes-**literal-argument** lowering (deferred; needs the
+frontend `get_literal` context fix) and the `byteorder=` keyword form (model parameter named
+`big_endian`). A cleaner adjacent candidate is **`bytes.hex(sep)`** (the optional separator /
+`bytes_per_sep` arguments, extending §32's `bytes.hex`, stacked on PR #5585). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `str.maketrans`/`translate`,
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness). The §3 design-level blockers, §3c
 > **Note on numbering.** §30–§37 (PRs #5577/#5579/#5585/#5588/#5592/#5597/#5601 and the #5599 triage
 > finding) are in flight and not yet on `master`; this sweep is appended as §38. Its fix is in
 > flight as PR #5604.
