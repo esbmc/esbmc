@@ -933,11 +933,7 @@ void python_set::emit_filtered_extend(
 
   exprt guard = build_symbol(contains_result);
   if (!want_in_ref)
-  {
-    exprt neg("not", bool_type());
-    neg.copy_to_operands(guard);
-    guard = neg;
-  }
+    guard = build_not(guard);
 
   code_blockt then_block;
   then_block.copy_to_operands(converter.convert_expression_to_code(push_call));
@@ -1052,10 +1048,7 @@ exprt python_set::build_set_relation_call(
   if (disjoint)
     trigger = build_symbol(in);
   else
-  {
-    trigger = exprt("not", bool_type());
-    trigger.copy_to_operands(build_symbol(in));
-  }
+    trigger = build_not(build_symbol(in));
   code_blockt then_block;
   then_block.copy_to_operands(
     code_assignt(build_symbol(result), gen_boolean(false)));

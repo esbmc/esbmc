@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: AttributeError: 'f' has no attribute 'numerator'

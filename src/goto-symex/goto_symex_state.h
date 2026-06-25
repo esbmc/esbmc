@@ -462,7 +462,12 @@ public:
   /// the witness call chain returns) are filtered to avoid false positives.
   bool witness_target_reached;
 
-  /// Advance to the next segment (called when a follow waypoint is matched).
+  /// Pre-built O(1) lookup for branching(cycle) waypoints.
+  /// Maps line_id → direction_true (from wp.value == "true").
+  /// Populated at init time; queried on every forward-goto without touching
+  /// cur_seg (cycle branching is a persistent constraint, not a one-shot).
+  std::unordered_map<irep_idt, bool> cycle_branch_map;
+
   void advance_witness_position();
 };
 
