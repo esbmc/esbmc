@@ -2999,9 +2999,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       else
         size_call.arguments().push_back(address_of_exprt(value_expr));
 
-      exprt cond("notequal", bool_type());
-      cond.copy_to_operands(size_call, gen_zero(size_type()));
-      cond.location() = get_location_from_decl(value_node);
+      // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating once
+      // (mirrors the list-condition path at converter_stmt.cpp:3216). The
+      // round-trip drops the call operand's location, so re-attach it.
+      expr2tc size_call2;
+      migrate_expr(size_call, size_call2);
+      exprt cond = migrate_expr_back(
+        notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
+      const locationt cond_loc = get_location_from_decl(value_node);
+      cond.location() = cond_loc;
+      cond.op0().location() = cond_loc;
       return cond;
     }
 
@@ -3726,9 +3733,12 @@ exprt python_converter::get_block(
         block.copy_to_operands(size_call);
 
         // Replace test with: size != 0 (non-empty dict is truthy)
-        exprt is_not_empty("notequal", bool_type());
-        is_not_empty.copy_to_operands(
-          symbol_expr(size_result), gen_zero(size_type()));
+        // V.3: build `$dict_size$ != 0` in IREP2, back-migrating once
+        // (mirrors the list/string truthiness paths above).
+        expr2tc size2;
+        migrate_expr(symbol_expr(size_result), size2);
+        exprt is_not_empty = migrate_expr_back(
+          notequal2tc(size2, gen_zero(migrate_type(size_type()))));
         is_not_empty.location() = location;
         test = is_not_empty;
       }
