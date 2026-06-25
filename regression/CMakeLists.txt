@@ -310,6 +310,7 @@ else()
                     function_contract
                     witnesses_validate/reachsafety-violationwitness
                     witnesses_validate/reachsafety-correctnesswitness
+                    witnesses_validate/termination-violationwitness
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
@@ -492,6 +493,15 @@ set(_slow_regression_tests
     # the overhead.
     "regression/esbmc/math_log-rec1"
     "regression/esbmc/multi_dimensional_array_1-success"
+    # str_rsplit verifies SUCCESSFUL but is heavy: under --incremental-bmc it
+    # climbs to k=5 before the forward condition converges, re-running symex and
+    # a fresh Bitwuzla query at each step over the str/list operational models
+    # (rsplit + list-equality + __memcmp_impl). It lands at ~106s on the DebugOpt
+    # Linux runner -- right at the 120s cap with no headroom -- so the slower
+    # macOS arm64 runner tips it over (timed out at 120s in #5579 CI, a run that
+    # does not touch its code path). Give it the 2x budget so transient
+    # runner-speed differences don't flap it.
+    "regression/python/str_rsplit"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")

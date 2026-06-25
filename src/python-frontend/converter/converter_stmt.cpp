@@ -4,6 +4,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/python_exception_handler.h>
@@ -132,7 +133,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     const typet lhs_follow = ns.follow(lhs_type);
     if (lhs_follow.is_struct() && ns.follow(rhs_type.subtype()) == lhs_follow)
     {
-      rhs = dereference_exprt(rhs, lhs_type);
+      // V.3: build the deref in IREP2 (byte-identical round-trip; the helper
+      // restores the exact result type and falls back to legacy for dyn-array
+      // pointees).
+      rhs = python_expr::build_dereference(rhs, lhs_type);
       return;
     }
   }
@@ -1001,7 +1005,8 @@ bool python_converter::handle_unpacking_assignment(
       pointed_type.id() == "struct" &&
       tuple_handler_->is_tuple_type(pointed_type))
     {
-      exprt tuple_value = dereference_exprt(rhs, pointed_type);
+      // V.3: build the deref in IREP2 (resolved tuple-struct pointee).
+      exprt tuple_value = python_expr::build_dereference(rhs, pointed_type);
       tuple_value.location() = rhs.location();
       tuple_handler_->handle_tuple_unpacking(
         ast_node, target, tuple_value, target_block);

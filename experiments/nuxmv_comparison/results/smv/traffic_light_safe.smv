@@ -1,0 +1,186 @@
+MODULE main
+
+VAR
+  EW_Green : boolean;
+  EW_Red : boolean;
+  EW_Yellow : boolean;
+  Emergency_Vehicle : boolean;
+  Enable : boolean;
+  NS_Green : boolean;
+  NS_Red : boolean;
+  NS_Yellow : boolean;
+  Ped_EW_Walk : boolean;
+  Ped_NS_Walk : boolean;
+  Ped_Request : boolean;
+  Phase_EW_Green : boolean;
+  Phase_EW_Yellow : boolean;
+  Phase_NS_Green : boolean;
+  Phase_NS_Yellow : boolean;
+  TON1_ET : 0 .. 32767;
+  TON1_IN : boolean;
+  TON1_PT : 0 .. 32767;
+  TON1_Q : boolean;
+  TON2_ET : 0 .. 32767;
+  TON2_IN : boolean;
+  TON2_PT : 0 .. 32767;
+  TON2_Q : boolean;
+  TON3_ET : 0 .. 32767;
+  TON3_IN : boolean;
+  TON3_PT : 0 .. 32767;
+  TON3_Q : boolean;
+  TON4_ET : 0 .. 32767;
+  TON4_IN : boolean;
+  TON4_PT : 0 .. 32767;
+  TON4_Q : boolean;
+
+DEFINE
+  __r0_Phase_NS_Green :=
+    Enable & !(Emergency_Vehicle) & !(Phase_NS_Yellow) & !(Phase_EW_Green) & !(Phase_EW_Yellow);
+  __r1_TON1_IN :=
+    __r0_Phase_NS_Green;
+  __ton_TON1_q_v :=
+    TON1_ET >= TON1_PT;
+  __r3_Phase_NS_Yellow :=
+    __ton_TON1_q_v & !(__r0_Phase_NS_Green) & !(Phase_EW_Green) & !(Phase_EW_Yellow);
+  __r4_TON2_IN :=
+    __r3_Phase_NS_Yellow;
+  __ton_TON2_q_v :=
+    TON2_ET >= TON2_PT;
+  __r6_Phase_EW_Green :=
+    __ton_TON2_q_v & !(__r0_Phase_NS_Green) & !(__r3_Phase_NS_Yellow) & !(Phase_EW_Yellow);
+  __r7_TON3_IN :=
+    __r6_Phase_EW_Green;
+  __ton_TON3_q_v :=
+    TON3_ET >= TON3_PT;
+  __r9_Phase_EW_Yellow :=
+    __ton_TON3_q_v & !(__r0_Phase_NS_Green) & !(__r3_Phase_NS_Yellow) & !(__r6_Phase_EW_Green);
+  __r10_TON4_IN :=
+    __r9_Phase_EW_Yellow;
+  __ton_TON4_q_v :=
+    TON4_ET >= TON4_PT;
+  __r12_NS_Green :=
+    __r0_Phase_NS_Green & !(Emergency_Vehicle);
+  __r13_NS_Yellow :=
+    __r3_Phase_NS_Yellow;
+  __r14_NS_Red :=
+    !(__r0_Phase_NS_Green) & !(__r3_Phase_NS_Yellow);
+  __r15_NS_Red :=
+    Emergency_Vehicle;
+  __r16_EW_Green :=
+    __r6_Phase_EW_Green;
+  __r17_EW_Yellow :=
+    __r9_Phase_EW_Yellow;
+  __r18_EW_Red :=
+    !(__r6_Phase_EW_Green) & !(__r9_Phase_EW_Yellow);
+  __r19_Ped_NS_Walk :=
+    __r0_Phase_NS_Green & !(Emergency_Vehicle) & Ped_Request;
+  __r20_Ped_EW_Walk :=
+    __r6_Phase_EW_Green & Ped_Request;
+
+ASSIGN
+  init(Emergency_Vehicle) := FALSE;
+  init(Enable) := FALSE;
+  init(Ped_Request) := FALSE;
+  next(Emergency_Vehicle) := {TRUE, FALSE};
+  next(Enable) := {TRUE, FALSE};
+  next(Ped_Request) := {TRUE, FALSE};
+  init(TON1_PT) := 0;
+  next(TON1_PT) := TON1_PT;
+  init(TON2_PT) := 0;
+  next(TON2_PT) := TON2_PT;
+  init(TON3_PT) := 0;
+  next(TON3_PT) := TON3_PT;
+  init(TON4_PT) := 0;
+  next(TON4_PT) := TON4_PT;
+  init(TON1_ET) := 0;
+  next(TON1_ET) :=
+    case
+      __r1_TON1_IN & TON1_ET < 32767 : TON1_ET + 1;
+      !(__r1_TON1_IN) : 0;
+      TRUE : TON1_ET;
+    esac;
+  init(TON2_ET) := 0;
+  next(TON2_ET) :=
+    case
+      __r4_TON2_IN & TON2_ET < 32767 : TON2_ET + 1;
+      !(__r4_TON2_IN) : 0;
+      TRUE : TON2_ET;
+    esac;
+  init(TON3_ET) := 0;
+  next(TON3_ET) :=
+    case
+      __r7_TON3_IN & TON3_ET < 32767 : TON3_ET + 1;
+      !(__r7_TON3_IN) : 0;
+      TRUE : TON3_ET;
+    esac;
+  init(TON4_ET) := 0;
+  next(TON4_ET) :=
+    case
+      __r10_TON4_IN & TON4_ET < 32767 : TON4_ET + 1;
+      !(__r10_TON4_IN) : 0;
+      TRUE : TON4_ET;
+    esac;
+  init(EW_Green) := FALSE;
+  next(EW_Green) := __r16_EW_Green;
+  init(EW_Red) := FALSE;
+  next(EW_Red) := __r18_EW_Red;
+  init(EW_Yellow) := FALSE;
+  next(EW_Yellow) := __r17_EW_Yellow;
+  init(NS_Green) := FALSE;
+  next(NS_Green) := __r12_NS_Green;
+  init(NS_Red) := FALSE;
+  next(NS_Red) := __r15_NS_Red;
+  init(NS_Yellow) := FALSE;
+  next(NS_Yellow) := __r13_NS_Yellow;
+  init(Ped_EW_Walk) := FALSE;
+  next(Ped_EW_Walk) := __r20_Ped_EW_Walk;
+  init(Ped_NS_Walk) := FALSE;
+  next(Ped_NS_Walk) := __r19_Ped_NS_Walk;
+  init(Phase_EW_Green) := FALSE;
+  next(Phase_EW_Green) := __r6_Phase_EW_Green;
+  init(Phase_EW_Yellow) := FALSE;
+  next(Phase_EW_Yellow) := __r9_Phase_EW_Yellow;
+  init(Phase_NS_Green) := FALSE;
+  next(Phase_NS_Green) := __r0_Phase_NS_Green;
+  init(Phase_NS_Yellow) := FALSE;
+  next(Phase_NS_Yellow) := __r3_Phase_NS_Yellow;
+  init(TON1_IN) := FALSE;
+  next(TON1_IN) := __r1_TON1_IN;
+  init(TON1_Q) := FALSE;
+  next(TON1_Q) := __ton_TON1_q_v;
+  init(TON2_IN) := FALSE;
+  next(TON2_IN) := __r4_TON2_IN;
+  init(TON2_Q) := FALSE;
+  next(TON2_Q) := __ton_TON2_q_v;
+  init(TON3_IN) := FALSE;
+  next(TON3_IN) := __r7_TON3_IN;
+  init(TON3_Q) := FALSE;
+  next(TON3_Q) := __ton_TON3_q_v;
+  init(TON4_IN) := FALSE;
+  next(TON4_IN) := __r10_TON4_IN;
+  init(TON4_Q) := FALSE;
+  next(TON4_Q) := __ton_TON4_q_v;
+
+-- P1: NS and EW must never both show Green simultaneously
+INVARSPEC !(__r12_NS_Green & __r16_EW_Green);
+
+-- P2: NS pedestrian walk must not coincide with EW Green
+INVARSPEC !(__r19_Ped_NS_Walk & __r16_EW_Green);
+
+-- P3: EW pedestrian walk must not coincide with NS Green
+INVARSPEC !(__r20_Ped_EW_Walk & __r12_NS_Green);
+
+-- P4: NS must never show Green and Red simultaneously
+INVARSPEC !(__r12_NS_Green & __r15_NS_Red);
+
+-- P5: EW must never show Green and Red simultaneously
+INVARSPEC !(__r16_EW_Green & __r18_EW_Red);
+
+-- P6: Global safety: at most one direction can have Green
+INVARSPEC !__r12_NS_Green | !__r16_EW_Green;
+
+-- P7: NS pedestrian walk only active when NS is Green
+INVARSPEC !__r19_Ped_NS_Walk | __r12_NS_Green;
+
+-- P8: EW pedestrian walk only active when EW is Green
+INVARSPEC !__r20_Ped_EW_Walk | __r16_EW_Green;

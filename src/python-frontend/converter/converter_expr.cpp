@@ -1006,6 +1006,32 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
+      // Numeric-tower properties on int/float (attribute access returning a
+      // known constant). A real number is its own real part with a zero
+      // imaginary part; CPython additionally exposes int as the ratio n/1 via
+      // numerator/denominator. float has no numerator/denominator (it is not a
+      // Rational), so those fall through to the AttributeError below.
+      {
+        const typet &num_t = symbol->get_type();
+        const bool is_int = num_t.is_signedbv() || num_t.is_unsignedbv();
+        const bool is_float = num_t.is_floatbv();
+        if (is_int || is_float)
+        {
+          if (attr_name == "real" || (is_int && attr_name == "numerator"))
+            break; // value is unchanged — expr already holds it
+          if (attr_name == "imag")
+          {
+            expr = is_float ? from_double(0.0, num_t) : from_integer(0, num_t);
+            break;
+          }
+          if (is_int && attr_name == "denominator")
+          {
+            expr = from_integer(1, num_t);
+            break;
+          }
+        }
+      }
+
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
       const typet &symbol_type = (symbol->get_type().is_pointer())

@@ -377,11 +377,12 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     strlen_call.location() = location;
     converter_.add_instruction(strlen_call);
 
-    // Add 1 for null terminator: size = strlen(s) + 1
-    // Use strlen_result.type to ensure exact type match
-    exprt one_const = from_integer(1, strlen_result.get_type());
-    elem_size = exprt("+", strlen_result.get_type());
-    elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+    // Add 1 for null terminator: size = strlen(s) + 1. strlen_result is a
+    // synthetic size_type symbol, so build the addition in IREP2 (V.3).
+    elem_size = build_add(
+      build_symbol(strlen_result),
+      from_integer(1, strlen_result.get_type()),
+      strlen_result.get_type());
   }
   else
   {
@@ -2851,9 +2852,10 @@ exprt python_list::handle_index_access(
     exprt array_size = to_array_type(resolved_array_type).size();
     if (array_size.type() != size_type())
       array_size = build_typecast(array_size, size_type());
-    exprt one = from_integer(1, size_type());
-    exprt str_len = exprt("-", size_type());
-    str_len.copy_to_operands(array_size, one);
+    // str_len = array_size - 1. array_size is typecast to size_type above, so
+    // both operands share width; build the subtraction in IREP2 (V.3).
+    exprt str_len =
+      build_sub(array_size, from_integer(1, size_type()), size_type());
 
     // Emit: if (idx >= str_len) throw IndexError("string index out of range")
     // (idx is typecast to size_type above; str_len is a size_type subtraction —
@@ -4095,10 +4097,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             strlen_call.location() = item_info.location;
             converter_.add_instruction(strlen_call);
 
-            // Add 1 for null terminator: size = strlen(s) + 1
-            exprt one_const = from_integer(1, strlen_result.get_type());
-            elem_size = exprt("+", strlen_result.get_type());
-            elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+            // Add 1 for null terminator: size = strlen(s) + 1. strlen_result
+            // is a synthetic size_type symbol, so build it in IREP2 (V.3).
+            elem_size = build_add(
+              build_symbol(strlen_result),
+              from_integer(1, strlen_result.get_type()),
+              strlen_result.get_type());
           }
 
           break; // Found string array type, use it
@@ -5196,9 +5200,10 @@ void python_list::set_list_symbolic_size(
   {
     if (comp.get_name() == "size")
     {
-      // Create assignment: list->size = n
-      dereference_exprt deref(list_expr, pointee_type);
-      member_exprt size_member(deref, comp.get_name(), comp.type());
+      // Create assignment: list->size = n. pointee_type is a resolved struct
+      // (followed and checked above), so build *(list).size in IREP2 (V.3).
+      exprt deref = build_dereference(list_expr, pointee_type);
+      exprt size_member = build_member(deref, comp.get_name(), comp.type());
       exprt size_value = build_typecast(size_expr, comp.type());
       code_assignt size_assignment(size_member, size_value);
 
@@ -5745,18 +5750,16 @@ void python_list::handle_list_var_unpacking(
     size_call.location() = loc;
     target_block.copy_to_operands(size_call);
 
-    // upper = size - after_star
+    // upper = size - after_star. size_var and the literal are both size_type
+    // (synthetic), so build the subtraction in IREP2 (V.3).
     exprt upper_expr;
     if (after_star > 0)
-    {
-      upper_expr = exprt("-", size_type());
-      upper_expr.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star, size_type()));
-    }
+      upper_expr = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star, size_type()),
+        size_type());
     else
-    {
       upper_expr = build_symbol(size_var);
-    }
 
     // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
     symbolt &loop_idx = converter_.create_tmp_symbol(
@@ -5833,10 +5836,12 @@ void python_list::handle_list_var_unpacking(
     for (size_t j = 0; j < after_star; j++)
     {
       size_t target_idx = static_cast<size_t>(star_idx) + 1 + j;
-      // index = size - after_star + j
-      exprt after_idx = exprt("-", size_type());
-      after_idx.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star - j, size_type()));
+      // index = size - (after_star - j). size_var and the literal are both
+      // size_type (synthetic), so build the subtraction in IREP2 (V.3).
+      exprt after_idx = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star - j, size_type()),
+        size_type());
       exprt list_at = build_list_at_call(list_expr, after_idx, list_value_);
       exprt val = extract_pyobject_value(list_at, elem_type);
       assign_to_target(targets[target_idx], val);
