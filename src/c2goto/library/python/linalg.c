@@ -8,6 +8,12 @@
 // All arrays are stored row-major contiguous in memory
 void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
 {
+  if (m == 1 && n == 1 && p == 1)
+  {
+    *C = (*A) * (*B);
+    return;
+  }
+
   int64_t i = 0;
   while (i < m)
   {
@@ -37,6 +43,12 @@ void dot_double(
   int64_t n,
   int64_t p)
 {
+  if (m == 1 && n == 1 && p == 1)
+  {
+    *C = (*A) * (*B);
+    return;
+  }
+
   int64_t i = 0;
   while (i < m)
   {

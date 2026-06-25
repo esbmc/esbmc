@@ -358,6 +358,10 @@ std::string python_annotation<Json>::get_string_method_return_type(
   if (method == "split" || method == "rsplit")
     return "list";
 
+  // str.encode() returns a bytes object, not str.
+  if (method == "encode")
+    return "bytes";
+
   // partition()/rpartition() return a 3-tuple (before, sep, after). Map to
   // "tuple", which resolves to an empty type so the concrete struct type of the
   // 3-tuple produced by handle_string_partition is copied onto the target
@@ -1784,6 +1788,12 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       call["func"]["attr"] == "hex")
       return "str";
 
+    // bytes.decode() returns a str.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "decode")
+      return "str";
+
     return obj_type;
   }
 
@@ -2317,6 +2327,15 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
     if (
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "hex")
+      return "str";
+    // str.encode() returns bytes; bytes.decode() returns str.
+    if (
+      obj_type == "str" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "encode")
+      return "bytes";
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "decode")
       return "str";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.

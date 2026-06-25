@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <regex>
 #include <stdexcept>
@@ -35,40 +36,6 @@
 
 using namespace json_utils;
 using namespace python_expr;
-
-namespace
-{
-// Build a List/Tuple AST node whose elements are the single-character strings
-// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
-// list/tuple-literal path. Location fields are copied from @p loc_src.
-nlohmann::json build_char_sequence_node(
-  const char *kind,
-  const std::string &chars,
-  const nlohmann::json &loc_src)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto copy_loc = [&](nlohmann::json &node) {
-    for (const char *k : loc_keys)
-      if (loc_src.contains(k))
-        node[k] = loc_src[k];
-  };
-
-  nlohmann::json node;
-  node["_type"] = kind;
-  node["elts"] = nlohmann::json::array();
-  for (const char ch : chars)
-  {
-    nlohmann::json elt;
-    elt["_type"] = "Constant";
-    elt["value"] = std::string(1, ch);
-    copy_loc(elt);
-    node["elts"].push_back(elt);
-  }
-  copy_loc(node);
-  return node;
-}
-} // namespace
 
 namespace
 {
@@ -3540,6 +3507,12 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
+  const bool is_numpy_model_call = [](const std::string &filename) {
+    std::string normalized = filename;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    return boost::algorithm::ends_with(
+      normalized, std::string{"/models/numpy.py"});
+  }(function_id_.get_filename());
 
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
@@ -3582,8 +3555,9 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   if (
-    !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
-                          (func_name == "sum" && (n_args == 1 || n_args == 2))))
+    !is_user_imported && !is_numpy_model_call &&
+    ((is_sorted_min_max && n_args == 1) ||
+     (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
@@ -4341,17 +4315,19 @@ exprt function_call_expr::handle_general_function_call()
         temp_decl.location() = location;
         converter_.current_block->copy_to_operands(temp_decl);
 
-        // Assign the character to the first element
+        // Assign the character to the first element. V.3: build the index in
+        // IREP2 (resolved array-typed symbol source) — the byte-identical
+        // round-trip of index_exprt(temp_array, .., char_type()).
         exprt temp_array = build_symbol(temp_symbol);
         exprt first_element =
-          index_exprt(temp_array, from_integer(0, size_type()));
+          build_index(temp_array, from_integer(0, size_type()));
         code_assignt assign_char(first_element, arg);
         assign_char.location() = location;
         converter_.current_block->copy_to_operands(assign_char);
 
         // Assign null terminator to the second element
         exprt second_element =
-          index_exprt(temp_array, from_integer(1, size_type()));
+          build_index(temp_array, from_integer(1, size_type()));
         code_assignt assign_null(second_element, from_integer(0, char_type()));
         assign_null.location() = location;
         converter_.current_block->copy_to_operands(assign_null);

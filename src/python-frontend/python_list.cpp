@@ -377,11 +377,12 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     strlen_call.location() = location;
     converter_.add_instruction(strlen_call);
 
-    // Add 1 for null terminator: size = strlen(s) + 1
-    // Use strlen_result.type to ensure exact type match
-    exprt one_const = from_integer(1, strlen_result.get_type());
-    elem_size = exprt("+", strlen_result.get_type());
-    elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+    // Add 1 for null terminator: size = strlen(s) + 1. strlen_result is a
+    // synthetic size_type symbol, so build the addition in IREP2 (V.3).
+    elem_size = build_add(
+      build_symbol(strlen_result),
+      from_integer(1, strlen_result.get_type()),
+      strlen_result.get_type());
   }
   else
   {
@@ -689,8 +690,9 @@ void python_list::emit_list_copy(
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  // i = i + 1
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  // i = i + 1 (V.3: synthetic size_type increment, built in IREP2)
+  exprt i_inc =
+    build_add(build_symbol(i_sym), gen_one(size_type()), size_type());
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   // while (i < n) { ... }
@@ -1626,8 +1628,9 @@ exprt python_list::handle_range_slice(
     code_assignt assign(dst, src);
     body.copy_to_operands(assign);
 
-    // i++
-    plus_exprt incr(build_symbol(idx), gen_one(size_type()));
+    // i++ (V.3: synthetic size_type increment, built in IREP2)
+    exprt incr =
+      build_add(build_symbol(idx), gen_one(size_type()), size_type());
     code_assignt update(build_symbol(idx), incr);
     body.copy_to_operands(update);
 
@@ -2851,9 +2854,10 @@ exprt python_list::handle_index_access(
     exprt array_size = to_array_type(resolved_array_type).size();
     if (array_size.type() != size_type())
       array_size = build_typecast(array_size, size_type());
-    exprt one = from_integer(1, size_type());
-    exprt str_len = exprt("-", size_type());
-    str_len.copy_to_operands(array_size, one);
+    // str_len = array_size - 1. array_size is typecast to size_type above, so
+    // both operands share width; build the subtraction in IREP2 (V.3).
+    exprt str_len =
+      build_sub(array_size, from_integer(1, size_type()), size_type());
 
     // Emit: if (idx >= str_len) throw IndexError("string index out of range")
     // (idx is typecast to size_type above; str_len is a size_type subtraction —
@@ -3204,6 +3208,117 @@ exprt python_list::compare(
       }
       return has_int && has_float;
     };
+
+    // Concrete nested lists can be compared directly without forcing the
+    // recursive list operational model. This keeps matrix-style comparisons
+    // from blowing up into large __ESBMC_list_eq trees.
+    const typet list_model_type = converter_.get_type_handler().get_list_type();
+    std::function<bool(
+      const symbolt *, const symbolt *, std::size_t, expr2tc &)>
+      build_nested_equality;
+    build_nested_equality = [&](
+                              const symbolt *lhs_list,
+                              const symbolt *rhs_list,
+                              std::size_t depth,
+                              expr2tc &result) -> bool {
+      if (
+        !lhs_list || !rhs_list ||
+        depth >= static_cast<std::size_t>(get_list_compare_depth()))
+        return false;
+
+      const std::string lhs_list_id = resolve_map_id(lhs_list);
+      const std::string rhs_list_id = resolve_map_id(rhs_list);
+      auto lhs_it = list_type_map.find(lhs_list_id);
+      auto rhs_it = list_type_map.find(rhs_list_id);
+      if (lhs_it == list_type_map.end() || rhs_it == list_type_map.end())
+        return false;
+
+      const std::size_t lhs_size = lhs_it->second.size();
+      const std::size_t rhs_size = rhs_it->second.size();
+      if (lhs_size != rhs_size)
+      {
+        result = gen_false_expr();
+        return true;
+      }
+      if (lhs_size > 64)
+        return false;
+
+      result = gen_true_expr();
+      for (std::size_t i = 0; i < lhs_size; ++i)
+      {
+        const std::string lhs_elem_id = get_list_element_id(lhs_list_id, i);
+        const std::string rhs_elem_id = get_list_element_id(rhs_list_id, i);
+        const symbolt *lhs_elem_sym = converter_.find_symbol(lhs_elem_id);
+        const symbolt *rhs_elem_sym = converter_.find_symbol(rhs_elem_id);
+        if (!lhs_elem_sym || !rhs_elem_sym)
+          return false;
+
+        const typet &lhs_elem_type = lhs_elem_sym->get_type();
+        const typet &rhs_elem_type = rhs_elem_sym->get_type();
+        const bool lhs_is_list = lhs_elem_type == list_model_type;
+        const bool rhs_is_list = rhs_elem_type == list_model_type;
+        expr2tc elem_equal;
+
+        if (lhs_is_list || rhs_is_list)
+        {
+          if (!(lhs_is_list && rhs_is_list))
+            elem_equal = gen_false_expr();
+          else
+          {
+            const std::string lhs_nested_id = resolve_map_id(lhs_elem_sym);
+            const std::string rhs_nested_id = resolve_map_id(rhs_elem_sym);
+            const symbolt *lhs_nested = converter_.find_symbol(lhs_nested_id);
+            const symbolt *rhs_nested = converter_.find_symbol(rhs_nested_id);
+            if (!build_nested_equality(
+                  lhs_nested, rhs_nested, depth + 1, elem_equal))
+              return false;
+          }
+        }
+        else
+        {
+          if (
+            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)) ||
+            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type)))
+            return false;
+
+          const exprt index = from_integer(BigInt(i), size_type());
+          exprt lhs_at =
+            build_list_at_call(build_symbol(*lhs_list), index, list_value_);
+          exprt rhs_at =
+            build_list_at_call(build_symbol(*rhs_list), index, list_value_);
+          exprt lhs_value = extract_pyobject_value(lhs_at, lhs_elem_type);
+          exprt rhs_value = extract_pyobject_value(rhs_at, rhs_elem_type);
+          if (lhs_elem_type != rhs_elem_type)
+          {
+            if (!(is_numeric(lhs_elem_type) && is_numeric(rhs_elem_type)))
+              return false;
+            lhs_value = build_typecast(lhs_value, double_type());
+            rhs_value = build_typecast(rhs_value, double_type());
+          }
+
+          expr2tc lhs_value2, rhs_value2;
+          migrate_expr(lhs_value, lhs_value2);
+          migrate_expr(rhs_value, rhs_value2);
+          elem_equal = equality2tc(lhs_value2, rhs_value2);
+        }
+
+        result = and2tc(result, elem_equal);
+      }
+      return true;
+    };
+
+    const typet lhs_first_type = get_list_element_type(lhs_id, 0);
+    const typet rhs_first_type = get_list_element_type(rhs_id, 0);
+    if (lhs_first_type == list_model_type && rhs_first_type == list_model_type)
+    {
+      expr2tc nested_equal;
+      if (build_nested_equality(lhs_symbol, rhs_symbol, 0, nested_equal))
+      {
+        if (op == "NotEq")
+          nested_equal = not2tc(nested_equal);
+        return migrate_expr_back(nested_equal);
+      }
+    }
 
     if (is_concrete_map(lhs_id) && is_concrete_map(rhs_id))
     {
@@ -3984,10 +4099,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             strlen_call.location() = item_info.location;
             converter_.add_instruction(strlen_call);
 
-            // Add 1 for null terminator: size = strlen(s) + 1
-            exprt one_const = from_integer(1, strlen_result.get_type());
-            elem_size = exprt("+", strlen_result.get_type());
-            elem_size.copy_to_operands(build_symbol(strlen_result), one_const);
+            // Add 1 for null terminator: size = strlen(s) + 1. strlen_result
+            // is a synthetic size_type symbol, so build it in IREP2 (V.3).
+            elem_size = build_add(
+              build_symbol(strlen_result),
+              from_integer(1, strlen_result.get_type()),
+              strlen_result.get_type());
           }
 
           break; // Found string array type, use it
@@ -4161,8 +4278,9 @@ exprt python_list::build_extend_list_call(
     push_call.location() = location;
     loop_body.copy_to_operands(push_call);
 
-    // Increment index: idx++
-    plus_exprt idx_inc(build_symbol(idx), gen_one(size_type()));
+    // Increment index: idx++ (V.3: synthetic size_type increment in IREP2)
+    exprt idx_inc =
+      build_add(build_symbol(idx), gen_one(size_type()), size_type());
     code_assignt idx_update(build_symbol(idx), idx_inc);
     loop_body.copy_to_operands(idx_update);
 
@@ -5085,9 +5203,10 @@ void python_list::set_list_symbolic_size(
   {
     if (comp.get_name() == "size")
     {
-      // Create assignment: list->size = n
-      dereference_exprt deref(list_expr, pointee_type);
-      member_exprt size_member(deref, comp.get_name(), comp.type());
+      // Create assignment: list->size = n. pointee_type is a resolved struct
+      // (followed and checked above), so build *(list).size in IREP2 (V.3).
+      exprt deref = build_dereference(list_expr, pointee_type);
+      exprt size_member = build_member(deref, comp.get_name(), comp.type());
       exprt size_value = build_typecast(size_expr, comp.type());
       code_assignt size_assignment(size_member, size_value);
 
@@ -5634,18 +5753,16 @@ void python_list::handle_list_var_unpacking(
     size_call.location() = loc;
     target_block.copy_to_operands(size_call);
 
-    // upper = size - after_star
+    // upper = size - after_star. size_var and the literal are both size_type
+    // (synthetic), so build the subtraction in IREP2 (V.3).
     exprt upper_expr;
     if (after_star > 0)
-    {
-      upper_expr = exprt("-", size_type());
-      upper_expr.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star, size_type()));
-    }
+      upper_expr = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star, size_type()),
+        size_type());
     else
-    {
       upper_expr = build_symbol(size_var);
-    }
 
     // Loop: for loop_idx = before_star; loop_idx < upper; loop_idx++
     symbolt &loop_idx = converter_.create_tmp_symbol(
@@ -5722,10 +5839,12 @@ void python_list::handle_list_var_unpacking(
     for (size_t j = 0; j < after_star; j++)
     {
       size_t target_idx = static_cast<size_t>(star_idx) + 1 + j;
-      // index = size - after_star + j
-      exprt after_idx = exprt("-", size_type());
-      after_idx.copy_to_operands(
-        build_symbol(size_var), from_integer(after_star - j, size_type()));
+      // index = size - (after_star - j). size_var and the literal are both
+      // size_type (synthetic), so build the subtraction in IREP2 (V.3).
+      exprt after_idx = build_sub(
+        build_symbol(size_var),
+        from_integer(after_star - j, size_type()),
+        size_type());
       exprt list_at = build_list_at_call(list_expr, after_idx, list_value_);
       exprt val = extract_pyobject_value(list_at, elem_type);
       assign_to_target(targets[target_idx], val);
