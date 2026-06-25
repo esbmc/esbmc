@@ -2990,20 +2990,17 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         throw std::runtime_error(
           "__ESBMC_list_size not found for list condition check");
 
-      side_effect_expr_function_callt size_call;
-      size_call.function() = symbol_expr(*size_func);
-      size_call.type() = size_type();
-      size_call.location() = get_location_from_decl(value_node);
-      if (value_expr.type().is_pointer())
-        size_call.arguments().push_back(value_expr);
-      else
-        size_call.arguments().push_back(address_of_exprt(value_expr));
-
       // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating once
-      // (mirrors the list-condition path at converter_stmt.cpp:3216). The
-      // round-trip drops the call operand's location, so re-attach it.
-      expr2tc size_call2;
-      migrate_expr(size_call, size_call2);
+      // (mirrors the list-condition path at converter_stmt.cpp:3216). The call
+      // is built directly in IREP2; it carries no IREP2 location, so the
+      // location is re-attached to the back-migrated operand below.
+      exprt size_arg = value_expr.type().is_pointer()
+                         ? value_expr
+                         : address_of_exprt(value_expr);
+      expr2tc size_arg2;
+      migrate_expr(size_arg, size_arg2);
+      expr2tc size_call2 = side_effect_function_call2tc(
+        migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
       exprt cond = migrate_expr_back(
         notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
       const locationt cond_loc = get_location_from_decl(value_node);
@@ -3213,20 +3210,16 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
         // Keep the size query inside the condition expression so constructs
         // like `while heap:` re-evaluate the current list size every iteration.
-        side_effect_expr_function_callt size_call;
-        size_call.function() = symbol_expr(*size_func);
-        if (cond.type().is_pointer())
-          size_call.arguments().push_back(cond);
-        else
-          size_call.arguments().push_back(address_of_exprt(cond));
-        size_call.type() = size_type();
-        size_call.location() = location;
-
         // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating
         // once (mirrors the list-condition path at converter_binop.cpp:208).
-        // The round-trip drops the call operand's location, so re-attach it.
-        expr2tc size_call2;
-        migrate_expr(size_call, size_call2);
+        // The call is built directly in IREP2; it carries no IREP2 location,
+        // so the location is re-attached to the back-migrated operand below.
+        exprt size_arg =
+          cond.type().is_pointer() ? cond : address_of_exprt(cond);
+        expr2tc size_arg2;
+        migrate_expr(size_arg, size_arg2);
+        expr2tc size_call2 = side_effect_function_call2tc(
+          migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
         cond = migrate_expr_back(
           notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
@@ -3241,18 +3234,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           throw std::runtime_error(
             "strlen not found for string truthiness check");
 
-        side_effect_expr_function_callt strlen_call;
-        strlen_call.function() = symbol_expr(*strlen_sym);
-        strlen_call.arguments().push_back(
-          string_handler_.get_array_base_address(cond));
-        strlen_call.type() = size_type();
-        strlen_call.location() = location;
-
         // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
-        // the string-truthiness path at converter_unop.cpp). Re-attach the
-        // call operand's location that the round-trip drops.
-        expr2tc strlen_call2;
-        migrate_expr(strlen_call, strlen_call2);
+        // the string-truthiness path at converter_unop.cpp). The call is built
+        // directly in IREP2; it carries no IREP2 location, so the location is
+        // re-attached to the back-migrated operand below.
+        expr2tc strlen_arg2;
+        migrate_expr(
+          string_handler_.get_array_base_address(cond), strlen_arg2);
+        expr2tc strlen_call2 = side_effect_function_call2tc(
+          migrate_type(size_type()), symbol_expr2tc(*strlen_sym), {strlen_arg2});
         cond = migrate_expr_back(
           notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
