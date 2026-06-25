@@ -1361,6 +1361,58 @@ symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.t
 `str.maketrans`/`translate`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness).
 The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
 `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §30–§37 (PRs #5577/#5579/#5585/#5588/#5592/#5597/#5601 and the #5599 triage
+> finding) are in flight and not yet on `master`; this sweep is appended as §38. Its fix is in
+> flight as PR #5604.
+
+## 38. 2026-06-24 (twenty-eighth sweep) & str.translate(str.maketrans(...))
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery confirmed `swapcase`/`title`/`zfill`/`removeprefix`/`removesuffix` already verify;
+`str.translate` (and `str.isascii`, withdrawn as unsound in §19a) were the unmodelled ones. This sweep
+took `str.translate` — an independent candidate on `master` (no PR stacking, unlike `bytes.hex(sep)`).
+
+### 38a. New isolated, soundly-fixable defect found & fixed
+**`str.translate` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`"hello".translate(str.maketrans("el", "ip"))` (CPython `"hippo"`) reported `Unsupported function
+'translate'` → `FAILED`.
+
+**Fix** (`string/string_handler.cpp`): in `handle_string_attribute_call`, constant-fold the common
+idiom `s.translate(str.maketrans(x, y[, z]))` over constant operands — pattern-match the inline
+`str.maketrans(...)` call, extract the constant strings, then map each receiver char `x[i] → y[i]`,
+delete the characters in `z`, and keep the rest (delete takes precedence, matching CPython); the
+`len(x) != len(y)` case raises the CPython `ValueError`. The byte-wise fold is **gated on ASCII
+operands** so a multi-byte UTF-8 sequence cannot be remapped/deleted one byte at a time (which would
+corrupt the string — a soundness concern caught in code review); non-ASCII operands, a dict table, and
+non-constant operands fall through to the existing (unsupported) dispatch — sound, never a wrong
+verdict. `translate` already infers a `str` return type, so no type-inference change is needed.
+
+Like §16a–§20a/§32a this **restores a working feature**. New regression pair
+`regression/python/str_translate{,_fail}` (CORE) covering the 2-arg map, 3-arg delete, a variable
+receiver, absent-char passthrough, and `len`/index on the result; the positive test is the liveness
+witness. Verified bit-for-bit against CPython; CPython sanity passes; the focused
+`regression/python/(str|string)` ctest subset (444 tests) shows zero new failures (12 solver-pinned
+`--z3`/`--ir`/`--boolector` excepted); the ASCII gate confirmed (non-ASCII `translate` falls through).
+Code-reviewed (0 critical/major; the one medium finding — non-ASCII byte corruption — closed by the
+ASCII gate). Solver-agnostic (frontend constant-fold, no SMT encoding).
+
+### 38b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: `bytes.hex(sep)` separator arguments (extends §32, stacks on
+PR #5585); the §36a bytes-**literal-argument** lowering (deferred — needs the frontend `get_literal`
+context fix); the `int.from_bytes(byteorder=)` keyword form (model parameter named `big_endian`); and
+the `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today). The
+separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates
+stand: `zip()`, symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()`
+(infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c
+timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+---
+
 > **Note on numbering.** §16–§29 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
 > #5554, #5555, #5556, #5558, #5562, #5563) precede this section; this sweep is appended as §30.
 > Its fix is in flight as PR #5577 and not yet on `master`.
