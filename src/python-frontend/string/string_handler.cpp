@@ -1292,14 +1292,13 @@ exprt string_handler::handle_string_membership(
       *strchr_symbol, gen_pointer_type(char_type()), {rhs_addr, char_as_int});
     strchr_call.location() = converter_.get_location_from_decl(element);
 
-    // Check if result != NULL (character found)
+    // Check if result != NULL (character found). Both operands are synthetic
+    // char* values (the strchr() result and a null constant), so build the
+    // comparison in IREP2 (V.3).
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    exprt not_equal("notequal", bool_type());
-    not_equal.copy_to_operands(strchr_call, null_ptr);
-
-    return not_equal;
+    return build_notequal(strchr_call, null_ptr);
   }
 
   // Use strstr for substring membership testing
@@ -1437,14 +1436,13 @@ exprt string_handler::handle_string_membership(
     *strstr_symbol, gen_pointer_type(char_type()), {rhs_addr, lhs_addr});
   strstr_call.location() = converter_.get_location_from_decl(element);
 
-  // Check if result != NULL (substring found)
+  // Check if result != NULL (substring found). Both operands are synthetic
+  // char* values (the strstr() result and a null constant), so build the
+  // comparison in IREP2 (V.3).
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  exprt not_equal("notequal", bool_type());
-  not_equal.copy_to_operands(strstr_call, null_ptr);
-
-  return not_equal;
+  return build_notequal(strstr_call, null_ptr);
 }
 
 std::string
