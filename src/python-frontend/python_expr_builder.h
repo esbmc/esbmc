@@ -83,6 +83,11 @@ exprt build_add(const exprt &a, const exprt &b, const typet &t);
 // `a - b : t` over same-width operands (sub2t asserts width consistency).
 exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 
+// Equality `a == b` over same-typed operands. migrate lowers a legacy
+// "=" node to equality2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip.
+exprt build_equal(const exprt &a, const exprt &b);
+
 // Inequality `a != b` over same-typed operands. migrate lowers a legacy
 // "notequal" node to notequal2tc(migrate(a), migrate(b)), so this is the
 // byte-identical round-trip.

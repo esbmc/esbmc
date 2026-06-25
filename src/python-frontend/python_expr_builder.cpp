@@ -219,6 +219,17 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+// `a == b` over same-typed operands. migrate lowers a legacy "=" node to
+// equality2tc(migrate(a), migrate(b)) (util/migrate.cpp equality path), so this
+// is the byte-identical round-trip.
+exprt build_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(equality2tc(a2, b2));
+}
+
 // `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
 // notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
 // is the byte-identical round-trip.

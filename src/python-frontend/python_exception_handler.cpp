@@ -535,7 +535,8 @@ void python_exception_handler::handle_function_call_assertion(
   {
     exprt cast_expr = build_typecast(temp_var_expr, signedbv_typet(32));
     exprt one_expr = constant_exprt("1", signedbv_typet(32));
-    assertion_expr = equality_exprt(cast_expr, one_expr);
+    // V.3: build `<result> == 1` in IREP2 (both operands are signedbv 32).
+    assertion_expr = build_equal(cast_expr, one_expr);
   }
 
   code_assertt assert_code;
