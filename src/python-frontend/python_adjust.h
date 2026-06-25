@@ -32,11 +32,21 @@ public:
   /// mirroring `clang_c_adjust::adjust()`.
   bool adjust();
 
-  /// Recursively visit `expr` and its sub-expressions. B.0: structural no-op.
-  /// Phase B.1 hooks member2t/index2t source resolution in here.
+  /// Recursively visit `expr` and its sub-expressions, resolving transient
+  /// `symbol_type2t` member2t/index2t sources to their followed aggregate type
+  /// (the V.1k two-phase source invariant). Recurses operands first, so nested
+  /// sources (`self.b.a`) resolve inner-to-outer.
   void adjust_expr(expr2tc &expr);
 
 protected:
   contextt &context;
   namespacet ns;
+
+  /// If `source` is a member2t/index2t source carrying a transient
+  /// `symbol_type2t`, follow it to the resolved struct/union/array and retype
+  /// the node in place (returns true); otherwise leave it (returns false). The
+  /// source is a plain `symbol2t` (the instance) or a `dereference2t` of a
+  /// `pointer→tag-Cls` instance pointer — both arrive as a symbol_type2t source,
+  /// since a member/index cannot be constructed over a raw pointer.
+  bool resolve_source(expr2tc &source);
 };
