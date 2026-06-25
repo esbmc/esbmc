@@ -28,11 +28,16 @@ class int:
             result: int = (result << 8) + byte
             index: int = index + step
 
-        if signed and bytes_data[-1] & 128 == 128:  # Check MSB of last byte
+        # The sign lives in the most-significant byte: index 0 for big-endian,
+        # the last byte for little-endian. Index it directly — the model does
+        # not support Python negative indexing (bytes_data[-1] read out of
+        # bounds), and bytes_data[-1] was also the wrong byte for big-endian.
+        sign_index: int = 0 if big_endian else bytes_len - 1
+        if signed and bytes_data[sign_index] & 128 == 128:  # MSB of sign byte
             is_negative: bool = True
 
         if signed and is_negative:
-            result: int = result - (1 << (8 * len(bytes_data)))
+            result: int = result - (1 << (8 * bytes_len))
 
         return result
 
