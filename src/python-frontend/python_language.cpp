@@ -259,9 +259,19 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // constant aggregate trips constant_struct2t's (un-relaxed) assert. Post-adjust
   // the types are resolved, so the walk is safe; it currently resolves nothing
   // (clang_cpp_adjust already did) and only writes a symbol back when it changes
-  // the value, so the flag is behaviour-inert. Moving the pass *before*
-  // clang_cpp_adjust to actually replace it (B.5) first requires resolving the
-  // migration-before-resolution problem this ordering documents.
+  // the value, so the flag is behaviour-inert.
+  //
+  // B.3 experiment (2026-06-25, negative result, do not retry as-is): moving the
+  // pass *before* clang_cpp_adjust to exercise resolution was prototyped. It
+  // additionally needs member2t/index2t to tolerate a transient pointer source
+  // (the Python frontend stores instances/containers behind a pointer) plus a
+  // pointer auto-deref in resolve_source. With those, migration no longer aborts,
+  // but the whole 20-test fixture then produced *no verdict* under the flag
+  // (symex crash/hang): running the IREP2 adjuster before clang_cpp_adjust while
+  // clang_cpp_adjust still runs afterwards double-resolves the same nodes — the
+  // "two-places-resolve hazard" the V.1k spike flagged. Conclusion: the
+  // before-placement is only viable once it *replaces* clang_cpp_adjust for
+  // Python (B.5), which is a dedicated effort, not a reorder of this call.
   if (config.options.get_bool_option("python-irep2-adjust"))
   {
     python_adjust py_adjuster(context);
