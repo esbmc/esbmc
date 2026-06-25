@@ -126,6 +126,16 @@ exprt build_index(const exprt &arr, const exprt &idx)
   return build_index(arr, idx, arr.type().subtype());
 }
 
+// `not op`, `op` a bool-typed value. migrate lowers a legacy "not" node to
+// not2tc(migrate(op)) (util/migrate.cpp i_not path), so this is the
+// byte-identical round-trip.
+exprt build_not(const exprt &op)
+{
+  expr2tc op2;
+  migrate_expr(op, op2);
+  return migrate_expr_back(not2tc(op2));
+}
+
 // `a < b` over synthetic same-width operands. migrate lowers a legacy "<" node
 // to lessthan2tc(migrate(a), migrate(b)) with no coercion (util/migrate.cpp
 // i_lt path), so this is the byte-identical round-trip.
@@ -161,6 +171,17 @@ exprt build_greater_equal(const exprt &a, const exprt &b)
   return migrate_expr_back(greaterthanequal2tc(a2, b2));
 }
 
+// `a || b`, both operands bool-typed. migrate lowers a legacy binary "or" node
+// to or2tc(migrate(a), migrate(b)) (util/migrate.cpp i_or path), so this is the
+// byte-identical round-trip.
+exprt build_or(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(or2tc(a2, b2));
+}
+
 exprt build_add(const exprt &a, const exprt &b, const typet &t)
 {
   expr2tc a2, b2;
@@ -181,6 +202,17 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
   // migrate_type does not round-trip #cpp_type; restore the exact result type.
   result.type() = t;
   return result;
+}
+
+// `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
+// notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
+// is the byte-identical round-trip.
+exprt build_notequal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(notequal2tc(a2, b2));
 }
 
 // Expression-context call `fn(args...)` returning return_type. If the return

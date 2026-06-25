@@ -105,12 +105,9 @@ void goto_symext::symex_witness_branching(
   bool &new_guard_false,
   const goto_programt::instructiont &instruction)
 {
-  if (
-    !validate_witness || !forward || is_constant(old_guard) ||
-    cur_state->cur_seg >= cur_state->witness_segs.size())
+  if (!validate_witness || !forward || is_constant(old_guard))
     return;
 
-  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
   const auto &loc = cur_state->source.pc->location;
 
   auto force_goto = [&](bool taken) {
@@ -121,6 +118,24 @@ void goto_symext::symex_witness_branching(
     if (!is_true(dir_cond))
       assume(dir_cond);
   };
+
+  // O(1) lookup for branching(cycle): persistent across all iterations,
+  // independent of cur_seg.  Built once at init in execution_state.cpp.
+  {
+    auto it = cur_state->cycle_branch_map.find(loc.get_line());
+    if (it != cur_state->cycle_branch_map.end())
+    {
+      const bool goto_taken =
+        instruction.flipped_guard ? it->second : !it->second;
+      force_goto(goto_taken);
+      return;
+    }
+  }
+
+  if (cur_state->cur_seg >= cur_state->witness_segs.size())
+    return;
+
+  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
 
   for (const auto &wp : seg)
   {
@@ -168,6 +183,8 @@ void goto_symext::symex_witness_branching(
     const bool goto_taken =
       instruction.flipped_guard ? direction_true : !direction_true;
     force_goto(goto_taken);
+    if (wp.action == waypoint::cycle)
+      cur_state->cycle_branch_map[loc.get_line()] = (wp.value == "true");
     if (!is_avoid)
       cur_state->advance_witness_position();
     break;
@@ -178,7 +195,10 @@ void goto_symext::symex_witness_assert(
   expr2tc &new_expr,
   const std::string &msg)
 {
-  if (!validate_witness || has_prefix(msg, "unwinding assertion loop"))
+  if (
+    !validate_witness || has_prefix(msg, "unwinding assertion loop") ||
+    has_prefix(msg, "termination per-loop marker") ||
+    has_prefix(msg, "termination abort-call marker"))
     return;
 
   const size_t seg = cur_state->cur_seg;

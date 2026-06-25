@@ -1,0 +1,125 @@
+MODULE main
+
+VAR
+  Alarm_Active : boolean;
+  At_Floor : boolean;
+  At_Floor1 : boolean;
+  At_Floor2 : boolean;
+  At_Floor3 : boolean;
+  Call_Floor1 : boolean;
+  Call_Floor2 : boolean;
+  Call_Floor3 : boolean;
+  Door_Closed : boolean;
+  Door_Open : boolean;
+  Emergency_Stop : boolean;
+  Motor_Down : boolean;
+  Motor_Running : boolean;
+  Motor_Up : boolean;
+  Overload : boolean;
+  TON1_ET : 0 .. 32767;
+  TON1_IN : boolean;
+  TON1_PT : 0 .. 32767;
+  TON1_Q : boolean;
+
+DEFINE
+  __r0_At_Floor :=
+    At_Floor1;
+  __r1_At_Floor :=
+    At_Floor2;
+  __r2_At_Floor :=
+    At_Floor3;
+  __r3_Motor_Up :=
+    Call_Floor2 & At_Floor1 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(Motor_Down);
+  __r4_Motor_Up :=
+    Call_Floor3 & At_Floor1 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(Motor_Down);
+  __r5_Motor_Up :=
+    Call_Floor3 & At_Floor2 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(Motor_Down);
+  __r6_Motor_Down :=
+    Call_Floor1 & At_Floor2 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(__r5_Motor_Up);
+  __r7_Motor_Down :=
+    Call_Floor1 & At_Floor3 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(__r5_Motor_Up);
+  __r8_Motor_Down :=
+    Call_Floor2 & At_Floor3 & Door_Closed & !(Emergency_Stop) & !(Overload) & !(__r5_Motor_Up);
+  __r9_Motor_Running :=
+    __r5_Motor_Up;
+  __r10_Motor_Running :=
+    __r8_Motor_Down;
+  __r11_Door_Open :=
+    __r2_At_Floor & !(__r5_Motor_Up) & !(__r8_Motor_Down) & !(Emergency_Stop);
+  __r12_TON1_IN :=
+    __r11_Door_Open;
+  __ton_TON1_q_v :=
+    TON1_ET >= TON1_PT;
+  __r14_Alarm_Active :=
+    Emergency_Stop;
+  __r15_Alarm_Active :=
+    Overload;
+
+ASSIGN
+  init(At_Floor1) := FALSE;
+  init(At_Floor2) := FALSE;
+  init(At_Floor3) := FALSE;
+  init(Call_Floor1) := FALSE;
+  init(Call_Floor2) := FALSE;
+  init(Call_Floor3) := FALSE;
+  init(Door_Closed) := FALSE;
+  init(Emergency_Stop) := FALSE;
+  init(Overload) := FALSE;
+  next(At_Floor1) := {TRUE, FALSE};
+  next(At_Floor2) := {TRUE, FALSE};
+  next(At_Floor3) := {TRUE, FALSE};
+  next(Call_Floor1) := {TRUE, FALSE};
+  next(Call_Floor2) := {TRUE, FALSE};
+  next(Call_Floor3) := {TRUE, FALSE};
+  next(Door_Closed) := {TRUE, FALSE};
+  next(Emergency_Stop) := {TRUE, FALSE};
+  next(Overload) := {TRUE, FALSE};
+  init(TON1_PT) := 0;
+  next(TON1_PT) := TON1_PT;
+  init(TON1_ET) := 0;
+  next(TON1_ET) :=
+    case
+      __r12_TON1_IN & TON1_ET < 32767 : TON1_ET + 1;
+      !(__r12_TON1_IN) : 0;
+      TRUE : TON1_ET;
+    esac;
+  init(Alarm_Active) := FALSE;
+  next(Alarm_Active) := __r15_Alarm_Active;
+  init(At_Floor) := FALSE;
+  next(At_Floor) := __r2_At_Floor;
+  init(Door_Open) := FALSE;
+  next(Door_Open) := __r11_Door_Open;
+  init(Motor_Down) := FALSE;
+  next(Motor_Down) := __r8_Motor_Down;
+  init(Motor_Running) := FALSE;
+  next(Motor_Running) := __r10_Motor_Running;
+  init(Motor_Up) := FALSE;
+  next(Motor_Up) := __r5_Motor_Up;
+  init(TON1_IN) := FALSE;
+  next(TON1_IN) := __r12_TON1_IN;
+  init(TON1_Q) := FALSE;
+  next(TON1_Q) := __ton_TON1_q_v;
+
+-- P1: Door must never open while motor is running
+INVARSPEC !(__r11_Door_Open & __r10_Motor_Running);
+
+-- P2: Motor_Up and Motor_Down must never activate simultaneously
+INVARSPEC !(__r5_Motor_Up & __r8_Motor_Down);
+
+-- P3: Emergency stop must disable Motor_Up
+INVARSPEC !Emergency_Stop | !__r5_Motor_Up;
+
+-- P4: Emergency stop must disable Motor_Down
+INVARSPEC !Emergency_Stop | !__r8_Motor_Down;
+
+-- P5: Door must not open during emergency stop
+INVARSPEC !Emergency_Stop | !__r11_Door_Open;
+
+-- P6: Motor_Up must not run while door is open
+INVARSPEC !__r11_Door_Open | !__r5_Motor_Up;
+
+-- P7: Motor_Down must not run while door is open
+INVARSPEC !__r11_Door_Open | !__r8_Motor_Down;
+
+-- P8: Overload condition must disable Motor_Up
+INVARSPEC !Overload | !__r5_Motor_Up;

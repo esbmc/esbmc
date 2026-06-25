@@ -3470,6 +3470,58 @@ converter. The remaining raw member/index/deref sites all **feed legacy consumer
 IREP2-native adjuster at V.4+**, which retires the residual general-operand wall and
 W3 together; pre-V.4 the migratable V.3 bulk is essentially complete.
 
+#### V.3 status (2026-06-24) — synthetic-operand + resolved-source member/index/deref surfaces fully drained; residual is exactly F-P11 + width-hazard
+
+A second draining pass (≈16 PRs, #5573–#5595) extended the 2026-06-22 status
+above and exhausted every *clean, byte-identical* converter site reachable
+pre-V.4:
+
+- **Shared builder module.** The per-TU copies of the `build_*` round-trip
+  helpers were consolidated into
+  `src/python-frontend/python_expr_builder.{h,cpp}` (`namespace python_expr`,
+  #5568), then extended with `build_not`/`build_or`/`build_notequal` (#5573,
+  #5575, #5576) for the boolean/equality nodes. The relational/logical/
+  arithmetic builders now share two private templates — `migrate_binary` and
+  `migrate_typed_binary` (#5594) — so the migrate→build→back-migrate round-trip
+  has a single source of truth.
+- **Synthetic-operand arithmetic & relational.** List loop-index increments
+  (#5584), list `strlen+1` element sizing (#5580), starred-unpack index
+  subtraction (#5578), the string-index OOB bound `array_size-1` (#5581), `set`
+  char* pointer arithmetic + dereference (#5582, #5590), the `input()`
+  length-bound assume (#5583), `str.startswith`/`endswith` length/offset
+  arithmetic (#5574, #5595), and the affix-tuple `or`-chain (#5575) — all moved
+  to the shared helpers, each a byte-identical round-trip over operands the
+  converter has already typed `size_type`/`bool`.
+- **Resolved-source member/index/deref feeding legacy consumers.** Sites whose
+  source is a *verified resolved* struct/array (not the F-P11 user case): the
+  list symbolic-size store `*(list).size` (#5586), the constructor default-attr
+  store `*(self).attr` (#5587), and the `str(char)` 2-element array subscripts
+  (#5589), via `build_dereference`/`build_member`/`build_index`. These reduce
+  the legacy expr-builder census but do *not* remove the migrate seam (subtree
+  rule).
+
+**Residual — provably blocked, enumerated.** What remains in the converter is
+*exactly* two permanently-blocked classes (neither is a mechanical migration):
+
+1. **F-P11 user-operand sites** — operands resolved only by `clang_cpp_adjust`,
+   so building IREP2 pre-adjust aborts on the `member2t`/`index2t`
+   resolved-source assert: `python_math.cpp` modulo/floor-div sign-correction,
+   `BoolOp` short-circuit (`converter_stmt.cpp`), `isinstance` NoneType/tuple
+   (`builtins.cpp:369/447`), is-none inequality (`converter_compare.cpp`),
+   slice-bound arithmetic (`python_list.cpp:1444-1683`), the complex int→double
+   promotion (`numpy_call_expr.cpp:1607`), and the converter subscript-base
+   derefs (`converter_expr.cpp:1369/1388`).
+2. **Width-hazard guards/arithmetic** — a `<`/`-` whose two operands have
+   *different* widths (a `size_type` index vs an `arr_type.size()`-typed length),
+   which the legacy node tolerates (adjust reconciles) but `lessthan2t`/`sub2t`
+   reject at construction: `python_set.cpp:171/234`, `python_list.cpp:4120/4533`.
+   (`build_array` types its dimension `size_type`, but the length operand is not
+   guaranteed to originate there — #5581 defensively typecasts before
+   subtracting, so a blind migrate is unsound.)
+
+Both classes need the **V.1k/V.4 IREP2-native adjuster** (resolve-then-build),
+not site-by-site migration. Pre-V.4, the clean V.3 surface is **fully drained**.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
