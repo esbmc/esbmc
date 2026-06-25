@@ -1,0 +1,30 @@
+properties:
+  - id: P1
+    kind: mutual_exclusion
+    variables: [Motor_Up, Motor_Down]
+    description: "Motor_Up and Motor_Down must never activate simultaneously"
+
+  - id: P2
+    kind: invariant
+    expression: "!Emergency_Stop || !Motor_Up"
+    description: "Emergency stop must disable Motor_Up"
+
+  - id: P3
+    kind: invariant
+    expression: "!Emergency_Stop || !Motor_Down"
+    description: "Emergency stop must disable Motor_Down"
+
+  - id: P4
+    kind: invariant
+    expression: "!Door_Open || !Motor_Up"
+    description: "Motor_Up must not run while door is open"
+
+  - id: P5
+    kind: invariant
+    expression: "!Door_Open || !Motor_Down"
+    description: "Motor_Down must not run while door is open"
+
+  - id: P6
+    kind: invariant
+    expression: "!Overload || !Motor_Up"
+    description: "Overload must disable Motor_Up"

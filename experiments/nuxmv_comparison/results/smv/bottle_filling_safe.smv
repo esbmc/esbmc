@@ -1,0 +1,101 @@
+MODULE main
+
+VAR
+  Alarm_No_Bottle : boolean;
+  Alarm_Overfill : boolean;
+  Bottle_Present : boolean;
+  Conveyor_Motor : boolean;
+  Conveyor_Ready : boolean;
+  Emergency_Stop : boolean;
+  Fill_Valve : boolean;
+  Filling_Active : boolean;
+  Filling_Done : boolean;
+  Level_Full : boolean;
+  Start_Button : boolean;
+  Stop_Button : boolean;
+  System_Running : boolean;
+  TON1_ET : 0 .. 32767;
+  TON1_IN : boolean;
+  TON1_PT : 0 .. 32767;
+  TON1_Q : boolean;
+
+DEFINE
+  __r0_System_Running :=
+    Start_Button & !(Emergency_Stop) & !(Stop_Button);
+  __r1_Fill_Valve :=
+    __r0_System_Running & Bottle_Present & !(Level_Full) & !(Filling_Done) & !(Emergency_Stop);
+  __r2_TON1_IN :=
+    __r1_Fill_Valve;
+  __ton_TON1_q_v :=
+    TON1_ET >= TON1_PT;
+  __r4_Filling_Done :=
+    __ton_TON1_q_v;
+  __r5_Filling_Done :=
+    Level_Full;
+  __r6_Filling_Active :=
+    __r1_Fill_Valve;
+  __r7_Conveyor_Motor :=
+    __r5_Filling_Done & !(Emergency_Stop) & Conveyor_Ready;
+  __r8_Alarm_Overfill :=
+    Level_Full & __r1_Fill_Valve;
+  __r9_Alarm_No_Bottle :=
+    __r1_Fill_Valve & !(Bottle_Present);
+
+ASSIGN
+  init(Bottle_Present) := FALSE;
+  init(Conveyor_Ready) := FALSE;
+  init(Emergency_Stop) := FALSE;
+  init(Level_Full) := FALSE;
+  init(Start_Button) := FALSE;
+  init(Stop_Button) := FALSE;
+  next(Bottle_Present) := {TRUE, FALSE};
+  next(Conveyor_Ready) := {TRUE, FALSE};
+  next(Emergency_Stop) := {TRUE, FALSE};
+  next(Level_Full) := {TRUE, FALSE};
+  next(Start_Button) := {TRUE, FALSE};
+  next(Stop_Button) := {TRUE, FALSE};
+  init(TON1_PT) := 0;
+  next(TON1_PT) := TON1_PT;
+  init(TON1_ET) := 0;
+  next(TON1_ET) :=
+    case
+      __r2_TON1_IN & TON1_ET < 32767 : TON1_ET + 1;
+      !(__r2_TON1_IN) : 0;
+      TRUE : TON1_ET;
+    esac;
+  init(Alarm_No_Bottle) := FALSE;
+  next(Alarm_No_Bottle) := __r9_Alarm_No_Bottle;
+  init(Alarm_Overfill) := FALSE;
+  next(Alarm_Overfill) := __r8_Alarm_Overfill;
+  init(Conveyor_Motor) := FALSE;
+  next(Conveyor_Motor) := __r7_Conveyor_Motor;
+  init(Fill_Valve) := FALSE;
+  next(Fill_Valve) := __r1_Fill_Valve;
+  init(Filling_Active) := FALSE;
+  next(Filling_Active) := __r6_Filling_Active;
+  init(Filling_Done) := FALSE;
+  next(Filling_Done) := __r5_Filling_Done;
+  init(System_Running) := FALSE;
+  next(System_Running) := __r0_System_Running;
+  init(TON1_IN) := FALSE;
+  next(TON1_IN) := __r2_TON1_IN;
+  init(TON1_Q) := FALSE;
+  next(TON1_Q) := __ton_TON1_q_v;
+
+-- P1: Fill valve must not open without a bottle present
+INVARSPEC !__r1_Fill_Valve | Bottle_Present;
+
+-- P2: Fill valve must not open when bottle is already full
+INVARSPEC !__r1_Fill_Valve | !Level_Full;
+
+-- P3: Emergency stop must force fill valve closed
+INVARSPEC !Emergency_Stop | !__r1_Fill_Valve;
+
+-- P4: Overfill alarm must not be active while fill valve is open
+INVARSPEC !(__r8_Alarm_Overfill & __r1_Fill_Valve);
+
+-- P5: Conveyor motor must stop during emergency
+INVARSPEC !Emergency_Stop | !__r7_Conveyor_Motor;
+
+-- P6: No-bottle alarm must not fire while valve is open
+INVARSPEC !(__r9_Alarm_No_Bottle & __r1_Fill_Valve);

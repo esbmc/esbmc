@@ -126,61 +126,108 @@ exprt build_index(const exprt &arr, const exprt &idx)
   return build_index(arr, idx, arr.type().subtype());
 }
 
-// `a < b` over synthetic same-width operands. migrate lowers a legacy "<" node
-// to lessthan2tc(migrate(a), migrate(b)) with no coercion (util/migrate.cpp
-// i_lt path), so this is the byte-identical round-trip.
-exprt build_less_than(const exprt &a, const exprt &b)
+// `not op`, `op` a bool-typed value. migrate lowers a legacy "not" node to
+// not2tc(migrate(op)) (util/migrate.cpp i_not path), so this is the
+// byte-identical round-trip.
+exprt build_not(const exprt &op)
+{
+  expr2tc op2;
+  migrate_expr(op, op2);
+  return migrate_expr_back(not2tc(op2));
+}
+
+// Shared round-trip for the binary builders below: migrate both legacy operands
+// to IREP2, build the node via `make`, and back-migrate. migrate lowers each
+// legacy binary node (`<`, `<=`, `>`, `>=`, `or`, `+`, `-`) to the matching
+// *2tc over the migrated operands with no coercion, so every builder is the
+// byte-identical round-trip of the node goto-convert would produce.
+namespace
+{
+template <typename Make>
+exprt migrate_binary(const exprt &a, const exprt &b, Make make)
 {
   expr2tc a2, b2;
   migrate_expr(a, a2);
   migrate_expr(b, b2);
-  return migrate_expr_back(lessthan2tc(a2, b2));
+  return migrate_expr_back(make(a2, b2));
+}
+
+// As migrate_binary, for a typed node make(migrate_type(t), a, b). Also restores
+// the exact result type, which migrate_type drops (e.g. #cpp_type).
+template <typename Make>
+exprt migrate_typed_binary(
+  const exprt &a,
+  const exprt &b,
+  const typet &t,
+  Make make)
+{
+  exprt result = migrate_binary(a, b, [&](const expr2tc &x, const expr2tc &y) {
+    return make(migrate_type(t), x, y);
+  });
+  result.type() = t;
+  return result;
+}
+} // namespace
+
+exprt build_less_than(const exprt &a, const exprt &b)
+{
+  return migrate_binary(
+    a, b, [](const expr2tc &x, const expr2tc &y) { return lessthan2tc(x, y); });
 }
 
 exprt build_less_equal(const exprt &a, const exprt &b)
 {
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(lessthanequal2tc(a2, b2));
+  return migrate_binary(a, b, [](const expr2tc &x, const expr2tc &y) {
+    return lessthanequal2tc(x, y);
+  });
 }
 
 exprt build_greater_than(const exprt &a, const exprt &b)
 {
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(greaterthan2tc(a2, b2));
+  return migrate_binary(a, b, [](const expr2tc &x, const expr2tc &y) {
+    return greaterthan2tc(x, y);
+  });
 }
 
 exprt build_greater_equal(const exprt &a, const exprt &b)
 {
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  return migrate_expr_back(greaterthanequal2tc(a2, b2));
+  return migrate_binary(a, b, [](const expr2tc &x, const expr2tc &y) {
+    return greaterthanequal2tc(x, y);
+  });
+}
+
+// `a || b`, both operands bool-typed.
+exprt build_or(const exprt &a, const exprt &b)
+{
+  return migrate_binary(
+    a, b, [](const expr2tc &x, const expr2tc &y) { return or2tc(x, y); });
 }
 
 exprt build_add(const exprt &a, const exprt &b, const typet &t)
 {
-  expr2tc a2, b2;
-  migrate_expr(a, a2);
-  migrate_expr(b, b2);
-  exprt result = migrate_expr_back(add2tc(migrate_type(t), a2, b2));
-  // migrate_type does not round-trip #cpp_type; restore the exact result type.
-  result.type() = t;
-  return result;
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return add2tc(ty, x, y);
+    });
 }
 
 exprt build_sub(const exprt &a, const exprt &b, const typet &t)
 {
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return sub2tc(ty, x, y);
+    });
+}
+
+// `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
+// notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
+// is the byte-identical round-trip.
+exprt build_notequal(const exprt &a, const exprt &b)
+{
   expr2tc a2, b2;
   migrate_expr(a, a2);
   migrate_expr(b, b2);
-  exprt result = migrate_expr_back(sub2tc(migrate_type(t), a2, b2));
-  // migrate_type does not round-trip #cpp_type; restore the exact result type.
-  result.type() = t;
-  return result;
+  return migrate_expr_back(notequal2tc(a2, b2));
 }
 
 // Expression-context call `fn(args...)` returning return_type. If the return

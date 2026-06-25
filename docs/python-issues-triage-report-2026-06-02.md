@@ -1311,6 +1311,253 @@ work; the §5 priority order stands.
 
 ---
 
+> **Note on numbering.** §30 (PR #5577, `list(str)` constructor) is in flight and not yet on
+> `master`; this sweep is appended as §31. Its fix is in flight as PR #5579. When both land, the
+> maintainer orders §30 → §31.
+
+## 31. 2026-06-24 re-validation (twenty-first sweep) & int/float numeric-tower properties
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep implemented the numeric-tower *properties* deferred since §22b — the attribute-access
+(not method-call) members of the int/float numeric tower.
+
+### 31a. New isolated, soundly-fixable defect found & fixed
+**`int.numerator`/`denominator`/`real`/`imag` and `float.real`/`imag` raised a spurious
+`AttributeError`.**
+
+`(5).numerator`, `(5).denominator`, `(5).real`, `(5).imag`, `(2.5).real`, `(2.5).imag` all failed
+with `AttributeError: '<x>' has no attribute '<attr>'`: int/float symbol types are not class
+structs, so attribute access fell through to the not-a-class error path (`converter_expr.cpp`). A
+program reading any of these properties errored out rather than verifying.
+
+**Fix** (`converter/converter_expr.cpp`): intercept in the instance-attribute branch, beside the
+existing complex `.real`/`.imag` delegation. For an int/float-typed symbol, return the known
+constant — `real`/`numerator` give the value unchanged (a real number is its own real part; an int
+is the ratio n/1), `imag` is `0` (`0.0` for float), `denominator` is `1` (int only). `float.numera
+tor`/`denominator` deliberately fall through to a clean `AttributeError` — `float` is not a
+`Rational` in CPython. `bool` (type id `bool`, not `signedbv`) is intentionally excluded and stays
+a clean `AttributeError`.
+
+Like §16a–§20a/§30a this **restores a working feature** (the values are trivially sound — self/0/1)
+rather than only converting a crash to a diagnostic. New regression tests
+`regression/python/numeric_tower_properties{,_fail}` (CORE; the positive test is the liveness
+witness — it errored pre-fix) and `numeric_tower_float_no_numerator_fail` (pins the float
+boundary). Verified bit-for-bit against CPython for int/float, negatives, and the wrong-value
+FAILED case; expression/chained receivers (`(4-1).numerator`, `x.real.numerator`) remain
+pre-existing clean errors (general attribute-on-BinOp / nested-attribute limitations, out of
+scope). CPython sanity passes; the focused
+`regression/python/(int|float|complex|numeric|conjugate|attr|class|real|imag|bit_)` ctest subset
+(194 tests) is 100% green — zero regressions in the attribute-access path. Code-reviewed (0
+critical/major). Solver-agnostic (a frontend constant-fold in attribute resolution, no SMT
+encoding).
+
+### 31b. Next candidate & everything else: unchanged disposition
+The numeric-tower **properties** are now complete; the remaining numeric-tower work is the
+bytes/encoding family — `str.encode()` / `bytes.decode()` / `bytes.hex()` — the obvious **next
+candidate** (a wrong-verdict cluster needing a bytes-iteration model; `bytes.hex()` over a constant
+bytes literal is the most isolated entry, foldable to a constant hex string). Other deferred
+candidates stand: `zip()` (unmodelled — confirmed still `SUCCESSFUL` only on simple forms),
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.to_bytes()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+---
+
+> **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
+> and §32 (PR #5585, `bytes.hex()`) are in flight and not yet on `master`; this sweep is appended
+> as §33. Its fix is in flight as PR #5588. When all land, the maintainer orders §30 → §31 → §32 →
+> §33.
+
+## 33. 2026-06-24 re-validation (twenty-third sweep) & str.encode()/bytes.decode()
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep continued the bytes/encoding family from §32b with the str↔bytes codec round-trip.
+
+### 33a. New isolated, soundly-fixable defect found & fixed
+**Standalone `str.encode()` and `bytes.decode()` reported a spurious `VERIFICATION FAILED`.**
+
+Only the round-trip `s.encode().decode()` was modelled (it returns the original string expr);
+`"abc".encode()` and `b"abc".decode()` used standalone were unmodelled → lowered to the
+unsupported-function `assert(false)` → `FAILED` (wrong-verdict class).
+
+**Fix** (`string/string_method_handler.cpp`, in `dispatch_decode_join_method`): fold a constant str
+to its UTF-8/ASCII bytes (`encode`) and a constant bytes object to its str (`decode`), gated on
+**ASCII** (`< 0x80`) where the byte sequence equals the characters in both directions. Non-ASCII /
+non-UTF-8 falls through to the existing clean error — CPython raises `UnicodeDecodeError` / needs
+multi-byte encoding there too, so no wrong value is produced. A new `extract_constant_bytes` helper
+resolves a bytes *variable* to its literal and **rejects an unresolved symbol** (a `bytes`
+parameter, or a value not stored as a constant) so it cannot silently mis-fold to `""` — a
+soundness gap caught in code review; a genuine `b""` literal is a constant array (not a symbol), so
+empty-bytes folding is preserved. `get_type_from_method` maps `str.encode → bytes` and
+`bytes.decode → str` at all three receiver sites (Constant, BinOp via `get_string_method_return_type`,
+builtin/variable) so the assignment target is typed correctly (the `#5114` mistyping guard).
+
+Like §16a–§20a/§30a/§32a this **restores a working feature**. The existing `s.encode().decode()`
+round-trip is unchanged (its block returns before the new standalone code). New regression pair
+`regression/python/bytes_encode_decode{,_fail}` (CORE); the positive test is the liveness witness
+(FAILED pre-fix) and covers literal/variable receivers, `len`/index, the explicit `utf-8` argument,
+and the round-trip. Verified bit-for-bit against CPython; a `bytes` parameter receiver correctly
+falls through (no silent `""`); CPython sanity passes; the focused
+`regression/python/(str|string|bytes|encode|decode)` ctest subset (457 tests) shows zero new
+failures (the 12 failing are the pre-existing `--z3`/`--ir`/`--boolector` environmental set on this
+Bitwuzla-only build). Code-reviewed (1 medium soundness finding fixed before commit; 0 remaining).
+Solver-agnostic (a frontend constant-fold, no SMT encoding).
+
+### 33b. Next candidate & everything else: unchanged disposition
+The str↔bytes ASCII codec is now complete (`hex`/`encode`/`decode`). The obvious continuations are
+**`bytes.hex(sep)`** (the optional separator/`bytes_per_sep` arguments) and **`int.to_bytes()` /
+`int.from_bytes()`** (variable-length byte arrays — the **next candidate**, the last sizeable
+bytes-family entry). Multi-byte (non-ASCII) UTF-8 encode/decode is a larger follow-up. A
+separately-tracked, out-of-scope `len`/`strlen` concern remains: `len()` of an *inline* string
+method result (`len(b"..".decode())`, `len("..".replace(...))`) mis-measures even though the value
+is correct (§14b). Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
+> **Note on numbering.** §30–§36 (PRs #5577/#5579/#5585/#5588/#5592/#5597 and the #5599 triage
+> finding) are in flight and not yet on `master`; this sweep is appended as §37. Its fix is in
+> flight as PR #5601.
+
+## 37. 2026-06-24 (twenty-seventh sweep) & int.from_bytes signed=True sign-byte fix
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the cleaner `signed=True` candidate named in §36b (avoiding the §36a literal-arg
+lowering work by using variable receivers).
+
+### 37a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, "big", signed=True)` crashed and was logically wrong for big-endian.**
+
+The two's-complement path reported `dereference failure: array bounds violated`, and even the cases
+that did not crash were wrong for big-endian. The model located the sign bit with `bytes_data[-1]`:
+(1) Python **negative indexing** is not supported by the OM — `bytes_data[-1]` read out of bounds
+(the crash); (2) the most-significant byte, which carries the sign, is **byte 0** for big-endian, not
+the last byte, so `bytes([255, 0])` big-endian (CPython `-256`) was mis-evaluated independently of the
+crash.
+
+**Fix** (`models/int.py`): index the sign byte directly — `0` for big-endian, `bytes_len - 1` for
+little-endian — via a ternary (no new branch, so Mode C is not engaged), and reuse the already-computed
+`bytes_len`. This **restores a working feature** (signed `from_bytes` now matches CPython) and removes
+the crash. New regression pair `regression/python/int_from_bytes_signed{,_fail}` (CORE) covering
+big/little endian, positive/negative, single/multi-byte, the big-endian sign-in-first-byte case, and
+the unaffected `signed=False` path; the positive test is the liveness witness. Verified bit-for-bit
+against CPython for all seven cases; CPython sanity passes; pylint clean on the model; the focused
+`regression/python/(int_|from_bytes|bytes)` ctest subset (30 tests) shows zero new failures, and the
+existing `int_from_bytes` (signed=False) test still passes. Independent of the in-flight `from_bytes`
+PRs (#5597 default-signed, #5599 literal-arg triage): the tests use the explicit `signed=` keyword and
+variable receivers, so it verifies on `master` as-is.
+
+### 37b. Next candidate & everything else: unchanged disposition
+With `to_bytes` (§34), the `signed` default (§35) and now signed `from_bytes` (§37) done, the
+remaining `from_bytes` work is the §36a bytes-**literal-argument** lowering (deferred; needs the
+frontend `get_literal` context fix) and the `byteorder=` keyword form (model parameter named
+`big_endian`). A cleaner adjacent candidate is **`bytes.hex(sep)`** (the optional separator /
+`bytes_per_sep` arguments, extending §32's `bytes.hex`, stacked on PR #5585). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `str.maketrans`/`translate`,
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness). The §3 design-level blockers, §3c
+> **Note on numbering.** §30–§37 (PRs #5577/#5579/#5585/#5588/#5592/#5597/#5601 and the #5599 triage
+> finding) are in flight and not yet on `master`; this sweep is appended as §38. Its fix is in
+> flight as PR #5604.
+
+## 38. 2026-06-24 (twenty-eighth sweep) & str.translate(str.maketrans(...))
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery confirmed `swapcase`/`title`/`zfill`/`removeprefix`/`removesuffix` already verify;
+`str.translate` (and `str.isascii`, withdrawn as unsound in §19a) were the unmodelled ones. This sweep
+took `str.translate` — an independent candidate on `master` (no PR stacking, unlike `bytes.hex(sep)`).
+
+### 38a. New isolated, soundly-fixable defect found & fixed
+**`str.translate` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`"hello".translate(str.maketrans("el", "ip"))` (CPython `"hippo"`) reported `Unsupported function
+'translate'` → `FAILED`.
+
+**Fix** (`string/string_handler.cpp`): in `handle_string_attribute_call`, constant-fold the common
+idiom `s.translate(str.maketrans(x, y[, z]))` over constant operands — pattern-match the inline
+`str.maketrans(...)` call, extract the constant strings, then map each receiver char `x[i] → y[i]`,
+delete the characters in `z`, and keep the rest (delete takes precedence, matching CPython); the
+`len(x) != len(y)` case raises the CPython `ValueError`. The byte-wise fold is **gated on ASCII
+operands** so a multi-byte UTF-8 sequence cannot be remapped/deleted one byte at a time (which would
+corrupt the string — a soundness concern caught in code review); non-ASCII operands, a dict table, and
+non-constant operands fall through to the existing (unsupported) dispatch — sound, never a wrong
+verdict. `translate` already infers a `str` return type, so no type-inference change is needed.
+
+Like §16a–§20a/§32a this **restores a working feature**. New regression pair
+`regression/python/str_translate{,_fail}` (CORE) covering the 2-arg map, 3-arg delete, a variable
+receiver, absent-char passthrough, and `len`/index on the result; the positive test is the liveness
+witness. Verified bit-for-bit against CPython; CPython sanity passes; the focused
+`regression/python/(str|string)` ctest subset (444 tests) shows zero new failures (12 solver-pinned
+`--z3`/`--ir`/`--boolector` excepted); the ASCII gate confirmed (non-ASCII `translate` falls through).
+Code-reviewed (0 critical/major; the one medium finding — non-ASCII byte corruption — closed by the
+ASCII gate). Solver-agnostic (frontend constant-fold, no SMT encoding).
+
+### 38b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: `bytes.hex(sep)` separator arguments (extends §32, stacks on
+PR #5585); the §36a bytes-**literal-argument** lowering (deferred — needs the frontend `get_literal`
+context fix); the `int.from_bytes(byteorder=)` keyword form (model parameter named `big_endian`); and
+the `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today). The
+separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates
+stand: `zip()`, symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()`
+(infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c
+timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+---
+
+> **Note on numbering.** §16–§29 (PRs #5526, #5531, #5532, #5536, #5537, #5540, #5543, #5548,
+> #5554, #5555, #5556, #5558, #5562, #5563) precede this section; this sweep is appended as §30.
+> Its fix is in flight as PR #5577 and not yet on `master`.
+
+## 30. 2026-06-24 re-validation (twentieth sweep) & list(str) constructor
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep implemented the `list("abc")` candidate named in §29b — the direct sibling of §29's
+`tuple(str)`, on the `list()` constructor path.
+
+### 30a. New isolated, soundly-fixable defect found & fixed
+**`list("abc")` (the `list()` constructor over a constant string) crashed with `migrate expr
+failed`.**
+
+CPython yields `list("ab") == ['a', 'b']`, but ESBMC crashed: the string array fell through the
+`list()` operand dispatch (which handled empty / `range` / list-typed / tuple operands) into the
+generic call builder, which mistyped the `char` array as a `PyListObject` pointer.
+
+**Fix** (`converter/converter_funcall.cpp`): in the `list(...)` handler, fold a constant-string
+operand to a `List` AST of single-character `Constant`s and recurse through the proven `[]`
+list-literal path (reusing `build_char_sequence_node`, hoisted from §29's `tuple(str)` fix in
+`function_call/expr.cpp` into the dependency-free `json_utils.h` as a template — a net
+de-duplication). The fold is gated on a char-element operand (`subtype() == char_type()`), so a
+`bytes` literal — modelled as a 64-bit int array (`type_handler.cpp` `build_array(long_long_int
+_type())`) — is excluded: CPython `list(b"ab") == [97, 98]` (ints), not chars.
+
+**Code review (the same boundary §29 flagged) recommended pinning the bytes case.** `list(b"ab")`
+previously fell through to the generic builder and *crashed* (`migrate expr failed`); it is now
+rejected with a clean `ERROR: list() over a bytes object is not supported; bytes elements are
+integers, not characters` (exit 254) — a §5-item-5 crash→diagnostic that also pins the str-only
+soundness boundary of the fold, mirroring §29's `tuple_from_bytes_unsupported`.
+
+This **restores a working feature** (`list(str)` now verifies with the right elements) and removes
+an adjacent crash. New regression tests `regression/python/list_from_str{,_fail}` (CORE) and
+`list_from_bytes_unsupported`; the positive `list_from_str` test is the **Py-Live** liveness
+witness for both added branches (pre-fix it crashed). Verified bit-for-bit against CPython for
+literal/variable/empty-string and the `list(list)`/`list(tuple)` non-regression; CPython sanity
+passes; the focused `regression/python/{list,tuple,str,string}*` ctest subset (739 tests) shows
+zero new failures (the 50 failing are the pre-existing `--z3`/`--ir`/`--boolector` environmental
+set on this Bitwuzla-only `ENABLE_Z3=OFF` build). Code-reviewed (0 critical/major). Solver-agnostic
+(constant-fold + dispatch guard in the frontend, no SMT-encoding change).
+
+### 30b. Next candidate & everything else: unchanged disposition
+The `list(str)`/`tuple(str)` char-sequence lowering is now complete on both constructor paths. The
+obvious **next candidate** is `str.encode()` / `bytes.decode()` / `bytes.hex()` — the bytes/encoding
+family deferred since §22b–§29b (the now-clean `list(bytes)`/`tuple(bytes)` boundaries make a proper
+bytes-iteration model the natural next step). Other deferred candidates stand: `zip()` (unmodelled),
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `int.to_bytes()`,
+`str.maketrans`/`translate`, `float.hex()` (infeasible), `str.isascii()` (string-soundness), and the
+numeric-tower *properties*. The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
 > **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
 > §32 (PR #5585, `bytes.hex()`), and §33 (PR #5588, `str.encode()`/`bytes.decode()`) are in flight
 > and not yet on `master`; this sweep is appended as §34. Its fix is in flight as PR #5592. When
