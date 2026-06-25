@@ -25,6 +25,7 @@ add_library(pythonfrontend STATIC
             converter/converter_types.cpp
             converter/converter_unop.cpp
             converter/converter_util.cpp
+            python_adjust.cpp
             python_class.cpp
             python_class_builder.cpp
             python_consteval.cpp
