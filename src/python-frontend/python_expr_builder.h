@@ -88,6 +88,13 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 // byte-identical round-trip.
 exprt build_notequal(const exprt &a, const exprt &b);
 
+// Ternary select `cond ? then : else_`. The if2t invariant requires both
+// branches to share the result type kind, so this falls back to the legacy
+// node when the branch types diverge (or contain a dyn-sized array that does
+// not round-trip). On the common matching-branch path it is the byte-identical
+// round-trip.
+exprt build_if(const exprt &cond, const exprt &then_, const exprt &else_);
+
 // Expression-context call `fn(args...) : return_type`, fn a function symbol.
 exprt build_call_expr(
   const symbolt &fn,

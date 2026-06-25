@@ -230,6 +230,29 @@ exprt build_notequal(const exprt &a, const exprt &b)
   return migrate_expr_back(notequal2tc(a2, b2));
 }
 
+// `cond ? then_ : else_`. migrate lowers a legacy "if" node to
+// if2tc(type, migrate(cond), migrate(then_), migrate(else_)) (util/migrate.cpp
+// if path); if2t asserts both branches share the result type kind, so fall back
+// to the legacy node when the branch types diverge. The legacy if_exprt infers
+// its type from the true branch, so the result type is then_'s type.
+exprt build_if(const exprt &cond, const exprt &then_, const exprt &else_)
+{
+  if (
+    contains_dyn_array(then_.type()) || contains_dyn_array(else_.type()) ||
+    contains_dyn_array(cond.type()))
+    return if_exprt(cond, then_, else_);
+  expr2tc cond2, then2, else2;
+  migrate_expr(cond, cond2);
+  migrate_expr(then_, then2);
+  migrate_expr(else_, else2);
+  if (then2->type->type_id != else2->type->type_id)
+    return if_exprt(cond, then_, else_);
+  exprt result = migrate_expr_back(if2tc(then2->type, cond2, then2, else2));
+  // migrate_type drops type attributes (e.g. #cpp_type); restore the exact type.
+  result.type() = then_.type();
+  return result;
+}
+
 // Expression-context call `fn(args...)` returning return_type. If the return
 // type or any argument type contains a dyn-sized array (which does not
 // round-trip), build the legacy side_effect_expr_function_callt instead.
