@@ -157,8 +157,9 @@ exprt function_call_expr::handle_input() const
   len_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_assign);
 
-  exprt len_bound("<", bool_type());
-  len_bound.copy_to_operands(
+  // len_sym and the literal are both size_type (synthetic), so build the
+  // length-bound comparison in IREP2 (V.3).
+  exprt len_bound = build_less_than(
     build_symbol(len_sym), from_integer(max_str_length, size_type()));
   codet assume_len("assume");
   assume_len.copy_to_operands(len_bound);

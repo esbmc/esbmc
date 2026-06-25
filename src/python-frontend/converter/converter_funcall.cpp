@@ -345,8 +345,37 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // mistypes it as a list (wrong elements / out-of-bounds dereference).
     if (get_tuple_handler().is_tuple_type(arg_expr.type()))
       return python_list::build_list_from_tuple(*this, arg_expr, element);
+
+    // list("abc") — a constant string yields a list of single-character
+    // strings (CPython: list("ab") == ['a', 'b']). Lower to a list literal so
+    // it routes through the proven `[]` path. Gate on a genuine string
+    // (char-element) operand: a bytes literal serialises to an identical
+    // Constant JSON, but list(b"ab") is [97, 98] in CPython — its operand type
+    // is an int array (not char), so it correctly falls through to the error.
+    const typet &arg_t = arg_expr.type();
+    const bool is_string_operand = (arg_t.is_array() || arg_t.is_pointer()) &&
+                                   arg_t.subtype() == char_type();
+    std::string str_val;
+    if (
+      is_string_operand &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      return get_expr(build_char_sequence_node("List", str_val, element));
+
+    // list(b"ab") — a bytes literal serialises to the same Constant JSON as a
+    // str, so it also extracts as a constant string, but CPython yields the
+    // int list [97, 98], not a char list. Its operand type is a (non-char) int
+    // array, so it is excluded above; reject it here with a clean diagnostic
+    // rather than letting the byte array reach the generic builder, which
+    // mistypes it as a list pointer (out-of-bounds dereference / migrate
+    // failure). This pins the str-only boundary of the fold above.
+    if (
+      arg_t.is_array() && arg_t.subtype() != char_type() &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      throw std::runtime_error(
+        "list() over a bytes object is not supported; bytes elements are "
+        "integers, not characters");
     // Fall through to the generic function-call builder below for non-list
-    // iterables (e.g. list("abc") or list(42)).
+    // iterables (e.g. list(42) or a non-constant string).
   }
 
   // Handle dict(iterable) constructor:

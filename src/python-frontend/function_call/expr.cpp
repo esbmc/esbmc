@@ -38,40 +38,6 @@ using namespace python_expr;
 
 namespace
 {
-// Build a List/Tuple AST node whose elements are the single-character strings
-// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
-// list/tuple-literal path. Location fields are copied from @p loc_src.
-nlohmann::json build_char_sequence_node(
-  const char *kind,
-  const std::string &chars,
-  const nlohmann::json &loc_src)
-{
-  static constexpr const char *loc_keys[] = {
-    "lineno", "col_offset", "end_lineno", "end_col_offset"};
-  auto copy_loc = [&](nlohmann::json &node) {
-    for (const char *k : loc_keys)
-      if (loc_src.contains(k))
-        node[k] = loc_src[k];
-  };
-
-  nlohmann::json node;
-  node["_type"] = kind;
-  node["elts"] = nlohmann::json::array();
-  for (const char ch : chars)
-  {
-    nlohmann::json elt;
-    elt["_type"] = "Constant";
-    elt["value"] = std::string(1, ch);
-    copy_loc(elt);
-    node["elts"].push_back(elt);
-  }
-  copy_loc(node);
-  return node;
-}
-} // namespace
-
-namespace
-{
 // Constants for UTF-8 encoding
 
 // Constants for symbol parsing
@@ -4341,8 +4307,9 @@ exprt function_call_expr::handle_general_function_call()
         temp_decl.location() = location;
         converter_.current_block->copy_to_operands(temp_decl);
 
-        // Assign the character to the first element. temp_array is a synthetic
-        // resolved char array, so build the subscripts in IREP2 (V.3).
+        // Assign the character to the first element. V.3: build the index in
+        // IREP2 (resolved array-typed symbol source) — the byte-identical
+        // round-trip of index_exprt(temp_array, .., char_type()).
         exprt temp_array = build_symbol(temp_symbol);
         exprt first_element =
           build_index(temp_array, from_integer(0, size_type()));

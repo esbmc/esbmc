@@ -802,6 +802,44 @@ exprt python_dict_handler::create_dict_from_literal(
 
   python_list list_handler(converter_, element);
 
+  // Enable the float storage path only when *every* value is statically float
+  // (a homogeneous-float dict). Then the read site also knows the element type
+  // is float and lowers .values()/.items() reads/comparisons as floats, so the
+  // real-sorted __ESBMC_float_buf payload is read back correctly (#5501).
+  // For a heterogeneous dict (e.g. {"a": int, "b": float}) the value type is
+  // erased to void*, so reads compare item->value as a raw pointer; routing the
+  // float into float_buf would then make v a float_buf pointer that no longer
+  // equals the integer bit-pattern, breaking the comparison (github_3719_4).
+  // In that case fall back to the integer bit-pattern copy.
+  bool all_values_float = !values.empty();
+  for (const auto &value_node : values)
+  {
+    // get_typet throws "Invalid type" for value shapes it cannot statically
+    // classify (lambdas/function values, user-function calls, conditional
+    // expressions, f-strings, comprehensions). Treat any such case — and any
+    // non-float result — as "not all float": the integer/void* path is the
+    // safe default, so declining the float optimization here is sound.
+    // Catch (...) rather than (const std::exception &): on macOS/clang a
+    // std::runtime_error thrown by get_typet escaped a base-class catch across
+    // the translation-unit boundary, crashing convert() with "ERROR: Invalid
+    // type" (a homogeneous-key dict with a lambda value, e.g. github_3690).
+    // The catch-all matches via the unwinder without consulting type_info, so
+    // it always intercepts the throw and falls back to the integer path.
+    try
+    {
+      if (!type_handler_.get_typet(value_node).is_floatbv())
+      {
+        all_values_float = false;
+        break;
+      }
+    }
+    catch (...)
+    {
+      all_values_float = false;
+      break;
+    }
+  }
+
   for (size_t i = 0; i < keys.size(); ++i)
   {
     exprt key_expr = converter_.get_expr(keys[i]);
@@ -828,11 +866,15 @@ exprt python_dict_handler::create_dict_from_literal(
     }
     else
     {
-      // Regular value: store value directly (value semantics).
-      // Disable float path so dict comparisons via *(void**)item->value use
-      // the integer bit-pattern copy instead of the float_buf pointer.
+      // Regular value: store value directly (value semantics). For a
+      // homogeneous-float dict, keep the float path enabled (as for keys) so a
+      // float value is copied into the real-sorted __ESBMC_float_buf and its
+      // float_idx is recorded; reading it back through .values()/.items() then
+      // yields the correct value instead of float_buf[0] (#5501). For a
+      // heterogeneous dict, disable it so reads use the integer bit-pattern
+      // copy instead of the float_buf pointer (github_3719_4).
       exprt push_value = list_handler.build_push_list_call(
-        values_list, element, value_expr, false);
+        values_list, element, value_expr, all_values_float);
       converter_.add_instruction(push_value);
     }
   }
@@ -1262,10 +1304,18 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
+  // float_type_id: route a float value into the real-sorted __ESBMC_float_buf
+  // (and record its float_idx) so .values()/.items() reads it back correctly
+  // rather than as float_buf[0] (#5501). Mirrors the dict-literal value push.
+  exprt value_float_type_id =
+    value_info.elem_symbol->get_type().is_floatbv()
+      ? static_cast<exprt>(build_symbol(*value_info.elem_type_sym))
+      : static_cast<exprt>(from_integer(BigInt(0), size_type()));
+
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(build_symbol(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
-  set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  set_value_call.arguments().push_back(value_float_type_id);
   set_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
       value_info.elem_symbol->get_type())),
@@ -1306,7 +1356,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(
     build_symbol(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
-  push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_value_call.arguments().push_back(value_float_type_id);
   push_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
       value_info.elem_symbol->get_type())),
@@ -3550,8 +3600,7 @@ exprt python_dict_handler::compare(
 
   if (op == "NotEq")
   {
-    exprt negated("not", bool_type());
-    negated.move_to_operands(result);
+    exprt negated = build_not(result);
     negated.location() = location;
     return negated;
   }
