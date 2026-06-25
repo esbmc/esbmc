@@ -653,7 +653,6 @@ exprt python_list::handle_range_slice(
   {
     const char *key = which == 0 ? "lower" : "upper";
     bool &present = which == 0 ? has_lower : has_upper;
-    size_t &out = which == 0 ? lower_bound : upper_bound;
 
     present = slice_node.contains(key) && !slice_node[key].is_null();
     if (!present)
@@ -663,7 +662,10 @@ exprt python_list::handle_range_slice(
       b.is_object() && b.contains("_type") && b["_type"] == "Constant" &&
       b.contains("value") && b["value"].is_number_integer() &&
       b["value"].get<long long>() >= 0)
+    {
+      size_t &out = which == 0 ? lower_bound : upper_bound;
       out = b["value"].get<size_t>();
+    }
     else
       bounds_usable = false; // negative or non-constant: not known statically
   }
