@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -249,6 +250,23 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
+
+  // V.4 B.2: optionally run the IREP2-native Python adjuster. Default off.
+  //
+  // It runs *after* clang_cpp_adjust for now: reading get_value2() migrates each
+  // legacy value to IREP2, which requires its types to already be resolved —
+  // before clang_cpp_adjust they are still by-name symbol_types and migrating a
+  // constant aggregate trips constant_struct2t's (un-relaxed) assert. Post-adjust
+  // the types are resolved, so the walk is safe; it currently resolves nothing
+  // (clang_cpp_adjust already did) and only writes a symbol back when it changes
+  // the value, so the flag is behaviour-inert. Moving the pass *before*
+  // clang_cpp_adjust to actually replace it (B.5) first requires resolving the
+  // migration-before-resolution problem this ordering documents.
+  if (config.options.get_bool_option("python-irep2-adjust"))
+  {
+    python_adjust py_adjuster(context);
+    py_adjuster.adjust();
+  }
 
   return false;
 }
