@@ -43,6 +43,7 @@ private:
 
   symbol_exprt declare_variable(const VarDecl &v);
   symbol_exprt declare_bool_shadow(const std::string &id);
+  symbol_exprt declare_scoped(const std::string &id, const typet &t);
   symbol_exprt var_expr(const std::string &name) const;
 
   code_blockt build_scan_body(const exprt &pf_in);
@@ -52,6 +53,7 @@ private:
   codet translate_timer(const LdIRNode &n);
   codet translate_counter(const LdIRNode &n);
   codet translate_arith(const LdIRNode &n);
+  codet translate_user_fb(const UserFBExec &ex);
 
   void emit_scan_function(const code_blockt &scan_body);
   void emit_main_function();

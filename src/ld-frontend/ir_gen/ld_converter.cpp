@@ -1,8 +1,10 @@
 #include <ld-frontend/ir_gen/ld_converter.h>
+#include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/symbol.h>
+#include <iostream>
 #include <stdexcept>
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
@@ -79,6 +81,10 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
     sym.set_type(int32_t_());
     sym.set_value(int_const(0));
     break;
+  case VarKind::REAL:
+    sym.set_type(double_type());
+    sym.set_value(from_double(0.0, double_type()));
+    break;
   }
 
   context_.move_symbol_to_context(sym);
@@ -112,6 +118,36 @@ symbol_exprt ld_converter::declare_bool_shadow(const std::string &id)
   return symbol_exprt(id, bool_t());
 }
 
+// Declare an instance-scoped FB-local symbol (idempotent). Names are prefixed
+// per FB instance (e.g. ld::EQ_00__IN1) so they never collide with program
+// variables. static_lifetime gives them a defined zero/false initial value.
+symbol_exprt ld_converter::declare_scoped(const std::string &id, const typet &t)
+{
+  if (!context_.find_symbol(id))
+  {
+    symbolt sym;
+    static const std::string kPrefix = "ld::";
+    sym.id = id;
+    sym.name = (id.compare(0, kPrefix.size(), kPrefix) == 0)
+                 ? id.substr(kPrefix.size())
+                 : id;
+    sym.module = "ld";
+    sym.mode = "LD";
+    sym.lvalue = true;
+    sym.static_lifetime = true;
+    sym.file_local = false;
+    sym.is_extern = false;
+    sym.set_type(t);
+    sym.set_value(t.id() == "bool" ? static_cast<exprt>(false_exprt())
+                                   : int_const(0));
+    locationt loc;
+    loc.set_file(ir_.source_file);
+    sym.location = loc;
+    context_.move_symbol_to_context(sym);
+  }
+  return symbol_exprt(id, t);
+}
+
 symbol_exprt ld_converter::var_expr(const std::string &name) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
@@ -137,9 +173,14 @@ codet ld_converter::translate_contact(
                  ? ContactKind::NormallyClosed
                  : ContactKind::NormallyOpen;
 
+  // Coerce a numeric (INT/REAL) contact variable to a Boolean test (var != 0).
+  exprt base = (var.type() == bool_t())
+                 ? static_cast<exprt>(var)
+                 : static_cast<exprt>(
+                     not_exprt(equality_exprt(var, gen_zero(var.type()))));
   exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
-                        ? static_cast<exprt>(not_exprt(var))
-                        : static_cast<exprt>(var);
+                        ? static_cast<exprt>(not_exprt(base))
+                        : base;
   pf_out = and_exprt(pf_in, contact_val);
   return code_skipt();
 }
@@ -151,17 +192,23 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   if (fault_injection_)
     eff_kind = CoilKind::Output;
 
+  // A numeric (INT/REAL) coil receives the Boolean power-flow cast to its type.
+  const bool num = (var.type() != bool_t());
+  auto as_coil = [&](const exprt &b) -> exprt {
+    return num ? static_cast<exprt>(typecast_exprt(b, var.type())) : b;
+  };
+
   code_blockt blk;
   switch (eff_kind)
   {
   case CoilKind::Output:
-    blk.copy_to_operands(code_assignt(var, pf));
+    blk.copy_to_operands(code_assignt(var, as_coil(pf)));
     break;
   case CoilKind::Set:
   {
     code_ifthenelset ite;
     ite.cond() = pf;
-    ite.then_case() = code_assignt(var, true_exprt());
+    ite.then_case() = code_assignt(var, as_coil(true_exprt()));
     blk.copy_to_operands(ite);
     break;
   }
@@ -169,7 +216,7 @@ codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
   {
     code_ifthenelset ite;
     ite.cond() = pf;
-    ite.then_case() = code_assignt(var, false_exprt());
+    ite.then_case() = code_assignt(var, as_coil(false_exprt()));
     blk.copy_to_operands(ite);
     break;
   }
@@ -302,6 +349,83 @@ codet ld_converter::translate_arith(const LdIRNode &n)
   return code_assignt(out, op_expr);
 }
 
+// Execute a user-defined FB body once per scan.  Inputs are sampled
+// nondeterministically (the open-world sensor model: the dataset's FB inputs
+// are program inputs), FB-local symbols are instance-scoped, and the body is
+// translated to native codet — crucially the WHILE stays a real loop so a
+// non-terminating Ladder Logic Bomb trips ESBMC's unwinding assertion.
+// On any translation failure the body is over-approximated (skipped), matching
+// the pre-existing "unsupported FB" behaviour (no regression).
+codet ld_converter::translate_user_fb(const UserFBExec &ex)
+{
+  const std::string prefix = "ld::" + ex.instance_name + "__";
+
+  st_fb_translator::resolver_t resolve =
+    [this, prefix](const std::string &nm) -> symbol_exprt {
+    const symbolt *s = context_.find_symbol(prefix + nm);
+    if (s)
+      return symbol_exprt(prefix + nm, s->get_type());
+    return declare_scoped(prefix + nm, int32_t_());
+  };
+
+  // Declare the formal output with its correct type (others default to int via
+  // the resolver during translation).
+  declare_scoped(prefix + ex.output_var,
+                 ex.output_is_bool ? bool_t() : int32_t_());
+
+  // Translate the body first.  If it uses constructs outside the supported ST
+  // subset (nested FB calls, REAL, MOD, library functions), it throws and we
+  // emit NOTHING — preserving the pre-existing "unsupported FB" behaviour
+  // exactly (no regression on benchmarks whose FBs we cannot model).
+  code_blockt body;
+  try
+  {
+    st_fb_translator translator(resolve);
+    body = translator.translate(ex.st_body);
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "warning: user FB '" << ex.type_name
+              << "' body not translated (" << e.what()
+              << "); over-approximating (no-op).\n";
+    return code_skipt();
+  }
+  catch (...)
+  {
+    std::cerr << "warning: user FB '" << ex.type_name
+              << "' body not translated; over-approximating (no-op).\n";
+    return code_skipt();
+  }
+
+  // Success: sample inputs nondeterministically at scan entry, then run body.
+  code_blockt blk;
+  for (const auto &iv : ex.input_vars)
+  {
+    symbol_exprt s = resolve(iv);
+    blk.copy_to_operands(
+      code_assignt(s, side_effect_expr_nondett(s.type())));
+  }
+  for (const auto &op : body.operands())
+    blk.copy_to_operands(static_cast<const codet &>(op));
+
+  // Wire FB output pins to the program variables that consume them, so a forged
+  // FB output (value/actuator-manipulation bomb) propagates into the program.
+  for (const auto &w : ex.out_wires)
+  {
+    const symbolt *pinsym = context_.find_symbol(prefix + w.pin);
+    const symbolt *pvsym = context_.find_symbol("ld::" + w.prog_var);
+    if (!pinsym || !pvsym)
+      continue;
+    symbol_exprt pin(prefix + w.pin, pinsym->get_type());
+    symbol_exprt pv("ld::" + w.prog_var, pvsym->get_type());
+    exprt rhs = (pin.type() == pv.type())
+                  ? static_cast<exprt>(pin)
+                  : static_cast<exprt>(typecast_exprt(pin, pv.type()));
+    blk.copy_to_operands(code_assignt(pv, rhs));
+  }
+  return blk;
+}
+
 // -----------------------------------------------------------------------
 // Scan body construction
 // -----------------------------------------------------------------------
@@ -369,6 +493,13 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     }
 
     scan_body.move_to_operands(rung_blk);
+  }
+
+  // Execute user-defined FB bodies (carriers of hidden logic / LLBs).
+  for (const auto &ex : ir_.user_fbs)
+  {
+    codet fb = translate_user_fb(ex);
+    scan_body.move_to_operands(fb);
   }
 
   return scan_body;

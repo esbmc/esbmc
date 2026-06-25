@@ -162,6 +162,7 @@ enum class VarKind
   INT,
   DINT,
   TIME, // used for timer PT/ET fields
+  REAL, // IEEE floating point (analog process variables)
 };
 
 struct VarDecl
@@ -174,6 +175,39 @@ struct VarDecl
 };
 
 // -----------------------------------------------------------------------
+// User-defined function blocks (e.g. EQ_0/GT_0/SUB_0 wrappers that may carry
+// Ladder Logic Bombs).  Their Structured Text bodies are translated and
+// executed in the scan cycle so the embedded logic reaches the GOTO IR.
+// -----------------------------------------------------------------------
+
+struct UserFBDef
+{
+  std::string type_name;               // e.g. "EQ_0"
+  std::vector<std::string> input_vars; // formal input names (IN1, IN2, ...)
+  std::vector<std::string> local_vars; // FB-local names (e.g. "i")
+  std::string output_var;              // formal output name (OUT)
+  bool output_is_bool = true;          // OUT type (BOOL vs INT)
+  std::string st_body;                 // raw Structured Text body
+};
+
+// Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".
+struct FBOutWire
+{
+  std::string prog_var; // program variable driven by the pin (e.g. MV1)
+  std::string pin;       // FB formal output name (e.g. OUT_MV1)
+};
+
+struct UserFBInstance
+{
+  std::string type_name;     // references a UserFBDef
+  std::string instance_name; // e.g. "EQ_00"
+  std::string block_id;      // graphical localId of the block
+  std::string in1_var; // program variable feeding IN1 ("" => nondet sample)
+  std::vector<FBOutWire> out_wires; // pins consumed by program outVariables
+  LdLocation loc;
+};
+
+// -----------------------------------------------------------------------
 // Top-level AST
 // -----------------------------------------------------------------------
 
@@ -182,5 +216,7 @@ struct LdAst
   std::string source_file;           // path of the PLCopen XML file
   std::vector<VarDecl> variables;    // all declared variables
   std::vector<NetworkNode> networks; // one per POU (Tier 1: single POU)
-  bool has_interrupt_tasks = false;  // triggers Tier-2 rejection
+  std::vector<UserFBDef> user_fb_defs;
+  std::vector<UserFBInstance> user_fb_instances;
+  bool has_interrupt_tasks = false; // triggers Tier-2 rejection
 };

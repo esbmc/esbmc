@@ -105,5 +105,28 @@ LdIR LdIRBuilder::build(const LdAst &ast)
     for (const auto &rung : net.rungs)
       ir.rungs.push_back(lower_rung(rung));
 
+  // Join user-FB instances with their definitions so the converter can
+  // execute each instance's translated body once per scan cycle.
+  for (const auto &inst : ast.user_fb_instances)
+  {
+    for (const auto &def : ast.user_fb_defs)
+    {
+      if (def.type_name != inst.type_name)
+        continue;
+      UserFBExec ex;
+      ex.type_name = def.type_name;
+      ex.instance_name = inst.instance_name;
+      ex.input_vars = def.input_vars;
+      ex.local_vars = def.local_vars;
+      ex.output_var = def.output_var;
+      ex.output_is_bool = def.output_is_bool;
+      ex.in1_var = inst.in1_var;
+      ex.out_wires = inst.out_wires;
+      ex.st_body = def.st_body;
+      ir.user_fbs.push_back(ex);
+      break;
+    }
+  }
+
   return ir;
 }

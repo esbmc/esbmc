@@ -46,7 +46,13 @@ VarKind PlcopenXmlParser::var_kind_from_string(const std::string &s)
     {"BOOL", VarKind::BOOL},
     {"INT", VarKind::INT},
     {"DINT", VarKind::DINT},
+    {"UINT", VarKind::INT},
+    {"SINT", VarKind::INT},
+    {"LINT", VarKind::DINT},
+    {"WORD", VarKind::INT},
     {"TIME", VarKind::TIME},
+    {"REAL", VarKind::REAL},
+    {"LREAL", VarKind::REAL},
   };
   auto it = table.find(s);
   if (it == table.end())
@@ -639,6 +645,98 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
         v.is_input = true;
       else if (coil_vars.count(v.name) && !contact_vars.count(v.name))
         v.is_output = true;
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // User-defined function-block bodies (e.g. EQ_0/GT_0/SUB_0 wrappers that
+  // may carry Ladder Logic Bombs).  Register each functionBlock POU's
+  // Structured Text body, and record every block instance referencing one so
+  // the converter can execute the translated body in the scan cycle.  This
+  // makes logic hidden inside FB bodies reachable to the verifier instead of
+  // being dropped as an unsupported rung element.
+  // -------------------------------------------------------------------
+  std::function<void(const pugi::xml_node &, std::string &)> collect_text =
+    [&](const pugi::xml_node &n, std::string &out) {
+      for (pugi::xml_node c : n)
+      {
+        if (c.type() == pugi::node_pcdata || c.type() == pugi::node_cdata)
+          out += c.value();
+        else
+          collect_text(c, out);
+      }
+    };
+
+  for (auto xp : root.select_nodes("//pou[@pouType='functionBlock']"))
+  {
+    pugi::xml_node pou = xp.node();
+    UserFBDef def;
+    def.type_name = pou.attribute("name").as_string();
+    if (def.type_name.empty())
+      continue;
+    for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
+      def.input_vars.push_back(v.node().attribute("name").as_string());
+    for (auto v : pou.select_nodes(".//interface/localVars/variable"))
+      def.local_vars.push_back(v.node().attribute("name").as_string());
+    if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
+    {
+      def.output_var = ov.attribute("name").as_string();
+      pugi::xml_node tnode = ov.child("type");
+      def.output_is_bool =
+        tnode && tnode.first_child() &&
+        std::string(tnode.first_child().name()) == "BOOL";
+    }
+    pugi::xml_node st = pou.select_node(".//body/ST").node();
+    if (!st)
+      continue; // non-ST body (e.g. graphical FB) — not handled here
+    collect_text(st, def.st_body);
+    if (def.output_var.empty() || def.st_body.empty())
+      continue;
+    ast.user_fb_defs.push_back(std::move(def));
+  }
+
+  if (!ast.user_fb_defs.empty())
+  {
+    for (auto xp : root.select_nodes("//pou[@pouType='program']//block"))
+    {
+      pugi::xml_node blk = xp.node();
+      std::string tn = blk.attribute("typeName").as_string();
+      for (const auto &def : ast.user_fb_defs)
+      {
+        if (def.type_name != tn)
+          continue;
+        UserFBInstance inst;
+        inst.type_name = tn;
+        inst.instance_name = blk.attribute("instanceName").as_string();
+        inst.block_id = blk.attribute("localId").as_string();
+        inst.loc = {source_file_, 0, 0};
+        ast.user_fb_instances.push_back(std::move(inst));
+        break;
+      }
+    }
+
+    // Wire FB output pins to the program variables that consume them: a program
+    // <outVariable> with <connection refLocalId="<block>" formalParameter="<pin>">
+    // means "<prog_var> := <fb_instance>.<pin>".  This propagates a (possibly
+    // forged) FB output into the program so value/actuator-manipulation bombs
+    // become observable, and makes the model faithful instead of vacuous.
+    for (auto xp :
+         root.select_nodes("//pou[@pouType='program']//outVariable"))
+    {
+      pugi::xml_node ov = xp.node();
+      std::string pv = ov.child("expression").child_value();
+      if (pv.empty())
+        pv = ov.child("variable").child_value();
+      pugi::xml_node conn = ov.select_node(".//connection").node();
+      if (!conn || pv.empty())
+        continue;
+      std::string ref = conn.attribute("refLocalId").as_string();
+      std::string pin = conn.attribute("formalParameter").as_string();
+      if (pin.empty())
+        continue;
+      for (auto &inst : ast.user_fb_instances)
+        if (inst.block_id == ref)
+          inst.out_wires.push_back({pv, pin});
     }
   }
 
