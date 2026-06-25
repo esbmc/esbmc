@@ -3544,6 +3544,55 @@ verdict + counterexample parity holds (dual-solver Bitwuzla + Z3). With these,
 the clean V.3 surface is drained; the residual is exactly the two
 permanently-blocked classes above.
 
+#### V.3 residual → the remaining tasks to reach 100 % IREP2 (2026-06-24)
+
+The pre-V.4 clean V.3 surface is drained; the residual is exactly the two
+classes above (F-P11 user-operand sites + width-hazard guards). Both share one
+root cause and therefore one fix, so the path to **100 % IREP2** is a small,
+ordered task list — not an open-ended sweep. A read-only spike pins the
+constraint the keystone task must respect:
+
+- **The resolution lives in a legacy-`codet` adjust pass.** `python_languaget::
+  final` runs `clang_cpp_adjust::adjust()` over the symbol values
+  (`python_language.cpp:249-250`, entry `adjust_code(codet&)`,
+  `clang_cpp_adjust.h:32`); this is where the converter's unresolved
+  `member`/`index` sources get followed (the P2/W2 resolution). The residual
+  aborts because the converter builds those nodes **before** this pass.
+- **The goto-convert body round-trip stays legacy (W1-loc) — and is off this
+  critical path.** V.4 concluded the *body* round-trip is a `RETAIN_BOUNDARY`
+  for source-location fidelity. That governs `goto_convert`'s side-effect
+  hoisting, **not** the converter→adjust type-resolution seam where the residual
+  is built, so it does not block the tasks below.
+
+**Tasks to 100 % (ordered; the first is the keystone, RV2 the gate):**
+
+1. **V.1k — resolve-then-build via the design-(b) IREP2-native adjuster.**
+   Stand up the Python-specific IREP2 adjuster that performs `clang_cpp_adjust`'s
+   *complete* resolution (recursive struct-following + auto-deref +
+   dataclass/inference-aware completion) as one IREP2 pass, so the converter can
+   build `member2tc`/`index2tc`/arith with **resolved** operand types and the
+   F-P11 + width-hazard aborts vanish. **Open design question to settle in the
+   first spike:** whether this runs as a type-resolution *service* the converter
+   queries at construction (no materialised IREP2 body needed) or requires
+   materialising IREP2 bodies pre-adjust (the resolved-source chicken-and-egg
+   the relaxed assert only partially lifts). *Accept (RV2, hard gate):* the
+   20-test acceptance fixture (§V.1k design (b)) back to green; the F-P11/
+   width-hazard sites build in-converter with zero `irep2_expr.h` aborts;
+   verdict + text unchanged.
+2. **V.2 — IREP2-native attribute carriage (W3).** Fold `#cpp_type`/
+   `#member_name`/`#cformat` onto the typed IREP2 companion; the (b) adjuster is
+   the natural home, so V.1k and V.2 land together.
+3. **V.5 — IREP2-native counterexample printer (W4).** Independent of the above
+   (Part II §2.7, own issue); can proceed in parallel.
+4. **V.6 — flip & verify.** Switch the symbol-table writes fully to
+   `set_value(expr2tc)`, census → ~0, dual-solver + asserts + `esbmc-cpp`
+   parity. §V.1 bar met.
+
+Converter-side V.3 *construction* is drained as far as the pre-adjust assert
+allows; everything remaining is the V.1k keystone and what it unblocks. The
+deeper W1 body round-trip (V.4) is the one piece retained by design — it is a
+shared goto-convert concern, not part of the Python 100 % target.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
