@@ -239,7 +239,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "argv string (default 256)."},
     {"gcc-nested-functions",
      NULL,
-     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
+     "Enable GCC nested functions extension (source-level lambda lifting)"},
+    {"sv-comp",
+     NULL,
+     "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
+     "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
+     "physical line numbers for witnesses, and avoid malloc/free in the "
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},

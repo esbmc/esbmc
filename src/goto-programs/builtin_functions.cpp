@@ -1037,11 +1037,11 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-#if ESBMC_SVCOMP
     /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
-    if (base_name == "__builtin_unreachable")
+    if (
+      base_name == "__builtin_unreachable" &&
+      config.options.get_bool_option("sv-comp"))
       return;
-#endif
 
     if (!options.get_bool_option("no-assertions"))
     {
