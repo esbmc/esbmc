@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 parity anchor pinned; flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 first site (BoolOp cast) LANDED behind the flag, Bitwuzla parity 0-divergence over fixture+broad+boolop, Z3 via CI; B.4 (unresolved-base F-P11 families) next (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3501,6 +3501,20 @@ following (`next: None`→`Node`), and dataclass field resolution.
   the strong assert). Acceptance unchanged: the relevant slice of the 20-test fixture
   green, dual-solver, asserts build, **plus** RV2 — the service's resolved type must
   equal `clang_cpp_adjust`'s (corpus round-trip equivalence). See the B.3 spike outcome.
+  **First site LANDED behind the flag (2026-06-26).** The `BoolOp` short-circuit's
+  `to_bool_condition` general cast (`converter_stmt.cpp`) now, under
+  `--python-irep2-adjust`, builds the boolean cast via the IREP2 round-trip
+  (`migrate_expr` operand → `typecast2tc` → `migrate_expr_back`, locations re-attached)
+  instead of the legacy `typecast_exprt`. **Empirical finding:** the operand reaching
+  this site is already resolved by `get_expr`, so `migrate_expr` does **not** hit the
+  F-P11 member/index assert here (a probe over the fixture confirmed it) — this site is
+  the file-1 already-resolved-operand recipe, not the general unresolved-base case the
+  later F-P11 families need. **RV2 — Bitwuzla half discharged:** the `PARITY_FLAG=
+  --python-irep2-adjust` sweep is 0 divergences over the 20-test fixture (71) **and** a
+  130-test broad slice **and** 39 `and`/`or`-heavy tests. Flag off ⇒ byte-identical;
+  the Z3 half runs in CI (`regression/python/boolop_member_attr_adjust{,_fail}` pin the
+  flipped path). The remaining F-P11 families (unresolved-base member/index) still need
+  the `name_space().follow()` resolution and are B.4.
 - **B.4 — generalise + post-adjust verification.** Add the exit assertion (every
   member/index source resolved); migrate the remaining F-P11 families; fold in W3
   (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute

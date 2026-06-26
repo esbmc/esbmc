@@ -3012,8 +3012,34 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       return cond;
     }
 
+    const locationt loc = get_location_from_decl(value_node);
+
+    // V.1k (b) B.3: when --python-irep2-adjust is set, build the boolean cast
+    // via the IREP2 resolve-then-build recipe (migrate the already-resolved
+    // operand forward, compose typecast2t, back-migrate once). Default off ⇒
+    // the legacy path below, byte-identical. The operand reaching here has been
+    // resolved by get_expr, so migrate_expr does not hit the F-P11 member/index
+    // assert (empirically clean over the V.1k fixture). See docs/irep2-migration.md.
+    if (config.options.get_bool_option("python-irep2-adjust"))
+    {
+      const locationt operand_loc = value_expr.location();
+      expr2tc operand2;
+      migrate_expr(value_expr, operand2);
+      exprt bool_expr =
+        migrate_expr_back(typecast2tc(migrate_type(bool_type()), operand2));
+      // The round-trip drops sub-expression locations; re-attach the typecast's
+      // and the operand's own top-level locations (mirrors the __ESBMC_list_size
+      // path above) so the back-migrated node matches the legacy form's printed
+      // counterexample text. Nested sub-locations are not restored — irrelevant
+      // to the verdict and consistent with that path.
+      bool_expr.location() = loc;
+      if (bool_expr.operands().size() == 1 && operand_loc.is_not_nil())
+        bool_expr.op0().location() = operand_loc;
+      return bool_expr;
+    }
+
     exprt bool_expr = typecast_exprt(value_expr, bool_type());
-    bool_expr.location() = get_location_from_decl(value_node);
+    bool_expr.location() = loc;
     return bool_expr;
   };
 
