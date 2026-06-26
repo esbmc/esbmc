@@ -2435,7 +2435,8 @@ code_contractst::materialize_ptr_deref_snapshots(
           // Only constant-size arrays of scalar elements (skip VLAs and
           // nested array/struct elements, which would recurse into the same
           // array-rvalue problem).
-          if (!is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
+          if (
+            !is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
             continue;
           type2tc k_type = atype.array_size->type;
 
@@ -2467,7 +2468,8 @@ code_contractst::materialize_ptr_deref_snapshots(
             greaterthanequal2tc(witness_k, gen_zero(k_type)),
             lessthan2tc(witness_k, atype.array_size));
           k_rng->location = location;
-          k_rng->location.comment("frame: constrain ptr-deref index (Phase 2C)");
+          k_rng->location.comment(
+            "frame: constrain ptr-deref index (Phase 2C)");
 
           // scalar snapshot of (*p).field[k]
           symbolt s_obj;
@@ -2482,12 +2484,13 @@ code_contractst::materialize_ptr_deref_snapshots(
           goto_programt::targett s_decl = wrapper.add_instruction(DECL);
           s_decl->code = code_decl2tc(elem_type, s_added->id);
           s_decl->location = location;
-          s_decl->location.comment("frame: ptr-deref array snapshot (Phase 2C)");
+          s_decl->location.comment(
+            "frame: ptr-deref array snapshot (Phase 2C)");
 
           expr2tc field_arr = member2tc(ftype, deref_expr, field);
           goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
-          s_asg->code =
-            code_assign2tc(snap_expr, index2tc(elem_type, field_arr, witness_k));
+          s_asg->code = code_assign2tc(
+            snap_expr, index2tc(elem_type, field_arr, witness_k));
           s_asg->location = location;
           s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
 
@@ -2498,7 +2501,8 @@ code_contractst::materialize_ptr_deref_snapshots(
           entry.value_type = elem_type;
           entry.snapshot_sym = snap_expr;
           entry.array_index = witness_k;
-          entry.member_type = ftype; // array type, for member access at assert time
+          entry.member_type =
+            ftype; // array type, for member access at assert time
           result.push_back(entry);
           continue;
         }
@@ -2610,7 +2614,8 @@ void code_contractst::emit_ptr_deref_assertions(
           member2tc(snap.member_type, deref_expr, snap.field_name);
         current_val = index2tc(snap.value_type, field_arr, snap.array_index);
         var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
-                    id2string(snap.field_name) + "[k] (k: nondet witness index)";
+                    id2string(snap.field_name) +
+                    "[k] (k: nondet witness index)";
       }
       else
       {
