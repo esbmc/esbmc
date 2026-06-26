@@ -1870,6 +1870,27 @@ exprt python_converter::handle_string_binary_operations(
 
 namespace
 {
+// A legacy `p[i]` whose base is a *pointer* is sugar for `*(p+i)`;
+// clang_c_adjust::adjust_index rewrites it only later, so pre-adjust it is still
+// an `index` over a pointer source. migrate_expr lowers `index` straight to
+// index2t, which forbids a pointer source (debug assert in index2t) — it expects
+// the adjusted array/vector form. The flag-gated flip below runs during
+// conversion, i.e. before that adjust, and is reached even for dead
+// operational-model bodies (e.g. `int.from_bytes`' `bytes_data[i]`). Detect that
+// shape so such an operand keeps its legacy node and is migrated normally at
+// goto-convert, instead of asserting here.
+bool has_pointer_index(const exprt &e)
+{
+  if (
+    e.id() == "index" && e.operands().size() == 2 &&
+    e.op0().type().id() == "pointer")
+    return true;
+  for (const exprt &op : e.operands())
+    if (has_pointer_index(op))
+      return true;
+  return false;
+}
+
 // V.1k (b) B.4: the IREP2 resolve-then-build flip for a binary op, shared by all
 // flipped families. Returns the round-tripped IREP2 node, or nil if the op/type
 // shape is not (yet) flipped — in which case the caller keeps the legacy node.
@@ -1885,6 +1906,11 @@ exprt try_build_irep2_binop(
   const exprt &rhs,
   const typet &type)
 {
+  // Keep the legacy node when an operand still carries a pre-adjust pointer
+  // index: migrate_expr would assert building index2t over a pointer source.
+  if (has_pointer_index(lhs) || has_pointer_index(rhs))
+    return nil_exprt();
+
   const bool same_int = lhs.type() == rhs.type() &&
                         (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
 
