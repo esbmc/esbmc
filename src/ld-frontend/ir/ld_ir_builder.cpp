@@ -119,7 +119,7 @@ LdIR LdIRBuilder::build(const LdAst &ast)
       ex.input_vars = def.input_vars;
       ex.local_vars = def.local_vars;
       ex.output_var = def.output_var;
-      ex.output_is_bool = def.output_is_bool;
+      ex.output_kind = def.output_kind;
       ex.in1_var = inst.in1_var;
       ex.out_wires = inst.out_wires;
       ex.st_body = def.st_body;

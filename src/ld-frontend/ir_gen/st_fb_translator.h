@@ -57,6 +57,7 @@ private:
   void parse_stmt_list(code_blockt &out, const char *const *terminators);
   codet parse_stmt();
   exprt parse_condition();
-  exprt parse_expr();   // arithmetic (left-assoc + - * /)
+  exprt parse_expr();    // additive  (+ -), left-assoc
+  exprt parse_term();    // multiplicative (* /), binds tighter than + -
   exprt parse_primary();
 };

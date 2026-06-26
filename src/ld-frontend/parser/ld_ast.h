@@ -180,14 +180,23 @@ struct VarDecl
 // executed in the scan cycle so the embedded logic reaches the GOTO IR.
 // -----------------------------------------------------------------------
 
+// A function-block formal/local variable with its declared IEC 61131-3 type.
+// Carrying the type (rather than just the name) keeps REAL/analog FB variables
+// from being silently demoted to int when the body is translated.
+struct FBVarDecl
+{
+  std::string name;
+  VarKind kind = VarKind::INT; // numeric default for an untyped FB variable
+};
+
 struct UserFBDef
 {
-  std::string type_name;               // e.g. "EQ_0"
-  std::vector<std::string> input_vars; // formal input names (IN1, IN2, ...)
-  std::vector<std::string> local_vars; // FB-local names (e.g. "i")
-  std::string output_var;              // formal output name (OUT)
-  bool output_is_bool = true;          // OUT type (BOOL vs INT)
-  std::string st_body;                 // raw Structured Text body
+  std::string type_name;              // e.g. "EQ_0"
+  std::vector<FBVarDecl> input_vars;  // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;  // FB-local variables (e.g. "i") + types
+  std::string output_var;             // formal output name (OUT)
+  VarKind output_kind = VarKind::BOOL; // OUT declared type
+  std::string st_body;                // raw Structured Text body
 };
 
 // Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".

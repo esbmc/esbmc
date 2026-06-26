@@ -1,22 +1,50 @@
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <cctype>
-#include <cstdlib>
 #include <stdexcept>
+#include <string>
 
-// Configuration toggle for reproducing the two paper configurations from one binary:
-//   default               -> "analog-extended": over-approximate unsupported ST
-//                            constructs (function calls, member access) as
-//                            nondeterministic, enabling analog programs (SWaT) to be
-//                            modelled at the cost of soundness (RQ6).
-//   env LLB_SOUND_MODE set -> "sound Boolean/integer": such constructs throw, so the
-//                            FB body falls back to a no-op; no over-approximation,
-//                            zero false positives (RQ2, RQ5).
+// Configuration toggle for reproducing the two paper configurations from one
+// binary.  Selected by the --ld-sound-mode CLI flag so the chosen semantics is
+// visible in the verification record (rather than an undiscoverable env var):
+//   default (flag unset) -> "analog-extended": over-approximate unsupported ST
+//                           constructs (function calls, member access) as
+//                           nondeterministic, enabling analog programs (SWaT) to
+//                           be modelled at the cost of soundness (RQ6).
+//   --ld-sound-mode      -> "sound Boolean/integer": such constructs throw, so
+//                           the FB body falls back to a no-op; no over-
+//                           approximation, zero false positives (RQ2, RQ5).
 static bool sound_mode()
 {
-  static const bool s = (std::getenv("LLB_SOUND_MODE") != nullptr);
-  return s;
+  return config.options.get_bool_option("ld-sound-mode");
+}
+
+// Scan-watchdog instrumentation is opt-in: it injects an assertion and thus
+// changes the verified model (see the WHILE handler).  --ld-scan-budget bounds
+// the tolerated loop iterations (default 8).
+static bool watchdog_enabled()
+{
+  return config.options.get_bool_option("ld-scan-watchdog");
+}
+static long long scan_budget()
+{
+  const std::string s = config.options.get_option("ld-scan-budget");
+  if (!s.empty())
+  {
+    try
+    {
+      const long long v = std::stoll(s);
+      if (v > 0)
+        return v;
+    }
+    catch (const std::exception &)
+    {
+      // fall through to the default on a malformed value
+    }
+  }
+  return 8;
 }
 static void require_tolerant(const char *what)
 {
@@ -194,11 +222,34 @@ exprt st_fb_translator::parse_primary()
   return resolve_(w); // typed symbol_exprt
 }
 
-// arithmetic: left-associative + - * / (precedence not modelled; FB bodies are
-// flat single-operator expressions, which is sufficient for the LLB corpus).
+// Build a binary arithmetic node, deriving its result type from the operands:
+// promote to double when either side is floating point (REAL/analog), otherwise
+// stay integer.  Hard-coding int here would silently truncate the analog (SWaT)
+// arithmetic this frontend now supports.
+static bool is_floating(const typet &t)
+{
+  return t.id() == "floatbv" || t.id() == "fixedbv";
+}
+static exprt make_binary_arith(const irep_idt &op, exprt lhs, exprt rhs)
+{
+  const typet result = (is_floating(lhs.type()) || is_floating(rhs.type()))
+                          ? double_type()
+                          : int_type();
+  if (lhs.type() != result)
+    lhs = typecast_exprt(lhs, result);
+  if (rhs.type() != result)
+    rhs = typecast_exprt(rhs, result);
+  exprt e(op, result);
+  e.copy_to_operands(lhs, rhs);
+  return e;
+}
+
+// arithmetic with IEC 61131-3 precedence: '*' and '/' bind tighter than '+' and
+// '-'; both levels are left-associative.  Modelling precedence keeps a mixed-
+// operator guard such as `a + b * c` from mis-parsing as `(a + b) * c`.
 exprt st_fb_translator::parse_expr()
 {
-  exprt lhs = parse_primary();
+  exprt lhs = parse_term();
   for (;;)
   {
     irep_idt op;
@@ -206,16 +257,26 @@ exprt st_fb_translator::parse_expr()
       op = exprt::plus;
     else if (accept_sym("-"))
       op = exprt::minus;
-    else if (accept_sym("*"))
+    else
+      break;
+    lhs = make_binary_arith(op, lhs, parse_term());
+  }
+  return lhs;
+}
+
+exprt st_fb_translator::parse_term()
+{
+  exprt lhs = parse_primary();
+  for (;;)
+  {
+    irep_idt op;
+    if (accept_sym("*"))
       op = exprt::mult;
     else if (accept_sym("/"))
       op = exprt::div;
     else
       break;
-    exprt rhs = parse_primary();
-    exprt e(op, int_type());
-    e.copy_to_operands(lhs, rhs);
-    lhs = e;
+    lhs = make_binary_arith(op, lhs, parse_primary());
   }
   return lhs;
 }
@@ -284,26 +345,40 @@ codet st_fb_translator::parse_stmt()
     expect_kw("end_while");
     accept_sym(";");
 
-    // Scan-watchdog instrumentation.  A real PLC trips a watchdog timer if a
-    // scan overruns; a non-terminating rung loop is exactly such an overrun.
-    // We prepend a per-loop iteration counter and assert it stays within a
-    // bounded budget, turning a (trigger-gated) non-terminating Ladder Logic
-    // Bomb into a reachable safety violation that incremental BMC detects,
-    // while bounded legitimate loops within budget remain SAFE.
+    code_whilet loop;
+    loop.cond() = cond;
+
+    // Without the scan-watchdog, the WHILE stays a plain loop: a non-terminating
+    // Ladder Logic Bomb is then caught by ESBMC's unwinding assertion (--unwind),
+    // and no extra assertion is added to the verified model.
+    if (!watchdog_enabled())
+    {
+      loop.body() = body;
+      return loop;
+    }
+
+    // Scan-watchdog instrumentation (opt-in via --ld-scan-watchdog).  A real PLC
+    // trips a watchdog timer if a scan overruns; a non-terminating rung loop is
+    // exactly such an overrun.  We prepend a per-loop iteration counter and
+    // assert it stays within the scan budget, turning a (trigger-gated)
+    // non-terminating Ladder Logic Bomb into a reachable safety violation that
+    // incremental BMC detects, while bounded legitimate loops within budget
+    // remain SAFE.  This injects an assertion, so it deliberately changes the
+    // verified model and is therefore gated behind the explicit flag.  The
+    // budget (--ld-scan-budget, default 8) bounds tolerated iterations and
+    // should be kept <= the BMC --unwind so the assertion is reachable.
+    const long long budget = scan_budget();
     symbol_exprt wd = resolve_("__wd" + std::to_string(wd_counter_++));
-    const long long WDOG = 8;
 
     code_blockt instrumented;
     exprt inc(exprt::plus, wd.type());
     inc.copy_to_operands(wd, from_integer(BigInt(1), wd.type()));
     instrumented.copy_to_operands(code_assignt(wd, inc));
-    instrumented.copy_to_operands(code_assertt(
-      binary_relation_exprt(wd, "<=", from_integer(BigInt(WDOG), wd.type()))));
+    instrumented.copy_to_operands(code_assertt(binary_relation_exprt(
+      wd, "<=", from_integer(BigInt(budget), wd.type()))));
     for (const auto &op : body.operands())
       instrumented.copy_to_operands(static_cast<const codet &>(op));
 
-    code_whilet loop;
-    loop.cond() = cond;
     loop.body() = instrumented;
 
     code_blockt out;

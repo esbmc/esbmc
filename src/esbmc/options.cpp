@@ -135,7 +135,22 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Plant known semantic errors in the Ladder Diagram (negate contact "
      "polarities, degrade Set/Reset coils to plain output coils) to validate "
-     "that the property checks detect them"}}},
+     "that the property checks detect them"},
+    {"ld-sound-mode",
+     NULL,
+     "Translate user function-block ST bodies in sound Boolean/integer mode: "
+     "unsupported constructs (function calls, member access) make the FB body "
+     "fall back to a no-op instead of being over-approximated as "
+     "nondeterministic (no over-approximation, zero false positives)"},
+    {"ld-scan-watchdog",
+     NULL,
+     "Instrument WHILE loops in user function-block bodies with a scan-watchdog "
+     "assertion that fails once a loop exceeds --ld-scan-budget iterations, "
+     "modelling a PLC scan overrun (changes the verified model)"},
+    {"ld-scan-budget",
+     boost::program_options::value<unsigned>()->value_name("N"),
+     "Tolerated iterations before the --ld-scan-watchdog assertion fails "
+     "(default 8); keep <= the BMC --unwind so the assertion is reachable"}}},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",

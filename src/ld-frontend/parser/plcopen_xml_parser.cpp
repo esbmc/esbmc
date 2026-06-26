@@ -674,17 +674,31 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     def.type_name = pou.attribute("name").as_string();
     if (def.type_name.empty())
       continue;
+    // Resolve a <variable>'s declared type the same way parse_var_decl does:
+    // <type> holds a single child whose tag is the type name (or "derived"
+    // carrying a name attribute).  Mapping through var_kind_from_string (which
+    // knows REAL) keeps REAL FB variables from collapsing to BOOL/INT.
+    auto fb_var_kind = [this](const pugi::xml_node &v) -> VarKind {
+      pugi::xml_node tnode = v.child("type");
+      pugi::xml_node first = tnode.first_child();
+      if (!first)
+        return VarKind::INT; // numeric default for an untyped FB variable
+      std::string tag = first.name();
+      std::string type_str = (tag == "derived")
+                               ? first.attribute("name").as_string()
+                               : tag;
+      return var_kind_from_string(type_str);
+    };
     for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
-      def.input_vars.push_back(v.node().attribute("name").as_string());
+      def.input_vars.push_back(
+        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
     for (auto v : pou.select_nodes(".//interface/localVars/variable"))
-      def.local_vars.push_back(v.node().attribute("name").as_string());
+      def.local_vars.push_back(
+        {v.node().attribute("name").as_string(), fb_var_kind(v.node())});
     if (auto ov = pou.select_node(".//interface/outputVars/variable").node())
     {
       def.output_var = ov.attribute("name").as_string();
-      pugi::xml_node tnode = ov.child("type");
-      def.output_is_bool =
-        tnode && tnode.first_child() &&
-        std::string(tnode.first_child().name()) == "BOOL";
+      def.output_kind = fb_var_kind(ov);
     }
     pugi::xml_node st = pou.select_node(".//body/ST").node();
     if (!st)

@@ -3,8 +3,9 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/message.h>
 #include <util/symbol.h>
-#include <iostream>
+#include <map>
 #include <stdexcept>
 
 ld_converter::ld_converter(contextt &context, const LdIR &ir)
@@ -24,6 +25,22 @@ typet ld_converter::bool_t() const
 typet ld_converter::int32_t_() const
 {
   return int_type();
+}
+
+typet ld_converter::type_of_kind(VarKind kind) const
+{
+  switch (kind)
+  {
+  case VarKind::BOOL:
+    return bool_t();
+  case VarKind::REAL:
+    return double_type();
+  case VarKind::INT:
+  case VarKind::DINT:
+  case VarKind::TIME:
+    break;
+  }
+  return int32_t_();
 }
 
 exprt ld_converter::int_const(long long value) const
@@ -69,21 +86,19 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
   loc.set_column(v.loc.col);
   sym.location = loc;
 
+  sym.set_type(type_of_kind(v.kind));
   switch (v.kind)
   {
   case VarKind::BOOL:
-    sym.set_type(bool_t());
     sym.set_value(false_exprt());
+    break;
+  case VarKind::REAL:
+    sym.set_value(from_double(0.0, double_type()));
     break;
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
-    sym.set_type(int32_t_());
     sym.set_value(int_const(0));
-    break;
-  case VarKind::REAL:
-    sym.set_type(double_type());
-    sym.set_value(from_double(0.0, double_type()));
     break;
   }
 
@@ -360,18 +375,30 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
 {
   const std::string prefix = "ld::" + ex.instance_name + "__";
 
+  // Map every declared FB input/local to its type so the resolver can honour
+  // it: a REAL FB variable must stay double, not be demoted to int.  Anything
+  // not declared (e.g. a temporary introduced by the body) defaults to int.
+  std::map<std::string, VarKind> declared_kinds;
+  for (const auto &v : ex.input_vars)
+    declared_kinds[v.name] = v.kind;
+  for (const auto &v : ex.local_vars)
+    declared_kinds[v.name] = v.kind;
+  declared_kinds[ex.output_var] = ex.output_kind;
+
   st_fb_translator::resolver_t resolve =
-    [this, prefix](const std::string &nm) -> symbol_exprt {
+    [this, prefix, &declared_kinds](const std::string &nm) -> symbol_exprt {
     const symbolt *s = context_.find_symbol(prefix + nm);
     if (s)
       return symbol_exprt(prefix + nm, s->get_type());
-    return declare_scoped(prefix + nm, int32_t_());
+    auto it = declared_kinds.find(nm);
+    const typet t = (it != declared_kinds.end()) ? type_of_kind(it->second)
+                                                 : int32_t_();
+    return declare_scoped(prefix + nm, t);
   };
 
-  // Declare the formal output with its correct type (others default to int via
-  // the resolver during translation).
-  declare_scoped(prefix + ex.output_var,
-                 ex.output_is_bool ? bool_t() : int32_t_());
+  // Declare the formal output with its declared type (REAL outputs stay
+  // double); other locals are declared on demand by the resolver above.
+  declare_scoped(prefix + ex.output_var, type_of_kind(ex.output_kind));
 
   // Translate the body first.  If it uses constructs outside the supported ST
   // subset (nested FB calls, REAL, MOD, library functions), it throws and we
@@ -385,15 +412,17 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
   }
   catch (const std::exception &e)
   {
-    std::cerr << "warning: user FB '" << ex.type_name
-              << "' body not translated (" << e.what()
-              << "); over-approximating (no-op).\n";
+    log_warning(
+      "user FB '{}' body not translated ({}); over-approximating (no-op).",
+      ex.type_name,
+      e.what());
     return code_skipt();
   }
   catch (...)
   {
-    std::cerr << "warning: user FB '" << ex.type_name
-              << "' body not translated; over-approximating (no-op).\n";
+    log_warning(
+      "user FB '{}' body not translated; over-approximating (no-op).",
+      ex.type_name);
     return code_skipt();
   }
 
@@ -401,7 +430,7 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
   code_blockt blk;
   for (const auto &iv : ex.input_vars)
   {
-    symbol_exprt s = resolve(iv);
+    symbol_exprt s = resolve(iv.name);
     blk.copy_to_operands(
       code_assignt(s, side_effect_expr_nondett(s.type())));
   }
