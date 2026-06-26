@@ -1,9 +1,26 @@
 # Design Proposal: a sound return-length model for the printf / (v)asprintf family
 
-**Status:** DRAFT PROPOSAL (for discussion — no implementation committed)
-**Tracking:** #4976, #4977, #4978, #4979 (busybox `no-overflow` false alarms); umbrella #2513; related #2797 (missing libc OM bodies)
+**Status:** IMPLEMENTED — Phases 0–2 merged; Phase 3 (G-C) deferred (optional precision)
+**Tracking:** #4976, #4977, #4978, #4979 (busybox `no-overflow` false alarms) — **all CLOSED**; umbrella #2513; related #2797 (missing libc OM bodies); follow-on precision tracked by #5012.
 **Author context:** follow-up to `docs/svcomp-issue-triage.md` §3.1 and the finding that wiring `vasprintf` into the *current* `symex_printf` is unsound (PR #5009).
-**Date:** 2026-05-31
+**Date:** 2026-05-31 (proposal); 2026-06-26 (status update)
+
+> **Implementation status (2026-06-26).** The sound model proposed here shipped across
+> four PRs and closed the four busybox false alarms:
+> - **Phase 1 / G-A** — non-constant format no longer under-approximates: **PR #5017**.
+> - **Phase 1 / G-B** — non-literal `%s` contributes the sound *unbounded* fallback (never 0);
+>   the object-size tightening of §4.2.1 remains an optional precision improvement.
+> - **Phase 2 / G-D** — `vprintf`/`vsprintf`/`vsnprintf`/`asprintf`/`vasprintf` wired into
+>   `symex_printf`: **PR #5270**, with the unbounded-return cap at `INT_MAX/2` (**PR #5278**)
+>   and the `*strp` heap-allocation model (**PR #5279**).
+> - **Phase 3 / G-C** — `va_list` `%s` argument recovery: **deferred** (precision-only;
+>   correctness never depends on it). Tracked under #5012.
+>
+> Regression coverage lives in `regression/esbmc/`: `asprintf_const_format_exact`,
+> `vasprintf_const_format_no_overflow`, `vasprintf_overflow_fail`,
+> `vasprintf_unbounded_s_no_overflow`, `vasprintf_unbounded_s_overflow_fail`, and the
+> reduced reproducers `github_4977`/`github_4978`/`github_4979` (+ `github_4978_fail`).
+> Issues #4976–#4979 were closed on 2026-06-09. See `docs/svcomp-issue-triage.md` §3.1.
 
 ---
 
