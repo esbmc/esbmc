@@ -3574,6 +3574,14 @@ following (`next: None`→`Node`), and dataclass field resolution.
   `regression/python/eq_member_adjust{,_fail}` pin it. The integer arithmetic and
   comparison families are now flipped behind the flag; the residue is float (`ieee_*`),
   width-mismatched, and non-integer-typed binops.
+  **Float `Add`/`Sub`/`Mult` flipped (2026-06-26).** New `python_expr::build_ieee_add`/
+  `build_ieee_sub`/`build_ieee_mul` (`ieee_*2tc`) reproduce migrate's default
+  `c:@__ESBMC_rounding_mode` (the converter's freshly-built float binops carry no
+  rounding_mode field, so the round-trip is byte-identical). Same exact-type-match guard
+  on `is_floatbv()`. `Div`/modulo/floor-div (separate `ieee_*` tree sites) stay legacy.
+  Sweep **0 divergences** over 45 float-ish + 80 broad tests; swap-probe (`ieee_add`→
+  `ieee_mul`) made `f.x + 1.5 == 4.0` FAIL, confirming it fires.
+  `regression/python/float_member_adjust{,_fail}` pin it.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

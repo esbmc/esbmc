@@ -1988,6 +1988,22 @@ exprt python_converter::build_binary_expression(
     return result;
   }
 
+  // V.1k (b) B.4: float Add/Sub/Mult via the ieee_* round-trip builders (same
+  // exact-type-match guard so ieee_*2t's operand-width assert holds). Div is
+  // handled separately above; the builders reproduce migrate's default
+  // __ESBMC_rounding_mode, so the round-trip is byte-identical. Default off.
+  if (
+    config.options.get_bool_option("python-irep2-adjust") &&
+    (op == "Add" || op == "Sub" || op == "Mult") && type.is_floatbv() &&
+    lhs.type() == type && rhs.type() == type)
+  {
+    exprt result = (op == "Add")   ? python_expr::build_ieee_add(lhs, rhs, type)
+                   : (op == "Sub") ? python_expr::build_ieee_sub(lhs, rhs, type)
+                                   : python_expr::build_ieee_mul(lhs, rhs, type);
+    result.location() = bin_expr.location();
+    return result;
+  }
+
   // V.1k (b) B.4: same idiom for the integer comparisons. The result is bool but
   // the operands carry their own type; lessthan2t / equality2t etc. assert
   // operand type/width consistency, so the guard requires same-type integer-
