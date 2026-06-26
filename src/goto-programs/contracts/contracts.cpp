@@ -2498,6 +2498,7 @@ code_contractst::materialize_ptr_deref_snapshots(
           entry.value_type = elem_type;
           entry.snapshot_sym = snap_expr;
           entry.array_index = witness_k;
+          entry.member_type = ftype; // array type, for member access at assert time
           result.push_back(entry);
           continue;
         }
@@ -2602,20 +2603,14 @@ void code_contractst::emit_ptr_deref_assertions(
       expr2tc deref_expr = dereference2tc(snap.pointee_type, snap.ptr_sym);
       if (snap.array_index)
       {
-        // Array field: compare the scalar element at the witness index.
-        // Recover the member's array type from the pointee struct.
-        type2tc arr_ty;
-        const struct_type2t &st = to_struct_type(snap.pointee_type);
-        for (size_t i = 0; i < st.member_names.size(); ++i)
-          if (st.member_names[i] == snap.field_name)
-          {
-            arr_ty = st.members[i];
-            break;
-          }
-        expr2tc field_arr = member2tc(arr_ty, deref_expr, snap.field_name);
+        // Array field: compare the scalar element at the nondet witness index.
+        // The member's array type was captured at snapshot time, so we need not
+        // rediscover it from the (possibly typedef'd) struct.
+        expr2tc field_arr =
+          member2tc(snap.member_type, deref_expr, snap.field_name);
         current_val = index2tc(snap.value_type, field_arr, snap.array_index);
         var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
-                    id2string(snap.field_name) + "[k]";
+                    id2string(snap.field_name) + "[k] (k: nondet witness index)";
       }
       else
       {

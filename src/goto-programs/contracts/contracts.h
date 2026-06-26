@@ -135,6 +135,7 @@ public:
     type2tc value_type;   ///< Type of the snapshotted value
     expr2tc snapshot_sym; ///< Snapshot symbol holding the pre-call value
     expr2tc array_index;  ///< Nil for scalars; nondet witness index for array fields
+    type2tc member_type;  ///< Array-field member type (for indexing); nil otherwise
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
