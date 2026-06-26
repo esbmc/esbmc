@@ -9,8 +9,10 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
+#include <util/config.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
@@ -1965,6 +1967,25 @@ exprt python_converter::build_binary_expression(
   // Handle division promotion
   if (op == "Div" || op == "div")
     math_handler_.handle_float_division(lhs, rhs, bin_expr);
+
+  // V.1k (b) B.4: under --python-irep2-adjust, build same-type integer Add/Sub
+  // via the IREP2 resolve-then-build round-trip (python_expr::build_add/sub).
+  // Guarded on exact type match (lhs==rhs==result, integer bitvector) so
+  // add2t/sub2t's width-consistency assert holds; every width-mismatched or
+  // float/other case falls through to the legacy node below, byte-identical.
+  // The operands reaching here are already resolved (B.4 triage: member
+  // arithmetic migrates without the F-P11 assert). Default off ⇒ legacy.
+  if (
+    config.options.get_bool_option("python-irep2-adjust") &&
+    (op == "Add" || op == "Sub") &&
+    (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
+    rhs.type() == type)
+  {
+    exprt result = (op == "Add") ? python_expr::build_add(lhs, rhs, type)
+                                 : python_expr::build_sub(lhs, rhs, type);
+    result.location() = bin_expr.location();
+    return result;
+  }
 
   // Add operands
   bin_expr.copy_to_operands(lhs, rhs);
