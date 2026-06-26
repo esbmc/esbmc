@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 landed (2026-06-26); B.1 next.** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 landed (2026-06-26); B.2 next.** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3469,11 +3469,18 @@ following (`next: None`→`Node`), and dataclass field resolution.
   contracts — visits-every-node and the `is_type`-skip no-op — are pinned by
   `unit/python-frontend/python_adjust_test.cpp`. Parity is trivially unchanged
   (the pass is on no execution path).
-- **B.1 — member/index source following.** Teach the pass to follow a `symbol_type2t`
-  member/index source to its `struct_type2t`/`array_type2t` via `namespacet::follow`,
-  **recursively** (resolve `X` before building `X.a`), with pointer auto-deref. Still
-  not wired in. Unit round-trip tests asserting a hand-built
-  `member2tc(symbol_type2t-source)` resolves to a struct source.
+- **B.1 — member/index source following. LANDED.** `python_adjust::adjust_expr`
+  is now a mutating post-order walk: it resolves operands first (resolve `X`
+  before `X.a`), then rewrites a `member2t`/`index2t` source whose type is an
+  unresolved `symbol_type2t` to carry the followed `struct_type2t`/`array_type2t`
+  (`namespacet::follow` + `expr2t::with_type`). **Pointer auto-deref is not in the
+  adjuster:** the `member2t`/`index2t` construction assert forbids a pointer
+  source (`irep2_expr.h:1552-1556`/`:1647-1648` permit only struct/union/complex/
+  array/vector/`symbol_id`), so a pointer base is dereferenced — to a
+  `symbol_type2t`-typed source — *before* the node is built; the adjuster only
+  ever sees the by-name source. Still not wired into `python_language.cpp` (B.2).
+  `python_adjust_test.cpp` pins direct member, direct index, and recursive nested
+  resolution.
 - **B.2 — wire in behind a flag.** `--python-irep2-adjust` (default off) routes Python
   output through the new pass *in addition to* the legacy `clang_cpp_adjust` (the new
   pass resolves the pre-adjust `symbol_type2t` members the converter will start
