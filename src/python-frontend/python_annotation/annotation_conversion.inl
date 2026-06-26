@@ -1788,6 +1788,12 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       call["func"]["attr"] == "hex")
       return "str";
 
+    // (258).to_bytes(...) on an int literal returns bytes.
+    if (
+      obj_type == "int" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "to_bytes")
+      return "bytes";
+
     // bytes.decode() returns a str.
     if (
       obj_type == "bytes" && call["func"].contains("attr") &&
@@ -2328,6 +2334,15 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "hex")
       return "str";
+    // int.to_bytes() returns bytes. This is the instance form x.to_bytes(...)
+    // on an int variable; the int.to_bytes(x, ...) class form is mapped in
+    // get_type_from_call. Without this the receiver's "int" type propagates to
+    // the assignment target, so the bytes result is mistyped as a scalar int
+    // and subscript/len on it fail.
+    if (
+      obj_type == "int" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "to_bytes")
+      return "bytes";
     // str.encode() returns bytes; bytes.decode() returns str.
     if (
       obj_type == "str" && call["func"].contains("attr") &&
