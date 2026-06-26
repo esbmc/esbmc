@@ -31,7 +31,9 @@ public:
   virtual ~python_adjust() = default;
 
   /** Walk every non-type symbol's IREP2 body and write the resolved form back.
-   *  Returns true on error (none today), mirroring `clang_c_adjust::adjust()`. */
+   *  Returns true on error — specifically if the post-adjust strong invariant is
+   *  violated (a member/index source still carries an unresolved `symbol_type2t`
+   *  after resolution), mirroring `clang_c_adjust::adjust()`'s bool contract. */
   bool adjust();
 
 protected:
@@ -49,6 +51,11 @@ private:
    *  followed aggregate type and return true. Otherwise leave it untouched and
    *  return false. */
   bool resolve_aggregate_source(expr2tc &source) const;
+
+  /** Post-adjust strong-invariant check (V.1k B.4): true if any `member2t` or
+   *  `index2t` in @p expr still has a `symbol_type2t` source — i.e. a source the
+   *  pass could not resolve (e.g. an unregistered tag). Recursive. */
+  bool has_unresolved_source(const expr2tc &expr) const;
 };
 
 #endif /* PYTHON_FRONTEND_PYTHON_ADJUST_H_ */
