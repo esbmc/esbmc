@@ -3551,6 +3551,13 @@ following (`next: None`→`Node`), and dataclass field resolution.
   the flip actually fires (it flipped the verdict). `regression/python/arith_member_adjust
   {,_fail}` pin the flipped path for CI. The width-mismatch / float arith remain legacy
   (the genuine width-hazard residue, §3640).
+  **`Mult` added (2026-06-26).** Same guard, via a new `python_expr::build_mul`
+  (`mul2tc`); the integer-bitvector + exact-type-match fence covers `mul2t`'s width
+  assert identically. Sweep stays **0 divergences** over 65 class/arith + 90 broad
+  (four flips active); swap-probe (`build_mul`→`build_add`) made `m.x * 7 == 42` FAIL,
+  confirming it fires. `regression/python/mult_member_adjust{,_fail}` pin it. The
+  integer `Add`/`Sub`/`Mult` family is now flipped; `Div`/float (`ieee_*`) and
+  width-mismatched arith remain the legacy residue.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

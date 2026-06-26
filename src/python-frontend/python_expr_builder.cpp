@@ -219,6 +219,14 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+exprt build_mul(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return mul2tc(ty, x, y);
+    });
+}
+
 // `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
 // notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
 // is the byte-identical round-trip.

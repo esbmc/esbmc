@@ -1977,12 +1977,13 @@ exprt python_converter::build_binary_expression(
   // arithmetic migrates without the F-P11 assert). Default off ⇒ legacy.
   if (
     config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Add" || op == "Sub") &&
+    (op == "Add" || op == "Sub" || op == "Mult") &&
     (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
     rhs.type() == type)
   {
-    exprt result = (op == "Add") ? python_expr::build_add(lhs, rhs, type)
-                                 : python_expr::build_sub(lhs, rhs, type);
+    exprt result = (op == "Add")   ? python_expr::build_add(lhs, rhs, type)
+                   : (op == "Sub") ? python_expr::build_sub(lhs, rhs, type)
+                                   : python_expr::build_mul(lhs, rhs, type);
     result.location() = bin_expr.location();
     return result;
   }
