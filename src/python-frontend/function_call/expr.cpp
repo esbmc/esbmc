@@ -2604,7 +2604,7 @@ function_call_expr::get_dispatch_table()
              return imag_part;
            fast_path = make_complex(real_part, imag_part);
          }
-         return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
+         return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
        }
 
        // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
@@ -2642,7 +2642,7 @@ function_call_expr::get_dispatch_table()
          fast_guard = and2tc(fast_guard, imag_guard);
        }
 
-       return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
+       return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
      },
      "cmath inverse pure-imag fast path"},
 
@@ -3489,8 +3489,8 @@ exprt function_call_expr::handle_general_function_call()
                   }
                   exprt old_i = vals[i];
                   exprt old_j = vals[j];
-                  vals[i] = materialize(if_exprt(cond, old_j, old_i));
-                  vals[j] = materialize(if_exprt(cond, old_i, old_j));
+                  vals[i] = materialize(build_if(cond, old_j, old_i));
+                  vals[j] = materialize(build_if(cond, old_i, old_j));
                 }
               }
 

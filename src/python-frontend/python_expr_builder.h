@@ -83,10 +83,22 @@ exprt build_add(const exprt &a, const exprt &b, const typet &t);
 // `a - b : t` over same-width operands (sub2t asserts width consistency).
 exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 
+// Equality `a == b` over same-typed operands. migrate lowers a legacy
+// "=" node to equality2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip.
+exprt build_equal(const exprt &a, const exprt &b);
+
 // Inequality `a != b` over same-typed operands. migrate lowers a legacy
 // "notequal" node to notequal2tc(migrate(a), migrate(b)), so this is the
 // byte-identical round-trip.
 exprt build_notequal(const exprt &a, const exprt &b);
+
+// Ternary select `cond ? then : else_`. The if2t invariant requires both
+// branches to share the result type kind, so this falls back to the legacy
+// node when the branch types diverge (or contain a dyn-sized array that does
+// not round-trip). On the common matching-branch path it is the byte-identical
+// round-trip.
+exprt build_if(const exprt &cond, const exprt &then_, const exprt &else_);
 
 // Expression-context call `fn(args...) : return_type`, fn a function symbol.
 exprt build_call_expr(

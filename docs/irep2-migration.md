@@ -3508,6 +3508,63 @@ expressions directly, and §V.1 acceptance bars #1/#2 fall for the converter's
 expression surface. (Bodies/`goto_convert` W1 stays a RETAIN_BOUNDARY per the V.4
 outcome; the C/C++ counterexample printer W4 stays Phase V.5.)
 
+#### B.0–B.3 implementation outcomes (2026-06-25) — infra landed, B.3 is gated on B.5
+
+> **Status: B.0–B.2 + validation built (dead-but-tested); B.3 blocked on B.5.** The
+> skeleton, resolution, flag-wiring and fixture-validation are implemented; the step
+> that *exercises* resolution in the pipeline (B.3) is, empirically, not separable
+> from B.5. Recorded so the B.5 effort starts from the real state, not the forecast.
+
+**What landed (all flag-gated behind `--python-irep2-adjust`, default off ⇒
+byte-identical):**
+- **B.0** — `src/python-frontend/python_adjust.{h,cpp}`: a pass that walks each code
+  symbol's `get_value2()`. Structurally a no-op; unit-tested (`python_adjust_test`).
+- **B.1** — `adjust_expr` resolves a transient `symbol_type2t` member2t/index2t source
+  via `namespacet::follow` + `expr2t::with_type`, recursing operands first
+  (inner-to-outer for `self.b.a`). *Correction to the §design above:* a member/index
+  **cannot** be built over a raw pointer source (the construction assert rejects
+  `pointer_id`), so the transient form is a `symbol_type2t`, carried on a `symbol2t`
+  or a `dereference2t` — one symbol-type branch handles both. No separate
+  pointer-deref arm is needed at this layer.
+- **B.2** — `--python-irep2-adjust` option + invocation in `python_languaget::convert`,
+  **after** `clang_cpp_adjust`. Wiring the body-walk surfaced the concrete
+  *migration-before-resolution wall*: reading a Python body's `get_value2()` migrates a
+  by-name `symbol_type` constant aggregate, which trips **`constant_struct2t`**'s assert
+  (V.1k relaxed `member2t`/`index2t` but not the aggregate literals). Fixed by relaxing
+  `constant_struct2t` the same way (permit a transient `symbol_id`; `NDEBUG`-only, so
+  release-inert). `adjust()` writes a symbol back only when resolution changed it and
+  walks only code symbols, so the flag is behaviour-inert.
+- **B.2 validation** — flag-on vs flag-off parity over the **entire 20-test acceptance
+  fixture** (69 CORE tests): **0 divergences, 0 aborts**. Pinned by
+  `python_irep2_adjust_{nested_attr,inferred_attr,dataclass}` regression tests.
+
+**B.3 negative result — the before-placement is unsound while `clang_cpp_adjust` still
+runs.** B.3 (make resolution actually fire) was prototyped by moving `python_adjust`
+*before* `clang_cpp_adjust`. Findings, in order:
+1. All 69 fixture tests then abort on **`index2t`** — the migrated index source is a
+   **pointer** (the Python frontend stores instances and containers behind a pointer),
+   which the relaxed `index2t` assert does not permit.
+2. Relaxing `member2t`/`index2t` to tolerate a transient `pointer_id` source **plus**
+   adding a pointer auto-deref to `resolve_source` stops the aborts — but then the whole
+   fixture yields **no verdict** under the flag (symex crash/hang).
+3. Root cause: running the IREP2 adjuster before `clang_cpp_adjust` *while
+   `clang_cpp_adjust` still runs afterwards* **double-resolves** the same nodes — exactly
+   the "two-places-resolve hazard" the V.1k spike (round 1) flagged.
+
+**Consequence for the plan:** B.3 as "emit pre-adjust + resolve with the pass" is **not
+separable from B.5**. The pass can only resolve soundly once it **replaces**
+`clang_cpp_adjust` on the Python path — which means it must first reproduce
+`clang_cpp_adjust`'s *complete* completion (recursive follow + pointer auto-deref +
+dataclass/inference-aware resolution + `#cpp_type`/`#member_name` carriage), and only
+then is `clang_cpp_adjust` dropped and the pass moved before. So **B.3, B.4 and B.5
+collapse into one milestone**: a complete IREP2-native Python adjuster that supplants
+`clang_cpp_adjust`, validated GOTO-byte + dual-solver against it. The incremental
+"flag-gated, one-family-at-a-time" decomposition the plan above sketched does not hold
+across the `clang_cpp_adjust` boundary, because that boundary cannot be half-crossed
+(two resolvers running over the same nodes is unsound). The B.0–B.2 infra and the
+relaxed asserts (`member2t`/`index2t`/`constant_struct2t` for `symbol_id`) remain the
+correct foundation for that combined effort.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
