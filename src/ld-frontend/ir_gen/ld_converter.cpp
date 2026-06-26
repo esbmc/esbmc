@@ -631,6 +631,29 @@ void ld_converter::prepend_static_init()
 
 void ld_converter::convert()
 {
+  // REAL function-block arithmetic emits ieee_* operators, which reference
+  // c:@__ESBMC_rounding_mode. The C frontend declares this symbol; the LD
+  // frontend must supply it too, initialised to 0 (round-to-nearest-even).
+  // Otherwise the rounding mode is an unconstrained nondet input: the SMT
+  // backend must reason over every rounding mode, which makes even trivial REAL
+  // arithmetic blow up (and is unsound). prepend_static_init() picks this up
+  // and emits the initialisation at the top of __ESBMC_main.
+  if (!context_.find_symbol("c:@__ESBMC_rounding_mode"))
+  {
+    symbolt rm;
+    rm.id = "c:@__ESBMC_rounding_mode";
+    rm.name = "__ESBMC_rounding_mode";
+    rm.module = "ld";
+    rm.mode = "C";
+    rm.lvalue = true;
+    rm.static_lifetime = true;
+    rm.file_local = false;
+    rm.is_extern = false;
+    rm.set_type(int32_t_());
+    rm.set_value(int_const(0));
+    context_.move_symbol_to_context(rm);
+  }
+
   for (const auto &v : ir_.variables)
     declare_variable(v);
 
