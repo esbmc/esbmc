@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 + B.2 landed; B.3 spike done — service design chosen, B.0–B.2 re-sequenced to B.5 (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 (type-following) pinned, layer-2 gated at the flip (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3562,8 +3562,45 @@ proceed independently via the **service** (`ns.follow` at construction).
 **The load-bearing risk stays RV2 (critical).** `clang_cpp_adjust` does more than
 `ns.follow` — pointer auto-deref, dataclass/inference completion. The service's
 resolved type must equal what `clang_cpp_adjust` + goto-convert produce, proven by
-corpus round-trip equivalence on an asserts build, before any F-P11 site flips. The
-next task is that proof harness + the first (BoolOp) site, gated dual-solver.
+corpus round-trip equivalence on an asserts build, before any F-P11 site flips.
+
+#### RV2 discharge — layer 1 (type-following) pinned; layer 2 (auto-deref/completion) gated at the flip (2026-06-26)
+
+> A follow-up read of the resolution mechanism splits RV2 into two layers and
+> discharges the first. **The spike's "the service is just `ns.follow`" is too
+> coarse** — the empirical mechanism is subtler, which is *why* RV2 is critical.
+
+**Mechanism (empirical, GOTO-dump grounded).**
+- `clang_c_adjust::adjust_type` does **not** follow a non-macro symbol type
+  (`clang_c_adjust_expr.cpp`: it resolves only `is_macro` type symbols); the
+  struct-following for a member base happens elsewhere.
+- For a Python instance (`pointer→symbol_typet("tag-Cls")`), `adjust_member`
+  inserts a **dereference** whose type is the pointer's `subtype`; the member
+  source therefore resolves to a `dereference` of the followed struct. A
+  `--goto-functions-only` dump of `p.x` confirms it: `ASSERT p->x == 5` — a
+  resolved-struct member over a pointer auto-deref, **not** a raw `symbol_type`
+  source surviving to symex.
+
+**Layer 1 — type-following (DISCHARGED).** The service resolves the source type
+with the IREP2-native `namespacet::follow(type2tc)`; `clang_cpp_adjust` follows
+through the legacy `namespacet::follow(typet)`. These are *two distinct
+implementations* (the IREP2 one was added to skip the back-migrate detour on the
+hot path). A new unit test
+(`unit/python-frontend/python_adjust_test.cpp`, `[rv2]`) pins
+`ns.follow(migrate_type(s)) == migrate_type(ns.follow(s))` across the 20-test
+fixture's class shapes — simple, nested struct-valued, self-referential
+(`*Node`), and pointer-to-class (`*B`). Equivalent across all; a divergence in
+either follow can no longer silently break the service.
+
+**Layer 2 — auto-deref + dataclass/inference completion (gated, not yet
+discharged).** The pointer auto-deref and dataclass-field completion are *not*
+covered by the type-following test. They are validated end-to-end at the first
+site flip via the existing corpus parity sweep
+(`scripts/irep2-migration/parity_sweep.sh`, deterministic verdict + matched-text,
+dual-solver Bitwuzla + Z3, asserts build) — RV-adj2 mandates verdict/text parity
+over a goto diff because of model nondeterminism. **Next task:** flip the first
+(BoolOp) F-P11 site to resolve-then-build via the service, then run the parity
+sweep over the 20-test fixture; commit only on dual-solver parity.
 
 **Risks (extend §V.4 / Part II §7).** *RV-adj1:* the new pass must reproduce
 `clang_cpp_adjust`'s dataclass/inference completion exactly — mitigate by reusing the
