@@ -140,22 +140,141 @@ static void collect_address_taken(
     [&](const expr2tc &sub) { collect_address_taken(sub, ns, out); });
 }
 
+/* Name of the function a FUNCTION_CALL targets, or an empty id when the callee
+ * is reached through a pointer (no statically-known name). */
+static irep_idt called_function_name(const goto_programt::instructiont &ins)
+{
+  const code_function_call2t &c = to_code_function_call2t(ins.code);
+  if (is_symbol2t(c.function))
+    return to_symbol2t(c.function).thename;
+  return irep_idt();
+}
+
+/* Set of functions that may, directly or transitively, spawn a thread (i.e.
+ * reach a call to the __ESBMC_spawn_thread intrinsic, which pthread_create
+ * lowers to). A call to any of these is the point past which more than one
+ * thread may be live. */
+static std::unordered_set<irep_idt, irep_id_hash>
+compute_thread_spawners(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::unordered_set<irep_idt, irep_id_hash> spawners;
+  std::unordered_map<
+    irep_idt,
+    std::unordered_set<irep_idt, irep_id_hash>,
+    irep_id_hash>
+    callers;
+
+  forall_goto_functions (f_it, goto_functions)
+  {
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      if (!ins.is_function_call())
+        continue;
+      const irep_idt callee = called_function_name(ins);
+      if (callee.empty())
+        continue;
+      if (callee == spawn_intrinsic)
+        spawners.insert(f_it->first);
+      callers[callee].insert(f_it->first);
+    }
+  }
+
+  // The intrinsic itself is the spawn point, so a direct call to it (a body
+  // that bypasses the pthread_create wrapper) is recognised too.
+  spawners.insert(spawn_intrinsic);
+
+  // Propagate "may spawn" up the call graph to a fixpoint: any function that
+  // calls a spawner is itself a spawner.
+  std::vector<irep_idt> work(spawners.begin(), spawners.end());
+  while (!work.empty())
+  {
+    const irep_idt f = work.back();
+    work.pop_back();
+    auto it = callers.find(f);
+    if (it == callers.end())
+      continue;
+    for (const auto &caller : it->second)
+      if (spawners.insert(caller).second)
+        work.push_back(caller);
+  }
+  return spawners;
+}
+
+/* Instructions of `body` that may execute after a thread has been spawned:
+ * every instruction reachable in the CFG (following gotos and loop back-edges)
+ * from a call to a thread-spawning function, including the spawning call
+ * itself. A write that lies outside this set runs while `body` is still the
+ * only live thread, so it cannot race with any other thread. */
+static std::unordered_set<const goto_programt::instructiont *>
+instructions_after_spawn(
+  const goto_programt &body,
+  const std::unordered_set<irep_idt, irep_id_hash> &spawners)
+{
+  std::unordered_set<const goto_programt::instructiont *> reachable;
+  std::vector<goto_programt::const_targett> work;
+
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+    if (
+      it->is_function_call() && spawners.count(called_function_name(*it)) != 0)
+      work.push_back(it);
+
+  while (!work.empty())
+  {
+    const goto_programt::const_targett cur = work.back();
+    work.pop_back();
+    if (cur == body.instructions.end() || !reachable.insert(&*cur).second)
+      continue;
+    goto_programt::const_targetst succs;
+    body.get_successors(cur, succs);
+    for (const auto &s : succs)
+      work.push_back(s);
+  }
+  return reachable;
+}
+
 void reachability_treet::scan_program_writes()
 {
   if (!readonly_global_opt)
     return;
+
+  // Functions whose invocation may bring a second thread to life.
+  const std::unordered_set<irep_idt, irep_id_hash> spawners =
+    compute_thread_spawners(goto_functions);
+
+  // The entry function runs as the main thread. Writes it performs strictly
+  // before it spawns the first thread are single-threaded and cannot race, so
+  // they must not mark their target as written (e.g. `global = 100;` issued in
+  // main before pthread_create leaves `global` read-only for the other
+  // threads).
+  const irep_idt entry =
+    "c:@F@" + (config.main.empty() ? std::string("main") : config.main);
 
   Forall_goto_functions (f_it, goto_functions)
   {
     if (f_it->first == "__ESBMC_main")
       continue;
 
-    if (f_it->second.body.hide)
-      continue;
+    // For the entry function, restrict write collection to the instructions
+    // that may run after the first spawn. Only engaged when the entry actually
+    // spawns a thread itself; otherwise every write is collected, keeping the
+    // analysis sound (a never-spawning entry means either no threads exist or
+    // they are created down a path we conservatively treat as concurrent).
+    std::unordered_set<const goto_programt::instructiont *> concurrent;
+    bool filter_entry = false;
+    if (f_it->first == entry)
+    {
+      concurrent = instructions_after_spawn(f_it->second.body, spawners);
+      filter_entry = !concurrent.empty();
+    }
 
     for (const auto &ins : f_it->second.body.instructions)
     {
       if (is_nil_expr(ins.code))
+        continue;
+
+      if (filter_entry && concurrent.count(&ins) == 0)
         continue;
 
       if (ins.is_assign())
