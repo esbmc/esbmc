@@ -243,3 +243,34 @@ TEST_CASE(
   REQUIRE(out != nullptr);
   REQUIRE(is_struct_type(to_member2t(out->get_value2()).source_value->type));
 }
+
+TEST_CASE(
+  "python_adjust B.2 adjust() skips non-Python-mode symbols",
+  "[python-frontend][irep2][python-adjust]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  const type2tc intt = get_int_type(config.ansi_c.int_width);
+
+  contextt context;
+  add_type_symbol(context, "tag-Point", make_struct("tag-Point", "x", intt));
+
+  // A C-mode symbol carrying an unresolved member: the Python-only pass must
+  // leave it untouched (V.1k RV-adj4 — the C OM bodies stay on the legacy path).
+  const expr2tc body =
+    member2tc(intt, symbol2tc(symbol_type2tc("tag-Point"), "p"), "x");
+  symbolt symbol;
+  symbol.id = "c:@F@uses_point";
+  symbol.name = "uses_point";
+  symbol.mode = "C";
+  symbol.set_value(body);
+  symbol.set_type(intt);
+  context.add(symbol);
+
+  REQUIRE_FALSE(python_adjust(context).adjust());
+
+  const symbolt *out = context.find_symbol("c:@F@uses_point");
+  REQUIRE(out != nullptr);
+  REQUIRE(is_symbol_type(to_member2t(out->get_value2()).source_value->type));
+}

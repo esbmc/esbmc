@@ -827,7 +827,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "Deprecated no-op (accepted for backward compatibility). goto_convert "
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
-     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
+     "bypass and the --no-irep2-bodies escape hatch have been removed."},
+    {"python-irep2-adjust",
+     NULL,
+     "Run the IREP2-native Python adjuster (V.1k) over Python-mode symbols, in "
+     "addition to the legacy clang_cpp_adjust. Default off; off => byte-"
+     "identical. Staged enabling infra for the resolve-then-build migration "
+     "(docs/irep2-migration.md, Part V Phase V.1k (b))."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},
