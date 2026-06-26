@@ -3520,6 +3520,16 @@ following (`next: None`→`Node`), and dataclass field resolution.
   (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute
   reads at `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`,
   `goto2c/expr2c.cpp:169-174`.
+  **Exit assertion LANDED (2026-06-26).** `python_adjust::adjust()` now re-enforces
+  the strong invariant: after resolving each body it walks the result and, if any
+  `member2t`/`index2t` source is still a `symbol_type2t` (a survivor the pass could not
+  follow — e.g. an unregistered tag, left untouched by the guard), it `log_error`s
+  naming the symbol and returns true (error). This is the post-relaxation re-enforcement
+  the relaxed construction assert deferred. It is a pure safety net on the live pipeline
+  — `clang_cpp_adjust` resolves every source before the flag-on pass runs, so the
+  fixture + broad parity sweep stays **0 divergences** with the check active — and it
+  catches a B.5-era resolution bug deterministically. Unit-tested both ways (resolved
+  body ⇒ false; unregistered-tag survivor ⇒ true).
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
