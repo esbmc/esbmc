@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract add --function add --unwind 9
+^VERIFICATION FAILED$

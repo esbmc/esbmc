@@ -2421,6 +2421,87 @@ code_contractst::materialize_ptr_deref_snapshots(
         if (is_pointer_type(ftype) || is_code_type(ftype))
           continue;
 
+        // Array field: a whole-array rvalue read through the pointer is
+        // illegal C (dereference cannot build an array rvalue). Snapshot the
+        // scalar element (*p).field[k] at a nondet witness index k in [0,n)
+        // and later assert it is unchanged -- sound by the same forall-via-
+        // witness argument as Phase 2B (avoids dereference.cpp abort).
+        if (is_array_type(ftype))
+        {
+          const array_type2t &atype = to_array_type(ftype);
+          type2tc elem_type = atype.subtype;
+          if (is_symbol_type(elem_type))
+            elem_type = ns.follow(elem_type);
+          // Only constant-size arrays of scalar elements (skip VLAs and
+          // nested array/struct elements, which would recurse into the same
+          // array-rvalue problem).
+          if (!is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
+            continue;
+          type2tc k_type = atype.array_size->type;
+
+          std::string base = func_name + "_" + id2string(param_id) + "_" +
+                             id2string(field) + "_" +
+                             std::to_string(ptr_deref_snap_counter++);
+
+          // nondet witness index k, constrained to [0, n)
+          symbolt k_obj;
+          k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
+          set_symbol_type(k_obj, k_type);
+          k_obj.lvalue = true;
+          k_obj.static_lifetime = false;
+          k_obj.file_local = false;
+          symbolt *k_added = context.move_symbol_to_context(k_obj);
+          expr2tc witness_k = symbol2tc(k_type, k_added->id);
+
+          goto_programt::targett k_decl = wrapper.add_instruction(DECL);
+          k_decl->code = code_decl2tc(k_type, k_added->id);
+          k_decl->location = location;
+          k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
+
+          goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
+          k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
+          k_asg->location = location;
+
+          goto_programt::targett k_rng = wrapper.add_instruction(ASSUME);
+          k_rng->guard = and2tc(
+            greaterthanequal2tc(witness_k, gen_zero(k_type)),
+            lessthan2tc(witness_k, atype.array_size));
+          k_rng->location = location;
+          k_rng->location.comment("frame: constrain ptr-deref index (Phase 2C)");
+
+          // scalar snapshot of (*p).field[k]
+          symbolt s_obj;
+          s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
+          set_symbol_type(s_obj, elem_type);
+          s_obj.lvalue = true;
+          s_obj.static_lifetime = false;
+          s_obj.file_local = false;
+          symbolt *s_added = context.move_symbol_to_context(s_obj);
+          expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
+
+          goto_programt::targett s_decl = wrapper.add_instruction(DECL);
+          s_decl->code = code_decl2tc(elem_type, s_added->id);
+          s_decl->location = location;
+          s_decl->location.comment("frame: ptr-deref array snapshot (Phase 2C)");
+
+          expr2tc field_arr = member2tc(ftype, deref_expr, field);
+          goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
+          s_asg->code =
+            code_assign2tc(snap_expr, index2tc(elem_type, field_arr, witness_k));
+          s_asg->location = location;
+          s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
+
+          ptr_deref_snapshot_t entry;
+          entry.ptr_sym = ptr_sym;
+          entry.pointee_type = pointee;
+          entry.field_name = field;
+          entry.value_type = elem_type;
+          entry.snapshot_sym = snap_expr;
+          entry.array_index = witness_k;
+          result.push_back(entry);
+          continue;
+        }
+
         std::string snap_name = "__ESBMC_frame_snap_pderef_" + func_name + "_" +
                                 id2string(param_id) + "_" + id2string(field) +
                                 "_" + std::to_string(ptr_deref_snap_counter++);
@@ -2519,9 +2600,29 @@ void code_contractst::emit_ptr_deref_assertions(
     {
       // Struct field: assert p->field == snapshot
       expr2tc deref_expr = dereference2tc(snap.pointee_type, snap.ptr_sym);
-      current_val = member2tc(snap.value_type, deref_expr, snap.field_name);
-      var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
-                  id2string(snap.field_name);
+      if (snap.array_index)
+      {
+        // Array field: compare the scalar element at the witness index.
+        // Recover the member's array type from the pointee struct.
+        type2tc arr_ty;
+        const struct_type2t &st = to_struct_type(snap.pointee_type);
+        for (size_t i = 0; i < st.member_names.size(); ++i)
+          if (st.member_names[i] == snap.field_name)
+          {
+            arr_ty = st.members[i];
+            break;
+          }
+        expr2tc field_arr = member2tc(arr_ty, deref_expr, snap.field_name);
+        current_val = index2tc(snap.value_type, field_arr, snap.array_index);
+        var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
+                    id2string(snap.field_name) + "[k]";
+      }
+      else
+      {
+        current_val = member2tc(snap.value_type, deref_expr, snap.field_name);
+        var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
+                    id2string(snap.field_name);
+      }
     }
 
     expr2tc guard = equality2tc(current_val, snap.snapshot_sym);
