@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: scoped, not started (2026-06-25).** The V.1k breakthrough above deferred
+> **Status: B.0 landed (2026-06-26); B.1 next.** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3459,11 +3459,16 @@ single-leaf-follow (a) missed: recursive following (`self.b.a`), inferred-type
 following (`next: None`→`Node`), and dataclass field resolution.
 
 **Phased, commit-sized plan (gate each on the §V.5 universal gate + `esbmc-cpp`).**
-- **B.0 — pass skeleton, dead-but-tested.** Add a Python-only IREP2 walker
-  (`src/python-frontend/python_adjust.{h,cpp}`, modelled on `clang_c_adjust::adjust()`)
-  that walks `symbol.get_value2()` and is a structural **no-op** (visits every node,
-  changes nothing). Not wired into `python_language.cpp` yet. Gate: full Python +
-  `esbmc-cpp` parity is trivially unchanged (pass does nothing).
+- **B.0 — pass skeleton, dead-but-tested. LANDED.** Added the Python-only IREP2
+  walker `src/python-frontend/python_adjust.{h,cpp}`, modelled on
+  `clang_c_adjust::adjust()`: it snapshots the symbol list, skips `is_type`
+  symbols, and walks each remaining `symbol.get_value2()` via a `const`
+  `adjust_expr(const expr2tc&)` that descends every operand through
+  `foreach_operand` and **mutates nothing** (the `const` signature makes the
+  no-op a compile-time guarantee). Not wired into `python_language.cpp`. The
+  contracts — visits-every-node and the `is_type`-skip no-op — are pinned by
+  `unit/python-frontend/python_adjust_test.cpp`. Parity is trivially unchanged
+  (the pass is on no execution path).
 - **B.1 — member/index source following.** Teach the pass to follow a `symbol_type2t`
   member/index source to its `struct_type2t`/`array_type2t` via `namespacet::follow`,
   **recursively** (resolve `X` before building `X.a`), with pointer auto-deref. Still
