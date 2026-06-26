@@ -51,7 +51,7 @@ static void require_tolerant(const char *what)
   if (sound_mode())
     throw std::runtime_error(
       std::string("st_fb_translator: ") + what +
-      " requires analog-extended mode (LLB_SOUND_MODE unset)");
+      " requires analog-extended mode (do not pass --ld-sound-mode)");
 }
 
 // -----------------------------------------------------------------------
@@ -230,16 +230,33 @@ static bool is_floating(const typet &t)
 {
   return t.id() == "floatbv" || t.id() == "fixedbv";
 }
+// Floating-point arithmetic must use the ieee_* operators: the LD frontend has
+// no adjust pass to rewrite plus/mult on a floatbv operand, and the simplifier
+// asserts on a plain plus/mult node whose type is floatbv.  The irep2 migration
+// defaults the rounding mode.
+static irep_idt arith_id(const irep_idt &op, bool real)
+{
+  if (!real)
+    return op;
+  if (op == exprt::plus)
+    return "ieee_add";
+  if (op == exprt::minus)
+    return "ieee_sub";
+  if (op == exprt::mult)
+    return "ieee_mul";
+  if (op == exprt::div)
+    return "ieee_div";
+  return op;
+}
 static exprt make_binary_arith(const irep_idt &op, exprt lhs, exprt rhs)
 {
-  const typet result = (is_floating(lhs.type()) || is_floating(rhs.type()))
-                          ? double_type()
-                          : int_type();
+  const bool real = is_floating(lhs.type()) || is_floating(rhs.type());
+  const typet result = real ? double_type() : int_type();
   if (lhs.type() != result)
     lhs = typecast_exprt(lhs, result);
   if (rhs.type() != result)
     rhs = typecast_exprt(rhs, result);
-  exprt e(op, result);
+  exprt e(arith_id(op, real), result);
   e.copy_to_operands(lhs, rhs);
   return e;
 }
@@ -281,24 +298,48 @@ exprt st_fb_translator::parse_term()
   return lhs;
 }
 
+// Promote a comparison's operands to a common type: if either side is REAL
+// (floating), cast the other to double so a mixed REAL/INT comparison does not
+// build a relation node with mismatched operand sorts (the LD frontend has no
+// adjust pass to fix it up later).
+static void promote_numeric(exprt &a, exprt &b)
+{
+  if (is_floating(a.type()) && !is_floating(b.type()))
+    b = typecast_exprt(b, double_type());
+  else if (is_floating(b.type()) && !is_floating(a.type()))
+    a = typecast_exprt(a, double_type());
+}
+
 // value possibly followed by a relational operator (=, <>, <, <=, >, >=)
 exprt st_fb_translator::parse_condition()
 {
   exprt lhs = parse_expr();
+  irep_idt relop;
+  bool equality = false, negate = false;
   // multi-char operators first
   if (accept_sym("<="))
-    return binary_relation_exprt(lhs, "<=", parse_expr());
-  if (accept_sym(">="))
-    return binary_relation_exprt(lhs, ">=", parse_expr());
-  if (accept_sym("<>"))
-    return not_exprt(equality_exprt(lhs, parse_expr()));
-  if (accept_sym("<"))
-    return binary_relation_exprt(lhs, "<", parse_expr());
-  if (accept_sym(">"))
-    return binary_relation_exprt(lhs, ">", parse_expr());
-  if (accept_sym("="))
-    return equality_exprt(lhs, parse_expr());
-  return lhs;
+    relop = "<=";
+  else if (accept_sym(">="))
+    relop = ">=";
+  else if (accept_sym("<>"))
+    equality = negate = true;
+  else if (accept_sym("<"))
+    relop = "<";
+  else if (accept_sym(">"))
+    relop = ">";
+  else if (accept_sym("="))
+    equality = true;
+  else
+    return lhs;
+
+  exprt rhs = parse_expr();
+  promote_numeric(lhs, rhs);
+  if (equality)
+  {
+    exprt eq = equality_exprt(lhs, rhs);
+    return negate ? static_cast<exprt>(not_exprt(eq)) : eq;
+  }
+  return binary_relation_exprt(lhs, relop, rhs);
 }
 
 // -----------------------------------------------------------------------

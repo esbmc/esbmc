@@ -153,8 +153,7 @@ symbol_exprt ld_converter::declare_scoped(const std::string &id, const typet &t)
     sym.file_local = false;
     sym.is_extern = false;
     sym.set_type(t);
-    sym.set_value(t.id() == "bool" ? static_cast<exprt>(false_exprt())
-                                   : int_const(0));
+    sym.set_value(gen_zero(t)); // type-correct zero (REAL gets a float zero)
     locationt loc;
     loc.set_file(ir_.source_file);
     sym.location = loc;
