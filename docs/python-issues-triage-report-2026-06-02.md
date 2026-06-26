@@ -1311,6 +1311,60 @@ work; the §5 priority order stands.
 
 ---
 
+> **Note on numbering.** §30 (PR #5577, `list(str)`) and §31 (PR #5579, numeric-tower properties)
+> are in flight and not yet on `master`; this sweep is appended as §32. Its fix is in flight as
+> PR #5585. When all land, the maintainer orders §30 → §31 → §32.
+
+## 32. 2026-06-24 re-validation (twenty-second sweep) & bytes.hex()
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the bytes/encoding family named in §31b, starting with its most isolated entry,
+`bytes.hex()`.
+
+### 32a. New isolated, soundly-fixable defect found & fixed
+**`bytes.hex()` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`b"\x01\xab".hex()` should give `"01ab"` (CPython), but `hex` had no handler, so the call lowered
+to the unsupported-function `assert(false)` and any program using it reported `FAILED` — the
+highest-value (wrong-verdict) class.
+
+**Fix** (`string/string_handler.cpp`): in `handle_string_attribute_call`, intercept `.hex()` with no
+args on a bytes receiver and fold a constant bytes object to its lowercase hex string. `str` has no
+`.hex()` method, so the attribute is unambiguously a bytes method; bytes are modelled as an int
+array (64-bit elements) while `str` is a char array, so the `subtype() != char_type()` check
+excludes strings (the same boundary used by the §29/§30 `tuple`/`list`-over-bytes guards). A variable
+receiver is resolved to its symbol value; a non-constant byte (where `to_integer` fails) raises a
+clean unsupported-feature error, never a wrong verdict. `get_type_from_method`
+(`annotation_conversion.inl`) is extended at both receiver sites (Constant literal and
+builtin-type/variable) to map `bytes.hex → str`, so the assignment target is typed `str` and
+`len`/indexing/concatenation on the result work (the `#5114` mistyping guard, mirrored from
+`split`→`list` / `partition`→`tuple`).
+
+Like §16a–§20a/§30a this **restores a working feature**. New regression pair
+`regression/python/bytes_hex{,_fail}` (CORE); the positive test is the liveness witness (FAILED
+pre-fix) and covers literal/variable receivers, ASCII, empty bytes, indexing, `len` via a variable,
+and string composition. Verified bit-for-bit against CPython; `bytes(3).hex()` and sliced-bytes
+receivers resolve without crashing; CPython sanity passes; the focused
+`regression/python/(str|string|bytes|hex|encode|decode)` ctest subset (457 tests) shows zero new
+failures (the 12 failing are the pre-existing `--z3`/`--ir`/`--boolector` environmental set on this
+Bitwuzla-only build). Code-reviewed (0 critical/major). Solver-agnostic (a frontend constant-fold,
+no SMT encoding).
+
+### 32b. Next candidate & everything else: unchanged disposition
+The rest of the bytes/encoding family is the obvious continuation: **`bytes.decode()`** and
+**`str.encode()`** (round-trip between a constant str and bytes — `decode` reuses the char-sequence
+lowering, `encode` builds the byte array; the **next candidate**), then `bytes.hex(sep)` with the
+optional separator argument, and `int.to_bytes()`/`int.from_bytes()` (variable-length byte arrays).
+A separately-tracked, out-of-scope `len`/`strlen` concern remains: `len()` of an *inline* string
+method result (`len(b"..".hex())`, `len("..".replace(...))`) mis-measures even though the value is
+correct — the same item flagged in §14b. Other deferred candidates stand: `zip()`, symbolic/
+user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `str.maketrans`/`translate`,
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness). The §3 design-level blockers,
+§3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5
+priority order stands.
+
+---
+
 > **Note on numbering.** §30–§35 (PRs #5577/#5579/#5585/#5588/#5592/#5597) are in flight and not yet
 > on `master`; this finding is appended as §36.
 

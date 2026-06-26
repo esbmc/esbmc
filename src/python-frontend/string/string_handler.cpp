@@ -2287,6 +2287,40 @@ exprt string_handler::handle_string_attribute_call(
       return nil_exprt();
   }
 
+  // bytes.hex(): fold a constant bytes object to its lowercase hex string
+  // (CPython: b"\x01\xab".hex() == "01ab"). str has no .hex() method, so a
+  // "hex" attribute is unambiguously a bytes method. Bytes are modelled as an
+  // int array; a str is a char array, so the subtype check excludes strings.
+  if (method_name == "hex" && args.empty())
+  {
+    exprt recv = get_receiver_expr();
+    if (recv.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(
+        to_symbol_expr(recv).get_identifier().as_string());
+      if (s && !s->get_value().is_nil())
+        recv = s->get_value();
+    }
+    const typet &rt = recv.type();
+    if (rt.is_array() && rt.subtype() != char_type())
+    {
+      static const char digits[] = "0123456789abcdef";
+      std::string hex;
+      hex.reserve(recv.operands().size() * 2);
+      for (const exprt &op : recv.operands())
+      {
+        BigInt v;
+        if (to_integer(op, v)) // true == not a constant integer
+          throw std::runtime_error(
+            "bytes.hex() is only supported on a constant bytes object");
+        const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+        hex.push_back(digits[(byte >> 4) & 0xf]);
+        hex.push_back(digits[byte & 0xf]);
+      }
+      return string_builder_->build_string_literal(hex);
+    }
+  }
+
   // str.translate(str.maketrans(x, y[, z])): fold a constant string through a
   // constant translation table. CPython maps each x[i] to y[i] and deletes the
   // characters in z. Only the two/three-string maketrans form over constant
