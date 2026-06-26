@@ -238,6 +238,14 @@ exprt build_notequal(const exprt &a, const exprt &b)
   return migrate_expr_back(notequal2tc(a2, b2));
 }
 
+exprt build_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(equality2tc(a2, b2));
+}
+
 // Expression-context call `fn(args...)` returning return_type. If the return
 // type or any argument type contains a dyn-sized array (which does not
 // round-trip), build the legacy side_effect_expr_function_callt instead.

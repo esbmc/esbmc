@@ -3567,6 +3567,13 @@ following (`next: None`→`Node`), and dataclass field resolution.
   class/arith + 100 broad (relational flip active); swap-probe (`Lt`→`Gt`) made
   `p.a < p.b` FAIL, confirming it fires. `regression/python/cmp_member_adjust{,_fail}`
   pin it.
+  **`Eq`/`NotEq` added (2026-06-26).** Completes the integer comparison family, via a
+  new `python_expr::build_equal` (`equality2tc`) + the existing `build_notequal`
+  (`notequal2tc`), same operand-match guard. Sweep **0 divergences** over 65 class/arith
+  + 100 broad; swap-probe (`Eq`→`NotEq`) made `p.a == 5` FAIL, confirming it fires.
+  `regression/python/eq_member_adjust{,_fail}` pin it. The integer arithmetic and
+  comparison families are now flipped behind the flag; the residue is float (`ieee_*`),
+  width-mismatched, and non-integer-typed binops.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

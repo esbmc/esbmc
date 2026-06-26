@@ -1988,20 +1988,23 @@ exprt python_converter::build_binary_expression(
     return result;
   }
 
-  // V.1k (b) B.4: same idiom for the ordering comparisons. The result is bool
-  // but the operands carry their own type; lessthan2t etc. assert operand width
-  // consistency, so the guard requires same-type integer-bitvector operands.
-  // Everything else (mismatched widths, float, Eq/NotEq) stays legacy.
+  // V.1k (b) B.4: same idiom for the integer comparisons. The result is bool but
+  // the operands carry their own type; lessthan2t / equality2t etc. assert
+  // operand type/width consistency, so the guard requires same-type integer-
+  // bitvector operands. Float and width-mismatched comparisons stay legacy.
   if (
     config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE") &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE" || op == "Eq" ||
+     op == "NotEq") &&
     lhs.type() == rhs.type() &&
     (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
   {
     exprt result = (op == "Lt")    ? python_expr::build_less_than(lhs, rhs)
                    : (op == "LtE") ? python_expr::build_less_equal(lhs, rhs)
                    : (op == "Gt")  ? python_expr::build_greater_than(lhs, rhs)
-                                   : python_expr::build_greater_equal(lhs, rhs);
+                   : (op == "GtE") ? python_expr::build_greater_equal(lhs, rhs)
+                   : (op == "Eq")  ? python_expr::build_equal(lhs, rhs)
+                                   : python_expr::build_notequal(lhs, rhs);
     result.location() = bin_expr.location();
     return result;
   }

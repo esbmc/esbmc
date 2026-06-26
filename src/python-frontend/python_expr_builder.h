@@ -91,6 +91,11 @@ exprt build_mul(const exprt &a, const exprt &b, const typet &t);
 // byte-identical round-trip.
 exprt build_notequal(const exprt &a, const exprt &b);
 
+// Equality `a == b` over same-typed operands. migrate lowers a legacy "="
+// node to equality2tc(migrate(a), migrate(b)), so this is the byte-identical
+// round-trip.
+exprt build_equal(const exprt &a, const exprt &b);
+
 // Expression-context call `fn(args...) : return_type`, fn a function symbol.
 exprt build_call_expr(
   const symbolt &fn,
