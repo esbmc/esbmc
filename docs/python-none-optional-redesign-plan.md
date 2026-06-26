@@ -1,7 +1,11 @@
 # Python None/Optional → `Class*` Model Redesign — Project Plan (2026-06-12)
 
-**Status:** Planning. Scoped as a standalone project, to be executed in its own focused effort
-rather than incrementally on top of the object-lifetime branch.
+**Status: COMPLETE — merged to `master`.** The whole migration landed via
+PR [#5339](https://github.com/esbmc/esbmc/pull/5339) (*"[python] Object-model migration:
+heap-allocated class instances (#3067)"*, merge commit `656031fea1`, 2026-06-22), built from the
+`feat/python-object-heap-lifetime` branch. Every unit below (§§10–22) and the post-§22 follow-ups
+are upstream; the source branch is superseded. See §23 for the close-out record. The body that
+follows is preserved as the design/execution log.
 
 **Companion:** `python-object-model-design-2026-06-12.md` (the Stage-1 object-lifetime migration
 and §§11–14, which record the empirical findings this plan is built on). **Prerequisite:** the
@@ -651,3 +655,46 @@ and chained method calls, so migrating it must keep those working. Treat as a
 focused unit: make all class constructions (lvalue, no-lvalue, return) uniformly
 `Class*` via new_object, then drop the `$ctor_self$` struct path. Pre-existing
 on the branch (master passes); tracked alongside github_4149 and github_2012.
+
+The §22 return migration subsequently landed (branch commit `89974a2d9f` +
+`59183f7425` for list-stored instances, #4805); `github_4558` is CORE on master.
+
+---
+
+## 23. Close-out (2026-06-25) — plan complete, merged via PR #5339
+
+The migration is done and upstream. PR
+[#5339](https://github.com/esbmc/esbmc/pull/5339) — *"[python] Object-model
+migration: heap-allocated class instances (#3067)"* — merged to `master` on
+2026-06-22 (merge commit `656031fea1`), bringing the whole effort recorded in
+§§10–22 (and the post-§22 follow-ups) into the mainline. The later #5424
+("Give Python class instances GC lifetime to fix escape UAF") hardens the same
+model on `master`.
+
+**Verified against `master` on 2026-06-25:**
+
+- The five §8 acceptance / canary tests are all **CORE on master and pass**:
+  `github_3976_optional_attr_access`, `dataclass-edge-equality_true`,
+  `dunder-bool-condition`, `github_4117_function_internal` (the flip),
+  `github_4796_object_handle_eq`.
+- Every follow-on test from §§14–22 is **CORE on master** — including the
+  param/global migration (`object_param_global`), class-var components
+  (`class_var_param_augassign`, `class_var_inherited_default`), in-function
+  retyping (`retype_str_in_function`, `retype_str_cond_gated`), unary-dunder
+  dispatch (`object_str_dunder`), `object/Any`-typed lvalues
+  (`object_typed_class_instance`), call-result side effects
+  (`method_sideeffect_str_into_int`), the return migration (`github_4558`), and
+  list-stored instances (`github_4805_attr_list_loop`). No branch test is absent
+  from `master`.
+- A full `ctest -L python` (3919 tests) on the source branch produced **105
+  failures, all environmental** — each requires a solver not built into this
+  Bitwuzla-only clone (`--z3`, `--ir`/Int-Real, boolector) or imports an
+  unavailable package (`flask`). A `master` baseline fails the identical set, so
+  the branch introduces **zero regressions**. The remaining solver legs are
+  validated in CI, as §8 anticipated.
+
+The `feat/python-object-heap-lifetime` branch is therefore superseded and may be
+deleted. **Scope boundary (§1) holds:** `Optional[<scalar/builtin>]` keeps the
+legacy handle / `tag-Optional_` representation; only `Optional[<user class>]` /
+`<user class> | None` became `Class*`. No further work is planned under this
+project.
