@@ -498,6 +498,36 @@ bool has_direct_pointer_array_write(const goto_functionst &goto_functions)
   }
   return false;
 }
+
+/// True iff the program contains a reachable call to __VERIFIER_nondet_memory
+/// in user (non-hidden) code. That intrinsic havocs a caller object with fresh
+/// nondeterminism through a pointer (`*(p + i) = nondet_uchar()` over memory
+/// with no nameable symbol) — the opaque "havoc_memory" analogue of the
+/// per-element user nondet-array builder loops the SV-COMP "havoc_object" shape
+/// uses. The inductive step cannot generalise such an input, so a reachable
+/// call makes it unsound: it proves unsafe programs SAFE (the
+/// SoftwareSystems-Intel-TDX-Module-ReachSafety `*_havoc_memory` tasks). The
+/// model body is linked into *every* program, so gate on an actual call, not
+/// on its always-present loop. See #5593 (recurrence of #5224 / #5230).
+bool calls_nondet_memory(const goto_functionst &goto_functions)
+{
+  forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available || it->second.body.hide)
+      continue;
+    for (const auto &instr : it->second.body.instructions)
+    {
+      if (!instr.is_function_call())
+        continue;
+      const code_function_call2t &call = to_code_function_call2t(instr.code);
+      if (
+        is_symbol2t(call.function) &&
+        to_symbol2t(call.function).thename == "c:@F@__VERIFIER_nondet_memory")
+        return true;
+    }
+  }
+  return false;
+}
 } // namespace
 
 bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
@@ -524,7 +554,10 @@ bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
     }
   }
 
-  bool disable_inductive_step = false;
+  // A reachable __VERIFIER_nondet_memory call havocs a caller object the
+  // inductive step cannot generalise, so its unsoundness is independent of any
+  // loop shape — disable the inductive step up front. See #5593.
+  bool disable_inductive_step = calls_nondet_memory(goto_functions);
   Forall_goto_functions (it, goto_functions)
   {
     if (!it->second.body_available)
