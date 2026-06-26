@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 parity anchor pinned; flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3608,9 +3608,20 @@ reference the flip must preserve.
 A Bitwuzla-only build (e.g. local dev here) discharges only the Bitwuzla half; the Z3
 half runs in CI on the PR. **Commit policy:** because the flip is behind a default-off
 flag, the change is byte-identical by default and safe to land; the flag-on path is
-*not* RV2-discharged until the CI Z3 parity run is green. **Next task:** flip the first
-(BoolOp) F-P11 site behind the flag, confirm Bitwuzla parity locally, and let CI close
-the dual-solver gate before relying on flag-on.
+*not* RV2-discharged until the CI Z3 parity run is green.
+
+**B.3 parity anchor pinned (2026-06-26).** The exact BoolOp-over-member-operands
+pattern the flip targets is now a CORE regression test
+(`regression/python/boolop_member_attr{,_fail}`): a class with `box.a and box.b` /
+`box.a or box.b` short-circuits over attribute operands. It verifies SUCCESSFUL /
+FAILED identically with the flag **off and on** today — the concrete parity target the
+sweep checks; the flip must preserve it. **Next task:** implement the flag-gated flip —
+at the BoolOp site, when `--python-irep2-adjust` is set, resolve the member-operand base
+type via `name_space().follow()` and build the short-circuit condition as a
+*resolved-source* IREP2 node (the file-1 migrate→build→back-migrate recipe), instead of
+letting a naive `migrate_expr` of the unresolved operand abort (F-P11). Confirm Bitwuzla
+parity over the fixture + this anchor; let CI close the Z3 half before flag-on is
+trusted. The change is safe to land regardless (default-off flag).
 
 **Risks (extend §V.4 / Part II §7).** *RV-adj1:* the new pass must reproduce
 `clang_cpp_adjust`'s dataclass/inference completion exactly — mitigate by reusing the
