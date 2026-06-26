@@ -447,9 +447,18 @@ public:
     // struct view at the SMT boundary (see struct_union_members), and
     // the clang frontend builds complex literals as struct-id exprt
     // with a complex type — accept that shape here.
+    //
+    // A `symbol_id` type is permitted ONLY as a transient pre-resolution
+    // state, identical to the member2t/index2t "two-phase source invariant"
+    // below: a frontend may migrate a struct constant whose type is still a
+    // by-name `symbol_type2t` tag (the Python typecheck-time round-trip done
+    // by python_adjust, before the tag is followed to its struct). The strong
+    // invariant is restored by the post-resolution goto-convert re-migration,
+    // which sees the resolved struct type.
     assert(
       type->type_id == type2t::struct_id ||
-      type->type_id == type2t::complex_id);
+      type->type_id == type2t::complex_id ||
+      type->type_id == type2t::symbol_id);
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
