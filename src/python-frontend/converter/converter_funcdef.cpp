@@ -1213,6 +1213,31 @@ void python_converter::get_function_definition(
   // Process function arguments
   process_function_arguments(function_node, type, id, location);
 
+  // Stage 1 object-model migration (#3067): a function returning a user-defined
+  // class instance returns a *reference* (pointer) to the heap object, matching
+  // CPython and the pointer representation already used for locals, parameters
+  // and `self`. Returning by value copied the struct out of the callee frame,
+  // which (a) breaks identity/aliasing across the call (`y = f(x); y.v = 1`
+  // would not be observed through `x`) and (b) forces a pointer->value
+  // dereference on `return self`/`return param` that crashes the SMT backend
+  // with a sort mismatch. None is encoded as a NULL pointer, so such a return
+  // is already nullable and must not be re-wrapped in Optional below.
+  //
+  // Skip @overload stubs: each carries a single-class annotation (`-> Foo`),
+  // but the overload set is polymorphic — the effective return type is resolved
+  // per call site from the argument types. Migrating a stub to one Class* loses
+  // the alternatives and overrides that call-site resolution (e.g. a
+  // `Literal["bar"] -> Bar` overload would be mis-typed as `Foo*`, #3057). The
+  // real implementation (a union return) is typed `void*` and never reaches
+  // this branch.
+  if (
+    is_user_class_struct_type(type.return_type()) &&
+    !json_utils::has_overload_decorator(function_node))
+  {
+    type.return_type() = gen_pointer_type(type.return_type());
+    current_element_type = type.return_type();
+  }
+
   // Create and register function symbol
   symbolt symbol = create_symbol(
     module_name, current_func_name_, id.to_string(), location, type);
@@ -1254,7 +1279,7 @@ void python_converter::get_function_definition(
   };
 
   bool already_optional =
-    annotation_is_optional ||
+    annotation_is_optional || is_user_class_pointer(type.return_type()) ||
     (type.return_type().is_struct() && to_struct_type(type.return_type())
                                          .tag()
                                          .as_string()

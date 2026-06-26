@@ -3934,8 +3934,20 @@ exprt function_call_expr::handle_general_function_call()
               const auto &returns = func_node["returns"];
               if (returns.contains("id"))
               {
-                return_type =
-                  type_handler_.get_typet(returns["id"].get<std::string>());
+                const std::string ret_cls = returns["id"].get<std::string>();
+                return_type = type_handler_.get_typet(ret_cls);
+                // Stage 1 object-model migration (#3067): mirror the funcdef
+                // migration — a forward-referenced function returning a
+                // user-defined class returns a Cls* reference, not the value
+                // struct. Resolving it by value here leaves the call typed as a
+                // struct while the callee actually returns a pointer, which
+                // crashes on `return f(...)` with a struct-vs-pointer
+                // irep2_cast_error. @overload stubs resolve per call site, so
+                // leave them by value (consistent with call_return_class).
+                if (
+                  json_utils::is_class(ret_cls, converter_.ast()) &&
+                  !json_utils::has_overload_decorator(func_node))
+                  return_type = gen_pointer_type(return_type);
               }
             }
             exprt body = converter_.get_block(func_node["body"]);

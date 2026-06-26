@@ -1657,6 +1657,47 @@ std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
   return "";
 }
 
+std::string python_converter::call_return_class(const nlohmann::json &rhs) const
+{
+  if (
+    !rhs.is_object() || rhs.value("_type", "") != "Call" ||
+    !rhs.contains("func") || !rhs["func"].is_object() ||
+    rhs["func"].value("_type", "") != "Name" || !rhs["func"].contains("id") ||
+    !rhs["func"]["id"].is_string())
+    return "";
+
+  // Constructor calls (`Cls(...)`) are handled by the dedicated path above.
+  const std::string fname = rhs["func"]["id"].get<std::string>();
+  if (json_utils::is_class(fname, *ast_json))
+    return "";
+
+  const auto &fn = json_utils::find_function((*ast_json)["body"], fname);
+  if (fn.empty() || !fn.contains("returns") || fn["returns"].is_null())
+    return "";
+
+  // An @overload stub carries a single-class annotation (`-> Foo`) but the
+  // overload set is polymorphic — the real return type is resolved per call
+  // site from the argument types. find_function returns the first stub, so
+  // trusting its annotation would mis-type, e.g., a `Literal["bar"] -> Bar`
+  // result as `Foo*` (#3057). Leave such results to the existing call-site
+  // overload resolution rather than forcing a single Class* here.
+  if (json_utils::has_overload_decorator(fn))
+    return "";
+
+  // The return annotation may be a bare Name (`-> Cls`) or a forward-reference
+  // string (`-> "Cls"`).
+  const auto &ret = fn["returns"];
+  std::string cls;
+  if (ret.value("_type", "") == "Name" && ret.contains("id"))
+    cls = ret["id"].get<std::string>();
+  else if (
+    ret.value("_type", "") == "Constant" && ret.contains("value") &&
+    ret["value"].is_string())
+    cls = ret["value"].get<std::string>();
+
+  return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1707,6 +1748,17 @@ void python_converter::get_var_assign(
       cls = ast_node["value"]["func"]["id"].get<std::string>();
     else
       cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+    // `y = f(...)` where f returns a class: type y as `Cls*` so the returned
+    // reference is bound (not value-copied into a struct local).
+    if (cls.empty())
+      cls = call_return_class(ast_node["value"]);
+    // A target explicitly annotated as a user class (`v: Cls = ...`) is an
+    // instance reference too. This covers RHS shapes the cases above miss —
+    // notably method calls `v: Cls = obj.method()` returning a class — so the
+    // result binds as a `Cls*` pointer instead of being value-copied into a
+    // struct slot (which mismatches the pointer the callee now returns).
+    if (cls.empty() && json_utils::is_class(lhs_type, *ast_json))
+      cls = lhs_type;
     if (!cls.empty())
     {
       typet st = type_handler_.get_typet(cls);
@@ -1773,7 +1825,10 @@ void python_converter::get_var_assign(
             ++it;
         }
       }
-      const std::string cls = flow_rhs_class(ast_node["value"]);
+      std::string cls = flow_rhs_class(ast_node["value"]);
+      if (cls.empty())
+        cls =
+          call_return_class(ast_node["value"]); // `v = f()` returning a class
       if (!cls.empty())
         flow_class_map_[path] = cls;
       else
@@ -3547,30 +3602,43 @@ void python_converter::get_return_statements(
       }
     }
 
-    // When returning a class-typed parameter (internally A*), dereference it
-    // so the return type matches the annotation (A).  This is needed because
-    // user-defined class parameters are modelled as pointers internally for
-    // Python object reference semantics, but callers expect a value return.
-    if (return_value.type().is_pointer())
+    // `return ClassName(...)` lowers to a stack-local `$ctor_self$` *value*
+    // struct (function_call_expr's no-LHS constructor path), but the function
+    // now returns a class *reference* (Cls*). Box the constructed value onto a
+    // fresh non-expiring heap object and return the pointer, so the result
+    // survives the callee frame with reference identity (#3067) — the same
+    // model as `o = ClassName(...)`. Returning `&$ctor_self$` would instead
+    // hand back a dangling stack address.
+    if (
+      is_user_class_pointer(current_func_return_type_) &&
+      is_user_class_struct_type(return_value.type()))
     {
-      typet ret_sub = return_value.type().subtype();
-      typet expected = current_func_return_type_;
-      if (ret_sub.id() == "symbol")
-        ret_sub = ns.follow(ret_sub);
-      if (expected.id() == "symbol")
-        expected = ns.follow(expected);
-      if (ret_sub.is_struct() && expected.is_struct())
-      {
-        const struct_typet &rs = to_struct_type(ret_sub);
-        const struct_typet &es = to_struct_type(expected);
-        if (rs.tag() == es.tag())
-        {
-          exprt deref("dereference");
-          deref.type() = return_value.type().subtype();
-          deref.copy_to_operands(return_value);
-          return_value = deref;
-        }
-      }
+      const symbolt *new_obj_sym =
+        symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
+      assert(new_obj_sym && "__ESBMC_new_object model required");
+
+      symbolt heap_symbol = create_return_temp_variable(
+        current_func_return_type_, location, "ctor_box");
+      symbol_table_.add(heap_symbol);
+      exprt heap_ptr = symbol_expr(heap_symbol);
+
+      code_declt heap_decl(heap_ptr);
+      heap_decl.location() = location;
+      target_block.copy_to_operands(heap_decl);
+
+      code_function_callt alloc_call;
+      alloc_call.lhs() = heap_ptr;
+      alloc_call.function() = symbol_expr(*new_obj_sym);
+      alloc_call.location() = location;
+      target_block.copy_to_operands(alloc_call);
+
+      exprt deref("dereference", current_func_return_type_.subtype());
+      deref.copy_to_operands(heap_ptr);
+      code_assignt store(deref, return_value);
+      store.location() = location;
+      target_block.copy_to_operands(store);
+
+      return_value = heap_ptr;
     }
 
     // Wrap return value in Optional if the function returns Optional

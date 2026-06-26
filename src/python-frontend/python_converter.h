@@ -1127,6 +1127,16 @@ private:
   /// known class, or a Name already tracked in flow_class_map_. Else "".
   std::string flow_rhs_class(const nlohmann::json &rhs) const;
 
+  /// User-class name returned by a non-constructor call RHS (`y = f(...)` where
+  /// `f` is annotated `-> Cls`), so the LHS can be typed as a `Cls*` reference.
+  /// Returns "" for constructor calls, unannotated returns, or non-class types.
+  /// Scope: only a direct `Name` call to a module-level function with a `Name`
+  /// or forward-reference-string return annotation. Method calls
+  /// (`obj.method()`), `Attribute` annotations (`-> mod.Cls`), and nested or
+  /// imported callees are not resolved here — those reach `Cls*` typing via the
+  /// explicit-annotation fallback in get_var_assign instead.
+  std::string call_return_class(const nlohmann::json &rhs) const;
+
   /// Nesting depth of get_block() invocations. The module/imported-module body
   /// is depth 1; every nested body (function, if/while/for, try/except) is
   /// deeper because those bodies are converted through get_block() too.
