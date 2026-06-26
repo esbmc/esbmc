@@ -6,6 +6,9 @@
 #include <util/config.h>
 #include <util/context.h>
 #include <util/c_types.h>
+#include <util/migrate.h>
+#include <util/namespace.h>
+#include <util/std_types.h>
 
 // Part V Phase V.1k (b), sub-phases B.0/B.1 (docs/irep2-migration.md): the
 // IREP2-native Python adjuster. These tests pin its contracts so each later
@@ -273,4 +276,60 @@ TEST_CASE(
   const symbolt *out = context.find_symbol("c:@F@uses_point");
   REQUIRE(out != nullptr);
   REQUIRE(is_symbol_type(to_member2t(out->get_value2()).source_value->type));
+}
+
+// --- RV2 foundation: type-following equivalence ---------------------------
+//
+// B.3 resolves member/index sources via the converter's `name_space().follow()`
+// at construction (the "service"; docs/irep2-migration.md B.3 spike). The
+// load-bearing RV2 risk is that the service's resolved type must equal what the
+// legacy `clang_cpp_adjust` path produces. clang_cpp_adjust follows symbol types
+// through the *legacy* `namespacet::follow(typet)`; the service uses the
+// IREP2-native `namespacet::follow(type2tc)` — a separate reimplementation added
+// for the hot path (migrate.cpp: "mirroring follow(typet) without the back-
+// migrate detour"). This test pins that the two agree across the V.1k 20-test
+// fixture's class shapes, so a divergence in either follow implementation cannot
+// silently break the service. It discharges the *type-following* layer of RV2;
+// the auto-deref / dataclass-completion layer is gated by the corpus parity
+// sweep at the actual site flip (scripts/irep2-migration/parity_sweep.sh).
+TEST_CASE(
+  "python_adjust RV2: IREP2 ns.follow equals legacy follow + migrate",
+  "[python-frontend][irep2][python-adjust][rv2]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  const type2tc intt = get_int_type(config.ansi_c.int_width);
+
+  contextt context;
+  // simple struct (nested-attr / dataclass leaf)
+  add_type_symbol(context, "tag-Point", make_struct("tag-Point", "x", intt));
+  // struct-valued field (nested-attr chain)
+  add_type_symbol(context, "tag-Inner", make_struct("tag-Inner", "x", intt));
+  add_type_symbol(
+    context, "tag-Outer", make_struct("tag-Outer", "inner", symbol_type2tc("tag-Inner")));
+  // self-referential (self_ref_nested_attr_chain): next: *Node
+  add_type_symbol(
+    context,
+    "tag-Node",
+    make_struct("tag-Node", "next", pointer_type2tc(symbol_type2tc("tag-Node"))));
+  // pointer-to-class field (github_4117): b: *B
+  add_type_symbol(context, "tag-B", make_struct("tag-B", "y", intt));
+  add_type_symbol(
+    context, "tag-A", make_struct("tag-A", "b", pointer_type2tc(symbol_type2tc("tag-B"))));
+  // symbol→symbol chain: forces both follow implementations through the
+  // multi-hop while-loop (the divergence-prone path this test guards).
+  add_type_symbol(context, "tag-Alias", symbol_type2tc("tag-Point"));
+
+  const namespacet ns(context);
+  for (const char *tag :
+       {"tag-Point", "tag-Outer", "tag-Node", "tag-A", "tag-Alias"})
+  {
+    const symbol_typet legacy_sym(tag);
+    const type2tc service = ns.follow(migrate_type(legacy_sym));
+    const type2tc legacy = migrate_type(ns.follow(legacy_sym));
+    INFO("tag = " << tag);
+    REQUIRE(service == legacy);
+    REQUIRE(is_struct_type(service));
+  }
 }
