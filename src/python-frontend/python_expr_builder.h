@@ -91,6 +91,11 @@ exprt build_bitand(const exprt &a, const exprt &b, const typet &t);
 exprt build_bitor(const exprt &a, const exprt &b, const typet &t);
 exprt build_bitxor(const exprt &a, const exprt &b, const typet &t);
 
+// `a << b` (shl2t) / `a >> b` arithmetic (ashr2t) : t. The Python frontend maps
+// RShift to ashr unconditionally; both lower over the migrated operands.
+exprt build_shl(const exprt &a, const exprt &b, const typet &t);
+exprt build_ashr(const exprt &a, const exprt &b, const typet &t);
+
 // Float `a + b`/`a - b`/`a * b : t` over same-floatbv operands, using the
 // default __ESBMC_rounding_mode (matching migrate of a legacy ieee_* node with
 // no rounding_mode field). ieee_*2t assert operand-width consistency.

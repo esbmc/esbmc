@@ -1902,6 +1902,14 @@ exprt try_build_irep2_binop(
       return python_expr::build_bitor(lhs, rhs, type);
     if (op == "BitXor")
       return python_expr::build_bitxor(lhs, rhs, type);
+    // Shifts kept separate from the arith/bitwise list above only for clarity:
+    // shift operands need not share width in general, but this group's
+    // lhs==rhs==type guard restricts the flip to the equal-width case shl2t/
+    // ashr2t accept; mismatched-width shifts fall through to the legacy node.
+    if (op == "LShift")
+      return python_expr::build_shl(lhs, rhs, type);
+    if (op == "RShift")
+      return python_expr::build_ashr(lhs, rhs, type);
   }
 
   if (type.is_floatbv() && lhs.type() == type && rhs.type() == type)
