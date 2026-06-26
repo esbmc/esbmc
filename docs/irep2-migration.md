@@ -3588,6 +3588,13 @@ following (`next: None`→`Node`), and dataclass field resolution.
   subtleties) stay legacy. Sweep **0 divergences** over 65 class/arith + 70 broad;
   swap-probe (`bitand`→`bitor`) made `(b.x & b.y) == 8` FAIL, confirming it fires.
   `regression/python/bitwise_member_adjust{,_fail}` pin it.
+  **Consolidation (2026-06-26).** The four accumulated flip blocks (each repeating the
+  flag check + `location()`/return boilerplate) were folded into one file-local
+  `try_build_irep2_binop(op, lhs, rhs, type)` returning the IREP2 node or nil, called
+  once behind a single flag check. Three guard groups (integer arith+bitwise; float
+  arith; integer comparisons) preserve the exact prior dispatch — verified
+  behaviour-preserving: parity sweep stays **0 divergences** and all 18 `*_adjust`
+  regression tests pass. Future op flips are now a one-line addition to the helper.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
