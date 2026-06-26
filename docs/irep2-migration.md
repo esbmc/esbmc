@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 first site (BoolOp cast) LANDED behind the flag, Bitwuzla parity 0-divergence over fixture+broad+boolop, Z3 via CI; B.4 (unresolved-base F-P11 families) next (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 first site (BoolOp cast) LANDED behind the flag, Bitwuzla parity 0-divergence over fixture+broad+boolop, Z3 via CI; B.4 triage done — F-P11 residue substantially stale (member-arith already-resolved), most of B.4 is cheap flag-gated round-trips not follow()-service work (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3520,6 +3520,29 @@ following (`next: None`→`Node`), and dataclass field resolution.
   (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute
   reads at `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`,
   `goto2c/expr2c.cpp:169-174`.
+
+  #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
+  > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
+  > `build_binary_expression` trial that aborted ~277/432). Attribute-type resolution
+  > in `get_expr` has improved since, so that list is now an **over-count**. A
+  > throwaway probe — `migrate_expr(lhs)` / `migrate_expr(rhs)` unconditionally at
+  > `build_binary_expression` (`converter_binop.cpp:1953`), rebuilt — runs **clean**
+  > (no `irep2_expr.h:1502/1576` abort) on `class1`/`class2`/`class4`/`class5`
+  > (member arithmetic: `self.weight += 1`, `self.age + 1`). The same held for the
+  > BoolOp site (B.3, the whole fixture). So the operand reaching these arithmetic /
+  > boolean sites is **already resolved**, and they are *not* genuine F-P11 aborts —
+  > they migrate via the B.3 round-trip recipe (no `follow()` service needed).
+  >
+  > **Consequence — B.4 re-scoped.** Most of the §3636 list is now the *cheap*
+  > already-resolved case: flag-gated round-trip flips like B.3, fully Bitwuzla-
+  > validatable + Z3-via-CI, **no dual-solver-gated `follow()`-service work**. The
+  > genuinely-unresolved residue (if any survives) must be re-confirmed by probe per
+  > site before assuming it needs `name_space().follow()`. **Next B.4 step:** probe
+  > each §3636 site, flag-gate the already-resolved ones (the bulk), and only build the
+  > `follow()` service for any site a probe proves still aborts. The arithmetic
+  > builders (`build_binary_expression`, `handle_modulo`/`handle_floor_division`) need a
+  > per-operator `*2tc` mapping rather than the single `typecast2tc` of B.3, so they are
+  > a slightly larger (but still already-resolved) flip than the BoolOp cast.
 - **B.5 — flip default, then drop the Python `clang_cpp_adjust` round-trip.** Once the
   full 20-test fixture + whole `regression/python` + model `.py` corpus hold parity on
   both solvers (asserts build) and `esbmc-cpp` is green (RV3 — the relaxed assert and
