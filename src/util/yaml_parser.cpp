@@ -345,7 +345,7 @@ std::string yaml_parser::build_violation_witness_source(
 {
   // Inject assumption waypoints on the same physical line as the pointed
   // statement. This preserves physical line numbers for all subsequent lines,
-  // so both ESBMC_SVCOMP builds (physical line numbers) and regular builds
+  // so both SV-COMP mode (--sv-comp, physical line numbers) and regular runs
   // (logical line numbers via #line) see the correct line for each waypoint.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());

@@ -2340,7 +2340,10 @@ function_call_expr::get_dispatch_table()
        const auto &obj = call_["func"]["value"];
        return (obj["_type"] == "Name" && obj["id"] == "int") ||
               (obj["_type"] == "Name" &&
-               type_handler_.get_var_type(obj["id"]) == "int");
+               type_handler_.get_var_type(obj["id"]) == "int") ||
+              // Literal receiver, e.g. (258).to_bytes(2, "big").
+              (obj["_type"] == "Constant" && obj.contains("value") &&
+               obj["value"].is_number_integer());
      },
      [this]() { return handle_int_to_bytes(); },
      "int.to_bytes()"},

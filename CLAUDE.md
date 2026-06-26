@@ -196,7 +196,7 @@ Look for the `python_user_main` function to see how Python source maps to GOTO i
 
 **4. Key files for Python frontend debugging:**
 - `src/python-frontend/python_converter.cpp` — Main expression/statement conversion
-- `src/python-frontend/python_list.cpp` — List operations
+- `src/python-frontend/python-list/` — List operations (split by concern: construction, mutation, access, query, string ops, comprehension, set ops, type map, type inference)
 - `src/python-frontend/function_call_expr.cpp` — Method call handling
 - `src/c2goto/library/python/list.c` — C operational model for list operations
 

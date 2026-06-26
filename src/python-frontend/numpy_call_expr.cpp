@@ -3253,8 +3253,10 @@ exprt numpy_call_expr::create_expr_from_call()
           pointer_typet(is_float ? double_type() : long_long_int_type());
         if (args.size() >= 2)
         {
-          args[0] = typecast_exprt(args[0], flat_ptr_type);
-          args[1] = typecast_exprt(args[1], flat_ptr_type);
+          // V.3: build the flat-pointer arg casts in IREP2 via np_typecast,
+          // matching the sibling binary-op branches (e.g. lines 3133-3134).
+          args[0] = np_typecast(args[0], flat_ptr_type);
+          args[1] = np_typecast(args[1], flat_ptr_type);
         }
         args.push_back(
           np_typecast(np_address_of(*converter_.current_lhs), flat_ptr_type));

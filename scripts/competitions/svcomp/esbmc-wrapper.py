@@ -230,7 +230,11 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
+# --sv-comp enables SV-COMP mode (replaces the former ESBMC_SVCOMP build): it
+# suppresses GCC-acceptable frontend diagnostics, treats __builtin_unreachable
+# as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
+# in the fopen/fclose models.
+esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>

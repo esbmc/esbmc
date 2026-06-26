@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string/string_builder.h>
@@ -610,10 +611,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // For Any-typed (void*) parameters, cast to a generic function pointer
       // so that the adjuster can dereference it to a code type (it calls
       // to_code_type on the dereferenced subtype, which would fail on void).
-      exprt func_ptr_expr = symbol_expr(*var_symbol);
+      // V.3: build the function-pointer reference (and the generic-pointer
+      // cast the adjuster relies on) in IREP2; both are over a clean symbol.
+      exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
       if (var_symbol->get_type() == any_type())
-        func_ptr_expr =
-          typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
+        func_ptr_expr = python_expr::build_typecast(
+          func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
