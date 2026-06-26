@@ -3530,6 +3530,15 @@ following (`next: None`→`Node`), and dataclass field resolution.
   fixture + broad parity sweep stays **0 divergences** with the check active — and it
   catches a B.5-era resolution bug deterministically. Unit-tested both ways (resolved
   body ⇒ false; unregistered-tag survivor ⇒ true).
+  **Second site flipped — `isinstance` NoneType null-check (2026-06-26).** Under the
+  flag, `build_isinstance`'s `obj == NULL` None-check (`builtins.cpp`) builds via the
+  IREP2 round-trip (`migrate_expr` operands → `equality2tc` → `migrate_expr_back`,
+  operand location re-attached) instead of the legacy `exprt("=")`. Probe-confirmed
+  already-resolved (no F-P11), no width hazard (equality over same-type pointer
+  operands). RV2 Bitwuzla half: **0 divergences** flag on vs off over 60
+  isinstance/Optional tests + a 90-test broad slice (both this and the BoolOp flip
+  active together). Flag off ⇒ byte-identical; `regression/python/isinstance_none_adjust
+  {,_fail}` pin the flipped path for the CI Z3 half.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
