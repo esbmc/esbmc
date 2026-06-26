@@ -20,6 +20,12 @@ bool python_adjust::adjust()
     if (symbol.is_type)
       continue;
 
+    // Python-only by design (V.1k RV-adj4): only the Python converter emits the
+    // pre-adjust symbol_type2t member/index sources this pass resolves, so leave
+    // the C operational-model bodies to the legacy path.
+    if (symbol.mode != "Python")
+      continue;
+
     expr2tc value = symbol.get_value2();
     if (is_nil_expr(value))
       continue;

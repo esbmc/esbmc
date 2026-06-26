@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 landed (2026-06-26); B.2 next.** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed (2026-06-26); B.3 next.** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3481,11 +3481,15 @@ following (`next: None`→`Node`), and dataclass field resolution.
   ever sees the by-name source. Still not wired into `python_language.cpp` (B.2).
   `python_adjust_test.cpp` pins direct member, direct index, and recursive nested
   resolution.
-- **B.2 — wire in behind a flag.** `--python-irep2-adjust` (default off) routes Python
-  output through the new pass *in addition to* the legacy `clang_cpp_adjust` (the new
-  pass resolves the pre-adjust `symbol_type2t` members the converter will start
-  emitting; legacy adjust still runs for everything else). Flag off ⇒ byte-identical
-  to today. Tests pin the flag.
+- **B.2 — wire in behind a flag. LANDED.** Added the `--python-irep2-adjust`
+  option (`options.cpp`, IREP2-migration group, default off). `python_languaget::
+  typecheck` runs `python_adjust` after the legacy `clang_cpp_adjust` when the flag
+  is set; `adjust()` is scoped to Python-mode symbols (V.1k RV-adj4 — the C OM
+  bodies stay on the legacy path). Flag off ⇒ byte-identical (the branch is not
+  taken); flag on is also byte-identical on today's corpus (the converter does not
+  yet emit pre-adjust `symbol_type2t` members, so the pass resolves nothing).
+  Regression tests `regression/python/python_irep2_adjust{,_fail}` pin both verdicts
+  under the flag; a unit test pins the Python-mode scoping.
 - **B.3 — converter emits one F-P11 family pre-adjust.** Flip the *smallest* F-P11
   site (e.g. the `BoolOp` short-circuit, `converter_stmt.cpp`) to build `member2t`/
   `index2t` directly over the (relaxed) `symbol_type2t` source, relying on B.2's pass

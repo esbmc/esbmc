@@ -1,5 +1,6 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_adjust.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
@@ -249,6 +250,17 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
+
+  // V.1k (b) B.2: optionally run the IREP2-native Python adjuster over Python
+  // output, in addition to the legacy pass. Default off => byte-identical; it
+  // resolves the pre-adjust symbol_type2t member/index sources the converter
+  // will emit once B.3 lands. See docs/irep2-migration.md, Part V Phase V.1k.
+  if (config.options.get_bool_option("python-irep2-adjust"))
+  {
+    python_adjust py_adjuster(context);
+    if (py_adjuster.adjust())
+      return true;
+  }
 
   return false;
 }
