@@ -21,12 +21,26 @@ bool python_adjust::adjust()
     if (symbol->is_type)
       continue;
 
+    // Only function bodies carry the member2t/index2t expressions this pass
+    // resolves, and only bodies are what goto-convert later migrates via
+    // get_value2() (V.4.4b). Reading get_value2() on a data symbol whose value
+    // is a by-name-typed constant aggregate would trip constant_struct2t's
+    // (un-relaxed) migration assert, so skip non-code symbols.
+    if (!is_code_type(symbol->get_type2()))
+      continue;
+
     expr2tc value = symbol->get_value2();
     if (is_nil_expr(value))
       continue;
 
+    const expr2tc original = value;
     adjust_expr(value);
-    symbol->set_value(value);
+    // Only write back when resolution actually changed the tree. Leaving an
+    // unchanged symbol untouched keeps its legacy value cache valid, so the
+    // following clang_cpp_adjust pass sees a byte-identical body — the pass is
+    // inert until the converter emits transient symbol_type member sources.
+    if (value != original)
+      symbol->set_value(value);
   }
 
   return false;
