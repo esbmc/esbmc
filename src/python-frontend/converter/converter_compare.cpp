@@ -1,5 +1,6 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -378,11 +379,12 @@ exprt python_converter::handle_string_comparison(
     throw std::runtime_error(
       "strcmp function not found in symbol table for string comparison");
 
-  side_effect_expr_function_callt strcmp_call;
-  strcmp_call.function() = symbol_expr(*strncmp_symbol);
-  strcmp_call.arguments() = {resolved_lhs, resolved_rhs};
+  // V.3: build the strcmp() expression-context call in IREP2. The string base
+  // addresses are clean pointers (built via build_index/build_address_of), so
+  // this is the byte-identical round-trip of the legacy call node.
+  exprt strcmp_call = python_expr::build_call_expr(
+    *strncmp_symbol, int_type(), {resolved_lhs, resolved_rhs});
   strcmp_call.location() = get_location_from_decl(element);
-  strcmp_call.type() = int_type();
 
   lhs = strcmp_call;
   rhs = gen_zero(int_type());
