@@ -3485,11 +3485,18 @@ following (`next: None`→`Node`), and dataclass field resolution.
   option (`options.cpp`, IREP2-migration group, default off). `python_languaget::
   typecheck` runs `python_adjust` after the legacy `clang_cpp_adjust` when the flag
   is set; `adjust()` is scoped to Python-mode symbols (V.1k RV-adj4 — the C OM
-  bodies stay on the legacy path). Flag off ⇒ byte-identical (the branch is not
-  taken); flag on is also byte-identical on today's corpus (the converter does not
-  yet emit pre-adjust `symbol_type2t` members, so the pass resolves nothing).
-  Regression tests `regression/python/python_irep2_adjust{,_fail}` pin both verdicts
-  under the flag; a unit test pins the Python-mode scoping.
+  bodies stay on the legacy path) **and to symbols whose IREP2 value is
+  authoritative** (`symbolt::has_native_value2()`). The latter is required: the
+  pass exists to resolve the converter's *IREP2-native* pre-adjust members, and
+  forcing `get_value2()` on a legacy-valued symbol (e.g. an operational-model
+  function body) would migrate sub-expressions the frontend left with unresolved
+  struct tags — a latent hole the lazy legacy/IREP2 split tolerates only while
+  nothing reads the IREP2 side (see `symbolt`). Flag off ⇒ byte-identical (the
+  branch is not taken); flag on is also byte-identical on today's corpus (no
+  symbol yet carries a native pre-adjust `symbol_type2t` member, so the pass
+  resolves nothing). Regression tests `regression/python/python_irep2_adjust{,_fail}`
+  pin both verdicts under the flag; unit tests pin the Python-mode and
+  native-value scoping.
 - **B.3 — converter emits one F-P11 family pre-adjust.** Flip the *smallest* F-P11
   site (e.g. the `BoolOp` short-circuit, `converter_stmt.cpp`) to build `member2t`/
   `index2t` directly over the (relaxed) `symbol_type2t` source, relying on B.2's pass

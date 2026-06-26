@@ -6,6 +6,7 @@
 #include <util/config.h>
 #include <util/context.h>
 #include <util/c_types.h>
+#include <util/migrate.h>
 
 // Part V Phase V.1k (b), sub-phases B.0/B.1 (docs/irep2-migration.md): the
 // IREP2-native Python adjuster. These tests pin its contracts so each later
@@ -273,4 +274,39 @@ TEST_CASE(
   const symbolt *out = context.find_symbol("c:@F@uses_point");
   REQUIRE(out != nullptr);
   REQUIRE(is_symbol_type(to_member2t(out->get_value2()).source_value->type));
+}
+
+TEST_CASE(
+  "python_adjust B.2 adjust() skips legacy-valued symbols",
+  "[python-frontend][irep2][python-adjust]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  const type2tc intt = get_int_type(config.ansi_c.int_width);
+
+  contextt context;
+  add_type_symbol(context, "tag-Point", make_struct("tag-Point", "x", intt));
+
+  // A Python-mode symbol whose value is the *legacy* exprt form: the pass must
+  // leave it untouched. Forcing get_value2() would migrate sub-expressions the
+  // frontend may have left with unresolved tags (the lazy legacy/IREP2 split
+  // tolerates those holes only while nothing reads the IREP2 side), so the pass
+  // adjusts only IREP2-native values -- the converter's pre-adjust members.
+  const expr2tc body =
+    member2tc(intt, symbol2tc(symbol_type2tc("tag-Point"), "p"), "x");
+  symbolt symbol;
+  symbol.id = "py:main.py@F@uses_point_legacy";
+  symbol.name = "uses_point_legacy";
+  symbol.mode = "Python";
+  symbol.set_value(migrate_expr_back(body)); // legacy setter => not native
+  symbol.set_type(intt);
+  REQUIRE_FALSE(symbol.has_native_value2());
+  context.add(symbol);
+
+  // The legacy-valued symbol is never descended into: adjust() skips it before
+  // touching its IREP2 side, so the visit counter stays at zero.
+  test_adjust ta(context);
+  REQUIRE_FALSE(ta.adjust());
+  REQUIRE(ta.visited == 0);
 }
