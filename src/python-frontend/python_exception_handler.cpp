@@ -533,14 +533,12 @@ void python_exception_handler::handle_function_call_assertion(
   }
   else
   {
-    // V.3: build `(int)<temp> == 1` in IREP2 (the temp is a synthetic bool),
-    // mirroring the is_negated `not` branch above.
+    // V.3: build `(int)<temp> == 1` in IREP2 via the build_equal helper (the
+    // temp is a synthetic bool; both operands are signedbv 32), mirroring the
+    // is_negated `not` branch above.
     exprt cast_expr = build_typecast(temp_var_expr, signedbv_typet(32));
     exprt one_expr = constant_exprt("1", signedbv_typet(32));
-    expr2tc cast2, one2;
-    migrate_expr(cast_expr, cast2);
-    migrate_expr(one_expr, one2);
-    assertion_expr = migrate_expr_back(equality2tc(cast2, one2));
+    assertion_expr = build_equal(cast_expr, one_expr);
   }
 
   code_assertt assert_code;
