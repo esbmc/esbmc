@@ -1,4 +1,5 @@
 #include <python-frontend/python_adjust.h>
+#include <irep2/irep2_utils.h>
 
 python_adjust::python_adjust(contextt &_context)
   : context(_context), ns(_context)
@@ -19,18 +20,58 @@ bool python_adjust::adjust()
     if (symbol.is_type)
       continue;
 
-    adjust_expr(symbol.get_value2());
+    expr2tc value = symbol.get_value2();
+    if (is_nil_expr(value))
+      continue;
+
+    adjust_expr(value);
+    symbol.set_value(value);
   }
 
   return false;
 }
 
-void python_adjust::adjust_expr(const expr2tc &expr)
+void python_adjust::adjust_expr(expr2tc &expr)
 {
   if (is_nil_expr(expr))
     return;
 
-  // B.0: no transformation. Descend into every operand so that B.1
-  // (member/index source following) extends a complete traversal.
-  expr->foreach_operand([this](const expr2tc &e) { adjust_expr(e); });
+  // Resolve sub-expressions first: a source must be resolved before the
+  // member/index that reads it (resolve `X` before building `X.a`).
+  expr->Foreach_operand([this](expr2tc &e) { adjust_expr(e); });
+
+  if (is_member2t(expr))
+  {
+    const member2t &m = to_member2t(expr);
+    expr2tc source = m.source_value;
+    if (resolve_aggregate_source(source))
+      expr = member2tc(expr->type, source, m.member);
+  }
+  else if (is_index2t(expr))
+  {
+    const index2t &i = to_index2t(expr);
+    expr2tc source = i.source_value;
+    if (resolve_aggregate_source(source))
+      expr = index2tc(expr->type, source, i.index);
+  }
+}
+
+bool python_adjust::resolve_aggregate_source(expr2tc &source) const
+{
+  // A member2t/index2t source reaches the adjuster as an unresolved by-name
+  // symbol_type2t (the relaxed-assert transient state); follow it to its
+  // struct/union/array. A pointer base never appears here: the member2t/index2t
+  // construction assert forbids a pointer source, so the converter dereferences
+  // it (yielding a symbol_type2t-typed source) before building the node.
+  if (!is_symbol_type(source->type))
+    return false;
+
+  // ns.follow() asserts (debug) / null-derefs (release) on an unregistered tag.
+  // Leave such a source untouched: the post-adjust strong-invariant check (B.4)
+  // is the correct place to flag a tag that never resolved.
+  if (context.find_symbol(to_symbol_type(source->type).symbol_name) == nullptr)
+    return false;
+
+  source = source->with_type(ns.follow(source->type));
+  return true;
 }
