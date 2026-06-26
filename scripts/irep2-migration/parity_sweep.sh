@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# V.4.4 verdict-parity sweep: for each regression test, compare the verdict
-# produced with the test's own flags (legacy, --irep2-bodies OFF) against the
-# verdict with --irep2-bodies added. Any divergence or flag-on crash is a
-# V.4.4 parity blocker. Deterministic verdict comparison per Part V §V.5.
+# Verdict-parity sweep: for each regression test, compare the verdict produced
+# with the test's own flags against the verdict with one extra migration flag
+# added. Any divergence or flag-on crash is a parity blocker. Deterministic
+# verdict comparison per Part V §V.5.
+#
+# The extra flag defaults to --irep2-bodies (the original V.4.4 use). Override it
+# via PARITY_FLAG to gate any other staged migration flag, e.g.
+#   PARITY_FLAG=--python-irep2-adjust parity_sweep.sh build/src/esbmc/esbmc \
+#       regression/python    # V.1k (b) resolve-then-build gate
 #
 # Usage: parity_sweep.sh <esbmc-binary> <regression-subdir> [max-tests]
 set -u
+
+# The migration flag whose on/off verdict parity is being swept.
+FLAG="${PARITY_FLAG:---irep2-bodies}"
 
 # Resolve the binary to an absolute path: the sweep cd's into each test dir
 # before invoking it, so a relative path would silently fail there (esbmc never
@@ -39,7 +47,7 @@ while IFS= read -r desc; do
   flags=$(sed -n '3p' "$desc")
   [ "$kind" = "KNOWNBUG" ] && continue
   [ -z "$src" ] && continue
-  case "$flags" in *--irep2-bodies*) continue;; esac   # skip tests already pinning the flag
+  case "$flags" in *"$FLAG"*) continue;; esac   # skip tests already pinning the flag
   n=$((n+1))
   # Split source and flags into words deliberately: $flags is a flag list that
   # must reach esbmc as separate arguments. Arrays keep that splitting explicit
@@ -48,7 +56,7 @@ while IFS= read -r desc; do
   read -ra flag_arr <<<"$flags"
   out_off=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" 2>&1)
   rc_off=$?
-  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" --irep2-bodies 2>&1)
+  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" "$FLAG" 2>&1)
   rc_on=$?
   v_off=$(verdict "$out_off"); v_on=$(verdict "$out_on")
   # ignore timeouts (rc 124) on either side — not a parity signal
