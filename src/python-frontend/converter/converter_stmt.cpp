@@ -3239,10 +3239,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         // directly in IREP2; it carries no IREP2 location, so the location is
         // re-attached to the back-migrated operand below.
         expr2tc strlen_arg2;
-        migrate_expr(
-          string_handler_.get_array_base_address(cond), strlen_arg2);
+        migrate_expr(string_handler_.get_array_base_address(cond), strlen_arg2);
         expr2tc strlen_call2 = side_effect_function_call2tc(
-          migrate_type(size_type()), symbol_expr2tc(*strlen_sym), {strlen_arg2});
+          migrate_type(size_type()),
+          symbol_expr2tc(*strlen_sym),
+          {strlen_arg2});
         cond = migrate_expr_back(
           notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
         cond.location() = location;
