@@ -3602,9 +3602,16 @@ following (`next: None`→`Node`), and dataclass field resolution.
   width shifts (the general case the consolidation note flagged) stay legacy. Sweep
   **0 divergences** over 65 class/arith + 70 broad; swap-probe (`shl`→`ashr`) made
   `(s.x << s.n) == 12` FAIL, confirming it fires. `regression/python/shift_member_adjust
-  {,_fail}` pin it. The integer/float arith, all comparisons, bitwise, and shift binop
-  surface is now flipped behind the flag; residue = float `Div`/modulo/floor-div trees,
-  non-integer/width-mismatched binops, W3 carriage, B.5.
+  {,_fail}` pin it.
+  **Float `Div` flipped (2026-06-26).** New `python_expr::build_ieee_div`; `Div` reaches
+  the helper's float group after `handle_float_division` has promoted both operands to
+  double and set the result type, so it is a resolved same-type single `ieee_div` node
+  (not a tree). Sweep **0 divergences** over 45 float-ish + 60 broad; swap-probe
+  (`ieee_div`→`ieee_mul`) made `d.x / d.y == 3.5` FAIL, confirming it fires.
+  `regression/python/floatdiv_member_adjust{,_fail}` pin it. The unary ops (`USub`/
+  `Invert`/`Not`/`UAdd`) are already IREP2 (unconditional V.3 work). The flipped binop
+  surface now spans integer+float arith incl. `Div`, all comparisons, bitwise, shifts;
+  residue = modulo/floor-div trees, non-integer/width-mismatched binops, W3, B.5.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

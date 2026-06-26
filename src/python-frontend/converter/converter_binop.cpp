@@ -1920,6 +1920,11 @@ exprt try_build_irep2_binop(
       return python_expr::build_ieee_sub(lhs, rhs, type);
     if (op == "Mult")
       return python_expr::build_ieee_mul(lhs, rhs, type);
+    // Div: handle_float_division (called before this helper) has already
+    // promoted both operands to double and set the result type, so it reaches
+    // here as a resolved same-type float op.
+    if (op == "Div" || op == "div")
+      return python_expr::build_ieee_div(lhs, rhs, type);
   }
 
   if (same_int)
