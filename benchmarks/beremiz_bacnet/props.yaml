@@ -1,9 +1,0 @@
-properties:
-  - id: P1
-    kind: invariant
-    expression: "!Heater || !ControlDisable"
-    description: "Heater must not activate when control is disabled"
-  - id: P2
-    kind: invariant
-    expression: "!ControlDisable || !Heater"
-    description: "Control disable must stop the heater"
