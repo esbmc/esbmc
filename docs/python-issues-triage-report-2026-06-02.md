@@ -1311,6 +1311,109 @@ work; the §5 priority order stands.
 
 ---
 
+> **Note on numbering.** §30–§35 (PRs #5577/#5579/#5585/#5588/#5592/#5597) are in flight and not yet
+> on `master`; this finding is appended as §36.
+
+## 36. 2026-06-24 (twenty-sixth sweep) — int.from_bytes literal-arg root cause (characterized, deferred)
+
+Re-test against current `master` (tip `6d79c6204c`). KNOWNBUG classification unchanged — §3 holds.
+This sweep investigated the §35b next candidate — a bytes **literal passed directly as the
+`int.from_bytes` argument** — and root-caused it, but it is **not** the isolated one-liner the
+catalogue implied: it is a two-layer frontend bytes-literal-argument lowering bug. No fix is shipped;
+the precise diagnosis is recorded here for a future focused effort, and the partial patch was reverted
+(it converted a detected out-of-bounds into a silent wrong value — strictly worse).
+
+### 36a. Root cause (GOTO evidence)
+`int.from_bytes(b"\x01\x02", "big")` reports `dereference failure: array bounds violated` at the
+model's `bytes_data[index]`. The **variable** form `c = b"\x01\x02"; int.from_bytes(c, ...)` verifies.
+The GOTO shows why:
+
+- **Variable form:** `c = { 1, 2 }` — a 2-element array of 64-bit ints (`build_raw_byte_array`,
+  element type `long_long_int`) — passed as `from_bytes(0, &c[0], 1, 0)`. The model's
+  `len(bytes_data)`/indexing are correct.
+- **Literal form:** `from_bytes(0, (signed long int *)(&"\001\002"[0]), 1, 0)` — the bytes literal
+  is lowered as a **char-array string constant** `"\001\002"` (1 byte/element, null-terminated) and
+  its address is cast to the model's 64-bit-element bytes pointer. The model reads 8 bytes per
+  element over a 3-byte buffer → out of bounds.
+
+Two layers conspire:
+1. **`get_literal`/`is_bytes_literal` (`converter/converter_expr.cpp`):** a bare bytes-literal
+   *argument* — with no bytes-typed LHS/annotation context — is not recognised as bytes
+   (`current_element_type` is not `"bytes"`, and the node reaches `get_literal` without the
+   `encoded_bytes` marker that fires `is_bytes_literal`), so it falls through to the string path and
+   is built as a char array. The assignment-RHS context works only because the inferred `bytes` LHS
+   sets `current_element_type`.
+2. **Argument clobber (`function_call/expr.cpp`, ~L4410):** the model-call arg path then rebuilds any
+   `Constant` whose JSON `value` is a string into a `string_literal` — the same clobber the adjacent
+   complex-literal guard already prevents. Guarding bytes there (mirroring the complex guard, on a
+   non-char array subtype) removes the size-mismatch cast but **not** the wrong value, because
+   layer 1 already produced a char array.
+
+The complete fix must make layer 1 lower a bare bytes-literal argument as a byte array (preserve/honour
+`encoded_bytes` independent of LHS context), after which the layer-2 guard keeps the arg from being
+re-clobbered. That is a frontend bytes-literal-lowering change touching `get_literal`'s context
+handling — a focused but non-trivial change, deferred. **Sound workaround:** bind the literal to a
+variable first (`c = b"\x01\x02"; int.from_bytes(c, ...)`), which verifies today.
+
+### 36b. Next candidate & everything else: unchanged disposition
+A **cleaner next candidate** (avoiding the layer-1 lowering work) is the `signed=True` two's-complement
+negative path of `int.from_bytes` (a model-logic case), or `bytes.hex(sep)` separator arguments
+(extends §32's `bytes.hex`). The bytes-literal-arg lowering (§36a) and the `byteorder=` keyword form
+(model parameter named `big_endian`) remain catalogued. The separately-tracked inline-`len`/strlen
+concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()`
+(infeasible), and `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d
+questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+> **Note on numbering.** §30 (PR #5577, `list(str)`), §31 (PR #5579, numeric-tower properties),
+> §32 (PR #5585, `bytes.hex()`), §33 (PR #5588, `str.encode()`/`bytes.decode()`), and §34 (PR
+> #5592, `int.to_bytes()` receiver forms) are in flight and not yet on `master`; this sweep is
+> appended as §35. Its fix is in flight as PR #5597. When all land, the maintainer orders
+> §30 → §31 → §32 → §33 → §34 → §35.
+
+## 35. 2026-06-24 re-validation (twenty-fifth sweep) & int.from_bytes default signed
+
+Re-test against current `master` (tip `8567a816e2`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.from_bytes()` defect catalogued in §34b.
+
+### 35a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, "big")` (the common 2-argument form) raised an uncaught `TypeError`.**
+
+The counterexample was an uncaught exception, not a wrong value: the `int.py` operational model's
+`from_bytes(cls, bytes_data, big_endian, signed)` had no default for `signed`, so the preprocessor's
+missing-argument check rejected the 2-argument call before the model ran. CPython's signature is
+`int.from_bytes(bytes, byteorder, *, signed=False)`; the model's arithmetic was already correct (the
+*explicit*-signed form `int.from_bytes(b, "big", False)`, exercised by the pre-existing
+`int_from_bytes` regression test, verified).
+
+**Fix** (`models/int.py`): give the model's `signed` parameter the matching `False` default. One
+line; the preprocessor's `functionDefaults` mechanism then supplies it for the 2-argument form. No
+arithmetic change — a trivial literal (default-value) change, so no Mode C is required. The model is
+FLAIL-mangled, so the binary was rebuilt before testing.
+
+New regression pair `regression/python/int_from_bytes_default_signed{,_fail}` (CORE) covering the
+2-argument default form, the `signed=False` keyword, big/little endian, a leading zero, and a single
+byte; the positive test is the liveness witness (uncaught-exception `FAILED` pre-fix). Verified
+bit-for-bit against CPython; the existing `int_from_bytes` (explicit-signed) test still passes;
+pylint clean on the model; the focused `regression/python/(int_|bytes|from_bytes|to_bytes)` ctest
+subset (31 tests) shows zero new failures.
+
+(Methodology note: the V.3 `python_expr` IREP2 expr-builder module was considered for this fix, but
+the defect turned out to be a missing argument default — an uncaught `TypeError` — not an
+expr-construction problem, so no new exprs are built and the builder does not apply here.)
+
+### 35b. Next candidate & everything else: unchanged disposition
+Two `from_bytes` sub-defects surfaced once the exception was removed and are the obvious **next
+candidates**: (1) a bytes **literal passed directly as the argument** — `int.from_bytes(b"\x00\xff",
+"big")` — still fails because the constant byte-array argument is not materialized for the model
+call (the variable form works); this is the constant-array-arg materialization path, where the
+`python_expr` IREP2 builders (`build_symbol`/`build_address_of`) *would* apply. (2) The `signed=True`
+two's-complement negative path and the `byteorder=` keyword form (the model parameter is named
+`big_endian`). Smaller adjacent entries: `bytes.hex(sep)` separator arguments, multi-byte (non-ASCII)
+UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still
+stands. Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §30 (PR #5577, `list(str)` constructor) is in flight and not yet on
 > `master`; this sweep is appended as §31. Its fix is in flight as PR #5579. When both land, the
 > maintainer orders §30 → §31.

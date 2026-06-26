@@ -1298,7 +1298,12 @@ exprt string_handler::handle_string_membership(
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    return build_notequal(strchr_call, null_ptr);
+    // V.3: build `strchr(...) != NULL` in IREP2 via the shared build_notequal
+    // helper (#5576). The migrate round-trip drops the call operand's location,
+    // so re-attach it.
+    exprt not_equal = build_notequal(strchr_call, null_ptr);
+    not_equal.op0().location() = strchr_call.location();
+    return not_equal;
   }
 
   // Use strstr for substring membership testing
@@ -1442,7 +1447,12 @@ exprt string_handler::handle_string_membership(
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  return build_notequal(strstr_call, null_ptr);
+  // V.3: build `strstr(...) != NULL` in IREP2 via the shared build_notequal
+  // helper (#5576, mirrors the strchr membership path above). The migrate
+  // round-trip drops the call operand's location, so re-attach it.
+  exprt not_equal = build_notequal(strstr_call, null_ptr);
+  not_equal.op0().location() = strstr_call.location();
+  return not_equal;
 }
 
 std::string

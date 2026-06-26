@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <regex>
 #include <stdexcept>
@@ -3506,6 +3507,12 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
+  const bool is_numpy_model_call = [](const std::string &filename) {
+    std::string normalized = filename;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    return boost::algorithm::ends_with(
+      normalized, std::string{"/models/numpy.py"});
+  }(function_id_.get_filename());
 
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
@@ -3548,8 +3555,9 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   if (
-    !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
-                          (func_name == "sum" && (n_args == 1 || n_args == 2))))
+    !is_user_imported && !is_numpy_model_call &&
+    ((is_sorted_min_max && n_args == 1) ||
+     (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;

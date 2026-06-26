@@ -4806,13 +4806,13 @@ void clang_c_convertert::get_presumed_location(
 
   clang::SourceLocation FileLoc = sm->getFileLoc(loc);
   bool use_line_directives = true;
-#if ESBMC_SVCOMP
   /* Do not use #line directives, because the GraphML witness format appearently
    * wants to use the physical line in the pre-processed .i file; at least
    * CPAchecker and UAutomizer do. */
-  if (!config.options.get_bool_option("validate-violation-witness"))
+  if (
+    config.options.get_bool_option("sv-comp") &&
+    !config.options.get_bool_option("validate-violation-witness"))
     use_line_directives = false;
-#endif
   PLoc = sm->getPresumedLoc(FileLoc, use_line_directives);
 }
 
