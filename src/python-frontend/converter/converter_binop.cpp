@@ -1988,6 +1988,22 @@ exprt python_converter::build_binary_expression(
     return result;
   }
 
+  // V.1k (b) B.4: same idiom for integer bitwise And/Or/Xor (bitand2t etc.
+  // assert operand-width consistency; the exact-type-match guard discharges it).
+  // Shifts (LShift/RShift) and width-mismatched cases stay legacy.
+  if (
+    config.options.get_bool_option("python-irep2-adjust") &&
+    (op == "BitAnd" || op == "BitOr" || op == "BitXor") &&
+    (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
+    rhs.type() == type)
+  {
+    exprt result = (op == "BitAnd")  ? python_expr::build_bitand(lhs, rhs, type)
+                   : (op == "BitOr") ? python_expr::build_bitor(lhs, rhs, type)
+                                     : python_expr::build_bitxor(lhs, rhs, type);
+    result.location() = bin_expr.location();
+    return result;
+  }
+
   // V.1k (b) B.4: float Add/Sub/Mult via the ieee_* round-trip builders (same
   // exact-type-match guard so ieee_*2t's operand-width assert holds). Div is
   // handled separately above; the builders reproduce migrate's default

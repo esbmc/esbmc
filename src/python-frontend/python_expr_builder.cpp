@@ -227,6 +227,30 @@ exprt build_mul(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+exprt build_bitand(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitand2tc(ty, x, y);
+    });
+}
+
+exprt build_bitor(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitor2tc(ty, x, y);
+    });
+}
+
+exprt build_bitxor(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitxor2tc(ty, x, y);
+    });
+}
+
 namespace
 {
 // The default rounding mode migrate_expr attaches to a legacy ieee_* node that

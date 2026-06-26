@@ -86,6 +86,11 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 // `a * b : t` over same-width operands (mul2t asserts width consistency).
 exprt build_mul(const exprt &a, const exprt &b, const typet &t);
 
+// `a & b` / `a | b` / `a ^ b : t` over same-width integer operands.
+exprt build_bitand(const exprt &a, const exprt &b, const typet &t);
+exprt build_bitor(const exprt &a, const exprt &b, const typet &t);
+exprt build_bitxor(const exprt &a, const exprt &b, const typet &t);
+
 // Float `a + b`/`a - b`/`a * b : t` over same-floatbv operands, using the
 // default __ESBMC_rounding_mode (matching migrate of a legacy ieee_* node with
 // no rounding_mode field). ieee_*2t assert operand-width consistency.

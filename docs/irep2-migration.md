@@ -3582,6 +3582,12 @@ following (`next: None`→`Node`), and dataclass field resolution.
   Sweep **0 divergences** over 45 float-ish + 80 broad tests; swap-probe (`ieee_add`→
   `ieee_mul`) made `f.x + 1.5 == 4.0` FAIL, confirming it fires.
   `regression/python/float_member_adjust{,_fail}` pin it.
+  **Bitwise `BitAnd`/`BitOr`/`BitXor` flipped (2026-06-26).** New
+  `python_expr::build_bitand`/`build_bitor`/`build_bitxor` (`bitand2tc` etc.), same
+  exact-type-match integer guard; shifts (`LShift`/`RShift`, which carry signedness
+  subtleties) stay legacy. Sweep **0 divergences** over 65 class/arith + 70 broad;
+  swap-probe (`bitand`→`bitor`) made `(b.x & b.y) == 8` FAIL, confirming it fires.
+  `regression/python/bitwise_member_adjust{,_fail}` pin it.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
