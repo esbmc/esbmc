@@ -148,7 +148,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "assertion that fails once a loop exceeds --ld-scan-budget iterations, "
      "modelling a PLC scan overrun (changes the verified model)"},
     {"ld-scan-budget",
-     boost::program_options::value<unsigned>()->value_name("N"),
+     boost::program_options::value<int>()->value_name("N"),
      "Tolerated iterations before the --ld-scan-watchdog assertion fails "
      "(default 8); keep <= the BMC --unwind so the assertion is reachable"}}},
 #endif
