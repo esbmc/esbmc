@@ -13,6 +13,7 @@
 #include <util/migrate.h>
 #include <util/std_expr.h>
 #include <util/std_code.h>
+#include <util/std_types.h>
 
 #include <algorithm>
 #include <cmath>
@@ -3111,6 +3112,9 @@ exprt numpy_call_expr::create_expr_from_call()
         // Scoped to the default floatbv encoding; the non-default --fixedbv
         // float path is left as-is (a separate, pre-existing concern).
         const bool is_float = base_type.is_floatbv();
+        unsigned dtype_bits = 64;
+        if (!is_float && (base_type.is_signedbv() || base_type.is_unsignedbv()))
+          dtype_bits = static_cast<const bv_typet &>(base_type).get_width();
         function_id_.set_function(is_float ? "dot_double" : "dot");
         // Update the symbol associated with the result
         if (converter_.current_lhs != nullptr)
@@ -3158,6 +3162,8 @@ exprt numpy_call_expr::create_expr_from_call()
         args.push_back(from_integer(m, long_long_int_type()));
         args.push_back(from_integer(n, long_long_int_type()));
         args.push_back(from_integer(p, long_long_int_type()));
+        if (!is_float)
+          args.push_back(from_integer(dtype_bits, long_long_int_type()));
 
         return call;
       }
