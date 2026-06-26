@@ -112,7 +112,13 @@ int fclose(FILE *stream)
 __ESBMC_HIDE:;
   // Don't clear pending state here - let it remain for verification.
   // Mirror fopen: in SV-COMP mode the stream is a sentinel, not heap memory.
-  if (!__ESBMC_sv_comp())
+  // Outside SV-COMP, only release storage we actually allocated on the heap
+  // (fopen/fdopen).  The standard streams stdin/stdout/stderr are not heap
+  // objects, so free()ing them would spuriously report "invalid pointer
+  // freed" even though fclose(stdout) is well-defined.  Guarding on
+  // __ESBMC_is_dynamic keeps a genuine double-fclose of an fopen'd stream
+  // detectable as a double free (the flag stays set after free()).
+  if (!__ESBMC_sv_comp() && __ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)])
     free(stream);
   return nondet_int();
 }
