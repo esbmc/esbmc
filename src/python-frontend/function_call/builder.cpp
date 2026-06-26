@@ -78,7 +78,10 @@ bool function_call_builder::is_cover_call(const symbol_id &function_id) const
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
-  if (type_utils::is_builtin_type(function_id.get_function()))
+  const std::string &function = function_id.get_function();
+  if (
+    type_utils::is_builtin_type(function) || function == "isinstance" ||
+    function == "hasattr")
     return false;
 
   const std::string &filename = function_id.get_filename();
@@ -636,7 +639,6 @@ exprt function_call_builder::build() const
   }
 
   symbol_id function_id = build_function_id();
-
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     exprt arg_expr = converter_.get_expr(call_["args"][0]);

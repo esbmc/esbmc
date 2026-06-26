@@ -3537,7 +3537,8 @@ void python_converter::get_return_statements(
           str_content, string_type, string_constantt::k_default);
 
         // Get its address (converts array to pointer)
-        return_value = address_of_exprt(return_value);
+        // V.3: build the address-of in IREP2 (operand is a string constant).
+        return_value = python_expr::build_address_of(return_value);
       }
       else
       {

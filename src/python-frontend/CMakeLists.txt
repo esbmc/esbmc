@@ -32,7 +32,15 @@ add_library(pythonfrontend STATIC
             python_expr_builder.cpp
             python_exception_handler.cpp
             python_lambda.cpp
-            python_list.cpp
+            python-list/list_type_inference.cpp
+            python-list/list_type_map.cpp
+            python-list/list_construction.cpp
+            python-list/list_mutation.cpp
+            python-list/list_access.cpp
+            python-list/list_query.cpp
+            python-list/list_string_ops.cpp
+            python-list/list_comprehension.cpp
+            python-list/list_set_ops.cpp
             python_math.cpp
             python_set.cpp
             python_typechecking.cpp

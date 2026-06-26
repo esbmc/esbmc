@@ -814,6 +814,15 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_sv_comp")
+  {
+    expr2tc sv_comp = config.options.get_bool_option("sv-comp")
+                        ? gen_true_expr()
+                        : gen_false_expr();
+    symex_assign(code_assign2tc(func_call.ret, sv_comp));
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
