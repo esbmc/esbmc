@@ -3558,6 +3558,15 @@ following (`next: None`→`Node`), and dataclass field resolution.
   confirming it fires. `regression/python/mult_member_adjust{,_fail}` pin it. The
   integer `Add`/`Sub`/`Mult` family is now flipped; `Div`/float (`ieee_*`) and
   width-mismatched arith remain the legacy residue.
+  **Ordering comparisons `Lt`/`LtE`/`Gt`/`GtE` flipped (2026-06-26).** Same idiom via
+  the existing `build_less_than`/`build_less_equal`/`build_greater_than`/
+  `build_greater_equal` helpers. The result is bool but the operands carry their own
+  type, so the guard is *operand* match — `lhs.type() == rhs.type()` + integer
+  bitvector — which discharges `lessthan2t` et al.'s operand-width assert; `Eq`/`NotEq`,
+  float, and width-mismatched comparisons stay legacy. Sweep **0 divergences** over 65
+  class/arith + 100 broad (relational flip active); swap-probe (`Lt`→`Gt`) made
+  `p.a < p.b` FAIL, confirming it fires. `regression/python/cmp_member_adjust{,_fail}`
+  pin it.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

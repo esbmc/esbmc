@@ -1988,6 +1988,24 @@ exprt python_converter::build_binary_expression(
     return result;
   }
 
+  // V.1k (b) B.4: same idiom for the ordering comparisons. The result is bool
+  // but the operands carry their own type; lessthan2t etc. assert operand width
+  // consistency, so the guard requires same-type integer-bitvector operands.
+  // Everything else (mismatched widths, float, Eq/NotEq) stays legacy.
+  if (
+    config.options.get_bool_option("python-irep2-adjust") &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE") &&
+    lhs.type() == rhs.type() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  {
+    exprt result = (op == "Lt")    ? python_expr::build_less_than(lhs, rhs)
+                   : (op == "LtE") ? python_expr::build_less_equal(lhs, rhs)
+                   : (op == "Gt")  ? python_expr::build_greater_than(lhs, rhs)
+                                   : python_expr::build_greater_equal(lhs, rhs);
+    result.location() = bin_expr.location();
+    return result;
+  }
+
   // Add operands
   bin_expr.copy_to_operands(lhs, rhs);
 
