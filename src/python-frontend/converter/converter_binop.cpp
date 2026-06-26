@@ -1868,6 +1868,30 @@ exprt python_converter::handle_string_binary_operations(
   return nil_exprt();
 }
 
+namespace
+{
+// A legacy `p[i]` whose base is a *pointer* is sugar for `*(p+i)`;
+// clang_c_adjust::adjust_index rewrites it only later, so pre-adjust it is still
+// an `index` over a pointer source. migrate_expr lowers `index` straight to
+// index2t, which forbids a pointer source (debug assert in index2t) — it expects
+// the adjusted array/vector form. The flag-gated flips below run during
+// conversion, i.e. before that adjust, and are reached even for dead
+// operational-model bodies (e.g. `int.from_bytes`' `bytes_data[i]`). Detect that
+// shape so such an operand keeps its legacy node and is migrated normally at
+// goto-convert, instead of asserting here.
+bool has_pointer_index(const exprt &e)
+{
+  if (
+    e.id() == "index" && e.operands().size() == 2 &&
+    e.op0().type().id() == "pointer")
+    return true;
+  for (const exprt &op : e.operands())
+    if (has_pointer_index(op))
+      return true;
+  return false;
+}
+} // namespace
+
 exprt python_converter::build_binary_expression(
   const std::string &op,
   exprt &lhs,
@@ -1968,6 +1992,13 @@ exprt python_converter::build_binary_expression(
   if (op == "Div" || op == "div")
     math_handler_.handle_float_division(lhs, rhs, bin_expr);
 
+  // Gate the IREP2 flips below: enabled by --python-irep2-adjust, but suppressed
+  // when an operand still carries a pre-adjust pointer index (migrate_expr would
+  // assert building index2t over a pointer source); such an operand keeps its
+  // legacy node.
+  const bool do_irep2 = config.options.get_bool_option("python-irep2-adjust") &&
+                        !has_pointer_index(lhs) && !has_pointer_index(rhs);
+
   // V.1k (b) B.4: under --python-irep2-adjust, build same-type integer Add/Sub
   // via the IREP2 resolve-then-build round-trip (python_expr::build_add/sub).
   // Guarded on exact type match (lhs==rhs==result, integer bitvector) so
@@ -1976,8 +2007,7 @@ exprt python_converter::build_binary_expression(
   // The operands reaching here are already resolved (B.4 triage: member
   // arithmetic migrates without the F-P11 assert). Default off ⇒ legacy.
   if (
-    config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Add" || op == "Sub" || op == "Mult") &&
+    do_irep2 && (op == "Add" || op == "Sub" || op == "Mult") &&
     (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
     rhs.type() == type)
   {
@@ -1992,14 +2022,14 @@ exprt python_converter::build_binary_expression(
   // assert operand-width consistency; the exact-type-match guard discharges it).
   // Shifts (LShift/RShift) and width-mismatched cases stay legacy.
   if (
-    config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "BitAnd" || op == "BitOr" || op == "BitXor") &&
+    do_irep2 && (op == "BitAnd" || op == "BitOr" || op == "BitXor") &&
     (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
     rhs.type() == type)
   {
-    exprt result = (op == "BitAnd")  ? python_expr::build_bitand(lhs, rhs, type)
-                   : (op == "BitOr") ? python_expr::build_bitor(lhs, rhs, type)
-                                     : python_expr::build_bitxor(lhs, rhs, type);
+    exprt result = (op == "BitAnd") ? python_expr::build_bitand(lhs, rhs, type)
+                   : (op == "BitOr")
+                     ? python_expr::build_bitor(lhs, rhs, type)
+                     : python_expr::build_bitxor(lhs, rhs, type);
     result.location() = bin_expr.location();
     return result;
   }
@@ -2009,9 +2039,8 @@ exprt python_converter::build_binary_expression(
   // handled separately above; the builders reproduce migrate's default
   // __ESBMC_rounding_mode, so the round-trip is byte-identical. Default off.
   if (
-    config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Add" || op == "Sub" || op == "Mult") && type.is_floatbv() &&
-    lhs.type() == type && rhs.type() == type)
+    do_irep2 && (op == "Add" || op == "Sub" || op == "Mult") &&
+    type.is_floatbv() && lhs.type() == type && rhs.type() == type)
   {
     exprt result = (op == "Add")   ? python_expr::build_ieee_add(lhs, rhs, type)
                    : (op == "Sub") ? python_expr::build_ieee_sub(lhs, rhs, type)
@@ -2025,7 +2054,7 @@ exprt python_converter::build_binary_expression(
   // operand type/width consistency, so the guard requires same-type integer-
   // bitvector operands. Float and width-mismatched comparisons stay legacy.
   if (
-    config.options.get_bool_option("python-irep2-adjust") &&
+    do_irep2 &&
     (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE" || op == "Eq" ||
      op == "NotEq") &&
     lhs.type() == rhs.type() &&
