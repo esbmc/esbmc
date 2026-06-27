@@ -1064,6 +1064,54 @@ goto_programt code_contractst::generate_checking_wrapper(
   // ARRAY_ALLOC_ELEMS (which only applies to validity-assumption allocations).
   std::map<irep_idt, expr2tc> is_fresh_sizes;
 
+  // Emit the malloc + non-null assume for one resolved is_fresh pointer lvalue.
+  auto emit_is_fresh_alloc =
+    [&](const expr2tc &ptr_var, const expr2tc &size_expr) {
+      // Use u8 as the alloc element type so that size_expr (in bytes) equals
+      // the element count.  symex_mem casts the u8* result to lhs->type.
+      type2tc char_type = get_uint8_type();
+      expr2tc malloc_expr = sideeffect2tc(
+        pointer_type2tc(char_type),
+        expr2tc(),
+        size_expr,
+        std::vector<expr2tc>(),
+        char_type,
+        sideeffect2t::allockind::malloc);
+
+      goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
+      assign_inst->location = location;
+      assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
+
+      // Remember the allocation so the wrapper can free it before returning.
+      wrapper_heap_ptrs.push_back(ptr_var);
+
+      // Record the allocation size keyed by the pointer symbol so Phase 2B can
+      // bound its array-element witness index by the real allocation.
+      if (is_symbol2t(ptr_var))
+        is_fresh_sizes[to_symbol2t(ptr_var).thename] = size_expr;
+
+      // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
+      // valid memory block.  Without this, symex_mem's non-deterministic
+      // malloc-failure path can produce NULL, causing later derefs to fail.
+      expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
+      expr2tc not_null = notequal2tc(ptr_var, null_ptr);
+      auto assume_nn = wrapper.add_instruction(ASSUME);
+      assume_nn->guard = not_null;
+      assume_nn->location = location;
+      assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
+    };
+
+  // is_fresh pointers whose lvalue reads through another pointer — e.g. a
+  // member access `this->p` in a C++ method — must be allocated AFTER that base
+  // pointer's harness storage is set up. add_pointer_validity_assumptions (step
+  // 1) havocs the receiver struct with NONDET, which would otherwise clobber a
+  // malloc emitted here, leaving `this->p` pointing at a nondet (invalid)
+  // address. Defer those to step 1b. Plain symbol params are not havoced in
+  // enforce mode, so allocate them up-front where old-snapshots and validity
+  // assumptions can see them. Issue #6.
+  std::vector<is_fresh_info> deferred_is_fresh;
+
   for (const auto &info : is_fresh_calls)
   {
     // Strip typecasts (e.g. (void*)(&hdr_len) → &hdr_len) to recover the
@@ -1105,39 +1153,18 @@ goto_programt code_contractst::generate_checking_wrapper(
       ptr_var = stripped;
     }
 
-    // Use u8 as the alloc element type so that size_expr (in bytes) equals
-    // the element count.  symex_mem casts the u8* result to lhs->type.
-    type2tc char_type = get_uint8_type();
-    expr2tc malloc_expr = sideeffect2tc(
-      pointer_type2tc(char_type),
-      expr2tc(),
-      info.size_expr,
-      std::vector<expr2tc>(),
-      char_type,
-      sideeffect2t::allockind::malloc);
-
-    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
-    assign_inst->location = location;
-    assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
-
-    // Remember the allocation so the wrapper can free it before returning.
-    wrapper_heap_ptrs.push_back(ptr_var);
-
-    // Record the allocation size keyed by the pointer symbol so Phase 2B can
-    // bound its array-element witness index by the real allocation.
+    // A plain symbol lvalue is independent of any harness setup — allocate now.
+    // An indirect lvalue (member/index/dereference) reads through a base
+    // pointer that step 1 sets up, so defer it.
     if (is_symbol2t(ptr_var))
-      is_fresh_sizes[to_symbol2t(ptr_var).thename] = info.size_expr;
-
-    // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
-    // valid memory block.  Without this, symex_mem's non-deterministic
-    // malloc-failure path can produce NULL, causing later dereferences to fail.
-    expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
-    expr2tc not_null = notequal2tc(ptr_var, null_ptr);
-    auto assume_nn = wrapper.add_instruction(ASSUME);
-    assume_nn->guard = not_null;
-    assume_nn->location = location;
-    assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
+      emit_is_fresh_alloc(ptr_var, info.size_expr);
+    else
+    {
+      is_fresh_info deferred;
+      deferred.ptr_arg = ptr_var;
+      deferred.size_expr = info.size_expr;
+      deferred_is_fresh.push_back(deferred);
+    }
   }
 
   // Collect the set of params already allocated by __ESBMC_is_fresh so that
@@ -1195,6 +1222,13 @@ goto_programt code_contractst::generate_checking_wrapper(
       is_fresh_allocated_params,
       wrapper_heap_ptrs);
   }
+
+  // 1b. Allocate deferred is_fresh pointers (those reading through a base
+  //     pointer, e.g. a C++ method's this->member) now that the base pointer's
+  //     harness storage exists and has been havoced. See the note where
+  //     deferred_is_fresh is populated. Issue #6.
+  for (const auto &info : deferred_is_fresh)
+    emit_is_fresh_alloc(info.ptr_arg, info.size_expr);
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
   //    Comes after is_fresh allocation so that old-snapshot assignments can
