@@ -41,10 +41,10 @@ The SV-COMP backlog was triaged in two passes:
 
 | # | Benchmark | Property | Disposition | New PR? |
 |---|---|---|---|---|
-| 4976 | busybox `sync-1` | no-overflow | PRECISION LIMITATION — printf-layer fix is unsound; sound fix needs a `va_list`-modeling OM | no (coupled, see below) |
-| 4977 | busybox `sync-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
-| 4978 | busybox `whoami-incomplete-1` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
-| 4979 | busybox `whoami-incomplete-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
+| 4976 | busybox `sync-1` | no-overflow | RESOLVED — sound return-length model shipped (#5017/#5270/#5278/#5279); CLOSED 06-09. *Pass-2 view below was superseded; see §3.1 banner.* | yes (later) |
+| 4977 | busybox `sync-2` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
+| 4978 | busybox `whoami-incomplete-1` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
+| 4979 | busybox `whoami-incomplete-2` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
 | 4980 | ldv `turbografx.ko` | termination | ALREADY-ADDRESSED — overlaps open PR #4919 | no (avoid duplicate) |
 
 **Why no new PRs for this batch.** In both cases shipping a quick patch would be either *unsound*
@@ -75,10 +75,10 @@ The SV-COMP backlog was triaged in two passes:
 | # | Title (short) | Category | Disposition |
 |---|---|---|---|
 | 4980 | termination false alarm: turbografx.ko | termination/k-induction | overlaps open PR #4919 (§3.2) |
-| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4977 | no-overflow false alarm: sync-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4976 | no-overflow false alarm: sync-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
+| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4977 | no-overflow false alarm: sync-2 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4976 | no-overflow false alarm: sync-1 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
 | 4611 | Witness GraphML returnFromFunction key + dup nodes | witness | needs witness validator (§4) |
 | 4439 | valid-memsafety false alarm: w83977af_ir.ko | memsafety/concurrency | research-grade LDV driver (§4) |
 | 4438 | unreach-call false alarm: log_6_safe | FP/k-induction | open PR #4480 (§4) |
@@ -115,9 +115,25 @@ ESBMC 8.3.0 commit `911d1790`. Each is a *false alarm* (ground truth `true`, ESB
 
 ### 3.1 #4976 / #4977 / #4978 / #4979 — no-overflow false alarm in busybox `bb_verror_msg`
 
-**Status: tightly coupled (one function, one root cause). One future PR, not four. PRECISION /
-INCOMPLETENESS LIMITATION — the printf-model-layer fix was measured to be unsound; a sound fix
-requires a `va_list`-modeling `(v)asprintf` OM.**
+> **RESOLVED (2026-06-26 reconciliation) — supersedes the Pass-2 conclusion below.** A *sound*
+> return-length model for the printf/(v)asprintf family was designed
+> (`docs/design-printf-return-length-om.md`) and shipped: **PR #5017** (G-A, non-constant format
+> no longer under-approximates), **PR #5270** (G-D, wire `(v)asprintf`/`(v)sprintf`/`vsnprintf`/
+> `vprintf` into `symex_printf`), **PR #5278** (cap the unbounded return at `INT_MAX/2`), and
+> **PR #5279** (model the `*strp` heap allocation). The key realisation that unblocked it: the
+> earlier "unsound" measurement (PR #5009) was of a *naive* routing that clamped a symbolic
+> format to length 0; the shipped model instead caps the return at a sound over-approximation
+> (`INT_MAX/2`), which removes the false overflow *without* masking a genuine one. **All four
+> issues #4976–#4979 were closed on 2026-06-09.** Regression coverage:
+> `regression/esbmc/asprintf_const_format_exact`, `vasprintf_*`, and the reduced reproducers
+> `github_4977`/`github_4978`/`github_4979` (+ `github_4978_fail`) — all green; the reproducers
+> converge to `VERIFICATION SUCCESSFUL` at k=11 and the `_fail` variant still `FAILED`. Only the
+> Phase-3 G-C precision pass (`va_list` `%s` recovery, symbolic-format tightening) remains open,
+> tracked by #5012. The historical Pass-2 analysis is retained below for the record.
+
+**Status (Pass 2, superseded — see banner above): tightly coupled (one function, one root cause).
+One future PR, not four. PRECISION / INCOMPLETENESS LIMITATION — the printf-model-layer fix was
+measured to be unsound; a sound fix requires a `va_list`-modeling `(v)asprintf` OM.**
 
 **Benchmarks.** `c/busybox-1.22.0/{sync-1,sync-2,whoami-incomplete-1,whoami-incomplete-2}.i`.
 Each is run (per the issue) with:

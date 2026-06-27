@@ -249,6 +249,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
           continue;
         }
         const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
+        // Only fold to a string constant when the array has compile-time
+        // content. A nondet / runtime-filled array has no static initializer;
+        // leaving it as an array lets the formatter apply a sound object-size
+        // length bound (strlen <= size-1) instead of under-approximating the
+        // %s contribution to "" (length 0).
+        const exprt &val = s.get_value();
+        if (val.is_nil() || val.operands().empty())
+          continue;
         exprt dest;
         if (array2string(s, dest))
           continue;
@@ -258,6 +266,30 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
     // 3 get the number of characters output (return value)
     printf_formattert printf_formatter;
+    // For the v* variants the actual arguments are hidden behind a va_list, so
+    // the operand at a %s position is the va_list pointer, not the string. Mark
+    // the operands unreliable so the formatter does not derive an (unsound)
+    // object-size bound from them; %s stays unbounded until va_list recovery.
+    // Exhaustive over printf_kindt (no default) so a future va_list kind must
+    // be classified here rather than silently inheriting the reliable default.
+    switch (new_rhs.kind)
+    {
+    case printf_kindt::VPRINTF:
+    case printf_kindt::VFPRINTF:
+    case printf_kindt::VSPRINTF:
+    case printf_kindt::VSNPRINTF:
+    case printf_kindt::VASPRINTF:
+      printf_formatter.args_reliable = false;
+      break;
+    case printf_kindt::PRINTF:
+    case printf_kindt::FPRINTF:
+    case printf_kindt::DPRINTF:
+    case printf_kindt::SPRINTF:
+    case printf_kindt::SNPRINTF:
+    case printf_kindt::ASPRINTF:
+      printf_formatter.args_reliable = true;
+      break;
+    }
     printf_formatter(fmt.as_string(), args);
     printf_formatter.as_string(); // populate min_outlen / max_outlen
 
