@@ -3595,6 +3595,16 @@ following (`next: None`→`Node`), and dataclass field resolution.
   arith; integer comparisons) preserve the exact prior dispatch — verified
   behaviour-preserving: parity sweep stays **0 divergences** and all 18 `*_adjust`
   regression tests pass. Future op flips are now a one-line addition to the helper.
+  **Shifts `LShift`/`RShift` flipped (2026-06-26).** First op added post-consolidation
+  (a one-line-per-op addition, as designed): new `python_expr::build_shl`/`build_ashr`
+  (the frontend maps `RShift`→`ashr` unconditionally). Same exact-type-match guard —
+  which restricts the flip to the equal-width case `shl2t`/`ashr2t` accept; mismatched-
+  width shifts (the general case the consolidation note flagged) stay legacy. Sweep
+  **0 divergences** over 65 class/arith + 70 broad; swap-probe (`shl`→`ashr`) made
+  `(s.x << s.n) == 12` FAIL, confirming it fires. `regression/python/shift_member_adjust
+  {,_fail}` pin it. The integer/float arith, all comparisons, bitwise, and shift binop
+  surface is now flipped behind the flag; residue = float `Div`/modulo/floor-div trees,
+  non-integer/width-mismatched binops, W3 carriage, B.5.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4

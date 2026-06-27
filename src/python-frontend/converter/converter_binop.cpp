@@ -1874,11 +1874,11 @@ namespace
 // clang_c_adjust::adjust_index rewrites it only later, so pre-adjust it is still
 // an `index` over a pointer source. migrate_expr lowers `index` straight to
 // index2t, which forbids a pointer source (debug assert in index2t) — it expects
-// the adjusted array/vector form. The flip below runs during conversion, i.e.
-// before that adjust, and is reached even for dead operational-model bodies
-// (e.g. `int.from_bytes`' `bytes_data[i]`). Detect that shape so such an operand
-// keeps its legacy node and is migrated normally at goto-convert, instead of
-// asserting here.
+// the adjusted array/vector form. The flag-gated flip below runs during
+// conversion, i.e. before that adjust, and is reached even for dead
+// operational-model bodies (e.g. `int.from_bytes`' `bytes_data[i]`). Detect that
+// shape so such an operand keeps its legacy node and is migrated normally at
+// goto-convert, instead of asserting here.
 bool has_pointer_index(const exprt &e)
 {
   if (
@@ -1907,6 +1907,8 @@ exprt try_build_irep2_binop(
   const exprt &rhs,
   const typet &type)
 {
+  // Keep the legacy node when an operand still carries a pre-adjust pointer
+  // index: migrate_expr would assert building index2t over a pointer source.
   if (has_pointer_index(lhs) || has_pointer_index(rhs))
     return nil_exprt();
 
@@ -1927,6 +1929,14 @@ exprt try_build_irep2_binop(
       return python_expr::build_bitor(lhs, rhs, type);
     if (op == "BitXor")
       return python_expr::build_bitxor(lhs, rhs, type);
+    // Shifts kept separate from the arith/bitwise list above only for clarity:
+    // shift operands need not share width in general, but this group's
+    // lhs==rhs==type guard restricts the flip to the equal-width case shl2t/
+    // ashr2t accept; mismatched-width shifts fall through to the legacy node.
+    if (op == "LShift")
+      return python_expr::build_shl(lhs, rhs, type);
+    if (op == "RShift")
+      return python_expr::build_ashr(lhs, rhs, type);
   }
 
   if (type.is_floatbv() && lhs.type() == type && rhs.type() == type)
