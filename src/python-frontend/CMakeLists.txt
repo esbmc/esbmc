@@ -29,7 +29,14 @@ add_library(pythonfrontend STATIC
             python_class.cpp
             python_class_builder.cpp
             python_consteval.cpp
-            python_dict_handler.cpp
+            python-dict/dict_core.cpp
+            python-dict/dict_nested.cpp
+            python-dict/dict_construction.cpp
+            python-dict/dict_access.cpp
+            python-dict/dict_type_resolution.cpp
+            python-dict/dict_assignment.cpp
+            python-dict/dict_methods.cpp
+            python-dict/dict_compare.cpp
             python_expr_builder.cpp
             python_exception_handler.cpp
             python_lambda.cpp
