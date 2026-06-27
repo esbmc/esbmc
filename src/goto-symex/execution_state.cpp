@@ -857,7 +857,7 @@ void execution_statet::get_expr_globals(
       // must not trigger a cswitch. WRITE accesses are never filtered —
       // a write on its own establishes the "may be written" fact for the
       // other side of any future read/write conflict.
-      if (kind == access_kindt::READ)
+      if (art1->readonly_global_opt && kind == access_kindt::READ)
       {
         expr2tc orig = p;
         get_active_state().get_original_name(orig);
