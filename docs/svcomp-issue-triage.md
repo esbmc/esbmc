@@ -1,9 +1,9 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-22 (Pass 8 — reconcile #5395/#5400 closures; **x86_64 Linux host removes
-the aarch64 parse blocker** for the ldv-linux-3.14-races drivers: all four #5396–#5399 reproduced and
-root-caused (a shared unmodeled-LDV-kernel-environment pointer/device gap), #5142 re-classified to a
-clang `-Wint-conversion` blocker; see §12. Pass 7 in §11)
+**Last updated:** 2026-06-26 (Pass 9 — reconcile four closures since Pass 8 (#5395/#5399/#5400 and the
+new #5593, an Intel-TDX `havoc_memory` recurrence of #5224 fixed by merged PR #5602); triage the new
+live issue #5565 and **fix its first post-#5564 residual** — an unmodeled `getopt_long` left `optarg` an
+invalid pointer, a sound localized OM fix; see §13. Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -41,10 +41,10 @@ The SV-COMP backlog was triaged in two passes:
 
 | # | Benchmark | Property | Disposition | New PR? |
 |---|---|---|---|---|
-| 4976 | busybox `sync-1` | no-overflow | PRECISION LIMITATION — printf-layer fix is unsound; sound fix needs a `va_list`-modeling OM | no (coupled, see below) |
-| 4977 | busybox `sync-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
-| 4978 | busybox `whoami-incomplete-1` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
-| 4979 | busybox `whoami-incomplete-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
+| 4976 | busybox `sync-1` | no-overflow | RESOLVED — sound return-length model shipped (#5017/#5270/#5278/#5279); CLOSED 06-09. *Pass-2 view below was superseded; see §3.1 banner.* | yes (later) |
+| 4977 | busybox `sync-2` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
+| 4978 | busybox `whoami-incomplete-1` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
+| 4979 | busybox `whoami-incomplete-2` | no-overflow | RESOLVED — same fix; CLOSED 06-09 (§3.1 banner) | yes (later) |
 | 4980 | ldv `turbografx.ko` | termination | ALREADY-ADDRESSED — overlaps open PR #4919 | no (avoid duplicate) |
 
 **Why no new PRs for this batch.** In both cases shipping a quick patch would be either *unsound*
@@ -75,10 +75,10 @@ The SV-COMP backlog was triaged in two passes:
 | # | Title (short) | Category | Disposition |
 |---|---|---|---|
 | 4980 | termination false alarm: turbografx.ko | termination/k-induction | overlaps open PR #4919 (§3.2) |
-| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4977 | no-overflow false alarm: sync-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
-| 4976 | no-overflow false alarm: sync-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
+| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4977 | no-overflow false alarm: sync-2 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
+| 4976 | no-overflow false alarm: sync-1 | overflow/OM | RESOLVED — sound model shipped, CLOSED 06-09 (§3.1 banner) |
 | 4611 | Witness GraphML returnFromFunction key + dup nodes | witness | needs witness validator (§4) |
 | 4439 | valid-memsafety false alarm: w83977af_ir.ko | memsafety/concurrency | research-grade LDV driver (§4) |
 | 4438 | unreach-call false alarm: log_6_safe | FP/k-induction | open PR #4480 (§4) |
@@ -115,9 +115,25 @@ ESBMC 8.3.0 commit `911d1790`. Each is a *false alarm* (ground truth `true`, ESB
 
 ### 3.1 #4976 / #4977 / #4978 / #4979 — no-overflow false alarm in busybox `bb_verror_msg`
 
-**Status: tightly coupled (one function, one root cause). One future PR, not four. PRECISION /
-INCOMPLETENESS LIMITATION — the printf-model-layer fix was measured to be unsound; a sound fix
-requires a `va_list`-modeling `(v)asprintf` OM.**
+> **RESOLVED (2026-06-26 reconciliation) — supersedes the Pass-2 conclusion below.** A *sound*
+> return-length model for the printf/(v)asprintf family was designed
+> (`docs/design-printf-return-length-om.md`) and shipped: **PR #5017** (G-A, non-constant format
+> no longer under-approximates), **PR #5270** (G-D, wire `(v)asprintf`/`(v)sprintf`/`vsnprintf`/
+> `vprintf` into `symex_printf`), **PR #5278** (cap the unbounded return at `INT_MAX/2`), and
+> **PR #5279** (model the `*strp` heap allocation). The key realisation that unblocked it: the
+> earlier "unsound" measurement (PR #5009) was of a *naive* routing that clamped a symbolic
+> format to length 0; the shipped model instead caps the return at a sound over-approximation
+> (`INT_MAX/2`), which removes the false overflow *without* masking a genuine one. **All four
+> issues #4976–#4979 were closed on 2026-06-09.** Regression coverage:
+> `regression/esbmc/asprintf_const_format_exact`, `vasprintf_*`, and the reduced reproducers
+> `github_4977`/`github_4978`/`github_4979` (+ `github_4978_fail`) — all green; the reproducers
+> converge to `VERIFICATION SUCCESSFUL` at k=11 and the `_fail` variant still `FAILED`. Only the
+> Phase-3 G-C precision pass (`va_list` `%s` recovery, symbolic-format tightening) remains open,
+> tracked by #5012. The historical Pass-2 analysis is retained below for the record.
+
+**Status (Pass 2, superseded — see banner above): tightly coupled (one function, one root cause).
+One future PR, not four. PRECISION / INCOMPLETENESS LIMITATION — the printf-model-layer fix was
+measured to be unsound; a sound fix requires a `va_list`-modeling `(v)asprintf` OM.**
 
 **Benchmarks.** `c/busybox-1.22.0/{sync-1,sync-2,whoami-incomplete-1,whoami-incomplete-2}.i`.
 Each is run (per the issue) with:
@@ -1177,3 +1193,107 @@ under-/over-approx trade-off is the #5145/#5138 project.
    pointers — the shared blocker behind all four #5396–#5399; research-grade, would close the
    ldv-linux-3.14-races overflow/memsafety cluster.
 8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+---
+
+## 13. Pass 9 — reconcile closures + comm_3args_ok getopt_long residual (2026-06-26)
+
+Pass 8 closed on 2026-06-22. This pass reconciles the four issues that closed since, triages the one
+new live issue (#5565), and produces **one sound localized OM fix** for it. Verdicts are **repro**
+(locally reproduced this pass with each issue's exact flags) on an **x86_64 Linux** host. The reference
+binary was rebuilt from master `9e79dbe179` — which **includes PR #5564** (`[symex] treat
+stack-reachable heap as live in memory-leak check`, merged 2026-06-26), the fix for the #5138/#5565
+forgotten-memory layer. (An earlier stale binary still carried the pre-#5564 leak and masked the
+residual below — the rebuild was a prerequisite.)
+
+### 13.1 Closed since Pass 8
+
+| # | Property | Closed | Outcome |
+|---|---|---|---|
+| #5395 | unreach-call (`rule57_ebda_blast`) | 2026-06-18 | the Pass-7 fix landed (`calloc(_,0)` → `malloc(0)`); see §11.2. |
+| #5399 | valid-memsafety (`cafe_ccic.ko.cil-2`) | 2026-06-22 | closed-with-RCA (§12.4). Its twin **#5398** (`cil-1`) stays **open** as the tracker — same root cause (no-op `v4l2_device_register` + non-zeroed `pdev` + unguarded `to_cam`); not re-triaged. |
+| #5400 | valid-memtrack (`arraycollapse_rc`) | 2026-06-19 | closed-with-RCA (§12.2); allocation-site value-set imprecision. |
+| #5593 | unreach-call (Intel-TDX `*_havoc_memory`, 27 tasks) | 2026-06-26 | **recurrence of #5224**; fixed by **merged PR #5602** (`[k-induction] disable inductive step on reachable __VERIFIER_nondet_memory`), extending the #5228/#5230 pointer-array havoc gate to the `__VERIFIER_nondet_memory` write idiom that #5268 missed. Two regression tests (`github_5593_nondet_memory_heap{,_fail}`). Sound Phase-1/2 gate extension — **no competing PR**. |
+
+### 13.2 #5565 — `comm_3args_ok` residual after #5564: `getopt_long`/`optarg` false alarm — FIXED
+
+**Status: FIXED. Sound localized OM fix (`getopt_long`/`getopt_long_only`) + two regression tests.
+PR opened.**
+
+#5565 was filed (2026-06-22) as the residual after #5564 resolved the `forgotten memory` leak on
+`coreutils-v8.31/comm_3args_ok`, and *predicted* two residual model gaps: an `fclose(stdout)`
+static-stream free and a `strcmp` invalid-pointer. **Reproduced on a post-#5564 x86_64 build, the
+first-firing residual is neither of those** — it is an **unmodeled `getopt_long`**:
+
+* Both the `--sv-comp` and the plain (`#5138`-command) runs report
+  `dereference failure: invalid pointer` at `k = 11`: the `--sv-comp` run at `comm_3args_ok.c:51622`
+  (`if (*optarg)` in `__main`), the plain run inside `strlen` (`string.c:92`, from
+  `strlen(optarg)` two lines later). Ground truth is `true` ⇒ false alarm.
+* **Root cause (trace + source).** The trace shows `WARNING: no body for function getopt_long` and
+  `optarg = invalid-object`. ESBMC models `getopt` (`src/c2goto/library/getopt.c`: `optarg =
+  argv[result_index]`, `result_index < argc`) but **not** `getopt_long`/`getopt_long_only`, so the
+  global `optarg` is never assigned and stays its uninitialised (invalid/NULL) value; the benchmark
+  then dereferences it. This is the missing-libc-OM class of §4 #2797, here narrowed to one function.
+
+**Fix.** Add `getopt_long` and `getopt_long_only` to `getopt.c`, mirroring `getopt` via a shared
+`__ESBMC_getopt_long(argc, argv)` helper: `__ESBMC_assume(result_index < argc); optarg =
+argv[result_index]; return nondet_int();`. The nondet return (vs `getopt`'s constant `0`) keeps every
+option-handling branch *and* loop termination via `-1` reachable. An incomplete `struct option`
+forward declaration suffices (the long-option table is only forwarded, never read).
+
+**Why it is sound.** `optarg` is bound to a real argv element (`result_index < argc`), exactly what the
+real library does for an option that takes an argument, and exactly what the pre-existing `getopt`
+model already does. It is an over-approximation in the same direction as `getopt`: `optarg` is always a
+valid non-NULL pointer and `optind`/`*longindex` are not advanced (documented in the file comment) — so
+no genuine race/leak/OOB is hidden. The esbmc-verifier agent confirmed the model does **not**
+blanket-suppress pointer/bounds checks (a deref of `optarg` *without* calling `getopt_long` still fires
+`invalid pointer`; an out-of-bounds write past the argv element still fires `array bounds violated`),
+and that the positive test is **not** vacuous (the `optarg` branch is reachable and verified safe).
+
+**Validation.**
+* Minimal repro → `VERIFICATION SUCCESSFUL` (was `invalid pointer`/`NULL pointer` FAILED).
+* Full `comm_3args_ok.c` with the issue's exact flags (`--sv-comp`): the spurious `FALSE` at `k = 11`
+  is **gone** — ESBMC unwinds past it to `k ≥ 12` and times out (UNKNOWN, sound — no false positive),
+  instead of reporting a false counterexample.
+* Two regressions under `regression/esbmc-unix/`: `github_5565_getopt_long_optarg` (exercises both
+  `getopt_long` and `getopt_long_only`; `optarg` deref safe ⇒ SUCCESSFUL) and
+  `github_5565_getopt_long_optarg_oob_fail` (`optarg[100]` past a 4-byte argv element ⇒
+  `array bounds violated` FAILED — pins that `optarg` is a *bounded* real object, not an invented
+  infinite buffer).
+* **Dual-solver z3 + bitwuzla agree** on both tests; esbmc-verifier (Mode A) reports
+  `PATCH VERIFIED — no new errors`. The pre-existing `getopt_long` test
+  (`instrumented_nohup_comb_overflow`) still passes (still finds its target overflow — the nondet
+  return preserves bug-finding). Code-reviewed: no critical/major findings.
+
+**Residual.** The `fclose` static-stream free the issue names is gated by the **compile-time
+`ESBMC_SVCOMP`** build (`#5138` needs `-DESBMC_SVCOMP=On`, §11.6), and the `strcmp` invalid-pointer did
+not surface as the first failure on a standard build — both are either that-build-gated or downstream
+of the `optarg` layer fixed here. Keep #5565 open for those; the `getopt_long`/`optarg` layer is
+closed by this PR.
+
+### 13.3 Pass-9 running report
+
+**Analysed.** The four closures (#5395/#5399/#5400/#5593) reconciled against current GitHub state;
+#5565 reproduced and root-caused on a post-#5564 build.
+
+**PRs opened.** One: `[om] model getopt_long/getopt_long_only so optarg is a valid pointer` — addresses
+**#5565** (the `getopt_long`/`optarg` layer). Sound, dual-solver-validated, esbmc-verifier-confirmed,
+code-reviewed, two regression tests.
+
+**Duplicated work avoided.** #5593 not re-fixed — merged PR #5602 already targets it (sound gate
+extension of #5228/#5230). #5398 not re-triaged — same RCA as its closed twin #5399 (§12.4). The
+#5138/#5565 forgotten-memory layer not re-fixed — closed by #5564.
+
+**Remaining work (priority order, updated 2026-06-26).** Unchanged from §12.6, with #5565 reduced to
+its `fclose`/`strcmp` residual (lower priority, `ESBMC_SVCOMP`-gated):
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation of
+   "reachable"); note #5564 advanced the live-stack-reachability half.
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5142** — clang `-Wint-conversion` relaxation / integer→pointer initializer fix-up for CIL inputs.
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **#5565 residual** — `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free + `strcmp` argv-string
+   pointer-validity; reproduce under a `-DESBMC_SVCOMP=On` build.
+9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.

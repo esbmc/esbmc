@@ -3400,7 +3400,10 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: scoped, not started (2026-06-25).** The V.1k breakthrough above deferred
+> **Status: superseded by "B.0–B.3 implementation outcomes" below (B.0 merged to
+> master via #5615; B.1–B.2 + validation built on `feat/v4-b1-python-adjust-resolve`,
+> not yet merged).** The section below is the live record; this one is retained for
+> the design rationale. The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3510,13 +3513,17 @@ outcome; the C/C++ counterexample printer W4 stays Phase V.5.)
 
 #### B.0–B.3 implementation outcomes (2026-06-25) — infra landed, B.3 is gated on B.5
 
-> **Status: B.0–B.2 + validation built (dead-but-tested); B.3 blocked on B.5.** The
-> skeleton, resolution, flag-wiring and fixture-validation are implemented; the step
-> that *exercises* resolution in the pipeline (B.3) is, empirically, not separable
-> from B.5. Recorded so the B.5 effort starts from the real state, not the forecast.
+> **Status: B.0 skeleton merged to master (#5615); B.1–B.2 + validation built and
+> consolidated on `feat/v4-b1-python-adjust-resolve` (#5621), not yet merged to
+> master; B.3 blocked on B.5.** Only the no-op skeleton is in master's tree today;
+> the resolution, flag-wiring and fixture-validation described below live on that
+> branch and reach master when it does. The step that *exercises* resolution in the
+> pipeline (B.3) is, empirically, not separable from B.5. Recorded so the B.5 effort
+> starts from the real state, not the forecast.
 
-**What landed (all flag-gated behind `--python-irep2-adjust`, default off ⇒
-byte-identical):**
+**What was built (B.0 in master via #5615; B.1–B.2 on
+`feat/v4-b1-python-adjust-resolve`; all flag-gated behind `--python-irep2-adjust`,
+default off ⇒ byte-identical):**
 - **B.0** — `src/python-frontend/python_adjust.{h,cpp}`: a pass that walks each code
   symbol's `get_value2()`. Structurally a no-op; unit-tested (`python_adjust_test`).
 - **B.1** — `adjust_expr` resolves a transient `symbol_type2t` member2t/index2t source
@@ -3526,7 +3533,7 @@ byte-identical):**
   `pointer_id`), so the transient form is a `symbol_type2t`, carried on a `symbol2t`
   or a `dereference2t` — one symbol-type branch handles both. No separate
   pointer-deref arm is needed at this layer.
-- **B.2** — `--python-irep2-adjust` option + invocation in `python_languaget::convert`,
+- **B.2** — `--python-irep2-adjust` option + invocation in `python_languaget::typecheck`,
   **after** `clang_cpp_adjust`. Wiring the body-walk surfaced the concrete
   *migration-before-resolution wall*: reading a Python body's `get_value2()` migrates a
   by-name `symbol_type` constant aggregate, which trips **`constant_struct2t`**'s assert
@@ -3536,7 +3543,8 @@ byte-identical):**
   walks only code symbols, so the flag is behaviour-inert.
 - **B.2 validation** — flag-on vs flag-off parity over the **entire 20-test acceptance
   fixture** (69 CORE tests): **0 divergences, 0 aborts**. Pinned by
-  `python_irep2_adjust_{nested_attr,inferred_attr,dataclass}` regression tests.
+  `python_irep2_adjust_{nested_attr,inferred_attr,dataclass}` regression tests (on
+  `feat/v4-b1-python-adjust-resolve`, not yet in master's `regression/python/`).
 
 **B.3 negative result — the before-placement is unsound while `clang_cpp_adjust` still
 runs.** B.3 (make resolution actually fire) was prototyped by moving `python_adjust`

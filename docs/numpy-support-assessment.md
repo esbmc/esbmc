@@ -152,8 +152,8 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | **Comparison/logical** `> < == & |` | Partial | model-backed comparison/logical ufuncs `greater`/`less`/`greater_equal`/`less_equal`/`equal`/`not_equal`/`logical_and`/`logical_or`/`logical_not` **[T]** |
 | **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Partial | model-backed reductions for `sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax` **[T]** |
 | `np.fmax`,`np.fmin` (binary, element-wise) | Partial | model-backed min/max helpers **[T]** |
-| **Linear algebra** `dot` | Partial | 1-D/2-D, int + float backends **[T]** `dot*`, `github_5115_*`; `dot6`(bool),`dot7` KNOWNBUG |
-| `matmul` | Partial | 1-D/2-D, symbolic elements OK **[T]** `matmul_*`, `github_5115_matmul_float_symbolic` |
+| **Linear algebra** `dot` | Partial | 1-D/2-D, int + float backends; integer overflow assertion at dtype width **[T]** `dot*`, `dot_overflow_*`, `github_5115_*`; `dot6`(bool),`dot7` KNOWNBUG |
+| `matmul` | Partial | 1-D/2-D, symbolic elements OK; integer overflow assertion at dtype width **[T]** `matmul*`, `matmul_overflow_*`, `github_5115_matmul_*` |
 | `linalg.det` | Partial | **constant** 2×2/3×3 only **[T]**; 1×1,4×4 rejected |
 | `linalg.inv`,`solve`,`eig`,`svd`,`norm`,`qr`,`cholesky` | Missing | no handler **[V]** |
 | **Math fns** `sin cos exp sqrt arctan fabs ceil floor round trunc arccos copysign` | Partial | scalar fold + list-backed literal `floor`/`fabs`/`trunc`; runtime 1-D `arccos` array lowering; `copysign`/`fmax`/`fmin`/`rint`/`modf`/`frexp`/`round`/`remainder`/`nextafter`/`isclose`/`round2` now model-backed **[T]** |
@@ -231,12 +231,16 @@ Risks:
   The `--python-no-fold` flag now exists for differential testing when we want
   to force the non-folded path.
 
-### 4.3 **[V] MEDIUM — `linalg.c::dot` accumulator width / overflow**
+### 4.3 **[RESOLVED] `linalg.c::dot` accumulator width / overflow**
 
-Integer `dot` accumulates into `int64_t` with no overflow assertion; NumPy
-would wrap at the array dtype width (e.g. `int32`). For symbolic int matrices
-this can **miss real overflow bugs** or report results NumPy would not produce.
-The float path uses `double` accumulation (matches NumPy reasonably). **[I]**
+Integer `dot`/`matmul` now takes a `bits` parameter carrying the operand dtype
+width and emits `__ESBMC_assert` per result element verifying the accumulated
+value fits within `[-2^(bits-1), 2^(bits-1)-1]`. For 64-bit (default Python
+`int`) the assertion is trivially satisfied; for narrower dtypes (int32, int16)
+the assertion fires when the dot product exceeds the dtype range. Combined with
+`--overflow-check`, ESBMC also detects int64-level arithmetic overflow in the
+accumulation loop itself. The float path is unchanged (`double` accumulation).
+**[T]** `dot_overflow_*`, `matmul_overflow_*`.
 
 ### 4.4 **[V] MEDIUM — 2×2 `det` host-folds; Gaussian `det` is `#if 0`-disabled**
 
@@ -337,10 +341,10 @@ SUCCESSFUL" is worse than an honest "unsupported". Each item lists
 - *Complexity:* Low. *Tests:* deeply nested subscript → clean error, no crash.
 - *Risk:* low; *Priority:* high (robustness).
 
-**P1.4 — Integer `dot` overflow semantics (4.3).** **[P1]**
-- *Description:* accumulate/wrap at the operand dtype width, or emit an overflow
-  assertion. *Complexity:* Medium. *Tests:* int32 matmul that overflows.
-- *Risk:* med (could change existing verdicts — gate behind dtype). *Priority:* med.
+**P1.4 — Integer `dot` overflow semantics (4.3).** **[DONE]**
+- *Resolved:* `dot`/`matmul` OM now takes a `bits` parameter and emits
+  `__ESBMC_assert` per result element. Frontend passes the operand dtype width.
+  **[T]** `dot_overflow_*`, `matmul_overflow_*`.
 
 **P1.5 — Clear the remaining KNOWNBUG cases or downgrade to explicit-unsupported.**
 **[P1]** The remaining KNOWNBUGs here (`dot6`, `dot7`, `transpose2`,

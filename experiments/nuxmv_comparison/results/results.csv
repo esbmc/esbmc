@@ -1,9 +1,0 @@
-benchmark,expected,esbmc_verdict,esbmc_time_s,nuxmv_bdd_verdict,nuxmv_bdd_time_s,nuxmv_ic3_verdict,nuxmv_ic3_time_s,num_bool_vars,num_int_vars,num_rungs,num_props
-tank_level_safe,SAFE,SAFE,0.051,SAFE,0.040,SAFE,0.064,7,0,4,5
-tank_level_unsafe,VIOLATION,VIOLATION,0.036,VIOLATION,0.043,VIOLATION,0.050,7,0,4,5
-bottle_filling_safe,SAFE,SAFE,0.042,SAFE,85.663,SAFE,102.294,15,2,10,6
-bottle_filling_unsafe,VIOLATION,VIOLATION,0.196,VIOLATION,86.268,VIOLATION,102.959,15,2,9,6
-elevator_safe,SAFE,SAFE,0.185,SAFE,85.984,SAFE,106.823,17,2,16,8
-elevator_unsafe,VIOLATION,VIOLATION,0.044,VIOLATION,87.780,VIOLATION,102.265,18,2,14,6
-traffic_light_safe,SAFE,SAFE,0.187,TIMEOUT,120.006,TIMEOUT,120.006,23,8,21,8
-traffic_light_unsafe,VIOLATION,VIOLATION,0.014,TIMEOUT,120.006,TIMEOUT,120.006,23,8,20,8
