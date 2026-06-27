@@ -1916,8 +1916,9 @@ exprt try_build_irep2_binop(
   if (migrate_unsafe_operand(lhs) || migrate_unsafe_operand(rhs))
     return nil_exprt();
 
-  const bool same_int = lhs.type() == rhs.type() &&
-                        (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
+  const bool same_int =
+    lhs.type() == rhs.type() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
 
   if (same_int && lhs.type() == type)
   {
@@ -2080,8 +2081,9 @@ exprt python_converter::build_binary_expression(
 
   // V.1k (b) B.4: under --python-irep2-adjust, build the resolved-operand binary
   // op directly in IREP2 (round-tripped at the seam) instead of the legacy node.
-  // try_build_irep2_binop returns nil for any op/type shape not (yet) flipped, in
-  // which case we keep the legacy node below. Default off ⇒ legacy, byte-identical.
+  // try_build_irep2_binop returns nil for any op/type shape not (yet) flipped (or
+  // for a migrate-unsafe operand, see migrate_unsafe_operand), in which case we
+  // keep the legacy node below. Default off ⇒ legacy, byte-identical.
   if (config.options.get_bool_option("python-irep2-adjust"))
   {
     exprt flipped = try_build_irep2_binop(op, lhs, rhs, type);
