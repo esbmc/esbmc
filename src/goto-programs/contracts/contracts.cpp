@@ -3214,26 +3214,54 @@ expr2tc code_contractst::fix_comparison_types(
             get_type_id(*ret_val->type));
         }
       }
-      // Case 3: return_value is an integer compared with an integer operand of
-      // a different width — e.g. an `int` return value against a `long`
-      // constant that does not fit in `int`. remove_incorrect_casts above
-      // stripped the usual-arithmetic-conversion cast Clang inserted, leaving a
-      // width mismatch the SMT backend rejects (mk_bvsgt requires equal operand
-      // widths). Re-apply the conversion by widening the narrower side to the
-      // wider integer type. Issue #5312.
+      // Cases 3 & 4: a comparison where one side is the return_value symbol.
+      // Two SMT-level sort mismatches can survive Clang's typing once
+      // get_decl_ref has corrected the symbol to the function's real return
+      // type, both because the global __ESBMC_return_value is declared `int`:
+      //
+      //   * Bool vs BitVector (issue #4): `__ESBMC_return_value == (c > 0)`
+      //     promotes the boolean operand to int. For a bool-returning function
+      //     the symbol is bool, leaving one side Bool and the other
+      //     (_ BitVec 32) — which Z3 rejects with "Sorts Bool and
+      //     (_ BitVec 32) are incompatible" (and core-dumps).
+      //
+      //   * Integer width (issue #5312): an `int` return value compared with a
+      //     wider integer operand after remove_incorrect_casts stripped the
+      //     usual-arithmetic-conversion cast (mk_bvsgt requires equal widths).
       else if (side1_is_retval || side2_is_retval)
       {
+        expr2tc *rv = side1_is_retval ? side1 : side2;
+        expr2tc *other = side1_is_retval ? side2 : side1;
+
         auto is_int = [](const type2tc &t) {
           return is_signedbv_type(t) || is_unsignedbv_type(t);
         };
-        if (
-          is_int((*side1)->type) && is_int((*side2)->type) &&
-          (*side1)->type->get_width() != (*side2)->type->get_width())
+
+        if (is_bool_type((*rv)->type) != is_bool_type((*other)->type))
         {
-          if ((*side1)->type->get_width() < (*side2)->type->get_width())
-            *side1 = typecast2tc((*side2)->type, *side1);
+          // Bool vs BitVector sort mismatch: promote the boolean side to the
+          // other operand's type, matching C's usual arithmetic conversions
+          // (a bool is widened to int, never the reverse). Casting the boolean
+          // up is value-preserving ({0,1} fits any wider type); demoting the
+          // other side to bool would collapse values >1 and silently satisfy
+          // postconditions such as `__ESBMC_return_value == (x & 3)`.
+          expr2tc *boolean = is_bool_type((*rv)->type) ? rv : other;
+          expr2tc *wider = (boolean == rv) ? other : rv;
+          *boolean = typecast2tc((*wider)->type, *boolean);
+          log_debug(
+            "contracts",
+            "Fixed bool/bitvector comparison: promoted boolean operand to {}",
+            get_type_id(*(*wider)->type));
+        }
+        else if (
+          is_int((*rv)->type) && is_int((*other)->type) &&
+          (*rv)->type->get_width() != (*other)->type->get_width())
+        {
+          // Integer width mismatch: widen the narrower side.
+          if ((*rv)->type->get_width() < (*other)->type->get_width())
+            *rv = typecast2tc((*other)->type, *rv);
           else
-            *side2 = typecast2tc((*side1)->type, *side2);
+            *other = typecast2tc((*rv)->type, *other);
           log_debug(
             "contracts",
             "Fixed integer comparison: widened return_value comparison to "
