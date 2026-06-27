@@ -3,6 +3,7 @@
 # whose formal parameter is a struct used to abort ESBMC with a core dump in
 # goto_symext::argument_assignments. It must now surface as a clean diagnostic.
 class Node:
+
     def __init__(self, nxts=[]):
         self.nxts = nxts
 

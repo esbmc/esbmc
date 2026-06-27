@@ -2,6 +2,7 @@
 # resolved, a pointer argument bound to a struct parameter (Python pass-by-
 # reference) must still be dereferenced and verified normally.
 class Node:
+
     def __init__(self, v: int):
         self.v = v
 
