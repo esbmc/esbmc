@@ -1870,6 +1870,34 @@ exprt python_converter::handle_string_binary_operations(
 
 namespace
 {
+// True if migrating @p e (or any sub-expression) to IREP2 would violate a
+// construction invariant — the build_* round-trip below migrates the whole
+// operand subtree, so an unsafe node anywhere under it aborts on an asserts-on
+// build. Two shapes are rejected (kept in sync with python_adjust.cpp's
+// migrate_unsafe):
+//   - `ptr[i]` indexing (e.g. the `bytes_data[sign_index]` read in the
+//     int.from_bytes model): index2t's source invariant admits only
+//     array/vector/symbol, not a pointer. Legacy keeps the index_exprt and
+//     lowers it to a dereference after the frontend.
+//   - a constant aggregate literal still carrying a by-name `symbol` type:
+//     constant_struct2t/constant_union2t require a concrete struct/union.
+// Such an operand is not part of the clean flip surface — keep the legacy node.
+bool migrate_unsafe_operand(const exprt &e)
+{
+  if (e.is_index() && e.operands().size() == 2 && e.op0().type().is_pointer())
+    return true;
+
+  if (
+    (e.id() == typet::t_struct || e.id() == typet::t_union) &&
+    e.type().id() == typet::t_symbol)
+    return true;
+
+  for (const exprt &op : e.operands())
+    if (migrate_unsafe_operand(op))
+      return true;
+  return false;
+}
+
 // V.1k (b) B.4: the IREP2 resolve-then-build flip for a binary op, shared by all
 // flipped families. Returns the round-tripped IREP2 node, or nil if the op/type
 // shape is not (yet) flipped — in which case the caller keeps the legacy node.
@@ -1877,14 +1905,17 @@ namespace
 //   - integer arith + bitwise: lhs == rhs == result, integer bitvector;
 //   - float arith:             lhs == rhs == result, floatbv (Div stays legacy);
 //   - integer comparisons:     lhs == rhs, integer bitvector (result is bool).
-// The operands reaching here are already resolved (B.4 triage), so migrate_expr
-// does not hit the F-P11 member/index assert.
+// Operands carrying a migrate-unsafe subtree (see migrate_unsafe_operand) fall
+// through to the legacy node.
 exprt try_build_irep2_binop(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const typet &type)
 {
+  if (migrate_unsafe_operand(lhs) || migrate_unsafe_operand(rhs))
+    return nil_exprt();
+
   const bool same_int = lhs.type() == rhs.type() &&
                         (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
 
