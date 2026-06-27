@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 2
+^\s*assertion a->value == 7$
+^VERIFICATION FAILED$

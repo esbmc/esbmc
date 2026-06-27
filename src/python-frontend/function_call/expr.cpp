@@ -3934,8 +3934,20 @@ exprt function_call_expr::handle_general_function_call()
               const auto &returns = func_node["returns"];
               if (returns.contains("id"))
               {
-                return_type =
-                  type_handler_.get_typet(returns["id"].get<std::string>());
+                const std::string ret_cls = returns["id"].get<std::string>();
+                return_type = type_handler_.get_typet(ret_cls);
+                // Stage 1 object-model migration (#3067): mirror the funcdef
+                // migration — a forward-referenced function returning a
+                // user-defined class returns a Cls* reference, not the value
+                // struct. Resolving it by value here leaves the call typed as a
+                // struct while the callee actually returns a pointer, which
+                // crashes on `return f(...)` with a struct-vs-pointer
+                // irep2_cast_error. @overload stubs resolve per call site, so
+                // leave them by value (consistent with call_return_class).
+                if (
+                  json_utils::is_class(ret_cls, converter_.ast()) &&
+                  !json_utils::has_overload_decorator(func_node))
+                  return_type = gen_pointer_type(return_type);
               }
             }
             exprt body = converter_.get_block(func_node["body"]);
@@ -4162,38 +4174,36 @@ exprt function_call_expr::handle_general_function_call()
         else if (func_value["_type"] == "Call")
         {
           // Chained method call (e.g., B().g().f()): the receiver is the return
-          // value of an inner method call. Create a temp to hold it and use
-          // &temp as self so that self is addressable in the GOTO IR.
-          std::string receiver_type =
-            type_handler_.get_operand_type(func_value);
-          if (!receiver_type.empty())
+          // value of an inner method call. Create a temp to hold it and use it
+          // as self so that self is addressable in the GOTO IR.
+          //
+          // Type the temp from the inner call's *actual* return type, not from
+          // get_operand_type's value-struct name: a method whose return was
+          // migrated to a class reference (#3067) returns `Cls*`, so a value
+          // `Cls` temp would receive a pointer (a struct-vs-pointer mismatch
+          // that trips value-set's make_member assertion). bind_instance_-
+          // receiver then forwards the pointer temp directly, or takes the
+          // address of a value temp — matching either representation.
+          exprt inner_call = converter_.get_expr(func_value);
+          if (inner_call.is_code() && inner_call.statement() == "function_call")
           {
-            typet class_type = type_handler_.get_typet(receiver_type);
             symbolt &tmp = converter_.create_tmp_symbol(
-              func_value, "$inst$", class_type, exprt());
+              func_value, "$inst$", inner_call.type(), exprt());
             converter_.symbol_table().add(tmp);
             code_declt tmp_decl(build_symbol(tmp));
             tmp_decl.location() = location;
             converter_.current_block->copy_to_operands(tmp_decl);
 
-            // Process the inner call; set its LHS to tmp so the return value
-            // is stored there (emits: FUNCTION_CALL: tmp = inner_call(...)).
-            exprt inner_call = converter_.get_expr(func_value);
-            if (
-              inner_call.is_code() && inner_call.statement() == "function_call")
-            {
-              inner_call.op0() = build_symbol(tmp);
-              inner_call.location() = location;
-              converter_.add_instruction(inner_call);
-            }
+            // Store the inner call's return value in tmp
+            // (emits: FUNCTION_CALL: tmp = inner_call(...)).
+            inner_call.op0() = build_symbol(tmp);
+            inner_call.location() = location;
+            converter_.add_instruction(inner_call);
             call.arguments().push_back(
               bind_instance_receiver(build_symbol(tmp)));
           }
           else
-          {
-            exprt obj_expr = converter_.get_expr(func_value);
-            call.arguments().push_back(bind_instance_receiver(obj_expr));
-          }
+            call.arguments().push_back(bind_instance_receiver(inner_call));
         }
         else
         {
