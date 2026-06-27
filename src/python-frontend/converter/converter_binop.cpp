@@ -1868,6 +1868,37 @@ exprt python_converter::handle_string_binary_operations(
   return nil_exprt();
 }
 
+namespace
+{
+// True if migrating @p e (or any sub-expression) to IREP2 would violate a
+// construction invariant — the python_expr::build_* round-trip below migrates
+// the whole operand subtree, so an unsafe node anywhere under it aborts on an
+// asserts-on build. Two shapes are rejected (kept in sync with
+// python_adjust.cpp's migrate_unsafe):
+//   - `ptr[i]` indexing (e.g. the `bytes_data[sign_index]` read in the
+//     int.from_bytes model): index2t's source invariant admits only
+//     array/vector/symbol, not a pointer. Legacy keeps the index_exprt and
+//     lowers it to a dereference after the frontend.
+//   - a constant aggregate literal still carrying a by-name `symbol` type:
+//     constant_struct2t/constant_union2t require a concrete struct/union.
+// Such an operand is not part of the clean flip surface — keep the legacy node.
+bool migrate_unsafe_operand(const exprt &e)
+{
+  if (e.is_index() && e.operands().size() == 2 && e.op0().type().is_pointer())
+    return true;
+
+  if (
+    (e.id() == typet::t_struct || e.id() == typet::t_union) &&
+    e.type().id() == typet::t_symbol)
+    return true;
+
+  for (const exprt &op : e.operands())
+    if (migrate_unsafe_operand(op))
+      return true;
+  return false;
+}
+} // namespace
+
 exprt python_converter::build_binary_expression(
   const std::string &op,
   exprt &lhs,
@@ -1979,11 +2010,34 @@ exprt python_converter::build_binary_expression(
     config.options.get_bool_option("python-irep2-adjust") &&
     (op == "Add" || op == "Sub" || op == "Mult") &&
     (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
-    rhs.type() == type)
+    rhs.type() == type && !migrate_unsafe_operand(lhs) &&
+    !migrate_unsafe_operand(rhs))
   {
     exprt result = (op == "Add")   ? python_expr::build_add(lhs, rhs, type)
                    : (op == "Sub") ? python_expr::build_sub(lhs, rhs, type)
                                    : python_expr::build_mul(lhs, rhs, type);
+    result.location() = bin_expr.location();
+    return result;
+  }
+
+  // V.1k (b) B.4: same idiom for the integer comparisons. The result is bool but
+  // the operands carry their own type; lessthan2t / equality2t etc. assert
+  // operand type/width consistency, so the guard requires same-type integer-
+  // bitvector operands. Float and width-mismatched comparisons stay legacy.
+  if (
+    config.options.get_bool_option("python-irep2-adjust") &&
+    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE" || op == "Eq" ||
+     op == "NotEq") &&
+    lhs.type() == rhs.type() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+    !migrate_unsafe_operand(lhs) && !migrate_unsafe_operand(rhs))
+  {
+    exprt result = (op == "Lt")    ? python_expr::build_less_than(lhs, rhs)
+                   : (op == "LtE") ? python_expr::build_less_equal(lhs, rhs)
+                   : (op == "Gt")  ? python_expr::build_greater_than(lhs, rhs)
+                   : (op == "GtE") ? python_expr::build_greater_equal(lhs, rhs)
+                   : (op == "Eq")  ? python_expr::build_equal(lhs, rhs)
+                                   : python_expr::build_notequal(lhs, rhs);
     result.location() = bin_expr.location();
     return result;
   }
