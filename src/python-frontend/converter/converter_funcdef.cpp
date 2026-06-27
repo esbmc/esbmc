@@ -1229,14 +1229,20 @@ void python_converter::get_function_definition(
   // the alternatives and overrides that call-site resolution (e.g. a
   // `Literal["bar"] -> Bar` overload would be mis-typed as `Foo*`, #3057). The
   // real implementation (a union return) is typed `void*` and never reaches
-  // this branch.
-  if (
-    is_user_class_struct_type(type.return_type()) &&
-    !json_utils::has_overload_decorator(function_node))
-  {
-    type.return_type() = gen_pointer_type(type.return_type());
+  // this branch. The same migration is applied below to a return type recovered
+  // by post-annotation inference (e.g. `return self`).
+  auto migrate_user_class_return = [&](typet &t) -> bool {
+    if (
+      is_user_class_struct_type(t) &&
+      !json_utils::has_overload_decorator(function_node))
+    {
+      t = gen_pointer_type(t);
+      return true;
+    }
+    return false;
+  };
+  if (migrate_user_class_return(type.return_type()))
     current_element_type = type.return_type();
-  }
 
   // Create and register function symbol
   symbolt symbol = create_symbol(
@@ -1319,6 +1325,15 @@ void python_converter::get_function_definition(
   if (type.return_type().is_empty())
   {
     typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    // Stage 1 object-model migration (#3067): an unannotated function whose
+    // body returns a user class instance (e.g. `return self` in __getitem__,
+    // #4514) is inferred to the value struct here — apply the same Cls* ->
+    // reference migration as the annotated path, so the declared return type
+    // matches the pointer the body actually returns. Without this, the callee
+    // returns a `Cls*` (self/param) while its declared return type is the value
+    // struct, and the assignment binds a pointer into a struct slot, tripping
+    // value-set's make_member assertion at the field read.
+    migrate_user_class_return(inferred_type);
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;

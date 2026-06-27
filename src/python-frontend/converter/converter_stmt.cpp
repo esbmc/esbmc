@@ -1298,6 +1298,28 @@ void python_converter::handle_function_call_rhs(
     }
   }
 
+  // Stage 1 object-model migration (#3067): the callee now returns a class
+  // *reference* (`Cls*`), but the assignment target may still have been typed
+  // as the value struct `Cls` — the annotator infers a value-struct type for an
+  // RHS it cannot see through (an imported function, or a subscript dispatching
+  // to `__getitem__` that returns `self`). Binding `rhs.op0() = lhs` then stores
+  // a pointer into a struct slot, and the later `lhs.field` read trips
+  // value-set's make_member assertion (#4513/#4514, transitive-imports). Retype
+  // the target to the returned `Cls*` so the reference is bound directly and the
+  // field read auto-dereferences, matching the other migrated assignment paths.
+  // Restricted to a plain symbol target (`x = ...`): for a subscript/attribute
+  // target `lhs_symbol` is the *container/base* symbol while `lhs` is the
+  // element/member expression, so retyping `lhs_symbol` would corrupt the whole
+  // container — the sibling migrations guard on a Name target for the same
+  // reason.
+  if (
+    !is_ctor_call && lhs_symbol && lhs.is_symbol() &&
+    is_user_class_pointer(rhs.type()) && is_user_class_struct_type(lhs.type()))
+  {
+    lhs.type() = rhs.type();
+    lhs_symbol->set_type(rhs.type());
+  }
+
   // Set return destination
   if (rhs.type().is_pointer() && !is_ctor_call)
   {
@@ -3453,8 +3475,8 @@ exprt python_converter::box_value_on_heap(
     symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
   assert(new_obj_sym && "__ESBMC_new_object model required");
 
-  symbolt heap_symbol =
-    create_return_temp_variable(current_func_return_type_, location, "ctor_box");
+  symbolt heap_symbol = create_return_temp_variable(
+    current_func_return_type_, location, "ctor_box");
   symbol_table_.add(heap_symbol);
   exprt heap_ptr = symbol_expr(heap_symbol);
 
