@@ -1912,8 +1912,9 @@ exprt try_build_irep2_binop(
   if (has_pointer_index(lhs) || has_pointer_index(rhs))
     return nil_exprt();
 
-  const bool same_int = lhs.type() == rhs.type() &&
-                        (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
+  const bool same_int =
+    lhs.type() == rhs.type() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
 
   if (same_int && lhs.type() == type)
   {
