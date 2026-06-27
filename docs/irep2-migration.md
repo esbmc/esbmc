@@ -3401,6 +3401,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
 > **Status: B.0 + B.1 + B.2 landed; B.3 spike done — service design chosen, B.0–B.2 re-sequenced to B.5 (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed (2026-06-26); B.3 next.** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3508,6 +3509,11 @@ following (`next: None`→`Node`), and dataclass field resolution.
   the strong assert). Acceptance unchanged: the relevant slice of the 20-test fixture
   green, dual-solver, asserts build, **plus** RV2 — the service's resolved type must
   equal `clang_cpp_adjust`'s (corpus round-trip equivalence). See the B.3 spike outcome.
+- **B.3 — converter emits one F-P11 family pre-adjust.** Flip the *smallest* F-P11
+  site (e.g. the `BoolOp` short-circuit, `converter_stmt.cpp`) to build `member2t`/
+  `index2t` directly over the (relaxed) `symbol_type2t` source, relying on B.2's pass
+  to resolve it. Acceptance: the relevant slice of the 20-test fixture green under the
+  flag, dual-solver, asserts build.
 - **B.4 — generalise + post-adjust verification.** Add the exit assertion (every
   member/index source resolved); migrate the remaining F-P11 families; fold in W3
   (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute
