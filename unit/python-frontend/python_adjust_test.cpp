@@ -16,10 +16,11 @@
 // after a walk. B.1 adds the resolution behaviour: a transient symbol_type2t
 // member2t/index2t source is followed to its struct/array (and a pointer source
 // is auto-dereferenced), re-establishing the strong source invariant the
-// construction assert was relaxed for. The pass is still not wired into
-// python_language.cpp (B.2 adds the flag), so these tests are the only thing
-// exercising it — the "machinery-first, prove-inert, wire-later" gate used for
-// the V.4.0 structured-CF kinds (esbmc/esbmc#5265).
+// construction assert was relaxed for. B.2 wires the pass into
+// python_languaget::typecheck behind --python-irep2-adjust (default off); these
+// unit tests exercise the behaviour directly — the "machinery-first,
+// prove-inert, wire-later" gate used for the V.4.0 structured-CF kinds
+// (esbmc/esbmc#5265).
 
 namespace
 {

@@ -36,9 +36,10 @@ bool python_adjust::adjust()
     const expr2tc original = value;
     adjust_expr(value);
     // Only write back when resolution actually changed the tree. Leaving an
-    // unchanged symbol untouched keeps its legacy value cache valid, so the
-    // following clang_cpp_adjust pass sees a byte-identical body — the pass is
-    // inert until the converter emits transient symbol_type member sources.
+    // unchanged symbol untouched keeps its legacy value cache valid, so
+    // goto-convert later sees a byte-identical body (this pass runs *after*
+    // clang_cpp_adjust) — the pass is inert until the converter emits transient
+    // symbol_type member sources.
     if (value != original)
       symbol->set_value(value);
   }

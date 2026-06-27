@@ -4,25 +4,23 @@
 #include <util/namespace.h>
 #include <irep2/irep2.h>
 
-/// V.1k (b) IREP2-native Python adjuster — Phase B.0 skeleton.
+/// V.1k (b) IREP2-native Python adjuster (phases B.0–B.2).
 ///
-/// This pass exists to replace, for the Python frontend, the legacy
-/// `clang_cpp_adjust` round-trip currently run on Python output
-/// (`python_language.cpp`). It walks each non-type symbol's IREP2 value
-/// (`symbolt::get_value2()`) recursively.
+/// Replaces, for the Python frontend, the legacy `clang_cpp_adjust` round-trip
+/// on Python output (`python_language.cpp`). It walks each code symbol's IREP2
+/// value (`symbolt::get_value2()`) and follows a transient `symbol_type2t`
+/// `member2t`/`index2t` source to its resolved `struct_type2t`/`array_type2t`
+/// (the V.1k "two-phase source invariant": relaxed at construction, re-enforced
+/// here before symex) — covering both a plain instance source and a
+/// dereferenced instance pointer.
 ///
-/// **B.0 is a structural no-op:** it visits every node and leaves the tree
-/// byte-identical. It is deliberately *not* wired into `python_language.cpp`
-/// yet — it is dead-but-tested, mirroring the "add the machinery, prove it
-/// inert, wire it later" pattern used for the V.4.0 structured-CF kinds
-/// (esbmc/esbmc#5265) and the V-track back-migration arms (#4737).
-///
-/// Later phases give `adjust_expr` real behaviour: following a transient
-/// `symbol_type2t` `member2t`/`index2t` source to its resolved
-/// `struct_type2t`/`array_type2t` (the V.1k "two-phase source invariant"),
-/// pointer auto-deref, and `#cpp_type`/`#member_name` carriage — at which
-/// point the legacy `clang_cpp_adjust` hop on Python output is dropped.
-/// See `docs/irep2-migration.md`, section "V.1k (b)-adjuster".
+/// Wired into `python_languaget::typecheck` behind `--python-irep2-adjust`
+/// (default off ⇒ byte-identical): it runs after `clang_cpp_adjust` and, until
+/// the converter emits transient sources pre-adjust, resolves nothing — so the
+/// path is dead-but-tested, mirroring the "add the machinery, prove it inert,
+/// wire it later" pattern (esbmc/esbmc#5265). `#cpp_type`/`#member_name`
+/// carriage and dropping the legacy hop remain later phases (B.4/B.5). See
+/// `docs/irep2-migration.md`, section "V.1k (b)-adjuster".
 class python_adjust
 {
 public:
