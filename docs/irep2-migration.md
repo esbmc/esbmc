@@ -3400,6 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done — service design chosen, B.0–B.2 re-sequenced to B.5 (2026-06-26).** The V.1k breakthrough above deferred
 > **Status: B.0 + B.1 + B.2 landed (2026-06-26); B.3 next.** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
@@ -3497,6 +3498,17 @@ following (`next: None`→`Node`), and dataclass field resolution.
   resolves nothing). Regression tests `regression/python/python_irep2_adjust{,_fail}`
   pin both verdicts under the flag; unit tests pin the Python-mode and
   native-value scoping.
+- **B.3 — converter emits one F-P11 family pre-adjust. RE-SCOPED by the B.3 spike
+  (2026-06-26, below): use the resolve-then-build *service*, not the B.2 pass.** The
+  original "build `member2t`/`index2t` over a `symbol_type2t` source and rely on B.2's
+  pass to resolve it" cannot work while legacy `clang_cpp_adjust` still runs (the spike
+  proves both blockers). The viable B.3 flips the *smallest* F-P11 site (e.g. the
+  `BoolOp` short-circuit, `converter_stmt.cpp`) to **resolve the source type via the
+  converter's `name_space().follow()` at construction** and build a *resolved-source*
+  `member2tc`/`index2tc` (the proven file-1 back-migrate-at-seam recipe; satisfies even
+  the strong assert). Acceptance unchanged: the relevant slice of the 20-test fixture
+  green, dual-solver, asserts build, **plus** RV2 — the service's resolved type must
+  equal `clang_cpp_adjust`'s (corpus round-trip equivalence). See the B.3 spike outcome.
 - **B.3 — converter emits one F-P11 family pre-adjust.** Flip the *smallest* F-P11
   site (e.g. the `BoolOp` short-circuit, `converter_stmt.cpp`) to build `member2t`/
   `index2t` directly over the (relaxed) `symbol_type2t` source, relying on B.2's pass
@@ -3511,7 +3523,53 @@ following (`next: None`→`Node`), and dataclass field resolution.
   full 20-test fixture + whole `regression/python` + model `.py` corpus hold parity on
   both solvers (asserts build) and `esbmc-cpp` is green (RV3 — the relaxed assert and
   any shared carriage touch C++ too), make `--python-irep2-adjust` default-on, then
-  remove the legacy adjust hop on Python output.
+  remove the legacy adjust hop on Python output. **Per the B.3 spike, B.0–B.2's
+  materialised-body `python_adjust` pass is the deliverable that does real work *here*
+  — it replaces the legacy hop; it is correctly dead-but-tested + flag-gated until this
+  point, because legacy `clang_cpp_adjust` resolves every source before it runs.**
+
+#### B.3 spike outcome (2026-06-26) — settles the §V.1k design question: B.3 uses the resolve-then-build *service*; the materialised-body pass is B.5
+
+> Read-only spike of the smallest F-P11 site (`BoolOp` short-circuit,
+> `converter_stmt.cpp`) against the live converter→adjust pipeline. It settles the
+> open design question recorded above ("type-resolution *service* the converter
+> queries at construction vs. materialising IREP2 bodies pre-adjust"): **the service
+> wins for B.3; the materialised-body pass (B.0–B.2) is repositioned to B.5.**
+
+**Finding 1 — the original B.3 ("rely on B.2's pass") cannot work pre-B.5.** Two
+independent, code-grounded blockers:
+1. *The converter body is legacy.* Each function body is a single legacy `codet`
+   stored by `set_value(exprt)` (`converter_funcdef.cpp:1403`). A lone IREP2
+   `member2tc` cannot be embedded in a legacy `codet`; making the whole body IREP2 and
+   writing `set_value(expr2tc)` is V.4/B.5-class, not a one-site flip.
+2. *Legacy adjust shadows the pass.* `python_languaget::typecheck` runs
+   `clang_cpp_adjust::adjust()` **unconditionally** (`python_language.cpp:249`), and it
+   follows the legacy member/index sources. By the time `python_adjust` reads
+   `symbol.get_value2()`, the lazily back-migrated body is already resolved — no
+   `symbol_type2t` source survives for it to resolve. So B.2's pass is a structural
+   no-op on the live pipeline *regardless of converter changes*, until the legacy hop
+   is dropped (B.5). (This is consistent with B.2's flag-on byte-identical result.)
+
+**Finding 2 (enabling) — the service is available today.** The converter exposes
+`name_space()` (`python_converter.h:187`), so `ns.follow()` resolution is reachable at
+construction. An F-P11 site can therefore follow its `symbol_type2t` base to the
+resolved `struct_type2t`/`array_type2t` and build a **resolved-source**
+`member2tc`/`index2tc` — which satisfies even the *strong* construction assert (no
+relaxation needed) and back-migrates cleanly at the seam (the proven file-1 recipe).
+This is exactly how the already-merged "resolved-source" sites (#5586/#5587/#5589)
+build, except the source is resolved by the service rather than known-resolved.
+
+**Consequence — re-sequencing (B.0–B.2 are not wasted).** B.0–B.2's `python_adjust`
+remains correct and is the **B.5** deliverable: the IREP2-native replacement for the
+legacy `clang_cpp_adjust` hop, which only has sources to resolve once that hop is
+dropped. It stays dead-but-tested + `--python-irep2-adjust`-gated until B.5. B.3/B.4
+proceed independently via the **service** (`ns.follow` at construction).
+
+**The load-bearing risk stays RV2 (critical).** `clang_cpp_adjust` does more than
+`ns.follow` — pointer auto-deref, dataclass/inference completion. The service's
+resolved type must equal what `clang_cpp_adjust` + goto-convert produce, proven by
+corpus round-trip equivalence on an asserts build, before any F-P11 site flips. The
+next task is that proof harness + the first (BoolOp) site, gated dual-solver.
 
 **Risks (extend §V.4 / Part II §7).** *RV-adj1:* the new pass must reproduce
 `clang_cpp_adjust`'s dataclass/inference completion exactly — mitigate by reusing the
