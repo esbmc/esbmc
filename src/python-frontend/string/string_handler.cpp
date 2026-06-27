@@ -7,6 +7,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
@@ -38,59 +39,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-// 2-arg index: element type is the source array's subtype (matches the legacy
-// index_exprt(arr, idx) ctor). Reached only on array sources here.
-exprt build_index(const exprt &arr, const exprt &idx)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(
-    index2tc(migrate_type(arr.type().subtype()), arr2, idx2));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 string_handler::string_handler(
   python_converter &converter,
@@ -1343,13 +1292,17 @@ exprt string_handler::handle_string_membership(
       *strchr_symbol, gen_pointer_type(char_type()), {rhs_addr, char_as_int});
     strchr_call.location() = converter_.get_location_from_decl(element);
 
-    // Check if result != NULL (character found)
+    // Check if result != NULL (character found). Both operands are synthetic
+    // char* values (the strchr() result and a null constant), so build the
+    // comparison in IREP2 (V.3).
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    exprt not_equal("notequal", bool_type());
-    not_equal.copy_to_operands(strchr_call, null_ptr);
-
+    // V.3: build `strchr(...) != NULL` in IREP2 via the shared build_notequal
+    // helper (#5576). The migrate round-trip drops the call operand's location,
+    // so re-attach it.
+    exprt not_equal = build_notequal(strchr_call, null_ptr);
+    not_equal.op0().location() = strchr_call.location();
     return not_equal;
   }
 
@@ -1488,13 +1441,17 @@ exprt string_handler::handle_string_membership(
     *strstr_symbol, gen_pointer_type(char_type()), {rhs_addr, lhs_addr});
   strstr_call.location() = converter_.get_location_from_decl(element);
 
-  // Check if result != NULL (substring found)
+  // Check if result != NULL (substring found). Both operands are synthetic
+  // char* values (the strstr() result and a null constant), so build the
+  // comparison in IREP2 (V.3).
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  exprt not_equal("notequal", bool_type());
-  not_equal.copy_to_operands(strstr_call, null_ptr);
-
+  // V.3: build `strstr(...) != NULL` in IREP2 via the shared build_notequal
+  // helper (#5576, mirrors the strchr membership path above). The migrate
+  // round-trip drops the call operand's location, so re-attach it.
+  exprt not_equal = build_notequal(strstr_call, null_ptr);
+  not_equal.op0().location() = strstr_call.location();
   return not_equal;
 }
 
@@ -2002,7 +1959,15 @@ exprt string_handler::handle_ord_conversion(
   exprt str_addr = get_array_base_address(str_expr);
 
   // Code point of the single character: (int) *str_addr.
-  exprt first_char = dereference_exprt(str_addr, char_type());
+  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
+  // carries only (type, value) — no offset/guard — so the round-trip is
+  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
+  // build_dereference). Restore the exact element type migrate_type may drop.
+  expr2tc str_addr2;
+  migrate_expr(str_addr, str_addr2);
+  exprt first_char =
+    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
+  first_char.type() = char_type();
   first_char.location() = location;
   return build_typecast(first_char, int_type());
 }
@@ -2320,6 +2285,97 @@ exprt string_handler::handle_string_attribute_call(
       recv.type() == list_type ||
       (recv.type().is_pointer() && recv.type().subtype() == list_type))
       return nil_exprt();
+  }
+
+  // bytes.hex(): fold a constant bytes object to its lowercase hex string
+  // (CPython: b"\x01\xab".hex() == "01ab"). str has no .hex() method, so a
+  // "hex" attribute is unambiguously a bytes method. Bytes are modelled as an
+  // int array; a str is a char array, so the subtype check excludes strings.
+  if (method_name == "hex" && args.empty())
+  {
+    exprt recv = get_receiver_expr();
+    if (recv.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(
+        to_symbol_expr(recv).get_identifier().as_string());
+      if (s && !s->get_value().is_nil())
+        recv = s->get_value();
+    }
+    const typet &rt = recv.type();
+    if (rt.is_array() && rt.subtype() != char_type())
+    {
+      static const char digits[] = "0123456789abcdef";
+      std::string hex;
+      hex.reserve(recv.operands().size() * 2);
+      for (const exprt &op : recv.operands())
+      {
+        BigInt v;
+        if (to_integer(op, v)) // true == not a constant integer
+          throw std::runtime_error(
+            "bytes.hex() is only supported on a constant bytes object");
+        const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+        hex.push_back(digits[(byte >> 4) & 0xf]);
+        hex.push_back(digits[byte & 0xf]);
+      }
+      return string_builder_->build_string_literal(hex);
+    }
+  }
+
+  // str.translate(str.maketrans(x, y[, z])): fold a constant string through a
+  // constant translation table. CPython maps each x[i] to y[i] and deletes the
+  // characters in z. Only the two/three-string maketrans form over constant
+  // operands is modelled; a dict table or a non-constant operand falls through
+  // to the regular (unsupported) dispatch.
+  if (method_name == "translate" && args.size() == 1)
+  {
+    const nlohmann::json &mk = args[0];
+    if (
+      mk.is_object() && mk.value("_type", std::string()) == "Call" &&
+      mk.contains("func") &&
+      mk["func"].value("_type", std::string()) == "Attribute" &&
+      mk["func"].value("attr", std::string()) == "maketrans" &&
+      mk["func"].contains("value") &&
+      mk["func"]["value"].value("_type", std::string()) == "Name" &&
+      mk["func"]["value"].value("id", std::string()) == "str" &&
+      mk.contains("args") && mk["args"].is_array())
+    {
+      const nlohmann::json &mkargs = mk["args"];
+      std::string from_chars, to_chars, del_chars, recv;
+      auto all_ascii = [](const std::string &s) {
+        for (unsigned char ch : s)
+          if (ch >= 0x80)
+            return false;
+        return true;
+      };
+      if (
+        (mkargs.size() == 2 || mkargs.size() == 3) &&
+        extract_constant_string(mkargs[0], converter_, from_chars) &&
+        extract_constant_string(mkargs[1], converter_, to_chars) &&
+        (mkargs.size() == 2 ||
+         extract_constant_string(mkargs[2], converter_, del_chars)) &&
+        extract_constant_string(receiver_json, converter_, recv) &&
+        // The fold is byte-wise; restrict it to ASCII so a multi-byte UTF-8
+        // sequence cannot be remapped/deleted one byte at a time (which would
+        // corrupt the string). Non-ASCII operands fall through to the regular
+        // (unsupported) dispatch — sound, never a wrong verdict.
+        all_ascii(from_chars) && all_ascii(to_chars) && all_ascii(del_chars) &&
+        all_ascii(recv))
+      {
+        if (from_chars.size() != to_chars.size())
+          throw std::runtime_error(
+            "str.maketrans() arguments must have equal length");
+        std::string result;
+        result.reserve(recv.size());
+        for (char c : recv)
+        {
+          if (del_chars.find(c) != std::string::npos)
+            continue;
+          const std::size_t pos = from_chars.find(c);
+          result.push_back(pos == std::string::npos ? c : to_chars[pos]);
+        }
+        return string_builder_->build_string_literal(result);
+      }
+    }
   }
 
   std::optional<locationt> cached_location;

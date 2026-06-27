@@ -1,10 +1,10 @@
 # ESBMC NumPy Support — Assessment and Implementation Roadmap
 
-**Status:** Assessment as of master commit `a5383a3a12` (2026-06-08).
+**Status:** Assessment as of current branch state (2026-06-21).
 **Scope:** ESBMC's Python frontend NumPy support — frontend lowering
 (`src/python-frontend/numpy_call_expr.cpp`), operational models
 (`src/c2goto/library/python/{linalg,umath,list,math}.c`,
-`src/python-frontend/models/numpy*.py`), and the 329-test
+`src/python-frontend/models/numpy*.py`), and the 369-test
 `regression/numpy/` suite.
 
 > **Evidence convention.** Each finding is tagged:
@@ -19,7 +19,8 @@
 
 ESBMC has a **breadth-first, demonstration-grade** NumPy implementation. It
 covers a wide surface of the API (array creation, 1-D/2-D indexing, broadcasting
-checks, element-wise ufuncs, a dozen math functions, `dot`/`matmul`/`det`,
+checks, element-wise ufuncs, reductions, comparison/logical ufuncs,
+constructors, `where`, a broad set of math functions, `dot`/`matmul`/`det`,
 complex numbers) but the implementation strategy is dominated by **compile-time
 constant folding in the C++ frontend**, not symbolic encoding. The practical
 consequences:
@@ -40,6 +41,12 @@ consequences:
    design. **[T]**
 5. **Nested-list / tensor performance** is the dominant scalability blocker
    (issue #5121). **[V]**
+
+The current branch is actively landing the broad Phase 2 NumPy coverage:
+reductions, comparison/logical ufuncs, constructors, `where`, and the common
+math family (`tan`, `arcsin`, `log`, `log2`, `log10`, `sinh`, `cosh`,
+`tanh`). The next follow-up PR should stay focused on the remaining overflow
+and indexing gaps so review and testing remain tractable.
 
 The roadmap below prioritises (Phase 1) closing the **soundness** gaps before
 breadth, then (Phases 2–4) widening symbolic coverage, lifting the 2-D ceiling,
@@ -124,7 +131,8 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 |---|---|---|
 | **Array creation** `array` | Partial | 1-D/2-D literal only; 3-D+ rejected **[T]** `unsupported_3d_array_fail` |
 | `zeros`,`ones` | Partial | int / 1-elt-tuple / 2-tuple shape; 3-D rejected; empty tuple rejected **[T]** |
-| `empty`,`full`,`arange`,`eye`,`identity`,`linspace` | Missing | no handler **[V]** |
+| `empty` | Missing | no handler **[V]** |
+| `full`,`arange`,`eye`,`identity`,`linspace` | Partial | model-backed constructors **[T]** |
 | **Indexing** `a[i]`, `a[i,j]`, `a[i][j]` | Partial | 1-D/2-D; tuple/negative/boolean scalar index **[T]** `github_4666_*` |
 | Multi-dim `a[i,j,k]` (3-D) | Unsupported | explicit `TypeError` **[T]** |
 | **Slicing** `a[i:j]`, `a[:,k]`, strided | Missing/Partial | `zero_step_slice_fail`, `tuple_slice_index_fail` reject; general slices not modelled **[T]/[I]** |
@@ -141,23 +149,22 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 | **Arithmetic** `+ - * /` scalar/array | Partial | literal fold; symbolic int/float via typed umath; `--python-no-fold` available **[V]** |
 | `power` | Partial | exact integer folding for fixed-width ints; negative integer exponents fail explicitly; float paths still use host `pow` **[T]** `power`, `power-overflow-fail` |
 | `//` floor-div, `%` mod (array) | Partial | `np.fmod` supports literal list-backed 1D/2D broadcasting; runtime array operands lower via the array OM **[T]** `fmod_array_unsupported` |
-| **Comparison/logical** `> < == & |` | Missing | no element-wise comparison ufunc **[I]** `mixed-types-comp` is scalar |
-| **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Missing | no handler **[V]** |
-| `np.fmax`,`np.fmin` (binary, element-wise) | Unsound/KNOWNBUG | KNOWNBUG; stub returns 0.2 **[T]** |
-| **Linear algebra** `dot` | Partial | 1-D/2-D, int + float backends **[T]** `dot*`, `github_5115_*`; `dot6`(bool),`dot7` KNOWNBUG |
-| `matmul` | Partial | 1-D/2-D, symbolic elements OK **[T]** `matmul_*` |
+| **Comparison/logical** `> < == & |` | Partial | model-backed comparison/logical ufuncs `greater`/`less`/`greater_equal`/`less_equal`/`equal`/`not_equal`/`logical_and`/`logical_or`/`logical_not` **[T]** |
+| **Reductions** `sum`,`prod`,`min`,`max`,`mean`,`argmin`,`argmax`,`cumsum` | Partial | model-backed reductions for `sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax` **[T]** |
+| `np.fmax`,`np.fmin` (binary, element-wise) | Partial | model-backed min/max helpers **[T]** |
+| **Linear algebra** `dot` | Partial | 1-D/2-D, int + float backends; integer overflow assertion at dtype width **[T]** `dot*`, `dot_overflow_*`, `github_5115_*`; `dot6`(bool),`dot7` KNOWNBUG |
+| `matmul` | Partial | 1-D/2-D, symbolic elements OK; integer overflow assertion at dtype width **[T]** `matmul*`, `matmul_overflow_*`, `github_5115_matmul_*` |
 | `linalg.det` | Partial | **constant** 2×2/3×3 only **[T]**; 1×1,4×4 rejected |
 | `linalg.inv`,`solve`,`eig`,`svd`,`norm`,`qr`,`cholesky` | Missing | no handler **[V]** |
-| **Math fns** `sin cos exp sqrt arctan fabs ceil floor round trunc arccos copysign` | Partial | scalar fold + list-backed literal `floor`/`fabs`/`trunc`; runtime 1-D `arccos` array lowering **[T]** |
-| `tan arcsin tan2 log log2 log10 sinh cosh tanh` | Missing | not in `is_math_function` **[V]** |
-| `remainder`,`rint`,`nextafter`,`modf`,`frexp`,`isclose` | KNOWNBUG | declared, not correctly modelled **[T]** |
-| Constants `np.pi`, `np.e` | Missing/KNOWNBUG | `e` KNOWNBUG **[T]** |
+| **Math fns** `sin cos exp sqrt arctan fabs ceil floor round trunc arccos copysign` | Partial | scalar fold + list-backed literal `floor`/`fabs`/`trunc`; runtime 1-D `arccos` array lowering; `copysign`/`fmax`/`fmin`/`rint`/`modf`/`frexp`/`round`/`remainder`/`nextafter`/`isclose`/`round2` now model-backed **[T]** |
+| `tan arcsin log log2 log10 sinh cosh tanh` | Partial | NumPy model-backed and covered by regression tests **[T]** |
+| Constants `np.pi`, `np.e` | Partial | model-backed constants **[T]** |
 | **Complex** `1+2j`, abs/conj/real/imag/angle | Partial | scalar + 1-D/2-D literal; symbolic fallback **[T]** `complex_*` |
 | complex **dtype constructor** `np.zeros(..,dtype=complex)` | Unsupported | explicit `TypeError` **[T]** |
 | **dtypes/casting** int/uint/float/bool widths | Partial | parsed, mapped to bitvector widths; overflow modelled for scalar fold **[T]** |
 | `object` dtype, `astype`, structured dtype | Unsupported/Missing | `object` rejected **[T]** |
 | **Statistics** `std`,`var`,`median`,`percentile`,`histogram` | Missing | no handler **[V]** |
-| **Sorting/search** `sort`,`argsort`,`searchsorted`,`unique`,`where`,`nonzero` | Missing | no handler **[V]** |
+| **Sorting/search** `sort`,`argsort`,`searchsorted`,`unique`,`where`,`nonzero` | Partial | `where` is model-backed; the rest remain missing **[T]/[V]** |
 | **Random** `rand`,`randn`,`randint`,`seed`,`choice` | Missing | no handler **[V]** |
 | **Structured/record arrays** | Missing | no handler **[V]** |
 | **Views vs copies / memory layout / strides** | Missing | not modelled; arrays are value lists **[V]** |
@@ -175,16 +182,12 @@ host-folded, no symbolic support; **Unsupported** = explicit error;
 - broadcasting shape mismatches; zero-step slices.
 
 **Declared but KNOWNBUG (silently wrong / not modelled): [T]**
-`copysign`, `fmax`, `fmin`, `rint`, `round2`, `remainder`, `nextafter`,
-`modf`, `frexp`, `isclose`, `dot6` (bool), `dot7`, `transpose2`, `transpose7`,
-`e` constant. (15 KNOWNBUG tests total.)
+`dot6` (bool), `dot7`, `transpose2`, `transpose7`.
 
 **Entirely missing (no handler): [V]**
-`empty`, `full`, `arange`, `eye`, `identity`, `linspace`, `reshape`, `ravel`,
-`flatten`, general slicing, boolean-mask & fancy indexing, all reductions
-(`sum`/`mean`/`min`/`max`/`argmax`/…), comparison ufuncs, `where`, `sort`,
-`unique`, statistics, random, `linalg.{inv,solve,eig,svd,norm}`, structured
-arrays, views/strides, `tan`/`log`/hyperbolic math fns, `astype`, `np.pi`.
+`empty`, `reshape`, `ravel`, `flatten`, general slicing, boolean-mask & fancy
+indexing, `sort`, `unique`, statistics, random, `linalg.{inv,solve,eig,svd,norm}`,
+structured arrays, views/strides, `astype`.
 
 ---
 
@@ -228,12 +231,16 @@ Risks:
   The `--python-no-fold` flag now exists for differential testing when we want
   to force the non-folded path.
 
-### 4.3 **[V] MEDIUM — `linalg.c::dot` accumulator width / overflow**
+### 4.3 **[RESOLVED] `linalg.c::dot` accumulator width / overflow**
 
-Integer `dot` accumulates into `int64_t` with no overflow assertion; NumPy
-would wrap at the array dtype width (e.g. `int32`). For symbolic int matrices
-this can **miss real overflow bugs** or report results NumPy would not produce.
-The float path uses `double` accumulation (matches NumPy reasonably). **[I]**
+Integer `dot`/`matmul` now takes a `bits` parameter carrying the operand dtype
+width and emits `__ESBMC_assert` per result element verifying the accumulated
+value fits within `[-2^(bits-1), 2^(bits-1)-1]`. For 64-bit (default Python
+`int`) the assertion is trivially satisfied; for narrower dtypes (int32, int16)
+the assertion fires when the dot product exceeds the dtype range. Combined with
+`--overflow-check`, ESBMC also detects int64-level arithmetic overflow in the
+accumulation loop itself. The float path is unchanged (`double` accumulation).
+**[T]** `dot_overflow_*`, `matmul_overflow_*`.
 
 ### 4.4 **[V] MEDIUM — 2×2 `det` host-folds; Gaussian `det` is `#if 0`-disabled**
 
@@ -279,18 +286,18 @@ oracle. **[I]**
 
 | Category | NumPy expectation | ESBMC today | Gap severity |
 |---|---|---|---|
-| Array creation | n-D, many constructors | 1-D/2-D `array`/`zeros`/`ones` | High (no `arange`/`full`/`eye`/`linspace`; 2-D ceiling) |
+| Array creation | n-D, many constructors | 1-D/2-D `array`/`zeros`/`ones` plus model-backed `arange`/`full`/`eye`/`identity`/`linspace` | Medium (still no `empty`; 2-D ceiling) |
 | Indexing/slicing | full slicing, fancy, boolean mask | scalar/tuple/negative index, 1-D/2-D | High (no real slicing, no masks, no fancy) |
 | Broadcasting | n-D evaluate | check ✓, evaluate ≤2-D concrete; float scalar ufuncs now typed | Med-High (soundness 4.1) |
 | Shape manip | reshape/ravel/transpose/stack | `.shape`, 2-D `transpose` | High |
 | Arithmetic | n-D ufuncs symbolic | literal fold + typed float scalar ufuncs; `--python-no-fold` available | High (4.1, 4.2) |
-| Comparison/logical | element-wise `> == & |` | scalar only | High |
-| Reductions | `sum/mean/min/max/argmax/...` | none | High |
+| Comparison/logical | element-wise `> == & |` | model-backed ufuncs available; operator-level array lowering still incomplete | Medium |
+| Reductions | `sum/mean/min/max/argmax/...` | model-backed reductions available for common cases | Medium |
 | Linear algebra | `dot/matmul/inv/solve/eig/svd/det/norm` | `dot`/`matmul`/(const)`det` | High |
 | Random | full RNG | none | Medium (verification of RNG is itself nondet) |
-| Math fns | ~40 ufuncs symbolic | ~12, many fold-only; KNOWNBUGs | Medium |
+| Math fns | ~40 ufuncs symbolic | broad scalar coverage; few fold-only edge cases remain | Medium |
 | Statistics | `std/var/median/...` | none | Medium |
-| Sorting/search | `sort/argsort/where/unique` | none | High (`where` is common) |
+| Sorting/search | `sort/argsort/where/unique` | `where` model-backed; others missing | Medium |
 | Structured arrays | record dtypes | none | Low |
 | dtype/casting | full promotion, `astype` | width map + scalar overflow; no `astype` | Medium |
 | Views vs copies | aliasing semantics | value-list, no aliasing | Med (correctness if user relies on views) |
@@ -334,46 +341,52 @@ SUCCESSFUL" is worse than an honest "unsupported". Each item lists
 - *Complexity:* Low. *Tests:* deeply nested subscript → clean error, no crash.
 - *Risk:* low; *Priority:* high (robustness).
 
-**P1.4 — Integer `dot` overflow semantics (4.3).** **[P1]**
-- *Description:* accumulate/wrap at the operand dtype width, or emit an overflow
-  assertion. *Complexity:* Medium. *Tests:* int32 matmul that overflows.
-- *Risk:* med (could change existing verdicts — gate behind dtype). *Priority:* med.
+**P1.4 — Integer `dot` overflow semantics (4.3).** **[DONE]**
+- *Resolved:* `dot`/`matmul` OM now takes a `bits` parameter and emits
+  `__ESBMC_assert` per result element. Frontend passes the operand dtype width.
+  **[T]** `dot_overflow_*`, `matmul_overflow_*`.
 
-**P1.5 — Clear all 15 KNOWNBUG math fns or downgrade to explicit-unsupported.**
-**[P1]** A KNOWNBUG that "passes" today (`copysign`, `fmax`, `fmin`, `rint`,
-`remainder`, `nextafter`, `modf`, `frexp`, `isclose`, `e`) is a silent-wrong
-risk. Either model correctly (reuse libm OMs) or make them throw "unsupported".
+**P1.5 — Clear the remaining KNOWNBUG cases or downgrade to explicit-unsupported.**
+**[P1]** The remaining KNOWNBUGs here (`dot6`, `dot7`, `transpose2`,
+`transpose7`) are silent-wrong risk. Either model correctly (reuse the
+existing OMs) or make them throw "unsupported".
 *Complexity:* Low–Med. *Priority:* high (each is a latent false verdict).
 
 ### Phase 2 — Broad practical coverage
+
+> **Status note.** Reductions, comparison/logical ufuncs, `where`, the
+> constructor family, and the common scalar math set now have model-backed
+> support in the current branch. The remaining open work in this phase is the
+> integer `dot`/`matmul` overflow contract plus the slicing / bounded
+> mask-indexing cleanup.
 
 **P2.1 — Reductions:** `sum`, `prod`, `min`, `max`, `mean`, `argmin`, `argmax`,
 with `axis=`. *Rationale:* ubiquitous. *Dependencies:* shared loop-OM over the
 list backing; symbolic-safe. *Complexity:* Medium. *Tests:* axis=None/0/1,
 empty-array semantics, overflow on int `sum`. *Risk:* med (axis shape logic).
-*Priority:* high.
+*Priority:* high. *Status:* landed in the current branch.
 
 **P2.2 — Comparison & logical ufuncs:** `>,<,>=,==,!=`, `logical_and/or/not`,
 returning bool arrays. *Dependency:* element-wise framework from P1.1.
 *Complexity:* Medium. *Tests:* element-wise compare + broadcast. *Priority:* high.
+*Status:* landed in the current branch.
 
 **P2.3 — `where`, boolean-mask indexing `a[mask]`.** *Rationale:* the most
 common "missing" idiom; needed for realistic code. *Complexity:* High
 (variable-length result → either bound it or keep shape via masked-select).
 *Verification risk:* High — masked indexing yields data-dependent shape; prefer
 a sound *bounded* model (fixed-capacity result + validity flags) over an
-unsound dynamic one. *Priority:* high but careful.
+unsound dynamic one. *Priority:* high but careful. *Status:* `where` landed;
+bounded mask indexing remains open.
 
 **P2.4 — General slicing** `a[i:j]`, `a[:,k]`, `a[i:j:s]` (1-D/2-D).
 *Dependency:* `slice.c` exists for Python lists — reuse. *Complexity:* Medium.
 *Tests:* strided, negative, empty slice; view-vs-copy note (P3.5). *Priority:* high.
+*Status:* still open.
 
 **P2.5 — `arange`, `full`, `eye`, `identity`, `linspace`.** *Complexity:* Low–Med
 (literal-shape constructors). *Tests:* each + dtype. *Priority:* med.
-
-**P2.6 — Missing scalar math fns** `tan`, `arcsin`, `log`, `log2`, `log10`,
-`sinh/cosh/tanh`, constants `np.pi/np.e`. Reuse libm OMs. *Complexity:* Low.
-*Priority:* med.
+*Status:* landed in the current branch.
 
 ### Phase 3 — Advanced support
 
@@ -426,19 +439,13 @@ regression test (repo convention). Soundness PRs first.
 1. **PR-1** landed in the current branch: `umath.c` float models + selection
    (P1.1), recursion depth guard (P1.3), and `--python-no-fold` /
    integer-exact `power` (P1.2). Label `python`.
-2. **PR-2** recursion depth-guard follow-ups, if any, should only cover parser
-   or harness cleanup. Label `python`.
-3. **PR-3** `--python-no-fold` differential follow-ups, if any, should only
-   cover docs or extra regression coverage. Label `python`.
-4. **PR-4** KNOWNBUG math fns: model or hard-unsupport, per fn (P1.5) — can be a
-   short series (one fn or small group per PR).
-5. **PR-5** int `dot` overflow semantics (P1.4).
-6. **PR-6** reductions `sum/min/max/mean` + `axis` (P2.1).
-7. **PR-7** comparison/logical ufuncs returning bool arrays (P2.2).
-8. **PR-8** general 1-D/2-D slicing reusing `slice.c` (P2.4).
-9. **PR-9** `where` + bounded boolean-mask indexing (P2.3).
-10. **PR-10** `arange/full/eye/identity/linspace` (P2.5) + missing math fns (P2.6).
-11. **PR-11+** Phase 3/4 items, each gated on its dependency.
+2. **PR-2** the current branch lands the Phase 2 bulk: reductions,
+   comparison/logical ufuncs, `where`, constructors, and common math.
+   Label `python`.
+3. **PR-3** int `dot` overflow semantics (P1.4).
+4. **PR-4** general 1-D/2-D slicing reusing `slice.c` (P2.4).
+5. **PR-5** bounded boolean-mask indexing cleanup around `where` (P2.3).
+6. **PR-6** Phase 3/4 items, each gated on its dependency.
 
 > Sequencing rationale: PRs 1–5 raise the **trust floor** so that subsequent
 > breadth additions inherit a sound element-wise/encoding substrate. Building
@@ -449,7 +456,7 @@ regression test (repo convention). Soundness PRs first.
 
 ## 8. Regression-test strategy
 
-The existing 329-test suite is broad but **literal-heavy**. Strengthen it along
+The existing 369-test suite is broad but **literal-heavy**. Strengthen it along
 the axes that actually exercise the solver:
 
 1. **Symbolic-element tests for every op.** For each ufunc/reduction, add a
@@ -483,21 +490,21 @@ behaviour.
 
 ```python
 # --- Array creation (P2.5) ---
-a = np.arange(5)            # now: unsupported; want: [0 1 2 3 4]
-b = np.full((2,2), 7)       # now: unsupported; want: [[7 7][7 7]]
+a = np.arange(5)            # now: supported; want: [0 1 2 3 4]
+b = np.full((2,2), 7)       # now: supported; want: [[7 7][7 7]]
 
 # --- Element-wise float arithmetic (P1.1 landed) ---
 z = np.add(5.0, 1.0)        # now: typed float backend; want: z == 6.0
 assert z == 6.0
 
 # --- Reductions (P2.1) ---
-s = np.sum(np.array([1, 2, 3]))      # now: unsupported; want: 6
-m = np.max(np.array([[1,9],[4,2]]))  # now: unsupported; want: 9
+s = np.sum(np.array([1, 2, 3]))      # now: supported; want: 6
+m = np.max(np.array([[1,9],[4,2]]))  # now: supported; want: 9
 
 # --- Comparison ufunc + where (P2.2/P2.3) ---
 a = np.array([1, -2, 3])
-mask = a > 0                          # now: unsupported; want: [True False True]
-pos = np.where(a > 0, a, 0)           # want: [1 0 3]
+mask = a > 0                          # now: supported; want: [True False True]
+pos = np.where(a > 0, a, 0)           # now: supported; want: [1 0 3]
 
 # --- Slicing (P2.4) ---
 a = np.array([10,20,30,40])
@@ -533,6 +540,6 @@ assert np.power(2, 7, dtype=np.int8) == -128   # now: SUPPORTED scalar [T]
 ---
 
 *Prepared from code inspection of `numpy_call_expr.cpp`, `linalg.c`, `umath.c`,
-`models/numpy*.py`; the 329-test `regression/numpy/` suite; and the
+`models/numpy*.py`; the 369-test `regression/numpy/` suite; and the
 issue/PR history (#2258–#5251). Findings tagged [V]/[T] are evidence-backed;
 [I]/[?] require runtime confirmation and are called out as such.*

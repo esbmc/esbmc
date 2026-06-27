@@ -3398,6 +3398,178 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 - **Net simplification:** V.1k's deliverable is the **assert relaxation**, not an
   adjuster. The keystone was smaller than the (b) scope assumed.
 
+#### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
+
+> **Status: superseded by "B.0–B.3 implementation outcomes" below (B.0–B.2 + validation
+> now in master).** The section below is the live record; this one is retained for
+> the design rationale. The V.1k breakthrough above deferred
+> the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
+> has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
+> now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
+> (`goto_convert_functions.cpp:184`, `migrate_expr_back(symbol.get_value2())`). The
+> assert-relaxation half of V.1k is also landed (the `symbol_id` disjunct in
+> `member2t`/`index2t`, `irep2_expr.h:1553-1556`/`:1637-1638`, documented there as
+> "staged enabling infra, exercised once the V.1k converter/adjuster pilot lands").
+> So the (b) adjuster is **now buildable**; this section scopes it. It is the single
+> remaining unlock for the V.3 residue (the F-P11 general-operand wall) **and** W3
+> (`#cpp_type` attribute carriage) — they retire together.
+
+**Why this is the next task (and the V.3 micro-stragglers are not).** The clean,
+behaviour-preserving V.3 surface — synthetic-operand subtrees and resolved-source
+member/index/deref round-trips — is drained across the whole frontend (converter,
+OM handlers, numpy, string/dict/set/tuple, class/lambda/builtins). Every *remaining*
+legacy expression-builder site is exactly one of: (i) **F-P11** — an operand resolved
+only by `clang_cpp_adjust`, so building IREP2 pre-adjust aborts on the (now-relaxed but
+still real, post-adjust) `member2t`/`index2t` resolved-source invariant; (ii) a
+**width-hazard** guard/arith the legacy node tolerates but `lessthan2t`/`sub2t` reject;
+or (iii) a **statement-context** `code_function_callt`/`code_assignt` operand that is
+intentionally legacy until V.4/W1 (e.g. `converter_unop.cpp` `__ESBMC_list_size`
+truthiness, commented "the size_decl/size_call statements above stay legacy (P1)").
+None of (i)–(iii) is a mechanical migration; all three need resolve-then-build, i.e.
+the (b) adjuster.
+
+**What the adjuster is (grounded restatement).** A new IREP2-native pass that runs
+the *complete* resolution `clang_cpp_adjust` does today — recursive `symbol_type2t` →
+followed `struct_type2t`/`array_type2t` following, pointer auto-deref, dataclass/
+inference-aware completion, and `#cpp_type`/`#member_name` carriage — but over the
+IREP2 body (`symbol.get_value2()`) instead of the legacy `codet`. It replaces the
+legacy `clang_cpp_adjust adjuster(context); adjuster.adjust()` round-trip on Python
+output (`python_language.cpp:249-250`). The converter's already-computed inferred
+attribute types ride the node as `gen_pointer_type(symbol_typet("tag-<cls>"))`
+(`converter_class.cpp:291`, fed by `infer_attr_type_from_usage`/`flow_class_map_`), so
+the adjuster *follows* what inference produced — it does not re-infer (V.1k
+investigation B).
+
+**Two-phase source invariant (the core mechanism, half-landed).**
+1. *Relax* the `member2t`/`index2t` construction assert to permit a transient
+   `symbol_type2t` source — **DONE** (`irep2_expr.h`, V.1k step 1). Investigation A
+   proved this is a no-op for C/C++/CUDA/Solidity (no frontend builds `member2t`
+   pre-adjust; all go through `migrate` at goto-convert, which is post-adjust), so the
+   blast radius is exactly the new Python pre-adjust window the adjuster closes.
+2. *Re-enforce* the strong invariant post-adjust: the adjuster asserts at exit that
+   every `member2t`/`index2t` source is a resolved `struct`/`union`/`array`/`vector`
+   — **this pass is what V.1k (b) builds.** The ~11 symex/simplifier consumers
+   (`to_member2t(...).source_value`, `struct_union_members`, …) need no change; they
+   all run strictly post-adjust.
+
+**Acceptance fixture (already in tree).** The 20-test regression set the design-(a)
+`ns.follow` prototype regressed is the acceptance gate — four families, all present
+(`regression/python/{nested-attr*,github_4117*,dataclass*,self_ref_nested_attr_chain*}`,
+69 tests in those families today). The adjuster must take all four back to green while
+keeping the flat-member improvement, because they exercise exactly the resolution the
+single-leaf-follow (a) missed: recursive following (`self.b.a`), inferred-type
+following (`next: None`→`Node`), and dataclass field resolution.
+
+**Phased, commit-sized plan (gate each on the §V.5 universal gate + `esbmc-cpp`).**
+- **B.0 — pass skeleton, dead-but-tested.** Add a Python-only IREP2 walker
+  (`src/python-frontend/python_adjust.{h,cpp}`, modelled on `clang_c_adjust::adjust()`)
+  that walks `symbol.get_value2()` and is a structural **no-op** (visits every node,
+  changes nothing). Not wired into `python_language.cpp` yet. Gate: full Python +
+  `esbmc-cpp` parity is trivially unchanged (pass does nothing).
+- **B.1 — member/index source following.** Teach the pass to follow a `symbol_type2t`
+  member/index source to its `struct_type2t`/`array_type2t` via `namespacet::follow`,
+  **recursively** (resolve `X` before building `X.a`), with pointer auto-deref. Still
+  not wired in. Unit round-trip tests asserting a hand-built
+  `member2tc(symbol_type2t-source)` resolves to a struct source.
+- **B.2 — wire in behind a flag.** `--python-irep2-adjust` (default off) routes Python
+  output through the new pass *in addition to* the legacy `clang_cpp_adjust` (the new
+  pass resolves the pre-adjust `symbol_type2t` members the converter will start
+  emitting; legacy adjust still runs for everything else). Flag off ⇒ byte-identical
+  to today. Tests pin the flag.
+- **B.3 — converter emits one F-P11 family pre-adjust.** Flip the *smallest* F-P11
+  site (e.g. the `BoolOp` short-circuit, `converter_stmt.cpp`) to build `member2t`/
+  `index2t` directly over the (relaxed) `symbol_type2t` source, relying on B.2's pass
+  to resolve it. Acceptance: the relevant slice of the 20-test fixture green under the
+  flag, dual-solver, asserts build.
+- **B.4 — generalise + post-adjust verification.** Add the exit assertion (every
+  member/index source resolved); migrate the remaining F-P11 families; fold in W3
+  (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute
+  reads at `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`,
+  `goto2c/expr2c.cpp:169-174`.
+- **B.5 — flip default, then drop the Python `clang_cpp_adjust` round-trip.** Once the
+  full 20-test fixture + whole `regression/python` + model `.py` corpus hold parity on
+  both solvers (asserts build) and `esbmc-cpp` is green (RV3 — the relaxed assert and
+  any shared carriage touch C++ too), make `--python-irep2-adjust` default-on, then
+  remove the legacy adjust hop on Python output.
+
+**Risks (extend §V.4 / Part II §7).** *RV-adj1:* the new pass must reproduce
+`clang_cpp_adjust`'s dataclass/inference completion exactly — mitigate by reusing the
+converter's already-inferred `tag-` types (investigation B) rather than re-deriving.
+*RV-adj2:* GOTO-byte parity vs the legacy adjust path is the gate, but model
+nondeterminism (§8.1) means use **deterministic verdict+matched-text parity**, not the
+goto diff. *RV-adj3:* W3 carriage is shared with C++ — stage it last (B.4) and gate on
+`esbmc-cpp`. *RV-adj4:* keep the pass **Python-only** until a later shared phase;
+investigation C confirmed the first cut is cleanly Python-scoped (the relaxed assert is
+the only shared change, and it is a no-op for other frontends by investigation A).
+
+**Definition of done (this sub-program).** F-P11 + width-hazard residue migrated; W3
+retired; the legacy `clang_cpp_adjust` round-trip is gone from the Python path; the
+20-test fixture and full corpus hold dual-solver + asserts parity; `esbmc-cpp` green.
+At that point the Python converter writes IREP2 member/index/general-operand
+expressions directly, and §V.1 acceptance bars #1/#2 fall for the converter's
+expression surface. (Bodies/`goto_convert` W1 stays a RETAIN_BOUNDARY per the V.4
+outcome; the C/C++ counterexample printer W4 stays Phase V.5.)
+
+#### B.0–B.3 implementation outcomes (2026-06-25) — infra landed, B.3 is gated on B.5
+
+> **Status: B.0–B.2 + validation merged to master (B.0 skeleton via #5615; B.1–B.2
+> resolution, flag-wiring and fixture tests via the V.4 B.1/B.2 merge); B.3 blocked
+> on B.5.** The skeleton, resolution, flag-wiring and fixture-validation are all in
+> master's tree, flag-gated behind `--python-irep2-adjust` (default off ⇒
+> byte-identical). The step that *exercises* resolution in the pipeline (B.3) is,
+> empirically, not separable from B.5. Recorded so the B.5 effort starts from the
+> real state, not the forecast.
+
+**What was built (all in master — B.0 via #5615, B.1–B.2 via the V.4 B.1/B.2 merge;
+all flag-gated behind `--python-irep2-adjust`, default off ⇒ byte-identical):**
+- **B.0** — `src/python-frontend/python_adjust.{h,cpp}`: a pass that walks each code
+  symbol's `get_value2()`. Structurally a no-op; unit-tested (`python_adjust_test`).
+- **B.1** — `adjust_expr` resolves a transient `symbol_type2t` member2t/index2t source
+  via `namespacet::follow` + `expr2t::with_type`, recursing operands first
+  (inner-to-outer for `self.b.a`). *Correction to the §design above:* a member/index
+  **cannot** be built over a raw pointer source (the construction assert rejects
+  `pointer_id`), so the transient form is a `symbol_type2t`, carried on a `symbol2t`
+  or a `dereference2t` — one symbol-type branch handles both. No separate
+  pointer-deref arm is needed at this layer.
+- **B.2** — `--python-irep2-adjust` option + invocation in `python_languaget::typecheck`,
+  **after** `clang_cpp_adjust`. Wiring the body-walk surfaced the concrete
+  *migration-before-resolution wall*: reading a Python body's `get_value2()` migrates a
+  by-name `symbol_type` constant aggregate, which trips **`constant_struct2t`**'s assert
+  (V.1k relaxed `member2t`/`index2t` but not the aggregate literals). Fixed by relaxing
+  `constant_struct2t` the same way (permit a transient `symbol_id`; `NDEBUG`-only, so
+  release-inert). `adjust()` writes a symbol back only when resolution changed it and
+  walks only code symbols, so the flag is behaviour-inert.
+- **B.2 validation** — flag-on vs flag-off parity over the **entire 20-test acceptance
+  fixture** (69 CORE tests): **0 divergences, 0 aborts**. Pinned by the
+  `python_irep2_adjust_{nested_attr,inferred_attr,dataclass}` regression tests.
+
+**B.3 negative result — the before-placement is unsound while `clang_cpp_adjust` still
+runs.** B.3 (make resolution actually fire) was prototyped by moving `python_adjust`
+*before* `clang_cpp_adjust`. Findings, in order:
+1. All 69 fixture tests then abort on **`index2t`** — the migrated index source is a
+   **pointer** (the Python frontend stores instances and containers behind a pointer),
+   which the relaxed `index2t` assert does not permit.
+2. Relaxing `member2t`/`index2t` to tolerate a transient `pointer_id` source **plus**
+   adding a pointer auto-deref to `resolve_source` stops the aborts — but then the whole
+   fixture yields **no verdict** under the flag (symex crash/hang).
+3. Root cause: running the IREP2 adjuster before `clang_cpp_adjust` *while
+   `clang_cpp_adjust` still runs afterwards* **double-resolves** the same nodes — exactly
+   the "two-places-resolve hazard" the V.1k spike (round 1) flagged.
+
+**Consequence for the plan:** B.3 as "emit pre-adjust + resolve with the pass" is **not
+separable from B.5**. The pass can only resolve soundly once it **replaces**
+`clang_cpp_adjust` on the Python path — which means it must first reproduce
+`clang_cpp_adjust`'s *complete* completion (recursive follow + pointer auto-deref +
+dataclass/inference-aware resolution + `#cpp_type`/`#member_name` carriage), and only
+then is `clang_cpp_adjust` dropped and the pass moved before. So **B.3, B.4 and B.5
+collapse into one milestone**: a complete IREP2-native Python adjuster that supplants
+`clang_cpp_adjust`, validated GOTO-byte + dual-solver against it. The incremental
+"flag-gated, one-family-at-a-time" decomposition the plan above sketched does not hold
+across the `clang_cpp_adjust` boundary, because that boundary cannot be half-crossed
+(two resolvers running over the same nodes is unsound). The B.0–B.2 infra and the
+relaxed asserts (`member2t`/`index2t`/`constant_struct2t` for `symbol_id`) remain the
+correct foundation for that combined effort.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
@@ -3423,6 +3595,175 @@ This is the Part IV §7.2 file-by-file work, now **unblocked**. *Accept:* legacy
 expression-builder census in `src/python-frontend` → 0 except body shells;
 verdict + text unchanged; asserts cross-check silent. *This is the
 "comparatively mechanical" bulk — but only after V.1k.*
+
+#### V.3 status (2026-06-22) — two migratable surfaces (synthetic-operand + guarded member/index round-trip) are now ~drained; general-operand construction stays blocked
+
+Per the **V.1k breakthrough** above, V.1k's keystone — the `member2t`/`index2t`
+construction-assert **relaxation** (now permitting a transient
+`struct`/`union`/`complex`/`symbol` member source and `array`/`vector`/`symbol`
+index source, `irep2_expr.h` ~1553/~1637) — **has landed on master**. The separate
+(b) IREP2-native adjuster is *not* needed for V.3; it moves to V.4+. So **two**
+converter surfaces are migratable today, and both are now largely drained:
+
+1. **Synthetic-operand subtrees** — constructions every forward-migrated operand of
+   which is a fully-synthetic concrete-typed value (OM-call results like
+   `__ESBMC_list_size`/`strlen`, `size_type`/`bool` temporaries, constants, already
+   -built comparisons). ~25 PRs merged (the `[python] V.3: build … in IREP2` series,
+   #5454–#5522): truthiness checks, list/set/tuple/string/complex result-bools,
+   is/identity equality, deref/member *sandwich* collapses, chained-comparison
+   and-folds, generic unary operators.
+2. **Guarded member/index/deref round-trips** — `migrate_expr_back(member2tc/
+   index2tc/dereference2tc(migrate_type(t), migrate(base), …))`, which is the
+   *byte-identical* round-trip of the legacy node (`member`/`index`/`dereference`
+   lower uniformly in `migrate_expr`, `util/migrate.cpp:1580`), guarded on the
+   source type (`is_struct/union/symbol` for member, `is_array/vector/symbol` for
+   index) with a legacy fallback otherwise. The `build_member`/`build_index`/
+   `build_dereference`/`build_typecast`/`build_symbol` helpers across the frontend
+   are all migrated this way; the last clean *returned* raw sites — complex
+   truthiness (#5533) and `ord()`'s char load (#5534) — followed.
+
+**What is still blocked (the genuine F-P11 residue).** General-operand construction
+over *arbitrary user expressions* — `BoolOp` (`and`/`or`), arithmetic in
+`build_binary_expression`, and member/index whose source's type is **neither a
+resolved struct/array nor a `symbol`** — cannot use the migrate-forward recipe. A
+worked attempt to fold the `and`/`or` `BoolOp` node into `and2tc`/`or2tc` (the
+sibling of the merged chained-comparison fold #5519) **reproduced an `index2t`
+abort** (`irep2_expr.h:1638`) even on pure-boolean `(a>0) and (b>0)`: the operand
+carried an unresolved `index` whose source matched *none* of the relaxed disjuncts.
+The relaxation widened the migratable surface but did **not** remove the wall for
+operands the converter has not yet typed — those still need the full (b) adjuster
+(V.4+). Reverted, not shipped.
+
+**Consequence.** Both clean surfaces (synthetic-operand subtrees and guarded
+member/index round-trips at *returned/composed* seams) are ~drained in the core
+converter. The remaining raw member/index/deref sites all **feed legacy consumers**
+(`code_assignt` LHS, `tuple`/`dict_handler` args) — migratable in isolation but
+**no net gain** under the subtree rule. The next structural unlock is the **(b)
+IREP2-native adjuster at V.4+**, which retires the residual general-operand wall and
+W3 together; pre-V.4 the migratable V.3 bulk is essentially complete.
+
+#### V.3 status (2026-06-24) — synthetic-operand + resolved-source member/index/deref surfaces fully drained; residual is exactly F-P11 + width-hazard
+
+A second draining pass (≈16 PRs, #5573–#5595) extended the 2026-06-22 status
+above and exhausted every *clean, byte-identical* converter site reachable
+pre-V.4:
+
+- **Shared builder module.** The per-TU copies of the `build_*` round-trip
+  helpers were consolidated into
+  `src/python-frontend/python_expr_builder.{h,cpp}` (`namespace python_expr`,
+  #5568), then extended with `build_not`/`build_or`/`build_notequal` (#5573,
+  #5575, #5576) for the boolean/equality nodes. The relational/logical/
+  arithmetic builders now share two private templates — `migrate_binary` and
+  `migrate_typed_binary` (#5594) — so the migrate→build→back-migrate round-trip
+  has a single source of truth.
+- **Synthetic-operand arithmetic & relational.** List loop-index increments
+  (#5584), list `strlen+1` element sizing (#5580), starred-unpack index
+  subtraction (#5578), the string-index OOB bound `array_size-1` (#5581), `set`
+  char* pointer arithmetic + dereference (#5582, #5590), the `input()`
+  length-bound assume (#5583), `str.startswith`/`endswith` length/offset
+  arithmetic (#5574, #5595), and the affix-tuple `or`-chain (#5575) — all moved
+  to the shared helpers, each a byte-identical round-trip over operands the
+  converter has already typed `size_type`/`bool`.
+- **Resolved-source member/index/deref feeding legacy consumers.** Sites whose
+  source is a *verified resolved* struct/array (not the F-P11 user case): the
+  list symbolic-size store `*(list).size` (#5586), the constructor default-attr
+  store `*(self).attr` (#5587), and the `str(char)` 2-element array subscripts
+  (#5589), via `build_dereference`/`build_member`/`build_index`. These reduce
+  the legacy expr-builder census but do *not* remove the migrate seam (subtree
+  rule).
+
+**Residual — provably blocked, enumerated.** What remains in the converter is
+*exactly* two permanently-blocked classes (neither is a mechanical migration):
+
+1. **F-P11 user-operand sites** — operands resolved only by `clang_cpp_adjust`,
+   so building IREP2 pre-adjust aborts on the `member2t`/`index2t`
+   resolved-source assert: `python_math.cpp` modulo/floor-div sign-correction,
+   `BoolOp` short-circuit (`converter_stmt.cpp`), `isinstance` NoneType/tuple
+   (`builtins.cpp:369/447`), is-none inequality (`converter_compare.cpp`),
+   slice-bound arithmetic (`python_list.cpp:1444-1683`), the complex int→double
+   promotion (`numpy_call_expr.cpp:1607`), and the converter subscript-base
+   derefs (`converter_expr.cpp:1369/1388`).
+2. **Width-hazard guards/arithmetic** — a `<`/`-` whose two operands have
+   *different* widths (a `size_type` index vs an `arr_type.size()`-typed length),
+   which the legacy node tolerates (adjust reconciles) but `lessthan2t`/`sub2t`
+   reject at construction: `python_set.cpp:171/234`, `python_list.cpp:4120/4533`.
+   (`build_array` types its dimension `size_type`, but the length operand is not
+   guaranteed to originate there — #5581 defensively typecasts before
+   subtracting, so a blind migrate is unsound.)
+
+Both classes need the **V.1k/V.4 IREP2-native adjuster** (resolve-then-build),
+not site-by-site migration.
+
+#### V.3 follow-up (2026-06-24) — truthiness/membership stragglers drained
+
+A re-census after the pass above found the "fully drained" claim was slightly
+overstated: five clean synthetic-operand sites — each a *byte-identical
+round-trip* analog of an already-merged migration — were still building legacy
+`exprt("notequal"/…)` nodes. All were drained to the
+`migrate_expr_back(notequal2tc/equality2tc(…))` pattern:
+
+- `converter_stmt.cpp` list-condition `__ESBMC_list_size(xs) != 0` (analog of the
+  already-migrated truthiness path at the same file ~3216);
+- `converter_stmt.cpp` dict-truthiness `$dict_size$ != 0`;
+- `string_handler.cpp` `strchr(...) != NULL` and `strstr(...) != NULL` membership
+  (analog of the merged `strcmp(...) op 0` at `converter_binop.cpp:973`);
+- `python_exception_handler.cpp` non-negated assertion `(int)<bool-temp> == 1`
+  (sibling of the already-migrated `not <temp>` branch).
+
+Operands are all fully-synthetic concrete-typed (OM-call results, `size_type`
+temps, constants), so each is the exact IREP2 round-trip of the legacy node —
+verdict + counterexample parity holds (dual-solver Bitwuzla + Z3). With these,
+the clean V.3 surface is drained; the residual is exactly the two
+permanently-blocked classes above.
+
+#### V.3 residual → the remaining tasks to reach 100 % IREP2 (2026-06-24)
+
+The pre-V.4 clean V.3 surface is drained; the residual is exactly the two
+classes above (F-P11 user-operand sites + width-hazard guards). Both share one
+root cause and therefore one fix, so the path to **100 % IREP2** is a small,
+ordered task list — not an open-ended sweep. A read-only spike pins the
+constraint the keystone task must respect:
+
+- **The resolution lives in a legacy-`codet` adjust pass.** `python_languaget::
+  final` runs `clang_cpp_adjust::adjust()` over the symbol values
+  (`python_language.cpp:249-250`, entry `adjust_code(codet&)`,
+  `clang_cpp_adjust.h:32`); this is where the converter's unresolved
+  `member`/`index` sources get followed (the P2/W2 resolution). The residual
+  aborts because the converter builds those nodes **before** this pass.
+- **The goto-convert body round-trip stays legacy (W1-loc) — and is off this
+  critical path.** V.4 concluded the *body* round-trip is a `RETAIN_BOUNDARY`
+  for source-location fidelity. That governs `goto_convert`'s side-effect
+  hoisting, **not** the converter→adjust type-resolution seam where the residual
+  is built, so it does not block the tasks below.
+
+**Tasks to 100 % (ordered; the first is the keystone, RV2 the gate):**
+
+1. **V.1k — resolve-then-build via the design-(b) IREP2-native adjuster.**
+   Stand up the Python-specific IREP2 adjuster that performs `clang_cpp_adjust`'s
+   *complete* resolution (recursive struct-following + auto-deref +
+   dataclass/inference-aware completion) as one IREP2 pass, so the converter can
+   build `member2tc`/`index2tc`/arith with **resolved** operand types and the
+   F-P11 + width-hazard aborts vanish. **Open design question to settle in the
+   first spike:** whether this runs as a type-resolution *service* the converter
+   queries at construction (no materialised IREP2 body needed) or requires
+   materialising IREP2 bodies pre-adjust (the resolved-source chicken-and-egg
+   the relaxed assert only partially lifts). *Accept (RV2, hard gate):* the
+   20-test acceptance fixture (§V.1k design (b)) back to green; the F-P11/
+   width-hazard sites build in-converter with zero `irep2_expr.h` aborts;
+   verdict + text unchanged.
+2. **V.2 — IREP2-native attribute carriage (W3).** Fold `#cpp_type`/
+   `#member_name`/`#cformat` onto the typed IREP2 companion; the (b) adjuster is
+   the natural home, so V.1k and V.2 land together.
+3. **V.5 — IREP2-native counterexample printer (W4).** Independent of the above
+   (Part II §2.7, own issue); can proceed in parallel.
+4. **V.6 — flip & verify.** Switch the symbol-table writes fully to
+   `set_value(expr2tc)`, census → ~0, dual-solver + asserts + `esbmc-cpp`
+   parity. §V.1 bar met.
+
+Converter-side V.3 *construction* is drained as far as the pre-adjust assert
+allows; everything remaining is the V.1k keystone and what it unblocks. The
+deeper W1 body round-trip (V.4) is the one piece retained by design — it is a
+shared goto-convert concern, not part of the Python 100 % target.
 
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,

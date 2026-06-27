@@ -435,14 +435,18 @@ exprt python_converter::handle_chained_comparisons_logic(
   const nlohmann::json &element,
   exprt &bin_expr)
 {
-  exprt cond("and", bool_type());
-  cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
+  // Collect the per-pair comparisons (bin_expr is the first), then fold the
+  // conjunction in IREP2 and back-migrate once. V.3: the legacy n-ary "and"
+  // is spliced by migrate into exactly this left-nested and2t chain (and the
+  // mandatory --irep2-bodies round-trip normalises both forms identically),
+  // so building it directly is behaviour-preserving. The callers guarantee
+  // comparators.size() > 1, so there are always at least two conjuncts.
+  std::vector<exprt> conjuncts;
+  conjuncts.push_back(bin_expr); // bin_expr compares left and comparators[0]
 
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt logical_expr(
-      python_frontend::map_operator(op, bool_type()), bool_type());
     exprt op1 = get_expr(element["comparators"][i]);
     exprt op2 = get_expr(element["comparators"][i + 1]);
 
@@ -458,21 +462,31 @@ exprt python_converter::handle_chained_comparisons_logic(
       {
         exprt expr(python_frontend::map_operator(op, bool_type()), bool_type());
         expr.copy_to_operands(op1, op2);
-        cond.move_to_operands(expr);
+        conjuncts.push_back(expr);
       }
       else
       {
-        cond.move_to_operands(string_expr);
+        conjuncts.push_back(string_expr);
       }
     }
     else
     {
-      logical_expr.copy_to_operands(op1);
-      logical_expr.copy_to_operands(op2);
-      cond.move_to_operands(logical_expr);
+      exprt logical_expr(
+        python_frontend::map_operator(op, bool_type()), bool_type());
+      logical_expr.copy_to_operands(op1, op2);
+      conjuncts.push_back(logical_expr);
     }
   }
-  return cond;
+
+  expr2tc acc;
+  migrate_expr(conjuncts.front(), acc);
+  for (size_t i = 1; i < conjuncts.size(); ++i)
+  {
+    expr2tc c2;
+    migrate_expr(conjuncts[i], c2);
+    acc = and2tc(acc, c2);
+  }
+  return migrate_expr_back(acc);
 }
 
 exprt python_converter::handle_membership_operator(
@@ -656,6 +670,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return set_result;
   }
 
+  // Python dict union (PEP 584: `d1 | d2`) and bitwise operations on dicts are
+  // not modeled. Reject them with a clean diagnostic: otherwise both dict
+  // structs fall through to build_binary_expression's bitwise path, which emits
+  // a bitvector BitOr over struct operands and SIGSEGVs in the SMT backend
+  // (a struct irep is handed to bitwuzla_mk_term2 as a term pointer).
+  if (
+    (op == "BitOr" || op == "BitAnd" || op == "BitXor") &&
+    lhs.type().is_struct() && rhs.type().is_struct() &&
+    dict_handler_->is_dict_type(lhs.type()) &&
+    dict_handler_->is_dict_type(rhs.type()))
+    throw std::runtime_error(
+      "dict union '|' and bitwise operations on dict are not supported");
+
   // Handle membership operators
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
@@ -767,7 +794,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs.type().is_pointer() != rhs.type().is_pointer())
   {
     exprt &struct_side = lhs.type().is_pointer() ? rhs : lhs;
-    const exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
+    exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
     auto class_tag = [&](const typet &t) -> irep_idt {
       typet r = t;
       if (r.id() == "symbol")
@@ -777,11 +804,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const irep_idt s_tag = class_tag(struct_side.type());
     if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
     {
-      // V.3: take the struct's address in IREP2 — exact round-trip of the
-      // legacy gen_address_of (a plain address_of of the struct value).
-      expr2tc ss2;
-      migrate_expr(struct_side, ss2);
-      struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+      // struct_side is a by-value instance of the same class as *ptr_side.
+      // Normally take its address so both compare as references (github #4116).
+      // But a constant-struct rvalue — e.g. an Enum member like `Color.RED`,
+      // which has no storage — cannot be addressed: gen_address_of would emit
+      // address-of-constant, which the SMT backend rejects ("Unrecognized
+      // address_of operand"). Dereference the pointer instead and compare the
+      // two structs by value, the correct semantics for Enum singletons
+      // (github_3642).
+      if (struct_side.is_constant() || struct_side.id() == "struct")
+        ptr_side = dereference_exprt(ptr_side, ptr_side.type());
+      else
+      {
+        // V.3: take the struct's address in IREP2 — exact round-trip of the
+        // legacy gen_address_of (a plain address_of of the struct value).
+        expr2tc ss2;
+        migrate_expr(struct_side, ss2);
+        struct_side = migrate_expr_back(address_of2tc(ss2->type, ss2));
+      }
     }
   }
 
@@ -816,28 +856,43 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
              !tuple_handler_->is_tuple_type(r);
     };
 
+    // A class *reference*: a pointer to a user-defined class struct. Under the
+    // object-model migration (#3067/#4773) instances are heap pointers, so the
+    // non-handle side of `instance == None-handle` is `Class*`, not a by-value
+    // struct.
+    auto is_user_class_ptr = [&](const typet &t) {
+      return t.is_pointer() && is_user_class_struct(t.subtype());
+    };
+
     const bool lhs_handle = is_object_handle(lhs.type());
     const bool rhs_handle = is_object_handle(rhs.type());
     if (lhs_handle != rhs_handle)
     {
       exprt &struct_side = lhs_handle ? rhs : lhs;
       exprt &handle_side = lhs_handle ? lhs : rhs;
-      if (is_user_class_struct(struct_side.type()))
+      const bool side_is_struct = is_user_class_struct(struct_side.type());
+      const bool side_is_ptr = is_user_class_ptr(struct_side.type());
+      if (side_is_struct || side_is_ptr)
       {
-        // Compare as pointers, not integers: take the struct's address and
-        // reinterpret the integer handle as a pointer to the same class, so
-        // ESBMC's object/offset pointer model decides identity. Casting both
-        // to the integer handle instead would lose the distinct-object
-        // guarantee and spuriously satisfy `a != b` for distinct instances.
+        // Compare as pointers, not integers: reinterpret the integer handle as
+        // a pointer to the same class so ESBMC's object/offset pointer model
+        // decides identity. Casting both to the integer handle instead would
+        // lose the distinct-object guarantee and spuriously satisfy `a != b`
+        // for distinct instances. A by-value instance needs its address taken;
+        // a class reference is already a pointer.
         // V.3: built in IREP2 — exact round-trip of the legacy
-        // gen_address_of + typecast_exprt (migrate's typecast defaults the
-        // same rounding-mode symbol the 2-arg typecast2tc uses).
-        typet ptr_t = gen_pointer_type(ns.follow(struct_side.type()));
+        // gen_address_of + typecast_exprt.
+        typet ptr_t = side_is_ptr
+                        ? struct_side.type()
+                        : gen_pointer_type(ns.follow(struct_side.type()));
         const type2tc ptr_t2 = migrate_type(ptr_t);
-        expr2tc ss2;
-        migrate_expr(struct_side, ss2);
-        struct_side =
-          migrate_expr_back(typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        if (side_is_struct)
+        {
+          expr2tc ss2;
+          migrate_expr(struct_side, ss2);
+          struct_side = migrate_expr_back(
+            typecast2tc(ptr_t2, address_of2tc(ss2->type, ss2)));
+        }
         expr2tc hs2;
         migrate_expr(handle_side, hs2);
         handle_side = migrate_expr_back(typecast2tc(ptr_t2, hs2));
@@ -889,22 +944,27 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const symbolt *strcmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
       if (strcmp_symbol)
       {
-        // Normalise each side to char*: cast void*, take base address of arrays.
+        // Normalise each side to char* in IREP2: cast void*, take base address
+        // of arrays. Building the typecast as typecast2tc is byte-identical to
+        // migrating the legacy typecast_exprt, and lets the strcmp call below
+        // be built without a separate forward migration of each side.
         const typet char_ptr = pointer_typet(char_type());
-        auto as_char_ptr = [&](const exprt &e) -> exprt {
-          if (is_void_ptr(e.type()))
-            return typecast_exprt(e, char_ptr);
+        auto as_char_ptr = [&](const exprt &e) -> expr2tc {
+          expr2tc e2;
           if (e.type().is_array())
-            return string_handler_.get_array_base_address(e);
-          return e;
+            migrate_expr(string_handler_.get_array_base_address(e), e2);
+          else
+            migrate_expr(e, e2);
+          if (is_void_ptr(e.type()))
+            return typecast2tc(migrate_type(char_ptr), e2);
+          return e2;
         };
 
         // V.3: build `strcmp(a, b) op 0` (op is Eq/NotEq) in IREP2, back
         // -migrating once. Exact round-trip of the legacy side-effect strcmp
         // call compared against zero via equality/notequal.
-        expr2tc lhs2, rhs2;
-        migrate_expr(as_char_ptr(lhs), lhs2);
-        migrate_expr(as_char_ptr(rhs), rhs2);
+        expr2tc lhs2 = as_char_ptr(lhs);
+        expr2tc rhs2 = as_char_ptr(rhs);
         expr2tc strcmp_call2 = side_effect_function_call2tc(
           migrate_type(int_type()),
           symbol_expr2tc(*strcmp_symbol),
@@ -1190,6 +1250,11 @@ exprt python_converter::handle_array_operations(
     if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
       return nil_exprt();
 
+    // Element-wise modulo is only modelled for integer elements; float-array %
+    // would need fmod-style lowering, so let it fall through to a clean reject.
+    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
+      return nil_exprt();
+
     const exprt &size_expr = to_array_type(array_type).size();
     if (!size_expr.is_constant())
       return nil_exprt();
@@ -1224,6 +1289,12 @@ exprt python_converter::handle_array_operations(
       exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
       exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
+      // Python/NumPy integer % is floored (sign of the divisor), unlike C's
+      // truncated remainder; correct each element the same way the scalar path
+      // does (#5498). bin_elem currently holds the raw C remainder.
+      if (op == "Mod")
+        bin_elem =
+          math_handler_.handle_int_modulo(array_item, casted_scalar, bin_elem);
       expr2tc bin_elem2;
       migrate_expr(bin_elem, bin_elem2);
       result2 = with2tc(result2->type, result2, ix2, bin_elem2);
@@ -1293,6 +1364,38 @@ exprt python_converter::handle_array_operations(
       std::ostringstream msg;
       msg << "TypeError: arithmetic on numeric arrays is not supported "
              "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // NumPy element-wise integer modulo. `ndarray % scalar` previously fell
+  // through to generic arithmetic (pointer-modulo on the array) and crashed the
+  // SMT backend (#5498). Model `numeric_array % scalar` with per-element
+  // floored modulo; reject the broadcasting forms that are not modelled
+  // (scalar % array, array % array, non-constant-size or float arrays) cleanly.
+  if (op == "Mod")
+  {
+    const bool lhs_numeric_array = lhs.type().is_array() &&
+                                   is_numeric_type(lhs.type().subtype()) &&
+                                   !is_char_array(lhs.type());
+    const bool rhs_numeric_array = rhs.type().is_array() &&
+                                   is_numeric_type(rhs.type().subtype()) &&
+                                   !is_char_array(rhs.type());
+
+    if (lhs_numeric_array && !rhs.type().is_array())
+    {
+      exprt lowered = build_scalar_broadcast(lhs, rhs);
+      if (!lowered.is_nil())
+        return lowered;
+    }
+
+    if (lhs_numeric_array || rhs_numeric_array)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: NumPy array modulo broadcasting is not modelled";
       const locationt loc = get_location_from_decl(element);
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();

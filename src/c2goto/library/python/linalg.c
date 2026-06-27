@@ -6,8 +6,29 @@
 // Generic dot product for int64_t arrays
 // A: m×n matrix, B: n×p matrix, C: m×p output matrix (all stored as flat arrays)
 // All arrays are stored row-major contiguous in memory
-void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
+// bits: operand dtype width (e.g. 32 for int32, 64 for int64)
+void dot(
+  int64_t *A,
+  int64_t *B,
+  int64_t *C,
+  int64_t m,
+  int64_t n,
+  int64_t p,
+  int64_t bits)
 {
+  int64_t max_val = (bits >= 64) ? INT64_MAX : ((1LL << (bits - 1)) - 1);
+  int64_t min_val = (bits >= 64) ? INT64_MIN : -(1LL << (bits - 1));
+
+  if (m == 1 && n == 1 && p == 1)
+  {
+    int64_t result = (*A) * (*B);
+    __ESBMC_assert(
+      result >= min_val && result <= max_val,
+      "integer overflow in dot product");
+    *C = result;
+    return;
+  }
+
   int64_t i = 0;
   while (i < m)
   {
@@ -21,6 +42,8 @@ void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
         sum += *(A + i * n + k) * *(B + k * p + j);
         k++;
       }
+      __ESBMC_assert(
+        sum >= min_val && sum <= max_val, "integer overflow in dot product");
       *(C + i * p + j) = sum;
       j++;
     }
@@ -37,6 +60,12 @@ void dot_double(
   int64_t n,
   int64_t p)
 {
+  if (m == 1 && n == 1 && p == 1)
+  {
+    *C = (*A) * (*B);
+    return;
+  }
+
   int64_t i = 0;
   while (i < m)
   {
@@ -57,9 +86,16 @@ void dot_double(
   }
 }
 
-void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
+void matmul(
+  int64_t *A,
+  int64_t *B,
+  int64_t *C,
+  int64_t m,
+  int64_t n,
+  int64_t p,
+  int64_t bits)
 {
-  dot(A, B, C, m, n, p);
+  dot(A, B, C, m, n, p, bits);
 }
 
 void matmul_double(

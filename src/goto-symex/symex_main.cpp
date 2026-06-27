@@ -19,6 +19,7 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
+#include <util/type_byte_size.h>
 #include <util/message.h>
 
 #include <vector>
@@ -127,29 +128,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
-  if (validate_witness && !has_prefix(msg, "unwinding assertion loop"))
-  {
-    const size_t seg = cur_state->cur_seg;
-    const waypoint *target_wp = nullptr;
-    if (seg < cur_state->witness_segs.size())
-      for (const auto &wp : cur_state->witness_segs[seg])
-        if (wp.type == waypoint::target)
-        {
-          target_wp = &wp;
-          break;
-        }
-
-    if (
-      !target_wp ||
-      cur_state->source.pc->location.get_line() != target_wp->line_id ||
-      cur_state->witness_target_reached)
-      new_expr = gen_true_expr();
-    else
-    {
-      cur_state->advance_witness_position();
-      cur_state->witness_target_reached = true;
-    }
-  }
+  symex_witness_assert(new_expr, msg);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
@@ -271,75 +250,6 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
     target, total_claims, remaining_claims, simplified_claims);
-}
-
-static void substitute_result(expr2tc &e, const expr2tc &ret_val)
-{
-  if (is_symbol2t(e) && to_symbol2t(e).thename == "\\result")
-  {
-    e = ret_val;
-    return;
-  }
-  if (is_constant_int2t(e))
-  {
-    if (
-      is_unsignedbv_type(ret_val->type) &&
-      to_constant_int2t(e).value.is_negative())
-      log_warning(
-        "witness: function_return constraint compares signed constant {} "
-        "against unsigned return type; constraint may be trivially false",
-        integer2string(to_constant_int2t(e).value));
-    e = from_integer(to_constant_int2t(e).value, ret_val->type);
-    return;
-  }
-  e->Foreach_operand([&](expr2tc &op) { substitute_result(op, ret_val); });
-}
-
-void goto_symext::symex_witness_function_return(
-  expr2tc ret_val,
-  const irep_idt &call_line)
-{
-  if (cur_state->cur_seg >= cur_state->witness_segs.size())
-    return;
-
-  const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-  for (const waypoint &wp : seg)
-  {
-    if (wp.type == waypoint::function_enter)
-    {
-      if (wp.line_id.empty() || wp.line_id != call_line)
-        continue;
-      if (wp.action == waypoint::avoid)
-      {
-        cur_state->source.pc++;
-        return;
-      }
-
-      cur_state->advance_witness_position();
-      return;
-    }
-
-    if (wp.type != waypoint::function_return)
-      continue;
-    if (!wp.parsed_cond.valid)
-      continue;
-    if (wp.line_id != call_line)
-      continue;
-
-    cur_state->rename(ret_val);
-
-    expr2tc constraint = wp.parsed_cond.expr;
-    substitute_result(constraint, ret_val);
-
-    if (wp.action == waypoint::avoid)
-      assume(not2tc(constraint));
-    else
-    {
-      assume(constraint);
-      cur_state->advance_witness_position();
-    }
-    return;
-  }
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -498,36 +408,11 @@ void goto_symext::symex_step(reachability_treet &art)
       }
     }
 
-    // Violation-witness: handle function_enter waypoints in the current segment.
-    // avoid, not matching: skip (persistent).
-    // avoid, matching: skip the call (pc++), segment does not advance.
-    // follow, not matching: stop (follows are ordered; cannot bypass).
-    // follow, matching: advance to next segment; fall through to the call.
-    if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+    if (validate_witness)
     {
-      const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-      const auto &loc = cur_state->source.pc->location;
-      for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
-      {
-        const waypoint &wp = seg[wp_idx];
-        if (wp.type != waypoint::function_enter)
-          continue;
-        const bool loc_matches =
-          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-          (wp.function_id.empty() || wp.function_id == loc.get_function());
-        if (loc_matches)
-        {
-          if (wp.action == waypoint::avoid)
-          {
-            cur_state->source.pc++;
-            return;
-          }
-          cur_state->advance_witness_position();
-          break;
-        }
-        if (wp.action != waypoint::avoid)
-          break;
-      }
+      const irep_idt call_line = cur_state->source.pc->location.get_line();
+      if (symex_witness_function_enter(call_line))
+        return;
     }
 
     symex_function_call(deref_code);
@@ -930,6 +815,15 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_sv_comp")
+  {
+    expr2tc sv_comp = config.options.get_bool_option("sv-comp")
+                        ? gen_true_expr()
+                        : gen_false_expr();
+    symex_assign(code_assign2tc(func_call.ret, sv_comp));
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
@@ -1144,13 +1038,74 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // PythonList / dict / set methods
+  // PythonList / dict / set methods — model functions with real bodies that
+  // must be executed, not treated as built-in intrinsics.
   if (
     has_prefix(symname, "c:@F@__ESBMC_list") ||
     has_prefix(symname, "c:@F@__ESBMC_dict") ||
     has_prefix(symname, "c:@F@__ESBMC_set"))
   {
     bump_call(func_call, symname);
+    return;
+  }
+
+  // Python object allocator (Stage 1 object-model migration, #3067/#4773).
+  // `o = ClassName(...)` lowers to `o = __ESBMC_new_object()` where `o` is a
+  // pointer to the class struct. Allocate a single, typed, non-expiring dynamic
+  // object of that struct and bind `o` to it. Sized symbolically by the struct
+  // type (robust to fields added to the struct after this construction site),
+  // guaranteed valid (CPython construction never fails — no malloc-NULL model),
+  // and finite (a single value, not an infinite array, which would blow up
+  // pointer-identity reasoning). Mirrors symex_mem_inf's binding but with a
+  // size-1 dynamic object.
+  if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
+  {
+    assert(
+      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    const expr2tc &lhs = func_call.ret;
+    const type2tc base = to_pointer_type(lhs->type).subtype;
+    const guard2tc &guard = cur_state->guard;
+
+    // Build a single dynamic struct value (mirrors symex_mem's size_is_one
+    // path) — typed (sized symbolically by the struct), guaranteed valid (no
+    // malloc-NULL model) and not auto-deallocated, so it survives the
+    // constructing function's return.
+    unsigned int &dynamic_counter = get_dynamic_counter();
+    dynamic_counter++;
+    symbolt symbol;
+    symbol.name = "dynamic_" + i2string(dynamic_counter) + "_value";
+    symbol.id = std::string("symex_dynamic::") + id2string(symbol.name);
+    symbol.lvalue = true;
+    symbol.mode = "C";
+    {
+      typet t = ns.follow(migrate_type_back(base));
+      t.dynamic(true);
+      t.set(
+        "alignment",
+        constant_exprt(config.ansi_c.max_alignment(), size_type()));
+      symbol.set_type(std::move(t));
+    }
+    new_context.add(symbol);
+
+    const type2tc new_type = migrate_symbol_type(symbol);
+    expr2tc obj = symbol2tc(new_type, symbol.id);
+    // address_of2tc(new_type, e): first argument is the *pointee* type, so the
+    // result is `new_type *` — reconcile with the LHS pointer type.
+    expr2tc rhs = address_of2tc(new_type, obj);
+    do_simplify(rhs);
+    expr2tc ptr_rhs = rhs;
+    guard2tc alloc_guard = guard;
+    if (rhs->type != lhs->type)
+      rhs = typecast2tc(lhs->type, rhs);
+    cur_state->rename(rhs);
+    expr2tc rhs_copy(rhs);
+    symex_assign(code_assign2tc(lhs, rhs), true, guard);
+
+    expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+    track_new_pointer(ptr_obj, new_type, guard);
+    alloc_guard.append(guard);
+    dynamic_memory.emplace_back(
+      rhs_copy, alloc_guard, false, symbol.name.as_string());
     return;
   }
 
@@ -1338,6 +1293,220 @@ void goto_symext::add_memory_leak_checks()
      * 'true'). */
     std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> globals(1);
     va.get_globals(globals[0].second);
+
+    /* A dynamic object reachable only through an in-scope automatic variable of
+     * an active call frame is NOT a leak: when __ESBMC_memory_leak_checks() is
+     * invoked from exit()/abort() (or a __noreturn assert) the call stack is
+     * still live, so SV-COMP valid-memtrack counts stack-reachable memory as
+     * tracked. The static-globals roots above miss these; without them an
+     * `argv` buffer that the entry harness allocates and keeps in main's own
+     * local is wrongly reported as "forgotten memory" (issue #5138).
+     *
+     * We root reachability from the pointer-typed locals of every active frame
+     * and then chase the pointer graph through heap objects, recording each
+     * reachable object (and the condition under which it is reachable) into
+     * globals_point_to alongside the global roots above.
+     *
+     * Heap buffers need a content-based chase rather than the type-based
+     * get_entries_rec() used for globals: the SV-COMP entry harness stores an
+     * array of `char *` arguments into a single `malloc((argc+1)*8)` block,
+     * which ESBMC types as a flat byte array. get_entries_rec() sees no pointer
+     * sub-component there and would stop, leaking the argument strings. Instead,
+     * for each constant-size object we read a pointer at every pointer-aligned
+     * offset and OR same_object() over them: this reads the actual stored bytes
+     * (sound -- a pointer the buffer no longer holds does not match) and, being
+     * fully expanded for a constant size, is negatable in the leak claim's
+     * `not(reachable)` context (the array-index reachability TODO below only
+     * blocks the *symbolic*-size case). */
+    const bool is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+    const BigInt ptr_bytes(config.ansi_c.pointer_width() / 8);
+    const type2tc void_ptr_type = pointer_type2tc(get_empty_type());
+
+    /* A value-set target is a usable reachability root only if it denotes a
+     * concrete object: drop unknown/invalid descriptors and null/string/code
+     * objects. Returns the root object symbol, or nil to skip. */
+    auto usable_root = [](const expr2tc &descriptor) -> expr2tc {
+      if (is_unknown2t(descriptor) || is_invalid2t(descriptor))
+        return expr2tc();
+      assert(is_object_descriptor2t(descriptor));
+      expr2tc obj = to_object_descriptor2t(descriptor).get_root_object();
+      if (
+        is_null_object2t(obj) || is_constant_string2t(obj) ||
+        is_code_type(obj) || !is_symbol2t(obj))
+        return expr2tc();
+      return obj;
+    };
+
+    /* Worklist of (heap-object symbol, condition under which it is reachable).
+     * `local_reached` bounds work on cyclic heaps and caps total objects. */
+    std::vector<std::pair<expr2tc, expr2tc>> reach_work;
+    std::unordered_set<std::string> local_reached;
+    const size_t max_reached = 4096;
+    const uint64_t max_slots = 1024;
+
+    for (const auto &local_frame : cur_state->call_stack)
+    {
+      for (const auto &lv : local_frame.local_variables)
+      {
+        const symbolt *lsym = ns.lookup(lv.base_name);
+        if (lsym == nullptr || has_prefix(lsym->name, "__ESBMC_"))
+          continue;
+
+        /* Skip compiler-generated temporaries. A function-return temporary
+         * such as `return_value$_malloc$N` keeps holding the pointer it
+         * produced even after the source program has dropped its last
+         * reference (e.g. `p = malloc(); p = NULL;`), so rooting reachability
+         * from it would mask genuine leaks (unsound). Only source-level
+         * automatic variables denote program-visible references; the frontend
+         * names those `<file>@<line>@F@<func>@<var>` (no `$`) and reserves `$`
+         * for synthetic symbols, so a `$` anywhere marks a temporary. Dropping
+         * a real root we fail to recognise only costs precision (a residual
+         * false positive), never soundness. */
+        const std::string &lname = lv.base_name.as_string();
+        if (lname.find('$') != std::string::npos)
+          continue;
+
+        type2tc lsym_type = migrate_symbol_type(*lsym);
+        if (!is_pointer_type(lsym_type))
+          continue;
+
+        expr2tc lptr = symbol2tc(lsym_type, lv.base_name);
+        local_frame.level1.get_ident_name(lptr);
+
+        value_sett::object_mapt lpoints_to;
+        cur_state->value_set.get_value_set_rec(
+          lptr, lpoints_to, "", lptr->type);
+
+        /* The value set is flow-insensitive: lptr's entry still lists every
+         * object it ever pointed at, even ones it no longer holds (e.g. after
+         * `p = NULL`). To keep the leak check sound we must test the pointer's
+         * *current* value, so L2-rename a copy of lptr to its SSA value here.
+         * level1 was already applied via the owning frame above; level2 is
+         * frame-independent, so renaming through the current state is correct. */
+        expr2tc lptr_val = lptr;
+        cur_state->level2.rename(lptr_val);
+
+        for (auto it = lpoints_to.begin(); it != lpoints_to.end(); ++it)
+        {
+          expr2tc root_object = usable_root(cur_state->value_set.to_expr(it));
+          if (is_nil_expr(root_object))
+            continue;
+
+          /* The local is unconditionally live; it points at root_object
+           * exactly when same_object holds. */
+          expr2tc adr = address_of2tc(root_object->type, root_object);
+          reach_work.emplace_back(root_object, same_object2tc(lptr_val, adr));
+        }
+      }
+    }
+
+    while (!reach_work.empty() && local_reached.size() < max_reached)
+    {
+      expr2tc obj = reach_work.back().first;
+      expr2tc cond = reach_work.back().second;
+      reach_work.pop_back();
+
+      /* Record the object as reachable under `cond`. */
+      expr2tc adr = address_of2tc(obj->type, obj);
+      expr2tc &pts = globals_point_to[adr];
+      pts = pts ? or2tc(pts, cond) : cond;
+
+      /* Expand each object's contents once. */
+      if (!local_reached.insert(to_symbol2t(obj).get_symbol_name()).second)
+        continue;
+
+      /* Only constant-size objects can be soundly, fully expanded; a symbolic
+       * size hits the array-index reachability TODO further down and is left
+       * as a (sound) residual false positive. */
+      if (!is_array_type(obj->type))
+        continue;
+      const array_type2t &arr_t = to_array_type(obj->type);
+      if (is_nil_expr(arr_t.array_size) || !is_constant_int2t(arr_t.array_size))
+        continue;
+
+      /* Only scalar elements are read below: a byte (stitched) or a
+       * pointer-width number/pointer (indexed directly). Restricting to these
+       * keeps type_byte_size() off incomplete/unsized types and keeps the
+       * direct-index path off aggregates (bitcast would be ill-formed). Arrays
+       * of structs/arrays are left unexpanded -- a sound residual. */
+      if (!is_number_type(arr_t.subtype) && !is_pointer_type(arr_t.subtype))
+        continue;
+
+      const BigInt elem_bytes = type_byte_size(arr_t.subtype);
+      const BigInt total_bytes =
+        to_constant_int2t(arr_t.array_size).value * elem_bytes;
+      if (
+        ptr_bytes == 0 || elem_bytes == 0 ||
+        total_bytes / ptr_bytes > BigInt(max_slots))
+        continue;
+
+      /* Each pointer occupies a whole number of elements, or each element is a
+       * single byte we stitch together; other element sizes are skipped (a
+       * sound residual). The SMT backend rejects byte_extract on an array, so
+       * read element-by-element via index() and combine. */
+      const uint64_t pb = ptr_bytes.to_uint64();
+      if (elem_bytes != 1 && elem_bytes != ptr_bytes)
+        continue;
+
+      /* The buffer's current content: L2-rename the object symbol. */
+      expr2tc buf_val = obj;
+      cur_state->rename(buf_val);
+
+      /* Read the pointer stored at byte offset `off`. */
+      auto read_slot = [&](const BigInt &off) -> expr2tc {
+        if (elem_bytes == ptr_bytes)
+        {
+          expr2tc el = index2tc(
+            arr_t.subtype, buf_val, gen_ulong((off / elem_bytes).to_uint64()));
+          return is_pointer_type(el) ? typecast2tc(void_ptr_type, el)
+                                     : bitcast2tc(void_ptr_type, el);
+        }
+        /* elem_bytes == 1: stitch `pb` consecutive bytes into a pointer. */
+        std::vector<expr2tc> bytes;
+        bytes.reserve(pb);
+        for (uint64_t b = 0; b < pb; b++)
+          bytes.push_back(typecast2tc(
+            get_uint8_type(),
+            index2tc(
+              arr_t.subtype,
+              buf_val,
+              gen_ulong((off + BigInt(b)).to_uint64()))));
+        expr2tc accuml = is_big_endian ? bytes.front() : bytes.back();
+        if (is_big_endian)
+          for (uint64_t b = 1; b < pb; b++)
+            accuml = concat2tc(
+              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+        else
+          for (int b = (int)pb - 2; b >= 0; b--)
+            accuml = concat2tc(
+              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+        return bitcast2tc(void_ptr_type, accuml);
+      };
+
+      /* Candidate objects the buffer's elements may point at. */
+      value_sett::object_mapt contents;
+      cur_state->value_set.get_value_set_rec(obj, contents, "[]", obj->type);
+
+      for (auto c_it = contents.begin(); c_it != contents.end(); ++c_it)
+      {
+        expr2tc cobj = usable_root(cur_state->value_set.to_expr(c_it));
+        if (is_nil_expr(cobj))
+          continue;
+
+        /* Reach `cobj` iff some pointer-aligned slot of the buffer currently
+         * holds its address: OR over slots of same_object(slot, &cobj). */
+        expr2tc cadr = address_of2tc(cobj->type, cobj);
+        expr2tc slot_reach;
+        for (BigInt off(0); off + ptr_bytes <= total_bytes; off += ptr_bytes)
+        {
+          expr2tc so = same_object2tc(read_slot(off), cadr);
+          slot_reach = slot_reach ? or2tc(slot_reach, so) : so;
+        }
+        if (slot_reach)
+          reach_work.emplace_back(cobj, and2tc(cond, slot_reach));
+      }
+    }
 
     /* In order to handle every globally reachable symbol just once even in case
      * the user code has constructed circular data structures, maintain a set

@@ -123,6 +123,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"python-irep2-adjust",
+      NULL,
+      "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
+      "(V.4 migration; experimental, default off)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND
@@ -217,7 +221,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
-    {"cprover", NULL, "Add compatibility layer for CPROVER gotos"},
+    {"cprover", NULL, "Deprecated no-op (kept for backward compatibility)"},
+    {"no-cprover-additions",
+     NULL,
+     "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -236,7 +243,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "argv string (default 256)."},
     {"gcc-nested-functions",
      NULL,
-     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
+     "Enable GCC nested functions extension (source-level lambda lifting)"},
+    {"sv-comp",
+     NULL,
+     "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
+     "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
+     "physical line numbers for witnesses, and avoid malloc/free in the "
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},

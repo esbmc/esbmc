@@ -31,19 +31,23 @@ public:
   {
   }
 
+  // @p from_right selects rsplit() semantics (split at the rightmost @p count
+  // separators) over split() (the leftmost). Defaults to split().
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const std::string &input,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const exprt &input_expr,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   exprt get();
 
@@ -195,7 +199,8 @@ public:
   exprt extract_pyobject_value(
     const exprt &pyobject_expr,
     const typet &elem_type,
-    bool mixed_numeric = false);
+    bool mixed_numeric = false,
+    bool string_safe = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
@@ -279,6 +284,17 @@ public:
   static exprt build_list_from_range(
     python_converter &converter,
     const nlohmann::json &range_args,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Materialise a tuple value into a fresh list, pushing each component
+   * in order. Used by list(tuple) (and any context that converts a tuple to a
+   * list), so the list model sees a real PyListObject* rather than the tuple
+   * struct. @p tuple_expr must have tuple struct type.
+   */
+  static exprt build_list_from_tuple(
+    python_converter &converter,
+    const exprt &tuple_expr,
     const nlohmann::json &element);
 
   /**

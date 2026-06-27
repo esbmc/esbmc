@@ -9,7 +9,7 @@
 class int:
 
     @classmethod
-    def from_bytes(cls, bytes_data: bytes, big_endian: bool, signed: bool) -> int:
+    def from_bytes(cls, bytes_data: bytes, big_endian: bool, signed: bool = False) -> int:
         result: int = 0
         index: int = 0
         step: int = 1
@@ -28,11 +28,16 @@ class int:
             result: int = (result << 8) + byte
             index: int = index + step
 
-        if signed and bytes_data[-1] & 128 == 128:  # Check MSB of last byte
+        # The sign lives in the most-significant byte: index 0 for big-endian,
+        # the last byte for little-endian. Index it directly — the model does
+        # not support Python negative indexing (bytes_data[-1] read out of
+        # bounds), and bytes_data[-1] was also the wrong byte for big-endian.
+        sign_index: int = 0 if big_endian else bytes_len - 1
+        if signed and bytes_data[sign_index] & 128 == 128:  # MSB of sign byte
             is_negative: bool = True
 
         if signed and is_negative:
-            result: int = result - (1 << (8 * len(bytes_data)))
+            result: int = result - (1 << (8 * bytes_len))
 
         return result
 
@@ -63,3 +68,33 @@ class int:
             n: IntWide = n >> 1
             length = length + 1
         return length
+
+    @classmethod
+    # bit_count() returns the number of ones in the binary representation
+    # of the absolute value of the integer (Python 3.10+). `n` is annotated
+    # `IntWide` for the same bignum reason as bit_length; narrow inputs
+    # sign-extend on entry, so negatives are folded to their magnitude
+    # before counting. The loop is bounded by a literal 512-shift counter
+    # (matching the --ir bignum IntWide width) rather than by the symbolic
+    # input, so the unwinder has a termination bound; narrow callsites exit
+    # at n == 0 well before that. The literal 512 shares bit_length's
+    # soundness contract (>= kPythonBitLengthCap in type_handler.cpp, tied to
+    # kPythonBignumWidth by a static_assert) — bump both together when
+    # widening Python int. Issues #1964 / #4642.
+    def bit_count(cls, n: IntWide) -> int:
+        if n < 0:
+            n: IntWide = -n
+        count: int = 0
+        shifts: int = 0
+        while shifts < 512 and n > 0:
+            count = count + (n & 1)
+            n: IntWide = n >> 1
+            shifts = shifts + 1
+        return count
+
+    @classmethod
+    # conjugate() returns the integer unchanged: the complex conjugate of a
+    # real number is itself (int implements the numeric-tower API). Like the
+    # other no-argument int methods, the caller's value is passed as `n`.
+    def conjugate(cls, n: int) -> int:
+        return n

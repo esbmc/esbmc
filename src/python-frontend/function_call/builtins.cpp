@@ -15,6 +15,7 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/expr_util.h>
@@ -33,105 +34,7 @@
 #include <stdexcept>
 
 using namespace json_utils;
-
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-//
-// Two migrate_type round-trip hazards are guarded: a dynamically-sized array
-// type (non-constant size) throws get_width downstream, and type attributes
-// such as #cpp_type are dropped. So the helpers fall back to the legacy node
-// for dyn-sized arrays / non-matching sources, and restore the exact result
-// type (result.type() = t) on the member/index/typecast nodes.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// member2t needs a struct/union/symbol source; fall back to legacy otherwise
-// (and for dyn-array result types).
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-
-// index2t needs an array/vector/symbol source; fall back to legacy otherwise
-// (and for dyn-array source/result types -- string indexing relies on the
-// #cpp_type attribute that migrate_type drops, hence result.type() = t).
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  if (contains_dyn_array(arr.type()) || contains_dyn_array(t))
-    return index_exprt(arr, idx, t);
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  if (
-    is_array_type(arr2->type) || is_vector_type(arr2->type) ||
-    is_symbol_type(arr2->type))
-  {
-    exprt result = migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-    result.type() = t;
-    return result;
-  }
-  return index_exprt(arr, idx, t);
-}
-
-// 2-arg form: element type is the source array's subtype (matches the legacy
-// index_exprt(arr, idx) constructor).
-exprt build_index(const exprt &arr, const exprt &idx)
-{
-  return build_index(arr, idx, arr.type().subtype());
-}
-} // namespace
+using namespace python_expr;
 
 namespace
 {
@@ -254,8 +157,9 @@ exprt function_call_expr::handle_input() const
   len_assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(len_assign);
 
-  exprt len_bound("<", bool_type());
-  len_bound.copy_to_operands(
+  // len_sym and the literal are both size_type (synthetic), so build the
+  // length-bound comparison in IREP2 (V.3).
+  exprt len_bound = build_less_than(
     build_symbol(len_sym), from_integer(max_str_length, size_type()));
   codet assume_len("assume");
   assume_len.copy_to_operands(len_bound);
@@ -473,6 +377,22 @@ exprt function_call_expr::handle_isinstance() const
     typet expected_type = type_handler_.get_typet(type_name, 0);
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
+
+    // Lists use a dedicated pointer-backed operational model. The generic
+    // isinstance expression cannot be used here because its operand widths
+    // are incompatible. When the static type is a list pointer, emit a
+    // runtime null check so that Optional[list] parameters (None at runtime)
+    // correctly return False.
+    if (type_name == "list")
+    {
+      if (obj_expr.type() == type_handler_.get_list_type())
+      {
+        expr2tc obj2;
+        migrate_expr(obj_expr, obj2);
+        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
+      }
+      return false_exprt();
+    }
 
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array

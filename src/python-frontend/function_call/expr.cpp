@@ -12,6 +12,7 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
@@ -20,86 +21,21 @@
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
+#include <util/c_sizeof.h>
 #include <util/string_constant.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 
 #include <algorithm>
 #include <cctype>
+#include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>
 
 using namespace json_utils;
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-//
-// A dynamically-sized array type (non-constant size) does not survive the
-// migrate_type round-trip (get_width throws downstream), so the helpers fall
-// back to the legacy constructor when the relevant type contains one.
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  // migrate_type does not round-trip type attributes such as #cpp_type;
-  // restore the exact target type so legacy typecast_exprt(from, t) is
-  // reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// Struct member access base.field : t (V.3). `base` must be a struct/union/
-// complex value (member2t's source precondition); the callers here pass a
-// tuple or complex struct whose component is named `name`.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(base.type()))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-  // migrate_type does not round-trip #cpp_type; restore the exact member type
-  // so legacy member_exprt(base, name, t) is reproduced faithfully.
-  result.type() = t;
-  return result;
-}
-} // namespace
+using namespace python_expr;
 
 namespace
 {
@@ -530,6 +466,20 @@ exprt function_call_expr::build_constant_from_arg() const
       python_list list_handler(converter_, call_);
       return list_handler.build_shallow_copy_call(expr, call_);
     }
+    // tuple("...") — a constant string yields a tuple of single-character
+    // strings (CPython: tuple("ab") == ('a', 'b')). Lower to a tuple literal so
+    // it routes through the proven tuple-literal path. Gate on a genuine string
+    // (char-element) operand: a bytes literal serialises to an identical
+    // Constant JSON, but tuple(b"ab") is (97, 98) in CPython — its operand type
+    // is an int array (not char), so it correctly falls through to the error.
+    const bool is_string_operand =
+      (et.is_array() || et.is_pointer()) && et.subtype() == char_type();
+    std::string str_val;
+    if (
+      is_string_operand &&
+      string_handler::extract_constant_string(arg, converter_, str_val))
+      return converter_.get_expr(
+        build_char_sequence_node("Tuple", str_val, call_));
     throw std::runtime_error(
       "tuple() is only supported over list and tuple arguments");
   }
@@ -1591,7 +1541,7 @@ bool function_call_expr::is_dict_method_call() const
 
   if (
     !python_dict_handler::is_value_returning_method(method_name) &&
-    method_name != "update")
+    method_name != "update" && method_name != "clear")
     return false;
 
   // A receiver that resolves to a non-dict object (e.g. a class instance whose
@@ -1701,6 +1651,9 @@ exprt function_call_expr::handle_dict_method() const
 
   if (method_name == "copy")
     return converter_.get_dict_handler()->handle_dict_copy(dict_expr, call_);
+
+  if (method_name == "clear")
+    return converter_.get_dict_handler()->handle_dict_clear(dict_expr, call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
@@ -1932,7 +1885,9 @@ bool function_call_expr::is_set_method_call() const
   if (
     method_name != "add" && method_name != "discard" &&
     method_name != "issubset" && method_name != "issuperset" &&
-    method_name != "update" && method_name != "symmetric_difference")
+    method_name != "isdisjoint" && method_name != "update" &&
+    method_name != "symmetric_difference" && method_name != "union" &&
+    method_name != "intersection" && method_name != "difference")
     return false;
 
   // set()/frozenset() constructor receivers (e.g. set(x).issuperset(y)) are
@@ -1958,12 +1913,15 @@ exprt function_call_expr::handle_set_method() const
   if (args.size() != 1)
     throw std::runtime_error(method_name + "() takes exactly one argument");
 
-  // set(<iterable>).issubset/issuperset(y): set() here only deduplicates,
-  // which cannot change a subset/superset verdict. Use the iterable directly
-  // and skip materializing the set — a guard like `set(xs).issuperset(...)`
-  // inside a loop would otherwise rebuild the set (one push plus one
-  // containment scan per element) on every iteration (#4805).
-  if (method_name == "issubset" || method_name == "issuperset")
+  // set(<iterable>).issubset/issuperset/isdisjoint(y): set() here only
+  // deduplicates, which cannot change a subset/superset/disjoint verdict. Use
+  // the iterable directly and skip materializing the set — a guard like
+  // `set(xs).issuperset(...)` inside a loop would otherwise rebuild the set
+  // (one push plus one containment scan per element) on every iteration
+  // (#4805).
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
   {
     const auto &receiver = call_["func"]["value"];
     if (
@@ -1998,8 +1956,8 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
-  // issubset / issuperset / update / symmetric_difference take another
-  // set/iterable.
+  // issubset / issuperset / isdisjoint / update / symmetric_difference take
+  // another set/iterable.
   exprt other = converter_.get_expr(args[0]);
   python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
@@ -2060,6 +2018,26 @@ bool function_call_expr::is_list_method_call() const
   {
     // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
     // not support arithmetic operators.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->get_type() == list_type;
+  }
+
+  // "clear" is shared between list and dict. Treat as list.clear() only when
+  // the receiver resolves to a list symbol; otherwise fall through to
+  // handle_dict_method(). Without this guard a dict receiver was claimed by
+  // the catch-all below and passed to __ESBMC_list_clear, which dereferenced
+  // the dict struct as a PyListObject and reported a spurious out-of-bounds
+  // (VERIFICATION FAILED).
+  if (method_name == "clear")
+  {
     if (
       call_["func"].contains("value") &&
       call_["func"]["value"].contains("_type") &&
@@ -2362,7 +2340,10 @@ function_call_expr::get_dispatch_table()
        const auto &obj = call_["func"]["value"];
        return (obj["_type"] == "Name" && obj["id"] == "int") ||
               (obj["_type"] == "Name" &&
-               type_handler_.get_var_type(obj["id"]) == "int");
+               type_handler_.get_var_type(obj["id"]) == "int") ||
+              // Literal receiver, e.g. (258).to_bytes(2, "big").
+              (obj["_type"] == "Constant" && obj.contains("value") &&
+               obj["value"].is_number_integer());
      },
      [this]() { return handle_int_to_bytes(); },
      "int.to_bytes()"},
@@ -2623,7 +2604,7 @@ function_call_expr::get_dispatch_table()
              return imag_part;
            fast_path = make_complex(real_part, imag_part);
          }
-         return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
+         return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
        }
 
        // asin/atan/asinh/atanh map the imaginary axis onto itself, so their
@@ -2661,7 +2642,7 @@ function_call_expr::get_dispatch_table()
          fast_guard = and2tc(fast_guard, imag_guard);
        }
 
-       return if_exprt(migrate_expr_back(fast_guard), fast_path, model_call);
+       return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
      },
      "cmath inverse pure-imag fast path"},
 
@@ -3508,8 +3489,8 @@ exprt function_call_expr::handle_general_function_call()
                   }
                   exprt old_i = vals[i];
                   exprt old_j = vals[j];
-                  vals[i] = materialize(if_exprt(cond, old_j, old_i));
-                  vals[j] = materialize(if_exprt(cond, old_i, old_j));
+                  vals[i] = materialize(build_if(cond, old_j, old_i));
+                  vals[j] = materialize(build_if(cond, old_i, old_j));
                 }
               }
 
@@ -3529,6 +3510,12 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
+  const bool is_numpy_model_call = [](const std::string &filename) {
+    std::string normalized = filename;
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    return boost::algorithm::ends_with(
+      normalized, std::string{"/models/numpy.py"});
+  }(function_id_.get_filename());
 
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
@@ -3571,8 +3558,9 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   if (
-    !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
-                          (func_name == "sum" && (n_args == 1 || n_args == 2))))
+    !is_user_imported && !is_numpy_model_call &&
+    ((is_sorted_min_max && n_args == 1) ||
+     (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
@@ -4080,7 +4068,46 @@ exprt function_call_expr::handle_general_function_call()
     // Self is the LHS
     else if (converter_.current_lhs)
     {
-      call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+      // Stage 1 object-model migration (#3067/#4773): when the LHS has been
+      // typed as a pointer-to-class reference, allocate the instance as a
+      // typed, non-expiring object and pass the pointer itself as `self`, so
+      // the object survives escaping its defining function. Otherwise keep the
+      // legacy in-place struct construction (self = &lhs). `__ESBMC_new_object`
+      // is intercepted in symex (symex_mem_inf): the LHS pointer type carries
+      // the class type, so the object is sized symbolically by the struct at
+      // symex time — robust to the class struct still gaining fields after this
+      // construction (which a byte-sized allocation cannot handle).
+      // If the lvalue is `object`/Any (a pointer to void/empty), the
+      // new_object interception cannot size the allocation — the pointee type
+      // has no width. Retype the lvalue (and its symbol) to the class being
+      // constructed; a `void*`/Any slot legitimately holds the resulting
+      // `Class*` pointer. Without this, `t: object = Box()` aborts in symex.
+      if (
+        converter_.current_lhs->type().is_pointer() &&
+        (converter_.current_lhs->type().subtype().id() == "empty" ||
+         converter_.current_lhs->type().subtype().id().empty()))
+      {
+        const typet class_ptr = gen_pointer_type(call.type());
+        converter_.current_lhs->type() = class_ptr;
+        if (converter_.current_lhs->is_symbol())
+          if (
+            symbolt *s = converter_.symbol_table().find_symbol(
+              converter_.current_lhs->identifier()))
+            s->set_type(class_ptr);
+      }
+      if (converter_.current_lhs->type().is_pointer())
+      {
+        const symbolt *new_obj_sym =
+          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+        assert(new_obj_sym && "__ESBMC_new_object model required");
+        code_function_callt alloc_call;
+        alloc_call.lhs() = *converter_.current_lhs;
+        alloc_call.function() = symbol_expr(*new_obj_sym);
+        converter_.add_instruction(alloc_call);
+        call.arguments().push_back(*converter_.current_lhs);
+      }
+      else
+        call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
     }
     else
@@ -4218,13 +4245,17 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(migrate_expr_back(gen_zero(migrate_type(t))));
       param_offset = 1;
 
-      // All methods for the int class without parameters acts solely on the encapsulated integer value.
-      // Therefore, we always pass the caller (obj) as a parameter in these functions.
-      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      // All methods for the int/float classes without parameters act solely
+      // on the encapsulated scalar value. Therefore, we always pass the caller
+      // (obj) as a parameter in these functions. For example, if x is an int
+      // instance, x.bit_length() call becomes bit_length(x); likewise a float
+      // instance's x.is_integer() becomes is_integer(x).
+      const std::string recv_type =
+        obj_symbol ? type_handler_.get_var_type(obj_symbol->name.as_string())
+                   : std::string();
       if (
-        obj_symbol &&
-        type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
-        call_["args"].empty())
+        obj_symbol && call_["args"].empty() &&
+        (recv_type == "int" || recv_type == "float"))
       {
         call.arguments().push_back(build_symbol(*obj_symbol));
       }
@@ -4287,17 +4318,19 @@ exprt function_call_expr::handle_general_function_call()
         temp_decl.location() = location;
         converter_.current_block->copy_to_operands(temp_decl);
 
-        // Assign the character to the first element
+        // Assign the character to the first element. V.3: build the index in
+        // IREP2 (resolved array-typed symbol source) — the byte-identical
+        // round-trip of index_exprt(temp_array, .., char_type()).
         exprt temp_array = build_symbol(temp_symbol);
         exprt first_element =
-          index_exprt(temp_array, from_integer(0, size_type()));
+          build_index(temp_array, from_integer(0, size_type()));
         code_assignt assign_char(first_element, arg);
         assign_char.location() = location;
         converter_.current_block->copy_to_operands(assign_char);
 
         // Assign null terminator to the second element
         exprt second_element =
-          index_exprt(temp_array, from_integer(1, size_type()));
+          build_index(temp_array, from_integer(1, size_type()));
         code_assignt assign_null(second_element, from_integer(0, char_type()));
         assign_null.location() = location;
         converter_.current_block->copy_to_operands(assign_null);
@@ -4378,8 +4411,18 @@ exprt function_call_expr::handle_general_function_call()
     }
 
     // Handle string literal constants
-    // Ensure they are proper null-terminated arrays
-    if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+    // Ensure they are proper null-terminated arrays.
+    // Guard: skip complex literals whose JSON "value" field is a string
+    // representation of the complex number (e.g. "0.5j") — get_expr already
+    // returned the correct complex struct via get_literal's annotation check.
+    // Overwriting it with a string literal here would produce an
+    // address-of-string argument ("got pointer, expected struct" crash).
+    const bool arg_is_complex_literal =
+      arg_node["_type"] == "Constant" &&
+      arg_node.value("esbmc_type_annotation", std::string()) == "complex";
+    if (
+      !arg_is_complex_literal && arg_node["_type"] == "Constant" &&
+      arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -4596,7 +4639,7 @@ exprt function_call_expr::handle_general_function_call()
       std::string var_type =
         type_handler_.get_var_type(obj_symbol->name.as_string());
 
-      if (var_type == "int")
+      if (var_type == "int" || var_type == "float")
         will_add_object = true;
     }
 

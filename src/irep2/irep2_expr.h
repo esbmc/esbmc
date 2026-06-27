@@ -447,9 +447,19 @@ public:
     // struct view at the SMT boundary (see struct_union_members), and
     // the clang frontend builds complex literals as struct-id exprt
     // with a complex type — accept that shape here.
+    //
+    // A symbol_id type is permitted ONLY as a transient pre-resolution state,
+    // the same V.1k "two-phase source invariant" the member2t/index2t asserts
+    // carry: the Python frontend stores class instances with a by-name
+    // symbol_type and resolves it lazily, so migrating a constant aggregate
+    // before the IREP2-native adjuster has followed the type would otherwise
+    // abort here. The adjuster re-establishes the strong invariant before symex;
+    // no frontend builds a constant_struct2t pre-adjust today, so this disjunct
+    // is staged enabling infra exercised by the --python-irep2-adjust path.
     assert(
       type->type_id == type2t::struct_id ||
-      type->type_id == type2t::complex_id);
+      type->type_id == type2t::complex_id ||
+      type->type_id == type2t::symbol_id);
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
