@@ -52,9 +52,17 @@ struct clang_c_lexert::LexerContext
   {
     lo.C17 = 1;
     lo.GNUMode = 1;
+    // CreateTargetInfo takes TargetOptions by reference since Clang 21; older
+    // releases (e.g. Clang 18) expect a const std::shared_ptr<TargetOptions>&.
+#if CLANG_VERSION_MAJOR >= 21
     clang::TargetOptions target_opts;
     target_opts.Triple = llvm::sys::getDefaultTargetTriple();
     target_info.reset(clang::TargetInfo::CreateTargetInfo(diags, target_opts));
+#else
+    auto target_opts = std::make_shared<clang::TargetOptions>();
+    target_opts->Triple = llvm::sys::getDefaultTargetTriple();
+    target_info.reset(clang::TargetInfo::CreateTargetInfo(diags, target_opts));
+#endif
   }
 };
 
