@@ -278,6 +278,41 @@ TEST_CASE(
   REQUIRE(is_symbol_type(to_member2t(out->get_value2()).source_value->type));
 }
 
+TEST_CASE(
+  "python_adjust B.2 adjust() skips legacy-valued symbols",
+  "[python-frontend][irep2][python-adjust]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  const type2tc intt = get_int_type(config.ansi_c.int_width);
+
+  contextt context;
+  add_type_symbol(context, "tag-Point", make_struct("tag-Point", "x", intt));
+
+  // A Python-mode symbol whose value is the *legacy* exprt form: the pass must
+  // leave it untouched. Forcing get_value2() would migrate sub-expressions the
+  // frontend may have left with unresolved tags (the lazy legacy/IREP2 split
+  // tolerates those holes only while nothing reads the IREP2 side), so the pass
+  // adjusts only IREP2-native values -- the converter's pre-adjust members.
+  const expr2tc body =
+    member2tc(intt, symbol2tc(symbol_type2tc("tag-Point"), "p"), "x");
+  symbolt symbol;
+  symbol.id = "py:main.py@F@uses_point_legacy";
+  symbol.name = "uses_point_legacy";
+  symbol.mode = "Python";
+  symbol.set_value(migrate_expr_back(body)); // legacy setter => not native
+  symbol.set_type(intt);
+  REQUIRE_FALSE(symbol.has_native_value2());
+  context.add(symbol);
+
+  // The legacy-valued symbol is never descended into: adjust() skips it before
+  // touching its IREP2 side, so the visit counter stays at zero.
+  test_adjust ta(context);
+  REQUIRE_FALSE(ta.adjust());
+  REQUIRE(ta.visited == 0);
+}
+
 // --- RV2 foundation: type-following equivalence ---------------------------
 //
 // B.3 resolves member/index sources via the converter's `name_space().follow()`
@@ -307,16 +342,21 @@ TEST_CASE(
   // struct-valued field (nested-attr chain)
   add_type_symbol(context, "tag-Inner", make_struct("tag-Inner", "x", intt));
   add_type_symbol(
-    context, "tag-Outer", make_struct("tag-Outer", "inner", symbol_type2tc("tag-Inner")));
+    context,
+    "tag-Outer",
+    make_struct("tag-Outer", "inner", symbol_type2tc("tag-Inner")));
   // self-referential (self_ref_nested_attr_chain): next: *Node
   add_type_symbol(
     context,
     "tag-Node",
-    make_struct("tag-Node", "next", pointer_type2tc(symbol_type2tc("tag-Node"))));
+    make_struct(
+      "tag-Node", "next", pointer_type2tc(symbol_type2tc("tag-Node"))));
   // pointer-to-class field (github_4117): b: *B
   add_type_symbol(context, "tag-B", make_struct("tag-B", "y", intt));
   add_type_symbol(
-    context, "tag-A", make_struct("tag-A", "b", pointer_type2tc(symbol_type2tc("tag-B"))));
+    context,
+    "tag-A",
+    make_struct("tag-A", "b", pointer_type2tc(symbol_type2tc("tag-B"))));
   // symbol→symbol chain: forces both follow implementations through the
   // multi-hop while-loop (the divergence-prone path this test guards).
   add_type_symbol(context, "tag-Alias", symbol_type2tc("tag-Point"));

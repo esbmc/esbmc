@@ -49,6 +49,17 @@ public:
   const type2tc &get_type2() const;
   const expr2tc &get_value2() const;
 
+  // True iff the IREP2 value is the authoritative form (written via the
+  // expr2tc setter), so get_value2() returns it directly without a lazy
+  // migration from the legacy exprt. Lets a pass honour the lazy split (see
+  // the class comment above): reading the IREP2 side of a legacy-valued symbol
+  // would force-migrate sub-expressions the frontend left with unresolved tags
+  // -- a latent hole the design tolerates only while nothing reads that side.
+  bool has_native_value2() const
+  {
+    return value2_valid_;
+  }
+
   // Type setters. Each writes one side and invalidates the other; the read
   // side derives lazily on first access (with the nil/empty-id case guarded
   // inside the readers).
