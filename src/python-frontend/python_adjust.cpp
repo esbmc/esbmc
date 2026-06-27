@@ -1,11 +1,62 @@
 #include <python-frontend/python_adjust.h>
 #include <irep2/irep2_utils.h>
 #include <util/message.h>
+#include <util/std_expr.h>
 
 python_adjust::python_adjust(contextt &_context)
   : context(_context), ns(_context)
 {
 }
+
+namespace
+{
+// Cheap legacy-exprt pre-scan, run before migrating a symbol value to IREP2.
+// The adjuster only acts on member/index nodes whose aggregate source is an
+// unresolved by-name `symbol` type (the V.1k transient pre-resolution state it
+// follows to a struct/union/array). A symbol whose legacy value carries no such
+// node has nothing to resolve, so migrating it is pure overhead.
+bool legacy_needs_adjust(const exprt &e)
+{
+  if (
+    (e.is_member() || e.is_index()) && !e.operands().empty() &&
+    e.op0().type().id() == typet::t_symbol)
+    return true;
+
+  forall_operands (it, e)
+    if (legacy_needs_adjust(*it))
+      return true;
+
+  return false;
+}
+
+// True if migrating @p e to IREP2 would violate a construction invariant. The
+// converter-emitted transient sources this pass targets are simple (a member2t/
+// index2t over a symbol_type2t symbol) and always migrate-safe. Model-library
+// bodies (e.g. the `all`/`from_bytes` builtins) are not — they embed shapes the
+// IREP2 constructors reject before this pass can resolve anything:
+//   - a constant aggregate literal still carrying a by-name `symbol` type
+//     (constant_struct2t/constant_union2t require a concrete struct/union);
+//   - `ptr[i]` indexing, where index2t rejects a pointer source (the legacy node
+//     is lowered to a dereference after the frontend, post-migrate).
+// Such bodies do not need this pass — the legacy path resolves them downstream —
+// so skipping them is sound and keeps the eager migration off the rocks.
+bool migrate_unsafe(const exprt &e)
+{
+  if (
+    (e.id() == typet::t_struct || e.id() == typet::t_union) &&
+    e.type().id() == typet::t_symbol)
+    return true;
+
+  if (e.is_index() && !e.operands().empty() && e.op0().type().is_pointer())
+    return true;
+
+  forall_operands (it, e)
+    if (migrate_unsafe(*it))
+      return true;
+
+  return false;
+}
+} // namespace
 
 bool python_adjust::adjust()
 {
@@ -26,6 +77,15 @@ bool python_adjust::adjust()
     // pre-adjust symbol_type2t member/index sources this pass resolves, so leave
     // the C operational-model bodies to the legacy path.
     if (symbol.mode != "Python")
+      continue;
+
+    // Skip symbols with nothing to resolve, and symbols whose value cannot be
+    // safely migrated (model-library bodies carrying tag-typed aggregates or
+    // pointer-indexing — see migrate_unsafe). The genuine targets this pass
+    // resolves are migrate-safe by construction; the rest are handled by the
+    // legacy path downstream.
+    const exprt &legacy_value = symbol.get_value();
+    if (!legacy_needs_adjust(legacy_value) || migrate_unsafe(legacy_value))
       continue;
 
     expr2tc value = symbol.get_value2();
