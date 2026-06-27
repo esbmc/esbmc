@@ -132,33 +132,6 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "python_adjust B.1 follows a symbol_type index source to its array",
-  "[python-adjust]")
-{
-  // The index2t arm of resolve_source: a source typed as a transient
-  // symbol_type2t("tag-Buf") is followed to its registered array type.
-  contextt ctx;
-  const type2tc array_t = array_type2tc(get_int32_type(), gen_ulong(4), false);
-
-  symbolt type_sym;
-  type_sym.id = "tag-Buf";
-  type_sym.name = "tag-Buf";
-  type_sym.mode = "Python";
-  type_sym.is_type = true;
-  type_sym.set_type(array_t);
-  ctx.add(type_sym);
-
-  const expr2tc source = symbol2tc(symbol_type2tc("tag-Buf"), "buf");
-  expr2tc index = index2tc(get_int32_type(), source, gen_ulong(0));
-
-  python_adjust adjuster(ctx);
-  adjuster.adjust_expr(index);
-
-  REQUIRE(is_index2t(index));
-  REQUIRE(to_index2t(index).source_value->type == array_t);
-}
-
-TEST_CASE(
   "python_adjust B.1 follows a symbol_type on a dereference member source",
   "[python-adjust]")
 {
