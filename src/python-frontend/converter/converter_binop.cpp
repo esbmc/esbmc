@@ -1870,23 +1870,30 @@ exprt python_converter::handle_string_binary_operations(
 
 namespace
 {
-// A legacy `p[i]` whose base is a *pointer* is sugar for `*(p+i)`;
-// clang_c_adjust::adjust_index rewrites it only later, so pre-adjust it is still
-// an `index` over a pointer source. migrate_expr lowers `index` straight to
-// index2t, which forbids a pointer source (debug assert in index2t) — it expects
-// the adjusted array/vector form. The flag-gated flip below runs during
-// conversion, i.e. before that adjust, and is reached even for dead
-// operational-model bodies (e.g. `int.from_bytes`' `bytes_data[i]`). Detect that
-// shape so such an operand keeps its legacy node and is migrated normally at
-// goto-convert, instead of asserting here.
-bool has_pointer_index(const exprt &e)
+// True if migrating @p e (or any sub-expression) to IREP2 would violate a
+// construction invariant — the build_* round-trip below migrates the whole
+// operand subtree, so an unsafe node anywhere under it aborts on an asserts-on
+// build. Two shapes are rejected (kept in sync with python_adjust.cpp's
+// migrate_unsafe):
+//   - `ptr[i]` indexing (e.g. the `bytes_data[sign_index]` read in the
+//     int.from_bytes model): index2t's source invariant admits only
+//     array/vector/symbol, not a pointer. Legacy keeps the index_exprt and
+//     lowers it to a dereference after the frontend.
+//   - a constant aggregate literal still carrying a by-name `symbol` type:
+//     constant_struct2t/constant_union2t require a concrete struct/union.
+// Such an operand is not part of the clean flip surface — keep the legacy node.
+bool migrate_unsafe_operand(const exprt &e)
 {
-  if (
-    e.id() == "index" && e.operands().size() == 2 &&
-    e.op0().type().id() == "pointer")
+  if (e.is_index() && e.operands().size() == 2 && e.op0().type().is_pointer())
     return true;
+
+  if (
+    (e.id() == typet::t_struct || e.id() == typet::t_union) &&
+    e.type().id() == typet::t_symbol)
+    return true;
+
   for (const exprt &op : e.operands())
-    if (has_pointer_index(op))
+    if (migrate_unsafe_operand(op))
       return true;
   return false;
 }
@@ -1898,18 +1905,15 @@ bool has_pointer_index(const exprt &e)
 //   - integer arith + bitwise: lhs == rhs == result, integer bitvector;
 //   - float arith:             lhs == rhs == result, floatbv (Div stays legacy);
 //   - integer comparisons:     lhs == rhs, integer bitvector (result is bool).
-// An operand still carrying a pre-adjust pointer index keeps its legacy node
-// (has_pointer_index): migrate_expr would assert building index2t over a pointer
-// source, so it is not (yet) part of the clean flip surface.
+// Operands carrying a migrate-unsafe subtree (see migrate_unsafe_operand) fall
+// through to the legacy node.
 exprt try_build_irep2_binop(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const typet &type)
 {
-  // Keep the legacy node when an operand still carries a pre-adjust pointer
-  // index: migrate_expr would assert building index2t over a pointer source.
-  if (has_pointer_index(lhs) || has_pointer_index(rhs))
+  if (migrate_unsafe_operand(lhs) || migrate_unsafe_operand(rhs))
     return nil_exprt();
 
   const bool same_int =
@@ -2073,8 +2077,8 @@ exprt python_converter::build_binary_expression(
   // V.1k (b) B.4: under --python-irep2-adjust, build the resolved-operand binary
   // op directly in IREP2 (round-tripped at the seam) instead of the legacy node.
   // try_build_irep2_binop returns nil for any op/type shape not (yet) flipped (or
-  // for a pointer-index operand, see has_pointer_index), in which case we keep
-  // the legacy node below. Default off ⇒ legacy, byte-identical.
+  // for a migrate-unsafe operand, see migrate_unsafe_operand), in which case we
+  // keep the legacy node below. Default off ⇒ legacy, byte-identical.
   if (config.options.get_bool_option("python-irep2-adjust"))
   {
     exprt flipped = try_build_irep2_binop(op, lhs, rhs, type);
