@@ -1752,12 +1752,28 @@ void python_converter::get_var_assign(
     // reference is bound (not value-copied into a struct local).
     if (cls.empty())
       cls = call_return_class(ast_node["value"]);
-    // A target explicitly annotated as a user class (`v: Cls = ...`) is an
-    // instance reference too. This covers RHS shapes the cases above miss —
-    // notably method calls `v: Cls = obj.method()` returning a class — so the
-    // result binds as a `Cls*` pointer instead of being value-copied into a
-    // struct slot (which mismatches the pointer the callee now returns).
-    if (cls.empty() && json_utils::is_class(lhs_type, *ast_json))
+    // A target *explicitly annotated* as a user class (`v: Cls = obj.method()`)
+    // is an instance reference too: bind it as `Cls*` so a migrated class
+    // return is not value-copied into a struct slot (which mismatches the
+    // pointer the callee now returns and trips value-set's make_member
+    // assertion). This is the only path covering an annotated *method*-call
+    // return — call_return_class above handles only plain `Name` function calls.
+    //
+    // Gate on the *resolved* annotation type via is_user_class_struct_type — the
+    // same predicate the funcdef return migration uses — not on the annotation
+    // *name* through json_utils::is_class: the latter also matches the built-in
+    // model classes `Tuple`/`List`/`int`, so `coord: Coordinate`
+    // (= `Tuple[int, int]`) would be mistyped as a pointer-to-tuple and fault on
+    // read. And require a *user-written* annotation: the annotator injects an
+    // inferred `annotation` on plain assignments, naming a class for an RHS that
+    // yields no instance — `_ = B() + B()` infers `B` though `__add__` returns
+    // an int, `b = create("bar")` infers an overload's `Bar` though the callee
+    // returns a value (#3057/#3091/#3286/#3921).
+    if (
+      cls.empty() && ast_node.contains("annotation") &&
+      !ast_node["annotation"].is_null() &&
+      !ast_node.value("_inferred_annotation", false) &&
+      is_user_class_struct_type(current_element_type))
       cls = lhs_type;
     if (!cls.empty())
     {
@@ -3428,6 +3444,39 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   return code;
 }
+exprt python_converter::box_value_on_heap(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  const symbolt *new_obj_sym =
+    symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
+  assert(new_obj_sym && "__ESBMC_new_object model required");
+
+  symbolt heap_symbol =
+    create_return_temp_variable(current_func_return_type_, location, "ctor_box");
+  symbol_table_.add(heap_symbol);
+  exprt heap_ptr = symbol_expr(heap_symbol);
+
+  code_declt heap_decl(heap_ptr);
+  heap_decl.location() = location;
+  target_block.copy_to_operands(heap_decl);
+
+  code_function_callt alloc_call;
+  alloc_call.lhs() = heap_ptr;
+  alloc_call.function() = symbol_expr(*new_obj_sym);
+  alloc_call.location() = location;
+  target_block.copy_to_operands(alloc_call);
+
+  exprt deref("dereference", current_func_return_type_.subtype());
+  deref.copy_to_operands(heap_ptr);
+  code_assignt store(deref, value);
+  store.location() = location;
+  target_block.copy_to_operands(store);
+
+  return heap_ptr;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -3546,9 +3595,18 @@ void python_converter::get_return_statements(
     // Add the function call statement to the block
     target_block.copy_to_operands(return_value);
 
-    // Wrap in Optional if the function returns Optional
     exprt ret_expr = temp_var_expr;
-    if (current_func_return_type_.is_struct())
+    // `return ClassName(...)` constructs into the stack-local value temp above;
+    // when the function returns a migrated class reference (Cls*, #3067), box
+    // that value onto a non-expiring heap object and return the pointer so the
+    // instance survives the frame (returning &temp would dangle). Mirrors the
+    // member/parameter return path's boxing in the else branch below.
+    if (
+      is_constructor && is_user_class_pointer(current_func_return_type_) &&
+      is_user_class_struct_type(temp_var_expr.type()))
+      ret_expr = box_value_on_heap(temp_var_expr, location, target_block);
+    // Wrap in Optional if the function returns Optional
+    else if (current_func_return_type_.is_struct())
     {
       const struct_typet &st = to_struct_type(current_func_return_type_);
       if (st.tag().as_string().starts_with("tag-Optional_"))
@@ -3612,34 +3670,7 @@ void python_converter::get_return_statements(
     if (
       is_user_class_pointer(current_func_return_type_) &&
       is_user_class_struct_type(return_value.type()))
-    {
-      const symbolt *new_obj_sym =
-        symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
-      assert(new_obj_sym && "__ESBMC_new_object model required");
-
-      symbolt heap_symbol = create_return_temp_variable(
-        current_func_return_type_, location, "ctor_box");
-      symbol_table_.add(heap_symbol);
-      exprt heap_ptr = symbol_expr(heap_symbol);
-
-      code_declt heap_decl(heap_ptr);
-      heap_decl.location() = location;
-      target_block.copy_to_operands(heap_decl);
-
-      code_function_callt alloc_call;
-      alloc_call.lhs() = heap_ptr;
-      alloc_call.function() = symbol_expr(*new_obj_sym);
-      alloc_call.location() = location;
-      target_block.copy_to_operands(alloc_call);
-
-      exprt deref("dereference", current_func_return_type_.subtype());
-      deref.copy_to_operands(heap_ptr);
-      code_assignt store(deref, return_value);
-      store.location() = location;
-      target_block.copy_to_operands(store);
-
-      return_value = heap_ptr;
-    }
+      return_value = box_value_on_heap(return_value, location, target_block);
 
     // Wrap return value in Optional if the function returns Optional
     if (current_func_return_type_.is_struct())

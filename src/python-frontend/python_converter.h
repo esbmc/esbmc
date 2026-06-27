@@ -376,6 +376,16 @@ private:
     const locationt &location,
     const std::string &func_name);
 
+  // Stage 1 object-model migration (#3067): copy a constructed class *value*
+  // onto a fresh non-expiring `__ESBMC_new_object` heap object and return the
+  // pointer to it, so a `-> Cls` function can hand back a `Cls*` reference that
+  // survives its frame. `current_func_return_type_` must be the migrated
+  // pointer type. Used by both return paths in get_return_statements.
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
