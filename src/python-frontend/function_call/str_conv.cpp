@@ -366,39 +366,63 @@ exprt function_call_expr::handle_int_to_bytes() const
                                    call_["func"]["value"]["_type"] == "Name" &&
                                    call_["func"]["value"]["id"] == "int";
 
-  // In the type-method form, the integer value is passed explicitly as the
-  // first argument. In the instance-method form, it comes from the receiver.
-  if (
-    args.size() < (is_type_method_call ? 3 : 2) ||
-    args.size() > (is_type_method_call ? 4 : 3))
-  {
-    throw std::runtime_error(
-      is_type_method_call ? "int.to_bytes() expects 3 or 4 positional "
-                            "arguments"
-                          : "int.to_bytes() expects 2 or 3 positional "
-                            "arguments");
-  }
-
+  // CPython signature: int.to_bytes(length=1, byteorder='big', *, signed=False).
+  // length and byteorder may be passed positionally or by keyword, and both
+  // default (since 3.11). Resolve each from its positional slot, then its
+  // keyword, then the default. The type-method form passes the integer value as
+  // the leading positional argument, shifting the length/byteorder slots by one.
+  const std::size_t value_offset = is_type_method_call ? 1 : 0;
   exprt value = is_type_method_call
                   ? converter_.get_expr(args[0])
                   : converter_.get_expr(call_["func"]["value"]);
-  const nlohmann::json &length_arg = args[is_type_method_call ? 1 : 0];
-  const nlohmann::json &byteorder_arg = args[is_type_method_call ? 2 : 1];
 
-  if (
-    !length_arg.contains("value") || !length_arg["value"].is_number_unsigned())
-    throw std::runtime_error(
-      "int.to_bytes() currently expects a constant unsigned length");
+  auto positional = [&](std::size_t i) -> const nlohmann::json * {
+    const std::size_t idx = value_offset + i;
+    return idx < args.size() ? &args[idx] : nullptr;
+  };
+  auto keyword = [&](const char *name) -> const nlohmann::json * {
+    if (call_.contains("keywords"))
+      for (const auto &kw : call_["keywords"])
+        if (kw.contains("arg") && kw["arg"].is_string() && kw["arg"] == name)
+          return &kw["value"];
+    return nullptr;
+  };
 
-  const std::size_t length = length_arg["value"].get<std::size_t>();
-
-  bool big_endian = true;
-  if (byteorder_arg.contains("value"))
+  const nlohmann::json *length_arg = positional(0);
+  if (!length_arg)
+    length_arg = keyword("length");
+  std::size_t length = 1; // CPython default
+  if (length_arg)
   {
-    if (byteorder_arg["value"].is_boolean())
-      big_endian = byteorder_arg["value"].get<bool>();
-    else if (byteorder_arg["value"].is_string())
-      big_endian = byteorder_arg["value"].get<std::string>() == "big";
+    if (
+      !length_arg->contains("value") ||
+      !(*length_arg)["value"].is_number_unsigned())
+      throw std::runtime_error(
+        "int.to_bytes() currently expects a constant unsigned length");
+    length = (*length_arg)["value"].get<std::size_t>();
+  }
+
+  const nlohmann::json *byteorder_arg = positional(1);
+  if (!byteorder_arg)
+    byteorder_arg = keyword("byteorder");
+  bool big_endian = true; // CPython default 'big' when byteorder is omitted
+  if (byteorder_arg)
+  {
+    // An explicit byteorder must be a constant; otherwise default it silently
+    // to big-endian would mis-fold a little-endian intent into a wrong byte
+    // array. Reject the non-constant form with a clean error instead, matching
+    // the constant-length guard above.
+    if (
+      byteorder_arg->contains("value") &&
+      (*byteorder_arg)["value"].is_boolean())
+      big_endian = (*byteorder_arg)["value"].get<bool>();
+    else if (
+      byteorder_arg->contains("value") &&
+      (*byteorder_arg)["value"].is_string())
+      big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
+    else
+      throw std::runtime_error(
+        "int.to_bytes() currently expects a constant byteorder");
   }
 
   const typet bytes_type = type_handler_.get_typet("bytes", length);

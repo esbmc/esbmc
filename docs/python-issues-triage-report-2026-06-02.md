@@ -1766,3 +1766,58 @@ Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=
 `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
 `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
 expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+## 45. 2026-06-28 re-validation (thirty-fifth sweep) & int.to_bytes() keyword/default arguments
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.to_bytes` keyword form — the `to_bytes` analogue of §40's `from_bytes`
+`byteorder=` keyword fix.
+
+### 45a. New isolated, soundly-fixable defect found & fixed
+**`int.to_bytes(2, byteorder="big")` and the no-arg default form errored — only the all-positional
+form was accepted.**
+
+CPython's signature is `int.to_bytes(length=1, byteorder='big', *, signed=False)` — both arguments may
+be passed by keyword and both default since 3.11. But `handle_int_to_bytes` (`function_call/str_conv.cpp`)
+read `length`/`byteorder` purely positionally and required the exact positional count, so
+`x.to_bytes(2, byteorder="big")`, `x.to_bytes(length=2, byteorder="big")`, and `x.to_bytes()` all hit
+`ERROR: int.to_bytes() expects 2 or 3 positional arguments`.
+
+**Fix** (`function_call/str_conv.cpp`): resolve `length` and `byteorder` each from its positional slot,
+else a keyword of that name, else the CPython default (`length=1`, `byteorder='big'`), via two small
+`positional()`/`keyword()` lookups. The `value_offset` shift keeps the unbound type-method form
+`int.to_bytes(x, ...)` correct (the integer value is the leading positional, so the length/byteorder
+slots start one later). The positional slot is consulted before the keyword, so a positional length is
+never shadowed. A code review also surfaced a **pre-existing** latent soundness gap — a *non-constant*
+byteorder silently defaulted to big-endian, mis-folding a little-endian intent into a wrong byte array
+— now closed: an explicit non-constant byteorder raises a clean error (matching the constant-length
+guard), never a wrong fold. `signed=` stays accepted-and-ignored, as the positional form already did.
+
+Like §34a/§40a this **restores a working feature**. New regression pair
+`regression/python/int_to_bytes_kwargs{,_fail}` (CORE) covering byteorder-keyword, both-keyword,
+little-endian keyword, length-only (default byteorder), the no-arg default form, the type-method form
+with keywords, and the unchanged positional form; the positive test is the liveness witness (errored
+pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh int_to_bytes`); the focused `regression/python/int_(to|from)_bytes*`
+ctest subset (10 tests) is 100% green — the existing `int_to_bytes` positional test still passes.
+Code-reviewed (0 critical/major; the one medium pre-existing non-constant-byteorder gap fixed before
+commit). Solver-agnostic (a frontend value-handler change, no SMT encoding).
+
+### 45b. Next candidate & everything else: unchanged disposition
+The `int.to_bytes`/`from_bytes` keyword/default surface is now complete. Remaining catalogued
+candidates: `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today);
+multi-byte (non-ASCII) UTF-8 encode/decode; `float.as_integer_ratio()` on a literal (returns a tuple —
+larger); the list-literal-receiver method gap (`[1,2].count(x)` — the list analogue of §42, a
+distinct list-dispatch path); and the §36a bytes-literal-argument lowering (deferred). The
+separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates
+stand: `zip()` (materialisation via `list(zip(...))` — a larger feature), symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2 — the constant-fold-vs-symbolic interaction makes it unsound, §19a). The §3
+design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), §43 (PR
+> #5669), and §44 (PR #5670) are in flight and not yet on `master`; this sweep is appended as §45.
+> When all land, the maintainer orders §39 → §40 → §41 → §42 → §43 → §44 → §45.
