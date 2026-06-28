@@ -226,20 +226,25 @@ std::string python_annotation<Json>::resolve_subscript_type(
   // List subscript
   if (base_type == "list")
   {
+    const bool is_slice =
+      subscript_node.contains("slice") &&
+      subscript_node["slice"].contains("_type") &&
+      subscript_node["slice"]["_type"] == "Slice";
+
     // First try to use the element_type from annotation (e.g., list[int])
     if (!element_type.empty())
-      return element_type;
+      return is_slice ? "list[" + element_type + "]" : element_type;
 
     // Try to infer from initialization if available
     if (var_node.contains("value") && !var_node["value"].is_null())
     {
       std::string inferred = get_list_subtype(var_node["value"]);
       if (!inferred.empty())
-        return inferred;
+        return is_slice ? "list[" + inferred + "]" : inferred;
     }
 
     // Last resort: return Any for unknown list element types
-    return "Any";
+    return is_slice ? "list" : "Any";
   }
 
   // String subscript: str[index] returns str
