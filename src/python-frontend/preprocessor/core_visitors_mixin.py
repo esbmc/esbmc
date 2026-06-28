@@ -799,13 +799,22 @@ class CoreVisitorsMixin:
 
     @staticmethod
     def _normalize_int_from_bytes_endianness(node):
-        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"
-                and len(node.args) > 1):
-            if isinstance(node.args[1], ast.Constant) and node.args[1].value == "big":
-                node.args[1] = ast.Constant(value=True)
-            else:
-                node.args[1] = ast.Constant(value=False)
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
+            return
+        # Positional byteorder: int.from_bytes(b, "big" | "little").
+        if len(node.args) > 1:
+            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
+            node.args[1] = ast.Constant(value=is_big)
+        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
+        # model names it "big_endian". Rename the keyword to the model's
+        # parameter and fold its string value to the bool the model expects.
+        for kw in node.keywords:
+            if kw.arg == "byteorder":
+                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
+                kw.arg = "big_endian"
+                kw.value = ast.Constant(value=is_big)
+        ast.fix_missing_locations(node)
 
     def _fill_missing_args_with_defaults(self, node, function_name, expected_args, keywords):
         missing_args = []
