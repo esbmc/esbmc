@@ -2079,3 +2079,65 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 57. 2026-06-28 re-validation (forty-seventh sweep) & constant string ordered comparison
+
+Re-test against current `master` (tip `39fceef565`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §56b string-comparison-via-variable lead and narrowed it to a clean, isolated
+**constant-fold soundness bug** in ordered string comparison.
+
+### 57a. New isolated, soundly-fixable defect found & fixed
+**`<=` / `>=` (and `<` / `>`) on constant strings were wrong whenever the answer differed from
+inequality.**
+
+`"abc" <= "abc"` verified as **False** (should be True), `"abd" <= "abc"` as **True** (should be
+False), `"abc" >= "abc"` as False, and so on — a soundness hole (false SUCCESSFUL/FAILED on any program
+branching on a constant string order). Root cause: `compare_constants_internal`
+(`converter/converter_compare.cpp`) computed `bool equal` and returned
+`gen_bool((op == "Eq") ? equal : !equal)` for every branch — so all four ordered operators collapsed to
+`!equal`. `==`/`!=` were correct, and `<`/`>` were correct only by coincidence (strict order of unequal
+operands equals `!equal`); `<=`/`>=` and the equal/greater cases were wrong.
+
+**Fix**: replace the `(op == "Eq") ? equal : !equal` folds with a real three-way comparison. A `resolve`
+helper maps an operator plus a comparison sign (`cmp < 0`/`== 0`/`> 0`) to the correct bool (and nil for
+non-comparison ops); a `char_value` helper reads a constant char's **unsigned** byte
+(`binary2integer(..., false)`) so high-bit characters (≥ 128) order by code point, matching Python and
+the lexicographic char-array/`strcmp` paths. Char-array strings now fold via `lhs_str.compare(rhs_str)`
+(lexicographic, prefix-correct: `"ab" < "abc"`); single-char and mixed char/array branches fold via the
+integer char values. The type-identifier-mismatch and multi-char-vs-char branches now fold only
+`Eq`/`NotEq` and return nil for ordered ops (falling through to the runtime `strcmp` path) instead of
+the old arbitrary `op == "NotEq"`.
+
+This is a **wrong-value/soundness fix**. New regression pair `str_ordered_compare{,_fail}` (CORE)
+covering all six operators across equal / less / greater / prefix / ASCII-case cases; the positive is
+the liveness witness (`"abc" <= "abc"` etc. were False pre-fix). The tests use constant operands only —
+variable-string ordering goes through runtime `strcmp` (orthogonal, unwinding-dependent) and is not part
+of this fold. Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh str_ordered`); a focused 117-test string-comparison/sort/min/max ctest
+subset shows no non-environmental regression (the only failures are pre-existing `--z3`/`--ir`
+solver-flagged tests on this Bitwuzla-only build). Code-reviewed (0 critical/high; the operator mapping,
+lexicographic/unsigned-byte correctness, Eq/NotEq preservation, and the safe terminating fall-through of
+the new nil paths all confirmed — the reviewer's unsigned-char-consistency caveat was applied as the
+`char_value` unsigned read). Solver-agnostic (a frontend constant fold).
+
+### 57b. Next candidates & everything else: unchanged disposition
+Priority follow-ups still standing from §56b: (i) `sorted`/`sort` with an arithmetic/function `key`
+(`key=lambda x: -x`, `key=len`) silently sorts by natural order (field-extraction keys work); (ii)
+`int`-literal-receiver methods (`(255).bit_length()`) unsupported though the variable form works
+(classification gap). The string-comparison-via-variable symptom from §56b is the *runtime-strcmp
+unwinding* concern, distinct from the constant fold fixed here.
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §47–§56 (PRs #5668, #5669, #5673–#5682) are in flight and not yet
+> on `master` (§39/§40/§41/§44/§45/§46 merged); this sweep is appended as §57.
