@@ -1766,3 +1766,59 @@ Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=
 `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
 `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
 expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+## 43. 2026-06-28 re-validation (thirty-third sweep) & float.is_integer() on a literal receiver
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the float analogue named in §42b — the literal-receiver dispatch gap for
+`float.is_integer()`, the float counterpart of §42's int methods.
+
+### 43a. New isolated, soundly-fixable defect found & fixed
+**`(2.0).is_integer()` (a float method on a *constant literal* receiver) reported a spurious
+`Unsupported function`.**
+
+`x.is_integer()` on a variable verifies (the float operational model `models/float.py` returns
+`x == int(x)`), but the bare-literal forms `(2.0).is_integer()`, `(2.5).is_integer()` reported
+`Unsupported function 'is_integer'` → `FAILED`. A literal receiver is not classified as a float
+instance (only a `Name`/`BinOp` receiver is), so the call never reached the model — the same
+class-resolution gap §34/§42 found for int methods.
+
+**Fix** (`function_call/expr.cpp`): add a `handle_float_is_integer_literal()` constant-fold,
+dispatched from `get_dispatch_table()` (next to the §34 `int.to_bytes` entry) when the method is
+`is_integer` and the receiver is a constant float literal or a unary `+`/`-` over one. It folds to a
+Python bool — `std::isfinite(d) && d == std::trunc(d)`, mirroring the float OM's `x == int(x)` and
+matching CPython for integral / fractional / zero / negative / inf / nan — built via
+`migrate_expr_back(gen_true_expr()/gen_false_expr())`, the same construction Python `True`/`False`
+literals use (so `is True`/`is False` identity comparisons work). The predicate matches only
+`Constant`/`UnaryOp(USub|UAdd)` float receivers, so the working `Name` (variable) path is untouched,
+int literals (`is_number_float()` is false for ints) and `~`/`not` operators are declined, and any
+argument is rejected by the handler's guard — no predicate-admits/handler-throws mismatch (the HIGH
+finding the sibling §42 PR fixed).
+
+Like §31a/§42a this **restores a working feature**. New regression pair
+`regression/python/float_is_integer_literal{,_fail}` (CORE) covering integral/fractional/zero/
+unary-signed literals, boolean context, and the unchanged variable form; the positive test is the
+liveness witness (`Unsupported`→`FAILED` pre-fix → `SUCCESSFUL` post-fix). Verified bit-for-bit
+against CPython; CPython sanity passes (`scripts/check_python_tests.sh float_is_integer_literal`); the
+focused `regression/python/(float_is_integer|is_integer|numeric_tower)` ctest subset (8 tests) is
+100% green — the existing `float_is_integer` variable-form tests still pass. Code-reviewed (0
+critical/major; predicate/handler consistency, bool typing, and the inf/nan guard all confirmed
+sound). Solver-agnostic (a frontend constant-fold, no SMT encoding).
+
+### 43b. Next candidate & everything else: unchanged disposition
+The int/float instance-method families now fold on literal receivers. Remaining catalogued
+candidates: `float.as_integer_ratio()` on a literal (returns a tuple — needs the tuple-construction
+path, larger); `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly
+today); multi-byte (non-ASCII) UTF-8 encode/decode; and the §36a bytes-literal-argument lowering
+(deferred). The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()` (materialisation via `list(zip(...))` — a larger feature),
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible),
+and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d
+questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`), §40 (PR #5663, `int.from_bytes`
+> `byteorder=`), §41 (PR #5665, `bytes.fromhex()`), and §42 (PR #5668, int methods on a literal
+> receiver) are in flight and not yet on `master`; this sweep is appended as §43. When all land, the
+> maintainer orders §39 → §40 → §41 → §42 → §43.
