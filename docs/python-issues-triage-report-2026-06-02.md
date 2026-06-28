@@ -2176,3 +2176,55 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 63. 2026-06-29 re-validation (fifty-third sweep) & round(x, negative ndigits)
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep stepped to a builtin: `round()` with a negative `ndigits`.
+
+### 63a. New isolated, soundly-fixable defect found & fixed
+**`round(1234, -2)` timed out (no verdict within the cap).**
+
+`round(x, n)` with a **negative** `ndigits` literal — `round(1234, -2)`, `round(1234, -1)`,
+`round(1234.5, -2)` — hung, while positive `ndigits` returned instantly. Root cause: `handle_round`
+(`function_call/builtins.cpp`) constant-folds `round(<numeric literal>, <int literal>)` by reading
+`ndigits_arg["value"]`, but a negative literal `-2` parses as `UnaryOp(USub, Constant(2))` — it has no
+`value` field — so the fold was skipped and the call fell through to the far more expensive symbolic
+round path, which times out for integer input.
+
+**Fix**: before the `is_number_integer()` check, detect `ndigits_arg` being a `UnaryOp`/`USub` and unwrap
+it to its operand, negating the extracted `n`. The rest of the fold (`round_to_ndigits_ties_even(val,
+n)`) already handles negative `n` (round to the nearest power of ten, ties to even). Guarded JSON access;
+a non-literal `round(x, -y)` still declines the fold and falls through.
+
+This is a **timeout→fast-correct-result fix**. New regression pair `round_negative_ndigits{,_fail}`
+(CORE) covering round-down/up, banker's rounding at the power-of-ten boundary (`1250 → 1200`,
+`1350 → 1400`), negative input, float input, and the unchanged positive/zero-`ndigits` forms; the
+positive is the liveness witness (it timed out pre-fix). Verified bit-for-bit against CPython; CPython
+sanity passes (`scripts/check_python_tests.sh round_negative`); the `regression/python/round` ctest
+subset is 100% green. Code-reviewed (0 critical/high; the `USub` unwrap producing `n = -2` not `2`, the
+guarded JSON access, the variable-`ndigits` fall-through, and the unchanged positive path all confirmed).
+A pre-existing note (unchanged here): the fold returns a float even for integer input — `round(int, n)`
+is int in CPython — but every comparison passes via `1200.0 == 1200`; left as-is. Solver-agnostic.
+
+### 63b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) `round(int, n)` returns float instead of int (above, low priority); (iii)
+`sorted`/`sort` with an arithmetic/function `key` silently sorts by natural order (§56b/§57b); (iv)
+`int`-literal-receiver methods (`(255).bit_length()`) unsupported though the variable form works (§57b);
+(v) `str.format` field width/spec (`"{:5}".format(...)` — the format mini-language, §46/§61b).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, `list.index()`-in-`try/except` (ValueError not catchable),
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers,
+§3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+> **Note on numbering.** §42/§43 and §49–§62 (PRs #5668, #5669, #5675–#5687, #5689) are in flight and not
+> yet on `master`; this sweep is appended as §63.
