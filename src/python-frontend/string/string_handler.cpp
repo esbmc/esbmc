@@ -2334,8 +2334,7 @@ exprt string_handler::handle_string_attribute_call(
   {
     auto extract_bytes_literal =
       [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
-      if (!(
-            n.is_object() && n.value("_type", std::string()) == "Call" &&
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
             n.contains("func") &&
             n["func"].value("_type", std::string()) == "Name" &&
             n["func"].value("id", std::string()) == "bytes" &&
@@ -2347,8 +2346,7 @@ exprt string_handler::handle_string_attribute_call(
       out.clear();
       for (const auto &e : n["args"][0]["elts"])
       {
-        if (!(
-              e.is_object() && e.value("_type", std::string()) == "Constant" &&
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
               e.contains("value") && e["value"].is_number_unsigned()))
           return false;
         const unsigned long long v = e["value"].get<unsigned long long>();
@@ -2373,7 +2371,8 @@ exprt string_handler::handle_string_attribute_call(
           a.contains("value") && a["value"].is_number_unsigned() &&
           a["value"].get<unsigned long long>() <= 255)
         {
-          sub_bytes.assign(1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
           have_sub = true;
         }
       }
