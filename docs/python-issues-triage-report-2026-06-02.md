@@ -1766,3 +1766,59 @@ Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=
 `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
 `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
 expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+## 39. 2026-06-28 re-validation (twenty-ninth sweep) & bytes.hex(sep, bytes_per_sep)
+
+Re-test against current `master` (tip `f343663bde`). KNOWNBUG classification unchanged — §3 holds.
+With PR #5585 (`bytes.hex()`) now on `master`, this sweep took its catalogued continuation — the
+optional separator arguments named in §32b/§33b/§37b/§38b — a clean direct task on `master` (no PR
+stacking).
+
+### 39a. New isolated, soundly-fixable defect found & fixed
+**`bytes.hex(sep[, bytes_per_sep])` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`bytes([1, 2, 3]).hex("-")` should give `"01-02-03"` and `bytes([0xb9, 0x01, 0x9e, 0xf3]).hex("_", 2)`
+should give `"b901_9ef3"` (CPython), but the §32 handler only fired for the no-argument form
+(`args.empty()`); any separator argument fell through to the unsupported-function `assert(false)` and
+reported `FAILED` — the wrong-verdict class.
+
+**Fix** (`string/string_handler.cpp`): widen the `bytes.hex` interception to `args.size() <= 2` and,
+when a constant one-character separator (and optional constant `bytes_per_sep`) is supplied, insert the
+separator between byte groups. CPython's grouping is reproduced exactly: a **positive** `bytes_per_sep`
+groups from the **right** (`(n - i) % g == 0`), a **negative** one from the **left** (`i % g == 0`),
+and `0` inserts none (default `1`). The separator string and grouping count are pulled with the
+existing `extract_constant_string` / `json_utils::extract_constant_integer` helpers (the latter already
+resolves `UnaryOp` negatives and variable receivers); a **non-constant** separator or count is not
+folded — `foldable` stays false and control falls through to the regular (unsupported) dispatch, never
+a wrong verdict. A `len(sep) != 1` constant is rejected with CPython's `ValueError` text; the separate
+"sep must be ASCII" branch is omitted as unreachable — a length-1 ESBMC string is necessarily ASCII
+because any single non-ASCII character is multi-byte in UTF-8, so the length check subsumes it. The
+method name is unchanged, so §32's `bytes.hex → str` type mapping still applies — no type-inference
+change. The grouping negate is done in the unsigned domain (`0ULL - (unsigned long long)group`) so
+`LLONG_MIN` cannot overflow (a code-review hardening; CPython rejects that literal anyway).
+
+Like §16a–§20a/§32a/§38a this **restores a working feature**. New regression pair
+`regression/python/bytes_hex_sep{,_fail}` (CORE) covering every-byte separation, right-grouping
+(`hex("_", 2)`), left-grouping (`hex(":", -2)`), zero-grouping, single-byte (no separator), the
+unchanged no-arg form, and `len`/index on the result; the positive test is the liveness witness
+(FAILED pre-fix → SUCCESSFUL post-fix, the **C-Live** witness for the added branch). Verified
+bit-for-bit against CPython (the grouping was additionally cross-checked against CPython over 20,000
+randomized trials in code review with zero mismatches); CPython sanity passes
+(`scripts/check_python_tests.sh bytes_hex`); the `regression/python/bytes_hex_sep{,_fail}` ctest pair
+is green and the focused `bytes_hex` set shows zero new failures (the pre-existing `--z3`/`--ir`/
+`--boolector` environmental set excepted, on this Bitwuzla-only build). Code-reviewed (1 low-severity
+signed-overflow finding fixed before commit; 0 remaining). Solver-agnostic (a frontend constant-fold,
+no SMT encoding).
+
+### 39b. Next candidate & everything else: unchanged disposition
+The bytes/encoding family's `hex` arm is now complete (`hex` / `hex(sep)` / `hex(sep, bytes_per_sep)`).
+Remaining catalogued candidates: the §36a bytes-**literal-argument** lowering (deferred — needs the
+frontend `get_literal` context fix); the `int.from_bytes(byteorder=)` keyword form (model parameter
+named `big_endian`); `str.maketrans`/`translate` dict-table and non-constant forms (fall through
+cleanly today); and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/
+strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/
+user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
