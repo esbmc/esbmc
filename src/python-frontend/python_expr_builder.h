@@ -102,6 +102,7 @@ exprt build_ashr(const exprt &a, const exprt &b, const typet &t);
 exprt build_ieee_add(const exprt &a, const exprt &b, const typet &t);
 exprt build_ieee_sub(const exprt &a, const exprt &b, const typet &t);
 exprt build_ieee_mul(const exprt &a, const exprt &b, const typet &t);
+exprt build_ieee_div(const exprt &a, const exprt &b, const typet &t);
 
 // Inequality `a != b` over same-typed operands. migrate lowers a legacy
 // "notequal" node to notequal2tc(migrate(a), migrate(b)), so this is the

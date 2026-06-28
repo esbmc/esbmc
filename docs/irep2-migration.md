@@ -3602,9 +3602,31 @@ following (`next: None`→`Node`), and dataclass field resolution.
   width shifts (the general case the consolidation note flagged) stay legacy. Sweep
   **0 divergences** over 65 class/arith + 70 broad; swap-probe (`shl`→`ashr`) made
   `(s.x << s.n) == 12` FAIL, confirming it fires. `regression/python/shift_member_adjust
-  {,_fail}` pin it. The integer/float arith, all comparisons, bitwise, and shift binop
-  surface is now flipped behind the flag; residue = float `Div`/modulo/floor-div trees,
-  non-integer/width-mismatched binops, W3 carriage, B.5.
+  {,_fail}` pin it.
+  **Float `Div` flipped (2026-06-26).** New `python_expr::build_ieee_div`; `Div` reaches
+  the helper's float group after `handle_float_division` has promoted both operands to
+  double and set the result type, so it is a resolved same-type single `ieee_div` node
+  (not a tree). Sweep **0 divergences** over 45 float-ish + 60 broad; swap-probe
+  (`ieee_div`→`ieee_mul`) made `d.x / d.y == 3.5` FAIL, confirming it fires.
+  `regression/python/floatdiv_member_adjust{,_fail}` pin it. The unary ops (`USub`/
+  `Invert`/`Not`/`UAdd`) are already IREP2 (unconditional V.3 work). The flipped binop
+  surface now spans integer+float arith incl. `Div`, all comparisons, bitwise, shifts;
+  residue = modulo/floor-div trees, non-integer/width-mismatched binops, W3, B.5.
+
+  #### B.4 binop flip surface — clean single-node families complete (2026-06-26)
+  The flag-gated single-node binop flip surface is **exhausted**: integer + float
+  `Add`/`Sub`/`Mult`, float `Div`, all six integer comparisons (`Lt`/`LtE`/`Gt`/`GtE`/
+  `Eq`/`NotEq`), bitwise `BitAnd`/`BitOr`/`BitXor`, and shifts `LShift`/`RShift` — all
+  routed through one consolidated `try_build_irep2_binop` helper, each Bitwuzla-validated
+  (0-divergence parity sweep) with a swap-probe confirming it fires, each with a
+  `*_member_adjust{,_fail}` regression pair. The unary ops (`USub`/`Invert`/`Not`/
+  `UAdd`) were already unconditional IREP2 (V.3). `regression/python/binop_irep2_adjust_all
+  {,_fail}` pins the whole surface in one program for CI (Z3 half).
+  **What remains is NOT clean single-node work:** integer/float modulo & floor-div are
+  **sign-correction trees** (multi-node, conditional — `python_math.cpp`
+  `handle_floor_division`/`handle_modulo`) that need building the IREP2 tree directly, a
+  larger rewrite warranting the dual-solver gate; then W3 attribute carriage (shared
+  C++) and B.5 (default-flip), both gated on landing this stack on `master` + a Z3 build.
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
