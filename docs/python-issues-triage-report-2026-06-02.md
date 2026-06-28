@@ -1766,3 +1766,61 @@ Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=
 `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
 `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
 expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+## 46. 2026-06-28 re-validation (thirty-sixth sweep) & builtin format()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep first probed the list-literal-receiver method gap (`[1,2].count(x)`) — the §45b list
+analogue of §42 — but found it is **not** a clean fix: routing the literal to `handle_list_count`
+needs the list-element metadata (`list_type_map`) materialised for the temp symbol, deeper
+list-machinery work (recorded as deferred, §46b). The sweep then took the builtin `format()`.
+
+### 46a. New isolated, soundly-fixable defect found & fixed
+**The builtin `format(value[, spec])` was unmodelled, producing a spurious `Unsupported function`.**
+
+`format(255, "x")` should give `"ff"` (CPython), but the builtin `format` had no handler and reported
+`Unsupported function 'format'` → `FAILED`. (The `str.format()` *method* was already handled.)
+
+**Fix** (`function_call/str_conv.cpp`): add `handle_format()`, dispatched from `get_dispatch_table()`
+when the call is a bare `Name` call to `format` (`_type == "Name"`, so the `str.format()` method —
+an `Attribute` call — is unaffected). It constant-folds a **literal** integer value with a bare
+presentation-type spec — `'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty/default — to the base string (no
+`0x`/`0o`/`0b` prefix, leading `-` for negatives, magnitude taken in the unsigned domain so
+`LLONG_MIN` is safe), and a constant string with the default spec to itself. Width/alignment/precision
+specs (e.g. `"08x"`), float values, and unsupported arity raise a clean error, never a wrong fold.
+
+A code review surfaced a **soundness hazard** that was fixed before commit: the value is folded only
+from a genuine literal node (`Constant`/`UnaryOp`), never a `Name` — `extract_constant_integer` would
+otherwise resolve a *reassigned* variable (`x = 255; x = 10`) to its stale constant, a potential false
+`SUCCESSFUL`. A variable argument is now left unsupported (a clean error, no worse than the prior
+fully-unsupported state).
+
+Like §39a this **restores a working feature**. New regression pair
+`regression/python/builtin_format{,_fail}` (CORE) covering the five base specs, the default spec,
+negatives, zero, a constant string, `len`/index composition, and the `str.format()` method coexistence;
+the positive test is the liveness witness (`Unsupported`→`FAILED` pre-fix → `SUCCESSFUL` post-fix).
+Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh builtin_format`); the focused
+`regression/python/(builtin_format|str_format|format|hex|ascii|oct|bin)` ctest subset (77 tests) is
+100% green — `str.format`/`hex`/`oct`/`bin`/`ascii` all unaffected. Code-reviewed (0 critical/major;
+the one soundness hazard — `Name`-resolved stale value — fixed before commit). Solver-agnostic (a
+frontend constant-fold, no SMT encoding).
+
+### 46b. Next candidate & everything else: unchanged disposition
+The builtin `format()` now folds the int base specs and the default. Remaining catalogued candidates:
+the **list-literal-receiver** method gap (`[1,2].count(x)`/`.index(x)` — `handle_list_count`/`index`
+need the literal's element metadata materialised for the `$literal_list$` temp, a list-machinery
+change, newly characterised this sweep); `format()` width/alignment specs (the format mini-language,
+larger); `str.maketrans`/`translate` dict-table; multi-byte (non-ASCII) UTF-8 encode/decode; and the
+§36a bytes-literal-argument lowering (deferred). The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()` (materialisation via
+`list(zip(...))` — a larger feature), symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), §43 (PR
+> #5669), §44 (PR #5670), and §45 (PR #5671) are in flight and not yet on `master`; this sweep is
+> appended as §46. When all land, the maintainer orders §39 → … → §46.
