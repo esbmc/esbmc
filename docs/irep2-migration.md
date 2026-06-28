@@ -3401,6 +3401,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
 > **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 (type-following) pinned, layer-2 gated at the flip (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3618,6 +3619,12 @@ flag, the change is byte-identical by default and safe to land; the flag-on path
 *not* RV2-discharged until the CI Z3 parity run is green. **Next task:** flip the first
 (BoolOp) F-P11 site behind the flag, confirm Bitwuzla parity locally, and let CI close
 the dual-solver gate before relying on flag-on.
+site flip via the existing corpus parity sweep
+(`scripts/irep2-migration/parity_sweep.sh`, deterministic verdict + matched-text,
+dual-solver Bitwuzla + Z3, asserts build) — RV-adj2 mandates verdict/text parity
+over a goto diff because of model nondeterminism. **Next task:** flip the first
+(BoolOp) F-P11 site to resolve-then-build via the service, then run the parity
+sweep over the 20-test fixture; commit only on dual-solver parity.
 
 **Risks (extend §V.4 / Part II §7).** *RV-adj1:* the new pass must reproduce
 `clang_cpp_adjust`'s dataclass/inference completion exactly — mitigate by reusing the
