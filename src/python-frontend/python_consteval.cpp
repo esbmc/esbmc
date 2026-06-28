@@ -1317,7 +1317,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           return PyConstValue::make_int(c);
         }
 
-        if (m == "find" || m == "rfind" || m == "index")
+        if (m == "find" || m == "rfind" || m == "index" || m == "rindex")
         {
           if (args_arr.empty() || args_arr.size() > 3)
             return std::nullopt;
@@ -1337,11 +1337,11 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           // the original string (offset by `start`).
           const std::string window = s.substr(
             static_cast<size_t>(start), static_cast<size_t>(end - start));
-          size_t pos =
-            (m == "rfind") ? window.rfind(needle) : window.find(needle);
+          size_t pos = (m == "rfind" || m == "rindex") ? window.rfind(needle)
+                                                        : window.find(needle);
           if (pos == std::string::npos)
           {
-            if (m == "index")
+            if (m == "index" || m == "rindex")
               return std::nullopt; // would raise ValueError — leave to BMC
             return PyConstValue::make_int(-1);
           }
