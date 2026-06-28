@@ -1453,3 +1453,86 @@ not re-touched — in flight as #5660.
 8. **#5565 residual** — `strcmp` argv-string pointer-validity only (the `fclose` half is discharged,
    §15.2); `ESBMC_SVCOMP`/`--sv-comp`-gated.
 9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+---
+
+## 16. Pass 12 — #1470 overflow-witness assignment verified emitted + pinned (2026-06-28)
+
+This pass picks the most concretely-verifiable close-out from §15's item 9 — **#1470** (*overflow
+witness contains no assignment*) — reproduces it in isolation, confirms the defect is resolved in
+mainline, and **pins the fixed behaviour with two regression tests**. The missing-assignment defect is
+directly observable by inspecting the emitted GraphML (an external validator is needed only for
+end-to-end replay, not to see whether the assignment node is present), so #1470 is verifiable here even
+though full UAutomizer/CPAchecker validation is not. Host: aarch64 macOS, ESBMC 8.3.0.
+
+### 16.1 #1470 — overflow witness now records the overflowing variable — VERIFIED FIXED
+
+**Status: defect resolved in mainline; pinned by two regression tests. Recommend closing #1470.**
+
+#1470 (`CWE190_..._int64_t_fscanf_add_08_bad`) reported that ESBMC found the `data + 1` arithmetic
+overflow but emitted a GraphML witness with **no assignment to `data`**, so UAutomizer/CPAchecker
+could not replay it. Reproduced in isolation with the issue's overflow shape (nondet `int64_t data;
+result = data + 1;`) under `--overflow-check --witness-output-graphml -`: the witness now contains
+
+```xml
+<edge ...>
+  <data key="startline">5</data>
+  <data key="assumption">data == 9223372036854775807;</data>
+</edge>
+```
+
+on the assignment edge — `data` is pinned to `INT64_MAX` (the unique value that overflows signed
+`+ 1`), exactly the assignment the issue said was missing. The missing-assignment defect is gone
+(addressed by the intervening witness work, e.g. #5038 / the #4611 GraphML cleanup).
+
+**Regression tests** (`regression/esbmc/`):
+* `github_1470_overflow_witness_fail` — nondet `int64_t` add ⇒ `VERIFICATION FAILED`, and the stdout
+  GraphML must contain `data == 9223372036854775807` (pins the assignment is emitted; the value is
+  deterministic so the regex is stable across solvers/architectures).
+* `github_1470_overflow_witness` — same shape but `__ESBMC_assume(data < INT64_MAX)` ⇒ `VERIFICATION
+  SUCCESSFUL` (pins the overflow check is value-sensitive, not a blanket alarm on nondet operands).
+
+Both pass.
+
+### 16.2 Residual noted — scanf numeric-specifier buffer-overflow check (separate from #1470)
+
+While reproducing, the literal `fscanf("%ld", &data)` form trips a **`buffer overflow on fscanf`**
+before the arithmetic overflow: the scanf format parser in `src/goto-programs/goto_check.cpp`
+(`fmt_idx`/`limits` loop, ~line 437) records every conversion whose `%` is not followed by a width
+digit as `"INF"` length — including numeric conversions like `%ld`/`%d`/`%lld`, which write a single
+scalar and cannot overflow a character buffer. Only `%s`/`%[...]` (string conversions) can. This is a
+**separate scanf-format-parsing precision matter**, not #1470's witness defect; flagged here for a
+future pass (a fix would restrict the INF-length treatment to string conversions, guarded so genuine
+unbounded `%s` reads still alarm). The #1470 witness behaviour is correctly exercised via a clean
+nondet input, which is the standard SV-COMP way to model `fscanf` input anyway.
+
+### 16.3 Pass-12 running report
+
+**Analysed.** #1470 reproduced, confirmed fixed, and pinned; scanf numeric-specifier INF-length
+residual noted.
+
+**PRs opened.** One: `[witness] regression-pin #1470 overflow-witness variable assignment` — two
+regression tests pinning that an arithmetic-overflow GraphML witness records the overflowing
+variable's assignment. No code change (the defect is already resolved); the tests guard against
+regression in the actively-changing witness emitter. Stacked on the #5660/#5662 (Pass-10/11) doc
+chain.
+
+**Duplicated work avoided.** #1470 not re-fixed — already resolved; this pass pins and recommends
+closure rather than re-patching. The scanf INF-length item is recorded, not speculatively patched
+(soundness-sensitive: must not weaken genuine `%s` overflow detection).
+
+**Remaining work (priority order, updated 2026-06-28, Pass 12).** As §15.4, with #1470 moved to
+"verified fixed, pending closure" and the scanf numeric-specifier residual added:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980 / #4438** — k-induction precision (termination recogniser + neural-network float CE);
+   full-set validation.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **scanf numeric-specifier INF-length** — restrict scanf overflow-check INF length to string
+   conversions only (§16.2); isolation-verifiable, soundness-sensitive.
+7. **#5142 residual** — no-overflow precision layer once parsed (x86 + full-benchmark-gated).
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+9. **#5565 residual** — `strcmp` argv-string pointer-validity (`fclose` half discharged, §15.2).
+10. **Close-outs:** #1470 (verified fixed §16.1, recommend closing), #4427; witness end-to-end
+    validation for #1471/#1492/#4611.
