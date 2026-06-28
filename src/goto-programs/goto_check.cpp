@@ -439,6 +439,16 @@ void goto_checkt::input_overflow_check(
     if (fmt[pos] == '%' && fmt[pos + 1] != '.')
     {
       pos++;
+
+      // "%%" is a literal percent (no conversion) and "%*..." suppresses
+      // assignment (it reads input but consumes no argument).  Neither maps to
+      // a call argument, so skip it -- pushing a phantom limit here would
+      // misalign limits[] against the argument list and abandon the whole check
+      // ("too few arguments for format specifiers"), silently dropping a real
+      // overflow on a later %s.
+      if (pos < fmt.length() && (fmt[pos] == '%' || fmt[pos] == '*'))
+        continue;
+
       while (std::isdigit(fmt[pos]))
       {
         tmp_str += fmt[pos];
