@@ -756,8 +756,7 @@ exprt function_call_expr::handle_format() const
     spec = args[1]["value"].get<std::string>();
   }
   if (spec.size() > 1)
-    throw std::runtime_error(
-      "format() spec '" + spec + "' is not supported");
+    throw std::runtime_error("format() spec '" + spec + "' is not supported");
   const char type = spec.empty() ? '\0' : spec[0];
 
   // Integer value with a base spec ('d'/''/'x'/'X'/'o'/'b'). A bool is an int
@@ -772,19 +771,20 @@ exprt function_call_expr::handle_format() const
   const bool is_literal_value =
     value_node_type == "Constant" || value_node_type == "UnaryOp";
   long long v = 0;
-  const bool is_int =
-    is_literal_value &&
-    json_utils::extract_constant_integer(
-      args[0], converter_.get_current_func_name(), converter_.get_ast_json(), v);
+  const bool is_int = is_literal_value && json_utils::extract_constant_integer(
+                                            args[0],
+                                            converter_.get_current_func_name(),
+                                            converter_.get_ast_json(),
+                                            v);
   if (
     is_int && (type == '\0' || type == 'd' || type == 'x' || type == 'X' ||
                type == 'o' || type == 'b'))
   {
     const bool negative = v < 0;
     // Magnitude in the unsigned domain so LLONG_MIN does not overflow.
-    unsigned long long mag =
-      negative ? 0ULL - static_cast<unsigned long long>(v)
-               : static_cast<unsigned long long>(v);
+    unsigned long long mag = negative
+                               ? 0ULL - static_cast<unsigned long long>(v)
+                               : static_cast<unsigned long long>(v);
 
     std::string digits;
     if (type == '\0' || type == 'd')
@@ -806,9 +806,7 @@ exprt function_call_expr::handle_format() const
 
   // format(value) / format(value, "") on a constant string is the string
   // itself (the default str.__format__ with an empty spec).
-  if (
-    type == '\0' && args[0].contains("value") &&
-    args[0]["value"].is_string())
+  if (type == '\0' && args[0].contains("value") && args[0]["value"].is_string())
     return converter_.get_string_builder().build_string_literal(
       args[0]["value"].get<std::string>());
 
