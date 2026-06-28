@@ -2553,6 +2553,9 @@ void python_converter::get_var_assign(
       if (rhs_identifier.empty() && rhs.id() == exprt::member)
       {
         const exprt &dict_sym = rhs.op0();
+        // get_component_name() returns an irep_idt by value; bind the string
+        // by value so it is copied out before that temporary is destroyed
+        // (GCC -Wdangling-reference under -Werror).
         const std::string component =
           to_member_expr(rhs).get_component_name().as_string();
         if (
@@ -2580,11 +2583,12 @@ void python_converter::get_var_assign(
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
     {
-#ifndef NDEBUG
-      const array_typet &thetype = lhs.type();
-      thetype.size().is_constant();
-      assert(thetype.size().is_nil());
-#endif
+      // Note: lhs.type() may be a fixed-size array (e.g. a string literal's
+      // char array) whose size is a constant, so no nil-size invariant holds
+      // here. The previous debug assert only passed because binding
+      // `const array_typet& = lhs.type()` constructed a throwaway array (with
+      // a nil size) rather than reinterpreting the real type; it asserted
+      // nothing meaningful and is removed.
       lhs_symbol->set_type(rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);

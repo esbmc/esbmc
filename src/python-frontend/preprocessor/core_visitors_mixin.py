@@ -1123,6 +1123,12 @@ class CoreVisitorsMixin:
             # means the name was rebound away from a dict; do not treat a stale
             # dict-literal binding as a dict.
             return False
+        # A bare ``dict``/``Dict`` annotation (e.g. ``def f(d: dict)``) carries
+        # no element types but still reliably marks the name as a dict. Mirror
+        # the subscript branch: an annotation for any other base type means the
+        # name is not a dict, regardless of a stale dict-literal binding.
+        if isinstance(ann, ast.Name):
+            return ann.id in ("dict", "Dict")
         if name in self.dict_literal_vars:
             return True
         # An unannotated parameter recovered as a dict by structural inference
