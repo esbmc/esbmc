@@ -964,9 +964,8 @@ exprt function_call_expr::handle_int_literal_method() const
   {
     // bit_length/bit_count operate on the magnitude (CPython ignores the sign).
     // Negate in the unsigned domain so LLONG_MIN does not overflow.
-    unsigned long long mag = v < 0
-                               ? 0ULL - static_cast<unsigned long long>(v)
-                               : static_cast<unsigned long long>(v);
+    unsigned long long mag = v < 0 ? 0ULL - static_cast<unsigned long long>(v)
+                                   : static_cast<unsigned long long>(v);
     result = 0;
     if (method == "bit_length")
       for (; mag != 0; mag >>= 1)
@@ -2412,14 +2411,14 @@ function_call_expr::get_dispatch_table()
        const auto &obj = call_["func"]["value"];
        if (obj["_type"] == "Constant")
          return fits_int64(obj);
-       if (obj["_type"] == "UnaryOp" && obj.contains("op") &&
-           obj.contains("operand"))
+       if (
+         obj["_type"] == "UnaryOp" && obj.contains("op") &&
+         obj.contains("operand"))
        {
          const auto &op = obj["op"];
          const bool is_sign =
-           (op.is_object() &&
-            (op.value("_type", "") == "USub" ||
-             op.value("_type", "") == "UAdd")) ||
+           (op.is_object() && (op.value("_type", "") == "USub" ||
+                               op.value("_type", "") == "UAdd")) ||
            (op.is_string() && (op == "USub" || op == "UAdd"));
          return is_sign && fits_int64(obj["operand"]);
        }
