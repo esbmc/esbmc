@@ -1874,3 +1874,58 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 53. 2026-06-28 re-validation (forty-third sweep) & divmod() tuple-sort crash
+
+Re-test against current `master` (tip `ff63b29e57`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the `divmod`-to-variable tuple-sort crash characterised in §52b.
+
+### 53a. New isolated, soundly-fixable defect found & fixed
+**`x = divmod(a, b); x == (q, r)` crashed ESBMC with a tuple-sort assertion.**
+
+`divmod` returns a 2-tuple; storing it in a variable and comparing to a tuple literal aborted with
+`Assertion failed: sort->get_tuple_type() == other->sort->get_tuple_type()`
+(`smt_tuple_node_ast.cpp`). Root cause: `handle_divmod` built its result tuple struct with a
+**hard-coded** tag `"tag-tuple_divmod"`, whereas a tuple literal `(q, r)` gets a **content-based** tag
+from `tuple_handler::build_tuple_tag` (`"tag-tuple_<elemtype>_<elemtype>"`). The two tuples therefore
+had different SMT sorts, and the equality comparison tripped the sort assertion. (The inline form
+`divmod(a, b) == (q, r)` and the unpack form `q, r = divmod(...)` did not crash — only the
+store-then-compare path reached the cross-sort tuple EQ.)
+
+**Fix** (`python_math.cpp`): replace all three manual tuple-struct constructions in `handle_divmod`
+(the float-constant, int-constant, and symbolic paths) with
+`converter.get_tuple_handler().create_tuple_struct_type({result_type, result_type})` — the same shared
+builder a tuple literal uses, which sets the content-based tag, the `element_0`/`element_1` components,
+and the python-aggregate-kind. The divmod result is now sort-compatible with a literal of the same
+element types (the elements already used `result_type`, which for the int path is the dividend's int
+type — the same type an int literal gets), so the comparison no longer mismatches sorts. A net
+de-duplication (−25 lines).
+
+This is a **crash→correct-result** fix (§5-item-5 class, resolved). New regression pair
+`regression/python/divmod_tuple_eq{,_fail}` (CORE) covering store-then-compare, negative and float
+divmod, and the unchanged index / unpack / inline forms; the positive test is the liveness witness —
+confirmed to **abort with the tuple-sort assertion pre-fix** and verify SUCCESSFUL post-fix (the durable
+crash regression). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh divmod`); the `regression/python/divmod` (17) and
+`regression/python/tuple` (38) ctest subsets are 100% green — `divmod` indexing/unpacking and all tuple
+behaviour unchanged. Code-review was started; the change is a minimal drop-in (only the struct tag
+changes, to the content-based one the literal uses; `create_tuple_struct_type` sets the identical
+components/kind), empirically confirmed across the float/int/symbolic paths. Solver-agnostic (a frontend
+struct-type change, no SMT-encoding change beyond removing the malformed sort).
+
+### 53b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: `list.index(x, start[, end])` position arguments (unsupported, §52b);
+the set/list-literal-receiver method gap (§46b/§51a); `frozenset` (unsupported AST type); `dict |` PEP
+584 union (explicitly unsupported); variadic `math.hypot` (float-precision, §51b); the bytes-returning
+methods (receiver-aware return-type inference, §49b); the symbolic bytes affix/search methods (§47b);
+`format()`/f-string width specs; `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 and §42–§52 (PRs #5661, #5668–#5678) are in flight and not yet on `master`
+> (§40/§41 merged); this sweep is appended as §53.
