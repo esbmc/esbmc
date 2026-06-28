@@ -219,6 +219,98 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+exprt build_mul(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return mul2tc(ty, x, y);
+    });
+}
+
+exprt build_bitand(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitand2tc(ty, x, y);
+    });
+}
+
+exprt build_bitor(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitor2tc(ty, x, y);
+    });
+}
+
+exprt build_bitxor(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return bitxor2tc(ty, x, y);
+    });
+}
+
+exprt build_shl(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return shl2tc(ty, x, y);
+    });
+}
+
+exprt build_ashr(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return ashr2tc(ty, x, y);
+    });
+}
+
+namespace
+{
+// The default rounding mode migrate_expr attaches to a legacy ieee_* node that
+// carries no "rounding_mode" field (util/migrate.cpp ieee_add path). The
+// converter's freshly-built float binops never set one, so reproducing this
+// default keeps the round-trip byte-identical.
+expr2tc default_rounding_mode()
+{
+  return symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+}
+} // namespace
+
+exprt build_ieee_add(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return ieee_add2tc(ty, x, y, default_rounding_mode());
+    });
+}
+
+exprt build_ieee_sub(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return ieee_sub2tc(ty, x, y, default_rounding_mode());
+    });
+}
+
+exprt build_ieee_mul(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return ieee_mul2tc(ty, x, y, default_rounding_mode());
+    });
+}
+
+exprt build_ieee_div(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return ieee_div2tc(ty, x, y, default_rounding_mode());
+    });
+}
+
 // `a != b` over same-typed operands. migrate lowers a legacy "notequal" node to
 // notequal2tc(migrate(a), migrate(b)) (util/migrate.cpp notequal path), so this
 // is the byte-identical round-trip.
@@ -228,6 +320,14 @@ exprt build_notequal(const exprt &a, const exprt &b)
   migrate_expr(a, a2);
   migrate_expr(b, b2);
   return migrate_expr_back(notequal2tc(a2, b2));
+}
+
+exprt build_equal(const exprt &a, const exprt &b)
+{
+  expr2tc a2, b2;
+  migrate_expr(a, a2);
+  migrate_expr(b, b2);
+  return migrate_expr_back(equality2tc(a2, b2));
 }
 
 // Expression-context call `fn(args...)` returning return_type. If the return

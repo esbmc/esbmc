@@ -83,10 +83,36 @@ exprt build_add(const exprt &a, const exprt &b, const typet &t);
 // `a - b : t` over same-width operands (sub2t asserts width consistency).
 exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 
+// `a * b : t` over same-width operands (mul2t asserts width consistency).
+exprt build_mul(const exprt &a, const exprt &b, const typet &t);
+
+// `a & b` / `a | b` / `a ^ b : t` over same-width integer operands.
+exprt build_bitand(const exprt &a, const exprt &b, const typet &t);
+exprt build_bitor(const exprt &a, const exprt &b, const typet &t);
+exprt build_bitxor(const exprt &a, const exprt &b, const typet &t);
+
+// `a << b` (shl2t) / `a >> b` arithmetic (ashr2t) : t. The Python frontend maps
+// RShift to ashr unconditionally; both lower over the migrated operands.
+exprt build_shl(const exprt &a, const exprt &b, const typet &t);
+exprt build_ashr(const exprt &a, const exprt &b, const typet &t);
+
+// Float `a + b`/`a - b`/`a * b : t` over same-floatbv operands, using the
+// default __ESBMC_rounding_mode (matching migrate of a legacy ieee_* node with
+// no rounding_mode field). ieee_*2t assert operand-width consistency.
+exprt build_ieee_add(const exprt &a, const exprt &b, const typet &t);
+exprt build_ieee_sub(const exprt &a, const exprt &b, const typet &t);
+exprt build_ieee_mul(const exprt &a, const exprt &b, const typet &t);
+exprt build_ieee_div(const exprt &a, const exprt &b, const typet &t);
+
 // Inequality `a != b` over same-typed operands. migrate lowers a legacy
 // "notequal" node to notequal2tc(migrate(a), migrate(b)), so this is the
 // byte-identical round-trip.
 exprt build_notequal(const exprt &a, const exprt &b);
+
+// Equality `a == b` over same-typed operands. migrate lowers a legacy "="
+// node to equality2tc(migrate(a), migrate(b)), so this is the byte-identical
+// round-trip.
+exprt build_equal(const exprt &a, const exprt &b);
 
 // Expression-context call `fn(args...) : return_type`, fn a function symbol.
 exprt build_call_expr(

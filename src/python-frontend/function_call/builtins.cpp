@@ -18,6 +18,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/python_types.h>
@@ -367,6 +368,24 @@ exprt function_call_expr::handle_isinstance() const
 
       // For pointer types, check if it's null
       exprt null_ptr = gen_zero(obj_expr.type());
+
+      // V.1k (b) B.4: under --python-irep2-adjust, build the `obj == NULL`
+      // null-check via the IREP2 resolve-then-build round-trip. The operand is
+      // already resolved here (probe over the isinstance/Optional corpus is
+      // clean), so migrate_expr does not hit the F-P11 assert. Default off ⇒ the
+      // legacy node below, byte-identical. See docs/irep2-migration.md.
+      if (config.options.get_bool_option("python-irep2-adjust"))
+      {
+        const locationt operand_loc = obj_expr.location();
+        expr2tc o2, n2;
+        migrate_expr(obj_expr, o2);
+        migrate_expr(null_ptr, n2);
+        exprt eq = migrate_expr_back(equality2tc(o2, n2));
+        if (eq.operands().size() == 2 && operand_loc.is_not_nil())
+          eq.op0().location() = operand_loc;
+        return eq;
+      }
+
       exprt equality("=", typet("bool"));
       equality.copy_to_operands(obj_expr);
       equality.move_to_operands(null_ptr);
