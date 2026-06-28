@@ -1871,10 +1871,10 @@ exprt python_converter::handle_string_binary_operations(
 namespace
 {
 // True if migrating @p e (or any sub-expression) to IREP2 would violate a
-// construction invariant — the python_expr::build_* round-trip below migrates
-// the whole operand subtree, so an unsafe node anywhere under it aborts on an
-// asserts-on build. Two shapes are rejected (kept in sync with
-// python_adjust.cpp's migrate_unsafe):
+// construction invariant — the build_* round-trip below migrates the whole
+// operand subtree, so an unsafe node anywhere under it aborts on an asserts-on
+// build. Two shapes are rejected (kept in sync with python_adjust.cpp's
+// migrate_unsafe):
 //   - `ptr[i]` indexing (e.g. the `bytes_data[sign_index]` read in the
 //     int.from_bytes model): index2t's source invariant admits only
 //     array/vector/symbol, not a pointer. Legacy keeps the index_exprt and
@@ -1896,6 +1896,86 @@ bool migrate_unsafe_operand(const exprt &e)
     if (migrate_unsafe_operand(op))
       return true;
   return false;
+}
+
+// V.1k (b) B.4: the IREP2 resolve-then-build flip for a binary op, shared by all
+// flipped families. Returns the round-tripped IREP2 node, or nil if the op/type
+// shape is not (yet) flipped — in which case the caller keeps the legacy node.
+// Three guard groups, each discharging its builders' operand-consistency assert:
+//   - integer arith + bitwise: lhs == rhs == result, integer bitvector;
+//   - float arith:             lhs == rhs == result, floatbv (Div stays legacy);
+//   - integer comparisons:     lhs == rhs, integer bitvector (result is bool).
+// Operands carrying a migrate-unsafe subtree (see migrate_unsafe_operand) fall
+// through to the legacy node.
+exprt try_build_irep2_binop(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  if (migrate_unsafe_operand(lhs) || migrate_unsafe_operand(rhs))
+    return nil_exprt();
+
+  const bool same_int =
+    lhs.type() == rhs.type() &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv());
+
+  if (same_int && lhs.type() == type)
+  {
+    if (op == "Add")
+      return python_expr::build_add(lhs, rhs, type);
+    if (op == "Sub")
+      return python_expr::build_sub(lhs, rhs, type);
+    if (op == "Mult")
+      return python_expr::build_mul(lhs, rhs, type);
+    if (op == "BitAnd")
+      return python_expr::build_bitand(lhs, rhs, type);
+    if (op == "BitOr")
+      return python_expr::build_bitor(lhs, rhs, type);
+    if (op == "BitXor")
+      return python_expr::build_bitxor(lhs, rhs, type);
+    // Shifts kept separate from the arith/bitwise list above only for clarity:
+    // shift operands need not share width in general, but this group's
+    // lhs==rhs==type guard restricts the flip to the equal-width case shl2t/
+    // ashr2t accept; mismatched-width shifts fall through to the legacy node.
+    if (op == "LShift")
+      return python_expr::build_shl(lhs, rhs, type);
+    if (op == "RShift")
+      return python_expr::build_ashr(lhs, rhs, type);
+  }
+
+  if (type.is_floatbv() && lhs.type() == type && rhs.type() == type)
+  {
+    if (op == "Add")
+      return python_expr::build_ieee_add(lhs, rhs, type);
+    if (op == "Sub")
+      return python_expr::build_ieee_sub(lhs, rhs, type);
+    if (op == "Mult")
+      return python_expr::build_ieee_mul(lhs, rhs, type);
+    // Div: handle_float_division (called before this helper) has already
+    // promoted both operands to double and set the result type, so it reaches
+    // here as a resolved same-type float op.
+    if (op == "Div" || op == "div")
+      return python_expr::build_ieee_div(lhs, rhs, type);
+  }
+
+  if (same_int)
+  {
+    if (op == "Lt")
+      return python_expr::build_less_than(lhs, rhs);
+    if (op == "LtE")
+      return python_expr::build_less_equal(lhs, rhs);
+    if (op == "Gt")
+      return python_expr::build_greater_than(lhs, rhs);
+    if (op == "GtE")
+      return python_expr::build_greater_equal(lhs, rhs);
+    if (op == "Eq")
+      return python_expr::build_equal(lhs, rhs);
+    if (op == "NotEq")
+      return python_expr::build_notequal(lhs, rhs);
+  }
+
+  return nil_exprt();
 }
 } // namespace
 
@@ -1999,47 +2079,19 @@ exprt python_converter::build_binary_expression(
   if (op == "Div" || op == "div")
     math_handler_.handle_float_division(lhs, rhs, bin_expr);
 
-  // V.1k (b) B.4: under --python-irep2-adjust, build same-type integer Add/Sub
-  // via the IREP2 resolve-then-build round-trip (python_expr::build_add/sub).
-  // Guarded on exact type match (lhs==rhs==result, integer bitvector) so
-  // add2t/sub2t's width-consistency assert holds; every width-mismatched or
-  // float/other case falls through to the legacy node below, byte-identical.
-  // The operands reaching here are already resolved (B.4 triage: member
-  // arithmetic migrates without the F-P11 assert). Default off ⇒ legacy.
-  if (
-    config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Add" || op == "Sub" || op == "Mult") &&
-    (type.is_signedbv() || type.is_unsignedbv()) && lhs.type() == type &&
-    rhs.type() == type && !migrate_unsafe_operand(lhs) &&
-    !migrate_unsafe_operand(rhs))
+  // V.1k (b) B.4: under --python-irep2-adjust, build the resolved-operand binary
+  // op directly in IREP2 (round-tripped at the seam) instead of the legacy node.
+  // try_build_irep2_binop returns nil for any op/type shape not (yet) flipped (or
+  // for a migrate-unsafe operand, see migrate_unsafe_operand), in which case we
+  // keep the legacy node below. Default off ⇒ legacy, byte-identical.
+  if (config.options.get_bool_option("python-irep2-adjust"))
   {
-    exprt result = (op == "Add")   ? python_expr::build_add(lhs, rhs, type)
-                   : (op == "Sub") ? python_expr::build_sub(lhs, rhs, type)
-                                   : python_expr::build_mul(lhs, rhs, type);
-    result.location() = bin_expr.location();
-    return result;
-  }
-
-  // V.1k (b) B.4: same idiom for the integer comparisons. The result is bool but
-  // the operands carry their own type; lessthan2t / equality2t etc. assert
-  // operand type/width consistency, so the guard requires same-type integer-
-  // bitvector operands. Float and width-mismatched comparisons stay legacy.
-  if (
-    config.options.get_bool_option("python-irep2-adjust") &&
-    (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE" || op == "Eq" ||
-     op == "NotEq") &&
-    lhs.type() == rhs.type() &&
-    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
-    !migrate_unsafe_operand(lhs) && !migrate_unsafe_operand(rhs))
-  {
-    exprt result = (op == "Lt")    ? python_expr::build_less_than(lhs, rhs)
-                   : (op == "LtE") ? python_expr::build_less_equal(lhs, rhs)
-                   : (op == "Gt")  ? python_expr::build_greater_than(lhs, rhs)
-                   : (op == "GtE") ? python_expr::build_greater_equal(lhs, rhs)
-                   : (op == "Eq")  ? python_expr::build_equal(lhs, rhs)
-                                   : python_expr::build_notequal(lhs, rhs);
-    result.location() = bin_expr.location();
-    return result;
+    exprt flipped = try_build_irep2_binop(op, lhs, rhs, type);
+    if (flipped.is_not_nil())
+    {
+      flipped.location() = bin_expr.location();
+      return flipped;
+    }
   }
 
   // Add operands
