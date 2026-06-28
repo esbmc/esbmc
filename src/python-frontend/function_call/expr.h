@@ -117,6 +117,11 @@ private:
   exprt build_constant_from_arg() const;
 
   /*
+   * Folds bytes.fromhex("..") over a constant hex string into a byte array.
+   */
+  exprt handle_bytes_fromhex() const;
+
+  /*
    * Sets the function_type_ attribute based on the call information.
    */
   void get_function_type();
