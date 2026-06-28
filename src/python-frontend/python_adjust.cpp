@@ -1,5 +1,6 @@
 #include <python-frontend/python_adjust.h>
 #include <irep2/irep2_utils.h>
+#include <util/message.h>
 
 python_adjust::python_adjust(contextt &_context)
   : context(_context), ns(_context)
@@ -14,6 +15,7 @@ bool python_adjust::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  bool error = false;
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
@@ -32,9 +34,22 @@ bool python_adjust::adjust()
 
     adjust_expr(value);
     symbol.set_value(value);
+
+    // Post-adjust strong invariant (V.1k B.4): re-enforce that no member/index
+    // source survived as an unresolved symbol_type2t. The construction asserts
+    // permit that source only as the transient pre-resolution state this pass
+    // discharges; a survivor (e.g. an unregistered tag) is an internal error.
+    if (has_unresolved_source(value))
+    {
+      log_error(
+        "python_adjust: symbol `{}' retains an unresolved member/index source "
+        "after adjust (V.1k post-adjust invariant violated)",
+        symbol.id.as_string());
+      error = true;
+    }
   }
 
-  return false;
+  return error;
 }
 
 void python_adjust::adjust_expr(expr2tc &expr)
@@ -80,4 +95,22 @@ bool python_adjust::resolve_aggregate_source(expr2tc &source) const
 
   source = source->with_type(ns.follow(source->type));
   return true;
+}
+
+bool python_adjust::has_unresolved_source(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_member2t(expr) && is_symbol_type(to_member2t(expr).source_value->type))
+    return true;
+  if (is_index2t(expr) && is_symbol_type(to_index2t(expr).source_value->type))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (has_unresolved_source(e))
+      found = true;
+  });
+  return found;
 }

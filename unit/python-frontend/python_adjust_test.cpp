@@ -278,6 +278,32 @@ TEST_CASE(
   REQUIRE(is_symbol_type(to_member2t(out->get_value2()).source_value->type));
 }
 
+TEST_CASE(
+  "python_adjust B.4 adjust() flags an unresolved member source post-adjust",
+  "[python-frontend][irep2][python-adjust]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  const type2tc intt = get_int_type(config.ansi_c.int_width);
+
+  // A Python symbol whose body reads a member of an UNREGISTERED tag: the pass
+  // cannot follow it (the unregistered-tag guard leaves it untouched), so the
+  // post-adjust strong-invariant check must catch the survivor and adjust()
+  // must return true (error).
+  contextt context;
+  symbolt symbol;
+  symbol.id = "py:test@F@unresolved";
+  symbol.name = "unresolved";
+  symbol.mode = "Python";
+  symbol.set_value(
+    member2tc(intt, symbol2tc(symbol_type2tc("tag-Missing"), "m"), "x"));
+  symbol.set_type(intt);
+  context.add(symbol);
+
+  REQUIRE(python_adjust(context).adjust());
+}
+
 // --- RV2 foundation: type-following equivalence ---------------------------
 //
 // B.3 resolves member/index sources via the converter's `name_space().follow()`
