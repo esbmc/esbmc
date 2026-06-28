@@ -260,6 +260,14 @@ private:
   exprt handle_ascii() const;
 
   /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
+
+  /*
    * Handles ord(str) conversions by extracting the Unicode code point
    * (as an integer) from a single-character string expression.
    */
