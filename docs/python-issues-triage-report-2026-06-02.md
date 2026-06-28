@@ -1769,6 +1769,55 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 44. 2026-06-28 re-validation (thirty-fourth sweep) & str.rindex()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the str search methods surfaced `str.rindex` as the one unmodelled member — the
+right-side analogue of `str.index`, missing while `find`/`index`/`rfind` were all handled.
+
+### 44a. New isolated, soundly-fixable defect found & fixed
+**`str.rindex()` was unmodelled, producing a spurious `Unsupported function`.**
+
+`"abcabc".rindex("b")` should give `4` (CPython — the last occurrence; like `rfind` but raising
+`ValueError` when absent), but `rindex` had no handler and reported `Unsupported function 'rindex'` →
+`FAILED`.
+
+**Fix** mirrors the existing `index`/`find` relationship onto `rindex`/`rfind`:
+- `string/string_method_handler.cpp`: new `handle_string_rindex()` / `handle_string_rindex_range()`
+  call the existing `handle_string_rfind()` / `handle_string_rfind_range()` then reuse
+  `build_string_index_result()` — the same builder `index` uses, which raises `ValueError` on a `-1`
+  (not-found) result. `rindex` is added to the search-method dispatcher, routed before the `rfind`
+  fall-through so it cannot leak into the non-raising path.
+- `python_consteval.cpp`: `rindex` is added to the constant-fold path — it searches like `rfind`
+  (`window.rfind`) and raises like `index` (returns nullopt on not-found, leaving BMC to raise), so
+  the constant and runtime paths agree.
+
+The underlying `__python_str_rfind`/`__python_str_rfind_range` OMs (which return `-1` on not-found, the
+same sentinel `find` uses) are reused unchanged — no new operational model. Like §24a (`rsplit`) this
+**restores a working feature**. New regression pair `regression/python/str_rindex{,_fail}` (CORE)
+covering last-occurrence, the start/end window, the catchable not-found `ValueError`, int-typed result
+arithmetic, and a variable receiver; the positive test is the liveness witness (`Unsupported`→`FAILED`
+pre-fix → `SUCCESSFUL` post-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh str_rindex`); the focused `regression/python/(str_rindex|string-rfind|
+str_index)` ctest subset is green (the 12 failing are the pre-existing `--z3` environmental set on this
+Bitwuzla-only build — confirmed by re-running one without `--z3`). Code-reviewed (0 critical/major;
+soundness, const-eval/runtime consistency, dispatcher ordering, and the `build_string_index_result`
+reuse all confirmed). Solver-agnostic (a frontend constant-fold + existing OM reuse, no SMT change).
+
+### 44b. Next candidate & everything else: unchanged disposition
+The str search family (`find`/`index`/`rfind`/`rindex`) is now complete. Remaining catalogued
+candidates: `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today);
+multi-byte (non-ASCII) UTF-8 encode/decode; `float.as_integer_ratio()` on a literal (returns a tuple —
+larger); and the §36a bytes-literal-argument lowering (deferred). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`
+(materialisation via `list(zip(...))` — a larger feature), symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), and §43 (PR
+> #5669) are in flight and not yet on `master`; this sweep is appended as §44. When all land, the
+> maintainer orders §39 → §40 → §41 → §42 → §43 → §44.
 ## 39. 2026-06-28 re-validation (twenty-ninth sweep) & bytes.hex(sep, bytes_per_sep)
 
 Re-test against current `master` (tip `f343663bde`). KNOWNBUG classification unchanged — §3 holds.
