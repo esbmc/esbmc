@@ -417,8 +417,7 @@ exprt function_call_expr::handle_int_to_bytes() const
       (*byteorder_arg)["value"].is_boolean())
       big_endian = (*byteorder_arg)["value"].get<bool>();
     else if (
-      byteorder_arg->contains("value") &&
-      (*byteorder_arg)["value"].is_string())
+      byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
       big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
     else
       throw std::runtime_error(
