@@ -512,7 +512,12 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (kind == "dict")
+    // Recognise a dict by its struct tag as well as its aggregate-kind marker.
+    // The kind irep can be dropped while a dict value flows through type
+    // inference (e.g. a dict comprehension result), but the `__python_dict__`
+    // tag is preserved — and subscript/len already key off the tag — so without
+    // this `x in {…comprehension…}` wrongly hit the unsupported-operand throw.
+    if (kind == "dict" || dict_handler_->is_dict_type(rhs_resolved_type))
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
