@@ -1536,3 +1536,136 @@ closure rather than re-patching. The scanf INF-length item is recorded, not spec
 9. **#5565 residual** — `strcmp` argv-string pointer-validity (`fclose` half discharged, §15.2).
 10. **Close-outs:** #1470 (verified fixed §16.1, recommend closing), #4427; witness end-to-end
     validation for #1471/#1492/#4611.
+
+---
+
+## 17. Pass 13 — scanf numeric-specifier fix shipped + #4611 witness items verified resolved (2026-06-28)
+
+This pass converts the §16.2 scanf residual into a shipped fix, and discharges the concrete,
+isolation-verifiable half of the #4611 witness close-out. Host: aarch64 macOS, ESBMC 8.3.0.
+
+### 17.1 scanf numeric-specifier INF-length (§16.2 item 6) — FIXED
+
+`goto_checkt::input_overflow_check` (`src/goto-programs/goto_check.cpp`) treated *every* width-less
+scanf conversion as `INF` → unconditional `buffer overflow on scanf`, including numeric/char/pointer
+conversions (`%d`, `%ld`, `%f`, `%c`) that write a single fixed-size scalar and cannot overflow a
+buffer. The spurious overflow preceded and masked the intended property (the #1470 CWE190 `data + 1`
+overflow). **Fix:** restrict the `INF` rule to genuine unbounded string conversions — `%s`, the
+`%[...]` scanset, and the wide-string `%S`/`%ls` — by skipping C length modifiers to reach the
+conversion specifier; width-less non-string conversions become a `BOUNDED` sentinel that is skipped.
+Sound (diagnostic-precision only; GCC/glibc semantics unchanged), code-reviewed (two findings applied:
+the `%S` wide-string soundness edge, and pinning `scanf-false-3`'s genuine NULL-deref property after it
+had relied on the removed false positive). Three new regression tests + one repaired. **PR #5666** (off
+master, independent of the doc chain).
+
+### 17.2 #4611 — witness GraphML concrete items verified already-resolved
+
+#4611 lists four GraphML witness tweaks from the defunct `adjust_type` branch. Audited the current
+emitter (`src/goto-symex/witnesses.cpp`) by inspecting `--witness-output-graphml -` output on a failing
+assert (heap write) and a function-return counterexample:
+
+* **Key naming (item 1).** Current output already emits the modern-spec `enterFunction` /
+  `returnFromFunction` keys (the 2020-onwards format the issue identifies as conformant). No change
+  needed.
+* **No duplicate nodes (item 2).** Node/edge counts are minimal and consistent (4 nodes/3 edges for the
+  heap-assert trace, 5/4 for the function-return trace); no repeated initial edge.
+* **No out-of-file trace steps (item 3).** Despite `<assert.h>`/`<stdlib.h>` on the path, every emitted
+  edge carries only user-file `startline`s — no system-header pollution.
+
+So #4611's concrete, isolation-verifiable items are **already satisfied** in mainline; the only residual
+is the external-validator audit (run a witness through CPAchecker/Ultimate to confirm key acceptance),
+not reproducible in this environment (no validators). #4611 reduces to that validation-only residual,
+the same class as #1471/#1492.
+
+### 17.3 Pass-13 running report
+
+**Analysed.** §16.2 scanf residual fixed (#5666); #4611 concrete items verified resolved; in-flight PR
+states reconciled.
+
+**PRs opened.** This doc reconciliation (stacked on the #5664 doc chain). The code deliverable of the
+pass is **#5666** (scanf). In flight from earlier passes: **#5660** (#5142 parse layer), **#5664**
+(#1470 witness-assignment regression tests).
+
+**Duplicated work avoided.** #4611 not patched — concrete items already in mainline (§17.2). The
+research-grade backlog (value-set #5145/#5393/#5394, reachability #5400/#5138, va_list #5012,
+k-induction #4980/#4438, atomics #4432, device-API) is unchanged — none is isolation-verifiable here,
+so none was patched with a heuristic.
+
+**Remaining work (priority order, updated 2026-06-28, Pass 13).** Item 6 (scanf) closed; #4611 moved to
+the validation-only residual:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980 / #4438** — k-induction precision (termination recogniser + neural-network float CE);
+   full-set validation.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5142 residual** — no-overflow precision layer once parsed (x86 + full-benchmark-gated).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **#5565 residual** — `strcmp` argv-string pointer-validity (`fclose` half discharged, §15.2).
+9. **Validation-only close-outs (need CPAchecker/Ultimate):** witness end-to-end validation for
+   #1471 / #1492 / #4611 (concrete items resolved §17.2); #4427 false-negative; #1470 (verified fixed
+   §16.1, recommend closing).
+
+---
+
+## 18. Pass 14 — close the verified-fixed witness issues + scanf parser false-negative (2026-06-28)
+
+This pass reconciles two concrete state changes since Pass 13: three witness issues were verified fixed
+and **closed**, and the scanf overflow-check PR (#5666) was extended with a second, independent
+correctness fix. No new SV-COMP issue has been filed (newest still 2026-06-17). Host: aarch64 macOS.
+
+### 18.1 Issues closed (3)
+
+A full validity re-audit of the 20 open SV-COMP issues confirmed three are effectively fixed in
+mainline; they were closed with evidence-bearing comments:
+
+| # | Property | Why closed |
+|---|---|---|
+| #1470 | overflow witness assignment | Witness now emits `data == INT64_MAX` on the assignment edge (§16.1); regression tests in #5664. |
+| #4611 | witness GraphML keys / dup nodes | Concrete items already in mainline — modern `enterFunction`/`returnFromFunction` keys, no duplicate nodes, no system-header trace pollution (§17.2). Residual is validator-audit only. |
+| #1471 | struct constant in witness not parseable | Struct constants are no longer emitted as unparseable brace literals (omitted instead, per #5038); the parse failure is gone. |
+
+Open SV-COMP count: 20 → **17**.
+
+### 18.2 scanf overflow-check — second fix: `%%`/`%*` false negative (extends #5666)
+
+The §16.2 scanf work (PR #5666) initially fixed the *false positive* on width-less numeric
+conversions (§17.1). Reviewing that change surfaced an independent *false negative* in the same parser:
+a `%%` literal and a `%*...` assignment-suppressed directive consume **no** argument, but the format
+parser pushed a phantom `limits[]` entry for each. That misaligned `limits[]` against the argument list
+and tripped `too few arguments for format specifiers`, which **abandons the entire scanf overflow
+check** — silently dropping a genuine overflow on a following `%s`. Reproduced: `scanf("%*d %s", buf)`
+and `scanf("100%% %s", buf)` into `char[4]` were reported SUCCESSFUL. **Fix:** skip `%%`/`%*` during
+parsing so real conversions line up with their arguments. Now correctly FAILED; no new false positive;
+full `cstd` suite green. Added `scanf_suppressed_assignment_overflow_bug`. PR #5666 now bundles both the
+false-positive and false-negative parser fixes.
+
+### 18.3 Pass-14 running report
+
+**Analysed.** Validity re-audit of all 20 open SV-COMP issues; three closed (§18.1); scanf parser
+false-negative fixed and folded into #5666 (§18.2); in-flight PR states reconciled (no CI failures).
+
+**PRs.** Code: **#5666** (scanf parser — both directions). In flight: **#5660** (#5142 parse layer),
+**#5664** (#1470 regression tests). This doc update continues the #5667 reconciliation chain (Pass 13 +
+14) rather than opening a fourth stacked doc PR.
+
+**Duplicated work avoided.** The closed issues (#1470/#4611/#1471) are not re-touched. The research-grade
+backlog is unchanged — none isolation-verifiable here, so none patched with a heuristic.
+
+**Remaining work (priority order, updated 2026-06-28, Pass 14).** The witness close-outs #1470/#4611/
+#1471 are gone (closed); the scanf parser is complete:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack`; #5138 narrowed to the `strcmp`
+   argv-string residual (other layers fixed by #5564/#5624 + the `fclose` guard).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980 / #4438** — k-induction precision (termination recogniser + neural-network float CE);
+   full-set validation.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (libvsync mcslock; large
+   benchmark + concurrency k-induction, not isolation-reproducible here).
+6. **#5142 residual** — no-overflow precision layer once parsed (x86 + full-benchmark-gated).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399/#4439
+   blocker.
+8. **#4427** — false-negative on unreach-call (missed bug; hardest class).
+9. **Validation-only (need CPAchecker/Ultimate):** #1492 FP witness validation; #1447 benchmark
+   incorrect-verdicts umbrella; #1440 wrapper-script sub-property handling (speculative, no property
+   file yet).
