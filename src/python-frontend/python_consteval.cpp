@@ -1338,7 +1338,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           const std::string window = s.substr(
             static_cast<size_t>(start), static_cast<size_t>(end - start));
           size_t pos = (m == "rfind" || m == "rindex") ? window.rfind(needle)
-                                                        : window.find(needle);
+                                                       : window.find(needle);
           if (pos == std::string::npos)
           {
             if (m == "index" || m == "rindex")
