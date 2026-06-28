@@ -1823,3 +1823,54 @@ and the infeasible `hashlib` case all stand; the §5 priority order stands.
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`) and §40 (PR #5663, `int.from_bytes`
 > `byteorder=` keyword) are in flight and not yet on `master`; this sweep is appended as §41. When all
 > land, the maintainer orders §39 → §40 → §41.
+## 40. 2026-06-28 re-validation (thirtieth sweep) & int.from_bytes(byteorder=) keyword form
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.from_bytes(byteorder=)` keyword form catalogued in §37b/§38b/§39b — the last
+small adjacent entry in the `from_bytes` family before the deferred §36a literal-argument lowering.
+
+### 40a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, byteorder="big")` (the keyword endianness form) raised a spurious `TypeError`.**
+
+The positional form `int.from_bytes(b, "big")` verifies (§35/§37), but the keyword form reported
+`FAILED` (uncaught `TypeError: from_bytes() missing 1 required positional argument: 'big_endian'`).
+Two layers conspired: the AST normalizer `_normalize_int_from_bytes_endianness`
+(`preprocessor/core_visitors_mixin.py`) folded the `"big"`/`"little"` string to a bool only for the
+**positional** argument (`node.args[1]`, guarded on `len(node.args) > 1`); and the operational model
+(`models/int.py`) names the endianness parameter `big_endian`, whereas CPython's keyword is
+`byteorder` — so a `byteorder=` keyword matched no model parameter and was reported as a missing
+positional argument by `_fill_missing_args_with_defaults`.
+
+**Fix** (`preprocessor/core_visitors_mixin.py`): extend `_normalize_int_from_bytes_endianness` to also
+walk `node.keywords` — when a `byteorder` keyword is present, **rename** it to the model's `big_endian`
+parameter and **fold** its constant string value to the bool the model expects (`"big" → True`,
+otherwise `False`, the same rule the positional path uses). The positional branch is refactored to the
+same `is_big` form (behaviour-identical: `True` only for the constant `"big"`, else `False`). The
+keyword-only `signed` argument already matches the model parameter name, so it is untouched and
+continues to work (`signed=True` two's-complement verified). A non-constant `byteorder` keyword folds
+to little-endian — the same pre-existing limitation as the positional path, not a new regression.
+
+Like §35a/§37a this **restores a working feature**. New regression pair
+`regression/python/int_from_bytes_byteorder_kw{,_fail}` (CORE) covering keyword big/little, the
+`signed=True`/`signed=False` keyword composition, the unchanged positional form, and a single byte;
+the positive test is the liveness witness (uncaught-`TypeError` `FAILED` pre-fix → `SUCCESSFUL`
+post-fix). All receivers are bytes **variables** because a bytes literal passed directly as the
+argument is the separate, deferred §36a lowering issue. Verified bit-for-bit against CPython; CPython
+sanity passes (`scripts/check_python_tests.sh from_bytes`); pylint clean on the changed file (the two
+pre-existing `listcomp_counter` E1101 false-positives are unrelated); the focused
+`regression/python/int_from_bytes*` ctest subset (8 tests) is 100% green. The preprocessor is
+FLAIL-mangled into the binary, so it was rebuilt before testing. Solver-agnostic (an AST-normalisation
+change, no SMT encoding).
+
+### 40b. Next candidate & everything else: unchanged disposition
+The `from_bytes` family is now complete except the deferred §36a bytes-**literal-argument** lowering
+(needs the frontend `get_literal` context fix). Remaining catalogued candidates: `str.maketrans`/
+`translate` dict-table and non-constant forms (fall through cleanly today); multi-byte (non-ASCII)
+UTF-8 encode/decode; and `bytes.hex(sep)` (shipped in flight as §39/PR #5661). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible),
+and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d
+questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
+> `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
