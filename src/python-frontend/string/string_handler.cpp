@@ -2350,8 +2350,7 @@ exprt string_handler::handle_string_attribute_call(
         {
           if (have_sep && g != 0 && i > 0)
           {
-            const bool boundary =
-              from_left ? (i % g == 0) : ((n - i) % g == 0);
+            const bool boundary = from_left ? (i % g == 0) : ((n - i) % g == 0);
             if (boundary)
               hex.push_back(sep[0]);
           }
