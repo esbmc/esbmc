@@ -1769,6 +1769,48 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 48. 2026-06-28 re-validation (thirty-eighth sweep) & bytes.find()/rfind()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep continued the bytes-affix/search family from §47 with the literal `bytes.find`/`rfind`.
+
+### 48a. New isolated, soundly-fixable defect found & fixed
+**`bytes.find(sub)`/`bytes.rfind(sub)` returned the wrong index for a literal bytes object.**
+
+`bytes([1,2,3]).find(bytes([2,3]))` should be `1` (CPython), but ESBMC computed the wrong value: like
+the §47 affix methods, bytes search is routed through the str `strncmp`/`strlen` machinery, wrong for
+the int-array bytes representation (a NUL byte truncates the length).
+
+**Fix** (`string/string_handler.cpp`): fold `bytes.find`/`bytes.rfind` when the receiver is a literal
+`bytes([…])` constructor and the argument is either a literal `bytes([…])` subsequence or a single
+integer byte (CPython accepts both), computing the first/last occurrence index (or `-1`) directly and
+returning a `long_long_int_type()` constant. As in §47 the match is **purely syntactic** (AST only),
+so no symbolic, branch-merged, or partially-evaluated value can reach the fold — the soundness hazard
+§47's first draft hit is structurally excluded. A str receiver, a variable/expression receiver, a
+`b"…"` literal, and the position-argument (2/3-arg) forms all fall through to the existing dispatch,
+sound and unchanged. The reverse `rfind` scan is `m <= n`-guarded so `n - m + 1` never underflows
+`size_t`, and `matches_at` indexing stays in bounds.
+
+Like §44a (`str.rindex`) this **restores a working feature** for the literal case. New regression pair
+`regression/python/bytes_find{,_fail}` (CORE) covering find/rfind, the not-found `-1`, the single-int
+argument, the empty subsequence (find→0, rfind→len), repeated occurrences, embedded NUL bytes,
+int-result composition, and `str.find`/`rfind` coexistence; the positive test is the liveness witness
+(FAILED pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh bytes_find`); the focused `regression/python/(bytes_find|string-rfind|
+str_index|bytes)` ctest subset is green (the 12 failing are the pre-existing `--z3` environmental set
+on this Bitwuzla-only build). Code-reviewed: confirmed **sound** (no path admits a non-constant value;
+search math verified against CPython incl. the `size_t` bounds; 0 critical/major). Solver-agnostic (a
+frontend constant-fold, no SMT encoding).
+
+### 48b. Next candidate & everything else: unchanged disposition
+The literal bytes affix/search methods now fold (`startswith`/`endswith` §47, `find`/`rfind` here).
+Remaining catalogued candidates: literal `bytes.index`/`rindex` (raising variants — need the exception
+machinery), `bytes.count`/`replace`/`split`/`join` over literals (same syntactic-fold pattern); the
+**symbolic** bytes affix/search methods (the str `strncmp`/`strlen` path is unsound for the int-array
+representation — a pre-existing gap needing a bytes-specific symbolic model, §47b); the list-literal
+receiver method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table; and
+multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
 ## 47. 2026-06-28 re-validation (thirty-seventh sweep) & bytes.endswith()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
@@ -2074,6 +2116,9 @@ inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred can
 (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation,
 and the infeasible `hashlib` case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §39–§47 (PRs #5661/#5663/#5665/#5668/#5669/#5670/#5671/#5672/#5673) are in
+> flight and not yet on `master`; this sweep is appended as §48. When all land, the maintainer orders
+> §39 → … → §48.
 > **Note on numbering.** §39–§46 (PRs #5661/#5663/#5665/#5668/#5669/#5670/#5671/#5672) are in flight
 > and not yet on `master`; this sweep is appended as §47. When all land, the maintainer orders
 > §39 → … → §47.
