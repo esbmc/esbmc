@@ -1927,3 +1927,54 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 54. 2026-06-28 re-validation (forty-fourth sweep) & list.insert() negative index
+
+Re-test against current `master` (tip `d761b93cf2`, with §39/§40/§41 now merged). KNOWNBUG
+classification unchanged — §3 holds. This sweep took a wrong-value defect in `list.insert` with a
+negative index (deliberately in the list operational model, not the contended `string_handler.cpp`).
+
+### 54a. New isolated, soundly-fixable defect found & fixed
+**`list.insert(i, x)` with a negative `i` produced the wrong list.**
+
+`[1, 2, 3].insert(-1, 9)` should give `[1, 2, 9, 3]` (CPython — a negative index counts from the end and
+clamps to `[0, len]`; insert never raises), but ESBMC appended, yielding `[1, 2, 3, 9]`. The operational
+model `__ESBMC_list_insert` declared its index parameter as `size_t`, so a negative Python index was
+reinterpreted as a huge unsigned value and always took the append fast-path.
+
+**Fix** (`c2goto/library/python/list.c`): change the index parameter to `int64_t` and normalize it —
+`if (index < 0) { index += (int64_t)l->size; if (index < 0) index = 0; }`, then the existing
+`index >= size → append`. This mirrors the established `__ESBMC_list_pop(PyListObject*, int64_t index)`
+negative-index pattern in the same file. The C++ builder is unchanged: the GOTO call sign-extends the
+(signed) Python int index into the `int64_t` parameter; the only other caller (`appendleft`, which
+passes a signed-64 zero) matches the new parameter type exactly.
+
+This is a **wrong-value fix** (a false verdict on any program using a negative insert index). New
+regression pair `regression/python/list_insert_negative{,_fail}` (CORE) covering `insert(-1)`/`(-2)`/
+`(-3)`/`(-5)` (before-last, mid, front, clamp-to-front) and the unchanged non-negative front / middle /
+beyond-end-append forms; the positive test is the liveness witness (`[1,2,3,9]` pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh list_insert`); the
+focused `regression/python/list_insert*` ctest subset (84 tests) is 100% green and the list-mutation
+subset shows no new failures (the failing ones are the pre-existing `--z3`/`--ir` environmental set on
+this Bitwuzla-only build, all confirmed solver-flagged). The OM is FLAIL-mangled, so the binary was
+rebuilt before testing. Code-reviewed (0 critical/high; the normalization vs CPython across all six
+index regimes, the post-normalization signed/unsigned comparison safety, sign preservation through the
+argument cast, and single-caller compatibility all confirmed). Solver-agnostic (an OM arithmetic
+change, no SMT-encoding change).
+
+### 54b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: `list.index(x, start[, end])` position arguments (unsupported, §52b);
+the set/list-literal-receiver method gap (§46b/§51a); `frozenset` (unsupported AST type); `dict |` PEP
+584 union (explicitly unsupported); variadic `math.hypot` (float-precision, §51b); the bytes-returning
+methods (receiver-aware return-type inference, §49b); the symbolic bytes affix/search methods (§47b);
+`format()`/f-string width specs; `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42–§53 (PRs #5668–#5679) are in flight and not yet on `master` (§39/§40/§41
+> merged); this sweep is appended as §54.
