@@ -1769,6 +1769,55 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 47. 2026-06-28 re-validation (thirty-seventh sweep) & bytes.endswith()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the bytes search/affix methods surfaced `bytes.endswith` as silently wrong while
+its sibling `bytes.startswith` worked.
+
+### 47a. New isolated, soundly-fixable defect found & fixed
+**`bytes.endswith(suffix)` returned the wrong value for a literal bytes object.**
+
+`bytes([1,2,3]).endswith(bytes([2,3]))` should be `True` (CPython), but ESBMC computed `False`. Bytes
+are modelled as an int array (64-bit elements), not a null-terminated char array, and both affix
+methods were routed through the str `strncmp`/`strlen` machinery. `startswith` happened to work (it
+uses the prefix array's static size), but `endswith` uses `strlen()` to compute the from-the-end
+offset — wrong for the int-array representation (a NUL byte truncates it) — so it mis-located the
+suffix.
+
+**Fix** (`string/string_handler.cpp`): in `handle_string_attribute_call` (beside the §32 `bytes.hex`
+block), fold `bytes.startswith`/`bytes.endswith` when the receiver **and** the single argument are
+literal `bytes([const, …])` constructor nodes, comparing the byte vectors directly (startswith at
+offset 0, endswith at offset `len - suffixlen`) and returning a Python bool. A first expr-based draft
+folded the receiver *value*, which a code review showed to be **unsound** — a symbolic or
+branch-merged bytes value reaches the fold as an operand-less array (a bare symbol, or a const-eval
+artifact whose array type collapses to size 0) and folded to a wrong constant, a false `SUCCESSFUL`.
+The fix was rewritten to inspect **only the AST syntax** (`_type == "Call"`, `func.id == "bytes"`, a
+single `List` of `0..255` integer `Constant`s): no symbolic, branch-merged, or partially-evaluated
+value can ever reach it. A str receiver, a *variable*/expression receiver, a `b"..."` literal, a tuple
+argument, and the position-argument (2/3-arg) form all fall through to the existing dispatch, sound and
+unchanged (the variable/symbolic bytes affix case remains on the pre-existing `strncmp` path, an
+out-of-scope incompleteness, not a wrong-`SUCCESSFUL`).
+
+Like §16a–§20a this **restores a working feature** for the literal case. New regression pair
+`regression/python/bytes_endswith{,_fail}` (CORE) covering true/false/full-match/longer suffixes,
+embedded NUL bytes (which `strlen` would truncate at), the unchanged `startswith`, and `str.endswith`
+coexistence; the positive test is the liveness witness (FAILED pre-fix). Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh bytes_endswith`); the focused
+`regression/python/(endswith|startswith|bytes)` ctest subset (41 tests) is 100% green — `str`
+startswith/endswith unaffected. Code-reviewed across three rounds: a critical symbolic-receiver fold
+was caught and the handler rewritten to the AST-syntactic form, which a final review confirmed
+**sound** (no path admits a non-constant value; 0 critical/major). Solver-agnostic (a frontend
+constant-fold, no SMT encoding).
+
+### 47b. Next candidate & everything else: unchanged disposition
+The constant `bytes.startswith`/`endswith` are now correct. Remaining catalogued candidates: the
+**symbolic** bytes affix/search methods (the str `strncmp`/`strlen` path is unsound for the int-array
+bytes representation — a pre-existing gap needing a bytes-specific symbolic model, newly characterised
+this sweep); the bytes tuple-of-affixes and position-argument forms (same root); the list-literal
+receiver method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table; and
+multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
 ## 46. 2026-06-28 re-validation (thirty-sixth sweep) & builtin format()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
@@ -2025,6 +2074,9 @@ inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred can
 (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation,
 and the infeasible `hashlib` case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §39–§46 (PRs #5661/#5663/#5665/#5668/#5669/#5670/#5671/#5672) are in flight
+> and not yet on `master`; this sweep is appended as §47. When all land, the maintainer orders
+> §39 → … → §47.
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`) and §40 (PR #5663, `int.from_bytes`
 > `byteorder=` keyword) are in flight and not yet on `master`; this sweep is appended as §41. When all
 > land, the maintainer orders §39 → §40 → §41.
