@@ -3400,6 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
 > **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 (type-following) pinned, layer-2 gated at the flip (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
@@ -3595,6 +3596,29 @@ either follow can no longer silently break the service.
 **Layer 2 — auto-deref + dataclass/inference completion (gated, not yet
 discharged).** The pointer auto-deref and dataclass-field completion are *not*
 covered by the type-following test. They are validated end-to-end at the first
+site flip via the corpus parity sweep (`scripts/irep2-migration/parity_sweep.sh`,
+deterministic verdict, dual-solver Bitwuzla + Z3, asserts build) — RV-adj2 mandates
+verdict/text parity over a goto diff because of model nondeterminism.
+
+**RV2 layer-2 gate is now turnkey (2026-06-26).** `parity_sweep.sh` was generalised
+to gate any staged flag via `PARITY_FLAG` (default `--irep2-bodies`, backward-
+compatible). The F-P11 flip is staged behind `--python-irep2-adjust` (default off,
+the B.2 flag), so its RV2 gate is a single command:
+`PARITY_FLAG=--python-irep2-adjust parity_sweep.sh <esbmc> <fixture>`, comparing
+flag-off (legacy) against flag-on (resolve-then-build) — they must agree.
+The **20-test fixture** is concretely the
+`regression/python/{nested-attr*,github_4117*,dataclass*,self_ref_nested_attr_chain*}`
+families (69 test.descs today). **Baseline established:** at the current B.2 state the
+sweep is **0 divergences / 69** on Bitwuzla — the no-op pass is parity-clean, the
+reference the flip must preserve.
+
+**Environment note (hard).** The mandatory dual-solver gate needs Z3 *and* Bitwuzla.
+A Bitwuzla-only build (e.g. local dev here) discharges only the Bitwuzla half; the Z3
+half runs in CI on the PR. **Commit policy:** because the flip is behind a default-off
+flag, the change is byte-identical by default and safe to land; the flag-on path is
+*not* RV2-discharged until the CI Z3 parity run is green. **Next task:** flip the first
+(BoolOp) F-P11 site behind the flag, confirm Bitwuzla parity locally, and let CI close
+the dual-solver gate before relying on flag-on.
 site flip via the existing corpus parity sweep
 (`scripts/irep2-migration/parity_sweep.sh`, deterministic verdict + matched-text,
 dual-solver Bitwuzla + Z3, asserts build) — RV-adj2 mandates verdict/text parity
