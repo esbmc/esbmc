@@ -1214,6 +1214,42 @@ exprt python_dict_handler::handle_dict_constructor(
   if (!call_node.contains("args") || !call_node["args"].is_array())
     return nil_exprt();
   const auto &args = call_node["args"];
+
+  // dict() / dict(a=1, b=2, ...): no positional iterable, build the dict from
+  // the keyword arguments (an empty dict when there are none). Each keyword
+  // name becomes a string-constant key. `dict(**other)` carries a null keyword
+  // arg and is not modelled — bail so it is not silently mis-lowered.
+  if (args.empty())
+  {
+    nlohmann::json keys = nlohmann::json::array();
+    nlohmann::json values = nlohmann::json::array();
+    if (call_node.contains("keywords") && call_node["keywords"].is_array())
+    {
+      for (const auto &kw : call_node["keywords"])
+      {
+        if (!kw.contains("arg") || !kw["arg"].is_string())
+          return nil_exprt();
+        nlohmann::json key_node;
+        key_node["_type"] = "Constant";
+        key_node["value"] = kw["arg"];
+        for (const char *f :
+             {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+          if (call_node.contains(f))
+            key_node[f] = call_node[f];
+        keys.push_back(std::move(key_node));
+        values.push_back(kw["value"]);
+      }
+    }
+    nlohmann::json synthetic_dict = call_node;
+    synthetic_dict.erase("args");
+    synthetic_dict.erase("func");
+    synthetic_dict.erase("keywords");
+    synthetic_dict["_type"] = "Dict";
+    synthetic_dict["keys"] = std::move(keys);
+    synthetic_dict["values"] = std::move(values);
+    return get_dict_literal(synthetic_dict);
+  }
+
   if (args.size() != 1)
     return nil_exprt();
 

@@ -2176,3 +2176,61 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 61. 2026-06-28 re-validation (fifty-first sweep) & dict() keyword/empty constructor
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §60b adjacent lead: `dict()`/`dict(a=1)` construction.
+
+### 61a. New isolated, soundly-fixable defect found & fixed
+**`dict(a=1, b=2)` and `dict()` aborted with "Projecting from non-tuple based AST".**
+
+The keyword form `dict(a=1, b=2)` and the empty form `dict()` failed at SMT-solve time
+(`smt_solver.cpp` `Projecting from non-tuple based AST`) — every downstream use (`d["a"]`, `in`, `len`)
+inherited the malformed result. Root cause: the `dict()`-constructor dispatch
+(`converter/converter_funcall.cpp`) only fired for `args.size() == 1` (a single positional iterable),
+and `handle_dict_constructor` (`python-dict/dict_methods.cpp`) returned nil for anything else. Keyword
+arguments are not positional, so `dict(a=1)` and `dict()` both have `args.size() == 0`, fell through the
+guard, and were lowered by a generic path into a non-tuple struct. The positional form `dict([pairs])`
+already worked.
+
+**Fix** (two changes): widen the dispatch guard to `args.size() <= 1`, and add an `args.empty()` branch
+to `handle_dict_constructor` that synthesises a `Dict` AST from the call's `keywords` — each keyword
+name becomes a string-`Constant` key (carrying the call's location), the value its value node — then
+hands off to `get_dict_literal`, the same lowering `{k: v}` and `dict([pairs])` already use. An empty
+`dict()` yields `keys=[]/values=[]`; `dict(**other)` (a keyword with a null `arg`) returns nil so it is
+declined rather than silently mis-lowered. (As with the pre-existing single-arg form, the dispatch keys
+on `func.id == "dict"`, so a user-defined `dict` would be shadowed — unchanged behaviour, noted in the
+commit.)
+
+This is a **crash/unsupported→correct-result fix**. New regression pair `dict_kwargs_constructor{,_fail}`
+(CORE) covering the keyword form's key access / membership / len, empty `dict()` + mutation, and the
+unchanged positional form; the positive is the liveness witness (it errored pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh dict_kwargs`); the
+focused dict-constructor ctest subset (32 tests) is 100% green and the broad dict subset shows no new
+failures (the 9 are the pre-existing `--z3`/`--ir` environmental set on this Bitwuzla-only build).
+Code-reviewed (0 critical/high; the synthesized string-key compatibility with `get_dict_literal`, the
+`dict(**other)` decline, the empty-dict shape, and the non-regression of the positional form and type
+inference all confirmed). Solver-agnostic.
+
+### 61b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) `dict.update(**kwargs)` (`update() takes exactly one argument` — the keyword
+form is unmodelled, the constructor analogue of this sweep); (iii) `sorted`/`sort` with an
+arithmetic/function `key` silently sorts by natural order (§56b/§57b); (iv) `int`-literal-receiver
+methods (`(255).bit_length()`) unsupported though the variable form works (§57b).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§60 (PRs #5668, #5669, #5675–#5686) are in flight and not yet
+> on `master`; this sweep is appended as §61.
