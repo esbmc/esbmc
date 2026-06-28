@@ -2287,11 +2287,14 @@ exprt string_handler::handle_string_attribute_call(
       return nil_exprt();
   }
 
-  // bytes.hex(): fold a constant bytes object to its lowercase hex string
-  // (CPython: b"\x01\xab".hex() == "01ab"). str has no .hex() method, so a
-  // "hex" attribute is unambiguously a bytes method. Bytes are modelled as an
-  // int array; a str is a char array, so the subtype check excludes strings.
-  if (method_name == "hex" && args.empty())
+  // bytes.hex([sep[, bytes_per_sep]]): fold a constant bytes object to its
+  // lowercase hex string (CPython: b"\x01\xab".hex() == "01ab"). str has no
+  // .hex() method, so a "hex" attribute is unambiguously a bytes method. Bytes
+  // are modelled as an int array; a str is a char array, so the subtype check
+  // excludes strings. An optional one-character ASCII separator is inserted
+  // between byte groups: a positive bytes_per_sep groups from the right, a
+  // negative one from the left, and zero inserts none (CPython default is 1).
+  if (method_name == "hex" && args.size() <= 2)
   {
     exprt recv = get_receiver_expr();
     if (recv.is_symbol())
@@ -2304,20 +2307,63 @@ exprt string_handler::handle_string_attribute_call(
     const typet &rt = recv.type();
     if (rt.is_array() && rt.subtype() != char_type())
     {
-      static const char digits[] = "0123456789abcdef";
-      std::string hex;
-      hex.reserve(recv.operands().size() * 2);
-      for (const exprt &op : recv.operands())
+      // A non-constant separator or grouping size is not folded — control
+      // falls through to the regular (unsupported) dispatch, never a wrong
+      // verdict.
+      std::string sep;
+      long long group = 1;
+      bool have_sep = false;
+      bool foldable = true;
+      if (!args.empty())
       {
-        BigInt v;
-        if (to_integer(op, v)) // true == not a constant integer
-          throw std::runtime_error(
-            "bytes.hex() is only supported on a constant bytes object");
-        const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
-        hex.push_back(digits[(byte >> 4) & 0xf]);
-        hex.push_back(digits[byte & 0xf]);
+        if (!extract_constant_string(args[0], converter_, sep))
+          foldable = false;
+        else
+        {
+          // A single non-ASCII character is multi-byte in UTF-8, so a length-1
+          // separator is necessarily ASCII; this check subsumes CPython's
+          // separate "sep must be ASCII" error.
+          if (sep.size() != 1)
+            throw std::runtime_error("bytes.hex(): sep must be length 1");
+          have_sep = true;
+          if (
+            args.size() == 2 && !json_utils::extract_constant_integer(
+                                  args[1],
+                                  converter_.get_current_func_name(),
+                                  converter_.get_ast_json(),
+                                  group))
+            foldable = false;
+        }
       }
-      return string_builder_->build_string_literal(hex);
+      if (foldable)
+      {
+        static const char digits[] = "0123456789abcdef";
+        const std::size_t n = recv.operands().size();
+        const bool from_left = group < 0;
+        // Negate in the unsigned domain so LLONG_MIN does not overflow.
+        const unsigned long long g =
+          group < 0 ? 0ULL - static_cast<unsigned long long>(group)
+                    : static_cast<unsigned long long>(group);
+        std::string hex;
+        hex.reserve(n * 3);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          if (have_sep && g != 0 && i > 0)
+          {
+            const bool boundary = from_left ? (i % g == 0) : ((n - i) % g == 0);
+            if (boundary)
+              hex.push_back(sep[0]);
+          }
+          BigInt v;
+          if (to_integer(recv.operands()[i], v)) // true == not constant
+            throw std::runtime_error(
+              "bytes.hex() is only supported on a constant bytes object");
+          const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+          hex.push_back(digits[(byte >> 4) & 0xf]);
+          hex.push_back(digits[byte & 0xf]);
+        }
+        return string_builder_->build_string_literal(hex);
+      }
     }
   }
 
