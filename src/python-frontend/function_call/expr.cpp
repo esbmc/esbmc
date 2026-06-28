@@ -1784,8 +1784,8 @@ exprt function_call_expr::handle_list_count() const
 exprt function_call_expr::handle_list_index() const
 {
   const auto &args = call_["args"];
-  if (args.size() != 1)
-    throw std::runtime_error("list.index() takes exactly one argument");
+  if (args.empty() || args.size() > 3)
+    throw std::runtime_error("list.index() takes one to three arguments");
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
@@ -1795,7 +1795,21 @@ exprt function_call_expr::handle_list_index() const
 
   exprt value = converter_.get_expr(args[0]);
   python_list list_helper(converter_, call_);
-  return list_helper.build_index_list_call(*list_symbol, call_, value);
+
+  if (args.size() == 1)
+    return list_helper.build_index_list_call(*list_symbol, call_, value);
+
+  // list.index(x, start[, end]) searches the slice l[start:end]. A missing end
+  // means "to the end of the list" — pass a large sentinel the model clamps to
+  // the list size. start/end normalization (negatives, clamping) lives in the
+  // model.
+  exprt start = converter_.get_expr(args[1]);
+  exprt end = args.size() == 3
+                ? converter_.get_expr(args[2])
+                : from_integer(
+                    BigInt(std::numeric_limits<int32_t>::max()), int_type());
+  return list_helper.build_index_range_list_call(
+    *list_symbol, call_, value, start, end);
 }
 
 exprt function_call_expr::handle_list_sort() const
