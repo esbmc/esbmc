@@ -7,6 +7,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
@@ -2318,6 +2319,102 @@ exprt string_handler::handle_string_attribute_call(
         hex.push_back(digits[byte & 0xf]);
       }
       return string_builder_->build_string_literal(hex);
+    }
+  }
+
+  // bytes.index(sub) / bytes.rindex(sub): like find/rfind but raise ValueError
+  // when sub is absent (CPython). Both are otherwise routed through the str
+  // strncmp/strlen machinery, wrong for the int-array bytes representation. Fold
+  // over *literal* operands: the receiver must be a bytes([...]) constructor and
+  // the argument either a bytes([...]) subsequence or a single integer byte. The
+  // match is purely syntactic (AST only), so no symbolic, branch-merged, or
+  // partially-evaluated value can reach the fold; a str receiver, a variable
+  // receiver, and any other form fall through to the existing dispatch.
+  if ((method_name == "index" || method_name == "rindex") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      if (!(
+            n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(
+              e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          if (method_name == "index")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rindex, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        if (result < 0)
+          return converter_.get_exception_handler().gen_exception_raise(
+            "ValueError", "subsection not found");
+        return from_integer(result, long_long_int_type());
+      }
     }
   }
 

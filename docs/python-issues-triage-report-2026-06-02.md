@@ -1766,3 +1766,59 @@ Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=
 `list.index()`-in-`try/except`, `str.maketrans`/`translate`, `float.hex()` (infeasible), and
 `str.isascii()` (string-soundness). The §3 design-level blockers, §3c timeouts, §3d questionable
 expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+---
+
+## 49. 2026-06-28 re-validation (thirty-ninth sweep) & bytes.index()/rindex()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep continued the bytes search family from §48 with the raising variants `bytes.index`/`rindex`.
+(A `bytes.replace` fold was attempted first but declined: its result is a *bytes* object and the
+return-type inference `get_string_method_return_type` is receiver-type-blind — it maps `replace → str`
+for both str and bytes — so the folded bytes value would be mistyped as a char array; fixing that needs
+receiver-aware return-type inference, recorded as §49b. The int-returning `index`/`rindex` avoid this.)
+
+### 49a. New isolated, soundly-fixable defect found & fixed
+**`bytes.index(sub)`/`bytes.rindex(sub)` returned the wrong index for a literal bytes object.**
+
+`bytes([1,2,3]).index(bytes([2,3]))` should be `1` (CPython); like §48's `find`/`rfind` the bytes
+search is routed through the str `strncmp`/`strlen` machinery, wrong for the int-array representation.
+
+**Fix** (`string/string_handler.cpp`): fold `bytes.index`/`bytes.rindex` when the receiver is a literal
+`bytes([…])` constructor and the argument is either a literal `bytes([…])` subsequence or a single
+integer byte. On a match it returns the index (a `long_long_int_type()` constant, like `find`); when the
+subsequence is **absent** it returns a catchable `ValueError` via `gen_exception_raise` — the
+distinguishing behaviour of `index`/`rindex` over `find`/`rfind`. As in §47/§48 the match is **purely
+syntactic** (AST only), so no symbolic, branch-merged, or partially-evaluated value can reach the fold;
+a str receiver, a variable/expression receiver, a `b"…"` literal, and the position-argument (2/3-arg)
+forms all fall through to the existing dispatch. (`bytes` receivers are int arrays — not tuples/lists —
+so the pre-existing count/index defer block does not divert them.)
+
+Like §44a (`str.rindex`) this **restores a working feature** for the literal case. New regression pair
+`regression/python/bytes_index{,_fail}` (CORE) covering index/rindex, the single-int argument, repeated
+occurrences, int-result composition, embedded NUL bytes, the **catchable** not-found `ValueError` (via
+`try/except`, for both index and rindex), and `str.index` coexistence; the positive test is the liveness
+witness (FAILED pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh bytes_index`); the focused
+`regression/python/(bytes_index|str_index|bytes)` ctest subset (71 tests) is 100% green — `str.index`
+unaffected (the not-found case still raises catchably). Code-reviewed: confirmed **sound** (no path
+admits a non-constant value; the not-found-vs-found decision and the catchable-raise idiom verified;
+search math + `size_t` bounds checked; 0 critical/major). Solver-agnostic (a frontend constant-fold +
+an existing exception-raise, no SMT encoding).
+
+### 49b. Next candidate & everything else: unchanged disposition
+The literal bytes affix/search methods now fold (`startswith`/`endswith` §47, `find`/`rfind` §48,
+`index`/`rindex` here). Remaining catalogued candidates: the *bytes-returning* methods
+(`replace`/`split`/`join`/`upper`/…) — these need **receiver-aware return-type inference**
+(`get_string_method_return_type` currently maps by method name only, so `bytes.replace` mistypes as
+str; newly characterised this sweep); the **symbolic** bytes affix/search methods (the str
+`strncmp`/`strlen` path is unsound for the int-array representation — §47b); the list-literal receiver
+method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table; and multi-byte
+(non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b)
+still stands. Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39–§48 (PRs #5661–#5674) are in flight and not yet on `master`; this sweep is
+> appended as §49. When all land, the maintainer orders §39 → … → §49.
