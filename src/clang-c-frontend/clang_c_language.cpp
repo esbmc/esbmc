@@ -253,12 +253,6 @@ void clang_c_languaget::build_compiler_args(
     // No longer show compiler warnings for SV-COMP
     compiler_args.push_back("-w");
     compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-    // clang 15+ promotes -Wint-conversion to a hard error by default, which
-    // rejects GCC-acceptable implicit int<->pointer conversions common in
-    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
-    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
-    // typecast logic, so downgrading the diagnostic does not affect semantics.
-    compiler_args.push_back("-Wno-int-conversion");
   }
 
   // Increase maximum bracket depth
@@ -271,6 +265,14 @@ void clang_c_languaget::build_compiler_args(
   // Suppress incompatible-pointer-types universally; became a hard error in
   // LLVM 22 and trips on system headers across all platforms.
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
+
+  // clang 15+ promotes -Wint-conversion to a hard error by default, which
+  // rejects GCC-acceptable implicit int<->pointer conversions common in
+  // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
+  // (void *)0xffffffffffffffffUL) and ordinary embedded/legacy C. GCC only
+  // warns; ESBMC models the conversion in its typecast logic, so downgrading
+  // the diagnostic preserves GCC compatibility without affecting semantics.
+  compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */

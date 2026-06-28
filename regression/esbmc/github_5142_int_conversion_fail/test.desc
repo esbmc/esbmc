@@ -1,6 +1,6 @@
 CORE
 main.c
---sv-comp
+
 ^Violated property:$
 ^\s*v is 0xdead, not 0 -- must fail$
 ^VERIFICATION FAILED$

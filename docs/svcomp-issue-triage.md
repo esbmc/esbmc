@@ -1297,3 +1297,91 @@ its `fclose`/`strcmp` residual (lower priority, `ESBMC_SVCOMP`-gated):
 8. **#5565 residual** — `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free + `strcmp` argv-string
    pointer-validity; reproduce under a `-DESBMC_SVCOMP=On` build.
 9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+---
+
+## 14. Pass 10 — reconcile #5624 + universalise the #5142 int-conversion relaxation (2026-06-28)
+
+Pass 9 closed on 2026-06-26. This pass reconciles the Pass-9 PR (now merged) and produces **one sound
+localized frontend fix** for the most feasible remaining item, **#5142**. No new SV-COMP issues have
+been filed since 2026-06-17 (all already triaged), so the priority list is otherwise unchanged. Host:
+**x86_64-independent** — the fix and its tests are architecture-neutral and were validated on aarch64
+macOS (ESBMC 8.3.0, master `f343663bde`).
+
+### 14.1 Closed since Pass 9
+
+| # | Property | Closed | Outcome |
+|---|---|---|---|
+| #5565 | valid-memsafety (`comm_3args_ok`, `getopt_long`/`optarg` layer) | merged | Pass-9 PR landed as **#5624** (`[om] model getopt_long/getopt_long_only so optarg is a valid pointer`). The `fclose`/`strcmp` residual (§13.2) stays open, `ESBMC_SVCOMP`-gated. |
+
+### 14.2 #5142 — `m0_drivers-media-rc-imon`: int-conversion relaxation made universal — FIXED (parse layer)
+
+**Status: FIXED (parse-blocker layer). Sound localized frontend change + two regression tests
+(repurposed from #5530). PR opened.**
+
+Pass 8 (§12.5) re-classified #5142 as a clang-strictness parse blocker: clang 15+ promotes
+`-Wint-conversion` to a hard error, rejecting the CIL-emitted sentinel initialiser
+`static struct mutex driver_lock = { …, 0xffffffffffffffffUL, … }`. ESBMC already carried
+`-Wno-int-conversion`, **but only inside the `--sv-comp` block** of
+`clang_c_languaget::build_compiler_args` (`src/clang-c-frontend/clang_c_language.cpp`). Immediately
+below it, the sibling relaxation `-Wno-incompatible-pointer-types` is applied **universally** (same
+class — "became a hard error … trips across all platforms"). The asymmetry meant a plain
+`esbmc foo.c` on clang 15+ still hard-errored on GCC-acceptable implicit int↔pointer conversions that
+ESBMC fully models.
+
+**Fix.** Move `-Wno-int-conversion` out of the `--sv-comp` block to the universal section, beside
+`-Wno-incompatible-pointer-types`. Reproduced and verified directly:
+
+* `void *p = 0xdeadbeefUL;` (no cast) → plain run was `ERROR: PARSING ERROR`; now `VERIFICATION
+  SUCCESSFUL`. `--sv-comp` already accepted it (proving the relaxation, not a semantics change, is the
+  fix).
+* The conversion is still **modeled, not rubber-stamped**: the same code with a wrong round-trip
+  assertion reports `VERIFICATION FAILED` (value preserved through int→ptr→int).
+
+**Why it is sound.** Purely a diagnostic-level change — it affects only whether clang refuses to
+parse, not the AST/GOTO semantics. GCC (the compiler ESBMC targets) only *warns* on this construct, so
+matching GCC is the correct behaviour; there is no program GCC rejects that ESBMC now silently accepts.
+Inherited unchanged by `clang_cpp_languaget`, where the flag is a no-op (C++ int↔pointer is a genuine
+type error not governed by `-Wint-conversion`), so C++ checking is not weakened. Code-reviewed: 0
+critical/major/minor findings.
+
+**Validation.** Two regressions under `regression/esbmc/`, repurposed from #5530 by dropping their
+`--sv-comp` flag so they now pin the *universal* path: `github_5142_int_conversion` (implicit int→ptr
+round-trip ⇒ SUCCESSFUL) and `github_5142_int_conversion_fail` (wrong round-trip value ⇒ FAILED, with
+the violated-property message). Both pass; a 52-test conversion/cast regression sample
+(`to_union*`, `*nondet_int_ptr*`, `github_382*`, `github_270*`, …) is green — no test depends on
+int-conversion being a hard error.
+
+**Residual.** This closes only the *parse-blocker* layer of #5142. The downstream no-overflow precision
+layer (whether the benchmark verdict is correct once it parses) is x86 + full-benchmark-gated and not
+reproducible in isolation here — it stays in the research-grade LDV-environment class. Keep #5142 open
+for that layer.
+
+### 14.3 Pass-10 running report
+
+**Analysed.** Pass-9 closure (#5624) reconciled; GitHub SV-COMP issue list re-swept (no new issues
+since 2026-06-17); #5142 parse layer reproduced and fixed.
+
+**PRs opened.** One: `[clang-frontend] apply -Wno-int-conversion universally, not only under --sv-comp`
+— addresses **#5142** (parse-blocker layer). Sound diagnostic-level change, code-reviewed, two
+regression tests.
+
+**Duplicated work avoided.** #5565 not re-fixed — its primary layer merged as #5624. The remaining
+research-grade items (#5145/#5393/#5394 value-set, #5400/#5138 reachability, #5012 va_list, #4980
+termination, #4432 atomics, device-API modelling) are unchanged — each requires a subsystem change
+that cannot be validated against the full SV-COMP set in this environment, so none was patched with a
+heuristic.
+
+**Remaining work (priority order, updated 2026-06-28).** As §13.3, with #5142 reduced to its
+no-overflow precision layer:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5142 residual** — no-overflow precision layer once parsed (x86 + full-benchmark-gated;
+   research-grade LDV-environment class).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **#5565 residual** — `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free + `strcmp` argv-string
+   pointer-validity; reproduce under a `-DESBMC_SVCOMP=On` build.
+9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
