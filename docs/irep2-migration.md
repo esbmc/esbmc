@@ -3539,6 +3539,18 @@ following (`next: None`→`Node`), and dataclass field resolution.
   isinstance/Optional tests + a 90-test broad slice (both this and the BoolOp flip
   active together). Flag off ⇒ byte-identical; `regression/python/isinstance_none_adjust
   {,_fail}` pin the flipped path for the CI Z3 half.
+  **Third site flipped — integer `Add`/`Sub` (`build_binary_expression`, 2026-06-26).**
+  The largest F-P11 family. Under the flag, same-type integer `Add`/`Sub` build via
+  `python_expr::build_add`/`build_sub` (the existing `add2tc`/`sub2tc` round-trip
+  helpers). **Width-hazard handled by a guard:** the flip fires only when
+  `lhs.type() == rhs.type() == result` and the type is an integer bitvector, so
+  `add2t`/`sub2t`'s width-consistency assert always holds; every width-mismatched,
+  float, or other case falls through to the legacy node, byte-identical. RV2 Bitwuzla
+  half: **0 divergences** flag on vs off over 65 class/arith tests + a 110-test broad
+  slice (all three flips active together). A swap-probe (build_add↔build_sub) confirmed
+  the flip actually fires (it flipped the verdict). `regression/python/arith_member_adjust
+  {,_fail}` pin the flipped path for CI. The width-mismatch / float arith remain legacy
+  (the genuine width-hazard residue, §3640).
 
   #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
   > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
