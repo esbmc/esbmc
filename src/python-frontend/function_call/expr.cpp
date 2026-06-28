@@ -949,8 +949,7 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   // Receiver is a constant float literal, or a unary +/- over one. Read the
   // operand value and apply the sign.
   const auto &obj = call_["func"]["value"];
-  const nlohmann::json &lit =
-    obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
+  const nlohmann::json &lit = obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
   double d = lit["value"].get<double>();
   if (
     obj["_type"] == "UnaryOp" && obj.contains("op") &&
@@ -962,6 +961,56 @@ exprt function_call_expr::handle_float_is_integer_literal() const
   // fractional part (mirrors the float OM's `x == int(x)`).
   const bool is_int = std::isfinite(d) && d == std::trunc(d);
   return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
+}
+
+exprt function_call_expr::handle_bytes_fromhex() const
+{
+  // bytes.fromhex("0102") == b"\x01\x02". Fold a constant hex string into a
+  // byte array (the same representation as a bytes literal / the bytes()
+  // constructor). CPython skips ASCII whitespace between byte pairs but
+  // requires the two hex digits of a byte to be adjacent.
+  if (call_["args"].size() != 1)
+    throw std::runtime_error("bytes.fromhex() takes exactly one argument");
+
+  std::string hexstr;
+  if (!string_handler::extract_constant_string(
+        call_["args"][0], converter_, hexstr))
+    throw std::runtime_error(
+      "bytes.fromhex() is only supported on a constant string");
+
+  auto hexval = [](char c) -> int {
+    if (c >= '0' && c <= '9')
+      return c - '0';
+    if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+    return -1;
+  };
+
+  std::vector<uint8_t> bytes;
+  const std::size_t n = hexstr.size();
+  for (std::size_t i = 0; i < n;)
+  {
+    if (std::isspace(static_cast<unsigned char>(hexstr[i])))
+    {
+      ++i;
+      continue;
+    }
+    const int hi = hexval(hexstr[i]);
+    const int lo = (i + 1 < n) ? hexval(hexstr[i + 1]) : -1;
+    if (hi < 0 || lo < 0)
+      throw std::runtime_error(
+        "ValueError: non-hexadecimal number found in fromhex() arg");
+    bytes.push_back(static_cast<uint8_t>((hi << 4) | lo));
+    i += 2;
+  }
+
+  // An empty byte array reuses the no-argument bytes() representation, which
+  // the size-0 (variable-length) path handles correctly for len()/iteration.
+  if (bytes.empty())
+    return exprt("constant", type_handler_.get_typet("bytes", 0));
+  return converter_.get_string_builder().build_raw_byte_array(bytes);
 }
 
 std::string function_call_expr::get_object_name() const
@@ -3167,6 +3216,14 @@ function_call_expr::get_dispatch_table()
        return handle_general_function_call();
      },
      "repr()"},
+
+    // bytes.fromhex("..") classmethod — fold a constant hex string to bytes
+    {[this]() {
+       return function_id_.get_function() == "fromhex" &&
+              get_object_name() == "bytes";
+     },
+     [this]() { return handle_bytes_fromhex(); },
+     "bytes.fromhex()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
