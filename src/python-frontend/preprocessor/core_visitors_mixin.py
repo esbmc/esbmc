@@ -817,10 +817,8 @@ class CoreVisitorsMixin:
         # Only the canonical `math.gcd(...)` / `math.lcm(...)` spelling is
         # normalised; `from math import gcd` and `import math as m` forms (and a
         # user object named `math`) fall through unchanged.
-        if not (isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "math"
-                and node.func.attr in ("gcd", "lcm")):
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math" and node.func.attr in ("gcd", "lcm")):
             return
         if node.keywords or len(node.args) == 2:
             return  # gcd/lcm take no keywords; the binary form is already modelled
@@ -833,8 +831,7 @@ class CoreVisitorsMixin:
         elif len(args) == 1:
             node.args = [args[0], ast.Constant(value=identity)]
         else:  # >= 3: left-fold into nested binary calls
-            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]],
-                           keywords=[])
+            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]], keywords=[])
             for a in args[2:-1]:
                 acc = ast.Call(func=copy.deepcopy(node.func), args=[acc, a], keywords=[])
             node.args = [acc, args[-1]]
