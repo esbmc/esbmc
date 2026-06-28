@@ -2176,3 +2176,59 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 64. 2026-06-29 re-validation (fifty-fourth sweep) & max/min/sum over a dict
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took a wrong-value bug in the reducers over a dict.
+
+### 64a. New isolated, soundly-fixable defect found & fixed
+**`max(d)` / `min(d)` / `sum(d)` over a dict gave the wrong answer.**
+
+In CPython, iterating a dict yields its keys, so `max({3:1, 1:2})` is the max **key** (3). ESBMC's bare
+`max`/`min`/`sum` reinterpreted the dict struct as a list and produced wrong results (false verdicts),
+even though `list(d)`, `sorted(d)`, and `for k in d` already iterated the keys correctly. Root cause: the
+preprocessor `_maybe_rewrite_dict_to_list_call` (`preprocessor/core_visitors_mixin.py`) already rewrote
+`list(d) → d.keys()` and `sorted(d) → sorted(d.keys())` for names known to be dicts, but it covered only
+`list`/`sorted`; the reducers were never routed through the dict-keys list path.
+
+**Fix**: extend that rewrite's covered builtins to `list`/`sorted`/`max`/`min`/`sum`. The existing tail
+replaces only the first positional with `d.keys()`, so `sum(d, start)` and `max(d, default=…)` preserve
+their extra positional/keyword arguments. A guard restricts the `max`/`min` rewrite to a **single**
+positional argument, so the variadic form `max(a, b)` (max *of* the arguments) is left untouched; the
+rewrite still fires only when the argument is an `ast.Name` reliably known to be a dict, so non-dict
+arguments and non-`Name` expressions (`max([1,2])`, `max(f())`) are unaffected.
+
+This is a **wrong-value/soundness fix**. New regression pair `reduce_over_dict_keys{,_fail}` (CORE)
+covering `max`/`min`/`sum` over a dict and the unchanged variadic `max(3, 7)`; the positive is the
+liveness witness (it was wrong pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh reduce_over_dict`), pylint clean (9.87/10, no new errors); the focused
+`reduce_over_dict`/`min_max`/`sorted`/`dict` ctest subset (12 tests) is 100% green and a broader
+list/dict/reducer sweep showed no new failures. The preprocessor is FLAIL-mangled, so the binary was
+rebuilt before testing. Code-reviewed (0 critical/high; the rewrite-tail preservation of extra args, the
+single-arg `max`/`min` guard excluding the variadic form, the `sum(iterable, start)` non-gating, and the
+absence of any new misfire surface beyond the existing `list`/`sorted` gate all confirmed). Solver-
+agnostic.
+
+### 64b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) `set.union`/`set.intersection` with multiple arguments (`ERROR: Object …` —
+variadic set methods); (iii) `sorted`/`sort` with an arithmetic/function `key` silently sorts by natural
+order (§56b/§57b); (iv) `int`-literal-receiver methods (`(255).bit_length()`) unsupported though the
+variable form works (§57b); (v) `round(int, n)` returns float instead of int (§63b); (vi) `str.format`
+field width/spec (the format mini-language, §46/§61b).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, `list.index()`-in-`try/except` (ValueError not catchable),
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers,
+§3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+> **Note on numbering.** §42/§43 and §49–§63 (PRs #5668, #5669, #5675–#5687, #5689, #5690) are in flight
+> and not yet on `master`; this sweep is appended as §64.
