@@ -761,6 +761,83 @@ exprt function_call_expr::handle_ascii() const
     "TypeError", "ascii() argument type not supported");
 }
 
+exprt function_call_expr::handle_format() const
+{
+  const auto &args = call_["args"];
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("format() takes one or two arguments");
+
+  // The format spec (default "") must be a constant string. Only a bare
+  // presentation-type spec is folded; any width/alignment/precision spec
+  // (e.g. "08x", ">10") is left unsupported rather than mis-folded.
+  std::string spec;
+  if (args.size() == 2)
+  {
+    if (!args[1].contains("value") || !args[1]["value"].is_string())
+      throw std::runtime_error(
+        "format() currently requires a constant string spec");
+    spec = args[1]["value"].get<std::string>();
+  }
+  if (spec.size() > 1)
+    throw std::runtime_error("format() spec '" + spec + "' is not supported");
+  const char type = spec.empty() ? '\0' : spec[0];
+
+  // Integer value with a base spec ('d'/''/'x'/'X'/'o'/'b'). A bool is an int
+  // subclass in Python, but a JSON bool is not is_number_integer, so True/False
+  // fall through to the unsupported path below (rare for format()).
+  //
+  // Only a genuine literal value is folded — a Constant or a unary +/- over one.
+  // extract_constant_integer would also resolve a Name to its bound constant,
+  // but that value can be stale after a reassignment (`x = 255; x = 10`), which
+  // would mis-fold; a variable argument is left unsupported instead.
+  const std::string value_node_type = args[0].value("_type", std::string());
+  const bool is_literal_value =
+    value_node_type == "Constant" || value_node_type == "UnaryOp";
+  long long v = 0;
+  const bool is_int = is_literal_value && json_utils::extract_constant_integer(
+                                            args[0],
+                                            converter_.get_current_func_name(),
+                                            converter_.get_ast_json(),
+                                            v);
+  if (
+    is_int && (type == '\0' || type == 'd' || type == 'x' || type == 'X' ||
+               type == 'o' || type == 'b'))
+  {
+    const bool negative = v < 0;
+    // Magnitude in the unsigned domain so LLONG_MIN does not overflow.
+    unsigned long long mag = negative
+                               ? 0ULL - static_cast<unsigned long long>(v)
+                               : static_cast<unsigned long long>(v);
+
+    std::string digits;
+    if (type == '\0' || type == 'd')
+      digits = std::to_string(mag);
+    else
+    {
+      const unsigned base = (type == 'o') ? 8 : (type == 'b') ? 2 : 16;
+      const char *alphabet =
+        (type == 'X') ? "0123456789ABCDEF" : "0123456789abcdef";
+      if (mag == 0)
+        digits = "0";
+      for (; mag != 0; mag /= base)
+        digits.insert(digits.begin(), alphabet[mag % base]);
+    }
+    if (negative)
+      digits.insert(digits.begin(), '-');
+    return converter_.get_string_builder().build_string_literal(digits);
+  }
+
+  // format(value) / format(value, "") on a constant string is the string
+  // itself (the default str.__format__ with an empty spec).
+  if (type == '\0' && args[0].contains("value") && args[0]["value"].is_string())
+    return converter_.get_string_builder().build_string_literal(
+      args[0]["value"].get<std::string>());
+
+  throw std::runtime_error(
+    "format() currently supports a constant int (with a base spec) or a "
+    "constant str");
+}
+
 exprt function_call_expr::handle_bin(nlohmann::json &arg) const
 {
   // The formatter is unused for binary (handled manually in
