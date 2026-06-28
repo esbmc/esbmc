@@ -1489,6 +1489,25 @@ exprt function_call_expr::handle_min_max(
   for (const auto &arg : args)
     exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
 
+  // The comparison chain below lowers to arithmetic </> over the operands,
+  // which is only meaningful for numeric (and bool) values. Over strings,
+  // tuples or lists it builds a bitvector/pointer comparison that the SMT
+  // backend rejects in compute_pointer_offset (a crash) or that silently
+  // yields a wrong result. Reject those cleanly and point at the single-
+  // iterable form, which the model handles lexicographically.
+  for (const exprt &e : exprs)
+  {
+    const typet &t = converter_.ns.follow(e.type());
+    if (!(
+          t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+          t.is_fixedbv() || t.is_bool()))
+      throw std::runtime_error(
+        func_name +
+        "() with multiple non-numeric arguments is not supported; pass a "
+        "single iterable instead, e.g. " +
+        func_name + "([...])");
+  }
+
   // Determine common promoted type across all arguments.
   typet result_type = exprs[0].type();
   for (size_t i = 1; i < exprs.size(); ++i)

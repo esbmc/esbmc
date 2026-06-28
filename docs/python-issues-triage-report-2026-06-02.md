@@ -2079,3 +2079,68 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 56. 2026-06-28 re-validation (forty-sixth sweep) & min()/max() non-numeric multi-arg crash
+
+Re-test against current `master` (tip `39fceef565`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took a **crash** in `min()`/`max()` over multiple non-numeric direct arguments. The probing this
+round surfaced two larger, complex defects first (recorded in §56b as priority follow-ups): `sorted`/
+`sort` with an *arithmetic* `key` (e.g. `key=lambda x: -x`) silently sorts by natural order — field-
+extraction keys like `key=lambda p: p[1]` work (github_4364/lambda19), arithmetic keys do not — and a
+string-comparison-via-variable gap (`m = a if a > b else b` over strings is wrong while `"a" < "b"` is
+right). Both need real feature work; this sweep fixed the clean, isolated crash instead.
+
+### 56a. New isolated, soundly-fixable defect found & fixed
+**`max(a, b)` / `min(a, b)` over multiple non-numeric arguments crashed the SMT backend.**
+
+`max("apple", "banana")`, `max((1, 2), (1, 3))`, and `max([1, 2], [3])` all aborted with
+`ERROR: compute_pointer_offset, unexpected irep`. `handle_min_max`'s N≥2-argument path builds a
+comparison chain that lowers to arithmetic `</>` (`greaterthan2tc`/`lessthan2tc`); over string
+(char-array/pointer), tuple (struct), or list operands that becomes a pointer/struct comparison the
+backend rejects in `compute_pointer_offset` — or, for some inputs, silently yields a wrong result (a
+soundness hole, since a false SUCCESSFUL is possible).
+
+**Fix** (`function_call/builtins.cpp`): after materialising the argument exprs and before the
+type-promotion loop, reject any operand whose followed type is not numeric/bool
+(`signedbv`/`unsignedbv`/`floatbv`/`fixedbv`/`bool`) with a clean
+`std::runtime_error` — "min()/max() with multiple non-numeric arguments is not supported; pass a single
+iterable instead, e.g. max([...])". This converts the crash (and the silent wrong results) into an
+honest diagnostic and points at the **single-iterable** form (`max([...])`), which the model already
+handles lexicographically and is unaffected. Numeric multi-arg `max`/`min` and the single-iterable/tuple
+paths are untouched (the guard sits on the N≥2 direct-args path only; single-iterable forms never reach
+it).
+
+This is a **crash→clean-diagnostic / soundness** fix (§5-item-5 class). New regression pair: the
+positive `min_max_multi_args` (CORE, SUCCESSFUL) pins numeric multi-arg `max`/`min` *and* the supported
+single-iterable string `max([...])`/`min([...])`; `min_max_nonnumeric_args` (CORE) pins the new
+`^ERROR: max() with multiple non-numeric arguments…` diagnostic (the `bytearray_unsupported` convention
+— valid CPython, ESBMC-rejected). Verified against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh min_max`); the focused `min_max`/sort-key ctest subset (12 tests incl.
+`min_max_key`, `github_4364`, `github_3765`) is 100% green — the existing `key=`-sort tests are
+unaffected. Code-reviewed (0 critical/high; the predicate matches exactly what the downstream promotion
+loop can compare, the N≥2-only scoping with single-list/tuple bypass, the error mechanism, and the
+absence of false rejections for numeric variables/calls all confirmed; one pre-existing non-blocking
+`max(True, 5)` bool×int limitation noted, unchanged by this patch). Solver-agnostic.
+
+### 56b. Next candidates & everything else: unchanged disposition
+**New priority follow-ups from this sweep's probing:** (i) `sorted`/`sort` with an arithmetic/function
+`key` (`key=lambda x: -x`, `key=len`) silently sorts by natural order — a soundness hole; field-
+extraction keys work, so the fix is to extend key application (or reject the unsupported key shapes).
+(ii) string `<`/`>` comparison over *variables* in a conditional (`a if a > b else b`) is wrong while
+literal `"a" < "b"` is right. (iii) `int`-literal-receiver methods (`(255).bit_length()`) are
+unsupported though the variable form works (classification gap).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §47–§55 (PRs #5668, #5669, #5673–#5681) are in flight and not yet
+> on `master` (§39/§40/§41/§44/§45/§46 merged); this sweep is appended as §56.
