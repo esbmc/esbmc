@@ -391,6 +391,19 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() &&
+      arg["slice"].value("_type", "") == "Slice" && arg.contains("value") &&
+      arg["value"].is_object() && arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) == "bytes")
+    {
+      // Inline len(b[a:b]) where b is bytes: the slice is a wide-int array, so
+      // count elements rather than running strlen over the byte representation
+      // (which stops at the first element's zero high bytes). String slices
+      // keep the strlen path (their result is a null-terminated char array).
+      func_name = kGetObjectSize;
+    }
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
@@ -502,6 +515,17 @@ symbol_id function_call_builder::build_function_id() const
       {
         // list slicing assigned to a variable may have no annotation.
         // Use list size semantics for len(sub) where sub = lst[a:b].
+        func_name = kGetObjectSize;
+      }
+      else if (
+        var_symbol &&
+        converter_.ns.follow(var_symbol->get_type()).is_array() &&
+        converter_.ns.follow(var_symbol->get_type()).subtype() != char_type())
+      {
+        // A non-char array reaching here unannotated — e.g. a bytes slice
+        // (s = b[a:b]), which loses its "bytes" frontend type — must be sized
+        // by element count, not strlen: bytes elements are wide ints whose zero
+        // high bytes make strlen stop at the first element.
         func_name = kGetObjectSize;
       }
     }

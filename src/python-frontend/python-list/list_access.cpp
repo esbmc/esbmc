@@ -392,9 +392,19 @@ exprt python_list::handle_range_slice(
       slice_len = size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
     }
 
-    // Create result array type with extra space for null terminator
-    plus_exprt result_size(slice_len, gen_one(size_type()));
-    result_size.type() = size_type();
+    // Char-array slices (strings) keep a trailing null terminator so the
+    // strlen-based length and C-string consumers stay correct. Non-char element
+    // arrays (e.g. bytes, modelled as wide-int arrays) must NOT carry a phantom
+    // null element: len() counts elements there, so an extra slot would
+    // over-count. Size the result accordingly.
+    const bool needs_null_term = (elem_type == char_type());
+    exprt result_size = slice_len;
+    if (needs_null_term)
+    {
+      plus_exprt with_null(slice_len, gen_one(size_type()));
+      with_null.type() = size_type();
+      result_size = with_null;
+    }
     array_typet result_type(elem_type, result_size);
 
     // Create temporary for sliced array
@@ -461,11 +471,14 @@ exprt python_list::handle_range_slice(
     loop.copy_to_operands(cond, body);
     converter_.add_instruction(loop);
 
-    // Add null terminator at result[slice_len]
-    exprt null_pos = build_index(build_symbol(result), slice_len, elem_type);
-    code_assignt add_null(null_pos, gen_zero(elem_type));
-    add_null.location() = location;
-    converter_.add_instruction(add_null);
+    // Add null terminator at result[slice_len] (char-array slices only).
+    if (needs_null_term)
+    {
+      exprt null_pos = build_index(build_symbol(result), slice_len, elem_type);
+      code_assignt add_null(null_pos, gen_zero(elem_type));
+      add_null.location() = location;
+      converter_.add_instruction(add_null);
+    }
 
     return build_symbol(result);
   }
