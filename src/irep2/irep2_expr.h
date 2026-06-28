@@ -448,13 +448,12 @@ public:
     // the clang frontend builds complex literals as struct-id exprt
     // with a complex type — accept that shape here.
     //
-    // A `symbol_id` type is permitted ONLY as a transient pre-resolution
-    // state, identical to the member2t/index2t "two-phase source invariant"
-    // below: a frontend may migrate a struct constant whose type is still a
-    // by-name `symbol_type2t` tag (the Python typecheck-time round-trip done
-    // by python_adjust, before the tag is followed to its struct). The strong
-    // invariant is restored by the post-resolution goto-convert re-migration,
-    // which sees the resolved struct type.
+    // A symbol_id type is permitted ONLY as a transient pre-resolution state,
+    // the same V.1k "two-phase source invariant" the member2t/index2t asserts
+    // carry: under --python-irep2-adjust the converter builds a constant
+    // aggregate over a by-name symbol_type and the adjuster follows it to the
+    // resolved struct before symex. Without this disjunct that build aborts
+    // here (regression/python/{python_irep2_adjust,isinstance_none_adjust}).
     assert(
       type->type_id == type2t::struct_id ||
       type->type_id == type2t::complex_id ||
