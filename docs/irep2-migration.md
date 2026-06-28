@@ -3400,7 +3400,7 @@ build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
 
 #### V.1k (b)-adjuster — execution scoping (post-V.4.4b: the precondition is now met)
 
-> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 parity anchor pinned; flip is next, gated dual-solver (Z3 via CI) (2026-06-26).** The V.1k breakthrough above deferred
+> **Status: B.0 + B.1 + B.2 landed; B.3 spike done (service design, B.0–B.2 → B.5); RV2 layer-1 pinned; RV2 layer-2 gate turnkey + Bitwuzla baseline clean (0/69); B.3 first site (BoolOp cast) LANDED behind the flag, Bitwuzla parity 0-divergence over fixture+broad+boolop, Z3 via CI; B.4 triage done — F-P11 residue substantially stale (member-arith already-resolved), most of B.4 is cheap flag-gated round-trips not follow()-service work (2026-06-26).** The V.1k breakthrough above deferred
 > the (b) IREP2-native adjuster to "V.4+" on the grounds that *a separate adjuster
 > has no IREP2 to operate on until function bodies are IREP2*. **That precondition is
 > now satisfied:** V.4.4b landed and the IREP2 body round-trip is the only body path
@@ -3508,11 +3508,58 @@ following (`next: None`→`Node`), and dataclass field resolution.
   the strong assert). Acceptance unchanged: the relevant slice of the 20-test fixture
   green, dual-solver, asserts build, **plus** RV2 — the service's resolved type must
   equal `clang_cpp_adjust`'s (corpus round-trip equivalence). See the B.3 spike outcome.
+  **First site LANDED behind the flag (2026-06-26).** The `BoolOp` short-circuit's
+  `to_bool_condition` general cast (`converter_stmt.cpp`) now, under
+  `--python-irep2-adjust`, builds the boolean cast via the IREP2 round-trip
+  (`migrate_expr` operand → `typecast2tc` → `migrate_expr_back`, locations re-attached)
+  instead of the legacy `typecast_exprt`. **Empirical finding:** the operand reaching
+  this site is already resolved by `get_expr`, so `migrate_expr` does **not** hit the
+  F-P11 member/index assert here (a probe over the fixture confirmed it) — this site is
+  the file-1 already-resolved-operand recipe, not the general unresolved-base case the
+  later F-P11 families need. **RV2 — Bitwuzla half discharged:** the `PARITY_FLAG=
+  --python-irep2-adjust` sweep is 0 divergences over the 20-test fixture (71) **and** a
+  130-test broad slice **and** 39 `and`/`or`-heavy tests. Flag off ⇒ byte-identical;
+  the Z3 half runs in CI (`regression/python/boolop_member_attr_adjust{,_fail}` pin the
+  flipped path). The remaining F-P11 families (unresolved-base member/index) still need
+  the `name_space().follow()` resolution and are B.4.
 - **B.4 — generalise + post-adjust verification.** Add the exit assertion (every
   member/index source resolved); migrate the remaining F-P11 families; fold in W3
   (`#cpp_type`/`#member_name` IREP2-native carriage), retiring the legacy attribute
   reads at `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`,
   `goto2c/expr2c.cpp:169-174`.
+  **Exit assertion LANDED (2026-06-26).** `python_adjust::adjust()` now re-enforces
+  the strong invariant: after resolving each body it walks the result and, if any
+  `member2t`/`index2t` source is still a `symbol_type2t` (a survivor the pass could not
+  follow — e.g. an unregistered tag, left untouched by the guard), it `log_error`s
+  naming the symbol and returns true (error). This is the post-relaxation re-enforcement
+  the relaxed construction assert deferred. It is a pure safety net on the live pipeline
+  — `clang_cpp_adjust` resolves every source before the flag-on pass runs, so the
+  fixture + broad parity sweep stays **0 divergences** with the check active — and it
+  catches a B.5-era resolution bug deterministically. Unit-tested both ways (resolved
+  body ⇒ false; unregistered-tag survivor ⇒ true).
+
+  #### B.4 triage (2026-06-26) — the F-P11 residue is substantially STALE; most sites are already-resolved
+  > The §3636 F-P11 residue list dates to **2026-06-02** (the Phase-4.4
+  > `build_binary_expression` trial that aborted ~277/432). Attribute-type resolution
+  > in `get_expr` has improved since, so that list is now an **over-count**. A
+  > throwaway probe — `migrate_expr(lhs)` / `migrate_expr(rhs)` unconditionally at
+  > `build_binary_expression` (`converter_binop.cpp:1953`), rebuilt — runs **clean**
+  > (no `irep2_expr.h:1502/1576` abort) on `class1`/`class2`/`class4`/`class5`
+  > (member arithmetic: `self.weight += 1`, `self.age + 1`). The same held for the
+  > BoolOp site (B.3, the whole fixture). So the operand reaching these arithmetic /
+  > boolean sites is **already resolved**, and they are *not* genuine F-P11 aborts —
+  > they migrate via the B.3 round-trip recipe (no `follow()` service needed).
+  >
+  > **Consequence — B.4 re-scoped.** Most of the §3636 list is now the *cheap*
+  > already-resolved case: flag-gated round-trip flips like B.3, fully Bitwuzla-
+  > validatable + Z3-via-CI, **no dual-solver-gated `follow()`-service work**. The
+  > genuinely-unresolved residue (if any survives) must be re-confirmed by probe per
+  > site before assuming it needs `name_space().follow()`. **Next B.4 step:** probe
+  > each §3636 site, flag-gate the already-resolved ones (the bulk), and only build the
+  > `follow()` service for any site a probe proves still aborts. The arithmetic
+  > builders (`build_binary_expression`, `handle_modulo`/`handle_floor_division`) need a
+  > per-operator `*2tc` mapping rather than the single `typecast2tc` of B.3, so they are
+  > a slightly larger (but still already-resolved) flip than the BoolOp cast.
 - **B.5 — flip default, then drop the Python `clang_cpp_adjust` round-trip.** Once the
   full 20-test fixture + whole `regression/python` + model `.py` corpus hold parity on
   both solvers (asserts build) and `esbmc-cpp` is green (RV3 — the relaxed assert and
