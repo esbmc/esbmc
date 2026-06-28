@@ -1385,3 +1385,71 @@ no-overflow precision layer:
 8. **#5565 residual** — `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free + `strcmp` argv-string
    pointer-validity; reproduce under a `-DESBMC_SVCOMP=On` build.
 9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+---
+
+## 15. Pass 11 — reconcile + confirm the actionable backlog is at its research-grade floor (2026-06-28)
+
+This pass re-swept GitHub immediately after Pass 10 and produced **no new code fix**, because the
+re-sweep found no new issue and confirmed that every concretely-localizable item already has a fix in
+mainline or in flight. It records the verifications that establish this, so a later pass does not
+re-investigate the same residuals. Host: aarch64 macOS, ESBMC 8.3.0, master `f343663bde`.
+
+### 15.1 Re-sweep result — no new work surfaced
+
+* **No new SV-COMP issue** since 2026-06-17 (the four ldv-linux-3.14-races drivers + aws-hash pair);
+  all are already triaged (§12, §13).
+* **Nothing newly closed** since the Pass-9 reconciliation (#5565/#5593 closed 2026-06-26 are already
+  in §13.1/§14.1).
+* **Pass-10 PR (#5142 parse layer) in flight** as **#5660**
+  (`[clang-frontend] apply -Wno-int-conversion universally, not only under --sv-comp`); awaiting review.
+
+### 15.2 Residuals re-checked — already addressed in mainline
+
+* **#5565 / #5138 `fclose(stdout)` static-stream free.** Re-verified this pass: a minimal
+  `fclose(stdout)` under `--memory-leak-check` reports `VERIFICATION SUCCESSFUL`, not the issue's
+  "invalid pointer freed". The guard already lives in `src/c2goto/library/io.c` `fclose`
+  (`if (!__ESBMC_sv_comp() && __ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)]) free(stream);`),
+  which frees only heap streams from `fopen`/`fdopen` and leaves the static standard streams alone,
+  while still catching a genuine double-`fclose` of an `fopen`'d stream. The remaining `strcmp`
+  argv-string layer "did not surface as the first failure on a standard build" (§13.2) and is not
+  independently reproducible here. The `fclose` residual of item 8 is therefore **discharged**; item 8
+  reduces to the `strcmp`/argv layer only.
+
+### 15.3 #4438 — log_6_safe.c-amalgamation (neural-network unreach-call false alarm): triaged research-grade
+
+Not previously detailed in the priority list. `c/neural-networks/log_6_safe.c-amalgamation` is a TRUE
+`unreach-call` task on which ESBMC reports `false(unreach-call)` under `kinduction` (SV-COMP 26 run,
+ESBMC 8.2.0). It is a large floating-point neural-network amalgamation: the spurious counterexample is
+a k-induction / float-precision interaction, not a localized frontend or OM gap, and is not
+reproducible in isolation without the (large) benchmark and a full-set k-induction validation. Same
+research-grade class as #4980 (k-induction) — added to the backlog rather than patched.
+
+### 15.4 Pass-11 running report
+
+**Analysed.** GitHub re-sweep (no new/newly-closed issues); #5565/#5138 `fclose` residual re-verified
+discharged; #4438 triaged.
+
+**PRs opened.** None code — the actionable, isolation-verifiable backlog is exhausted; every remaining
+item is research-grade or full-benchmark-gated (consistent with the Pass-8 doc-only cadence and the
+correctness-first mandate: no heuristic shipped for a soundness-sensitive subsystem that cannot be
+validated against the full SV-COMP set in this environment). This pass is the recurring triage-doc
+reconciliation, stacked on the #5660 (Pass-10) doc update.
+
+**Duplicated work avoided.** #5565/#5138 `fclose` layer not re-fixed — already guarded in `io.c`
+(re-verified §15.2). #4438 not patched — research-grade k-induction/float class. The #5142 parse layer
+not re-touched — in flight as #5660.
+
+**Remaining work (priority order, updated 2026-06-28, Pass 11).** As §14.3, with #4438 added and the
+#5565 `fclose` half discharged:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980 / #4438** — k-induction precision: termination ranking recogniser (#4980) and the
+   neural-network float counterexample (#4438); both need full-set validation.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+6. **#5142 residual** — no-overflow precision layer once parsed (x86 + full-benchmark-gated).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **#5565 residual** — `strcmp` argv-string pointer-validity only (the `fclose` half is discharged,
+   §15.2); `ESBMC_SVCOMP`/`--sv-comp`-gated.
+9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
