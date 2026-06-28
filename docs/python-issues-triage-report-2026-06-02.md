@@ -2176,3 +2176,56 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 62. 2026-06-28 re-validation (fifty-second sweep) & dict.update() keyword form
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §61b sibling lead: `dict.update(**kwargs)` — the method analogue of §61's constructor
+fix.
+
+### 62a. New isolated, soundly-fixable defect found & fixed
+**`d.update(b=2)` and `d.update()` raised "update() takes exactly one argument".**
+
+CPython's signature is `dict.update([E], **F)` — an optional positional iterable plus any number of
+keyword pairs — but `handle_dict_update` (`python-dict/dict_methods.cpp`) required `args.size() == 1`, so
+the keyword form `d.update(b=2)` and the empty form `d.update()` (both zero positional args) were
+rejected outright.
+
+**Fix**: relax the guard to `args.size() > 1` (at most one positional source), and add an
+`apply_keyword_args` step that assigns each keyword pair as `dict[name] = value` (the name lowered to a
+string-`Constant` key, reusing the existing `handle_dict_subscript_assign` primitive — the same
+synthesised-key pattern §61 and `fromkeys` use). It runs **after** the optional positional source so
+`d.update(other, k=v)` matches CPython's order (keyword wins on a clash), is a no-op when there are no
+keywords (so `update({…})` / `update(other_dict)` are byte-for-byte unchanged), and throws for
+`d.update(**other)` (a null keyword `arg`) rather than silently dropping the updates.
+
+This is a **crash/unsupported→correct-result fix**. New regression pair `dict_update_kwargs{,_fail}`
+(CORE) covering the keyword form, keyword overwrite, empty `update()`, and the combined
+positional-plus-keyword form; the positive is the liveness witness (it errored pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh dict_update`); the
+focused `dict_update`/`dict_method` ctest subset (8 tests) is 100% green. Code-reviewed (0 critical/high;
+the keyword key/value lowering equivalence to `d["b"]=2`, the positional-then-keyword order and
+exactly-once application, the inert-without-keywords non-regression of both existing paths, the
+synchronous `[&]` lambda capture, and the `**other` throw-vs-drop soundness all confirmed). Solver-
+agnostic.
+
+### 62b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) `sorted`/`sort` with an arithmetic/function `key` silently sorts by natural
+order (§56b/§57b); (iii) `int`-literal-receiver methods (`(255).bit_length()`) unsupported though the
+variable form works (§57b).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§61 (PRs #5668, #5669, #5675–#5687) are in flight and not yet
+> on `master`; this sweep is appended as §62.
