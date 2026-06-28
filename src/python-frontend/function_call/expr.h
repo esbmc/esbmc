@@ -146,6 +146,14 @@ private:
   exprt handle_int_to_bytes() const;
 
   /*
+   * Folds a zero-argument int method on a constant literal receiver
+   * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
+   * BinOp receiver already routes through the int operational model; a bare
+   * literal receiver is not classified as an int instance, so fold it here.
+   */
+  exprt handle_int_literal_method() const;
+
+  /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
    * constants by decoding their binary-encoded bitvector representations.
