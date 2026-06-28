@@ -28,6 +28,17 @@ bool python_adjust::adjust()
     if (symbol.mode != "Python")
       continue;
 
+    // Only adjust symbols whose IREP2 value is authoritative: those are the
+    // converter's IREP2-native member/index sources this pass exists to
+    // resolve. Forcing get_value2() on a legacy-valued symbol (e.g. an
+    // operational-model function body) would migrate sub-expressions the
+    // frontend left with unresolved struct tags -- a latent hole the lazy
+    // legacy/IREP2 split tolerates precisely because nothing reads their IREP2
+    // side (see symbolt). Until B.3 makes the converter emit these natively the
+    // pass is therefore a true no-op on today's corpus, as documented.
+    if (!symbol.has_native_value2())
+      continue;
+
     expr2tc value = symbol.get_value2();
     if (is_nil_expr(value))
       continue;
