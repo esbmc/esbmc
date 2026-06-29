@@ -2179,6 +2179,54 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 52. 2026-06-28 re-validation (forty-second sweep) & abs() of a bool (crash fix)
+
+Re-test against current `master` (tip `ff63b29e57`, with §40/§41 now merged). KNOWNBUG classification
+unchanged — §3 holds. An idiom battery surfaced a **crash** (not a wrong verdict) on `abs()` of a
+boolean.
+
+### 52a. New isolated, soundly-fixable defect found & fixed
+**`abs(True)` crashed ESBMC with a solver sort assertion.**
+
+`bool` is an int subclass in Python (`abs(True) == 1`, `abs(False) == 0`), but `abs()` over a bool
+operand built an `abs` node of **bool** type whose lowered `>= 0` comparison mixed a bool sort and a
+signed-bitvector sort, tripping `Assertion failed: is_signedbv_type(...)` in `smt_solver.cpp` — a hard
+abort under asserts-on builds (CI DebugOpt, and the local RelWithDebInfo here), not a recoverable
+verdict.
+
+**Fix** (`function_call/builtins.cpp`): in `handle_abs`'s `build_abs` lambda, cast a bool operand to
+the Python int type (`build_typecast(operand, get_typet("int", 0))`) before building the abs node, so
+the `>= 0` comparison is over two signed-bitvector sorts. bools are non-negative, so `abs` is identity
+on the cast value (0/1), matching CPython. The cast sits at the top of `build_abs`, before the
+`__abs__` dunder dispatch and the complex check — both safe, since `bool` is final (no custom
+`__abs__`) and never complex. Every bool-producing operand — literal, variable, and boolean expression
+(`abs(2 > 1)`) — routes through `build_abs`, so the one cast covers them all; the int/float/complex and
+`__abs__` paths are untouched (`is_bool()` matches only a Python bool).
+
+This is a **crash→correct-result** fix (§5-item-5 class, but resolved rather than merely diagnosed).
+New regression pair `regression/python/abs_bool{,_fail}` (CORE) covering `abs(True)`/`abs(False)`, a
+bool variable, boolean expressions, int composition, and the unchanged int/float cases; the positive
+test is the liveness witness — confirmed to **abort with the solver assertion pre-fix** and verify
+SUCCESSFUL post-fix (the durable crash regression). Verified bit-for-bit against CPython; CPython
+sanity passes (`scripts/check_python_tests.sh abs_bool`); the `regression/python/abs*` ctest subset
+(4 tests) is 100% green — the existing `abs`/`abs-fail` int/float tests still pass. Code-reviewed (0
+critical/high; correctness, the `is_bool()` non-regression, the pre-dunder placement, and full operand
+coverage all confirmed; the added branch's C-Live witness is the new positive test). Solver-agnostic
+(a frontend type cast, no SMT-encoding change beyond removing the malformed sort).
+
+A sibling crash was characterised and left for a follow-up: `x = divmod(a, b); x == (q, r)` aborts with
+a **tuple-sort** assertion (`smt_tuple_node_ast.cpp`) — the divmod result stored in a single variable
+mis-types against a tuple literal; distinct from this abs fix.
+
+### 52b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: the `divmod`-to-variable tuple-sort crash (above); `list.index(x,
+start[, end])` position arguments (unsupported — `a.index(2, 2)` errors; reuses slice+index or a range
+OM); the set/list-literal-receiver method gap (§46b/§51a); `frozenset` (unsupported AST type); `dict |`
+PEP 584 union (explicitly unsupported); variadic `math.hypot` (float-precision, §51b); the
+bytes-returning methods (receiver-aware return-type inference, §49b); the symbolic bytes affix/search
+methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate` dict-table; and multi-byte
+UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands.
+Other deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
 ## 53. 2026-06-28 re-validation (forty-third sweep) & divmod() tuple-sort crash
 
 Re-test against current `master` (tip `ff63b29e57`). KNOWNBUG classification unchanged — §3 holds. This
@@ -2229,5 +2277,7 @@ deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
 §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
 `hashlib` case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §39 and §42–§51 (PRs #5661, #5668–#5677) are in flight and not yet on
+> `master` (§40/§41 merged this sweep); this sweep is appended as §52.
 > **Note on numbering.** §39 and §42–§52 (PRs #5661, #5668–#5678) are in flight and not yet on `master`
 > (§40/§41 merged); this sweep is appended as §53.
