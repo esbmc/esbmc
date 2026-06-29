@@ -151,6 +151,14 @@ private:
   exprt handle_int_to_bytes() const;
 
   /*
+   * Folds float.is_integer() on a constant literal receiver
+   * (e.g. (2.0).is_integer()). A Name receiver already routes through the
+   * float operational model; a bare literal is not classified as a float
+   * instance, so fold it here to a Python bool.
+   */
+  exprt handle_float_is_integer_literal() const;
+
+  /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
    * constants by decoding their binary-encoded bitvector representations.
