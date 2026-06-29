@@ -1099,15 +1099,8 @@ exprt python_set::build_set_method_call(
   }
 
   if (method_name == "symmetric_difference")
-  {
-    // (self - other) ∪ (other - self) — collect into a fresh set.
-    symbolt &result = create_set_list();
-    emit_filtered_extend(
-      converter_, build_symbol(self), other, result, false, element);
-    emit_filtered_extend(
-      converter_, other, build_symbol(self), result, false, element);
-    return build_symbol(result);
-  }
+    return build_set_symmetric_difference_call(
+      build_symbol(self), other, element);
 
   // The non-mutating union/intersection/difference methods reuse the same
   // builders as the |, & and - operators; each returns a fresh set and leaves
@@ -1182,6 +1175,21 @@ exprt python_set::handle_operations(
     return set_handler.build_set_intersection_call(lhs, rhs, element);
   else if (op == "BitOr") // Set union: a | b
     return set_handler.build_set_union_call(lhs, rhs, element);
+  else if (op == "BitXor") // Set symmetric difference: a ^ b
+    return set_handler.build_set_symmetric_difference_call(lhs, rhs, element);
 
   return nil_exprt();
+}
+
+exprt python_set::build_set_symmetric_difference_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // (lhs - rhs) ∪ (rhs - lhs) — collect into a fresh set, mirroring the
+  // symmetric_difference() method.
+  symbolt &result = create_set_list();
+  emit_filtered_extend(converter_, lhs, rhs, result, false, element);
+  emit_filtered_extend(converter_, rhs, lhs, result, false, element);
+  return build_symbol(result);
 }

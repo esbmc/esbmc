@@ -1287,8 +1287,49 @@ exprt python_dict_handler::handle_dict_update(
 {
   const auto &args = call_node["args"];
 
-  if (args.size() != 1)
-    throw std::runtime_error("update() takes exactly one argument");
+  // CPython: dict.update([E], **F) — at most one positional iterable plus any
+  // number of keyword pairs.
+  if (args.size() > 1)
+    throw std::runtime_error(
+      "update() takes at most one positional argument");
+
+  // Apply each keyword argument as dict[name] = value. Runs after the optional
+  // positional source so `d.update(other, k=v)` matches CPython's order.
+  // `update(**other)` carries a null keyword arg and is not modelled.
+  auto apply_keyword_args = [&]() {
+    if (!call_node.contains("keywords") || !call_node["keywords"].is_array())
+      return;
+    for (const auto &kw : call_node["keywords"])
+    {
+      if (!kw.contains("arg") || !kw["arg"].is_string())
+        throw std::runtime_error(
+          "dict.update(**other) is not supported in ESBMC model");
+      nlohmann::json key_node;
+      key_node["_type"] = "Constant";
+      key_node["value"] = kw["arg"];
+      for (const char *f :
+           {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+        if (call_node.contains(f))
+          key_node[f] = call_node[f];
+      exprt value_expr = converter_.get_expr(kw["value"]);
+      code_blockt pair_block;
+      handle_dict_subscript_assign(
+        dict_expr,
+        get_key_expr(key_node),
+        value_expr,
+        converter_.get_location_from_decl(call_node),
+        key_node,
+        pair_block);
+      converter_.add_instruction(pair_block);
+    }
+  };
+
+  // dict.update(k=v, ...): no positional source, keyword pairs only.
+  if (args.empty())
+  {
+    apply_keyword_args();
+    return nil_exprt();
+  }
 
   const nlohmann::json &arg = args[0];
 
@@ -1312,6 +1353,7 @@ exprt python_dict_handler::handle_dict_update(
       converter_.add_instruction(pair_block);
     }
 
+    apply_keyword_args();
     return nil_exprt();
   }
 
@@ -1398,5 +1440,6 @@ exprt python_dict_handler::handle_dict_update(
   while_loop.location() = location;
   converter_.add_instruction(while_loop);
 
+  apply_keyword_args();
   return nil_exprt();
 }
