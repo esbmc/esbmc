@@ -439,15 +439,47 @@ void goto_checkt::input_overflow_check(
     if (fmt[pos] == '%' && fmt[pos + 1] != '.')
     {
       pos++;
+
+      // "%%" is a literal percent (no conversion) and "%*..." suppresses
+      // assignment (it reads input but consumes no argument).  Neither maps to
+      // a call argument, so skip it -- pushing a phantom limit here would
+      // misalign limits[] against the argument list and abandon the whole check
+      // ("too few arguments for format specifiers"), silently dropping a real
+      // overflow on a later %s.
+      if (pos < fmt.length() && (fmt[pos] == '%' || fmt[pos] == '*'))
+        continue;
+
       while (std::isdigit(fmt[pos]))
       {
         tmp_str += fmt[pos];
         pos++;
       }
+
+      // After the optional field width, skip C length modifiers (h, l, L, j,
+      // z, t, q) to reach the actual conversion specifier.  Only string
+      // conversions read an unbounded run of bytes into the caller's buffer:
+      // %s, the %[...] scanset, and the XSI/glibc wide-string %S (= %ls).
+      // Numeric, pointer and (wide-)char conversions write a single fixed-size
+      // scalar -- including %c/%lc/%C, which read exactly one (wide) character
+      // -- and so cannot overflow a buffer through a missing field width.  A
+      // width-less non-string conversion is therefore recorded as BOUNDED
+      // rather than INF, so it does not trip the unlimited buffer-overflow rule
+      // below (esbmc/esbmc#1470, scanf "%ld" false alarm).
+      long unsigned int conv_pos = pos;
+      while (conv_pos < fmt.length() &&
+             (fmt[conv_pos] == 'h' || fmt[conv_pos] == 'l' ||
+              fmt[conv_pos] == 'L' || fmt[conv_pos] == 'j' ||
+              fmt[conv_pos] == 'z' || fmt[conv_pos] == 't' ||
+              fmt[conv_pos] == 'q'))
+        conv_pos++;
+      const bool is_string_conv =
+        conv_pos < fmt.length() &&
+        (fmt[conv_pos] == 's' || fmt[conv_pos] == 'S' || fmt[conv_pos] == '[');
+
       if (tmp_str != "")
         limits.push_back(tmp_str);
       else
-        limits.push_back("INF");
+        limits.push_back(is_string_conv ? "INF" : "BOUNDED");
       tmp_str = "";
     }
   }
@@ -501,6 +533,11 @@ void goto_checkt::input_overflow_check(
   {
     if (arg_names.at(i).empty())
       return;
+
+    // A non-string conversion with no field width writes a single scalar; there
+    // is no buffer to overflow, so skip it (see the format-parse loop above).
+    if (limits.at(i) == "BOUNDED")
+      continue;
 
     const symbolt &arg = *ns.lookup(arg_names.at(i));
     const irep_idt type_id = arg.get_type().id();

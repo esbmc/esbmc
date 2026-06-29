@@ -2287,11 +2287,14 @@ exprt string_handler::handle_string_attribute_call(
       return nil_exprt();
   }
 
-  // bytes.hex(): fold a constant bytes object to its lowercase hex string
-  // (CPython: b"\x01\xab".hex() == "01ab"). str has no .hex() method, so a
-  // "hex" attribute is unambiguously a bytes method. Bytes are modelled as an
-  // int array; a str is a char array, so the subtype check excludes strings.
-  if (method_name == "hex" && args.empty())
+  // bytes.hex([sep[, bytes_per_sep]]): fold a constant bytes object to its
+  // lowercase hex string (CPython: b"\x01\xab".hex() == "01ab"). str has no
+  // .hex() method, so a "hex" attribute is unambiguously a bytes method. Bytes
+  // are modelled as an int array; a str is a char array, so the subtype check
+  // excludes strings. An optional one-character ASCII separator is inserted
+  // between byte groups: a positive bytes_per_sep groups from the right, a
+  // negative one from the left, and zero inserts none (CPython default is 1).
+  if (method_name == "hex" && args.size() <= 2)
   {
     exprt recv = get_receiver_expr();
     if (recv.is_symbol())
@@ -2304,20 +2307,223 @@ exprt string_handler::handle_string_attribute_call(
     const typet &rt = recv.type();
     if (rt.is_array() && rt.subtype() != char_type())
     {
-      static const char digits[] = "0123456789abcdef";
-      std::string hex;
-      hex.reserve(recv.operands().size() * 2);
-      for (const exprt &op : recv.operands())
+      // A non-constant separator or grouping size is not folded — control
+      // falls through to the regular (unsupported) dispatch, never a wrong
+      // verdict.
+      std::string sep;
+      long long group = 1;
+      bool have_sep = false;
+      bool foldable = true;
+      if (!args.empty())
       {
-        BigInt v;
-        if (to_integer(op, v)) // true == not a constant integer
-          throw std::runtime_error(
-            "bytes.hex() is only supported on a constant bytes object");
-        const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
-        hex.push_back(digits[(byte >> 4) & 0xf]);
-        hex.push_back(digits[byte & 0xf]);
+        if (!extract_constant_string(args[0], converter_, sep))
+          foldable = false;
+        else
+        {
+          // A single non-ASCII character is multi-byte in UTF-8, so a length-1
+          // separator is necessarily ASCII; this check subsumes CPython's
+          // separate "sep must be ASCII" error.
+          if (sep.size() != 1)
+            throw std::runtime_error("bytes.hex(): sep must be length 1");
+          have_sep = true;
+          if (
+            args.size() == 2 && !json_utils::extract_constant_integer(
+                                  args[1],
+                                  converter_.get_current_func_name(),
+                                  converter_.get_ast_json(),
+                                  group))
+            foldable = false;
+        }
       }
-      return string_builder_->build_string_literal(hex);
+      if (foldable)
+      {
+        static const char digits[] = "0123456789abcdef";
+        const std::size_t n = recv.operands().size();
+        const bool from_left = group < 0;
+        // Negate in the unsigned domain so LLONG_MIN does not overflow.
+        const unsigned long long g =
+          group < 0 ? 0ULL - static_cast<unsigned long long>(group)
+                    : static_cast<unsigned long long>(group);
+        std::string hex;
+        hex.reserve(n * 3);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          if (have_sep && g != 0 && i > 0)
+          {
+            const bool boundary = from_left ? (i % g == 0) : ((n - i) % g == 0);
+            if (boundary)
+              hex.push_back(sep[0]);
+          }
+          BigInt v;
+          if (to_integer(recv.operands()[i], v)) // true == not constant
+            throw std::runtime_error(
+              "bytes.hex() is only supported on a constant bytes object");
+          const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+          hex.push_back(digits[(byte >> 4) & 0xf]);
+          hex.push_back(digits[byte & 0xf]);
+        }
+        return string_builder_->build_string_literal(hex);
+      }
+    }
+  }
+
+  // bytes.startswith(prefix) / bytes.endswith(suffix) over *literal* bytes
+  // constructors `bytes([...])`. Both methods are otherwise routed through the
+  // str strncmp/strlen machinery, which is wrong for the int-array bytes
+  // representation (not null-terminated): endswith mis-computes its
+  // from-the-end offset and a NUL byte truncates the length. The fold inspects
+  // only the `bytes([const, ...])` AST syntax — so no symbolic, branch-merged,
+  // or partially-evaluated value can ever reach it — and compares the byte
+  // vectors directly. A str receiver, a variable/expression receiver, a tuple
+  // or position argument, and `b"..."` literals all fall through to the
+  // existing dispatch, sound and unchanged.
+  if (
+    (method_name == "startswith" || method_name == "endswith") &&
+    args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false; // out of range(0, 256): CPython raises ValueError
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    std::vector<unsigned> arg_bytes;
+    if (
+      extract_bytes_literal(receiver_json, recv_bytes) &&
+      extract_bytes_literal(args[0], arg_bytes))
+    {
+      bool result = arg_bytes.size() <= recv_bytes.size();
+      if (result)
+      {
+        const std::size_t off = (method_name == "endswith")
+                                  ? recv_bytes.size() - arg_bytes.size()
+                                  : 0;
+        for (std::size_t i = 0; i < arg_bytes.size(); ++i)
+          if (recv_bytes[off + i] != arg_bytes[i])
+          {
+            result = false;
+            break;
+          }
+      }
+      return migrate_expr_back(result ? gen_true_expr() : gen_false_expr());
+    }
+  }
+
+  // bytes.find(sub) / bytes.rfind(sub): the index of the first (find) or last
+  // (rfind) occurrence of sub in the receiver, or -1 if absent. Both methods
+  // are otherwise routed through the str strncmp/strlen machinery, which is
+  // wrong for the int-array bytes representation (a NUL byte truncates the
+  // length). Fold over *literal* operands only: the receiver must be a
+  // bytes([...]) constructor, and the argument either a bytes([...]) subsequence
+  // or a single integer byte. The match is purely syntactic (AST only), so no
+  // symbolic, branch-merged, or partially-evaluated value can reach the fold;
+  // a str receiver, a variable/expression receiver, and any other form fall
+  // through to the existing dispatch, sound and unchanged.
+  if ((method_name == "find" || method_name == "rfind") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte
+      // (CPython bytes.find accepts both); any other form falls through.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          // CPython: an empty sub matches at 0 (find) / n (rfind).
+          if (method_name == "find")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rfind, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        return from_integer(result, long_long_int_type());
+      }
     }
   }
 

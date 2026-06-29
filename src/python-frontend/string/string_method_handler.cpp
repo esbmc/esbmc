@@ -575,7 +575,9 @@ std::optional<exprt> dispatch_search_string_methods(
   const std::function<locationt()> &get_location,
   python_converter &converter)
 {
-  if (method_name != "find" && method_name != "index" && method_name != "rfind")
+  if (
+    method_name != "find" && method_name != "index" &&
+    method_name != "rfind" && method_name != "rindex")
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
@@ -596,6 +598,20 @@ std::optional<exprt> dispatch_search_string_methods(
       return self.handle_string_index(
         call_json, obj_expr, parsed.needle, get_location());
     return self.handle_string_index_range(
+      call_json,
+      obj_expr,
+      parsed.needle,
+      parsed.start,
+      parsed.end,
+      get_location());
+  }
+
+  if (method_name == "rindex")
+  {
+    if (!parsed.has_range)
+      return self.handle_string_rindex(
+        call_json, obj_expr, parsed.needle, get_location());
+    return self.handle_string_rindex_range(
       call_json,
       obj_expr,
       parsed.needle,
@@ -2049,6 +2065,31 @@ exprt string_handler::handle_string_rfind_range(
   rfind_call.location() = location;
 
   return rfind_call;
+}
+
+exprt string_handler::handle_string_rindex(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  // rindex is rfind that raises ValueError when the substring is not found,
+  // exactly as index relates to find (build_string_index_result raises on -1).
+  exprt rfind_expr = handle_string_rfind(string_obj, find_arg, location);
+  return build_string_index_result(call, rfind_expr, location);
+}
+
+exprt string_handler::handle_string_rindex_range(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt rfind_expr = handle_string_rfind_range(
+    string_obj, find_arg, start_arg, end_arg, location);
+  return build_string_index_result(call, rfind_expr, location);
 }
 
 exprt string_handler::handle_string_replace(
