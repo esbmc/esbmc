@@ -65,13 +65,43 @@ exprt python_converter::compare_constants_internal(
   if (!lhs.is_constant() || !rhs.is_constant())
     return nil_exprt();
 
+  // Resolve an op plus a three-way comparison sign (cmp < 0 / == 0 / > 0) to a
+  // bool literal, or nil for an op this helper does not cover. The ordered
+  // operators (Lt/LtE/Gt/GtE) previously collapsed to `!equal`, so ordered
+  // comparisons of constant strings/chars were wrong whenever the answer
+  // differed from inequality (e.g. "abc" <= "abc" folded to False, and
+  // "abd" <= "abc" to True).
+  auto resolve = [&op](int cmp) -> exprt {
+    if (op == "Eq")
+      return gen_bool(cmp == 0);
+    if (op == "NotEq")
+      return gen_bool(cmp != 0);
+    if (op == "Lt")
+      return gen_bool(cmp < 0);
+    if (op == "LtE")
+      return gen_bool(cmp <= 0);
+    if (op == "Gt")
+      return gen_bool(cmp > 0);
+    if (op == "GtE")
+      return gen_bool(cmp >= 0);
+    return nil_exprt();
+  };
+
+  // Characters order by code point (unsigned byte), matching both Python's
+  // string ordering and the lexicographic char-array / strcmp paths. Read the
+  // byte unsigned so a high-bit char (≥ 128) is not mis-ordered as negative.
+  auto char_value = [](const exprt &e) -> BigInt {
+    return binary2integer(e.value().as_string(), false);
+  };
+
   // Single character comparisons
   if (
     (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
     (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
-    bool equal = (lhs == rhs);
-    return gen_bool((op == "Eq") ? equal : !equal);
+    const BigInt l = char_value(lhs);
+    const BigInt r = char_value(rhs);
+    return resolve(l < r ? -1 : (l > r ? 1 : 0));
   }
 
   // Array vs array comparisons (string literal comparison)
@@ -85,21 +115,23 @@ exprt python_converter::compare_constants_internal(
       // Type-identifier constants (e.g. from `x = int`) have no operands and
       // store the name in get_value(). String literals have individual char
       // operands and an empty get_value(). These represent different Python
-      // objects (int != "int"), so comparing across formats is always unequal.
+      // objects (int != "int"), so comparing across formats is always unequal;
+      // an ordered comparison across them is meaningless, so fall through.
       bool lhs_is_type_id = lhs.operands().empty();
       bool rhs_is_type_id = rhs.operands().empty();
       if (lhs_is_type_id != rhs_is_type_id)
-        return gen_bool(op == "NotEq");
+        return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
+                                             : nil_exprt();
 
-      // Extract string values
+      // Extract string values and compare lexicographically (Python orders
+      // strings by code point; for the char-array model this is byte-wise,
+      // matching the runtime strcmp path).
       std::string lhs_str =
         string_handler_.extract_string_from_array_operands(lhs);
       std::string rhs_str =
         string_handler_.extract_string_from_array_operands(rhs);
 
-      // Compare strings
-      bool equal = (lhs_str == rhs_str);
-      return gen_bool((op == "Eq") ? equal : !equal);
+      return resolve(lhs_str.compare(rhs_str));
     }
   }
 
@@ -111,11 +143,12 @@ exprt python_converter::compare_constants_internal(
     const exprt::operandst &rhs_ops = rhs.operands();
     if (rhs_ops.size() == 1)
     {
-      bool equal =
-        (lhs == rhs_ops[0]) || (lhs.get("value") == rhs_ops[0].get("value"));
-      return gen_bool((op == "Eq") ? equal : !equal);
+      const BigInt l = char_value(lhs);
+      const BigInt r = char_value(rhs_ops[0]);
+      return resolve(l < r ? -1 : (l > r ? 1 : 0));
     }
-    return gen_bool(op == "NotEq");
+    return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
+                                         : nil_exprt();
   }
 
   if (
@@ -125,11 +158,12 @@ exprt python_converter::compare_constants_internal(
     const exprt::operandst &lhs_ops = lhs.operands();
     if (lhs_ops.size() == 1)
     {
-      bool equal =
-        (lhs_ops[0] == rhs) || (lhs_ops[0].get("value") == rhs.get("value"));
-      return gen_bool((op == "Eq") ? equal : !equal);
+      const BigInt l = char_value(lhs_ops[0]);
+      const BigInt r = char_value(rhs);
+      return resolve(l < r ? -1 : (l > r ? 1 : 0));
     }
-    return gen_bool(op == "NotEq");
+    return (op == "Eq" || op == "NotEq") ? gen_bool(op == "NotEq")
+                                         : nil_exprt();
   }
 
   return nil_exprt();
