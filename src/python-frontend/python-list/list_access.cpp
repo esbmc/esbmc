@@ -1617,6 +1617,15 @@ exprt python_list::handle_index_access(
     if (mixed_numeric)
       elem_type = double_type();
 
+    // A float-typed element read must dispatch on the stored type_id even for a
+    // constant index into a statically "pure-float" list: a list[float]
+    // parameter can receive a list whose elements are actually int (Python does
+    // not enforce annotations), and reading __ESBMC_float_buf unconditionally
+    // would reinterpret those int payloads as float garbage (math.dist with
+    // integer coordinates returned ~0). The type_id dispatch promotes int
+    // payloads correctly, so widen the dispatch to every float read.
+    const bool dispatch_numeric = mixed_numeric || elem_type.is_floatbv();
+
     // A heap-migrated user-class instance is stored in a list as a `Class*`
     // pointer: the push path records a pointer-sized element (type_size 8), not
     // the full struct. If the element type resolved to a by-value user-class
@@ -1643,7 +1652,7 @@ exprt python_list::handle_index_access(
     // The mixed-numeric read dereferences the element three times (type_id,
     // float_idx, value), so bind the __ESBMC_list_at result to a temp first and
     // evaluate the access once instead of three times on the hot path.
-    if (mixed_numeric)
+    if (dispatch_numeric)
     {
       const locationt loc = converter_.get_location_from_decl(list_value_);
       symbolt &elem_obj = converter_.create_tmp_symbol(
@@ -1664,7 +1673,7 @@ exprt python_list::handle_index_access(
     // value-context (assigned to the target), so an any_type string element may
     // be returned by pointer without overrunning its short char[] storage.
     return extract_pyobject_value(
-      list_at_call, elem_type, mixed_numeric, /*string_safe=*/true);
+      list_at_call, elem_type, dispatch_numeric, /*string_safe=*/true);
   }
 
   // Handle static string indexing with IndexError on out-of-bounds
