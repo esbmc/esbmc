@@ -3172,6 +3172,15 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_ascii(); },
      "ascii() builtin"},
 
+    // format() builtin — a bare Name call (not the str.format() method).
+    {[this]() {
+       return function_id_.get_function() == "format" &&
+              function_id_.get_prefix() == "py:" &&
+              call_["func"]["_type"] == "Name";
+     },
+     [this]() { return handle_format(); },
+     "format() builtin"},
+
     // round() builtin function
     {[this]() {
        const std::string &func_name = function_id_.get_function();
