@@ -2281,6 +2281,57 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
 
+---
+
+## 55. 2026-06-28 re-validation (forty-fifth sweep) & list.index(x, start[, end])
+
+Re-test against current `master` (tip `39fceef565`, with §39/§40/§41/§44/§45/§46 now merged). KNOWNBUG
+classification unchanged — §3 holds. This sweep took the catalogued `list.index` start/end gap (§52b),
+in the list operational model (non-contended).
+
+### 55a. New isolated, soundly-fixable defect found & fixed
+**`list.index(x, start[, end])` was rejected outright.**
+
+CPython `list.index(x, start[, end])` searches the slice `l[start:end]` and returns the absolute index
+(ValueError if absent); ESBMC threw `list.index() takes exactly one argument`. The handler only ever
+built the one-argument model call.
+
+**Fix** (three layers, all list-specific):
+- `c2goto/library/python/list.c`: new model `__ESBMC_list_index_range(l, item, type_id, size, int64_t
+  start, int64_t end)` — normalizes `start`/`end` as CPython slice bounds (negative `+= size`, then each
+  clamps to `[0, size]`), scans `[start, end)`, returns the first match, else the same
+  `__ESBMC_assert(0, "ValueError…")` the existing `__ESBMC_list_index` uses. Mirrors that function.
+- `python-list/list_query.cpp`: new builder `build_index_range_list_call` appending the `start`/`end`
+  args (the GOTO call casts them to the `int64_t` parameters, sign-preserving — the same mechanism the
+  §54 `list.insert` fix relied on).
+- `function_call/expr.cpp` (`handle_list_index`): accept 1–3 args; one arg keeps the existing path; a
+  missing `end` passes an `INT32_MAX` sentinel the model clamps to `size`.
+
+This **adds a missing feature**. New regression pair `regression/python/list_index_start_end{,_fail}`
+(CORE): the positive covers `index(x, start)`, `index(x, start, end)`, `start == 0`, negative start and
+negative end (slice-bound normalization), and the unchanged one-argument form; the `_fail` pins the
+not-found ValueError branch of the new model (`index(1, 1)` on `[1, 2, 3]`). Verified bit-for-bit
+against CPython; CPython sanity passes (`scripts/check_python_tests.sh list_index`); the focused
+`list_index`/`list_count` ctest subset is 100% green. The OM is FLAIL-mangled, so the binary was rebuilt
+before testing. Code-reviewed (0 critical/high; the normalize-then-scan vs CPython across every bound
+regime, the `INT32_MAX` sentinel soundness, sign preservation through the argument cast, OOB-safety of
+the scan loop, and the catchable-exception consistency all confirmed). Solver-agnostic (an OM/frontend
+change, no SMT-encoding change).
+
+### 55b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except` (the ValueError is not catchable — frontend-wide
+limitation), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3
+design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all
+stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §47–§54 (PRs #5668, #5669, #5673–#5680) are in flight and not yet
+> on `master` (§39/§40/§41/§44/§45/§46 merged); this sweep is appended as §55.
 ## 43. 2026-06-28 re-validation (thirty-third sweep) & float.is_integer() on a literal receiver
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
