@@ -830,11 +830,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
-  // Handle set operations (difference, intersection, union)
+  // Handle set operations (difference, intersection, union, symmetric diff)
   typet list_type = type_handler_.get_list_type();
   if (
     (lhs.type() == list_type || rhs.type() == list_type) &&
-    (op == "Sub" || op == "BitAnd" || op == "BitOr"))
+    (op == "Sub" || op == "BitAnd" || op == "BitOr" || op == "BitXor"))
   {
     exprt set_result =
       python_set::handle_operations(*this, op, lhs, rhs, element);
