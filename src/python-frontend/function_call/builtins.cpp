@@ -724,6 +724,12 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // - delegate to the complex handler when the operand is complex,
   // - otherwise emit a symbolic abs() expression preserving the type.
   auto build_abs = [this](exprt operand) -> exprt {
+    // bool is an int subclass in Python; abs() of a bool yields an int
+    // (abs(True) == 1, abs(False) == 0). Cast before building the abs node so
+    // its `>= 0` comparison does not mix a bool and a signed-bitvector sort
+    // (which trips a solver sort assertion).
+    if (operand.type().is_bool())
+      operand = build_typecast(operand, type_handler_.get_typet("int", 0));
     exprt dunder_result = converter_.dispatch_unary_dunder_operator(
       "abs", operand, converter_.get_location_from_decl(call_));
     if (!dunder_result.is_nil())
