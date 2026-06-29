@@ -1498,8 +1498,7 @@ exprt function_call_expr::handle_min_max(
   for (const exprt &e : exprs)
   {
     const typet &t = converter_.ns.follow(e.type());
-    if (!(
-          t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+    if (!(t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
           t.is_fixedbv() || t.is_bool()))
       throw std::runtime_error(
         func_name +
