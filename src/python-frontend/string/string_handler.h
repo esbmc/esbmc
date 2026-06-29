@@ -506,6 +506,40 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.rindex() method (rfind that raises on not-found)
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param location Source location
+   * @return index of the last occurrence of the substring.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rindex() with start/end
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex_range(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
    * @brief Handle str.replace() method
    * @param string_obj String object
    * @param old_arg Substring to replace
