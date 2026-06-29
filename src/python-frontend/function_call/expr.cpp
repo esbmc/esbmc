@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <regex>
@@ -978,6 +979,30 @@ exprt function_call_expr::handle_int_literal_method() const
   return from_integer(result, long_long_int_type());
 }
 
+exprt function_call_expr::handle_float_is_integer_literal() const
+{
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error("is_integer() takes no arguments");
+
+  // Receiver is a constant float literal, or a unary +/- over one. Read the
+  // operand value and apply the sign.
+  const auto &obj = call_["func"]["value"];
+  const nlohmann::json &lit = obj["_type"] == "UnaryOp" ? obj["operand"] : obj;
+  double d = lit["value"].get<double>();
+  if (
+    obj["_type"] == "UnaryOp" && obj.contains("op") &&
+    ((obj["op"].is_object() && obj["op"].value("_type", "") == "USub") ||
+     (obj["op"].is_string() && obj["op"] == "USub")))
+    d = -d;
+
+  // CPython: float.is_integer() is True iff the value is finite and has no
+  // fractional part (mirrors the float OM's `x == int(x)`).
+  const bool is_int = std::isfinite(d) && d == std::trunc(d);
+  return migrate_expr_back(is_int ? gen_true_expr() : gen_false_expr());
+}
+
 exprt function_call_expr::handle_bytes_fromhex() const
 {
   // bytes.fromhex("0102") == b"\x01\x02". Fold a constant hex string into a
@@ -1824,8 +1849,8 @@ exprt function_call_expr::handle_list_count() const
 exprt function_call_expr::handle_list_index() const
 {
   const auto &args = call_["args"];
-  if (args.size() != 1)
-    throw std::runtime_error("list.index() takes exactly one argument");
+  if (args.empty() || args.size() > 3)
+    throw std::runtime_error("list.index() takes one to three arguments");
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
@@ -1835,7 +1860,21 @@ exprt function_call_expr::handle_list_index() const
 
   exprt value = converter_.get_expr(args[0]);
   python_list list_helper(converter_, call_);
-  return list_helper.build_index_list_call(*list_symbol, call_, value);
+
+  if (args.size() == 1)
+    return list_helper.build_index_list_call(*list_symbol, call_, value);
+
+  // list.index(x, start[, end]) searches the slice l[start:end]. A missing end
+  // means "to the end of the list" — pass a large sentinel the model clamps to
+  // the list size. start/end normalization (negatives, clamping) lives in the
+  // model.
+  exprt start = converter_.get_expr(args[1]);
+  exprt end = args.size() == 3
+                ? converter_.get_expr(args[2])
+                : from_integer(
+                    BigInt(std::numeric_limits<int32_t>::max()), int_type());
+  return list_helper.build_index_range_list_call(
+    *list_symbol, call_, value, start, end);
 }
 
 exprt function_call_expr::handle_list_sort() const
@@ -2476,6 +2515,33 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_int_literal_method(); },
      "int-literal method"},
+
+    // float.is_integer() on a constant literal receiver, e.g.
+    // (2.0).is_integer(). A Name receiver routes through the float operational
+    // model; a bare literal is not classified as a float instance, so fold it.
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "is_integer")
+         return false;
+       const auto &obj = call_["func"]["value"];
+       // A constant float literal, or a unary +/- over one (e.g. (-2.0)); a
+       // Name receiver is left to the float operational model.
+       if (
+         obj["_type"] == "Constant" && obj.contains("value") &&
+         obj["value"].is_number_float())
+         return true;
+       return obj["_type"] == "UnaryOp" && obj.contains("op") &&
+              obj.contains("operand") && obj["operand"].contains("value") &&
+              obj["operand"]["value"].is_number_float() &&
+              ((obj["op"].is_object() &&
+                (obj["op"].value("_type", "") == "USub" ||
+                 obj["op"].value("_type", "") == "UAdd")) ||
+               (obj["op"].is_string() &&
+                (obj["op"] == "USub" || obj["op"] == "UAdd")));
+     },
+     [this]() { return handle_float_is_integer_literal(); },
+     "float.is_integer()"},
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },

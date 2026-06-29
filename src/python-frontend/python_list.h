@@ -346,6 +346,18 @@ public:
     const nlohmann::json &op,
     const exprt &elem);
 
+  /**
+   * @brief Build a list.index(x, start[, end]) call — position of the first
+   * element equal to x within the slice l[start:end]. start/end follow CPython
+   * slice-bound normalization. Raises ValueError (via assertion) if not found.
+   */
+  exprt build_index_range_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const exprt &start,
+    const exprt &end);
+
   /// Shared implementation of build_count_list_call / build_index_list_call;
   /// @p func_id selects the `c:@F@__ESBMC_list_{count,index}` model.
   exprt build_count_index_list_call(
