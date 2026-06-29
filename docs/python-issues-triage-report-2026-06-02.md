@@ -1769,6 +1769,55 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 51. 2026-06-28 re-validation (forty-first sweep) & set ^ (symmetric difference) operator
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the set operators surfaced `^` (symmetric difference) as the one unmapped member.
+
+### 51a. New isolated, soundly-fixable defect found & fixed
+**The `^` operator on sets (`a ^ b`, and `a ^= b`) returned the wrong result.**
+
+`{1,2,3} ^ {2,3,4}` should be `{1,4}` (CPython symmetric difference), but ESBMC computed the wrong
+value: the set-operation dispatch in `converter_binop.cpp` mapped only `-`/`&`/`|` (difference /
+intersection / union) to the set handler; `^` (`BitXor`) fell through to the generic bitwise path,
+which is meaningless over the list-pointer set representation. The `symmetric_difference()` *method*
+was modelled, but the operator was not wired to it.
+
+**Fix**:
+- `converter/converter_binop.cpp`: add `BitXor` to the set-operation dispatch condition (beside
+  `Sub`/`BitAnd`/`BitOr`), so a set `^` is routed to `python_set::handle_operations`.
+- `python_set.cpp`: add a `BitXor` case in `handle_operations` and a new
+  `build_set_symmetric_difference_call(lhs, rhs)` builder computing `(lhs - rhs) ∪ (rhs - lhs)` into a
+  fresh set (the two filtered halves are disjoint by construction, so no duplicates). The existing
+  `symmetric_difference()` method handler is refactored to reuse the builder — a net de-duplication, no
+  behaviour change. Augmented `^=` lowers through the same operator path, so it is fixed too.
+
+The gating stays sound: the set path fires only when an operand is the list type (sets are modelled as
+lists), so a genuine integer `^` is untouched, and the adjacent dict-bitwise diagnostic is neither
+bypassed nor newly triggered (dicts are structs, not lists).
+
+Like §20a (set union/intersection/difference methods) this **restores a working feature**. New
+regression pair `regression/python/set_symmetric_difference_op{,_fail}` (CORE) covering the `^`
+operator, the `^=` augmented form, and the unchanged `symmetric_difference()` method (variable
+receiver); the positive test is the liveness witness (wrong pre-fix). Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh set_symmetric`); the focused
+`regression/python/set_*` ctest subset is green (the 2 failing — `set_difference`/`set_intersection` —
+are the pre-existing `--ir` Z3-only environmental set on this Bitwuzla-only build, confirmed by
+re-running under `--incremental-bmc`). Code-reviewed (0 critical/major/minor; the symmetric-difference
+semantics, the behaviour-preserving method refactor, the operator gating, and `^=` all confirmed). The
+positive test is the C-Live liveness witness for the added `BitXor` branch (wrong→correct). A
+**pre-existing, out-of-scope** gap was noted: a *set-literal receiver* on the affix/value methods
+(`{1,2}.union(...)` etc.) errors with `Object "" not found` — the set analogue of the §46b list-literal
+gap, general across set methods.
+
+### 51b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: the set-literal-receiver method gap (general, §46b-style); variadic
+`math.hypot` (the gcd/lcm pattern, but float — a nested fold risks float-equality divergence, so it
+needs a sum-of-squares model, deferred); the aliased/from-import `gcd`/`lcm` spellings (§50b); the
+*bytes-returning* methods (`replace`/`split`/`join` — receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen
+concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
 ## 50. 2026-06-28 re-validation (fortieth sweep) & variadic math.gcd()/lcm()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
@@ -1816,6 +1865,11 @@ and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`l
 `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()`
 (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
 the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39–§50 (PRs #5661–#5676) are in flight and not yet on `master`; this sweep is
+> appended as §51. When all land, the maintainer orders §39 → … → §51.
+
+---
 
 > **Note on numbering.** §39–§49 (PRs #5661–#5675) are in flight and not yet on `master`; this sweep is
 > appended as §50. When all land, the maintainer orders §39 → … → §50.
