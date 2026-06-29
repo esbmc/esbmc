@@ -2332,6 +2332,44 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 60. 2026-06-28 re-validation (fiftieth sweep) & `in` on a dict comprehension
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep stepped away from the bytes family to a membership bug on dict comprehensions.
+
+### 60a. New isolated, soundly-fixable defect found & fixed
+**`x in d` / `x not in d` on a dict comprehension result raised "Unsupported expression for 'in'".**
+
+`d = {x: x*x for x in range(3)}; 2 in d` aborted with
+`ERROR: Unsupported expression for 'in' operation`, even though `d[2]`, `d.get(2)`, `len(d)`, and
+`2 in d.keys()` all worked on the same value. Root cause: `handle_membership_operator`
+(`converter/converter_binop.cpp`) dispatched dict membership only when
+`python_aggregate_kind(struct_type) == "dict"`. The aggregate-kind irep is dropped as a dict
+comprehension result flows through type inference, while the `__python_dict__` struct **tag** survives —
+and subscript / `len` already key off the tag via `dict_handler_->is_dict_type`. So membership was the
+lone dict consumer that rejected a tag-only dict.
+
+**Fix**: add `|| dict_handler_->is_dict_type(rhs_resolved_type)` to the dict dispatch condition, so
+membership recognises a dict by its tag as well as its aggregate-kind marker — the same trust subscript
+and `len` already rely on. One line; the kind check stays first (cheap), both arms route to the same
+`handle_dict_membership`.
+
+This is a **crash/unsupported→correct-result fix**. New regression pair `dictcomp_membership{,_fail}`
+(CORE) covering `in`/`not in` on a dict comprehension and unchanged dict-literal membership; the positive
+is the liveness witness (it errored pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh dictcomp_membership`); the focused dict ctest subset passes (the failures
+are the pre-existing `--z3`/`--ir` environmental set on this Bitwuzla-only build). Code-reviewed (0
+critical/high; the tag equivalence — `__python_dict__` is produced only by the canonical
+`get_dict_struct_type`, always with `keys`/`values` components — and the non-diversion of tuple/class
+structs confirmed). Solver-agnostic.
+
+### 60b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) `sorted`/`sort` with an arithmetic/function `key` silently sorts by natural
+order (§56b/§57b); (iii) `int`-literal-receiver methods (`(255).bit_length()`) unsupported though the
+variable form works (§57b). A new adjacent lead from this sweep: `x in dict(a=1)` errors with
+"Projecting from non-tuple based AST" — a separate dict()-keyword-construction path.
+
 ## 69. 2026-06-29 re-validation (fifty-ninth sweep) & str % (name) mapping form
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
@@ -2691,6 +2729,8 @@ dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`l
 The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
 case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §42/§43 and §49–§59 (PRs #5668, #5669, #5675–#5685) are in flight and not yet
+> on `master`; this sweep is appended as §60.
 > **Note on numbering.** §42/§43 and §49–§60 (PRs #5668, #5669, #5675–#5686) are in flight and not yet
 > on `master`; this sweep is appended as §61.
 > **Note on numbering.** §42/§43 and §49–§61 (PRs #5668, #5669, #5675–#5687) are in flight and not yet
