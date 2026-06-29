@@ -1,8 +1,8 @@
 def main() -> None:
-    # update(a=10) sets d["a"] to 10, not 1.
+    # After d.update(b=2), d["b"] is 2, not 9.
     d = {"a": 1}
-    d.update(a=10)
-    assert d["a"] == 1
+    d.update(b=2)
+    assert d["b"] == 9
 
 
 main()

@@ -1214,6 +1214,42 @@ exprt python_dict_handler::handle_dict_constructor(
   if (!call_node.contains("args") || !call_node["args"].is_array())
     return nil_exprt();
   const auto &args = call_node["args"];
+
+  // dict() / dict(a=1, b=2, ...): no positional iterable, build the dict from
+  // the keyword arguments (an empty dict when there are none). Each keyword
+  // name becomes a string-constant key. `dict(**other)` carries a null keyword
+  // arg and is not modelled — bail so it is not silently mis-lowered.
+  if (args.empty())
+  {
+    nlohmann::json keys = nlohmann::json::array();
+    nlohmann::json values = nlohmann::json::array();
+    if (call_node.contains("keywords") && call_node["keywords"].is_array())
+    {
+      for (const auto &kw : call_node["keywords"])
+      {
+        if (!kw.contains("arg") || !kw["arg"].is_string())
+          return nil_exprt();
+        nlohmann::json key_node;
+        key_node["_type"] = "Constant";
+        key_node["value"] = kw["arg"];
+        for (const char *f :
+             {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+          if (call_node.contains(f))
+            key_node[f] = call_node[f];
+        keys.push_back(std::move(key_node));
+        values.push_back(kw["value"]);
+      }
+    }
+    nlohmann::json synthetic_dict = call_node;
+    synthetic_dict.erase("args");
+    synthetic_dict.erase("func");
+    synthetic_dict.erase("keywords");
+    synthetic_dict["_type"] = "Dict";
+    synthetic_dict["keys"] = std::move(keys);
+    synthetic_dict["values"] = std::move(values);
+    return get_dict_literal(synthetic_dict);
+  }
+
   if (args.size() != 1)
     return nil_exprt();
 
@@ -1287,23 +1323,30 @@ exprt python_dict_handler::handle_dict_update(
 {
   const auto &args = call_node["args"];
 
+  // CPython: dict.update([E], **F) — at most one positional iterable plus any
+  // number of keyword pairs.
   if (args.size() > 1)
-    throw std::runtime_error("update() expected at most 1 positional argument");
+    throw std::runtime_error(
+      "update() takes at most one positional argument");
 
-  // update(a=1, b=2) inserts each keyword as a string-keyed entry. Applied
-  // after any positional source, matching CPython (keywords win on conflict).
-  auto apply_keywords = [&]() {
-    if (!call_node.contains("keywords"))
+  // Apply each keyword argument as dict[name] = value. Runs after the optional
+  // positional source so `d.update(other, k=v)` matches CPython's order.
+  // `update(**other)` carries a null keyword arg and is not modelled.
+  auto apply_keyword_args = [&]() {
+    if (!call_node.contains("keywords") || !call_node["keywords"].is_array())
       return;
     for (const auto &kw : call_node["keywords"])
     {
-      if (!kw.contains("arg") || kw["arg"].is_null())
+      if (!kw.contains("arg") || !kw["arg"].is_string())
         throw std::runtime_error(
-          "update() with **mapping is not supported in ESBMC model");
+          "dict.update(**other) is not supported in ESBMC model");
       nlohmann::json key_node;
       key_node["_type"] = "Constant";
       key_node["value"] = kw["arg"];
-      converter_.copy_location_fields_from_decl(call_node, key_node);
+      for (const char *f :
+           {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+        if (call_node.contains(f))
+          key_node[f] = call_node[f];
       exprt value_expr = converter_.get_expr(kw["value"]);
       code_blockt pair_block;
       handle_dict_subscript_assign(
@@ -1317,10 +1360,10 @@ exprt python_dict_handler::handle_dict_update(
     }
   };
 
-  // update() / update(**kwargs): no positional source.
+  // dict.update(k=v, ...): no positional source, keyword pairs only.
   if (args.empty())
   {
-    apply_keywords();
+    apply_keyword_args();
     return nil_exprt();
   }
 
@@ -1346,7 +1389,7 @@ exprt python_dict_handler::handle_dict_update(
       converter_.add_instruction(pair_block);
     }
 
-    apply_keywords();
+    apply_keyword_args();
     return nil_exprt();
   }
 
@@ -1433,6 +1476,6 @@ exprt python_dict_handler::handle_dict_update(
   while_loop.location() = location;
   converter_.add_instruction(while_loop);
 
-  apply_keywords();
+  apply_keyword_args();
   return nil_exprt();
 }

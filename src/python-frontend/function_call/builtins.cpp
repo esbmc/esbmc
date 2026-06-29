@@ -724,6 +724,12 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   // - delegate to the complex handler when the operand is complex,
   // - otherwise emit a symbolic abs() expression preserving the type.
   auto build_abs = [this](exprt operand) -> exprt {
+    // bool is an int subclass in Python; abs() of a bool yields an int
+    // (abs(True) == 1, abs(False) == 0). Cast before building the abs node so
+    // its `>= 0` comparison does not mix a bool and a signed-bitvector sort
+    // (which trips a solver sort assertion).
+    if (operand.type().is_bool())
+      operand = build_typecast(operand, type_handler_.get_typet("int", 0));
     exprt dunder_result = converter_.dispatch_unary_dunder_operator(
       "abs", operand, converter_.get_location_from_decl(call_));
     if (!dunder_result.is_nil())
@@ -877,13 +883,28 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     }
     else
     {
-      // round(x, n) -> float rounded to n decimals
+      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
+      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
+      // unwrap the minus to recover the integer; otherwise the constant fold is
+      // skipped and the (much more expensive) symbolic path is taken, which
+      // times out for round(int, -n).
       auto ndigits_arg = args[1];
+      bool ndigits_negated = false;
+      if (
+        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
+        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
+        ndigits_arg.contains("operand"))
+      {
+        ndigits_arg = ndigits_arg["operand"];
+        ndigits_negated = true;
+      }
       if (
         ndigits_arg.contains("value") &&
         ndigits_arg["value"].is_number_integer())
       {
         int n = ndigits_arg["value"].get<int>();
+        if (ndigits_negated)
+          n = -n;
         double val = arg["value"].is_number_integer()
                        ? static_cast<double>(arg["value"].get<int>())
                        : arg["value"].get<double>();

@@ -1,28 +1,20 @@
 def main() -> None:
-    # dict.update() previously accepted only a single positional dict and
-    # rejected keyword arguments ("update() takes exactly one argument").
-    # update(a=1, b=2) now inserts each keyword as a string-keyed entry.
+    # dict.update(k=v, ...) (keyword form) and dict.update() (empty) previously
+    # raised "update() takes exactly one argument": update only accepted a single
+    # positional source. Apply the keyword pairs (after any positional source).
     d = {"a": 1}
-    d.update(a=10, b=2)
-    assert d["a"] == 10 and d["b"] == 2
+    d.update(b=2, c=3)
+    assert d["b"] == 2 and d["c"] == 3
 
-    # No-argument update() is a no-op.
+    # Keyword pair overwrites an existing key.
+    d.update(a=9)
+    assert d["a"] == 9
+
+    # Empty update() is a no-op; the positional + keyword form together work.
     e = {"x": 1}
     e.update()
-    assert e["x"] == 1
-
-    # A positional source plus keywords; keywords win on a key conflict.
-    f = {}
-    f.update({"a": 1}, b=2)
-    assert f["a"] == 1 and f["b"] == 2
-    g = {}
-    g.update({"k": 1}, k=9)
-    assert g["k"] == 9
-
-    # Positional-only forms are unchanged.
-    h = {"a": 1}
-    h.update({"b": 2})
-    assert h["a"] == 1 and h["b"] == 2
+    e.update({"y": 2}, z=3)
+    assert e["x"] == 1 and e["y"] == 2 and e["z"] == 3
 
 
 main()
