@@ -1287,8 +1287,42 @@ exprt python_dict_handler::handle_dict_update(
 {
   const auto &args = call_node["args"];
 
-  if (args.size() != 1)
-    throw std::runtime_error("update() takes exactly one argument");
+  if (args.size() > 1)
+    throw std::runtime_error("update() expected at most 1 positional argument");
+
+  // update(a=1, b=2) inserts each keyword as a string-keyed entry. Applied
+  // after any positional source, matching CPython (keywords win on conflict).
+  auto apply_keywords = [&]() {
+    if (!call_node.contains("keywords"))
+      return;
+    for (const auto &kw : call_node["keywords"])
+    {
+      if (!kw.contains("arg") || kw["arg"].is_null())
+        throw std::runtime_error(
+          "update() with **mapping is not supported in ESBMC model");
+      nlohmann::json key_node;
+      key_node["_type"] = "Constant";
+      key_node["value"] = kw["arg"];
+      converter_.copy_location_fields_from_decl(call_node, key_node);
+      exprt value_expr = converter_.get_expr(kw["value"]);
+      code_blockt pair_block;
+      handle_dict_subscript_assign(
+        dict_expr,
+        get_key_expr(key_node),
+        value_expr,
+        converter_.get_location_from_decl(call_node),
+        key_node,
+        pair_block);
+      converter_.add_instruction(pair_block);
+    }
+  };
+
+  // update() / update(**kwargs): no positional source.
+  if (args.empty())
+  {
+    apply_keywords();
+    return nil_exprt();
+  }
 
   const nlohmann::json &arg = args[0];
 
@@ -1312,6 +1346,7 @@ exprt python_dict_handler::handle_dict_update(
       converter_.add_instruction(pair_block);
     }
 
+    apply_keywords();
     return nil_exprt();
   }
 
@@ -1398,5 +1433,6 @@ exprt python_dict_handler::handle_dict_update(
   while_loop.location() = location;
   converter_.add_instruction(while_loop);
 
+  apply_keywords();
   return nil_exprt();
 }

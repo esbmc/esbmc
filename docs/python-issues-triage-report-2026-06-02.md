@@ -2176,3 +2176,62 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 72. 2026-06-29 re-validation (sixty-second sweep) & dict.update keyword arguments
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. The
+§71b list-read follow-up (`pop`) was attempted but **withdrawn**: a side-effecting `__ESBMC_list_pop` bound
+to a temp via `add_instruction` double-emits (the expression builder runs across type-inference and
+codegen passes), popping twice — a regression, reverted before committing. §71's subscript fix already
+covers for-loops, comprehensions, `sum`/`min`/`max` over a `list[float]` of ints (they route through the
+subscript read); only `pop` remains, and it needs a single-evaluation mechanism — recorded as a follow-up.
+This sweep took an independent clean candidate instead.
+
+### 72a. New isolated, soundly-fixable defect found & fixed
+**`dict.update()` rejected keyword arguments, a no-argument call, and mixed positional+keyword forms.**
+
+`d.update(a=1, b=2)`, `d.update()`, and `d.update({...}, b=2)` all errored "update() takes exactly one
+argument" — the handler (`python-dict/dict_methods.cpp`) accepted only a single positional dict.
+
+**Fix**: relax the guard to "at most one positional argument" and add an `apply_keywords` step that
+inserts each `call_node["keywords"]` entry as a string-keyed assignment (synthesising a Constant string key
+node and reusing the existing `handle_dict_subscript_assign` primitive). Keywords are applied *after* any
+positional source, matching CPython's keyword-wins-on-conflict semantics; a no-positional call routes
+straight to `apply_keywords` (a no-op when empty); a `**mapping` keyword (null arg) is rejected with a
+clean diagnostic rather than silently dropped.
+
+This is a **crash/unsupported→correct-result fix**. New regression pair `dict_update_kwargs{,_fail}`
+(CORE) covering keyword-only, no-arg, mixed positional+keyword, keyword-wins-on-conflict, and the
+unchanged positional forms; the positive is the liveness witness (it errored pre-fix). Verified bit-for-bit
+against CPython; CPython sanity passes (`scripts/check_python_tests.sh dict_update_kwargs`); the dict/update
+ctest subset shows no new failures (9 pre-existing `--z3`/`--ir` environmental). Code-reviewed: ready for
+commit, 0 critical/major/minor — the synthesised string key processes identically to a dict-literal key,
+the positional paths are byte-for-byte unchanged but for the trailing no-op `apply_keywords()`, and the
+`**mapping`/`>1`-positional rejections were confirmed safe. C-Live for the new keyword/no-arg branches is
+discharged by the positive regression (it exercises them; pre-fix they errored). Solver-agnostic.
+
+**Pre-existing latent bug noted** (not introduced here): `d.update(other_dict)` where `other_dict` is a
+*variable* with two or more keys does not copy all entries (fails on master too) — a separate dict-var
+update-loop defect, recorded as a follow-up.
+
+### 72b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) `list[float].pop()` of an int element (needs a single-evaluation bind — §72
+above); (ii) `dict.update(other_dict_var)` multi-key copy (above); (iii) extend the `type_id` dispatch to
+the other `extract_pyobject_value` read paths for fixed-`list[float]`-signature models that iterate
+(§71b); (iv) `format()` builtin width/precision (the §70 `apply_format_spec` is reusable); (v) char-`join`
+— `"".join(c for c in s)` (§67b); (vi) nested-function closures; (vii) `dict |`/`|=` PEP 584 union.
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); variadic `math.hypot` (float-precision, §51b); the bytes-returning methods (§49b);
+the symbolic bytes affix/search methods (§47b); `str.maketrans`/`translate` dict-table; `sorted(dict.items())`
+tuple drop (known multi-layer); strided list-slice delete `del a[::k]` (§66b); `round(int, n)` returns
+float (§63b); and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The
+§3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all
+stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§71 (PRs #5668, #5669, #5675–#5687, #5689–#5698) are in flight
+> and not yet on `master`; this sweep is appended as §72.
