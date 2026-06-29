@@ -1769,6 +1769,56 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 50. 2026-06-28 re-validation (fortieth sweep) & variadic math.gcd()/lcm()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep stepped out of the bytes family to the `math` module's variadic `gcd`/`lcm`.
+
+### 50a. New isolated, soundly-fixable defect found & fixed
+**`math.gcd`/`math.lcm` returned the wrong result for any argument count other than 2.**
+
+`math.gcd(12, 8, 6)` should be `2` (CPython 3.9+ accepts any number of integer arguments), but ESBMC
+computed the wrong value: the operational model (`models/math.py`) defines `gcd(a, b)`/`lcm(a, b)` as
+**binary**, so the 0-, 1-, and 3-or-more-argument forms (`gcd()`, `gcd(x)`, `gcd(a, b, c, …)`) all
+mis-evaluated. The 2-argument form was correct.
+
+**Fix** (`preprocessor/core_visitors_mixin.py`): a new AST normalizer
+`_normalize_math_gcd_lcm_variadic`, called from `visit_Call` beside `_normalize_int_from_bytes_endianness`,
+rewrites a variadic `math.gcd`/`math.lcm` call into nested **binary** calls that reuse the existing
+model — `f()` → `f(identity, identity)`, `f(x)` → `f(x, identity)`, `f(a, b, c, …)` →
+`f(f(a, b), c, …)` (a left fold). gcd's identity is `0` (`gcd(x, 0) == abs(x)`), lcm's is `1`
+(`lcm(x, 1) == abs(x)`); the model's existing 2-argument handling of `0`/`1` makes these exact. Because
+the rewrite produces nested binary calls, it works on **symbolic** arguments too (the model runs on
+each pair), not just constants. The 2-argument form is left untouched; `*args` splat, keyword
+arguments, and the `from math import gcd` / `import math as m` spellings fall through unchanged (a
+coverage limitation noted in the code — those forms were already unmodelled, so the canonical
+`math.gcd(...)` path this sweep fixes is a strict improvement).
+
+Like §40a (`int.from_bytes`) this **restores a working feature**. New regression pair
+`regression/python/math_gcd_lcm_variadic{,_fail}` (CORE) covering 0/1/3/4-argument gcd and lcm, the
+identities, negative arguments, the unchanged 2-argument form, a symbolic argument, and the wrong-value
+case; the positive test is the liveness witness (FAILED pre-fix). Verified bit-for-bit against CPython;
+CPython sanity passes (`scripts/check_python_tests.sh math_gcd`); the focused `regression/python/math*`
+ctest subset (187 tests) is 100% green — no regression in the 2-argument or other math paths. pylint
+clean on the changed file (the two pre-existing `listcomp_counter` E1101 false-positives are unrelated).
+The preprocessor is FLAIL-mangled, so the binary was rebuilt before testing. Code-reviewed (0
+critical/high; the fold arithmetic, AST synthesis, and signature-defaults interaction all confirmed; the
+one medium finding — aliased/from-import coverage — documented rather than expanded, and a `*args` guard
+added). Solver-agnostic (an AST-normalisation change, no SMT encoding).
+
+### 50b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: the aliased/from-import `gcd`/`lcm` spellings (need module-alias
+tracking threaded into the normalizer); the *bytes-returning* methods (`replace`/`split`/`join` — need
+receiver-aware return-type inference, §49b); the **symbolic** bytes affix/search methods (§47b); the
+list-literal receiver method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table;
+and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
+the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39–§49 (PRs #5661–#5675) are in flight and not yet on `master`; this sweep is
+> appended as §50. When all land, the maintainer orders §39 → … → §50.
 ## 48. 2026-06-28 re-validation (thirty-eighth sweep) & bytes.find()/rfind()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
