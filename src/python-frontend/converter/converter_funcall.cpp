@@ -386,7 +386,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "dict" &&
     element.contains("args") && element["args"].is_array() &&
-    element["args"].size() == 1)
+    element["args"].size() <= 1)
   {
     exprt result = dict_handler_->handle_dict_constructor(element);
     if (!result.is_nil())
