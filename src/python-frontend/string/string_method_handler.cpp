@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <cmath>
 #include <climits>
 #include <iomanip>
@@ -138,6 +139,204 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     return value;
 
   throw std::runtime_error("format() requires constant arguments");
+}
+
+// Format a constant value per a str.format/format() format spec
+// ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or
+// spec feature not modelled here, so the caller can fall back to a sound nondet
+// string rather than mis-folding.
+std::string apply_format_spec(
+  const nlohmann::json &arg,
+  const std::string &spec,
+  python_converter &converter)
+{
+  // Only constant numeric/string literals are folded; anything else (a
+  // variable, a computed value) throws and degrades to the nondet fallback.
+  if (arg.value("_type", std::string()) != "Constant" || !arg.contains("value"))
+    throw std::runtime_error("format spec on a non-constant value");
+  const auto &val = arg["value"];
+
+  enum
+  {
+    KIND_INT,
+    KIND_FLOAT,
+    KIND_STR
+  } kind;
+  long long ival = 0;
+  double dval = 0;
+  std::string sval;
+  if (val.is_number_integer())
+  {
+    kind = KIND_INT;
+    ival = val.get<long long>();
+  }
+  else if (val.is_boolean())
+  {
+    kind = KIND_INT;
+    ival = val.get<bool>() ? 1 : 0;
+  }
+  else if (val.is_number_float())
+  {
+    kind = KIND_FLOAT;
+    dval = val.get<double>();
+  }
+  else if (val.is_string())
+  {
+    kind = KIND_STR;
+    sval = val.get<std::string>();
+  }
+  else
+    throw std::runtime_error("format spec on an unsupported constant type");
+
+  // Parse the spec.
+  size_t p = 0;
+  char fill = ' ';
+  char align = '\0';
+  auto is_align = [](char ch) {
+    return ch == '<' || ch == '>' || ch == '^' || ch == '=';
+  };
+  if (spec.size() >= 2 && is_align(spec[1]))
+  {
+    fill = spec[0];
+    align = spec[1];
+    p = 2;
+  }
+  else if (!spec.empty() && is_align(spec[0]))
+    align = spec[p++];
+  char sign = '-';
+  if (p < spec.size() && (spec[p] == '+' || spec[p] == '-' || spec[p] == ' '))
+    sign = spec[p++];
+  if (p < spec.size() && spec[p] == '#')
+    throw std::runtime_error("unsupported '#' in format spec");
+  if (p < spec.size() && spec[p] == '0')
+  {
+    // The '0' flag forces '0' fill even when an explicit alignment precedes it
+    // ("{:<05d}" -> "70000"); align defaults to '=' only when none was given.
+    fill = '0';
+    if (align == '\0')
+      align = '=';
+    ++p;
+  }
+  int width = 0;
+  while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
+    width = width * 10 + (spec[p++] - '0');
+  if (p < spec.size() && (spec[p] == ',' || spec[p] == '_'))
+    throw std::runtime_error("unsupported grouping in format spec");
+  int prec = -1;
+  if (p < spec.size() && spec[p] == '.')
+  {
+    ++p;
+    prec = 0;
+    while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
+      prec = prec * 10 + (spec[p++] - '0');
+  }
+  char type = (p < spec.size()) ? spec[p++] : '\0';
+  if (p != spec.size())
+    throw std::runtime_error("invalid format spec");
+  (void)converter;
+
+  // Build the value body (without field padding) and a default alignment.
+  std::string body;
+  char default_align;
+  if (kind == KIND_STR)
+  {
+    if (type != '\0' && type != 's')
+      throw std::runtime_error("unsupported type for str in format spec");
+    body = sval;
+    if (prec >= 0 && static_cast<int>(body.size()) > prec)
+      body.resize(static_cast<size_t>(prec)); // truncate, like %.Ns
+    default_align = '<';
+  }
+  else if (kind == KIND_INT && (type == '\0' || type == 'd' || type == 'x' ||
+                                type == 'X' || type == 'o' || type == 'b'))
+  {
+    const bool neg = ival < 0;
+    unsigned long long mag =
+      neg ? 0ULL - static_cast<unsigned long long>(ival)
+          : static_cast<unsigned long long>(ival);
+    std::string digits;
+    if (type == '\0' || type == 'd')
+      digits = std::to_string(mag);
+    else
+    {
+      const unsigned base = (type == 'o') ? 8 : (type == 'b') ? 2 : 16;
+      const char *alpha =
+        (type == 'X') ? "0123456789ABCDEF" : "0123456789abcdef";
+      if (mag == 0)
+        digits = "0";
+      for (; mag != 0; mag /= base)
+        digits.insert(digits.begin(), alpha[mag % base]);
+    }
+    const std::string sgn =
+      neg ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
+    body = sgn + digits;
+    default_align = '>';
+  }
+  else if (
+    kind == KIND_FLOAT &&
+    (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' ||
+     type == 'G'))
+  {
+    // A typeless float spec ("{:8}", "{:.2}") uses CPython's general format,
+    // which is not faithfully snprintf-expressible (e.g. 1.0 -> "1.0", not
+    // "1"); it is left to the nondet fallback via the final throw below.
+    const int pr = prec >= 0 ? prec : 6;
+    const char t = type;
+    int n = 0;
+    if (t == 'f' || t == 'F')
+      n = std::snprintf(nullptr, 0, "%.*f", pr, dval);
+    else if (t == 'e' || t == 'E')
+      n = std::snprintf(nullptr, 0, "%.*e", pr, dval);
+    else
+      n = std::snprintf(nullptr, 0, "%.*g", pr, dval);
+    if (n < 0)
+      throw std::runtime_error("format spec float error");
+    std::string num(static_cast<size_t>(n), '\0');
+    if (t == 'f' || t == 'F')
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*f", pr, dval);
+    else if (t == 'e' || t == 'E')
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*e", pr, dval);
+    else
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*g", pr, dval);
+    if (t == 'F' || t == 'E' || t == 'G')
+      for (char &ch : num)
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    // Apply +/space sign to a non-negative result.
+    if (!num.empty() && num[0] != '-')
+    {
+      if (sign == '+')
+        num = "+" + num;
+      else if (sign == ' ')
+        num = " " + num;
+    }
+    body = num;
+    default_align = '>';
+  }
+  else
+    throw std::runtime_error("unsupported type/value in format spec");
+
+  if (align == '\0')
+    align = default_align;
+
+  // Pad to width.
+  if (static_cast<int>(body.size()) >= width)
+    return body;
+  const int padn = width - static_cast<int>(body.size());
+  if (align == '<')
+    return body + std::string(padn, fill);
+  if (align == '>')
+    return std::string(padn, fill) + body;
+  if (align == '^')
+  {
+    const int l = padn / 2;
+    return std::string(l, fill) + body + std::string(padn - l, fill);
+  }
+  // '=' : pad after a leading sign (numeric).
+  size_t s = (!body.empty() && (body[0] == '-' || body[0] == '+' ||
+                                body[0] == ' '))
+               ? 1
+               : 0;
+  return body.substr(0, s) + std::string(padn, fill) + body.substr(s);
 }
 } // namespace
 
@@ -2626,6 +2825,11 @@ exprt string_handler::handle_string_format(
 
   std::vector<std::string> args;
   std::unordered_map<std::string, std::string> keywords;
+  // Parallel AST nodes, kept so a `{:spec}` field can re-format the original
+  // value rather than the already-stringified one. call is a const ref held by
+  // the caller, so these pointers stay valid for this function.
+  std::vector<const nlohmann::json *> arg_nodes;
+  std::unordered_map<std::string, const nlohmann::json *> keyword_nodes;
   try
   {
     if (call.contains("args") && call["args"].is_array())
@@ -2633,6 +2837,7 @@ exprt string_handler::handle_string_format(
       for (const auto &arg : call["args"])
       {
         args.push_back(format_value_from_json(arg, converter_));
+        arg_nodes.push_back(&arg);
       }
     }
 
@@ -2646,6 +2851,7 @@ exprt string_handler::handle_string_format(
         if (!kw.contains("value"))
           throw std::runtime_error("format() keyword missing value");
         keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+        keyword_nodes.emplace(key, &kw["value"]);
       }
     }
   }
@@ -2689,37 +2895,79 @@ exprt string_handler::handle_string_format(
         throw std::runtime_error("format() unmatched '{'");
 
       std::string field = format_str.substr(i + 1, end - (i + 1));
-      if (field.empty())
+
+      // A field is `name[:spec]`. Split off the format spec at the first ':'.
+      std::string fmt_spec;
+      const size_t colon = field.find(':');
+      std::string name = field;
+      if (colon != std::string::npos)
+      {
+        name = field.substr(0, colon);
+        fmt_spec = field.substr(colon + 1);
+      }
+
+      // !r/!s conversions and .attr/[idx] field access are not folded.
+      if (
+        name.find('!') != std::string::npos ||
+        name.find('.') != std::string::npos ||
+        name.find('[') != std::string::npos)
+        return build_nondet_string_fallback(location);
+
+      // Resolve the field name to its stringified value and AST node.
+      std::string str_val;
+      const nlohmann::json *node = nullptr;
+      if (name.empty())
       {
         if (arg_index >= args.size())
           throw std::runtime_error("format() missing arguments");
-        result += args[arg_index++];
+        str_val = args[arg_index];
+        node = arg_nodes[arg_index];
+        ++arg_index;
       }
       else
       {
         bool all_digits = true;
-        for (char fc : field)
-        {
+        for (char fc : name)
           if (!std::isdigit(static_cast<unsigned char>(fc)))
           {
             all_digits = false;
             break;
           }
-        }
 
         if (all_digits)
         {
-          size_t idx = static_cast<size_t>(std::stoull(field));
+          const size_t idx = static_cast<size_t>(std::stoull(name));
           if (idx >= args.size())
             throw std::runtime_error("format() argument index out of range");
-          result += args[idx];
+          str_val = args[idx];
+          node = arg_nodes[idx];
         }
         else
         {
-          auto it = keywords.find(field);
+          auto it = keywords.find(name);
           if (it == keywords.end())
             throw std::runtime_error("format() missing keyword argument");
-          result += it->second;
+          str_val = it->second;
+          auto nit = keyword_nodes.find(name);
+          node = (nit != keyword_nodes.end()) ? nit->second : nullptr;
+        }
+      }
+
+      if (fmt_spec.empty())
+        result += str_val;
+      else
+      {
+        // Apply the format spec to the original value; an unsupported spec or
+        // non-constant value degrades the whole call to a sound nondet string.
+        try
+        {
+          if (node == nullptr)
+            throw std::runtime_error("format spec without a value node");
+          result += apply_format_spec(*node, fmt_spec, converter_);
+        }
+        catch (const std::runtime_error &)
+        {
+          return build_nondet_string_fallback(location);
         }
       }
 
