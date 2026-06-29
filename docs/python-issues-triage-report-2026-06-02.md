@@ -2332,6 +2332,55 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 71. 2026-06-29 re-validation (sixty-first sweep) & list[float] param fed an int list
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. A
+math-module probe surfaced `math.dist` returning ~0 for integer coordinates; root-causing it led to a
+general list-read bug.
+
+### 71a. New isolated, soundly-fixable defect found & fixed
+**A `list[float]`-annotated parameter fed a list with integer elements misread those elements as float
+garbage (~0).**
+
+`math.dist([0,0],[3,4])` returned ~0 (so even `dist > 0` failed), while float coordinates worked. The
+root is general, not dist-specific: ESBMC stores list elements heterogeneously (each carries a runtime
+`type_id`; floats live in a global `__ESBMC_float_buf`). The subscript-read path
+(`python-list/list_access.cpp`) only dispatched on the stored `type_id` for a *non-constant* index into a
+*statically heterogeneous* list. A `list[float]` parameter is statically "pure float", so a constant-index
+read `p[0]` took the fast path and read `__ESBMC_float_buf[float_idx]` for an element that was actually an
+int — never stored in float_buf — reinterpreting the int payload as a denormal ~0. Python does not enforce
+annotations, so a `list[float]` can hold ints at runtime; the static type lied.
+
+**Fix**: widen the dispatch — `dispatch_numeric = mixed_numeric || elem_type.is_floatbv()` — so *every*
+float-typed element read dispatches on the runtime `type_id` (float elements read float_buf; int payloads
+are promoted `(double)*(long long*)value`), and bind the element to a temp once to avoid re-evaluating the
+access three times. The dispatch is the already-validated `#5160` mixed-numeric path, reused verbatim — no
+new IR.
+
+This is a **wrong-value→correct-result fix** (a soundness-relevant miscompute, not a crash). New
+regression pair `list_float_param_int{,_fail}` (CORE) covering the `list[float]` param with int and float
+lists and `math.dist` with integer/float coordinates; the positive is the liveness witness for the
+widened dispatch (it returned the wrong value pre-fix). Verified bit-for-bit against CPython; CPython
+sanity passes (`scripts/check_python_tests.sh list_float_param_int`); the focused math/float/list ctest
+subset shows no new failures (the non-environmental two, `list_extend11_{fail,nondet}`, pass when run
+without parallel load — `--unwind 17` timed out only under `-j4`). Code-reviewed: correct/minimal/well-
+targeted, 0 critical/high; the dispatch hash-equality, the int-payload promotion, the temp-bind lock-step,
+and the `--ir` back-migration were confirmed clean. **Known limitation** (reviewer Medium, acknowledged):
+a `list[float]` element whose runtime type is actually a `str`/`None`/object (an outright wrong
+annotation) now routes to the int-payload branch and may raise a *spurious* bounds violation rather than
+silently returning garbage — a possible false positive on wrong-annotation input, never a missed bug. The
+other ~15 `extract_pyobject_value` callers (dict/set/comprehension/pop/min-max) keep the annotation-
+trusting fast path; that latent inconsistency is low-risk today (overloaded numeric builtins dispatch by
+argument type) and is recorded as a follow-up. C-Live for the widened dispatch branch is discharged by the
+positive regression (it exercises the new path; pre-fix it miscomputed). Solver-agnostic.
+
+### 71b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) extend the `type_id` dispatch to the other `extract_pyobject_value` read paths
+(dict/set/comprehension) for fixed-`list[float]`-signature models that iterate instead of subscripting
+(above); (ii) `format()` builtin width/precision (the §70 `apply_format_spec` is reusable); (iii)
+char-`join` — `"".join(c for c in s)` (§67b); (iv) nested-function closures; (v) `sorted(dict.items())`
+tuple drop (known multi-layer); (vi) strided list-slice delete `del a[::k]` (§66b); (vii) `round(int, n)`
+returns float (§63b).
 ## 67. 2026-06-29 re-validation (fifty-seventh sweep) & __str__() on built-in scalars
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
@@ -2500,6 +2549,8 @@ inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred can
 (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
 the infeasible `hashlib` case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §42/§43 and §49–§70 (PRs #5668, #5669, #5675–#5687, #5689–#5697) are in flight
+> and not yet on `master`; this sweep is appended as §71.
 > **Note on numbering.** §42/§43 and §49–§68 (PRs #5668, #5669, #5675–#5687, #5689–#5695) are in flight
 > and not yet on `master`; this sweep is appended as §69.
 (§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
