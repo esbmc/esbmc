@@ -2386,6 +2386,46 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 > **Note on numbering.** §42/§43 and §49–§64 (PRs #5668, #5669, #5675–#5687, #5689–#5691) are in flight
 > and not yet on `master`; this sweep is appended as §65.
 
+## 69. 2026-06-29 re-validation (fifty-ninth sweep) & str % (name) mapping form
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took §68b's natural follow-up — the `%(name)s` mapping form of printf-`%` formatting (a sibling of
+the §68 flags/width/precision work, on a separate branch).
+
+### 69a. New isolated, soundly-fixable defect found & fixed
+**`str % {dict}` mapping conversions (`"%(x)s" % {"x": "hi"}`) were rejected with
+"unsupported conversion '%('".**
+
+`py_percent_format` (`converter/converter_binop.cpp`) only handled positional conversions; a right-hand
+dict was pushed as a single positional argument, so any `%(name)conv` hit the unsupported-conversion
+reject.
+
+**Fix**: `py_percent_format` gains a constant `key → value-node` mapping parameter. On encountering
+`%(`, it parses the key to the matching `)`, looks it up, and formats that value (without consuming a
+positional argument; a key may be referenced repeatedly); a missing key raises a clean KeyError-style
+diagnostic, matching CPython. The caller builds the mapping from a `Dict` right-hand side over its
+constant-string keys (last write wins, matching Python dict-literal semantics); Tuple/scalar right-hand
+sides keep the unchanged positional path.
+
+This is a **crash/unsupported→correct-result fix**. New regression pair
+`percent_format_mapping{,_fail}` (CORE) covering single/multi-key mapping, repeated keys, `%%` in a
+mapping string, and the unchanged positional form; the positive is the liveness witness (it errored
+pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh percent_format_mapping`); the `percent_format`/`str_mod` ctest subset
+is green and the broad `str` subset shows no new failures (the 12 are the pre-existing `--z3`/`--ir`
+environmental set on this Bitwuzla-only build). Code-reviewed: the reviewer's one finding — `emplace`
+keeping the *first* duplicate-key value where CPython keeps the *last* — was **fixed** (last-write-wins);
+bounds/`forced`-reset/positional-non-regression were confirmed clean. Solver-agnostic (a compile-time
+string fold). Composes with §68: once both land, `%(name).2f` (mapping plus a spec) folds through the
+shared path.
+
+### 69b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) char-`join` — `"".join(c for c in s)` (string-iteration elements typed as chars,
+§67b); (ii) nested-function closures (free-variable capture); (iii) `sorted(dict.items())` tuple drop
+(known multi-layer); (iv) strided list-slice delete `del a[::k]` (§66b); (v) pointer-form bytes
+(params/slices) content `len`/`==` (§58a/§59a); (vi) `round(int, n)` returns float (§63b); (vii) the `%`
+`#` alternate form and `*` dynamic width (§68b).
+
 ## 66. 2026-06-29 re-validation (fifty-sixth sweep) & del a[lower:upper] slice deletion
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. A
@@ -2431,6 +2471,14 @@ of int (§63b); (vii) `str.format` field width/spec (§46/§61b).
 Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
 (unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
 (float-precision, §51b); the bytes-returning methods (§49b); the symbolic bytes affix/search methods
+(§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+`list.index()`-in-`try/except` (ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
+the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§68 (PRs #5668, #5669, #5675–#5687, #5689–#5695) are in flight
+> and not yet on `master`; this sweep is appended as §69.
 (§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
 ## 64. 2026-06-29 re-validation (fifty-fourth sweep) & max/min/sum over a dict
 

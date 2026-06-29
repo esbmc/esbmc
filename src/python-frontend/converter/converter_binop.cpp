@@ -20,6 +20,7 @@
 #include <util/std_code.h>
 
 #include <functional>
+#include <map>
 #include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -70,11 +71,17 @@ bool py_const_int(const nlohmann::json &a, long long &out)
 // arithmetic (which crashed the SMT backend, #5495).
 std::string py_percent_format(
   const std::string &fmt,
-  const std::vector<nlohmann::json> &args)
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping)
 {
   std::string out;
   size_t argi = 0;
+  // When a `%(name)` mapping key was just parsed, `forced` points at its value
+  // node and next_arg() returns it (without consuming a positional argument).
+  const nlohmann::json *forced = nullptr;
   auto next_arg = [&]() -> const nlohmann::json & {
+    if (forced != nullptr)
+      return *forced;
     if (argi >= args.size())
       throw std::runtime_error(
         "TypeError: not enough arguments for format string");
@@ -90,6 +97,25 @@ std::string py_percent_format(
     }
     if (i + 1 >= fmt.size())
       throw std::runtime_error("ValueError: incomplete format");
+
+    // Mapping form: %(name)<conv> looks `name` up in the right-hand dict.
+    forced = nullptr;
+    if (fmt[i + 1] == '(')
+    {
+      const size_t close = fmt.find(')', i + 2);
+      if (close == std::string::npos)
+        throw std::runtime_error("ValueError: incomplete format key");
+      const std::string key = fmt.substr(i + 2, close - (i + 2));
+      const auto it = mapping.find(key);
+      if (it == mapping.end())
+        throw std::runtime_error(
+          "KeyError: '" + key + "' in str % mapping (or non-constant key)");
+      forced = &it->second;
+      i = close; // advance to ')'; the conversion char follows
+      if (i + 1 >= fmt.size())
+        throw std::runtime_error("ValueError: incomplete format");
+    }
+
     const char c = fmt[++i];
     switch (c)
     {
@@ -727,8 +753,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       throw std::runtime_error(
         "unsupported: str % formatting requires a literal format string");
 
+    // A right-hand dict drives the %(name)s mapping form: build a constant
+    // key -> value-node map. Folding requires constant string keys; a
+    // non-constant key leaves the map without that entry, so %(key) below
+    // surfaces a clean KeyError-style diagnostic instead of a wrong fold.
+    std::map<std::string, nlohmann::json> mapping;
     std::vector<nlohmann::json> args;
-    if (right.is_object() && right.value("_type", "") == "Tuple")
+    if (right.is_object() && right.value("_type", "") == "Dict")
+    {
+      const auto &keys = right["keys"];
+      const auto &values = right["values"];
+      for (size_t k = 0; k < keys.size() && k < values.size(); ++k)
+        if (
+          keys[k].is_object() && keys[k].value("_type", "") == "Constant" &&
+          keys[k].contains("value") && keys[k]["value"].is_string())
+          // Last write wins for duplicate keys, matching Python dict literals.
+          mapping[keys[k]["value"].get<std::string>()] = values[k];
+    }
+    else if (right.is_object() && right.value("_type", "") == "Tuple")
       for (const auto &e : right["elts"])
         args.push_back(e);
     else
@@ -739,7 +781,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // len("ab")), which materialises it correctly when consumed inline by
     // len()/==. Building the array directly left it unaddressable inline.
     nlohmann::json folded = left;
-    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
+    folded["value"] =
+      py_percent_format(left["value"].get<std::string>(), args, mapping);
     return get_expr(folded);
   }
 
