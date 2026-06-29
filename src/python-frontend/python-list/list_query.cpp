@@ -824,3 +824,42 @@ exprt python_list::build_index_list_call(
 {
   return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_index");
 }
+
+exprt python_list::build_index_range_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem,
+  const exprt &start,
+  const exprt &end)
+{
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_index_range");
+  if (!func)
+    throw std::runtime_error(
+      "__ESBMC_list_index_range function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = build_symbol(*elem_info.elem_symbol);
+  else
+    element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
+
+  // Args: (list, &value-or-ptr, type_id, size, start, end). The start/end
+  // Python ints are cast to the model's int64_t parameters by the call.
+  exprt call = build_call_expr(
+    *func,
+    size_type(),
+    {build_symbol(list),
+     element_arg,
+     build_symbol(*elem_info.elem_type_sym),
+     elem_info.elem_size,
+     start,
+     end});
+  call.location() = elem_info.location;
+
+  return call;
+}

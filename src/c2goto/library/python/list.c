@@ -611,6 +611,52 @@ size_t __ESBMC_list_index(
   return 0;
 }
 
+size_t __ESBMC_list_index_range(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size,
+  int64_t start,
+  int64_t end)
+{
+  if (!l || !item)
+    return 0;
+
+  // Normalize start/end like CPython slice bounds: a negative bound counts
+  // from the end, then start and end each clamp to [0, size]. The search
+  // covers l[start:end] for list.index(x, start[, end]).
+  int64_t n = (int64_t)l->size;
+  if (start < 0)
+  {
+    start += n;
+    if (start < 0)
+      start = 0;
+  }
+  if (start > n)
+    start = n;
+  if (end < 0)
+  {
+    end += n;
+    if (end < 0)
+      end = 0;
+  }
+  if (end > n)
+    end = n;
+
+  size_t i = (size_t)start;
+  while (i < (size_t)end)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
 /* ---------- extend list ---------- */
 
 void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
