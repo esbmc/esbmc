@@ -107,7 +107,7 @@ bool py_const_double(const nlohmann::json &a, double &out)
 // Pad `body` to `width` per the % flags: '-' left-justifies; '0' zero-pads a
 // numeric value (after any leading sign); otherwise space-pad on the left.
 std::string pad_format_field(
-  std::string body,
+  const std::string &body,
   int width,
   bool left,
   bool zero,
@@ -120,17 +120,17 @@ std::string pad_format_field(
     return body + std::string(n, ' ');
   if (zero && numeric)
   {
-    size_t sign = (!body.empty() && (body[0] == '-' || body[0] == '+' ||
-                                     body[0] == ' '))
-                    ? 1
-                    : 0;
+    size_t sign =
+      (!body.empty() && (body[0] == '-' || body[0] == '+' || body[0] == ' '))
+        ? 1
+        : 0;
     return body.substr(0, sign) + std::string(n, '0') + body.substr(sign);
   }
   return std::string(n, ' ') + body;
 }
 
 // Apply the +/space sign flags to a non-negative numeric string.
-std::string apply_sign_flags(std::string s, bool plus, bool space)
+std::string apply_sign_flags(const std::string &s, bool plus, bool space)
 {
   if (s.empty() || s[0] == '-')
     return s;
@@ -192,15 +192,16 @@ std::string py_percent_format(
         break;
     }
     int width = 0;
-    while (i + 1 < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[i + 1])))
+    while (i + 1 < fmt.size() &&
+           std::isdigit(static_cast<unsigned char>(fmt[i + 1])))
       width = std::min(kMaxField, width * 10 + (fmt[++i] - '0'));
     int prec = -1;
     if (i + 1 < fmt.size() && fmt[i + 1] == '.')
     {
       ++i;
       prec = 0;
-      while (
-        i + 1 < fmt.size() && std::isdigit(static_cast<unsigned char>(fmt[i + 1])))
+      while (i + 1 < fmt.size() &&
+             std::isdigit(static_cast<unsigned char>(fmt[i + 1])))
         prec = std::min(kMaxField, prec * 10 + (fmt[++i] - '0'));
     }
     if (width >= kMaxField || prec >= kMaxField)
@@ -290,7 +291,8 @@ std::string py_percent_format(
       if (!py_const_double(next_arg(), d))
         throw std::runtime_error(
           "unsupported: non-constant argument in str % formatting");
-      body = apply_sign_flags(fmt_double(c, prec >= 0 ? prec : 6, d), plus, space);
+      body =
+        apply_sign_flags(fmt_double(c, prec >= 0 ? prec : 6, d), plus, space);
       numeric = true;
     }
     else if (c == 's')
