@@ -2176,3 +2176,60 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 66. 2026-06-29 re-validation (fifty-sixth sweep) & del a[lower:upper] slice deletion
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. A
+probe round (a join-generator `str()` lead was investigated and **set aside** — removing the
+`str(x) → x.__str__()` lowering fixes `"".join(str(int) for ...)` but regresses a user-object
+`__str__` test by routing it through the slower runtime join; the real fix is `int.__str__()` support in
+the method dispatch, a larger change, recorded as a follow-up). This sweep took a clean, isolated del
+bug instead.
+
+### 66a. New isolated, soundly-fixable defect found & fixed
+**`del a[lower:upper]` on a list errored with "function call: argument".**
+
+`del a[1:3]`, `del a[:2]`, `del a[2:]` all aborted, while single-index `del a[i]` worked. Root cause: the
+Delete-statement handler (`converter/converter_stmt.cpp`) desugared `del a[subscript]` on a list to
+`a.pop(subscript)`. For a single index that is correct, but for a `Slice` subscript it passed the Slice
+AST node as `pop`'s index argument — invalid (pop wants an int) — producing the internal error.
+
+**Fix**: in the list branch, detect a `Slice` subscript and route it to the existing slice-assignment
+lowering with an empty replacement — `del a[1:3]` becomes `a[1:3] = []`, the CPython-equivalent removal,
+reusing the proven `handle_slice_assignment` path. A single-index subscript still desugars to
+`a.pop(i)`. A strided slice (`del a[::k]`, step ≠ 1) is rejected with a clean diagnostic rather than the
+misleading assignment-flavoured ValueError the empty-slice-assign model would otherwise raise (an
+extended-step delete is legal in CPython but `a[::k] = []` is not — handling strided deletion needs a
+dedicated model; recorded as a follow-up).
+
+This is a **crash/error→correct-result fix**. New regression pair `del_list_slice{,_fail}` (CORE)
+covering `del a[i:j]`, open-ended `del a[:j]`/`del a[i:]`, the post-delete length/contents, and the
+unchanged single-index delete; the positive is the liveness witness (it errored pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh del_list`); the
+`regression/python/del`/`slice` ctest subset (34 tests) is 100% green. Code-reviewed (the contiguous
+desugaring correctness, the empty-list value-node validity, the non-impact on dict/single-index/attribute
+deletes, and the constructor-json inertness all confirmed; the reviewer's extended-step divergence was
+addressed by the strided-reject guard). Solver-agnostic.
+
+### 66b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) `int.__str__()` / `"".join(str(int) for ...)` — support `__str__` as a method
+on built-in numerics so the join-generator lowering works for ints as well as user objects (above); (ii)
+strided list-slice delete `del a[::k]` (above); (iii) pointer-form bytes (params/slices) content
+`len`/`==` (§58a/§59a); (iv) `sorted`/`sort` with an arithmetic/function `key` (§56b/§57b); (v)
+`int`-literal-receiver methods (`(255).bit_length()`) (§57b); (vi) `round(int, n)` returns float instead
+of int (§63b); (vii) `str.format` field width/spec (§46/§61b).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (§49b); the symbolic bytes affix/search methods
+(§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, `list.index()`-in-`try/except` (ValueError not catchable),
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers,
+§3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+> **Note on numbering.** §42/§43 and §49–§65 (PRs #5668, #5669, #5675–#5687, #5689–#5692) are in flight
+> and not yet on `master`; this sweep is appended as §66.
