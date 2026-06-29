@@ -80,6 +80,19 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Build set symmetric difference (set1 ^ set2):
+   *        (lhs - rhs) ∪ (rhs - lhs), collected into a fresh set.
+   * @param lhs Left operand (set expression)
+   * @param rhs Right operand (set expression)
+   * @param element AST node for location information
+   * @return Expression representing the result set
+   */
+  exprt build_set_symmetric_difference_call(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
    * @brief Emit the IR for a binary set method (issubset / issuperset /
    *        isdisjoint / update / symmetric_difference / union / intersection /
    *        difference) called on @p self with @p other.

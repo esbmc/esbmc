@@ -4084,6 +4084,41 @@ void python_converter::get_delete_statement(
       // of requiring a dict.
       if (dict_type == type_handler_.get_list_type())
       {
+        // del a[lower:upper] removes the slice — equivalent to a[lower:upper]
+        // = []. Desugaring to pop() (below) would pass the Slice node as a pop
+        // index, which is invalid; route slice deletes through the existing
+        // slice-assignment lowering with an empty replacement instead.
+        if (slice.contains("_type") && slice["_type"] == "Slice")
+        {
+          // Only a contiguous (absent / step-1) slice maps to a[i:j] = []. An
+          // extended-step delete is always legal in CPython, but `a[::k] = []`
+          // is not (the slice-assign model asserts a size match), so reject the
+          // strided form with a clean diagnostic rather than a misleading
+          // assignment-flavoured ValueError.
+          const nlohmann::json &step =
+            slice.contains("step") ? slice["step"] : nlohmann::json();
+          bool contiguous = step.is_null();
+          if (
+            !contiguous && step.is_object() &&
+            step.value("_type", "") == "Constant" && step.contains("value") &&
+            step["value"].is_number_integer() &&
+            step["value"].get<long long>() == 1)
+            contiguous = true;
+          if (!contiguous)
+            throw std::runtime_error(
+              "del on a strided list slice (step != 1) is not supported");
+
+          nlohmann::json empty_list;
+          empty_list["_type"] = "List";
+          empty_list["elts"] = nlohmann::json::array();
+          copy_location_fields_from_decl(ast_node, empty_list);
+          python_list list_handler(*this, target);
+          list_handler.handle_slice_assignment(dict_expr, slice, empty_list);
+          continue;
+        }
+
+        // del a[i] on a list removes (and shifts out) the element at index i.
+        // This is exactly list.pop(i) with the result discarded.
         nlohmann::json pop_call;
         pop_call["_type"] = "Call";
         pop_call["func"] = {
