@@ -1,4 +1,3 @@
 import numpy as np
-a = np.array([3.0, 4.0])
-n = np.linalg.norm(a)
-assert n == 5.0
+result = np.linalg.norm(np.array([3.0, 4.0]))
+assert result == 5.0
