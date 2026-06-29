@@ -816,6 +816,36 @@ class CoreVisitorsMixin:
                 kw.value = ast.Constant(value=is_big)
         ast.fix_missing_locations(node)
 
+    @staticmethod
+    def _normalize_math_gcd_lcm_variadic(node):
+        # math.gcd / math.lcm accept any number of integer arguments in CPython,
+        # but the operational model (models/math.py) is binary. Normalise to
+        # nested 2-argument calls reusing the binary model: f() -> identity,
+        # f(x) -> f(x, identity), f(a, b, c, ...) -> f(f(a, b), c, ...). gcd's
+        # identity is 0 (gcd(x, 0) == abs(x)); lcm's is 1 (lcm(x, 1) == abs(x)).
+        # Only the canonical `math.gcd(...)` / `math.lcm(...)` spelling is
+        # normalised; `from math import gcd` and `import math as m` forms (and a
+        # user object named `math`) fall through unchanged.
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math" and node.func.attr in ("gcd", "lcm")):
+            return
+        if node.keywords or len(node.args) == 2:
+            return  # gcd/lcm take no keywords; the binary form is already modelled
+        if any(isinstance(a, ast.Starred) for a in node.args):
+            return  # *args splat: argument count is not statically known
+        identity = 0 if node.func.attr == "gcd" else 1
+        args = node.args
+        if len(args) == 0:
+            node.args = [ast.Constant(value=identity), ast.Constant(value=identity)]
+        elif len(args) == 1:
+            node.args = [args[0], ast.Constant(value=identity)]
+        else:  # >= 3: left-fold into nested binary calls
+            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]], keywords=[])
+            for a in args[2:-1]:
+                acc = ast.Call(func=copy.deepcopy(node.func), args=[acc, a], keywords=[])
+            node.args = [acc, args[-1]]
+        ast.fix_missing_locations(node)
+
     def _fill_missing_args_with_defaults(self, node, function_name, expected_args, keywords):
         missing_args = []
         for i in range(len(node.args), len(expected_args)):
@@ -1207,6 +1237,7 @@ class CoreVisitorsMixin:
             return rewritten_decimal
 
         self._normalize_int_from_bytes_endianness(node)
+        self._normalize_math_gcd_lcm_variadic(node)
 
         if not self._apply_call_signature_defaults(node):
             self.generic_visit(node)
