@@ -1960,7 +1960,14 @@ exprt function_call_expr::handle_set_method() const
   const std::string &method_name = function_id_.get_function();
   const auto &args = call_["args"];
 
-  if (args.size() != 1)
+  // union / intersection / difference are variadic in CPython:
+  // s.union(*others). symmetric_difference and the relation/mutation methods
+  // remain exactly-one-argument.
+  const bool is_variadic_set_op = method_name == "union" ||
+                                  method_name == "intersection" ||
+                                  method_name == "difference";
+
+  if (args.size() != 1 && !is_variadic_set_op)
     throw std::runtime_error(method_name + "() takes exactly one argument");
 
   // set(<iterable>).issubset/issuperset/isdisjoint(y): set() here only
@@ -2006,10 +2013,34 @@ exprt function_call_expr::handle_set_method() const
       *set_symbol, call_, elem, method_name);
   }
 
+  python_set set_helper(converter_, call_);
+
+  // Variadic union/intersection/difference: fold left over the arguments
+  // (s.union(a, b) == s.union(a).union(b)); the zero-argument form returns a
+  // copy of the set. Each step's result is a fresh set symbol to feed the next.
+  if (is_variadic_set_op)
+  {
+    if (args.empty())
+      return set_helper.build_set_copy(*set_symbol, call_);
+
+    const symbolt *cur = set_symbol;
+    exprt result;
+    for (const auto &arg : args)
+    {
+      exprt other = converter_.get_expr(arg);
+      result = set_helper.build_set_method_call(*cur, other, call_, method_name);
+      const symbolt *next =
+        converter_.find_symbol(result.identifier().as_string());
+      if (!next)
+        return result; // last step; nothing further to chain from
+      cur = next;
+    }
+    return result;
+  }
+
   // issubset / issuperset / isdisjoint / update / symmetric_difference take
   // another set/iterable.
   exprt other = converter_.get_expr(args[0]);
-  python_set set_helper(converter_, call_);
   return set_helper.build_set_method_call(
     *set_symbol, other, call_, method_name);
 }

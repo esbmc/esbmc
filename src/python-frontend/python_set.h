@@ -80,6 +80,13 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Build a fresh shallow copy of @p self as a new set. Used for the
+   * zero-argument variadic forms s.union()/intersection()/difference(), which
+   * return a copy of the set in CPython.
+   */
+  exprt build_set_copy(const symbolt &self, const nlohmann::json &element);
+
+  /**
    * @brief Emit the IR for a binary set method (issubset / issuperset /
    *        isdisjoint / update / symmetric_difference / union / intersection /
    *        difference) called on @p self with @p other.

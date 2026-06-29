@@ -698,6 +698,16 @@ exprt python_set::build_set_intersection_call(
   return build_symbol(result_set);
 }
 
+exprt python_set::build_set_copy(
+  const symbolt &self,
+  const nlohmann::json &element)
+{
+  // self ∪ ∅ is a fresh deduplicated copy of self.
+  symbolt &empty = create_set_list();
+  return build_set_union_call(
+    build_symbol(self), build_symbol(empty), element);
+}
+
 exprt python_set::build_set_union_call(
   const exprt &lhs,
   const exprt &rhs,
