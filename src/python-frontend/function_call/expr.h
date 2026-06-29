@@ -117,6 +117,11 @@ private:
   exprt build_constant_from_arg() const;
 
   /*
+   * Folds bytes.fromhex("..") over a constant hex string into a byte array.
+   */
+  exprt handle_bytes_fromhex() const;
+
+  /*
    * Sets the function_type_ attribute based on the call information.
    */
   void get_function_type();
@@ -261,6 +266,14 @@ private:
    * \xNN / \uNNNN / \UNNNNNNNN, following Python 3 `ascii()` semantics.
    */
   exprt handle_ascii() const;
+
+  /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
 
   /*
    * Handles ord(str) conversions by extracting the Unicode code point

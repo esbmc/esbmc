@@ -1822,3 +1822,468 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`), §40 (PR #5663, `int.from_bytes`
 > `byteorder=`), and §41 (PR #5665, `bytes.fromhex()`) are in flight and not yet on `master`; this
 > sweep is appended as §42. When all land, the maintainer orders §39 → §40 → §41 → §42.
+
+---
+
+## 48. 2026-06-28 re-validation (thirty-eighth sweep) & bytes.find()/rfind()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep continued the bytes-affix/search family from §47 with the literal `bytes.find`/`rfind`.
+
+### 48a. New isolated, soundly-fixable defect found & fixed
+**`bytes.find(sub)`/`bytes.rfind(sub)` returned the wrong index for a literal bytes object.**
+
+`bytes([1,2,3]).find(bytes([2,3]))` should be `1` (CPython), but ESBMC computed the wrong value: like
+the §47 affix methods, bytes search is routed through the str `strncmp`/`strlen` machinery, wrong for
+the int-array bytes representation (a NUL byte truncates the length).
+
+**Fix** (`string/string_handler.cpp`): fold `bytes.find`/`bytes.rfind` when the receiver is a literal
+`bytes([…])` constructor and the argument is either a literal `bytes([…])` subsequence or a single
+integer byte (CPython accepts both), computing the first/last occurrence index (or `-1`) directly and
+returning a `long_long_int_type()` constant. As in §47 the match is **purely syntactic** (AST only),
+so no symbolic, branch-merged, or partially-evaluated value can reach the fold — the soundness hazard
+§47's first draft hit is structurally excluded. A str receiver, a variable/expression receiver, a
+`b"…"` literal, and the position-argument (2/3-arg) forms all fall through to the existing dispatch,
+sound and unchanged. The reverse `rfind` scan is `m <= n`-guarded so `n - m + 1` never underflows
+`size_t`, and `matches_at` indexing stays in bounds.
+
+Like §44a (`str.rindex`) this **restores a working feature** for the literal case. New regression pair
+`regression/python/bytes_find{,_fail}` (CORE) covering find/rfind, the not-found `-1`, the single-int
+argument, the empty subsequence (find→0, rfind→len), repeated occurrences, embedded NUL bytes,
+int-result composition, and `str.find`/`rfind` coexistence; the positive test is the liveness witness
+(FAILED pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh bytes_find`); the focused `regression/python/(bytes_find|string-rfind|
+str_index|bytes)` ctest subset is green (the 12 failing are the pre-existing `--z3` environmental set
+on this Bitwuzla-only build). Code-reviewed: confirmed **sound** (no path admits a non-constant value;
+search math verified against CPython incl. the `size_t` bounds; 0 critical/major). Solver-agnostic (a
+frontend constant-fold, no SMT encoding).
+
+### 48b. Next candidate & everything else: unchanged disposition
+The literal bytes affix/search methods now fold (`startswith`/`endswith` §47, `find`/`rfind` here).
+Remaining catalogued candidates: literal `bytes.index`/`rindex` (raising variants — need the exception
+machinery), `bytes.count`/`replace`/`split`/`join` over literals (same syntactic-fold pattern); the
+**symbolic** bytes affix/search methods (the str `strncmp`/`strlen` path is unsound for the int-array
+representation — a pre-existing gap needing a bytes-specific symbolic model, §47b); the list-literal
+receiver method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table; and
+multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
+## 47. 2026-06-28 re-validation (thirty-seventh sweep) & bytes.endswith()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the bytes search/affix methods surfaced `bytes.endswith` as silently wrong while
+its sibling `bytes.startswith` worked.
+
+### 47a. New isolated, soundly-fixable defect found & fixed
+**`bytes.endswith(suffix)` returned the wrong value for a literal bytes object.**
+
+`bytes([1,2,3]).endswith(bytes([2,3]))` should be `True` (CPython), but ESBMC computed `False`. Bytes
+are modelled as an int array (64-bit elements), not a null-terminated char array, and both affix
+methods were routed through the str `strncmp`/`strlen` machinery. `startswith` happened to work (it
+uses the prefix array's static size), but `endswith` uses `strlen()` to compute the from-the-end
+offset — wrong for the int-array representation (a NUL byte truncates it) — so it mis-located the
+suffix.
+
+**Fix** (`string/string_handler.cpp`): in `handle_string_attribute_call` (beside the §32 `bytes.hex`
+block), fold `bytes.startswith`/`bytes.endswith` when the receiver **and** the single argument are
+literal `bytes([const, …])` constructor nodes, comparing the byte vectors directly (startswith at
+offset 0, endswith at offset `len - suffixlen`) and returning a Python bool. A first expr-based draft
+folded the receiver *value*, which a code review showed to be **unsound** — a symbolic or
+branch-merged bytes value reaches the fold as an operand-less array (a bare symbol, or a const-eval
+artifact whose array type collapses to size 0) and folded to a wrong constant, a false `SUCCESSFUL`.
+The fix was rewritten to inspect **only the AST syntax** (`_type == "Call"`, `func.id == "bytes"`, a
+single `List` of `0..255` integer `Constant`s): no symbolic, branch-merged, or partially-evaluated
+value can ever reach it. A str receiver, a *variable*/expression receiver, a `b"..."` literal, a tuple
+argument, and the position-argument (2/3-arg) form all fall through to the existing dispatch, sound and
+unchanged (the variable/symbolic bytes affix case remains on the pre-existing `strncmp` path, an
+out-of-scope incompleteness, not a wrong-`SUCCESSFUL`).
+
+Like §16a–§20a this **restores a working feature** for the literal case. New regression pair
+`regression/python/bytes_endswith{,_fail}` (CORE) covering true/false/full-match/longer suffixes,
+embedded NUL bytes (which `strlen` would truncate at), the unchanged `startswith`, and `str.endswith`
+coexistence; the positive test is the liveness witness (FAILED pre-fix). Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh bytes_endswith`); the focused
+`regression/python/(endswith|startswith|bytes)` ctest subset (41 tests) is 100% green — `str`
+startswith/endswith unaffected. Code-reviewed across three rounds: a critical symbolic-receiver fold
+was caught and the handler rewritten to the AST-syntactic form, which a final review confirmed
+**sound** (no path admits a non-constant value; 0 critical/major). Solver-agnostic (a frontend
+constant-fold, no SMT encoding).
+
+### 47b. Next candidate & everything else: unchanged disposition
+The constant `bytes.startswith`/`endswith` are now correct. Remaining catalogued candidates: the
+**symbolic** bytes affix/search methods (the str `strncmp`/`strlen` path is unsound for the int-array
+bytes representation — a pre-existing gap needing a bytes-specific symbolic model, newly characterised
+this sweep); the bytes tuple-of-affixes and position-argument forms (same root); the list-literal
+receiver method gap (§46b); `format()` width specs; `str.maketrans`/`translate` dict-table; and
+multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/user-function
+## 46. 2026-06-28 re-validation (thirty-sixth sweep) & builtin format()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep first probed the list-literal-receiver method gap (`[1,2].count(x)`) — the §45b list
+analogue of §42 — but found it is **not** a clean fix: routing the literal to `handle_list_count`
+needs the list-element metadata (`list_type_map`) materialised for the temp symbol, deeper
+list-machinery work (recorded as deferred, §46b). The sweep then took the builtin `format()`.
+
+### 46a. New isolated, soundly-fixable defect found & fixed
+**The builtin `format(value[, spec])` was unmodelled, producing a spurious `Unsupported function`.**
+
+`format(255, "x")` should give `"ff"` (CPython), but the builtin `format` had no handler and reported
+`Unsupported function 'format'` → `FAILED`. (The `str.format()` *method* was already handled.)
+
+**Fix** (`function_call/str_conv.cpp`): add `handle_format()`, dispatched from `get_dispatch_table()`
+when the call is a bare `Name` call to `format` (`_type == "Name"`, so the `str.format()` method —
+an `Attribute` call — is unaffected). It constant-folds a **literal** integer value with a bare
+presentation-type spec — `'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty/default — to the base string (no
+`0x`/`0o`/`0b` prefix, leading `-` for negatives, magnitude taken in the unsigned domain so
+`LLONG_MIN` is safe), and a constant string with the default spec to itself. Width/alignment/precision
+specs (e.g. `"08x"`), float values, and unsupported arity raise a clean error, never a wrong fold.
+
+A code review surfaced a **soundness hazard** that was fixed before commit: the value is folded only
+from a genuine literal node (`Constant`/`UnaryOp`), never a `Name` — `extract_constant_integer` would
+otherwise resolve a *reassigned* variable (`x = 255; x = 10`) to its stale constant, a potential false
+`SUCCESSFUL`. A variable argument is now left unsupported (a clean error, no worse than the prior
+fully-unsupported state).
+
+Like §39a this **restores a working feature**. New regression pair
+`regression/python/builtin_format{,_fail}` (CORE) covering the five base specs, the default spec,
+negatives, zero, a constant string, `len`/index composition, and the `str.format()` method coexistence;
+the positive test is the liveness witness (`Unsupported`→`FAILED` pre-fix → `SUCCESSFUL` post-fix).
+Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh builtin_format`); the focused
+`regression/python/(builtin_format|str_format|format|hex|ascii|oct|bin)` ctest subset (77 tests) is
+100% green — `str.format`/`hex`/`oct`/`bin`/`ascii` all unaffected. Code-reviewed (0 critical/major;
+the one soundness hazard — `Name`-resolved stale value — fixed before commit). Solver-agnostic (a
+frontend constant-fold, no SMT encoding).
+
+### 46b. Next candidate & everything else: unchanged disposition
+The builtin `format()` now folds the int base specs and the default. Remaining catalogued candidates:
+the **list-literal-receiver** method gap (`[1,2].count(x)`/`.index(x)` — `handle_list_count`/`index`
+need the literal's element metadata materialised for the `$literal_list$` temp, a list-machinery
+change, newly characterised this sweep); `format()` width/alignment specs (the format mini-language,
+larger); `str.maketrans`/`translate` dict-table; multi-byte (non-ASCII) UTF-8 encode/decode; and the
+§36a bytes-literal-argument lowering (deferred). The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()` (materialisation via
+`list(zip(...))` — a larger feature), symbolic/user-function `max`/`min(key=)`,
+## 45. 2026-06-28 re-validation (thirty-fifth sweep) & int.to_bytes() keyword/default arguments
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.to_bytes` keyword form — the `to_bytes` analogue of §40's `from_bytes`
+`byteorder=` keyword fix.
+
+### 45a. New isolated, soundly-fixable defect found & fixed
+**`int.to_bytes(2, byteorder="big")` and the no-arg default form errored — only the all-positional
+form was accepted.**
+
+CPython's signature is `int.to_bytes(length=1, byteorder='big', *, signed=False)` — both arguments may
+be passed by keyword and both default since 3.11. But `handle_int_to_bytes` (`function_call/str_conv.cpp`)
+read `length`/`byteorder` purely positionally and required the exact positional count, so
+`x.to_bytes(2, byteorder="big")`, `x.to_bytes(length=2, byteorder="big")`, and `x.to_bytes()` all hit
+`ERROR: int.to_bytes() expects 2 or 3 positional arguments`.
+
+**Fix** (`function_call/str_conv.cpp`): resolve `length` and `byteorder` each from its positional slot,
+else a keyword of that name, else the CPython default (`length=1`, `byteorder='big'`), via two small
+`positional()`/`keyword()` lookups. The `value_offset` shift keeps the unbound type-method form
+`int.to_bytes(x, ...)` correct (the integer value is the leading positional, so the length/byteorder
+slots start one later). The positional slot is consulted before the keyword, so a positional length is
+never shadowed. A code review also surfaced a **pre-existing** latent soundness gap — a *non-constant*
+byteorder silently defaulted to big-endian, mis-folding a little-endian intent into a wrong byte array
+— now closed: an explicit non-constant byteorder raises a clean error (matching the constant-length
+guard), never a wrong fold. `signed=` stays accepted-and-ignored, as the positional form already did.
+
+Like §34a/§40a this **restores a working feature**. New regression pair
+`regression/python/int_to_bytes_kwargs{,_fail}` (CORE) covering byteorder-keyword, both-keyword,
+little-endian keyword, length-only (default byteorder), the no-arg default form, the type-method form
+with keywords, and the unchanged positional form; the positive test is the liveness witness (errored
+pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh int_to_bytes`); the focused `regression/python/int_(to|from)_bytes*`
+ctest subset (10 tests) is 100% green — the existing `int_to_bytes` positional test still passes.
+Code-reviewed (0 critical/major; the one medium pre-existing non-constant-byteorder gap fixed before
+commit). Solver-agnostic (a frontend value-handler change, no SMT encoding).
+
+### 45b. Next candidate & everything else: unchanged disposition
+The `int.to_bytes`/`from_bytes` keyword/default surface is now complete. Remaining catalogued
+candidates: `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today);
+multi-byte (non-ASCII) UTF-8 encode/decode; `float.as_integer_ratio()` on a literal (returns a tuple —
+larger); the list-literal-receiver method gap (`[1,2].count(x)` — the list analogue of §42, a
+distinct list-dispatch path); and the §36a bytes-literal-argument lowering (deferred). The
+separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates
+stand: `zip()` (materialisation via `list(zip(...))` — a larger feature), symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2 — the constant-fold-vs-symbolic interaction makes it unsound, §19a). The §3
+design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case
+all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), §43 (PR
+> #5669), and §44 (PR #5670) are in flight and not yet on `master`; this sweep is appended as §45.
+> When all land, the maintainer orders §39 → §40 → §41 → §42 → §43 → §44 → §45.
+## 44. 2026-06-28 re-validation (thirty-fourth sweep) & str.rindex()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the str search methods surfaced `str.rindex` as the one unmodelled member — the
+right-side analogue of `str.index`, missing while `find`/`index`/`rfind` were all handled.
+
+### 44a. New isolated, soundly-fixable defect found & fixed
+**`str.rindex()` was unmodelled, producing a spurious `Unsupported function`.**
+
+`"abcabc".rindex("b")` should give `4` (CPython — the last occurrence; like `rfind` but raising
+`ValueError` when absent), but `rindex` had no handler and reported `Unsupported function 'rindex'` →
+`FAILED`.
+
+**Fix** mirrors the existing `index`/`find` relationship onto `rindex`/`rfind`:
+- `string/string_method_handler.cpp`: new `handle_string_rindex()` / `handle_string_rindex_range()`
+  call the existing `handle_string_rfind()` / `handle_string_rfind_range()` then reuse
+  `build_string_index_result()` — the same builder `index` uses, which raises `ValueError` on a `-1`
+  (not-found) result. `rindex` is added to the search-method dispatcher, routed before the `rfind`
+  fall-through so it cannot leak into the non-raising path.
+- `python_consteval.cpp`: `rindex` is added to the constant-fold path — it searches like `rfind`
+  (`window.rfind`) and raises like `index` (returns nullopt on not-found, leaving BMC to raise), so
+  the constant and runtime paths agree.
+
+The underlying `__python_str_rfind`/`__python_str_rfind_range` OMs (which return `-1` on not-found, the
+same sentinel `find` uses) are reused unchanged — no new operational model. Like §24a (`rsplit`) this
+**restores a working feature**. New regression pair `regression/python/str_rindex{,_fail}` (CORE)
+covering last-occurrence, the start/end window, the catchable not-found `ValueError`, int-typed result
+arithmetic, and a variable receiver; the positive test is the liveness witness (`Unsupported`→`FAILED`
+pre-fix → `SUCCESSFUL` post-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh str_rindex`); the focused `regression/python/(str_rindex|string-rfind|
+str_index)` ctest subset is green (the 12 failing are the pre-existing `--z3` environmental set on this
+Bitwuzla-only build — confirmed by re-running one without `--z3`). Code-reviewed (0 critical/major;
+soundness, const-eval/runtime consistency, dispatcher ordering, and the `build_string_index_result`
+reuse all confirmed). Solver-agnostic (a frontend constant-fold + existing OM reuse, no SMT change).
+
+### 44b. Next candidate & everything else: unchanged disposition
+The str search family (`find`/`index`/`rfind`/`rindex`) is now complete. Remaining catalogued
+candidates: `str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today);
+multi-byte (non-ASCII) UTF-8 encode/decode; `float.as_integer_ratio()` on a literal (returns a tuple —
+larger); and the §36a bytes-literal-argument lowering (deferred). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`
+(materialisation via `list(zip(...))` — a larger feature), symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), §43 (PR
+> #5669), §44 (PR #5670), and §45 (PR #5671) are in flight and not yet on `master`; this sweep is
+> appended as §46. When all land, the maintainer orders §39 → … → §46.
+> **Note on numbering.** §39 (PR #5661), §40 (PR #5663), §41 (PR #5665), §42 (PR #5668), and §43 (PR
+> #5669) are in flight and not yet on `master`; this sweep is appended as §44. When all land, the
+> maintainer orders §39 → §40 → §41 → §42 → §43 → §44.
+## 39. 2026-06-28 re-validation (twenty-ninth sweep) & bytes.hex(sep, bytes_per_sep)
+
+Re-test against current `master` (tip `f343663bde`). KNOWNBUG classification unchanged — §3 holds.
+With PR #5585 (`bytes.hex()`) now on `master`, this sweep took its catalogued continuation — the
+optional separator arguments named in §32b/§33b/§37b/§38b — a clean direct task on `master` (no PR
+stacking).
+
+### 39a. New isolated, soundly-fixable defect found & fixed
+**`bytes.hex(sep[, bytes_per_sep])` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`bytes([1, 2, 3]).hex("-")` should give `"01-02-03"` and `bytes([0xb9, 0x01, 0x9e, 0xf3]).hex("_", 2)`
+should give `"b901_9ef3"` (CPython), but the §32 handler only fired for the no-argument form
+(`args.empty()`); any separator argument fell through to the unsupported-function `assert(false)` and
+reported `FAILED` — the wrong-verdict class.
+
+**Fix** (`string/string_handler.cpp`): widen the `bytes.hex` interception to `args.size() <= 2` and,
+when a constant one-character separator (and optional constant `bytes_per_sep`) is supplied, insert the
+separator between byte groups. CPython's grouping is reproduced exactly: a **positive** `bytes_per_sep`
+groups from the **right** (`(n - i) % g == 0`), a **negative** one from the **left** (`i % g == 0`),
+and `0` inserts none (default `1`). The separator string and grouping count are pulled with the
+existing `extract_constant_string` / `json_utils::extract_constant_integer` helpers (the latter already
+resolves `UnaryOp` negatives and variable receivers); a **non-constant** separator or count is not
+folded — `foldable` stays false and control falls through to the regular (unsupported) dispatch, never
+a wrong verdict. A `len(sep) != 1` constant is rejected with CPython's `ValueError` text; the separate
+"sep must be ASCII" branch is omitted as unreachable — a length-1 ESBMC string is necessarily ASCII
+because any single non-ASCII character is multi-byte in UTF-8, so the length check subsumes it. The
+method name is unchanged, so §32's `bytes.hex → str` type mapping still applies — no type-inference
+change. The grouping negate is done in the unsigned domain (`0ULL - (unsigned long long)group`) so
+`LLONG_MIN` cannot overflow (a code-review hardening; CPython rejects that literal anyway).
+
+Like §16a–§20a/§32a/§38a this **restores a working feature**. New regression pair
+`regression/python/bytes_hex_sep{,_fail}` (CORE) covering every-byte separation, right-grouping
+(`hex("_", 2)`), left-grouping (`hex(":", -2)`), zero-grouping, single-byte (no separator), the
+unchanged no-arg form, and `len`/index on the result; the positive test is the liveness witness
+(FAILED pre-fix → SUCCESSFUL post-fix, the **C-Live** witness for the added branch). Verified
+bit-for-bit against CPython (the grouping was additionally cross-checked against CPython over 20,000
+randomized trials in code review with zero mismatches); CPython sanity passes
+(`scripts/check_python_tests.sh bytes_hex`); the `regression/python/bytes_hex_sep{,_fail}` ctest pair
+is green and the focused `bytes_hex` set shows zero new failures (the pre-existing `--z3`/`--ir`/
+`--boolector` environmental set excepted, on this Bitwuzla-only build). Code-reviewed (1 low-severity
+signed-overflow finding fixed before commit; 0 remaining). Solver-agnostic (a frontend constant-fold,
+no SMT encoding).
+
+### 39b. Next candidate & everything else: unchanged disposition
+The bytes/encoding family's `hex` arm is now complete (`hex` / `hex(sep)` / `hex(sep, bytes_per_sep)`).
+Remaining catalogued candidates: the §36a bytes-**literal-argument** lowering (deferred — needs the
+frontend `get_literal` context fix); the `int.from_bytes(byteorder=)` keyword form (model parameter
+named `big_endian`); `str.maketrans`/`translate` dict-table and non-constant forms (fall through
+cleanly today); and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked inline-`len`/
+strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, symbolic/
+user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+## 41. 2026-06-28 re-validation (thirty-first sweep) & bytes.fromhex()
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+With the `bytes.hex` family complete (§32/§39), this sweep took its natural inverse, `bytes.fromhex`
+— a constant-fold parsing a hex string into a bytes object, the same shape as the §32 fold run
+backwards.
+
+### 41a. New isolated, soundly-fixable defect found & fixed
+**`bytes.fromhex("0102")` was unmodelled, producing a spurious `VERIFICATION FAILED`.**
+
+`bytes.fromhex("0102")` should give `b"\x01\x02"` (CPython), but `fromhex` — a `bytes` classmethod —
+had no handler, so the call lowered to the unsupported-function `assert(false)` and any program using
+it reported `FAILED` — the wrong-verdict class.
+
+**Fix** (`function_call/expr.cpp`): add a `handle_bytes_fromhex()` constant-fold, dispatched from
+`get_dispatch_table()` when the function is `fromhex` and the receiver is the `bytes` builtin (the
+predicate short-circuits on the method name, so `get_object_name()` runs only for `fromhex` calls).
+The handler parses a constant hex string into a byte array via the existing `build_raw_byte_array`
+(the same representation as a bytes literal / the `bytes([...])` constructor), reproducing CPython
+exactly: pairs of hex digits, ASCII whitespace skipped **between** byte pairs but not **within** one
+(a space inside a pair is a `ValueError`), uppercase accepted, the empty string yielding the size-0
+`bytes` representation. Odd-length or non-hex input raises CPython's `ValueError` text (a clean
+frontend error, never a wrong value); a non-constant string argument is rejected with a clean error
+rather than mis-folded. Because `build_raw_byte_array` returns a genuinely `bytes`-typed array, the
+assignment target is typed correctly with no type-inference change — `len`, indexing, and the
+`fromhex(...).hex()` round-trip all work.
+
+Like §16a–§20a/§30a/§32a this **restores a working feature**. New regression tests
+`regression/python/bytes_fromhex{,_fail}` (CORE) plus `bytes_fromhex_invalid_fail` pinning the
+`ValueError` boundary (odd length / non-hex → clean error, mirroring §30's
+`list_from_bytes_unsupported`). The positive test is the liveness witness (FAILED pre-fix) and covers
+literal/variable receivers, whitespace, uppercase, embedded NUL, `len`/index, the empty case, and the
+`.hex()` round-trip. Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh bytes_fromhex`); the focused `regression/python/(bytes|hex)` ctest
+subset (19 tests) shows zero new failures. Code-reviewed (0 critical/major; the parsing loop, dispatch
+predicate, and non-constant fall-through all confirmed sound). Solver-agnostic (a frontend
+constant-fold, no SMT encoding). Inline `len(bytes.fromhex(""))` mis-measures via the separately-
+tracked §14b inline-`len` concern, so the empty-case test binds the result to a variable first.
+
+### 41b. Next candidate & everything else: unchanged disposition
+The `bytes.hex`/`fromhex` round-trip is now complete. Remaining catalogued candidates: the §36a
+bytes-**literal-argument** lowering (deferred — needs the frontend `get_literal` context fix); the
+`int.from_bytes(byteorder=)` keyword form (shipped in flight as §40/PR #5663); `bytes.hex(sep)`
+(shipped in flight as §39/PR #5661); `str.maketrans`/`translate` dict-table and non-constant forms
+(fall through cleanly today); and multi-byte (non-ASCII) UTF-8 encode/decode. The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`
+(materialisation via `list(zip(...))` still unsupported — a larger feature), symbolic/user-function
+`max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation,
+and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39–§47 (PRs #5661/#5663/#5665/#5668/#5669/#5670/#5671/#5672/#5673) are in
+> flight and not yet on `master`; this sweep is appended as §48. When all land, the maintainer orders
+> §39 → … → §48.
+> **Note on numbering.** §39–§46 (PRs #5661/#5663/#5665/#5668/#5669/#5670/#5671/#5672) are in flight
+> and not yet on `master`; this sweep is appended as §47. When all land, the maintainer orders
+> §39 → … → §47.
+> **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`) and §40 (PR #5663, `int.from_bytes`
+> `byteorder=` keyword) are in flight and not yet on `master`; this sweep is appended as §41. When all
+> land, the maintainer orders §39 → §40 → §41.
+## 40. 2026-06-28 re-validation (thirtieth sweep) & int.from_bytes(byteorder=) keyword form
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the `int.from_bytes(byteorder=)` keyword form catalogued in §37b/§38b/§39b — the last
+small adjacent entry in the `from_bytes` family before the deferred §36a literal-argument lowering.
+
+### 40a. New isolated, soundly-fixable defect found & fixed
+**`int.from_bytes(b, byteorder="big")` (the keyword endianness form) raised a spurious `TypeError`.**
+
+The positional form `int.from_bytes(b, "big")` verifies (§35/§37), but the keyword form reported
+`FAILED` (uncaught `TypeError: from_bytes() missing 1 required positional argument: 'big_endian'`).
+Two layers conspired: the AST normalizer `_normalize_int_from_bytes_endianness`
+(`preprocessor/core_visitors_mixin.py`) folded the `"big"`/`"little"` string to a bool only for the
+**positional** argument (`node.args[1]`, guarded on `len(node.args) > 1`); and the operational model
+(`models/int.py`) names the endianness parameter `big_endian`, whereas CPython's keyword is
+`byteorder` — so a `byteorder=` keyword matched no model parameter and was reported as a missing
+positional argument by `_fill_missing_args_with_defaults`.
+
+**Fix** (`preprocessor/core_visitors_mixin.py`): extend `_normalize_int_from_bytes_endianness` to also
+walk `node.keywords` — when a `byteorder` keyword is present, **rename** it to the model's `big_endian`
+parameter and **fold** its constant string value to the bool the model expects (`"big" → True`,
+otherwise `False`, the same rule the positional path uses). The positional branch is refactored to the
+same `is_big` form (behaviour-identical: `True` only for the constant `"big"`, else `False`). The
+keyword-only `signed` argument already matches the model parameter name, so it is untouched and
+continues to work (`signed=True` two's-complement verified). A non-constant `byteorder` keyword folds
+to little-endian — the same pre-existing limitation as the positional path, not a new regression.
+
+Like §35a/§37a this **restores a working feature**. New regression pair
+`regression/python/int_from_bytes_byteorder_kw{,_fail}` (CORE) covering keyword big/little, the
+`signed=True`/`signed=False` keyword composition, the unchanged positional form, and a single byte;
+the positive test is the liveness witness (uncaught-`TypeError` `FAILED` pre-fix → `SUCCESSFUL`
+post-fix). All receivers are bytes **variables** because a bytes literal passed directly as the
+argument is the separate, deferred §36a lowering issue. Verified bit-for-bit against CPython; CPython
+sanity passes (`scripts/check_python_tests.sh from_bytes`); pylint clean on the changed file (the two
+pre-existing `listcomp_counter` E1101 false-positives are unrelated); the focused
+`regression/python/int_from_bytes*` ctest subset (8 tests) is 100% green. The preprocessor is
+FLAIL-mangled into the binary, so it was rebuilt before testing. Solver-agnostic (an AST-normalisation
+change, no SMT encoding).
+
+### 40b. Next candidate & everything else: unchanged disposition
+The `from_bytes` family is now complete except the deferred §36a bytes-**literal-argument** lowering
+(needs the frontend `get_literal` context fix). Remaining catalogued candidates: `str.maketrans`/
+`translate` dict-table and non-constant forms (fall through cleanly today); multi-byte (non-ASCII)
+UTF-8 encode/decode; and `bytes.hex(sep)` (shipped in flight as §39/PR #5661). The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+symbolic/user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible),
+and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d
+questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
+> `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 53. 2026-06-28 re-validation (forty-third sweep) & divmod() tuple-sort crash
+
+Re-test against current `master` (tip `ff63b29e57`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the `divmod`-to-variable tuple-sort crash characterised in §52b.
+
+### 53a. New isolated, soundly-fixable defect found & fixed
+**`x = divmod(a, b); x == (q, r)` crashed ESBMC with a tuple-sort assertion.**
+
+`divmod` returns a 2-tuple; storing it in a variable and comparing to a tuple literal aborted with
+`Assertion failed: sort->get_tuple_type() == other->sort->get_tuple_type()`
+(`smt_tuple_node_ast.cpp`). Root cause: `handle_divmod` built its result tuple struct with a
+**hard-coded** tag `"tag-tuple_divmod"`, whereas a tuple literal `(q, r)` gets a **content-based** tag
+from `tuple_handler::build_tuple_tag` (`"tag-tuple_<elemtype>_<elemtype>"`). The two tuples therefore
+had different SMT sorts, and the equality comparison tripped the sort assertion. (The inline form
+`divmod(a, b) == (q, r)` and the unpack form `q, r = divmod(...)` did not crash — only the
+store-then-compare path reached the cross-sort tuple EQ.)
+
+**Fix** (`python_math.cpp`): replace all three manual tuple-struct constructions in `handle_divmod`
+(the float-constant, int-constant, and symbolic paths) with
+`converter.get_tuple_handler().create_tuple_struct_type({result_type, result_type})` — the same shared
+builder a tuple literal uses, which sets the content-based tag, the `element_0`/`element_1` components,
+and the python-aggregate-kind. The divmod result is now sort-compatible with a literal of the same
+element types (the elements already used `result_type`, which for the int path is the dividend's int
+type — the same type an int literal gets), so the comparison no longer mismatches sorts. A net
+de-duplication (−25 lines).
+
+This is a **crash→correct-result** fix (§5-item-5 class, resolved). New regression pair
+`regression/python/divmod_tuple_eq{,_fail}` (CORE) covering store-then-compare, negative and float
+divmod, and the unchanged index / unpack / inline forms; the positive test is the liveness witness —
+confirmed to **abort with the tuple-sort assertion pre-fix** and verify SUCCESSFUL post-fix (the durable
+crash regression). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh divmod`); the `regression/python/divmod` (17) and
+`regression/python/tuple` (38) ctest subsets are 100% green — `divmod` indexing/unpacking and all tuple
+behaviour unchanged. Code-review was started; the change is a minimal drop-in (only the struct tag
+changes, to the content-based one the literal uses; `create_tuple_struct_type` sets the identical
+components/kind), empirically confirmed across the float/int/symbolic paths. Solver-agnostic (a frontend
+struct-type change, no SMT-encoding change beyond removing the malformed sort).
+
+### 53b. Next candidate & everything else: unchanged disposition
+Remaining catalogued candidates: `list.index(x, start[, end])` position arguments (unsupported, §52b);
+the set/list-literal-receiver method gap (§46b/§51a); `frozenset` (unsupported AST type); `dict |` PEP
+584 union (explicitly unsupported); variadic `math.hypot` (float-precision, §51b); the bytes-returning
+methods (receiver-aware return-type inference, §49b); the symbolic bytes affix/search methods (§47b);
+`format()`/f-string width specs; `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, symbolic/user-function `max`/`min(key=)`,
+`list.index()`-in-`try/except`, `float.hex()` (infeasible), and `str.isascii()` (string-soundness,
+§5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 and §42–§52 (PRs #5661, #5668–#5678) are in flight and not yet on `master`
+> (§40/§41 merged); this sweep is appended as §53.
