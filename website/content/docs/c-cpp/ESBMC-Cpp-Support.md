@@ -61,6 +61,9 @@ The standard given is the one the test exercises (`--std`).
 - `static operator()` — static call operator, with the implicit object argument skipped (`github_4377_static_call`)
 - Library: `std::expected` (`github_4377_expected`)
 
+**Standard library**
+- `<cmath>` floating-point classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal`, and `std::signbit` — all five are `#undef`-ed from the leaking glibc `<math.h>` macros and re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics (previously `std::isinf`/`std::isfinite`/`std::signbit` failed to parse via `std::__builtin_isinf_sign`) (`regression/esbmc-cpp/bug_fixes/cmath_std_classifiers`)
+
 **Exceptions and destructors**
 - `noexcept` / `throw()` exception specifications are lowered under `--lower-exceptions` (`regression/esbmc-cpp/try_catch/lower-exceptions_noexcept_*`, `exception_spec_noexcept_*`)
 - `dynamic_cast<T&>` throws `std::bad_cast` on a failed reference cast

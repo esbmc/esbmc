@@ -151,6 +151,14 @@ private:
   exprt handle_int_to_bytes() const;
 
   /*
+   * Folds float.is_integer() on a constant literal receiver
+   * (e.g. (2.0).is_integer()). A Name receiver already routes through the
+   * float operational model; a bare literal is not classified as a float
+   * instance, so fold it here to a Python bool.
+   */
+  exprt handle_float_is_integer_literal() const;
+
+  /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
    * constants by decoding their binary-encoded bitvector representations.
@@ -258,6 +266,14 @@ private:
    * \xNN / \uNNNN / \UNNNNNNNN, following Python 3 `ascii()` semantics.
    */
   exprt handle_ascii() const;
+
+  /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
 
   /*
    * Handles ord(str) conversions by extracting the Unicode code point
