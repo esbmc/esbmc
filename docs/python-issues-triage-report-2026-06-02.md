@@ -2176,3 +2176,58 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 > **Note on numbering.** §39 (PR #5661, `bytes.hex(sep[, bytes_per_sep])`) is in flight and not yet on
 > `master`; this sweep is appended as §40. When both land, the maintainer orders §39 → §40.
+
+---
+
+## 67. 2026-06-29 re-validation (fifty-seventh sweep) & __str__() on built-in scalars
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §66b top follow-up — `int.__str__()` — which also unblocks the §66 join-generator-`str`
+lead set aside last sweep.
+
+### 67a. New isolated, soundly-fixable defect found & fixed
+**`x.__str__()` on a built-in scalar (int/float/bool/str) raised "Unsupported '__str__'".**
+
+`(5).__str__()`, `x.__str__()` for an int/float/bool/str variable — all rejected, while a user object's
+`__str__` worked. The dunder, called explicitly, was classified as a class method on the built-in type
+and looked up as an operational-model function that does not exist. This also kept
+`"".join(str(x) for x in xs)` broken for int `x`: the join-generator preprocessor lowering rewrites
+`str(x)` to `x.__str__()`, which then failed for ints (the §66 lead).
+
+**Fix** (`function_call/expr.cpp`): add a method-dispatch entry — `x.__str__()` with no arguments on a
+built-in scalar receiver routes to `convert_to_string(x)`, the exact lowering the `str()` builtin uses
+(constant-folds, else dispatches to the `__python_*_to_str` model). The predicate matches a `Constant`
+number/bool/string receiver or a `Name` whose frontend type is `int`/`float`/`bool`/`str`; a user-class
+instance has its class name as the type, so it does not match and falls through to the instance-method
+dispatch, preserving the user's `__str__`. Placed after the analogous `__iter__`-on-builtins entry; the
+predicate is side-effect-free (IR is only emitted in the handler, after a match).
+
+This is a **crash/unsupported→correct-result fix** that also closes the §66 join-`str(int)` follow-up.
+New regression pair `str_dunder_builtin{,_fail}` (CORE) covering `__str__()` on int/float/bool/str
+variables, an int literal, and `"".join(str(n) for n in [1,2,3])`; the positive is the liveness witness
+(it errored pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh str_dunder`); the focused `str`/`join`/`genexp` ctest subset (37 tests)
+is 100% green, and the user-object `recursive_join_genexp` test still passes (no regression). Code-reviewed
+(0 critical/high; the `x.__str__() == str(x)` equivalence for scalars, the non-match of user objects
+through `get_var_type`, the first-match-wins dispatch ordering, and the predicate null-safety/purity all
+confirmed). Solver-agnostic.
+
+### 67b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) strided list-slice delete `del a[::k]` (§66b); (ii) pointer-form bytes
+(params/slices) content `len`/`==` (§58a/§59a); (iii) `sorted`/`sort` with an arithmetic/function `key`
+(§56b/§57b); (iv) `int`-literal-receiver methods (`(255).bit_length()`) (§57b); (v) `round(int, n)`
+returns float instead of int (§63b); (vi) `str.format` field width/spec (§46/§61b); (vii) `join` of a
+non-`str()` generator over chars (`"".join(c for c in s)` — observed FAILED in §66's probe).
+
+Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
+(unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
+(float-precision, §51b); the bytes-returning methods (§49b); the symbolic bytes affix/search methods
+(§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
+encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
+deferred candidates stand: `zip()`, `list.index()`-in-`try/except` (ValueError not catchable),
+`float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers,
+§3c timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand; the §5 priority
+order stands.
+
+> **Note on numbering.** §42/§43 and §49–§66 (PRs #5668, #5669, #5675–#5687, #5689–#5693) are in flight
+> and not yet on `master`; this sweep is appended as §67.
