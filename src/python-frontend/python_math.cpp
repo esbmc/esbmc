@@ -1,5 +1,6 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
@@ -893,19 +894,13 @@ exprt python_math::handle_divmod(
       const double q = std::floor(*lhs_const / *rhs_const);
       const double r = *lhs_const - (q * *rhs_const);
 
-      struct_typet tuple_type;
-      tuple_type.tag("tag-tuple_divmod");
-      set_python_aggregate_kind(tuple_type, "tuple");
-
-      struct_typet::componentt comp0;
-      comp0.name("element_0");
-      comp0.type() = result_type;
-      tuple_type.components().push_back(comp0);
-
-      struct_typet::componentt comp1;
-      comp1.name("element_1");
-      comp1.type() = result_type;
-      tuple_type.components().push_back(comp1);
+      // Use the shared tuple struct type (content-based tag) so a divmod
+      // result is sort-compatible with a tuple literal of the same element
+      // types: a hard-coded "tag-tuple_divmod" tag made `x = divmod(a, b);
+      // x == (q, r)` crash on the SMT tuple-sort mismatch.
+      struct_typet tuple_type =
+        converter.get_tuple_handler().create_tuple_struct_type(
+          {result_type, result_type});
 
       exprt tuple_expr("struct", tuple_type);
       tuple_expr.copy_to_operands(
@@ -941,19 +936,9 @@ exprt python_math::handle_divmod(
           r += rhs_val;
         }
 
-        struct_typet tuple_type;
-        tuple_type.tag("tag-tuple_divmod");
-        set_python_aggregate_kind(tuple_type, "tuple");
-
-        struct_typet::componentt comp0;
-        comp0.name("element_0");
-        comp0.type() = result_type;
-        tuple_type.components().push_back(comp0);
-
-        struct_typet::componentt comp1;
-        comp1.name("element_1");
-        comp1.type() = result_type;
-        tuple_type.components().push_back(comp1);
+        struct_typet tuple_type =
+          converter.get_tuple_handler().create_tuple_struct_type(
+            {result_type, result_type});
 
         exprt tuple_expr("struct", tuple_type);
         tuple_expr.copy_to_operands(
@@ -1004,19 +989,9 @@ exprt python_math::handle_divmod(
   }
 
   // Create a tuple struct to hold both values
-  struct_typet tuple_type;
-  tuple_type.tag("tag-tuple_divmod");
-  set_python_aggregate_kind(tuple_type, "tuple");
-
-  struct_typet::componentt comp0;
-  comp0.name("element_0");
-  comp0.type() = result_type;
-  tuple_type.components().push_back(comp0);
-
-  struct_typet::componentt comp1;
-  comp1.name("element_1");
-  comp1.type() = result_type;
-  tuple_type.components().push_back(comp1);
+  struct_typet tuple_type =
+    converter.get_tuple_handler().create_tuple_struct_type(
+      {result_type, result_type});
 
   // Build the tuple expression
   exprt tuple_expr("struct", tuple_type);
