@@ -11,6 +11,7 @@
 #include <util/std_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
+#include <clang-c-frontend/typecast.h>
 
 using namespace python_expr;
 
@@ -168,7 +169,19 @@ exprt python_set::get_from_iterable(
     iterable.type().is_array() && iterable.type().subtype() == char_type())
   {
     const array_typet &arr_type = to_array_type(iterable.type());
-    length_expr = minus_exprt(arr_type.size(), gen_one(size_type()));
+    // V.1k keystone (W): build `size - 1` in IREP2. The array dimension is not
+    // guaranteed to be size_type-wide (see the loop-condition note below), so
+    // reconcile operand widths with the same gen_typecast_arithmetic
+    // clang_cpp_adjust applies to the legacy minus_exprt -- a byte-identical,
+    // idempotent transform that lets sub2t's matched-width invariant hold.
+    exprt size_op = arr_type.size();
+    exprt one_op = gen_one(size_type());
+    namespacet ns(converter_.symbol_table());
+    gen_typecast_arithmetic(ns, size_op, one_op);
+    expr2tc size2, one2;
+    migrate_expr(size_op, size2);
+    migrate_expr(one_op, one2);
+    length_expr = migrate_expr_back(sub2tc(size2->type, size2, one2));
   }
   else if (
     iterable.type().is_pointer() && iterable.type().subtype() == char_type())
