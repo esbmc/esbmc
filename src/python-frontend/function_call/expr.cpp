@@ -2067,7 +2067,8 @@ exprt function_call_expr::handle_set_method() const
     for (const auto &arg : args)
     {
       exprt other = converter_.get_expr(arg);
-      result = set_helper.build_set_method_call(*cur, other, call_, method_name);
+      result =
+        set_helper.build_set_method_call(*cur, other, call_, method_name);
       const symbolt *next =
         converter_.find_symbol(result.identifier().as_string());
       if (!next)

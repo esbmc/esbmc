@@ -704,8 +704,7 @@ exprt python_set::build_set_copy(
 {
   // self ∪ ∅ is a fresh deduplicated copy of self.
   symbolt &empty = create_set_list();
-  return build_set_union_call(
-    build_symbol(self), build_symbol(empty), element);
+  return build_set_union_call(build_symbol(self), build_symbol(empty), element);
 }
 
 exprt python_set::build_set_union_call(
