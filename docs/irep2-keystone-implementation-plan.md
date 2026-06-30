@@ -57,7 +57,11 @@ matched-text parity over the affected regression suite, asserts build.
    bound) → `sub2tc` via `gen_typecast_arithmetic`. Commit 23b46705be.
 2. **W** [DONE] `python_set.cpp:234` — `idx < length_expr` loop condition →
    `build_less_than` over reconciled operands. Commit eff4bc08ae.
-3. **W** `python_list.cpp:4120`, `:4533` — analogous list guards.
+3. **W** [DONE] `list_comprehension.cpp:290` — `i < length` comprehension loop
+   condition → `build_less_than` over reconciled operands. Commit 2dda75036c.
+   (The doc's stale `python_list.cpp:4120/4533` line numbers; python-list is now
+   split. Other list loop conditions — `list_access`, `list_construction:165`,
+   `list_comprehension:494` — were already migrated by earlier V.3 sweeps.)
 4. **W** `python_math.cpp:674`-`753` — floor-div/modulo sign-correction trees
    (relational + arith leaves; larger, migrate the whole correction subtree).
 5. **D** `builtins.cpp:369`/`447` — `isinstance` NoneType/tuple.
