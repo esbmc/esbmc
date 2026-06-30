@@ -57,6 +57,47 @@ type2tc add_struct_type(
 
   return struct_t;
 }
+
+// Register a type symbol `tag-<name>` = int[] so that
+// ns.follow(symbol_type2t("tag-<name>")) yields the resolved array.
+type2tc add_array_type(contextt &ctx, const std::string &name)
+{
+  const type2tc array_t =
+    array_type2tc(get_int32_type(), expr2tc(), /*infinite=*/true);
+
+  symbolt type_sym;
+  type_sym.id = "tag-" + name;
+  type_sym.name = "tag-" + name;
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(array_t);
+  ctx.add(type_sym);
+
+  return array_t;
+}
+
+// A nullary `void()` code type — the discriminator adjust() walks on.
+type2tc code_symbol_type()
+{
+  return code_type2tc(
+    std::vector<type2tc>{},
+    get_empty_type(),
+    std::vector<irep_idt>{},
+    /*ellipsis=*/false);
+}
+
+// Register a code symbol `id` whose IREP2 value (body) is `body`, so adjust()
+// reaches it (only code symbols are walked, python_adjust.cpp).
+void add_code_symbol(contextt &ctx, const std::string &id, const expr2tc &body)
+{
+  symbolt symbol;
+  symbol.id = id;
+  symbol.name = id;
+  symbol.mode = "Python";
+  symbol.set_type(code_symbol_type());
+  symbol.set_value(body);
+  ctx.add(symbol);
+}
 } // namespace
 
 TEST_CASE(
@@ -129,6 +170,27 @@ TEST_CASE(
 
   REQUIRE(is_member2t(member));
   REQUIRE(to_member2t(member).source_value->type == struct_t);
+}
+
+TEST_CASE(
+  "python_adjust B.1 follows a symbol_type index source to its array",
+  "[python-adjust]")
+{
+  // The index2t arm: a subscript `arr[0]` whose source carries the transient
+  // symbol_type2t("tag-IntArr") is followed to the resolved array type, the
+  // is_array_type arm of is_resolved_aggregate the member tests never reach.
+  contextt ctx;
+  const type2tc array_t = add_array_type(ctx, "IntArr");
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-IntArr"), "arr");
+  const expr2tc zero = gen_zero(get_uint32_type());
+  expr2tc index = index2tc(get_int32_type(), source, zero);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(index);
+
+  REQUIRE(is_index2t(index));
+  REQUIRE(to_index2t(index).source_value->type == array_t);
 }
 
 TEST_CASE(
@@ -212,4 +274,107 @@ TEST_CASE(
   adjuster.adjust_expr(member);
 
   REQUIRE(member == original);
+}
+
+TEST_CASE(
+  "python_adjust B.1 leaves a member untouched when the symbol_type follows to "
+  "a non-aggregate",
+  "[python-adjust]")
+{
+  // resolve_source only retypes a source whose followed type is a concrete
+  // aggregate. A symbol_type that follows to a scalar (here tag-Scalar -> int)
+  // is not an aggregate, so the member is left transient for the downstream
+  // construction assert to reject — the pass must not retype it to a scalar.
+  contextt ctx;
+  symbolt scalar_type_sym;
+  scalar_type_sym.id = scalar_type_sym.name = "tag-Scalar";
+  scalar_type_sym.mode = "Python";
+  scalar_type_sym.is_type = true;
+  scalar_type_sym.set_type(get_int32_type());
+  ctx.add(scalar_type_sym);
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-Scalar"), "obj");
+  expr2tc member = member2tc(get_int32_type(), source, "x");
+  const expr2tc original = member;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(member);
+
+  REQUIRE(member == original);
+}
+
+TEST_CASE(
+  "python_adjust adjust() resolves a member source inside a code body and "
+  "writes it back",
+  "[python-adjust]")
+{
+  // adjust() walks code symbols, resolving transient member sources in the
+  // body and writing the symbol back. The body wraps `obj.x` (obj : tag-Foo);
+  // after adjust() the stored body's member source is the resolved struct.
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Foo", "x");
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-Foo"), "obj");
+  const expr2tc member = member2tc(get_int32_type(), source, "x");
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(member)});
+  add_code_symbol(ctx, "py_adjust_code_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const symbolt *out = ctx.find_symbol("py_adjust_code_sym");
+  REQUIRE(out != nullptr);
+  const expr2tc &stored = out->get_value2();
+  REQUIRE(stored != body);
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &resolved_member = to_code_expression2t(stmt).operand;
+  REQUIRE(to_member2t(resolved_member).source_value->type == struct_t);
+}
+
+TEST_CASE(
+  "python_adjust adjust() leaves a code body with no transient source "
+  "unchanged",
+  "[python-adjust]")
+{
+  // When the body has nothing to resolve (its member source is already a
+  // resolved struct), adjust() must not rewrite the symbol — the value stays
+  // byte-identical so the legacy cache and goto-convert body are untouched.
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Qux", "w");
+
+  const expr2tc source = symbol2tc(struct_t, "obj");
+  const expr2tc member = member2tc(get_int32_type(), source, "w");
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(member)});
+  add_code_symbol(ctx, "py_adjust_noop_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const symbolt *out = ctx.find_symbol("py_adjust_noop_sym");
+  REQUIRE(out != nullptr);
+  REQUIRE(out->get_value2() == body);
+}
+
+TEST_CASE(
+  "python_adjust adjust() skips a code symbol with a nil value",
+  "[python-adjust]")
+{
+  // A code symbol with no body (nil value) is skipped before adjust_expr; the
+  // int-typed nil test bails earlier at the is_code_type guard, so this pins
+  // the is_nil_expr guard on the code path specifically.
+  symbolt symbol;
+  symbol.id = symbol.name = "py_adjust_code_nil_sym";
+  symbol.mode = "Python";
+  symbol.set_type(code_symbol_type());
+
+  contextt ctx;
+  ctx.add(symbol);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  // The body must remain nil — adjust() neither materialises nor rewrites it.
+  REQUIRE(is_nil_expr(ctx.find_symbol("py_adjust_code_nil_sym")->get_value2()));
 }
