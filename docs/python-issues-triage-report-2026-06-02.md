@@ -2391,6 +2391,53 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 68. 2026-06-29 re-validation (fifty-eighth sweep) & str % flags/width/precision
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. After
+probing several complex leads (char-`join` — multi-layer string-iteration typing; closures; the known
+`sorted`-of-`dict.items` tuple drop), this sweep took the printf-`%` format mini-language, a common
+real-world pattern.
+
+### 68a. New isolated, soundly-fixable defect found & fixed
+**`str % args` with any flag/width/precision (e.g. `"%.2f" % x`, `"%5d"`, `"%03d"`) was rejected; the
+float conversions `%f/%e/%g` were unsupported entirely.**
+
+`py_percent_format` (`converter/converter_binop.cpp`) constant-folds a printf-style `str % args` but read
+only a bare conversion char after `%`, so `%.2f`, `%5d`, `%03d`, `%-5d`, `%+d`, `%8.2f`, `%.3s` all hit
+the "unsupported conversion" reject, and `%f`/`%e`/`%g` had no case at all.
+
+**Fix**: parse the full `%[flags][width][.precision]<conv>` spec and render it. Integers format manually
+(sign split off so `+`/space/precision zero-fill land correctly), floats via a two-pass `std::snprintf`
+with **literal** `"%.*f"`/`"%.*e"`/`"%.*g"` formats (`*` precision — keeps `-Wformat-nonliteral`/`-Werror`
+clean), strings honour width and `.precision` truncation, and `pad_format_field` applies width with
+sign-aware `0`/`-` padding. Added `%f/%F/%e/%E/%g/%G` and integer precision (`%.3d → 005`). True to the
+folder's fold-or-reject contract, anything not faithfully renderable still throws a clean diagnostic
+rather than miscompiling.
+
+This is a **crash/unsupported→correct-result fix** (and removes a soundness hazard — the function exists
+precisely so an unsupported `%` spec is rejected, never mis-lowered). New regression pair
+`percent_format_spec{,_fail}` (CORE) covering float precision/width, sign-aware zero-pad of a negative
+(`%07.2f % -3.1 → -003.10`), int width/zero-pad/left/sign/precision, `%e`, string width/truncation, and
+the unchanged bare conversions; the positive is the liveness witness (most errored pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh percent_format`); the
+`percent_format`/`str_mod`/`format` ctest subset (37 tests) is 100% green. Code-reviewed: the reviewer's
+three findings — the `#` flag was parsed-then-dropped (silent miscompile), integer precision parsed-then-
+ignored, and a signed-overflow on a pathological digit run — were **all fixed** (`#` now rejects cleanly,
+integer precision implemented, width/precision clamped); memory-safety of the two-pass snprintf and the
+parse-bound alignment were confirmed clean. Solver-agnostic (a compile-time string fold).
+
+Remaining `%` limitations (rejected, not miscompiled): the `#` alternate form, `*` dynamic width, and the
+`%(name)s` mapping form — recorded as follow-ups.
+
+### 68b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) char-`join` — `"".join(c for c in s)` (string-iteration elements typed as
+chars, not single-char strings; §67b); (ii) `%(name)s` mapping `%`-format and `%#x`/`%*d` (above); (iii)
+nested-function closures (free-variable capture — `Variable 'x' is not defined`); (iv)
+`sorted(dict.items())` tuple-structure drop (known multi-layer); (v) strided list-slice delete
+`del a[::k]` (§66b); (vi) pointer-form bytes (params/slices) content `len`/`==` (§58a/§59a); (vii)
+`round(int, n)` returns float (§63b).
+
+---
 ## 70. 2026-06-29 re-validation (sixtieth sweep) & str.format() format specs
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. Probing
@@ -2828,6 +2875,15 @@ of int (§63b); (vii) `str.format` field width/spec (§46/§61b).
 Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
 (unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
 (float-precision, §51b); the bytes-returning methods (§49b); the symbolic bytes affix/search methods
+(§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked
+inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+`list.index()`-in-`try/except` (ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()`
+(string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
+the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§67 (PRs #5668, #5669, #5675–#5687, #5689–#5694) are in flight
+> and not yet on `master`; this sweep is appended as §68.
+(§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
 (§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked
 inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
 `list.index()`-in-`try/except` (ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()`
