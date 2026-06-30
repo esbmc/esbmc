@@ -472,6 +472,42 @@ private:
   // Initialize dispatch table
   std::vector<FunctionHandler> get_dispatch_table();
 
+  // --- get_dispatch_table() decomposition helpers ---
+  // The dispatch table pairs a predicate with a handler for each special
+  // function shape. The predicates and handlers below were lifted verbatim out
+  // of the inline lambdas in get_dispatch_table() so that the table itself reads
+  // as a flat list of {predicate, handler, name} entries. Extraction is purely
+  // mechanical: each helper is invoked from the same one-line lambda it
+  // replaced, so the predicates are still evaluated lazily and in the same
+  // order, and each handler still runs only when its predicate matched.
+  // Predicates only read state, so they are const; handlers may append to the
+  // current GOTO block or call non-const helpers, so they are non-const.
+
+  // int.to_bytes() with an int/int-typed/int-literal receiver.
+  bool is_int_to_bytes_call() const;
+  // Zero-arg int methods (bit_length/bit_count/conjugate) on a constant literal
+  // receiver that fits a signed 64-bit value.
+  bool is_int_literal_method_call() const;
+  // float.is_integer() on a constant float-literal receiver.
+  bool is_float_is_integer_literal_call() const;
+  // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
+  bool is_iter_on_builtin_call() const;
+  // x.__str__() with no args on a builtin scalar (int/float/bool/str).
+  bool is_str_on_builtin_scalar_call() const;
+  // x.__str__() on a builtin scalar -> route to str(x).
+  exprt handle_str_on_builtin_scalar();
+  // math.isnan / math.isinf (spelled __ESBMC_isnan / __ESBMC_isinf).
+  exprt handle_isnan_isinf();
+  // cmath.log / cmath.log10.
+  bool is_cmath_log_call() const;
+  exprt handle_cmath_log_dispatch();
+  // cmath inverse functions (asin/atan/asinh/atanh/acos/acosh) fast path.
+  bool is_cmath_inverse_call() const;
+  exprt handle_cmath_inverse_fast_path();
+  // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
+  bool is_math_function_dispatch_call() const;
+  exprt handle_math_function_dispatch();
+
   // General function call handler
   exprt handle_general_function_call();
 
