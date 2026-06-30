@@ -2391,6 +2391,59 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 65. 2026-06-29 re-validation (fifty-fifth sweep) & variadic set.union/intersection/difference
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §64b lead: variadic set methods.
+
+### 65a. New isolated, soundly-fixable defect found & fixed
+**`s.union(a, b)` / `s.intersection(...)` / `s.difference(...)` with any argument count ≠ 1 raised
+"<method>() takes exactly one argument".**
+
+CPython's `set.union`/`intersection`/`difference` are variadic — `s.union(*others)` — and the
+zero-argument form returns a copy. ESBMC's `handle_set_method` (`function_call/expr.cpp`) hard-required
+exactly one argument, so `a.union({2}, {3})`, `a.intersection({2,3}, {3,4})`, and `a.union()` all
+errored (with a variable receiver; the set-*literal*-receiver `{1}.union(...)` is the separate §51a gap).
+
+**Fix**: mark union/intersection/difference as variadic (`symmetric_difference` stays binary), and fold
+the arguments left — `s.union(a, b) == (s ∪ a) ∪ b` — reusing the existing single-argument
+`build_set_method_call`, whose result is a fresh set symbol that feeds the next step. The zero-argument
+form routes to a new `python_set::build_set_copy` (`self ∪ ∅`, a fresh deduplicated copy). The retained
+exactly-one-argument throw still guards `symmetric_difference`, the relation methods, `update`, and
+`add`/`discard`.
+
+This is a **crash/unsupported→correct-result fix**. New regression pair `set_variadic_methods{,_fail}`
+(CORE) covering a two-argument `union` and the zero-argument copy on a variable receiver (element/`len`
+checks rather than full set equality to keep the proof small); the positive is the liveness witness (it
+errored pre-fix). Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh set_variadic`); `set_variadic_methods{,_fail}` pass, and the other set
+failures in the subset are the pre-existing `--ir`/`--z3` environmental tests (`set_intersection`,
+`set_difference`) on this Bitwuzla-only build. Code-reviewed (0 critical/major; the left-fold semantics
+for all three methods, the fresh-set-symbol chaining, the zero-arg copy correctness for
+union/intersection/difference alike, the unchanged single-arg / symmetric_difference / add-discard
+paths, and the no-aliasing of `build_set_copy` all confirmed). Solver-agnostic. **Note**: chaining 3+
+arguments is correct but slow under BMC (each step materialises a set + dedup loop), so deep variadic
+calls may need a higher bound; the common 2-argument form is fast.
+
+### 65b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) pointer-form bytes (params/slices) content `len`/`==` — propagate a `bytes`
+identity (§58a/§59a); (ii) the set/list-literal-receiver method gap (`{1}.union(...)` errors with
+`Object "" not found`; §46b/§51a); (iii) `sorted`/`sort` with an arithmetic/function `key` silently sorts
+by natural order (§56b/§57b); (iv) `int`-literal-receiver methods (`(255).bit_length()`) unsupported
+though the variable form works (§57b); (v) `round(int, n)` returns float instead of int (§63b); (vi)
+`str.format` field width/spec (the format mini-language, §46/§61b).
+
+Remaining catalogued candidates: `frozenset` (unsupported AST type); `dict |` PEP 584 union (explicitly
+unsupported); variadic `math.hypot` (float-precision, §51b); the bytes-returning methods (receiver-aware
+return-type inference, §49b); the symbolic bytes affix/search methods (§47b); `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`,
+`list.index()`-in-`try/except` (ValueError not catchable), `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§64 (PRs #5668, #5669, #5675–#5687, #5689–#5691) are in flight
+> and not yet on `master`; this sweep is appended as §65.
 ## 54. 2026-06-28 re-validation (forty-fourth sweep) & list.insert() negative index
 
 Re-test against current `master` (tip `d761b93cf2`, with §39/§40/§41 now merged). KNOWNBUG
@@ -2685,6 +2738,7 @@ Priority follow-ups: (i) char-`join` — `"".join(c for c in s)` (string-iterati
 (known multi-layer); (iv) strided list-slice delete `del a[::k]` (§66b); (v) pointer-form bytes
 (params/slices) content `len`/`==` (§58a/§59a); (vi) `round(int, n)` returns float (§63b); (vii) the `%`
 `#` alternate form and `*` dynamic width (§68b).
+
 ## 66. 2026-06-29 re-validation (fifty-sixth sweep) & del a[lower:upper] slice deletion
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. A
@@ -2824,6 +2878,7 @@ identity (§58a/§59a); (ii) `dict.update(**kwargs)` (`update() takes exactly on
 form is unmodelled, the constructor analogue of this sweep); (iii) `sorted`/`sort` with an
 arithmetic/function `key` silently sorts by natural order (§56b/§57b); (iv) `int`-literal-receiver
 methods (`(255).bit_length()`) unsupported though the variable form works (§57b).
+
 ## 63. 2026-06-29 re-validation (fifty-third sweep) & round(x, negative ndigits)
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
