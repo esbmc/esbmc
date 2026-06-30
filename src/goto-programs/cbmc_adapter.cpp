@@ -304,12 +304,6 @@ irept instruction_to_esbmc_irep(
 {
   irept result;
 
-  if (ins.instr_type == 19)
-  {
-    log_error("CBMC adapter: unexpected instruction type 19");
-    abort();
-  }
-
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
   irept operands;
@@ -326,7 +320,8 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  result.add("typeid") = mk(std::to_string(ins.instr_type));
+  result.add("typeid") =
+    mk(std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
 
   if (!ins.targets.empty())
@@ -381,6 +376,78 @@ irept function_to_esbmc_irep(const cbmc_functiont &func)
 }
 
 } // namespace
+
+unsigned map_cbmc_instruction_type(unsigned cbmc_type)
+{
+  // CBMC's goto_program_instruction_typet (CBMC src/goto-programs/goto_program.h),
+  // named here so the CBMC->ESBMC mapping is explicit and auditable. The
+  // numbering matches CBMC's enum exactly.
+  enum cbmc_instruction_typet
+  {
+    CBMC_NO_INSTRUCTION_TYPE = 0,
+    CBMC_GOTO = 1,
+    CBMC_ASSUME = 2,
+    CBMC_ASSERT = 3,
+    CBMC_OTHER = 4,
+    CBMC_SKIP = 5,
+    CBMC_START_THREAD = 6,
+    CBMC_END_THREAD = 7,
+    CBMC_LOCATION = 8,
+    CBMC_END_FUNCTION = 9,
+    CBMC_ATOMIC_BEGIN = 10,
+    CBMC_ATOMIC_END = 11,
+    CBMC_RETURN = 12, // renamed SET_RETURN_VALUE upstream; value unchanged
+    CBMC_ASSIGN = 13,
+    CBMC_DECL = 14,
+    CBMC_DEAD = 15,
+    CBMC_FUNCTION_CALL = 16,
+    CBMC_THROW = 17,
+    CBMC_CATCH = 18,
+    CBMC_INCOMPLETE_GOTO = 19,
+  };
+
+  switch (cbmc_type)
+  {
+  // ESBMC shares these enumerator values (goto_program.h), so the raw CBMC
+  // value already names the right ESBMC kind: map by identity.
+  case CBMC_NO_INSTRUCTION_TYPE:
+  case CBMC_GOTO:
+  case CBMC_ASSUME:
+  case CBMC_ASSERT:
+  case CBMC_OTHER:
+  case CBMC_SKIP:
+  case CBMC_LOCATION:
+  case CBMC_END_FUNCTION:
+  case CBMC_ATOMIC_BEGIN:
+  case CBMC_ATOMIC_END:
+  case CBMC_RETURN:
+  case CBMC_ASSIGN:
+  case CBMC_DECL:
+  case CBMC_DEAD:
+  case CBMC_FUNCTION_CALL:
+  case CBMC_THROW:
+  case CBMC_CATCH:
+    return cbmc_type;
+
+  case CBMC_START_THREAD:
+  case CBMC_END_THREAD:
+    log_error(
+      "CBMC adapter: thread instruction ({}) is not supported; ESBMC models "
+      "concurrency as intrinsic calls, not goto instruction types",
+      cbmc_type == CBMC_START_THREAD ? "START_THREAD" : "END_THREAD");
+    abort();
+
+  case CBMC_INCOMPLETE_GOTO:
+    log_error(
+      "CBMC adapter: INCOMPLETE_GOTO (19) in a finished binary; the goto "
+      "target was never resolved");
+    abort();
+
+  default:
+    log_error("CBMC adapter: unknown CBMC instruction type {}", cbmc_type);
+    abort();
+  }
+}
 
 cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
 {
