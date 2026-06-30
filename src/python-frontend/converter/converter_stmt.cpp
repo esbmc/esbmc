@@ -113,6 +113,33 @@ struct block_nesting_guard
       --*fb_depth;
   }
 };
+
+// RAII snapshot/restore of the dynamic-retyping alias map across a conditional
+// body. A numeric<->string reassignment inside an if/while/for/try body retypes
+// the variable so in-body reads observe the new type (sound: there is no join
+// before the body ends). On body exit the alias map is reverted so the
+// post-join view keeps the variable's pre-conditional type — the branch-taken
+// retype must not leak across the control-flow join (see retype_str_cond_gated).
+// Inactive on the unconditional spine, where retypes persist for the whole body.
+struct retype_alias_scope_guard
+{
+  std::unordered_map<std::string, std::string> &aliases;
+  std::unordered_map<std::string, std::string> saved;
+  bool active;
+  retype_alias_scope_guard(
+    std::unordered_map<std::string, std::string> &a,
+    bool act)
+    : aliases(a), active(act)
+  {
+    if (active)
+      saved = aliases;
+  }
+  ~retype_alias_scope_guard()
+  {
+    if (active)
+      aliases = std::move(saved);
+  }
+};
 } // namespace
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
@@ -2309,24 +2336,25 @@ void python_converter::get_var_assign(
       return;
     }
 
-    // Straight-line dynamic retyping (#4770, #4774). A variable whose current
-    // static type is a numeric scalar is being reassigned a string value (or
-    // vice versa). The GOTO IR binds one type per symbol, so the new value
-    // cannot be stored in the old slot. On the unconditional spine (the module
-    // body plus the chain of enclosing function bodies, i.e. block_nesting_ ==
-    // function_body_depth_ + 1) there is no control-flow join that could leave
-    // the runtime type ambiguous, so we model the rebinding soundly: mint a
-    // fresh symbol of the new type, declare it, and redirect later loads of the
-    // name to it via retype_aliases_ (keyed by the function-qualified symbol
-    // id, so aliases never leak between functions). We then fall through to the
-    // normal assignment path with the new, correctly typed symbol. Statements
-    // inside any if/while/for/try body add a block_nesting_ frame without a
-    // function_body_depth_ frame, so the equality fails and they fall to the
-    // existing fallback. Class bodies are excluded via current_class_name_:
-    // their attribute symbols are managed separately by python_class_builder.
-    if (
-      block_nesting_ == function_body_depth_ + 1 &&
-      current_class_name_.empty() && lhs_symbol && lhs.is_symbol())
+    // Dynamic retyping (#4770, #4774). A variable whose current static type is a
+    // numeric scalar is being reassigned a string value (or vice versa). The
+    // GOTO IR binds one type per symbol, so the new value cannot be stored in
+    // the old slot. We model the rebinding by minting a fresh symbol of the new
+    // type, declaring it, and redirecting later loads of the name to it via
+    // retype_aliases_ (keyed by the function-qualified symbol id, so aliases
+    // never leak between functions). We then fall through to the normal
+    // assignment path with the new, correctly typed symbol.
+    //
+    // On the unconditional spine (block_nesting_ == function_body_depth_ + 1)
+    // the alias persists for the rest of the body — there is no control-flow
+    // join that could leave the runtime type ambiguous. Inside an if/while/for/
+    // try body the same rebinding is applied for in-body reads, but get_block
+    // snapshots retype_aliases_ on body entry and restores it on exit, so the
+    // retype does not leak across the join (the post-join view keeps the
+    // pre-conditional type — see retype_str_cond_gated). Class bodies are
+    // excluded via current_class_name_: their attribute symbols are managed
+    // separately by python_class_builder.
+    if (current_class_name_.empty() && lhs_symbol && lhs.is_symbol())
     {
       // The LHS lookup above returns the ORIGINAL symbol. If this variable was
       // already retyped, its live value lives in the alias target; resolve to
@@ -3716,6 +3744,13 @@ exprt python_converter::get_block(
   // adds a block_nesting_ frame without a function_body_depth_ frame.
   block_nesting_guard nesting_guard(
     block_nesting_, is_function_body ? &function_body_depth_ : nullptr);
+
+  // A conditional body is any block off the unconditional spine (the module
+  // body plus enclosing function bodies, block_nesting_ == function_body_depth_
+  // + 1). Inside one, dynamic retyping is applied locally for in-body reads but
+  // reverted on exit so it does not leak across the control-flow join.
+  const bool is_conditional_body = (block_nesting_ != function_body_depth_ + 1);
+  retype_alias_scope_guard retype_guard(retype_aliases_, is_conditional_body);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so
