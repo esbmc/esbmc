@@ -3388,369 +3388,484 @@ exprt function_call_expr::get()
 
 exprt function_call_expr::handle_general_function_call()
 {
-  auto &symbol_table = converter_.symbol_table();
-
   // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
-  // Fast-path: sorted() over a concrete int list can be materialized directly
-  // in the frontend, avoiding expensive runtime list sorting/equality paths.
-  // Honour reverse=<constant bool>; bail to the model for any other keyword.
-  if (func_name == "sorted" && call_["args"].size() == 1)
-  {
-    bool fast_path_reverse = false;
-    bool fast_path_ok = true;
-    if (call_.contains("keywords"))
-    {
-      for (const auto &kw : call_["keywords"])
-      {
-        if (kw.value("arg", "") != "reverse")
-        {
-          fast_path_ok = false;
-          break;
-        }
-        exprt v = converter_.get_expr(kw["value"]);
-        if (!v.is_constant())
-        {
-          fast_path_ok = false;
-          break;
-        }
-        fast_path_reverse = v.is_true();
-      }
-    }
-
-    if (fast_path_ok)
-    {
-      exprt list_arg = converter_.get_expr(call_["args"][0]);
-      if (list_arg.is_symbol())
-      {
-        const std::string list_id = list_arg.identifier().as_string();
-        const size_t map_size = python_list::get_list_type_map_size(list_id);
-        if (map_size > 0 && map_size <= 32)
-        {
-          struct sortable_elem
-          {
-            BigInt key;
-            size_t pos;
-          };
-
-          std::vector<sortable_elem> elems;
-          elems.reserve(map_size);
-          bool all_constant_ints = true;
-
-          for (size_t i = 0; i < map_size; ++i)
-          {
-            const std::string elem_id =
-              python_list::get_list_element_id(list_id, i);
-            if (elem_id.empty())
-            {
-              all_constant_ints = false;
-              break;
-            }
-
-            const symbolt *elem_sym = converter_.find_symbol(elem_id);
-            if (
-              !elem_sym || !elem_sym->get_value().is_constant() ||
-              !(elem_sym->get_type().is_signedbv() ||
-                elem_sym->get_type().is_unsignedbv()))
-            {
-              all_constant_ints = false;
-              break;
-            }
-
-            BigInt key =
-              binary2integer(elem_sym->get_value().value().c_str(), true);
-            elems.push_back({key, i});
-          }
-
-          if (all_constant_ints)
-          {
-            std::stable_sort(
-              elems.begin(),
-              elems.end(),
-              [](const sortable_elem &a, const sortable_elem &b) {
-                if (a.key == b.key)
-                  return a.pos < b.pos;
-                return a.key < b.key;
-              });
-
-            if (fast_path_reverse)
-              std::reverse(elems.begin(), elems.end());
-
-            nlohmann::json sorted_list;
-            sorted_list["_type"] = "List";
-            sorted_list["elts"] = nlohmann::json::array();
-            converter_.copy_location_fields_from_decl(call_, sorted_list);
-            for (const auto &elem : elems)
-            {
-              nlohmann::json cst;
-              cst["_type"] = "Constant";
-              cst["value"] = elem.key.to_int64();
-              cst["kind"] = nullptr;
-              converter_.copy_location_fields_from_decl(call_, cst);
-              sorted_list["elts"].push_back(cst);
-            }
-
-            python_list sorted_list_expr(converter_, sorted_list);
-            return sorted_list_expr.get();
-          }
-
-          // Concrete tuple path: a literal list of constant integer tuples
-          // (e.g. sorted([(3,1),(1,2)])). The runtime tuple-sort model retypes
-          // elements as int; sort here at convert time and rebuild a list of
-          // tuple literals so the element type is preserved and verification is
-          // cheap. Symbolic tuple lists fall through (still unsupported).
-          std::function<bool(const exprt &, BigInt &)> eval_const_int =
-            [&](const exprt &e, BigInt &out) -> bool {
-            if (
-              e.is_constant() && (e.type().is_signedbv() ||
-                                  e.type().is_unsignedbv() || e.is_boolean()))
-            {
-              out = binary2integer(
-                to_constant_expr(e).value().c_str(), e.type().is_signedbv());
-              return true;
-            }
-            if (e.is_symbol())
-            {
-              const symbolt *s =
-                converter_.find_symbol(e.identifier().as_string());
-              return s && eval_const_int(s->get_value(), out);
-            }
-            // A negative literal reaches here as unary-minus over a constant
-            // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
-            // as a typecast. Fold both.
-            if (e.id() == "unary-" && e.operands().size() == 1)
-            {
-              if (!eval_const_int(e.op0(), out))
-                return false;
-              out = -out;
-              return true;
-            }
-            if (e.id() == "typecast" && e.operands().size() == 1)
-              return eval_const_int(e.op0(), out);
-            return false;
-          };
-
-          struct sortable_tuple
-          {
-            std::vector<BigInt> key;
-            size_t pos;
-          };
-          std::vector<sortable_tuple> telems;
-          bool all_constant_tuples = true;
-          size_t arity = 0;
-
-          for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
-          {
-            const std::string elem_id =
-              python_list::get_list_element_id(list_id, i);
-            const symbolt *elem_sym =
-              elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
-            exprt val = elem_sym ? elem_sym->get_value() : exprt();
-            while (val.is_symbol())
-            {
-              const symbolt *s =
-                converter_.find_symbol(val.identifier().as_string());
-              if (!s)
-                break;
-              val = s->get_value();
-            }
-            if (
-              !elem_sym ||
-              !converter_.get_tuple_handler().is_tuple_type(
-                elem_sym->get_type()) ||
-              val.id() != "struct" || val.operands().empty())
-            {
-              all_constant_tuples = false;
-              break;
-            }
-            if (i == 0)
-              arity = val.operands().size();
-            else if (val.operands().size() != arity)
-            {
-              all_constant_tuples = false;
-              break;
-            }
-            std::vector<BigInt> key;
-            for (const auto &comp : val.operands())
-            {
-              BigInt v;
-              if (!eval_const_int(comp, v))
-              {
-                all_constant_tuples = false;
-                break;
-              }
-              key.push_back(v);
-            }
-            if (!all_constant_tuples)
-              break;
-            telems.push_back({std::move(key), i});
-          }
-
-          if (all_constant_tuples && !telems.empty())
-          {
-            std::stable_sort(
-              telems.begin(),
-              telems.end(),
-              [](const sortable_tuple &a, const sortable_tuple &b) {
-                if (a.key == b.key)
-                  return a.pos < b.pos;
-                return a.key < b.key; // lexicographic on the component vector
-              });
-            if (fast_path_reverse)
-              std::reverse(telems.begin(), telems.end());
-
-            nlohmann::json sorted_list;
-            sorted_list["_type"] = "List";
-            sorted_list["elts"] = nlohmann::json::array();
-            converter_.copy_location_fields_from_decl(call_, sorted_list);
-            for (const auto &te : telems)
-            {
-              nlohmann::json tup;
-              tup["_type"] = "Tuple";
-              tup["elts"] = nlohmann::json::array();
-              converter_.copy_location_fields_from_decl(call_, tup);
-              for (const BigInt &v : te.key)
-              {
-                // Mirror the parser's literal shape: a negative integer is
-                // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
-                // negative Constant nested in a tuple takes a slow conversion
-                // path, so emit the UnaryOp form for negatives.
-                nlohmann::json cst;
-                cst["_type"] = "Constant";
-                cst["value"] = (v < 0 ? -v : v).to_int64();
-                cst["kind"] = nullptr;
-                converter_.copy_location_fields_from_decl(call_, cst);
-                if (v < 0)
-                {
-                  nlohmann::json neg;
-                  neg["_type"] = "UnaryOp";
-                  neg["op"] = {{"_type", "USub"}};
-                  neg["operand"] = cst;
-                  converter_.copy_location_fields_from_decl(call_, neg);
-                  tup["elts"].push_back(neg);
-                }
-                else
-                  tup["elts"].push_back(cst);
-              }
-              sorted_list["elts"].push_back(tup);
-            }
-
-            python_list sorted_list_expr(converter_, sorted_list);
-            return sorted_list_expr.get();
-          }
-
-          // Symbolic tuple path: a list of tuples whose components may be
-          // symbolic (e.g. sorted([(a, b), (b, a)])). The runtime sort model
-          // compares the tuple storage as reinterpreted integers — not
-          // Python's lexicographic order — and retypes the result elements as
-          // int. Instead emit a convert-time oblivious sorting network
-          // (selection sort) that compares tuples lexicographically and
-          // selects elements with ite, producing a correctly ordered list
-          // whose elements keep their tuple type. Bounded to a small length to
-          // keep the ite trees manageable.
-          if (map_size <= 16)
-          {
-            std::vector<exprt> vals;
-            vals.reserve(map_size);
-            bool all_tuples = true;
-            typet tuple_type;
-            for (size_t i = 0; i < map_size; ++i)
-            {
-              const std::string elem_id =
-                python_list::get_list_element_id(list_id, i);
-              const symbolt *elem_sym =
-                elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
-              if (
-                !elem_sym || !converter_.get_tuple_handler().is_tuple_type(
-                               elem_sym->get_type()))
-              {
-                all_tuples = false;
-                break;
-              }
-              // Heterogeneous tuples (different arity/component types) are left
-              // to the model; a homogeneous list is the sortable case.
-              if (i == 0)
-                tuple_type = elem_sym->get_type();
-              else if (elem_sym->get_type() != tuple_type)
-              {
-                all_tuples = false;
-                break;
-              }
-              vals.push_back(build_symbol(*elem_sym));
-            }
-
-            if (all_tuples && vals.size() == map_size && map_size > 0)
-            {
-              const locationt loc = converter_.get_location_from_decl(call_);
-              // Materialize a value into a fresh temp symbol so later
-              // comparisons reference the symbol rather than a nested ite tree.
-              // exprt has value semantics (no subexpression sharing), so
-              // threading raw ite trees through the network would blow up
-              // exponentially in the number of compare-exchanges.
-              auto materialize = [&](const exprt &value) -> exprt {
-                symbolt &tmp = converter_.create_tmp_symbol(
-                  call_, "$sort_tmp$", value.type(), value);
-                code_declt decl(build_symbol(tmp));
-                decl.copy_to_operands(value);
-                decl.location() = loc;
-                converter_.add_instruction(decl);
-                return build_symbol(tmp);
-              };
-
-              // Each compare-exchange puts the smaller (or larger, when
-              // reverse=True) tuple at the earlier slot. This selection-sort
-              // network is not stable, but stability is moot here: the
-              // comparison is over the whole tuple, so two elements that
-              // compare equal are bit-identical and reordering them is
-              // unobservable. (Do not reuse this network for a partial-key
-              // sort, where ties would be distinguishable.)
-              const std::string cmp_op = fast_path_reverse ? "Gt" : "Lt";
-              bool network_ok = true;
-              for (size_t i = 0; i < vals.size() && network_ok; ++i)
-              {
-                for (size_t j = i + 1; j < vals.size(); ++j)
-                {
-                  exprt a = vals[j];
-                  exprt b = vals[i];
-                  exprt cond =
-                    converter_.handle_tuple_operations(cmp_op, a, b, call_);
-                  if (cond.is_nil() || !cond.type().is_bool())
-                  {
-                    network_ok = false; // non-orderable components
-                    break;
-                  }
-                  exprt old_i = vals[i];
-                  exprt old_j = vals[j];
-                  vals[i] = materialize(build_if(cond, old_j, old_i));
-                  vals[j] = materialize(build_if(cond, old_i, old_j));
-                }
-              }
-
-              if (network_ok)
-              {
-                python_list result(converter_, call_);
-                return result.build_list_from_exprs(vals);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
+  // Fast-path: sorted() over a concrete int/tuple list can be materialized
+  // directly in the frontend (see try_fold_sorted), avoiding the runtime
+  // list sort/equality model.
+  if (std::optional<exprt> folded = try_fold_sorted())
+    return *folded;
 
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
-  const bool is_numpy_model_call = [](const std::string &filename) {
+  const bool is_numpy_model_call = [](const std::string &filename)
+  {
     std::string normalized = filename;
     std::replace(normalized.begin(), normalized.end(), '\\', '/');
     return boost::algorithm::ends_with(
       normalized, std::string{"/models/numpy.py"});
   }(function_id_.get_filename());
 
+  if (std::optional<exprt> rounded = try_handle_round(is_user_imported))
+    return *rounded;
+
+  // Typed-builtin dispatch (min/max/sum/sorted/reversed): may rewrite
+  // actual_func_name or early-return an inline mixed-numeric comparison.
+  if (
+    std::optional<exprt> dispatched = apply_builtin_dispatch(
+      actual_func_name, is_user_imported, is_numpy_model_call))
+    return *dispatched;
+
+  // Get object symbol
+  symbolt *obj_symbol = nullptr;
+  symbol_id obj_symbol_id = converter_.create_symbol_id();
+
+  if (call_["func"]["_type"] == "Attribute")
+  {
+    std::string caller = get_object_name();
+    obj_symbol_id.set_object(caller);
+    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
+  }
+
+  // Indirect call through a variable holding a function pointer, e.g.:
+  // times3 = make_multiplier(3); times3(4)
+  if (std::optional<exprt> indirect = try_indirect_variable_call())
+    return *indirect;
+
+  // Get function symbol id - use actual_func_name for typed dispatch
+  std::string func_symbol_id;
+  if (actual_func_name != func_name)
+  {
+    symbol_id modified_function_id = function_id_;
+    modified_function_id.set_function(actual_func_name);
+    func_symbol_id = modified_function_id.to_string();
+  }
+  else
+    func_symbol_id = function_id_.to_string();
+
+  assert(!func_symbol_id.empty());
+
+  // Find function symbol (O1: use per-call cache to avoid redundant lookups)
+  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
+
+  if (func_symbol == nullptr)
+  {
+    if (
+      std::optional<exprt> resolved = resolve_missing_function_symbol(
+        func_symbol, func_symbol_id, obj_symbol, obj_symbol_id))
+      return *resolved;
+  }
+
+  if (func_symbol != nullptr)
+  {
+    exprt type_error =
+      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
+    if (!type_error.is_nil())
+      return type_error;
+  }
+
+  locationt location = converter_.get_location_from_decl(call_);
+
+  code_function_callt call;
+  call.location() = location;
+  call.function() = build_symbol(*func_symbol);
+  const typet &return_type =
+    to_code_type(func_symbol->get_type()).return_type();
+  call.type() = return_type;
+
+  size_t param_offset =
+    bind_call_receiver(call, obj_symbol, func_symbol, location);
+
+  if (
+    std::optional<exprt> early =
+      build_positional_arguments(call, param_offset, location, func_symbol))
+    return *early;
+
+  return finalize_call(call, param_offset, location, func_symbol, obj_symbol);
+}
+
+// === handle_general_function_call() decomposition helpers (see expr.h) ===
+// Each helper is an extracted, behaviour-preserving slice. A returned value
+// is what the caller must return immediately; std::nullopt means "fall
+// through", reproducing the original sequential control flow exactly.
+
+std::optional<exprt> function_call_expr::try_fold_sorted()
+{
+  const std::string &func_name = function_id_.get_function();
+  if (func_name != "sorted" || call_["args"].size() != 1)
+    return std::nullopt;
+
+  bool fast_path_reverse = false;
+  bool fast_path_ok = true;
+  if (call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw.value("arg", "") != "reverse")
+      {
+        fast_path_ok = false;
+        break;
+      }
+      exprt v = converter_.get_expr(kw["value"]);
+      if (!v.is_constant())
+      {
+        fast_path_ok = false;
+        break;
+      }
+      fast_path_reverse = v.is_true();
+    }
+  }
+
+  if (!fast_path_ok)
+    return std::nullopt;
+
+  exprt list_arg = converter_.get_expr(call_["args"][0]);
+  if (!list_arg.is_symbol())
+    return std::nullopt;
+
+  const std::string list_id = list_arg.identifier().as_string();
+  const size_t map_size = python_list::get_list_type_map_size(list_id);
+  if (map_size == 0 || map_size > 32)
+    return std::nullopt;
+
+  if (auto r = fold_sorted_int_list(list_id, map_size, fast_path_reverse))
+    return r;
+  if (
+    auto r = fold_sorted_constant_tuples(list_id, map_size, fast_path_reverse))
+    return r;
+  return fold_sorted_symbolic_tuples(list_id, map_size, fast_path_reverse);
+}
+
+std::optional<exprt> function_call_expr::fold_sorted_int_list(
+  const std::string &list_id,
+  size_t map_size,
+  bool fast_path_reverse) const
+{
+  struct sortable_elem
+  {
+    BigInt key;
+    size_t pos;
+  };
+
+  std::vector<sortable_elem> elems;
+  elems.reserve(map_size);
+  bool all_constant_ints = true;
+
+  for (size_t i = 0; i < map_size; ++i)
+  {
+    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    if (elem_id.empty())
+    {
+      all_constant_ints = false;
+      break;
+    }
+
+    const symbolt *elem_sym = converter_.find_symbol(elem_id);
+    if (
+      !elem_sym || !elem_sym->get_value().is_constant() ||
+      !(elem_sym->get_type().is_signedbv() ||
+        elem_sym->get_type().is_unsignedbv()))
+    {
+      all_constant_ints = false;
+      break;
+    }
+
+    BigInt key = binary2integer(elem_sym->get_value().value().c_str(), true);
+    elems.push_back({key, i});
+  }
+
+  if (all_constant_ints)
+  {
+    std::stable_sort(
+      elems.begin(),
+      elems.end(),
+      [](const sortable_elem &a, const sortable_elem &b)
+      {
+        if (a.key == b.key)
+          return a.pos < b.pos;
+        return a.key < b.key;
+      });
+
+    if (fast_path_reverse)
+      std::reverse(elems.begin(), elems.end());
+
+    nlohmann::json sorted_list;
+    sorted_list["_type"] = "List";
+    sorted_list["elts"] = nlohmann::json::array();
+    converter_.copy_location_fields_from_decl(call_, sorted_list);
+    for (const auto &elem : elems)
+    {
+      nlohmann::json cst;
+      cst["_type"] = "Constant";
+      cst["value"] = elem.key.to_int64();
+      cst["kind"] = nullptr;
+      converter_.copy_location_fields_from_decl(call_, cst);
+      sorted_list["elts"].push_back(cst);
+    }
+
+    python_list sorted_list_expr(converter_, sorted_list);
+    return sorted_list_expr.get();
+  }
+  return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
+  const std::string &list_id,
+  size_t map_size,
+  bool fast_path_reverse) const
+{
+  // Concrete tuple path: a literal list of constant integer tuples
+  // (e.g. sorted([(3,1),(1,2)])). The runtime tuple-sort model retypes
+  // elements as int; sort here at convert time and rebuild a list of
+  // tuple literals so the element type is preserved and verification is
+  // cheap. Symbolic tuple lists fall through (still unsupported).
+  std::function<bool(const exprt &, BigInt &)> eval_const_int =
+    [&](const exprt &e, BigInt &out) -> bool
+  {
+    if (
+      e.is_constant() &&
+      (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
+    {
+      out = binary2integer(
+        to_constant_expr(e).value().c_str(), e.type().is_signedbv());
+      return true;
+    }
+    if (e.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(e.identifier().as_string());
+      return s && eval_const_int(s->get_value(), out);
+    }
+    // A negative literal reaches here as unary-minus over a constant
+    // (the parser emits UnaryOp(USub, Constant(n))); a widened literal
+    // as a typecast. Fold both.
+    if (e.id() == "unary-" && e.operands().size() == 1)
+    {
+      if (!eval_const_int(e.op0(), out))
+        return false;
+      out = -out;
+      return true;
+    }
+    if (e.id() == "typecast" && e.operands().size() == 1)
+      return eval_const_int(e.op0(), out);
+    return false;
+  };
+
+  struct sortable_tuple
+  {
+    std::vector<BigInt> key;
+    size_t pos;
+  };
+  std::vector<sortable_tuple> telems;
+  bool all_constant_tuples = true;
+  size_t arity = 0;
+
+  for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
+  {
+    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    const symbolt *elem_sym =
+      elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+    exprt val = elem_sym ? elem_sym->get_value() : exprt();
+    while (val.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(val.identifier().as_string());
+      if (!s)
+        break;
+      val = s->get_value();
+    }
+    if (
+      !elem_sym ||
+      !converter_.get_tuple_handler().is_tuple_type(elem_sym->get_type()) ||
+      val.id() != "struct" || val.operands().empty())
+    {
+      all_constant_tuples = false;
+      break;
+    }
+    if (i == 0)
+      arity = val.operands().size();
+    else if (val.operands().size() != arity)
+    {
+      all_constant_tuples = false;
+      break;
+    }
+    std::vector<BigInt> key;
+    for (const auto &comp : val.operands())
+    {
+      BigInt v;
+      if (!eval_const_int(comp, v))
+      {
+        all_constant_tuples = false;
+        break;
+      }
+      key.push_back(v);
+    }
+    if (!all_constant_tuples)
+      break;
+    telems.push_back({std::move(key), i});
+  }
+
+  if (all_constant_tuples && !telems.empty())
+  {
+    std::stable_sort(
+      telems.begin(),
+      telems.end(),
+      [](const sortable_tuple &a, const sortable_tuple &b)
+      {
+        if (a.key == b.key)
+          return a.pos < b.pos;
+        return a.key < b.key; // lexicographic on the component vector
+      });
+    if (fast_path_reverse)
+      std::reverse(telems.begin(), telems.end());
+
+    nlohmann::json sorted_list;
+    sorted_list["_type"] = "List";
+    sorted_list["elts"] = nlohmann::json::array();
+    converter_.copy_location_fields_from_decl(call_, sorted_list);
+    for (const auto &te : telems)
+    {
+      nlohmann::json tup;
+      tup["_type"] = "Tuple";
+      tup["elts"] = nlohmann::json::array();
+      converter_.copy_location_fields_from_decl(call_, tup);
+      for (const BigInt &v : te.key)
+      {
+        // Mirror the parser's literal shape: a negative integer is
+        // UnaryOp(USub, Constant(|v|)), not Constant(-v). A bare
+        // negative Constant nested in a tuple takes a slow conversion
+        // path, so emit the UnaryOp form for negatives.
+        nlohmann::json cst;
+        cst["_type"] = "Constant";
+        cst["value"] = (v < 0 ? -v : v).to_int64();
+        cst["kind"] = nullptr;
+        converter_.copy_location_fields_from_decl(call_, cst);
+        if (v < 0)
+        {
+          nlohmann::json neg;
+          neg["_type"] = "UnaryOp";
+          neg["op"] = {{"_type", "USub"}};
+          neg["operand"] = cst;
+          converter_.copy_location_fields_from_decl(call_, neg);
+          tup["elts"].push_back(neg);
+        }
+        else
+          tup["elts"].push_back(cst);
+      }
+      sorted_list["elts"].push_back(tup);
+    }
+
+    python_list sorted_list_expr(converter_, sorted_list);
+    return sorted_list_expr.get();
+  }
+  return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
+  const std::string &list_id,
+  size_t map_size,
+  bool fast_path_reverse)
+{
+  // Symbolic tuple path: a list of tuples whose components may be
+  // symbolic (e.g. sorted([(a, b), (b, a)])). The runtime sort model
+  // compares the tuple storage as reinterpreted integers — not
+  // Python's lexicographic order — and retypes the result elements as
+  // int. Instead emit a convert-time oblivious sorting network
+  // (selection sort) that compares tuples lexicographically and
+  // selects elements with ite, producing a correctly ordered list
+  // whose elements keep their tuple type. Bounded to a small length to
+  // keep the ite trees manageable.
+  if (map_size > 16)
+    return std::nullopt;
+  std::vector<exprt> vals;
+  vals.reserve(map_size);
+  bool all_tuples = true;
+  typet tuple_type;
+  for (size_t i = 0; i < map_size; ++i)
+  {
+    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    const symbolt *elem_sym =
+      elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
+    if (
+      !elem_sym ||
+      !converter_.get_tuple_handler().is_tuple_type(elem_sym->get_type()))
+    {
+      all_tuples = false;
+      break;
+    }
+    // Heterogeneous tuples (different arity/component types) are left
+    // to the model; a homogeneous list is the sortable case.
+    if (i == 0)
+      tuple_type = elem_sym->get_type();
+    else if (elem_sym->get_type() != tuple_type)
+    {
+      all_tuples = false;
+      break;
+    }
+    vals.push_back(build_symbol(*elem_sym));
+  }
+
+  if (all_tuples && vals.size() == map_size && map_size > 0)
+  {
+    const locationt loc = converter_.get_location_from_decl(call_);
+    // Materialize a value into a fresh temp symbol so later
+    // comparisons reference the symbol rather than a nested ite tree.
+    // exprt has value semantics (no subexpression sharing), so
+    // threading raw ite trees through the network would blow up
+    // exponentially in the number of compare-exchanges.
+    auto materialize = [&](const exprt &value) -> exprt
+    {
+      symbolt &tmp =
+        converter_.create_tmp_symbol(call_, "$sort_tmp$", value.type(), value);
+      code_declt decl(build_symbol(tmp));
+      decl.copy_to_operands(value);
+      decl.location() = loc;
+      converter_.add_instruction(decl);
+      return build_symbol(tmp);
+    };
+
+    // Each compare-exchange puts the smaller (or larger, when
+    // reverse=True) tuple at the earlier slot. This selection-sort
+    // network is not stable, but stability is moot here: the
+    // comparison is over the whole tuple, so two elements that
+    // compare equal are bit-identical and reordering them is
+    // unobservable. (Do not reuse this network for a partial-key
+    // sort, where ties would be distinguishable.)
+    const std::string cmp_op = fast_path_reverse ? "Gt" : "Lt";
+    bool network_ok = true;
+    for (size_t i = 0; i < vals.size() && network_ok; ++i)
+    {
+      for (size_t j = i + 1; j < vals.size(); ++j)
+      {
+        exprt a = vals[j];
+        exprt b = vals[i];
+        exprt cond = converter_.handle_tuple_operations(cmp_op, a, b, call_);
+        if (cond.is_nil() || !cond.type().is_bool())
+        {
+          network_ok = false; // non-orderable components
+          break;
+        }
+        exprt old_i = vals[i];
+        exprt old_j = vals[j];
+        vals[i] = materialize(build_if(cond, old_j, old_i));
+        vals[j] = materialize(build_if(cond, old_i, old_j));
+      }
+    }
+
+    if (network_ok)
+    {
+      python_list result(converter_, call_);
+      return result.build_list_from_exprs(vals);
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
+{
+  const std::string &func_name = function_id_.get_function();
   const bool has_user_round =
     !find_function(converter_.ast()["body"], func_name).empty();
   if (
@@ -3764,7 +3879,15 @@ exprt function_call_expr::handle_general_function_call()
     auto arg = call_["args"][0];
     return handle_round(arg);
   }
+  return std::nullopt;
+}
 
+std::optional<exprt> function_call_expr::apply_builtin_dispatch(
+  std::string &actual_func_name,
+  bool is_user_imported,
+  bool is_numpy_model_call)
+{
+  const std::string &func_name = function_id_.get_function();
   // sum() accepts an optional start argument (sum(iterable, start)); accept
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
@@ -3832,20 +3955,13 @@ exprt function_call_expr::handle_general_function_call()
       // Integer types use base name without suffix
     }
   }
+  return std::nullopt;
+}
 
-  // Get object symbol
-  symbolt *obj_symbol = nullptr;
-  symbol_id obj_symbol_id = converter_.create_symbol_id();
-
-  if (call_["func"]["_type"] == "Attribute")
-  {
-    std::string caller = get_object_name();
-    obj_symbol_id.set_object(caller);
-    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
-  }
-
-  // Indirect call through variable holding a function pointer, e.g.:
-  // times3 = make_multiplier(3); times3(4)
+std::optional<exprt> function_call_expr::try_indirect_variable_call()
+{
+  const std::string &func_name = function_id_.get_function();
+  auto &symbol_table = converter_.symbol_table();
   if (call_["func"]["_type"] == "Name")
   {
     symbol_id var_sid = converter_.create_symbol_id();
@@ -3897,388 +4013,364 @@ exprt function_call_expr::handle_general_function_call()
       return call;
     }
   }
+  return std::nullopt;
+}
 
-  // Get function symbol id - use actual_func_name for typed dispatch
-  std::string func_symbol_id;
-  if (actual_func_name != func_name)
+std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
+  const symbolt *&func_symbol,
+  const std::string &func_symbol_id,
+  symbolt *obj_symbol,
+  const symbol_id &obj_symbol_id)
+{
+  // Dataclass synthesized constructors may call Class.__post_init__(...) before
+  // the class method symbol is fully registered. Preserve class scope and emit
+  // a forward reference call instead of falling back to global scope.
+  if (
+    function_type_ == FunctionType::ClassMethod &&
+    function_id_.get_function() == "__post_init__" &&
+    !function_id_.get_class().empty())
   {
-    symbol_id modified_function_id = function_id_;
-    modified_function_id.set_function(actual_func_name);
-    func_symbol_id = modified_function_id.to_string();
+    locationt location = converter_.get_location_from_decl(call_);
+    code_function_callt call;
+    call.location() = location;
+    call.function() = symbol_exprt(func_symbol_id, code_typet());
+    call.type() = empty_typet();
+
+    for (const auto &arg_node : call_["args"])
+    {
+      exprt arg = converter_.get_expr(arg_node);
+      if (arg.type().is_array())
+        call.arguments().push_back(build_address_of(arg));
+      else
+        call.arguments().push_back(arg);
+    }
+
+    return call;
   }
-  else
-    func_symbol_id = function_id_.to_string();
 
-  assert(!func_symbol_id.empty());
-
-  // Find function symbol (O1: use per-call cache to avoid redundant lookups)
-  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
-
-  if (func_symbol == nullptr)
+  if (
+    function_type_ == FunctionType::Constructor ||
+    function_type_ == FunctionType::InstanceMethod)
   {
-    // Dataclass synthesized constructors may call Class.__post_init__(...) before
-    // the class method symbol is fully registered. Preserve class scope and emit
-    // a forward reference call instead of falling back to global scope.
-    if (
-      function_type_ == FunctionType::ClassMethod &&
-      function_id_.get_function() == "__post_init__" &&
-      !function_id_.get_class().empty())
+    // Get method from a base class when it is not defined in the current class
+    func_symbol = converter_.find_function_in_base_classes(
+      function_id_.get_class(),
+      func_symbol_id,
+      function_id_.get_function(),
+      function_type_ == FunctionType::Constructor);
+
+    if (function_type_ == FunctionType::Constructor)
     {
-      locationt location = converter_.get_location_from_decl(call_);
-      code_function_callt call;
-      call.location() = location;
-      call.function() = symbol_exprt(func_symbol_id, code_typet());
-      call.type() = empty_typet();
-
-      for (const auto &arg_node : call_["args"])
-      {
-        exprt arg = converter_.get_expr(arg_node);
-        if (arg.type().is_array())
-          call.arguments().push_back(build_address_of(arg));
-        else
-          call.arguments().push_back(arg);
-      }
-
-      return call;
-    }
-
-    if (
-      function_type_ == FunctionType::Constructor ||
-      function_type_ == FunctionType::InstanceMethod)
-    {
-      // Get method from a base class when it is not defined in the current class
-      func_symbol = converter_.find_function_in_base_classes(
-        function_id_.get_class(),
-        func_symbol_id,
-        function_id_.get_function(),
-        function_type_ == FunctionType::Constructor);
-
-      if (function_type_ == FunctionType::Constructor)
-      {
-        if (!func_symbol)
-        {
-          // If __init__() is not defined for the class and bases,
-          // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in python_converter::get_var_assign().
-          return exprt("_init_undefined");
-        }
-        converter_.base_ctor_called = true;
-      }
-      else if (function_type_ == FunctionType::InstanceMethod)
-      {
-        if (obj_symbol && func_symbol)
-        {
-          converter_.update_instance_from_self(
-            get_classname_from_symbol_id(func_symbol->id.as_string()),
-            function_id_.get_function(),
-            obj_symbol_id.to_string());
-        }
-
-        // Handle forward reference: method not yet in symbol table
-        if (!func_symbol)
-        {
-          std::string class_name = function_id_.get_class();
-          std::string method_name = function_id_.get_function();
-
-          // Find all possible class types for this object
-          std::vector<std::string> possible_classes =
-            find_possible_class_types(obj_symbol);
-
-          // If no classes found, use the inferred class name as a best-effort
-          // fallback (it may come from weak type inference in dynamic code).
-          bool inferred_classes_from_fallback = false;
-          if (possible_classes.empty())
-          {
-            possible_classes.push_back(class_name);
-            inferred_classes_from_fallback = true;
-          }
-
-          // When there are multiple possible classes (polymorphic object),
-          // the method must exist in ALL of them; otherwise it is an
-          // AttributeError (the object could be any of those types at
-          // runtime and at least one path would fail).
-          // For a single class, it suffices that the method exists.
-          bool method_exists = false;
-          if (possible_classes.size() > 1)
-          {
-            bool all_have_method = true;
-            for (const auto &check_class : possible_classes)
-            {
-              if (check_class.empty())
-                continue;
-              if (!method_exists_in_class_hierarchy(check_class, method_name))
-              {
-                all_have_method = false;
-                break;
-              }
-            }
-            method_exists = all_have_method;
-          }
-          else
-          {
-            for (const auto &check_class : possible_classes)
-            {
-              if (check_class.empty())
-                continue;
-              if (method_exists_in_class_hierarchy(check_class, method_name))
-              {
-                method_exists = true;
-                break;
-              }
-            }
-          }
-
-          // Only report AttributeError if:
-          // 1. Method doesn't exist in the class hierarchy, AND
-          // 2. We're not currently processing any method in the same class
-          //    (methods may reference other methods not yet in the symbol table)
-          std::string current_func = converter_.current_function_name();
-          bool is_in_same_class = false;
-
-          // Check if we're in any method of the target class
-          for (const auto &check_class : possible_classes)
-          {
-            // We're in the same class if:
-            // - current function is the class name (constructor)
-            // - current function is __init__
-            // - the function symbol exists and contains the class marker for this class
-            if (current_func == check_class || current_func == "__init__")
-            {
-              is_in_same_class = true;
-              break;
-            }
-
-            // Check if current function belongs to this class by looking for @C@ClassName pattern
-            std::string class_marker = std::string(CLASS_MARKER) + check_class +
-                                       std::string(FUNCTION_MARKER);
-            const symbolt *current_func_sym =
-              converter_.find_symbol(converter_.create_symbol_id().to_string());
-            if (
-              current_func_sym && current_func_sym->id.as_string().find(
-                                    class_marker) != std::string::npos)
-            {
-              is_in_same_class = true;
-              break;
-            }
-          }
-
-          if (!method_exists && !is_in_same_class)
-          {
-            // In dynamic/untyped flows we may only have fallback class guesses.
-            // Do not inject a hard failure from uncertain inference.
-            if (inferred_classes_from_fallback)
-            {
-              locationt location = converter_.get_location_from_decl(call_);
-              // V.3: build the void* null fallback via the IREP2 factory.
-              exprt zero_fallback =
-                migrate_expr_back(gen_zero(migrate_type(any_type())));
-              zero_fallback.location() = location;
-              zero_fallback.location().user_provided(true);
-              return zero_fallback;
-            }
-
-            // Generate AttributeError for concrete class information.
-            return generate_attribute_error(method_name, possible_classes);
-          }
-
-          // Method exists or we're in a constructor - create forward reference
-          locationt location = converter_.get_location_from_decl(call_);
-          code_function_callt call;
-          call.location() = location;
-          call.function() = symbol_exprt(func_symbol_id, code_typet());
-          call.type() = empty_typet();
-
-          if (obj_symbol)
-          {
-            exprt receiver = build_symbol(*obj_symbol);
-            call.arguments().push_back(
-              receiver.type().is_pointer() ? receiver
-                                           : gen_address_of(receiver));
-          }
-
-          for (const auto &arg_node : call_["args"])
-          {
-            exprt arg = converter_.get_expr(arg_node);
-            if (arg.type().is_array())
-            {
-              if (
-                arg_node["_type"] == "Constant" &&
-                arg_node["value"].is_string())
-              {
-                arg = string_constantt(
-                  arg_node["value"].get<std::string>(),
-                  arg.type(),
-                  string_constantt::k_default);
-              }
-              else if (arg.is_constant())
-              {
-                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
-                symbolt &tmp = converter_.create_tmp_symbol(
-                  call_, "$const_str_arg$", arg.type(), arg);
-                code_declt tmp_decl(build_symbol(tmp));
-                tmp_decl.location() = location;
-                converter_.current_block->copy_to_operands(tmp_decl);
-                arg = build_symbol(tmp);
-              }
-              call.arguments().push_back(build_address_of(arg));
-            }
-            else
-              call.arguments().push_back(arg);
-          }
-
-          return call;
-        }
-      }
-    }
-    else
-    {
-      // Find in global scope
-      function_id_.set_class("");
-      func_symbol = converter_.find_symbol(function_id_.to_string());
-
       if (!func_symbol)
       {
-        // Check if this function is defined anywhere in the current Python source
-        // by searching the AST directly
-        bool is_forward_reference = false;
+        // If __init__() is not defined for the class and bases,
+        // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in python_converter::get_var_assign().
+        return exprt("_init_undefined");
+      }
+      converter_.base_ctor_called = true;
+    }
+    else if (function_type_ == FunctionType::InstanceMethod)
+    {
+      if (obj_symbol && func_symbol)
+      {
+        converter_.update_instance_from_self(
+          get_classname_from_symbol_id(func_symbol->id.as_string()),
+          function_id_.get_function(),
+          obj_symbol_id.to_string());
+      }
 
-        is_forward_reference = json_utils::search_function_in_ast(
-          converter_.ast(), function_id_.get_function());
+      // Handle forward reference: method not yet in symbol table
+      if (!func_symbol)
+      {
+        std::string class_name = function_id_.get_class();
+        std::string method_name = function_id_.get_function();
 
-        if (is_forward_reference)
+        // Find all possible class types for this object
+        std::vector<std::string> possible_classes =
+          find_possible_class_types(obj_symbol);
+
+        // If no classes found, use the inferred class name as a best-effort
+        // fallback (it may come from weak type inference in dynamic code).
+        bool inferred_classes_from_fallback = false;
+        if (possible_classes.empty())
         {
-          // Create a forward reference that can be resolved later
-          locationt location = converter_.get_location_from_decl(call_);
+          possible_classes.push_back(class_name);
+          inferred_classes_from_fallback = true;
+        }
 
-          code_function_callt call;
-          call.location() = location;
-
-          // Create symbol expression for the function (forward reference)
-          symbol_exprt func_sym(function_id_.to_string(), code_typet());
-          call.function() = func_sym;
-
-          // Extract return type from function definition in AST
-          typet return_type = empty_typet();
-          const auto &func_node = find_function(
-            converter_.ast()["body"], function_id_.get_function());
-          if (!func_node.empty())
+        // When there are multiple possible classes (polymorphic object),
+        // the method must exist in ALL of them; otherwise it is an
+        // AttributeError (the object could be any of those types at
+        // runtime and at least one path would fail).
+        // For a single class, it suffices that the method exists.
+        bool method_exists = false;
+        if (possible_classes.size() > 1)
+        {
+          bool all_have_method = true;
+          for (const auto &check_class : possible_classes)
           {
-            if (
-              func_node.contains("returns") && !func_node["returns"].is_null())
+            if (check_class.empty())
+              continue;
+            if (!method_exists_in_class_hierarchy(check_class, method_name))
             {
-              const auto &returns = func_node["returns"];
-              if (returns.contains("id"))
-              {
-                const std::string ret_cls = returns["id"].get<std::string>();
-                return_type = type_handler_.get_typet(ret_cls);
-                // Stage 1 object-model migration (#3067): mirror the funcdef
-                // migration — a forward-referenced function returning a
-                // user-defined class returns a Cls* reference, not the value
-                // struct. Resolving it by value here leaves the call typed as a
-                // struct while the callee actually returns a pointer, which
-                // crashes on `return f(...)` with a struct-vs-pointer
-                // irep2_cast_error. @overload stubs resolve per call site, so
-                // leave them by value (consistent with call_return_class).
-                if (
-                  json_utils::is_class(ret_cls, converter_.ast()) &&
-                  !json_utils::has_overload_decorator(func_node))
-                  return_type = gen_pointer_type(return_type);
-              }
+              all_have_method = false;
+              break;
             }
-            exprt body = converter_.get_block(func_node["body"]);
-            exprt const_return = converter_.get_function_constant_return(body);
-            if (!const_return.is_nil())
-              return const_return;
           }
-
-          call.type() = return_type;
-
-          // Process arguments normally
-          for (const auto &arg_node : call_["args"])
-          {
-            exprt arg = converter_.get_expr(arg_node);
-            if (arg.type().is_array())
-            {
-              if (
-                arg_node["_type"] == "Constant" &&
-                arg_node["value"].is_string())
-              {
-                arg = string_constantt(
-                  arg_node["value"].get<std::string>(),
-                  arg.type(),
-                  string_constantt::k_default);
-              }
-              else if (arg.is_constant())
-              {
-                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
-                symbolt &tmp = converter_.create_tmp_symbol(
-                  call_, "$const_str_arg$", arg.type(), arg);
-                code_declt tmp_decl(build_symbol(tmp));
-                tmp_decl.location() = location;
-                converter_.current_block->copy_to_operands(tmp_decl);
-                arg = build_symbol(tmp);
-              }
-              call.arguments().push_back(build_address_of(arg));
-            }
-            else
-              call.arguments().push_back(arg);
-          }
-
-          return call;
+          method_exists = all_have_method;
         }
         else
         {
-          const std::string &func_name = function_id_.get_function();
-          log_warning(
-            "Undefined function '{}' - replacing with assert(false)",
-            func_name);
-          // Create a side effect expression with nondet for assignments
-          locationt location = converter_.get_location_from_decl(call_);
-          // Create a nondet expression as a placeholder that won't crash
-          // This allows the code to continue but marks it as undefined behavior
-          exprt nondet_expr("sideeffect", empty_typet());
-          nondet_expr.statement("nondet");
-          nondet_expr.location() = location;
-          nondet_expr.location().user_provided(true);
-          nondet_expr.location().comment(
-            "Unsupported function '" + func_name + "' called");
-          // Also add an assertion to the current block to flag this as an
-          // error (V.3: build the always-fail condition in IREP2).
-          code_assertt assert_code(migrate_expr_back(gen_false_expr()));
-          assert_code.location() = location;
-          assert_code.location().user_provided(true);
-          assert_code.location().comment(
-            "Unsupported function '" + func_name + "' is reached");
-          converter_.current_block->copy_to_operands(assert_code);
-
-          return nondet_expr;
+          for (const auto &check_class : possible_classes)
+          {
+            if (check_class.empty())
+              continue;
+            if (method_exists_in_class_hierarchy(check_class, method_name))
+            {
+              method_exists = true;
+              break;
+            }
+          }
         }
+
+        // Only report AttributeError if:
+        // 1. Method doesn't exist in the class hierarchy, AND
+        // 2. We're not currently processing any method in the same class
+        //    (methods may reference other methods not yet in the symbol table)
+        std::string current_func = converter_.current_function_name();
+        bool is_in_same_class = false;
+
+        // Check if we're in any method of the target class
+        for (const auto &check_class : possible_classes)
+        {
+          // We're in the same class if:
+          // - current function is the class name (constructor)
+          // - current function is __init__
+          // - the function symbol exists and contains the class marker for this class
+          if (current_func == check_class || current_func == "__init__")
+          {
+            is_in_same_class = true;
+            break;
+          }
+
+          // Check if current function belongs to this class by looking for @C@ClassName pattern
+          std::string class_marker = std::string(CLASS_MARKER) + check_class +
+                                     std::string(FUNCTION_MARKER);
+          const symbolt *current_func_sym =
+            converter_.find_symbol(converter_.create_symbol_id().to_string());
+          if (
+            current_func_sym && current_func_sym->id.as_string().find(
+                                  class_marker) != std::string::npos)
+          {
+            is_in_same_class = true;
+            break;
+          }
+        }
+
+        if (!method_exists && !is_in_same_class)
+        {
+          // In dynamic/untyped flows we may only have fallback class guesses.
+          // Do not inject a hard failure from uncertain inference.
+          if (inferred_classes_from_fallback)
+          {
+            locationt location = converter_.get_location_from_decl(call_);
+            // V.3: build the void* null fallback via the IREP2 factory.
+            exprt zero_fallback =
+              migrate_expr_back(gen_zero(migrate_type(any_type())));
+            zero_fallback.location() = location;
+            zero_fallback.location().user_provided(true);
+            return zero_fallback;
+          }
+
+          // Generate AttributeError for concrete class information.
+          return generate_attribute_error(method_name, possible_classes);
+        }
+
+        // Method exists or we're in a constructor - create forward reference
+        locationt location = converter_.get_location_from_decl(call_);
+        code_function_callt call;
+        call.location() = location;
+        call.function() = symbol_exprt(func_symbol_id, code_typet());
+        call.type() = empty_typet();
+
+        if (obj_symbol)
+        {
+          exprt receiver = build_symbol(*obj_symbol);
+          call.arguments().push_back(
+            receiver.type().is_pointer() ? receiver : gen_address_of(receiver));
+        }
+
+        for (const auto &arg_node : call_["args"])
+        {
+          exprt arg = converter_.get_expr(arg_node);
+          if (arg.type().is_array())
+          {
+            if (
+              arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+            {
+              arg = string_constantt(
+                arg_node["value"].get<std::string>(),
+                arg.type(),
+                string_constantt::k_default);
+            }
+            else if (arg.is_constant())
+            {
+              // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+              symbolt &tmp = converter_.create_tmp_symbol(
+                call_, "$const_str_arg$", arg.type(), arg);
+              code_declt tmp_decl(build_symbol(tmp));
+              tmp_decl.location() = location;
+              converter_.current_block->copy_to_operands(tmp_decl);
+              arg = build_symbol(tmp);
+            }
+            call.arguments().push_back(build_address_of(arg));
+          }
+          else
+            call.arguments().push_back(arg);
+        }
+
+        return call;
       }
     }
   }
-
-  if (func_symbol != nullptr)
+  else
   {
-    exprt type_error =
-      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
-    if (!type_error.is_nil())
-      return type_error;
+    // Find in global scope
+    function_id_.set_class("");
+    func_symbol = converter_.find_symbol(function_id_.to_string());
+
+    if (!func_symbol)
+    {
+      // Check if this function is defined anywhere in the current Python source
+      // by searching the AST directly
+      bool is_forward_reference = false;
+
+      is_forward_reference = json_utils::search_function_in_ast(
+        converter_.ast(), function_id_.get_function());
+
+      if (is_forward_reference)
+      {
+        // Create a forward reference that can be resolved later
+        locationt location = converter_.get_location_from_decl(call_);
+
+        code_function_callt call;
+        call.location() = location;
+
+        // Create symbol expression for the function (forward reference)
+        symbol_exprt func_sym(function_id_.to_string(), code_typet());
+        call.function() = func_sym;
+
+        // Extract return type from function definition in AST
+        typet return_type = empty_typet();
+        const auto &func_node =
+          find_function(converter_.ast()["body"], function_id_.get_function());
+        if (!func_node.empty())
+        {
+          if (func_node.contains("returns") && !func_node["returns"].is_null())
+          {
+            const auto &returns = func_node["returns"];
+            if (returns.contains("id"))
+            {
+              const std::string ret_cls = returns["id"].get<std::string>();
+              return_type = type_handler_.get_typet(ret_cls);
+              // Stage 1 object-model migration (#3067): mirror the funcdef
+              // migration — a forward-referenced function returning a
+              // user-defined class returns a Cls* reference, not the value
+              // struct. Resolving it by value here leaves the call typed as a
+              // struct while the callee actually returns a pointer, which
+              // crashes on `return f(...)` with a struct-vs-pointer
+              // irep2_cast_error. @overload stubs resolve per call site, so
+              // leave them by value (consistent with call_return_class).
+              if (
+                json_utils::is_class(ret_cls, converter_.ast()) &&
+                !json_utils::has_overload_decorator(func_node))
+                return_type = gen_pointer_type(return_type);
+            }
+          }
+          exprt body = converter_.get_block(func_node["body"]);
+          exprt const_return = converter_.get_function_constant_return(body);
+          if (!const_return.is_nil())
+            return const_return;
+        }
+
+        call.type() = return_type;
+
+        // Process arguments normally
+        for (const auto &arg_node : call_["args"])
+        {
+          exprt arg = converter_.get_expr(arg_node);
+          if (arg.type().is_array())
+          {
+            if (
+              arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+            {
+              arg = string_constantt(
+                arg_node["value"].get<std::string>(),
+                arg.type(),
+                string_constantt::k_default);
+            }
+            else if (arg.is_constant())
+            {
+              // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+              symbolt &tmp = converter_.create_tmp_symbol(
+                call_, "$const_str_arg$", arg.type(), arg);
+              code_declt tmp_decl(build_symbol(tmp));
+              tmp_decl.location() = location;
+              converter_.current_block->copy_to_operands(tmp_decl);
+              arg = build_symbol(tmp);
+            }
+            call.arguments().push_back(build_address_of(arg));
+          }
+          else
+            call.arguments().push_back(arg);
+        }
+
+        return call;
+      }
+      else
+      {
+        const std::string &func_name = function_id_.get_function();
+        log_warning(
+          "Undefined function '{}' - replacing with assert(false)", func_name);
+        // Create a side effect expression with nondet for assignments
+        locationt location = converter_.get_location_from_decl(call_);
+        // Create a nondet expression as a placeholder that won't crash
+        // This allows the code to continue but marks it as undefined behavior
+        exprt nondet_expr("sideeffect", empty_typet());
+        nondet_expr.statement("nondet");
+        nondet_expr.location() = location;
+        nondet_expr.location().user_provided(true);
+        nondet_expr.location().comment(
+          "Unsupported function '" + func_name + "' called");
+        // Also add an assertion to the current block to flag this as an
+        // error (V.3: build the always-fail condition in IREP2).
+        code_assertt assert_code(migrate_expr_back(gen_false_expr()));
+        assert_code.location() = location;
+        assert_code.location().user_provided(true);
+        assert_code.location().comment(
+          "Unsupported function '" + func_name + "' is reached");
+        converter_.current_block->copy_to_operands(assert_code);
+
+        return nondet_expr;
+      }
+    }
   }
+  return std::nullopt;
+}
 
-  locationt location = converter_.get_location_from_decl(call_);
-
-  code_function_callt call;
-  call.location() = location;
-  call.function() = build_symbol(*func_symbol);
-  const typet &return_type =
-    to_code_type(func_symbol->get_type()).return_type();
-  call.type() = return_type;
-
+size_t function_call_expr::bind_call_receiver(
+  code_function_callt &call,
+  symbolt *obj_symbol,
+  const symbolt *func_symbol,
+  const locationt &location)
+{
   auto bind_instance_receiver = [&](exprt receiver) -> exprt {
     return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
   };
 
   auto bind_instance_receiver_symbol =
-    [&](const symbolt &receiver_symbol) -> exprt {
+    [&](const symbolt &receiver_symbol) -> exprt
+  {
     exprt receiver = build_symbol(receiver_symbol);
     return bind_instance_receiver(receiver);
   };
@@ -4510,11 +4602,16 @@ exprt function_call_expr::handle_general_function_call()
       }
     }
   }
+  return param_offset;
+}
 
-  // Get function type and parameters for Optional wrapping
-  const code_typet &func_type = to_code_type(func_symbol->get_type());
-  const auto &params = func_type.arguments();
-
+std::optional<exprt> function_call_expr::build_positional_arguments(
+  code_function_callt &call,
+  size_t param_offset,
+  const locationt &location,
+  const symbolt *func_symbol)
+{
+  const auto &params = to_code_type(func_symbol->get_type()).arguments();
   size_t arg_index = 0;
   for (const auto &arg_node : call_["args"])
   {
@@ -4836,7 +4933,17 @@ exprt function_call_expr::handle_general_function_call()
 
     arg_index++;
   }
+  return std::nullopt;
+}
 
+exprt function_call_expr::finalize_call(
+  code_function_callt &call,
+  size_t param_offset,
+  const locationt &location,
+  const symbolt *func_symbol,
+  symbolt *obj_symbol)
+{
+  const auto &params = to_code_type(func_symbol->get_type()).arguments();
   // Forward keyword arguments to their parameter slots so the callee
   // receives the supplied value. The validation loop below only fills in
   // default values for *missing* params, so kwargs would otherwise be
