@@ -139,19 +139,18 @@ void TypeChecker::check_rung_element(const RungElement &elem)
   case RungElementKind::Contact:
     if (elem.contact.variable.empty())
       throw TypeCheckError(loc_str(elem.loc) + ": contact has no variable");
-    if (lookup_type(elem.contact.variable, elem.loc) != VarKind::BOOL)
-      throw TypeCheckError(
-        loc_str(elem.loc) + ": contact variable '" + elem.contact.variable +
-        "' must be BOOL");
+    // Non-BOOL contacts/coils occur in analog process control (INT/REAL
+    // process variables). They are permitted; the converter coerces a numeric
+    // contact to a Boolean test (var != 0) and casts power-flow to a numeric
+    // coil. Only the variable's existence is enforced here (lookup_type throws
+    // on an undeclared name), so a stray contact cannot slip through as nondet.
+    lookup_type(elem.contact.variable, elem.loc);
     break;
 
   case RungElementKind::Coil:
     if (elem.coil.variable.empty())
       throw TypeCheckError(loc_str(elem.loc) + ": coil has no variable");
-    if (lookup_type(elem.coil.variable, elem.loc) != VarKind::BOOL)
-      throw TypeCheckError(
-        loc_str(elem.loc) + ": coil variable '" + elem.coil.variable +
-        "' must be BOOL");
+    lookup_type(elem.coil.variable, elem.loc);
     break;
 
   case RungElementKind::TimerFB:

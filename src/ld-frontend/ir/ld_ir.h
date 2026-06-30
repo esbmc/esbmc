@@ -70,10 +70,25 @@ struct LdIRRung
   LdLocation loc;
 };
 
+// A user-defined FB instance to execute once per scan cycle, with its ST body.
+struct UserFBExec
+{
+  std::string type_name;
+  std::string instance_name;
+  std::vector<FBVarDecl> input_vars; // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars; // FB locals (e.g. "i") + types
+  std::string output_var;
+  VarKind output_kind = VarKind::BOOL;
+  std::string in1_var;              // program var feeding IN1 ("" => nondet)
+  std::vector<FBOutWire> out_wires; // FB pin -> program variable assignments
+  std::string st_body;              // raw Structured Text
+};
+
 // Top-level IR: variable declarations + the ordered list of rungs.
 struct LdIR
 {
   std::string source_file;
-  std::vector<VarDecl> variables; // copied from LdAst
-  std::vector<LdIRRung> rungs;    // ordered scan body
+  std::vector<VarDecl> variables;   // copied from LdAst
+  std::vector<LdIRRung> rungs;      // ordered scan body
+  std::vector<UserFBExec> user_fbs; // user-defined FB bodies to execute
 };

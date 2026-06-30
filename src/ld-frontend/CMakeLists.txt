@@ -16,6 +16,7 @@ add_library(ldfrontend STATIC
   ir/ld_ir.cpp
   ir/ld_ir_builder.cpp
   ir_gen/ld_converter.cpp
+  ir_gen/st_fb_translator.cpp
   property/yaml_property_parser.cpp
   property/property_encoder.cpp
   verify/ld_verify.cpp
