@@ -2332,6 +2332,51 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 59. 2026-06-28 re-validation (forty-ninth sweep) & bytes content equality
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
+sweep took the §58b top follow-up (bytes-slice equality) and found its **root**: bytes equality compares
+by identity, not content — affecting *all* bytes, not just slices.
+
+### 59a. New isolated, soundly-fixable defect found & fixed
+**`a == b` for two equal-content bytes variables was wrongly False.**
+
+`a = bytes([2,3]); b = bytes([2,3]); a == b` verified as False (and `a != b` as True) — a soundness
+hole. bytes are modelled as arrays of `long_long_int`; for two array operands the generic binop path
+lowered `a == b` to `&a[0] == &b[0]` (confirmed via `--show-vcc`), an **address/identity** compare. Two
+distinct-but-equal byte sequences therefore compared unequal. Both-inline-literal comparisons already
+worked (a constant fold elsewhere); only the case with a variable operand was broken. str (strcmp) and
+list (list compare) already compared by content — bytes was the outlier.
+
+**Fix** (`converter/converter_binop.cpp`): before the generic builder, fold `==`/`!=` over two
+constant-length value arrays of `long_long_int` to an **element-wise** content comparison — unequal
+lengths fold to the constant verdict, length 0 folds to equal, otherwise the `AND` of `a[i] == b[i]`
+(negated for `!=`). Symbolic-length operands fall through unchanged, and the unroll is capped at 4096
+elements so a pathological literal cannot build a huge equality chain.
+
+This is a **wrong-value/soundness fix** and the root cause behind the §58 slice-equality follow-up (once
+PR #5684's slice sizing also lands, `b[1:3] == bytes([2,3])` follows from this fold). New regression pair
+`bytes_equality{,_fail}` (CORE) covering equal/unequal content, unequal length, empty bytes, `!=`
+negation, and `b"…"` literals; the positive is the liveness witness (`a == b` was False pre-fix).
+Verified bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh bytes_equality`); the focused `bytes`/`numpy` ctest subset (55 tests) is
+100% green. Code-reviewed (0 correctness defects; the element-wise logic, list/tuple/str exclusion, and
+the `acc`/index/size handling all confirmed). Two review points were addressed: (i) numpy integer arrays
+materialised as array *values* share the `array(long_long_int)` representation and are now also compared
+by content — a **strict improvement** over the prior identity compare (numpy's full elementwise-bool-
+array `==` remains a separate, unimplemented feature; numpy arrays held as pointers are untouched, hence
+the honest "value int array" framing); (ii) the unroll bound above. Solver-agnostic.
+
+A known residual: a bytes **parameter** (modelled as a pointer, not an array) keeps the identity compare
+— the same pointer-vs-value-array split noted for `len()` in §58a; the durable fix remains propagating a
+`bytes` identity through slices/params so pointer-form bytes route through the content path too.
+
+### 59b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) **pointer-form bytes (params/slices) content ops** — propagate a `bytes`
+identity so pointer-typed bytes get content `len`/`==` (subsumes the §58 slice-equality remainder once
+#5684 lands); (ii) `sorted`/`sort` with an arithmetic/function `key` silently sorts by natural order
+(§56b/§57b); (iii) `int`-literal-receiver methods (`(255).bit_length()`) unsupported though the variable
+form works (§57b).
 ## 71. 2026-06-29 re-validation (sixty-first sweep) & list[float] param fed an int list
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. A
@@ -2676,6 +2721,15 @@ identity (§58a/§59a); (ii) `round(int, n)` returns float instead of int (above
 Remaining catalogued candidates: the set/list-literal-receiver method gap (§46b/§51a); `frozenset`
 (unsupported AST type); `dict |` PEP 584 union (explicitly unsupported); variadic `math.hypot`
 (float-precision, §51b); the bytes-returning methods (receiver-aware return-type inference, §49b); the
+symbolic bytes affix/search methods (§47b); `format()`/f-string width specs; `str.maketrans`/`translate`
+dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`len`/strlen concern
+(§14b/§32b/§33b) still stands. Other deferred candidates stand: `zip()`, `list.index()`-in-`try/except`
+(ValueError not catchable), `float.hex()` (infeasible), and `str.isascii()` (string-soundness, §5-#2).
+The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
+case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §42/§43 and §49–§58 (PRs #5668, #5669, #5675–#5684) are in flight and not yet
+> on `master` (§39/§40/§41/§44–§48 merged); this sweep is appended as §59.
 symbolic bytes affix/search methods (§47b); `str.maketrans`/`translate` dict-table; and multi-byte UTF-8
 encode/decode. The separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other
 deferred candidates stand: `zip()`, `list.index()`-in-`try/except` (ValueError not catchable),
