@@ -883,13 +883,28 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     }
     else
     {
-      // round(x, n) -> float rounded to n decimals
+      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
+      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
+      // unwrap the minus to recover the integer; otherwise the constant fold is
+      // skipped and the (much more expensive) symbolic path is taken, which
+      // times out for round(int, -n).
       auto ndigits_arg = args[1];
+      bool ndigits_negated = false;
+      if (
+        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
+        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
+        ndigits_arg.contains("operand"))
+      {
+        ndigits_arg = ndigits_arg["operand"];
+        ndigits_negated = true;
+      }
       if (
         ndigits_arg.contains("value") &&
         ndigits_arg["value"].is_number_integer())
       {
         int n = ndigits_arg["value"].get<int>();
+        if (ndigits_negated)
+          n = -n;
         double val = arg["value"].is_number_integer()
                        ? static_cast<double>(arg["value"].get<int>())
                        : arg["value"].get<double>();
