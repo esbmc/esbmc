@@ -1,8 +1,14 @@
 name: Upload Release Asset
 on:
   schedule:
-    #      M H - - D => 06:00 of Monday 
+    #      M H - - D => 06:00 of Monday
   - cron: '0 6 * * 1'
+  push:
+    # Stable releases: tag the commit (e.g. v8.4) and this same pipeline
+    # publishes the canonical esbmc-{linux,windows,macos}.zip assets to that
+    # tag as a draft for a maintainer to review and publish.
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -76,11 +82,18 @@ jobs:
       - name: Do the release
         uses: softprops/action-gh-release@v3
         with:
-          name: 'ESBMC Weekly Pre-release'
-          body: 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.'
-          tag_name: weekly
+          # On a v* tag this is a stable release named after the tag; otherwise
+          # it is the rolling weekly pre-release. Both publish the same canonical
+          # asset names, so the website's releases/latest/download/esbmc-*.zip
+          # links keep resolving across stable releases.
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('ESBMC {0}', github.ref_name) || 'ESBMC Weekly Pre-release' }}
+          body: ${{ startsWith(github.ref, 'refs/tags/v') && format('ESBMC {0} stable release.', github.ref_name) || 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'weekly' }}
           target_commitish: ${{ github.sha }}
-          prerelease: true
+          # Stable releases are created as drafts so a maintainer reviews the
+          # notes and assets before publishing; the weekly stays a live pre-release.
+          draft: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             esbmc-linux.zip
             esbmc-windows.zip
