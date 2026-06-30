@@ -2438,6 +2438,49 @@ nested-function closures (free-variable capture — `Variable 'x' is not defined
 `round(int, n)` returns float (§63b).
 
 ---
+## 70. 2026-06-29 re-validation (sixtieth sweep) & str.format() format specs
+
+Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. Probing
+the `{}`-format mini-language showed f-strings already honour specs (`f"{x:.2f}"` works) but
+`str.format()` did not — this sweep closes that gap.
+
+### 70a. New isolated, soundly-fixable defect found & fixed
+**`str.format()` with any format spec (`"{:.2f}".format(x)`, `"{:>5}"`, `"{:05d}"`) errored
+"format() missing keyword argument".**
+
+The replacement-field parser in `handle_string_format` (`string/string_method_handler.cpp`) treated the
+entire `{...}` body as a field name, so `{:.2f}` became a lookup for a keyword literally named `:.2f`,
+which failed. The spec suffix after `:` was never split off, and the spec itself was never applied — even
+though the original argument values were available on the call node.
+
+**Fix**: split each field at the first `:` into `name` and `spec`; resolve `name` to both its
+stringified value and its AST node (kept in parallel `arg_nodes`/`keyword_nodes`); when a spec is
+present, format the original constant value through a new `apply_format_spec` helper implementing the
+`{}` mini-language `[[fill]align][sign][0][width][.precision][type]` (int `d/x/X/o/b`, float
+`f/F/e/E/g/G`, string with width/precision; default alignment numbers-right / strings-left; `0` forces
+`0` fill; floats via two-pass `snprintf` with literal `%.*f` formats). Anything not faithfully modelled
+(a non-constant value, `#`, grouping `,`/`_`, a typeless float spec, `!r`/`.attr`/`[idx]` access)
+**throws and degrades to the existing sound nondet-string fallback** rather than mis-folding — so the
+change never trades a hard error for a wrong answer, only for a folded value or a sound over-approximation.
+
+This is a **crash/unsupported→correct-result fix** that also turns the prior hard error on a *variable*
+argument into a sound nondet result. New regression pair `str_format_spec{,_fail}` (CORE) covering float
+precision/width, string align (`<>^`), int zero-pad/sign/precision, explicit-align-plus-`0`-flag, and
+indexed/keyword specs; the positive is the liveness witness (it errored pre-fix). Verified bit-for-bit
+against CPython; CPython sanity passes (`scripts/check_python_tests.sh str_format`); the broad `str`/`format`
+ctest subset shows no new failures (12 pre-existing `--z3`/`--ir` environmental, stable before/after).
+Code-reviewed: the reviewer's two findings — explicit-alignment-plus-`0` using the wrong fill char, and a
+typeless-float spec mis-folding as `%f` — were **both fixed** (`0` now forces `0` fill; typeless float
+degrades to nondet); pointer-lifetime, fallback soundness, and spec-less-field regression were confirmed
+clean. Solver-agnostic (a compile-time string fold). Sibling to §68/§69 (`%`-format spec/mapping).
+
+### 70b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) `format()` builtin width/precision (same mini-language, the single-value entry —
+`apply_format_spec` is now reusable for it); (ii) char-`join` — `"".join(c for c in s)` (string-iteration
+elements typed as chars, §67b); (iii) nested-function closures (free-variable capture); (iv)
+`sorted(dict.items())` tuple drop (known multi-layer); (v) strided list-slice delete `del a[::k]` (§66b);
+(vi) `round(int, n)` returns float (§63b); (vii) the `{}` grouping option `,`/`_` and typeless-float
+general format.
 
 ## 65. 2026-06-29 re-validation (fifty-fifth sweep) & variadic set.union/intersection/difference
 
@@ -2847,11 +2890,9 @@ inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred can
 (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and
 the infeasible `hashlib` case all stand; the §5 priority order stands.
 
-> **Note on numbering.** §42/§43 and §49–§70 (PRs #5668, #5669, #5675–#5687, #5689–#5697) are in flight
-> and not yet on `master`; this sweep is appended as §71.
-> **Note on numbering.** §42/§43 and §49–§68 (PRs #5668, #5669, #5675–#5687, #5689–#5695) are in flight
-> and not yet on `master`; this sweep is appended as §69.
-(§47b); `str.maketrans`/`translate` dict-table; `%(name)s` mapping `%`-format; and multi-byte UTF-8
+> **Note on numbering.** §42/§43 and §49–§69 (PRs #5668, #5669, #5675–#5687, #5689–#5696) are in flight
+> and not yet on `master`; this sweep is appended as §70.
+
 ## 64. 2026-06-29 re-validation (fifty-fourth sweep) & max/min/sum over a dict
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
