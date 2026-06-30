@@ -3165,9 +3165,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           short_circuit_if.cond() = result_expr;
         else
         {
-          exprt not_result("not", bool_type());
-          not_result.copy_to_operands(result_expr);
-          short_circuit_if.cond() = not_result;
+          // V.1k keystone: `not result` over the bool short-circuit accumulator
+          // (a symbol) built in IREP2 (exact not2tc round-trip, matching the
+          // not2tc uses above).
+          expr2tc result2;
+          migrate_expr(result_expr, result2);
+          short_circuit_if.cond() = migrate_expr_back(not2tc(result2));
         }
         short_circuit_if.then_case() = next_operand_block;
         current_block->copy_to_operands(short_circuit_if);
