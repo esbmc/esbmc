@@ -75,11 +75,19 @@ matched-text parity over the affected regression suite, asserts build.
    `python_math` tree nodes (task 4 remaining) and one float site
    `numpy_call_expr.cpp:2503` (ieee_sub + rounding-mode — a different hazard).
 
-5. **D** `builtins.cpp:369`/`447` — `isinstance` NoneType/tuple. **This is the
-   real remaining keystone work (F-P11 deferred-operand), harder than the
-   width-hazards: the operand may be a member/index subexpression whose source
-   resolution is deferred to clang_cpp_adjust, so a naive migrate aborts on
-   some inputs (regression risk). Needs resolve-then-build, not a leaf swap.**
+5. **D** [PARTIAL] `builtins.cpp:369` isinstance is-None — DONE (commit
+   9a7755247f). **Key finding: the F-P11 wall is milder than framed here.**
+   `migrate(obj_expr)` resolves cleanly *even for a class-member operand*
+   (`n.next`) — the converter resolves member/index sources inline at their
+   construction (`build_member_expr_from_class`, `converter_expr.cpp:1160`), so
+   by the time the operand reaches isinstance it is an already-resolved member,
+   not a transient symbol_type. The existing list-pointer case
+   (`builtins.cpp:391`) already migrated `obj_expr` — the precedent. Verified on
+   member + variable operands, A/B byte-parity, full isinstance suite.
+   REMAINING D sites, probe the same way (migrate + test the member-operand case
+   before trusting): `builtins.cpp:447` isinstance tuple; BoolOp short-circuit
+   (`converter_stmt.cpp`); is-none inequality (`converter_compare.cpp`);
+   slice-bound arith (`python_list.cpp`).
 6. **D** `converter_stmt.cpp` BoolOp short-circuit; `converter_compare.cpp`
    is-none inequality; `python_list.cpp:1444`-`1683` slice-bound arithmetic;
    `numpy_call_expr.cpp:1607` complex int→double; `converter_expr.cpp:1369`/
