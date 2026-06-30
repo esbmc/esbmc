@@ -2249,6 +2249,153 @@ exprt function_call_expr::handle_list_method() const
   throw std::runtime_error("Unsupported list method: " + method_name);
 }
 
+bool function_call_expr::is_numpy_astype_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  return function_id_.get_function() == "astype";
+}
+
+// Resolve the dtype argument to a target typet. Accepts np.float64-style
+// attribute access, bare type names (float/int/bool), and string literals
+// ("float64"); mirrors the dtype vocabulary already used for np.array(...,
+// dtype=...) and np.zeros(..., dtype=...) (see numpy_call_expr.cpp), but
+// kept local since astype's dtype is a positional arg, not a kwarg.
+static typet resolve_astype_target_type(const nlohmann::json &dtype_node)
+{
+  std::string name;
+  if (
+    dtype_node.value("_type", std::string()) == "Attribute" &&
+    dtype_node.contains("attr"))
+    name = dtype_node["attr"].get<std::string>();
+  else if (
+    dtype_node.value("_type", std::string()) == "Name" &&
+    dtype_node.contains("id"))
+    name = dtype_node["id"].get<std::string>();
+  else if (
+    dtype_node.value("_type", std::string()) == "Constant" &&
+    dtype_node.contains("value") && dtype_node["value"].is_string())
+    name = dtype_node["value"].get<std::string>();
+  else
+    throw std::runtime_error(
+      "TypeError: astype() requires a dtype argument (e.g. np.float64, "
+      "float, int, bool)");
+
+  static const std::unordered_map<std::string, std::string> aliases = {
+    {"bool_", "bool"},
+    {"int_", "int64"},
+    {"int", "int64"},
+    {"uint_", "uint64"},
+    {"uint", "uint64"},
+    {"float_", "float64"},
+    {"float", "float64"}};
+  auto alias_it = aliases.find(name);
+  if (alias_it != aliases.end())
+    name = alias_it->second;
+
+  if (name == "bool")
+    return bool_type();
+  if (name == "int8")
+    return signedbv_typet(8);
+  if (name == "int16")
+    return signedbv_typet(16);
+  if (name == "int32")
+    return signedbv_typet(32);
+  if (name == "int64")
+    return signedbv_typet(64);
+  if (name == "uint8")
+    return unsignedbv_typet(8);
+  if (name == "uint16")
+    return unsignedbv_typet(16);
+  if (name == "uint32")
+    return unsignedbv_typet(32);
+  if (name == "uint64")
+    return unsignedbv_typet(64);
+  if (name == "float32")
+    return build_float_type(32);
+  if (name == "float64")
+    return build_float_type(64);
+
+  if (name == "complex64" || name == "complex128" || name == "complex")
+    throw std::runtime_error(
+      "TypeError: astype() to a complex dtype is not supported");
+
+  throw std::runtime_error(
+    "TypeError: astype() target dtype '" + name + "' is not supported");
+}
+
+exprt function_call_expr::handle_numpy_astype() const
+{
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(
+      "TypeError: astype() takes exactly one argument (the target dtype)");
+
+  exprt arr_expr = converter_.get_expr(call_["func"]["value"]);
+  if (is_cpp_throw_expr(arr_expr))
+    return arr_expr;
+
+  const namespacet ns(converter_.symbol_table());
+  const typet arr_type = ns.follow(arr_expr.type());
+  if (!arr_type.is_array())
+    throw std::runtime_error(
+      "TypeError: astype() is only supported on numpy arrays");
+
+  const array_typet &src_array = static_cast<const array_typet &>(arr_type);
+  if (ns.follow(src_array.subtype()).is_array())
+    throw std::runtime_error(
+      "TypeError: astype() on a multi-dimensional array is not supported "
+      "yet; cast the innermost rows individually");
+
+  const typet target_type = resolve_astype_target_type(call_["args"][0]);
+  const locationt location = converter_.get_location_from_decl(call_);
+
+  array_typet result_type(target_type, src_array.size());
+  symbolt &result_sym = converter_.create_tmp_symbol(
+    call_, "$astype_result$", result_type, exprt());
+  code_declt result_decl(build_symbol(result_sym));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_, "$astype_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(build_symbol(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  code_blockt loop_body;
+
+  exprt src_elem =
+    build_index(arr_expr, build_symbol(index_var), src_array.subtype());
+  exprt casted_elem = build_typecast(src_elem, target_type);
+  exprt dest_elem =
+    build_index(build_symbol(result_sym), build_symbol(index_var), target_type);
+
+  code_assignt elem_assign(dest_elem, casted_elem);
+  elem_assign.location() = location;
+  loop_body.copy_to_operands(elem_assign);
+
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
+  code_assignt index_increment(build_symbol(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  exprt loop_condition =
+    build_less_than(build_symbol(index_var), src_array.size());
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return build_symbol(result_sym);
+}
+
 exprt function_call_expr::handle_list_append() const
 {
   const auto &args = call_["args"];
@@ -3245,6 +3392,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // numpy ndarray.astype(dtype)
+    {[this]() { return is_numpy_astype_call(); },
+     [this]() { return handle_numpy_astype(); },
+     "numpy astype"},
 
     // Dict class methods (dict.fromkeys), matched before instance-method dispatch
     // The receiver is the class name, not a dict symbol.
