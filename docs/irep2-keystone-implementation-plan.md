@@ -88,10 +88,21 @@ matched-text parity over the affected regression suite, asserts build.
    before trusting): `builtins.cpp:447` isinstance tuple; BoolOp short-circuit
    (`converter_stmt.cpp`); is-none inequality (`converter_compare.cpp`);
    slice-bound arith (`python_list.cpp`).
-6. **D** `converter_stmt.cpp` BoolOp short-circuit; `converter_compare.cpp`
-   is-none inequality; `python_list.cpp:1444`-`1683` slice-bound arithmetic;
-   `numpy_call_expr.cpp:1607` complex int→double; `converter_expr.cpp:1369`/
-   `:1388` subscript-base derefs.
+6. **D** sites — status after probing:
+   - [DONE] `converter_stmt.cpp` BoolOp `or` short-circuit `not` → not2tc
+     (commit 02ffd18f01). Operand is the bool accumulator symbol — clean.
+   - [RETAIN — not migratable] `converter_compare.cpp` is-none inequality and
+     `builtins.cpp:447` isinstance-tuple OR-chain build **custom Python nodes**
+     (`"isnone"`/`"isinstance"`) that `migrate_expr` cannot lower — they are
+     resolved later by `simplify_python_builtins`, so they are a genuine retain
+     boundary at construction, NOT a deferred-operand. **General lesson: a
+     D-site is only migratable if it builds a standard expr (comparison/arith/
+     bool) — sites that build custom `isinstance`/`isnone`/`isvoid` nodes stay
+     legacy until simplify.**
+   - [TODO, probe] `python_list.cpp:1444`-`1683` slice-bound arithmetic (arith,
+     likely migratable like width-hazards); `numpy_call_expr.cpp:1607` complex
+     int→double (float — risky, rounding-mode); `converter_expr.cpp:1369`/`:1388`
+     subscript-base derefs (deref, probe member-operand).
 
 ## Verification protocol per commit
 
