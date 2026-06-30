@@ -4,3 +4,12 @@
 # not reference them.
 def det(a: float, b: float) -> float:
     return 2.0
+
+def inv(a: list) -> list:
+    return [1.0]
+
+def solve(a: list, b: list) -> list:
+    return [1.0]
+
+def norm(a: list) -> float:
+    return 1.0
