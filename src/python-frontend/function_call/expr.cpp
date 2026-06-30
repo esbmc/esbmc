@@ -1869,10 +1869,10 @@ exprt function_call_expr::handle_list_index() const
   // the list size. start/end normalization (negatives, clamping) lives in the
   // model.
   exprt start = converter_.get_expr(args[1]);
-  exprt end = args.size() == 3
-                ? converter_.get_expr(args[2])
-                : from_integer(
-                    BigInt(std::numeric_limits<int32_t>::max()), int_type());
+  exprt end =
+    args.size() == 3
+      ? converter_.get_expr(args[2])
+      : from_integer(BigInt(std::numeric_limits<int32_t>::max()), int_type());
   return list_helper.build_index_range_list_call(
     *list_symbol, call_, value, start, end);
 }
@@ -3402,8 +3402,7 @@ exprt function_call_expr::handle_general_function_call()
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
     converter_.find_imported_symbol(function_id_.to_string()) != nullptr;
-  const bool is_numpy_model_call = [](const std::string &filename)
-  {
+  const bool is_numpy_model_call = [](const std::string &filename) {
     std::string normalized = filename;
     std::replace(normalized.begin(), normalized.end(), '\\', '/');
     return boost::algorithm::ends_with(
@@ -3583,8 +3582,7 @@ std::optional<exprt> function_call_expr::fold_sorted_int_list(
     std::stable_sort(
       elems.begin(),
       elems.end(),
-      [](const sortable_elem &a, const sortable_elem &b)
-      {
+      [](const sortable_elem &a, const sortable_elem &b) {
         if (a.key == b.key)
           return a.pos < b.pos;
         return a.key < b.key;
@@ -3624,8 +3622,7 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
   // tuple literals so the element type is preserved and verification is
   // cheap. Symbolic tuple lists fall through (still unsupported).
   std::function<bool(const exprt &, BigInt &)> eval_const_int =
-    [&](const exprt &e, BigInt &out) -> bool
-  {
+    [&](const exprt &e, BigInt &out) -> bool {
     if (
       e.is_constant() &&
       (e.type().is_signedbv() || e.type().is_unsignedbv() || e.is_boolean()))
@@ -3712,8 +3709,7 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
     std::stable_sort(
       telems.begin(),
       telems.end(),
-      [](const sortable_tuple &a, const sortable_tuple &b)
-      {
+      [](const sortable_tuple &a, const sortable_tuple &b) {
         if (a.key == b.key)
           return a.pos < b.pos;
         return a.key < b.key; // lexicographic on the component vector
@@ -3815,8 +3811,7 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
     // exprt has value semantics (no subexpression sharing), so
     // threading raw ite trees through the network would blow up
     // exponentially in the number of compare-exchanges.
-    auto materialize = [&](const exprt &value) -> exprt
-    {
+    auto materialize = [&](const exprt &value) -> exprt {
       symbolt &tmp =
         converter_.create_tmp_symbol(call_, "$sort_tmp$", value.type(), value);
       code_declt decl(build_symbol(tmp));
@@ -4369,8 +4364,7 @@ size_t function_call_expr::bind_call_receiver(
   };
 
   auto bind_instance_receiver_symbol =
-    [&](const symbolt &receiver_symbol) -> exprt
-  {
+    [&](const symbolt &receiver_symbol) -> exprt {
     exprt receiver = build_symbol(receiver_symbol);
     return bind_instance_receiver(receiver);
   };
