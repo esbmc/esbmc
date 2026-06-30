@@ -2,6 +2,8 @@
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_int_overflow.h>
+#include <python-frontend/python_list.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
@@ -4194,7 +4196,47 @@ exprt numpy_call_expr::get()
       auto fill = get_arg(1);
       auto dims = parse_shape(shape);
       if (dims.empty())
-        dims.push_back(shape["value"].get<std::size_t>());
+      {
+        // Try symbolic 1-D shape: evaluate the size expression at runtime.
+        bool pushed = false;
+        if (shape.contains("_type"))
+        {
+          try
+          {
+            dims.push_back(shape["value"].get<std::size_t>());
+            pushed = true;
+          }
+          catch (const std::exception &)
+          {
+          }
+        }
+        if (!pushed)
+        {
+          try
+          {
+            exprt size_expr = converter_.get_expr(call_["args"][0]);
+            if (
+              size_expr.type().is_signedbv() ||
+              size_expr.type().is_unsignedbv())
+            {
+              exprt fill_expr = converter_.get_expr(call_["args"][1]);
+              typet elem_type = fill_expr.type();
+              nlohmann::json dummy;
+              dummy["_type"] = "List";
+              dummy["elts"] = nlohmann::json::array();
+              converter_.copy_location_fields_from_decl(call_, dummy);
+              python_list lb(converter_, dummy);
+              return lb.build_symbolic_fill_list(
+                size_expr, fill_expr, elem_type);
+            }
+          }
+          catch (const std::exception &)
+          {
+          }
+          throw std::runtime_error(
+            "TypeError: numpy.full() shape argument must be an integer");
+        }
+      }
       if (dims.size() == 1)
       {
         std::vector<nlohmann::json> elts;
@@ -4344,6 +4386,55 @@ exprt numpy_call_expr::get()
       };
 
       return converter_.get_expr(create_nd_fill(0));
+    }
+
+    // Symbolic 1-D shape: try to evaluate the size expression at runtime,
+    // then construct the list via a bounded while-loop so the model checker
+    // can unwind up to its --unwind limit. Complex/unsupported symbolic shapes
+    // (tuples, multi-dimensional) are still rejected explicitly.
+    if (
+      shape_arg.value("_type", std::string()) == "Name" ||
+      shape_arg.value("_type", std::string()) == "Call" ||
+      shape_arg.value("_type", std::string()) == "BinOp" ||
+      shape_arg.value("_type", std::string()) == "BinOp")
+    {
+      try
+      {
+        exprt size_expr = converter_.get_expr(shape_arg);
+        if (
+          !size_expr.type().is_signedbv() && !size_expr.type().is_unsignedbv())
+          throw std::runtime_error("");
+
+        // Determine fill value and its type from the fill constant + dtype.
+        typet elem_type;
+        exprt fill_expr;
+        if (fill_value.value("value", 0.0) == 0.0 && dtype.empty())
+        {
+          elem_type = converter_.get_type_handler().get_typet(
+            std::string("int"), static_cast<size_t>(0));
+          nlohmann::json zero_const;
+          zero_const["_type"] = "Constant";
+          zero_const["value"] = 0;
+          fill_expr = converter_.get_expr(zero_const);
+        }
+        else
+        {
+          fill_expr = converter_.get_expr(fill_value);
+          elem_type = fill_expr.type();
+        }
+
+        nlohmann::json dummy_node;
+        dummy_node["_type"] = "List";
+        dummy_node["elts"] = nlohmann::json::array();
+        converter_.copy_location_fields_from_decl(call_, dummy_node);
+        python_list list_builder(converter_, dummy_node);
+        return list_builder.build_symbolic_fill_list(
+          size_expr, fill_expr, elem_type);
+      }
+      catch (const std::exception &)
+      {
+        // Fall through to the explicit rejection error below.
+      }
     }
 
     throw std::runtime_error(

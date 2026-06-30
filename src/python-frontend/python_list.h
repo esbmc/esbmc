@@ -63,6 +63,20 @@ public:
    */
   exprt build_list_from_exprs(const std::vector<exprt> &elems);
 
+  /**
+   * @brief Build a runtime PyListObject filled with @p fill_value repeated
+   * @p size times. @p size may be a symbolic expression; the resulting while-
+   * loop is bounded by the model checker's --unwind setting.
+   * @param element  AST node supplying source location.
+   * @param size     Expression giving the number of elements (often symbolic).
+   * @param fill_value Element value pushed on each iteration.
+   * @param elem_type  IRep2 type of @p fill_value, recorded in list_type_map.
+   */
+  exprt build_symbolic_fill_list(
+    const exprt &size,
+    const exprt &fill_value,
+    const typet &elem_type);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
   /**
