@@ -82,6 +82,21 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+static void throw_numpy_too_many_indices_error(
+  python_converter &converter,
+  const nlohmann::json &element,
+  std::size_t num_indices)
+{
+  std::ostringstream msg;
+  msg << "IndexError: too many indices for array: array has fewer "
+         "dimensions than the "
+      << num_indices << " indices given";
+  const locationt loc = converter.get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
+}
+
 class get_expr_depth_guard
 {
 public:
@@ -1434,35 +1449,52 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const bool tuple_index_targets_list_model =
       array_is_runtime_list || array_is_builtin_array;
 
-    // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
-    // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
+    // Multi-dimensional indexing ``a[i, j, k, ...]`` for list/array-backed
+    // models: lower to chained single-axis indexing `a[i][j][k]...`, one
+    // axis at a time. Mixed slice/index tuples (e.g. `a[1:2, 0]`) are not
+    // supported by the chained-list model and are rejected explicitly.
     if (
       tuple_index_targets_list_model && slice.contains("_type") &&
       slice["_type"] == "Tuple")
     {
       if (
         slice.contains("elts") && slice["elts"].is_array() &&
-        slice["elts"].size() == 2)
+        !slice["elts"].empty())
       {
-        const auto &row_idx_raw = slice["elts"][0];
-        const auto &col_idx_raw = slice["elts"][1];
-        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
-        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
-        const bool has_slice_dim =
-          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
-          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
+        std::vector<nlohmann::json> idx_nodes;
+        idx_nodes.reserve(slice["elts"].size());
+        bool has_slice_dim = false;
+        for (const auto &raw_idx : slice["elts"])
+        {
+          const nlohmann::json idx = normalize_bool_index_node(raw_idx);
+          if (idx.contains("_type") && idx["_type"] == "Slice")
+            has_slice_dim = true;
+          idx_nodes.push_back(idx);
+        }
         if (has_slice_dim)
           throw_numpy_multidim_index_error(*this, element);
 
         python_list list(*this, element);
-        exprt row = list.index(array, row_idx);
-        if (contains_cpp_throw(row))
+        exprt current = array;
+        for (std::size_t axis = 0; axis < idx_nodes.size(); ++axis)
         {
-          expr = row;
-          break;
+          if (axis > 0)
+          {
+            const typet current_type = ns.follow(current.type());
+            const bool current_is_list_like = current_type.is_array() ||
+                                              current_type.is_pointer() ||
+                                              current_type == list_type;
+            if (!current_is_list_like)
+              throw_numpy_too_many_indices_error(
+                *this, element, idx_nodes.size());
+          }
+
+          current = list.index(current, idx_nodes[axis]);
+          if (contains_cpp_throw(current))
+            break;
         }
 
-        expr = list.index(row, col_idx);
+        expr = current;
         break;
       }
 
