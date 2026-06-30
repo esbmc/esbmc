@@ -101,6 +101,111 @@ exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
   return exprt();
 }
 
+exprt python_list::build_bool_mask_index(
+  const exprt &array,
+  const exprt &mask,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const array_typet &array_type =
+    static_cast<const array_typet &>(ns.follow(array.type()));
+  const array_typet &mask_type =
+    static_cast<const array_typet &>(ns.follow(mask.type()));
+
+  const BigInt array_len =
+    binary2integer(array_type.size().value().c_str(), false);
+  const BigInt mask_len =
+    binary2integer(mask_type.size().value().c_str(), false);
+
+  if (array_len != mask_len)
+  {
+    std::ostringstream msg;
+    msg << "IndexError: boolean index did not match indexed array; mask "
+           "length "
+        << mask_len << " does not match array length " << array_len;
+    const locationt loc = converter_.get_location_from_decl(element);
+    if (!loc.is_nil())
+      msg << " at " << loc.get_file() << ":" << loc.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const locationt location = converter_.get_location_from_decl(element);
+  const typet elem_type = array_type.subtype();
+
+  // Whole-row selection (mask over the outer axis of an n-D array) would
+  // need to push an array-typed element into the runtime list model, which
+  // is not supported by the list element encoding yet (mirrors the same gap
+  // for list comprehensions over n-D arrays). Reject explicitly rather than
+  // emitting IR the solver back end cannot encode.
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: boolean-mask indexing of a multi-dimensional array "
+           "(whole-row selection) is not supported; mask must select "
+           "scalar elements";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  symbolt &result_list = create_list();
+  const std::string result_list_id = result_list.id.as_string();
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "$mask_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(build_symbol(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  code_blockt loop_body;
+
+  // build_push_list_call emits its element-staging declarations via
+  // converter_.add_instruction(), which targets whatever block is
+  // current_block. Redirect it to loop_body so those declarations land
+  // inside the loop (and so the staged element is refreshed every
+  // iteration) instead of being hoisted once before the loop runs.
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  exprt mask_elem = build_index(mask, build_symbol(index_var), bool_type());
+  exprt array_elem = build_index(array, build_symbol(index_var), elem_type);
+
+  exprt push_call = build_push_list_call(result_list, element, array_elem);
+
+  converter_.current_block = saved_block;
+
+  codet if_stmt;
+  if_stmt.set_statement("ifthenelse");
+  code_blockt then_block;
+  then_block.copy_to_operands(push_call);
+  if_stmt.copy_to_operands(mask_elem, then_block);
+  if_stmt.location() = location;
+  loop_body.copy_to_operands(if_stmt);
+
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
+  code_assignt index_increment(build_symbol(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  exprt loop_condition =
+    build_less_than(build_symbol(index_var), array_type.size());
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  add_type_info_entry(result_list_id, "", elem_type);
+
+  return build_symbol(result_list);
+}
+
 exprt python_list::remove_function_calls_recursive(
   exprt &e,
   const nlohmann::json &node)

@@ -66,6 +66,22 @@ public:
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
   /**
+   * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
+   * builds a fresh list holding the elements of @p array whose matching
+   * @p mask entry is True (NumPy fancy-indexing semantics). Both operands
+   * must be fixed-size arrays (the numpy array model); a compile-time
+   * length mismatch between @p array and @p mask is rejected explicitly.
+   * @param array  Source array expression (1-D or n-D; a row is pushed
+   *               whole when array is multi-dimensional).
+   * @param mask   Boolean array expression, same outer length as @p array.
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_bool_mask_index(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
    * @brief Lower a list slice assignment l[lower:upper:step] = value to a
    * __ESBMC_list_slice_assign model call. The step must be a constant literal
    * (or absent); the value must evaluate to a list.

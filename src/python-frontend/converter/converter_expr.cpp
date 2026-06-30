@@ -1501,6 +1501,45 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       throw_numpy_multidim_index_error(*this, element);
     }
 
+    // Boolean-mask indexing ``a[mask]``: when the index is a bare variable
+    // reference whose static type is a bool array, filter `array` at
+    // runtime to the elements where `mask` is True (NumPy fancy indexing).
+    // Restricted to a simple Name index so the type can be checked without
+    // re-evaluating a side-effecting expression later in this function.
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "Name")
+    {
+      exprt mask_candidate = get_expr(slice);
+      if (!contains_cpp_throw(mask_candidate))
+      {
+        const typet mask_type = ns.follow(mask_candidate.type());
+        if (mask_type.is_array())
+        {
+          if (ns.follow(mask_type.subtype()).is_bool())
+          {
+            python_list list(*this, element);
+            expr = list.build_bool_mask_index(array, mask_candidate, element);
+            break;
+          }
+
+          // Fancy/integer-array indexing (a[[0, 2]]) is not modelled yet;
+          // give an explicit error instead of falling through to the
+          // generic scalar-index path below, whose "not str" message is
+          // written for a different mistake (string indices) and would be
+          // confusing here.
+          std::ostringstream msg;
+          msg << "TypeError: fancy indexing with a non-boolean array is "
+                 "not supported; only boolean-mask indexing (a[mask]) is "
+                 "supported for array indices";
+          const locationt loc = get_location_from_decl(element);
+          if (!loc.is_nil())
+            msg << " at " << loc.get_file() << ":" << loc.get_line();
+          throw std::runtime_error(msg.str());
+        }
+      }
+    }
+
     // Handle object subscripting through __getitem__:
     //   obj[key] -> obj.__getitem__(key)
     if (has_dunder_method(element["value"], "__getitem__"))
