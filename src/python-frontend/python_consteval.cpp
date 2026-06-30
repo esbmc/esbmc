@@ -1245,6 +1245,18 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         if (m == "isspace")
           return pred_all(
             [](unsigned char c) { return std::isspace(c) != 0; }, false);
+        // isascii/isprintable return True on the empty string (unlike the
+        // other predicates); isdecimal returns False. Over byte strings the
+        // ASCII range coincides with CPython for isdecimal (the '0'..'9'
+        // digits) and for the printable/ascii classification.
+        if (m == "isascii")
+          return pred_all([](unsigned char c) { return c < 128; }, true);
+        if (m == "isdecimal")
+          return pred_all(
+            [](unsigned char c) { return c >= '0' && c <= '9'; }, false);
+        if (m == "isprintable")
+          return pred_all(
+            [](unsigned char c) { return std::isprint(c) != 0; }, true);
         if (m == "isupper" || m == "islower")
         {
           if (!args_arr.empty())
