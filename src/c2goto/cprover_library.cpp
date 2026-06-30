@@ -129,6 +129,7 @@ const static std::vector<std::string> python_c_extern_deps = {
   // libm / umath entry points and helpers (not defined under library/python)
   "ceil",
   "__ceil_array",
+  "__arccos_array",
   "fegetround",
   "fesetround",
   "rint",

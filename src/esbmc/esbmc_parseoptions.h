@@ -97,6 +97,18 @@ protected:
 
   bool read_goto_binary(goto_functionst &goto_functions);
 
+  /// True if any --binary input is a CBMC goto-binary (magic 0x7f 'G' 'B' 'F').
+  bool has_cbmc_binary_input();
+
+  /// Synthesises ESBMC's "additions" (the __ESBMC_main entry wrapper and the
+  /// CPROVER-intrinsic bodies) by compiling a boilerplate translation unit
+  /// through the C frontend into the given symbol table / goto functions, so a
+  /// CBMC goto-binary verifies without manually linking a library.goto.
+  /// Returns true on error.
+  bool synthesize_cprover_additions(
+    optionst &options,
+    goto_functionst &goto_functions);
+
   bool set_claims(goto_functionst &goto_functions);
 
   uint64_t read_time_spec(const char *str);

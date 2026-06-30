@@ -226,20 +226,25 @@ std::string python_annotation<Json>::resolve_subscript_type(
   // List subscript
   if (base_type == "list")
   {
+    const bool is_slice =
+      subscript_node.contains("slice") &&
+      subscript_node["slice"].contains("_type") &&
+      subscript_node["slice"]["_type"] == "Slice";
+
     // First try to use the element_type from annotation (e.g., list[int])
     if (!element_type.empty())
-      return element_type;
+      return is_slice ? "list[" + element_type + "]" : element_type;
 
     // Try to infer from initialization if available
     if (var_node.contains("value") && !var_node["value"].is_null())
     {
       std::string inferred = get_list_subtype(var_node["value"]);
       if (!inferred.empty())
-        return inferred;
+        return is_slice ? "list[" + inferred + "]" : inferred;
     }
 
     // Last resort: return Any for unknown list element types
-    return "Any";
+    return is_slice ? "list" : "Any";
   }
 
   // String subscript: str[index] returns str
@@ -355,16 +360,20 @@ std::string python_annotation<Json>::get_string_method_return_type(
   if (method == "find" || method == "rfind")
     return "int";
 
-  if (method == "split")
+  if (method == "split" || method == "rsplit")
     return "list";
 
-  // partition() returns a 3-tuple (before, sep, after). Map it to "tuple",
-  // which resolves to an empty type so the concrete struct type of the 3-tuple
-  // produced by handle_string_partition is copied onto the target symbol.
-  // Mapping it to the default "str" mistypes the target as a scalar char, which
-  // makes len()/subscript on the result wrong (unsound — proves false
-  // assertions, #5114).
-  if (method == "partition")
+  // str.encode() returns a bytes object, not str.
+  if (method == "encode")
+    return "bytes";
+
+  // partition()/rpartition() return a 3-tuple (before, sep, after). Map to
+  // "tuple", which resolves to an empty type so the concrete struct type of the
+  // 3-tuple produced by handle_string_partition is copied onto the target
+  // symbol. Mapping it to the default "str" mistypes the target as a scalar
+  // char, which makes len()/subscript on the result wrong (unsound — proves
+  // false assertions, #5114).
+  if (method == "partition" || method == "rpartition")
     return "tuple";
 
   // Keep previous behavior for unmapped string methods.
@@ -1778,6 +1787,24 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return get_string_method_return_type(method);
     }
 
+    // bytes.hex() returns a str (hex digits), not bytes.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "hex")
+      return "str";
+
+    // (258).to_bytes(...) on an int literal returns bytes.
+    if (
+      obj_type == "int" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "to_bytes")
+      return "bytes";
+
+    // bytes.decode() returns a str.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "decode")
+      return "str";
+
     return obj_type;
   }
 
@@ -2305,8 +2332,31 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
   {
     if (
       obj_type == "str" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "split")
+      (call["func"]["attr"] == "split" || call["func"]["attr"] == "rsplit"))
       return "list";
+    // bytes.hex() returns a str (hex digits), not bytes.
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "hex")
+      return "str";
+    // int.to_bytes() returns bytes. This is the instance form x.to_bytes(...)
+    // on an int variable; the int.to_bytes(x, ...) class form is mapped in
+    // get_type_from_call. Without this the receiver's "int" type propagates to
+    // the assignment target, so the bytes result is mistyped as a scalar int
+    // and subscript/len on it fail.
+    if (
+      obj_type == "int" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "to_bytes")
+      return "bytes";
+    // str.encode() returns bytes; bytes.decode() returns str.
+    if (
+      obj_type == "str" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "encode")
+      return "bytes";
+    if (
+      obj_type == "bytes" && call["func"].contains("attr") &&
+      call["func"]["attr"] == "decode")
+      return "str";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.
     // When that fails (no default arg supplied, e.g. ``d.get(key)``),

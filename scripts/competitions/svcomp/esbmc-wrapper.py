@@ -230,7 +230,11 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
+# --sv-comp enables SV-COMP mode (replaces the former ESBMC_SVCOMP build): it
+# suppresses GCC-acceptable frontend diagnostics, treats __builtin_unreachable
+# as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
+# in the fopen/fclose models.
+esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
@@ -245,7 +249,7 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -297,7 +301,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR "
+      if not validate:
+        command_line += "--goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check-only --no-assertions "
@@ -325,7 +331,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   return command_line
 
 def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:
     esbmc_command_line += "--validate-" + validate_mode + "-witness "

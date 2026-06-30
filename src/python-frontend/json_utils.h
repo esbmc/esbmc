@@ -687,6 +687,38 @@ inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
                                         : symbol_id;
 }
 
+// Build a List/Tuple AST node whose elements are the single-character strings
+// of @p chars. Used to lower list("abc") / tuple("abc") to the proven
+// list/tuple-literal path. Location fields are copied from @p loc_src.
+template <typename JsonType>
+JsonType build_char_sequence_node(
+  const char *kind,
+  const std::string &chars,
+  const JsonType &loc_src)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto copy_loc = [&](JsonType &node) {
+    for (const char *k : loc_keys)
+      if (loc_src.contains(k))
+        node[k] = loc_src[k];
+  };
+
+  JsonType node;
+  node["_type"] = kind;
+  node["elts"] = JsonType::array();
+  for (const char ch : chars)
+  {
+    JsonType elt;
+    elt["_type"] = "Constant";
+    elt["value"] = std::string(1, ch);
+    copy_loc(elt);
+    node["elts"].push_back(elt);
+  }
+  copy_loc(node);
+  return node;
+}
+
 template <typename JsonType>
 bool has_overload_decorator(const JsonType &func_node)
 {

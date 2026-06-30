@@ -193,6 +193,9 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
   else if (wp.type == waypoint::assumption)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "assumption";
+  else if (wp.type == waypoint::function_return)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "function_return";
   else if (wp.type == waypoint::branching)
     waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
              << "branching";
@@ -207,6 +210,15 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << wp.value;
     waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
              << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+  else if (wp.type == waypoint::function_return)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "ext_c_expression";
     waypoint << YAML::EndMap;
   }
   else if (wp.type == waypoint::branching)

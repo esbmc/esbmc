@@ -7,6 +7,8 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
@@ -38,59 +40,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-// 2-arg index: element type is the source array's subtype (matches the legacy
-// index_exprt(arr, idx) ctor). Reached only on array sources here.
-exprt build_index(const exprt &arr, const exprt &idx)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(
-    index2tc(migrate_type(arr.type().subtype()), arr2, idx2));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 string_handler::string_handler(
   python_converter &converter,
@@ -190,7 +140,18 @@ static std::optional<BigInt> get_constant_array_extent(const exprt &array_expr)
 static exprt
 make_binary_bool_expr(const irep_idt &id, const exprt &lhs, const exprt &rhs)
 {
-  exprt out(id, bool_type());
+  // V.3: build the boolean binop in IREP2 (the only ids used are =/and/or),
+  // back-migrated for the legacy callers.
+  expr2tc l2, r2;
+  migrate_expr(lhs, l2);
+  migrate_expr(rhs, r2);
+  if (id == "=")
+    return migrate_expr_back(equality2tc(l2, r2));
+  if (id == "and")
+    return migrate_expr_back(and2tc(l2, r2));
+  if (id == "or")
+    return migrate_expr_back(or2tc(l2, r2));
+  exprt out(id, bool_type()); // fallback for any other id
   out.copy_to_operands(lhs, rhs);
   return out;
 }
@@ -208,15 +169,17 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const BigInt extent = *extent_opt;
+  // V.3: membership constant results built in IREP2.
   if (extent <= 0)
-    return gen_boolean(needle_values.empty());
+    return migrate_expr_back(
+      needle_values.empty() ? gen_true_expr() : gen_false_expr());
 
   const BigInt haystack_content_len = extent - 1;
   const BigInt needle_len = static_cast<unsigned long>(needle_values.size());
   if (needle_len == 0)
-    return gen_boolean(true);
+    return migrate_expr_back(gen_true_expr());
   if (needle_len > haystack_content_len)
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   // Keep this bounded to avoid path explosion in symbolic membership.
   if (
@@ -225,7 +188,7 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const long long max_start = (haystack_content_len - needle_len).to_int64();
-  exprt disjunction = gen_boolean(false);
+  exprt disjunction = migrate_expr_back(gen_false_expr()); // V.3
 
   for (long long start = 0; start <= max_start; ++start)
   {
@@ -1330,13 +1293,17 @@ exprt string_handler::handle_string_membership(
       *strchr_symbol, gen_pointer_type(char_type()), {rhs_addr, char_as_int});
     strchr_call.location() = converter_.get_location_from_decl(element);
 
-    // Check if result != NULL (character found)
+    // Check if result != NULL (character found). Both operands are synthetic
+    // char* values (the strchr() result and a null constant), so build the
+    // comparison in IREP2 (V.3).
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    exprt not_equal("notequal", bool_type());
-    not_equal.copy_to_operands(strchr_call, null_ptr);
-
+    // V.3: build `strchr(...) != NULL` in IREP2 via the shared build_notequal
+    // helper (#5576). The migrate round-trip drops the call operand's location,
+    // so re-attach it.
+    exprt not_equal = build_notequal(strchr_call, null_ptr);
+    not_equal.op0().location() = strchr_call.location();
     return not_equal;
   }
 
@@ -1422,7 +1389,11 @@ exprt string_handler::handle_string_membership(
 
   if (needle_values.has_value() && haystack_values.has_value())
   {
-    return gen_boolean(contains_subsequence(*haystack_values, *needle_values));
+    // V.3: concrete-fold membership result built in IREP2.
+    return migrate_expr_back(
+      contains_subsequence(*haystack_values, *needle_values)
+        ? gen_true_expr()
+        : gen_false_expr());
   }
 
   // C strstr() is not null-aware for embedded '\0'. When one operand is
@@ -1471,13 +1442,17 @@ exprt string_handler::handle_string_membership(
     *strstr_symbol, gen_pointer_type(char_type()), {rhs_addr, lhs_addr});
   strstr_call.location() = converter_.get_location_from_decl(element);
 
-  // Check if result != NULL (substring found)
+  // Check if result != NULL (substring found). Both operands are synthetic
+  // char* values (the strstr() result and a null constant), so build the
+  // comparison in IREP2 (V.3).
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  exprt not_equal("notequal", bool_type());
-  not_equal.copy_to_operands(strstr_call, null_ptr);
-
+  // V.3: build `strstr(...) != NULL` in IREP2 via the shared build_notequal
+  // helper (#5576, mirrors the strchr membership path above). The migrate
+  // round-trip drops the call operand's location, so re-attach it.
+  exprt not_equal = build_notequal(strstr_call, null_ptr);
+  not_equal.op0().location() = strstr_call.location();
   return not_equal;
 }
 
@@ -1985,7 +1960,15 @@ exprt string_handler::handle_ord_conversion(
   exprt str_addr = get_array_base_address(str_expr);
 
   // Code point of the single character: (int) *str_addr.
-  exprt first_char = dereference_exprt(str_addr, char_type());
+  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
+  // carries only (type, value) — no offset/guard — so the round-trip is
+  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
+  // build_dereference). Restore the exact element type migrate_type may drop.
+  expr2tc str_addr2;
+  migrate_expr(str_addr, str_addr2);
+  exprt first_char =
+    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
+  first_char.type() = char_type();
   first_char.location() = location;
   return build_typecast(first_char, int_type());
 }
@@ -2303,6 +2286,398 @@ exprt string_handler::handle_string_attribute_call(
       recv.type() == list_type ||
       (recv.type().is_pointer() && recv.type().subtype() == list_type))
       return nil_exprt();
+  }
+
+  // bytes.hex([sep[, bytes_per_sep]]): fold a constant bytes object to its
+  // lowercase hex string (CPython: b"\x01\xab".hex() == "01ab"). str has no
+  // .hex() method, so a "hex" attribute is unambiguously a bytes method. Bytes
+  // are modelled as an int array; a str is a char array, so the subtype check
+  // excludes strings. An optional one-character ASCII separator is inserted
+  // between byte groups: a positive bytes_per_sep groups from the right, a
+  // negative one from the left, and zero inserts none (CPython default is 1).
+  if (method_name == "hex" && args.size() <= 2)
+  {
+    exprt recv = get_receiver_expr();
+    if (recv.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(
+        to_symbol_expr(recv).get_identifier().as_string());
+      if (s && !s->get_value().is_nil())
+        recv = s->get_value();
+    }
+    const typet &rt = recv.type();
+    if (rt.is_array() && rt.subtype() != char_type())
+    {
+      // A non-constant separator or grouping size is not folded — control
+      // falls through to the regular (unsupported) dispatch, never a wrong
+      // verdict.
+      std::string sep;
+      long long group = 1;
+      bool have_sep = false;
+      bool foldable = true;
+      if (!args.empty())
+      {
+        if (!extract_constant_string(args[0], converter_, sep))
+          foldable = false;
+        else
+        {
+          // A single non-ASCII character is multi-byte in UTF-8, so a length-1
+          // separator is necessarily ASCII; this check subsumes CPython's
+          // separate "sep must be ASCII" error.
+          if (sep.size() != 1)
+            throw std::runtime_error("bytes.hex(): sep must be length 1");
+          have_sep = true;
+          if (
+            args.size() == 2 && !json_utils::extract_constant_integer(
+                                  args[1],
+                                  converter_.get_current_func_name(),
+                                  converter_.get_ast_json(),
+                                  group))
+            foldable = false;
+        }
+      }
+      if (foldable)
+      {
+        static const char digits[] = "0123456789abcdef";
+        const std::size_t n = recv.operands().size();
+        const bool from_left = group < 0;
+        // Negate in the unsigned domain so LLONG_MIN does not overflow.
+        const unsigned long long g =
+          group < 0 ? 0ULL - static_cast<unsigned long long>(group)
+                    : static_cast<unsigned long long>(group);
+        std::string hex;
+        hex.reserve(n * 3);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          if (have_sep && g != 0 && i > 0)
+          {
+            const bool boundary = from_left ? (i % g == 0) : ((n - i) % g == 0);
+            if (boundary)
+              hex.push_back(sep[0]);
+          }
+          BigInt v;
+          if (to_integer(recv.operands()[i], v)) // true == not constant
+            throw std::runtime_error(
+              "bytes.hex() is only supported on a constant bytes object");
+          const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+          hex.push_back(digits[(byte >> 4) & 0xf]);
+          hex.push_back(digits[byte & 0xf]);
+        }
+        return string_builder_->build_string_literal(hex);
+      }
+    }
+  }
+
+  // bytes.startswith(prefix) / bytes.endswith(suffix) over *literal* bytes
+  // constructors `bytes([...])`. Both methods are otherwise routed through the
+  // str strncmp/strlen machinery, which is wrong for the int-array bytes
+  // representation (not null-terminated): endswith mis-computes its
+  // from-the-end offset and a NUL byte truncates the length. The fold inspects
+  // only the `bytes([const, ...])` AST syntax — so no symbolic, branch-merged,
+  // or partially-evaluated value can ever reach it — and compares the byte
+  // vectors directly. A str receiver, a variable/expression receiver, a tuple
+  // or position argument, and `b"..."` literals all fall through to the
+  // existing dispatch, sound and unchanged.
+  if (
+    (method_name == "startswith" || method_name == "endswith") &&
+    args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false; // out of range(0, 256): CPython raises ValueError
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    std::vector<unsigned> arg_bytes;
+    if (
+      extract_bytes_literal(receiver_json, recv_bytes) &&
+      extract_bytes_literal(args[0], arg_bytes))
+    {
+      bool result = arg_bytes.size() <= recv_bytes.size();
+      if (result)
+      {
+        const std::size_t off = (method_name == "endswith")
+                                  ? recv_bytes.size() - arg_bytes.size()
+                                  : 0;
+        for (std::size_t i = 0; i < arg_bytes.size(); ++i)
+          if (recv_bytes[off + i] != arg_bytes[i])
+          {
+            result = false;
+            break;
+          }
+      }
+      return migrate_expr_back(result ? gen_true_expr() : gen_false_expr());
+    }
+  }
+
+  // bytes.find(sub) / bytes.rfind(sub): the index of the first (find) or last
+  // (rfind) occurrence of sub in the receiver, or -1 if absent. Both methods
+  // are otherwise routed through the str strncmp/strlen machinery, which is
+  // wrong for the int-array bytes representation (a NUL byte truncates the
+  // length). Fold over *literal* operands only: the receiver must be a
+  // bytes([...]) constructor, and the argument either a bytes([...]) subsequence
+  // or a single integer byte. The match is purely syntactic (AST only), so no
+  // symbolic, branch-merged, or partially-evaluated value can reach the fold;
+  // a str receiver, a variable/expression receiver, and any other form fall
+  // through to the existing dispatch, sound and unchanged.
+  if ((method_name == "find" || method_name == "rfind") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte
+      // (CPython bytes.find accepts both); any other form falls through.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          // CPython: an empty sub matches at 0 (find) / n (rfind).
+          if (method_name == "find")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rfind, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        return from_integer(result, long_long_int_type());
+      }
+    }
+  }
+
+  // bytes.index(sub) / bytes.rindex(sub): like find/rfind but raise ValueError
+  // when sub is absent (CPython). Both are otherwise routed through the str
+  // strncmp/strlen machinery, wrong for the int-array bytes representation. Fold
+  // over *literal* operands: the receiver must be a bytes([...]) constructor and
+  // the argument either a bytes([...]) subsequence or a single integer byte. The
+  // match is purely syntactic (AST only), so no symbolic, branch-merged, or
+  // partially-evaluated value can reach the fold; a str receiver, a variable
+  // receiver, and any other form fall through to the existing dispatch.
+  if ((method_name == "index" || method_name == "rindex") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          if (method_name == "index")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rindex, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        if (result < 0)
+          return converter_.get_exception_handler().gen_exception_raise(
+            "ValueError", "subsection not found");
+        return from_integer(result, long_long_int_type());
+      }
+    }
+  }
+
+  // str.translate(str.maketrans(x, y[, z])): fold a constant string through a
+  // constant translation table. CPython maps each x[i] to y[i] and deletes the
+  // characters in z. Only the two/three-string maketrans form over constant
+  // operands is modelled; a dict table or a non-constant operand falls through
+  // to the regular (unsupported) dispatch.
+  if (method_name == "translate" && args.size() == 1)
+  {
+    const nlohmann::json &mk = args[0];
+    if (
+      mk.is_object() && mk.value("_type", std::string()) == "Call" &&
+      mk.contains("func") &&
+      mk["func"].value("_type", std::string()) == "Attribute" &&
+      mk["func"].value("attr", std::string()) == "maketrans" &&
+      mk["func"].contains("value") &&
+      mk["func"]["value"].value("_type", std::string()) == "Name" &&
+      mk["func"]["value"].value("id", std::string()) == "str" &&
+      mk.contains("args") && mk["args"].is_array())
+    {
+      const nlohmann::json &mkargs = mk["args"];
+      std::string from_chars, to_chars, del_chars, recv;
+      auto all_ascii = [](const std::string &s) {
+        for (unsigned char ch : s)
+          if (ch >= 0x80)
+            return false;
+        return true;
+      };
+      if (
+        (mkargs.size() == 2 || mkargs.size() == 3) &&
+        extract_constant_string(mkargs[0], converter_, from_chars) &&
+        extract_constant_string(mkargs[1], converter_, to_chars) &&
+        (mkargs.size() == 2 ||
+         extract_constant_string(mkargs[2], converter_, del_chars)) &&
+        extract_constant_string(receiver_json, converter_, recv) &&
+        // The fold is byte-wise; restrict it to ASCII so a multi-byte UTF-8
+        // sequence cannot be remapped/deleted one byte at a time (which would
+        // corrupt the string). Non-ASCII operands fall through to the regular
+        // (unsupported) dispatch — sound, never a wrong verdict.
+        all_ascii(from_chars) && all_ascii(to_chars) && all_ascii(del_chars) &&
+        all_ascii(recv))
+      {
+        if (from_chars.size() != to_chars.size())
+          throw std::runtime_error(
+            "str.maketrans() arguments must have equal length");
+        std::string result;
+        result.reserve(recv.size());
+        for (char c : recv)
+        {
+          if (del_chars.find(c) != std::string::npos)
+            continue;
+          const std::size_t pos = from_chars.find(c);
+          result.push_back(pos == std::string::npos ? c : to_chars[pos]);
+        }
+        return string_builder_->build_string_literal(result);
+      }
+    }
   }
 
   std::optional<locationt> cached_location;

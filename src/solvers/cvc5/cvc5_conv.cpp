@@ -1117,6 +1117,45 @@ smt_astt cvc5_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
+smt_astt cvc5_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function constant so every application shares it and
+  // the solver enforces functional congruence natively.
+  auto it = uf_decls.find(name);
+  cvc5::Term fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<cvc5::Sort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<cvc5::Sort>(arg->sort)->s);
+
+    cvc5::Sort fun_sort =
+      slv.mkFunctionSort(domain, to_solver_smt_sort<cvc5::Sort>(rangesort)->s);
+    fun = slv.mkConst(fun_sort, name);
+    uf_decls.emplace(name, fun);
+  }
+
+  // APPLY_UF takes [function, arg0, arg1, ...].
+  std::vector<cvc5::Term> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<cvc5_smt_ast>(arg)->a);
+
+  return new_ast(slv.mkTerm(cvc5::Kind::APPLY_UF, apply_args), rangesort);
+}
+
 smt_astt cvc5_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv

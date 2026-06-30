@@ -247,13 +247,19 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
-#if ESBMC_SVCOMP
-  compiler_args.push_back("-D__ESBMC_SVCOMP");
-  // No longer show compiler warnings for SV-COMP
-  compiler_args.push_back("-w");
-  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
-  compiler_args.push_back("-Wno-int-conversion");
-#endif
+  if (config.options.get_bool_option("sv-comp"))
+  {
+    compiler_args.push_back("-D__ESBMC_SVCOMP");
+    // No longer show compiler warnings for SV-COMP
+    compiler_args.push_back("-w");
+    compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+    // clang 15+ promotes -Wint-conversion to a hard error by default, which
+    // rejects GCC-acceptable implicit int<->pointer conversions common in
+    // preprocessed kernel/CIL inputs (e.g. the sentinel pointers CIL emits as
+    // (void *)0xffffffffffffffffUL). ESBMC models the conversion in its
+    // typecast logic, so downgrading the diagnostic does not affect semantics.
+    compiler_args.push_back("-Wno-int-conversion");
+  }
 
   // Increase maximum bracket depth
   compiler_args.push_back("-fbracket-depth=1024");
@@ -340,6 +346,7 @@ bool clang_c_languaget::parse(const std::string &path)
   {
     const std::string witness_path = config.options.get_option("witness");
     auto &waypoints = yaml_parser::get_waypoints(witness_path);
+    yaml_parser::fill_columns(actual_path, waypoints);
     clang_c_lexert lexer;
     for (auto &wp : waypoints)
     {

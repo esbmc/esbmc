@@ -13,57 +13,9 @@
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <python-frontend/python_expr_builder.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. Each
-// guards the dyn-sized-array round-trip hazard (fall back to legacy), and
-// build_typecast restores the exact target type (#cpp_type that migrate_type
-// drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  if (contains_dyn_array(t) || contains_dyn_array(from.type()))
-    return typecast_exprt(from, t);
-  expr2tc from2;
-  migrate_expr(from, from2);
-  exprt result = migrate_expr_back(typecast2tc(migrate_type(t), from2));
-  result.type() = t;
-  return result;
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  if (contains_dyn_array(obj.type()))
-    return address_of_exprt(obj);
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -525,9 +477,9 @@ void python_exception_handler::handle_list_assertion(
   size_func_call.location() = location;
   block.move_to_operands(size_func_call);
 
-  // Assert size > 0
-  exprt assertion(">", bool_type());
-  assertion.copy_to_operands(build_symbol(size_result), gen_zero(size_type()));
+  // Assert size > 0 (size_result and the 0 literal are both size_type).
+  exprt assertion =
+    build_greater_than(build_symbol(size_result), gen_zero(size_type()));
 
   code_assertt assert_code;
   assert_code.assertion() = assertion;
@@ -554,7 +506,8 @@ void python_exception_handler::handle_function_call_assertion(
     block.move_to_operands(code_stmt);
 
     code_assertt assert_code;
-    assert_code.assertion() = false_exprt();
+    // V.3: build the always-fail assert condition in IREP2.
+    assert_code.assertion() = migrate_expr_back(gen_false_expr());
     assert_code.location() = location;
     assert_code.location().comment("Assertion on None-returning function");
     attach_assert_message(assert_code);
@@ -573,13 +526,19 @@ void python_exception_handler::handle_function_call_assertion(
   exprt assertion_expr;
   if (is_negated)
   {
-    assertion_expr = not_exprt(temp_var_expr);
+    // V.3: build `not <result>` in IREP2 (the temp is bool-typed).
+    expr2tc tv2;
+    migrate_expr(temp_var_expr, tv2);
+    assertion_expr = migrate_expr_back(not2tc(tv2));
   }
   else
   {
+    // V.3: build `(int)<temp> == 1` in IREP2 via the build_equal helper (the
+    // temp is a synthetic bool; both operands are signedbv 32), mirroring the
+    // is_negated `not` branch above.
     exprt cast_expr = build_typecast(temp_var_expr, signedbv_typet(32));
     exprt one_expr = constant_exprt("1", signedbv_typet(32));
-    assertion_expr = equality_exprt(cast_expr, one_expr);
+    assertion_expr = build_equal(cast_expr, one_expr);
   }
 
   code_assertt assert_code;

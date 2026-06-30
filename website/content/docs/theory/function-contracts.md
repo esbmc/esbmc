@@ -36,6 +36,12 @@ obligations:
   assume the postcondition. This lets a caller be verified against the
   *specification* of its callees, without unrolling their bodies.
 
+The concrete checking harness for each obligation — the exact ordering of
+assume/assert/havoc steps and the flags that drive them
+(`--enforce-contract`, `--replace-call-with-contract`) — is given in the how-to
+guide's [Two modes](/docs/function-contracts#two-modes-enforce-and-replace)
+section.
+
 Enforcing each function once and replacing it everywhere it is called yields a
 proof whose cost does not blow up with call depth — the key scalability win over
 inlining everything into one [bounded model checking](/docs/theory/verification-algorithms#bmc)

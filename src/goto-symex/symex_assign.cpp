@@ -203,7 +203,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   stack_limit = sym.stack_limit;
   no_return_value_opt = sym.no_return_value_opt;
   validate_witness = sym.validate_witness;
-  witness_target_line = sym.witness_target_line;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -535,10 +534,16 @@ void goto_symext::symex_assign(
     {
       irep_idt call_line;
       if (cur_state->source.pc->is_return())
+      {
         call_line = cur_state->top().calling_location.pc->location.get_line();
+        symex_witness_function_return(original_lhs, call_line);
+      }
       else
+      {
         call_line = cur_state->source.pc->location.get_line();
-      symex_witness_function_return(original_lhs, call_line);
+        symex_witness_function_enter(call_line);
+        symex_witness_function_return(original_lhs, call_line);
+      }
     }
   }
 

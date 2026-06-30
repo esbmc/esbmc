@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string/string_builder.h>
@@ -314,6 +315,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   {
     const auto &list_arg = element["args"][0];
 
+    // list((a, b, ...)) — a tuple literal: lower to a List literal so it routes
+    // through the well-tested `[]` path with full element-type tracking. (A
+    // tuple held in a variable is handled below, after get_expr.)
+    if (list_arg["_type"] == "Tuple")
+    {
+      nlohmann::json list_node = list_arg;
+      list_node["_type"] = "List";
+      return get_expr(list_node);
+    }
+
     // Handle list(range(...))
     if (
       list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
@@ -329,8 +340,43 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     exprt arg_expr = get_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
       return arg_expr;
+
+    // list(tuple) — materialise the tuple's components into a real list.
+    // Without this the tuple struct flows into the generic builder, which
+    // mistypes it as a list (wrong elements / out-of-bounds dereference).
+    if (get_tuple_handler().is_tuple_type(arg_expr.type()))
+      return python_list::build_list_from_tuple(*this, arg_expr, element);
+
+    // list("abc") — a constant string yields a list of single-character
+    // strings (CPython: list("ab") == ['a', 'b']). Lower to a list literal so
+    // it routes through the proven `[]` path. Gate on a genuine string
+    // (char-element) operand: a bytes literal serialises to an identical
+    // Constant JSON, but list(b"ab") is [97, 98] in CPython — its operand type
+    // is an int array (not char), so it correctly falls through to the error.
+    const typet &arg_t = arg_expr.type();
+    const bool is_string_operand = (arg_t.is_array() || arg_t.is_pointer()) &&
+                                   arg_t.subtype() == char_type();
+    std::string str_val;
+    if (
+      is_string_operand &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      return get_expr(build_char_sequence_node("List", str_val, element));
+
+    // list(b"ab") — a bytes literal serialises to the same Constant JSON as a
+    // str, so it also extracts as a constant string, but CPython yields the
+    // int list [97, 98], not a char list. Its operand type is a (non-char) int
+    // array, so it is excluded above; reject it here with a clean diagnostic
+    // rather than letting the byte array reach the generic builder, which
+    // mistypes it as a list pointer (out-of-bounds dereference / migrate
+    // failure). This pins the str-only boundary of the fold above.
+    if (
+      arg_t.is_array() && arg_t.subtype() != char_type() &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      throw std::runtime_error(
+        "list() over a bytes object is not supported; bytes elements are "
+        "integers, not characters");
     // Fall through to the generic function-call builder below for non-list
-    // iterables (e.g. list("abc") or list(42)).
+    // iterables (e.g. list(42) or a non-constant string).
   }
 
   // Handle dict(iterable) constructor:
@@ -340,7 +386,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "dict" &&
     element.contains("args") && element["args"].is_array() &&
-    element["args"].size() == 1)
+    element["args"].size() <= 1)
   {
     exprt result = dict_handler_->handle_dict_constructor(element);
     if (!result.is_nil())
@@ -565,10 +611,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // For Any-typed (void*) parameters, cast to a generic function pointer
       // so that the adjuster can dereference it to a code type (it calls
       // to_code_type on the dereferenced subtype, which would fail on void).
-      exprt func_ptr_expr = symbol_expr(*var_symbol);
+      // V.3: build the function-pointer reference (and the generic-pointer
+      // cast the adjuster relies on) in IREP2; both are over a clean symbol.
+      exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
       if (var_symbol->get_type() == any_type())
-        func_ptr_expr =
-          typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
+        func_ptr_expr = python_expr::build_typecast(
+          func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
 
       // Resolve return type from the concrete target function stored in
@@ -807,7 +855,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (result->kind == PyConstValue::INT)
             return from_integer(result->int_val, long_long_int_type());
           if (result->kind == PyConstValue::BOOL)
-            return gen_boolean(result->bool_val);
+            // V.3: build the folded bool constant in IREP2.
+            return migrate_expr_back(
+              result->bool_val ? gen_true_expr() : gen_false_expr());
           // NONE and FLOAT fall through to normal call
         }
       }
@@ -1043,13 +1093,17 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             const symbolt *arg_symbol =
               symbol_table_.find_symbol(arg.identifier());
             if (arg_symbol)
-            {
               arg_actual_type = arg_symbol->get_type();
-              // Follow symbol type references using namespace
-              if (arg_actual_type.id() == "symbol")
-                arg_actual_type = ns.follow(arg_actual_type);
-            }
           }
+          // Follow a `symbol_typet` (`tag-Class`) to the struct it names. This
+          // must run for ANY argument, not just symbol expressions: a by-value
+          // class instance produced by a call (e.g. `use(make())` where
+          // `make() -> C`) arrives as a side_effect whose *type* is the
+          // unfollowed `tag-C` symbol — without following it, is_struct() below
+          // is false and the struct-to-`Class*`-parameter coercion is skipped,
+          // so a struct is passed to a pointer parameter (#4558/#4564).
+          if (arg_actual_type.id() == "symbol")
+            arg_actual_type = ns.follow(arg_actual_type);
           // Handle union types: if param is pointer and arg is struct (or symbol
           // to struct), take address. This is the post-processing pass for
           // general pointer-to-struct coercion.
@@ -1063,9 +1117,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             !arg.is_address_of() && !arg_actual_type.is_pointer())
           {
             // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
-            // by `a[i:j]`) cannot be the operand of `address_of` at the SMT
-            // level. Materialise them in a temp symbol first so the address
-            // we hand to the callee points at a real lvalue.
+            // by `a[i:j]`, or a call returning a by-value class instance)
+            // cannot be the operand of `address_of` at the SMT level.
+            // Materialise them in a temp symbol first so the address we hand to
+            // the callee points at a real lvalue.
             if (!arg.is_symbol())
             {
               assert(
@@ -1074,7 +1129,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
                 "materialise into");
               locationt loc = get_location_from_decl(element);
               symbolt &tmp = create_tmp_symbol(
-                element, "$struct_arg$", arg.type(), gen_zero(arg.type()));
+                element,
+                "$struct_arg$",
+                arg_actual_type,
+                gen_zero(arg_actual_type));
               code_declt tmp_decl(symbol_expr(tmp));
               tmp_decl.location() = loc;
               current_block->copy_to_operands(tmp_decl);

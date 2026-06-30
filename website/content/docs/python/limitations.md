@@ -10,7 +10,7 @@ weight: 4
 - `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
 - `for ... else` and `while ... else` are supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop).
 - List, set, dictionary, and generator comprehensions are supported. Dictionary comprehensions populate a real dict (see [Supported Features — Dictionaries](./supported-features#dictionaries)); the iterable must be a `range(...)`, a list of tuples, or a `d.items()` view (with an optional `if` filter). Comprehensions over other iterables (e.g. another dict comprehension or an arbitrary generator) may not be handled.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys is supported only for **local dict literals**; the same form over a dict received as a function parameter is not yet handled.
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys works for **local dict literals** and for **unannotated parameter dicts** with scalar or integer-tuple keys (recovered from the call sites). String-tuple-keyed parameter dicts are still not handled ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
 
 ## Lists
 
@@ -19,11 +19,11 @@ weight: 4
 
 ## Sets
 
-- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, and `.update()` (see [Supported Features — Sets](./supported-features#sets)). Other named methods (`.add()`, `.remove()`, `.discard()`, `.union()`, `.intersection()`, `.difference()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
+- The supported set methods are `.issubset()`, `.issuperset()`, `.symmetric_difference()`, `.update()`, `.union()`, `.intersection()`, and `.difference()` (see [Supported Features — Sets](./supported-features#sets)). The `.union()`/`.intersection()`/`.difference()` methods take exactly one argument (the zero-arg and variadic forms produce a clean error). Other named methods (`.add()`, `.remove()`, `.discard()`, `.isdisjoint()`, etc.) are not supported; use the equivalent binary operators (`-`, `&`, `|`, `^`) where one exists.
 
 ## Dictionaries
 
-- Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
+- Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, `popitem()`, and `clear()`. Other methods (e.g., `copy()`) are not yet implemented.
 
 ## Complex Numbers
 
@@ -32,7 +32,7 @@ weight: 4
 
 ## Built-in Functions
 
-- `min()` and `max()` support two-argument form and single-list form only; the `key` keyword argument is not supported (`default` is supported).
+- `min()` and `max()` support two-argument form and single-list form only (`default` is supported). The `key` keyword argument is honoured only over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms; any other key (symbolic elements, a user function, a non-constant key) silently falls back to ignoring `key`.
 - `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
 - `sum()` supports `int` and `float` element types only.
 - `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
@@ -114,10 +114,11 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Array constructors preserve explicit `dtype` for supported literal `bool`/`int`/`float` inputs in the 1D/2D recorte; unsupported constructor dtypes and higher-dimensional arrays are rejected explicitly. Full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, tuple indexing is lowered through chained indexing, and direct scalar broadcasting still covers simple binary operators such as `a + n` and `a * n`. Higher-dimensional arrays are rejected explicitly; full NumPy dtype semantics and unrestricted N-dimensional indexing remain unsupported.
 - Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
 - Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
-- The remaining type-inference-only stubs are `np.arccos`, `np.fmod`, `np.dot`, `np.matmul`, and `np.transpose`.
+- The reductions (`sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax`), comparison/logical ufuncs (`greater`/`less`/`equal`/`logical_*`/`where`), and constructors (`arange`/`full`/`eye`/`identity`/`linspace`) are constant-folded over list-backed (1D/2D) inputs and constant shapes; runtime-constructed inputs and higher-rank shapes are rejected with deterministic frontend errors.
+- `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.arccos` rejects runtime 2D arrays; `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
 - `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
 
 ## Exception Handling

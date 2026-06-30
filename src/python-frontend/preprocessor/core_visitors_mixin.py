@@ -351,16 +351,20 @@ class CoreVisitorsMixin:
         return result
 
     def _maybe_lower_dictcomp_over_items(self, node):
-        """Lower ``x = {key: val for k, v in d.items()}`` into ``x = {}``
-        followed by a population loop ``for k, v in d.items(): x[key] = val``.
+        """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
+        followed by a population loop, e.g.
+        ``x = {key: val for k, v in d.items()}`` ->
+        ``x = {}; for k, v in d.items(): x[key] = val``, and
+        ``x = {v: val for u, v in d}`` -> ``x = {}; for u, v in d: x[v] = val``.
 
         The converter's dict-comprehension handler models a list-of-tuples
-        iterable but not a ``dict.items()`` view (items() returns the keys list
-        as a placeholder, so the (k, v) tuple target cannot be unpacked).
-        Reusing the for-loop items() lowering (visit_For -> _transform_items_for)
-        gives the comprehension the (key, value) bindings it needs. Scoped to
-        ``.items()`` iterables so list-of-tuples dict comprehensions keep their
-        existing converter path.
+        iterable but not a dict view: ``d.items()`` returns the keys list as a
+        placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
+        dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
+        for-loop lowering (visit_For -> _transform_items_for / dict-key
+        iteration) gives the comprehension the bindings it needs. Scoped to dict
+        iterables so list-of-tuples dict comprehensions keep their existing
+        converter path.
         """
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
             return None
@@ -372,7 +376,14 @@ class CoreVisitorsMixin:
         outer = comp.generators[0].iter
         is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
                          and outer.func.attr == "items")
-        if not is_items_call:
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        if not (is_items_call or is_dict_iter or is_keys_call):
             return None
 
         target_id = node.targets[0].id
@@ -788,13 +799,52 @@ class CoreVisitorsMixin:
 
     @staticmethod
     def _normalize_int_from_bytes_endianness(node):
-        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"
-                and len(node.args) > 1):
-            if isinstance(node.args[1], ast.Constant) and node.args[1].value == "big":
-                node.args[1] = ast.Constant(value=True)
-            else:
-                node.args[1] = ast.Constant(value=False)
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
+            return
+        # Positional byteorder: int.from_bytes(b, "big" | "little").
+        if len(node.args) > 1:
+            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
+            node.args[1] = ast.Constant(value=is_big)
+        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
+        # model names it "big_endian". Rename the keyword to the model's
+        # parameter and fold its string value to the bool the model expects.
+        for kw in node.keywords:
+            if kw.arg == "byteorder":
+                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
+                kw.arg = "big_endian"
+                kw.value = ast.Constant(value=is_big)
+        ast.fix_missing_locations(node)
+
+    @staticmethod
+    def _normalize_math_gcd_lcm_variadic(node):
+        # math.gcd / math.lcm accept any number of integer arguments in CPython,
+        # but the operational model (models/math.py) is binary. Normalise to
+        # nested 2-argument calls reusing the binary model: f() -> identity,
+        # f(x) -> f(x, identity), f(a, b, c, ...) -> f(f(a, b), c, ...). gcd's
+        # identity is 0 (gcd(x, 0) == abs(x)); lcm's is 1 (lcm(x, 1) == abs(x)).
+        # Only the canonical `math.gcd(...)` / `math.lcm(...)` spelling is
+        # normalised; `from math import gcd` and `import math as m` forms (and a
+        # user object named `math`) fall through unchanged.
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math" and node.func.attr in ("gcd", "lcm")):
+            return
+        if node.keywords or len(node.args) == 2:
+            return  # gcd/lcm take no keywords; the binary form is already modelled
+        if any(isinstance(a, ast.Starred) for a in node.args):
+            return  # *args splat: argument count is not statically known
+        identity = 0 if node.func.attr == "gcd" else 1
+        args = node.args
+        if len(args) == 0:
+            node.args = [ast.Constant(value=identity), ast.Constant(value=identity)]
+        elif len(args) == 1:
+            node.args = [args[0], ast.Constant(value=identity)]
+        else:  # >= 3: left-fold into nested binary calls
+            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]], keywords=[])
+            for a in args[2:-1]:
+                acc = ast.Call(func=copy.deepcopy(node.func), args=[acc, a], keywords=[])
+            node.args = [acc, args[-1]]
+        ast.fix_missing_locations(node)
 
     def _fill_missing_args_with_defaults(self, node, function_name, expected_args, keywords):
         missing_args = []
@@ -879,6 +929,109 @@ class CoreVisitorsMixin:
                 param_type = self._extract_type_from_annotation(arg.annotation)
                 self.known_variable_types[arg.arg] = param_type
                 self.variable_annotations[arg.arg] = arg.annotation
+        self._infer_dict_params_structurally(node)
+
+    def _infer_dict_params_structurally(self, node):
+        """Recover the container *kind* of unannotated parameters.
+
+        An unannotated parameter carries no static type, so a dict passed into
+        it is treated as a list: iterating it (`for k, v in p`) or comprehending
+        over it then fails. Only dicts expose .items()/.keys()/.values(), so a
+        parameter on which any of those is called in the body is a dict. This
+        recovers the kind, not the element type (which would be unsound to
+        guess), and unblocks iteration/comprehension over a parameter dict
+        (#5444).
+        """
+        # Unannotated parameters only; annotated ones are recorded above.
+        all_args = (list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs))
+        candidates = {arg.arg for arg in all_args if arg.annotation is None}
+        dict_methods = {"items", "keys", "values"}
+        for n in ast.walk(node):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in dict_methods and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id in candidates):
+                self.known_variable_types[n.func.value.id] = "dict"
+
+        # Recover the concrete key/value types of each structurally-inferred
+        # parameter dict from its call sites, so iteration/comprehension over it
+        # resolves tuple/scalar element types instead of erasing them (#5444).
+        positional = list(node.args.posonlyargs) + list(node.args.args)
+        for idx, arg in enumerate(positional):
+            name = arg.arg
+            if (arg.annotation is None and name not in self.variable_annotations
+                    and self.known_variable_types.get(name) == "dict"):
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if recovered is not None:
+                    self.variable_annotations[name] = recovered
+
+    def _recover_param_dict_annotation(self, func_name, param_index):
+        """Recover a parameter dict's dict[K, V] annotation from its call sites.
+
+        Returns the inferred annotation node only when every direct call to
+        ``func_name`` passes, at ``param_index``, a dict literal or a name bound
+        to a dict literal whose inferred dict[K, V] type is identical. If any
+        call site is unknown or the shapes disagree, returns None so the
+        parameter stays untyped (a sound refusal rather than a wrong guess).
+        """
+        calls = self._dict_param_call_shapes.get(func_name, [])
+        candidates = []
+        for shapes in calls:
+            # A call that does not supply this parameter positionally (keyword
+            # arg, splat, too few args) leaves its shape unknown, which forces a
+            # refusal rather than silently trusting the remaining call sites.
+            candidates.append(shapes[param_index] if param_index < len(shapes) else None)
+        if not candidates or any(c is None for c in candidates):
+            return None
+        dumps = {ast.dump(c) for c in candidates}
+        return candidates[0] if len(dumps) == 1 else None
+
+    def _build_dict_annotation_from_literal(self, dict_node):
+        """Build a concrete dict[K, V] annotation node from a dict literal.
+
+        Returns None when either the key or value type cannot be inferred from
+        the literal's first entry, so callers treat the shape as unknown.
+        """
+        if not dict_node.keys or not dict_node.values or dict_node.keys[0] is None:
+            return None
+        key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        val_ann = self._infer_dict_value_annotation(dict_node.values[0])
+        if key_ann is None or val_ann is None:
+            return None
+        return ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+
+    def _infer_dict_key_annotation(self, key_node):
+        """Build a full key-type annotation node (preserving tuple element types).
+
+        Unlike _infer_dict_key_type, a tuple key yields the nested
+        tuple[A, B, ...] annotation rather than the bare name 'tuple', so the
+        recovered parameter dict carries the concrete struct shape. Returns None
+        for anything not statically known.
+        """
+        if isinstance(key_node, ast.Constant):
+            value = key_node.value
+            if isinstance(value, bool):
+                return ast.Name(id="bool", ctx=ast.Load())
+            if isinstance(value, float):
+                return ast.Name(id="float", ctx=ast.Load())
+            if isinstance(value, int):
+                return ast.Name(id="int", ctx=ast.Load())
+            if isinstance(value, str):
+                return ast.Name(id="str", ctx=ast.Load())
+            return None
+        if isinstance(key_node, ast.Tuple):
+            elt_anns = [self._infer_dict_key_annotation(e) for e in key_node.elts]
+            if not elt_anns or any(e is None for e in elt_anns):
+                return None
+            return ast.Subscript(
+                value=ast.Name(id="tuple", ctx=ast.Load()),
+                slice=ast.Tuple(elts=elt_anns, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        return None
 
     def _build_qualified_function_name(self, node):
         if hasattr(self, "current_class_name") and self.current_class_name:
@@ -1009,19 +1162,40 @@ class CoreVisitorsMixin:
             # means the name was rebound away from a dict; do not treat a stale
             # dict-literal binding as a dict.
             return False
-        return name in self.dict_literal_vars
+        # A bare ``dict``/``Dict`` annotation (e.g. ``def f(d: dict)``) carries
+        # no element types but still reliably marks the name as a dict. Mirror
+        # the subscript branch: an annotation for any other base type means the
+        # name is not a dict, regardless of a stale dict-literal binding.
+        if isinstance(ann, ast.Name):
+            return ann.id in ("dict", "Dict")
+        if name in self.dict_literal_vars:
+            return True
+        # An unannotated parameter recovered as a dict by structural inference
+        # (a .items()/.keys()/.values() call on it in the body — see
+        # _infer_dict_params_structurally) is a reliable dict too, so dict-view
+        # comprehensions and bare-dict iteration over a parameter dict desugar
+        # through the for-loop key-iteration path instead of reaching the C++
+        # dict-comp handler, which cannot consume a dict struct (#5444).
+        return self.known_variable_types.get(name) == "dict"
 
     def _maybe_rewrite_dict_to_list_call(self, node):
-        """Rewrite list(d) -> d.keys() and sorted(d, ...) -> sorted(d.keys(), ...).
+        """Rewrite iterating builtins over a dict to use d.keys().
 
-        The bare list()/sorted() builtins reinterpret the dict struct as a list
-        (wrong length, unsound subscript). Routing through d.keys() reuses the
-        correctly-typed dict-keys list path. Only fires for names reliably known
-        to be dicts. (GitHub #4790)
+        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        The bare builtins reinterpret the dict struct as a list (wrong length,
+        unsound subscript / wrong reduction). Routing through d.keys() reuses the
+        correctly-typed dict-keys list path — Python iterates a dict over its
+        keys. Only fires for names reliably known to be dicts. (GitHub #4790)
         """
-        if not (isinstance(node.func, ast.Name) and node.func.id in ("list", "sorted")):
+        if not (isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted", "max", "min", "sum")):
             return None
         if not node.args or (node.keywords and node.func.id == "list"):
+            return None
+        # max()/min() with several positional arguments is the variadic form
+        # (the max/min OF the arguments), not reduction over a single iterable —
+        # a dict argument there is compared, not iterated, so leave it alone.
+        if node.func.id in ("max", "min") and len(node.args) != 1:
             return None
         first = node.args[0]
         if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
@@ -1070,6 +1244,7 @@ class CoreVisitorsMixin:
             return rewritten_decimal
 
         self._normalize_int_from_bytes_endianness(node)
+        self._normalize_math_gcd_lcm_variadic(node)
 
         if not self._apply_call_signature_defaults(node):
             self.generic_visit(node)
@@ -1083,6 +1258,14 @@ class CoreVisitorsMixin:
         # restore on exit so a dict named `d` in one function does not make a
         # same-named plain parameter in another function look like a dict.
         saved_dict_vars = set(self.dict_literal_vars)
+        # Parameter/local variable kinds are scope-local for the same reason:
+        # an unannotated dict parameter recorded in one function must not make a
+        # same-named plain parameter in another function look like a dict (#5444).
+        saved_known_types = dict(self.known_variable_types)
+        # Recovered parameter-dict annotations (#5444) are scope-local too: a
+        # synthesized dict[K, V] for a parameter in one function must not leak
+        # onto a same-named parameter elsewhere.
+        saved_var_anns = dict(self.variable_annotations)
         # Per-function scope for call-origin tracking and the eq-only set.
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
@@ -1119,5 +1302,7 @@ class CoreVisitorsMixin:
             return return_nodes
         finally:
             self.dict_literal_vars = saved_dict_vars
+            self.known_variable_types = saved_known_types
+            self.variable_annotations = saved_var_anns
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only

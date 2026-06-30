@@ -1,5 +1,6 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
@@ -8,37 +9,9 @@
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
+#include <util/python_types.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam.
-exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-// member2t needs a struct/union/symbol source (tuple component access here is
-// always over a tuple struct). Restore the exact component type
-// (result.type() = t) so the #cpp_type attribute migrate_type drops is
-// preserved; fall back to legacy for any non-matching source.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-} // namespace
+using namespace python_expr;
 
 tuple_handler::tuple_handler(
   python_converter &converter,
@@ -73,6 +46,7 @@ struct_typet tuple_handler::create_tuple_struct_type(
 
   // Set the tag to ensure type identity
   tuple_type.tag(build_tuple_tag(element_types));
+  set_python_aggregate_kind(tuple_type, "tuple");
 
   return tuple_type;
 }
@@ -320,19 +294,21 @@ exprt tuple_handler::handle_tuple_subscript(
     const size_t n = components.size();
     typet idx_type = index_expr.type();
 
-    // Normalise negative indices: idx_norm = i < 0 ? i + n : i
-    exprt n_expr = from_integer(BigInt(n), idx_type);
-    exprt zero_idx = gen_zero(idx_type);
-    exprt is_neg = binary_relation_exprt(index_expr, "<", zero_idx);
-    exprt plus_n = plus_exprt(index_expr, n_expr);
-    plus_n.type() = idx_type;
-    if_exprt idx_norm(is_neg, plus_n, index_expr);
-    idx_norm.type() = idx_type;
+    // Normalise negative indices: idx_norm = i < 0 ? i + n : i.
+    // V.3: built in IREP2 (all operands are idx_type, so the if2t branch
+    // types agree). idx2t/idxnorm2 are reused by the bounds check and the
+    // select chain below.
+    const type2tc idx2t = migrate_type(idx_type);
+    expr2tc index2;
+    migrate_expr(index_expr, index2);
+    const expr2tc n2 = from_integer(BigInt(n), idx2t);
+    const expr2tc zero2 = gen_zero(idx2t);
+    const expr2tc idxnorm2 = if2tc(
+      idx2t, lessthan2tc(index2, zero2), add2tc(idx2t, index2, n2), index2);
 
     // Bounds: 0 <= idx_norm < n
-    exprt lo_ok = binary_relation_exprt(idx_norm, ">=", zero_idx);
-    exprt hi_ok = binary_relation_exprt(idx_norm, "<", n_expr);
-    exprt in_bounds = and_exprt(lo_ok, hi_ok);
+    exprt in_bounds = migrate_expr_back(
+      and2tc(greaterthanequal2tc(idxnorm2, zero2), lessthan2tc(idxnorm2, n2)));
     code_assertt bounds_assert(in_bounds);
     if (element.contains("lineno"))
       bounds_assert.location() = converter_.get_location_from_decl(element);
@@ -340,15 +316,31 @@ exprt tuple_handler::handle_tuple_subscript(
     converter_.add_instruction(bounds_assert);
 
     // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
+    // V.3: build the index select chain in IREP2. This path is gated to
+    // base_type_eq-homogeneous tuples (checked above), so the if2t branch
+    // types normally agree; a defensive exact-type guard keeps any
+    // base_type_eq-but-not-identical component on the legacy builder.
+    const type2tc ft2 = migrate_type(first_type);
+    // idx2t and idxnorm2 are already in scope from the index-norm block above.
     exprt chain = get_tuple_element(array, tuple_type, 0);
     for (size_t k = 1; k < n; ++k)
     {
       exprt member = get_tuple_element(array, tuple_type, k);
-      exprt cond =
-        binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
-      if_exprt sel(cond, member, chain);
-      sel.type() = first_type;
-      chain = sel;
+      const expr2tc cond2 =
+        equality2tc(idxnorm2, from_integer(BigInt(k), idx2t));
+      if (member.type() == first_type && chain.type() == first_type)
+      {
+        expr2tc member2, chain2;
+        migrate_expr(member, member2);
+        migrate_expr(chain, chain2);
+        chain = migrate_expr_back(if2tc(ft2, cond2, member2, chain2));
+      }
+      else
+      {
+        if_exprt sel(migrate_expr_back(cond2), member, chain);
+        sel.type() = first_type;
+        chain = sel;
+      }
     }
 
     if (element.contains("lineno"))
@@ -614,7 +606,8 @@ exprt tuple_handler::handle_tuple_membership(
   const bool rhs_is_struct_literal =
     rhs.id() == "struct" && rhs.operands().size() == components.size();
 
-  exprt result;
+  // V.3: build the membership or-fold in IREP2, back-migrated at the return.
+  expr2tc result2;
   for (size_t i = 0; i < components.size(); i++)
   {
     std::string member_name = "element_" + std::to_string(i);
@@ -626,7 +619,7 @@ exprt tuple_handler::handle_tuple_membership(
     const bool comp_is_string =
       components[i].type().is_array() || components[i].type().is_pointer();
 
-    exprt equality;
+    expr2tc eq2;
     if (lhs_is_string && comp_is_string)
     {
       // String content equality via the shared comparison machinery, which
@@ -634,28 +627,32 @@ exprt tuple_handler::handle_tuple_membership(
       // (signalled by a nil return — assemble it like the binop caller does).
       exprt l = lhs;
       exprt r = member_access;
-      equality = converter_.handle_string_comparison("Eq", l, r, element);
+      exprt equality = converter_.handle_string_comparison("Eq", l, r, element);
       if (equality.is_nil())
       {
-        equality = exprt("=", bool_type());
-        equality.copy_to_operands(l, r);
+        expr2tc l2, r2;
+        migrate_expr(l, l2);
+        migrate_expr(r, r2);
+        eq2 = equality2tc(l2, r2);
       }
+      else
+        migrate_expr(equality, eq2);
     }
     else if (lhs_is_string != comp_is_string)
     {
       // Cross-type: a string is never == a non-string in Python.
-      equality = false_exprt();
+      eq2 = gen_false_expr();
     }
     else
     {
-      equality = equality_exprt(lhs, member_access);
+      expr2tc l2, m2;
+      migrate_expr(lhs, l2);
+      migrate_expr(member_access, m2);
+      eq2 = equality2tc(l2, m2);
     }
 
-    if (i == 0)
-      result = equality;
-    else
-      result = or_exprt(result, equality);
+    result2 = (i == 0) ? eq2 : or2tc(result2, eq2);
   }
 
-  return invert ? not_exprt(result) : result;
+  return migrate_expr_back(invert ? not2tc(result2) : result2);
 }

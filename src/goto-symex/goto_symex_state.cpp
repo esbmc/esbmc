@@ -19,6 +19,7 @@ goto_symex_statet::goto_symex_statet(
   use_value_set = true;
   num_instructions = 0;
   cur_seg = 0;
+  witness_target_reached = false;
   thread_ended = false;
   guard.make_true();
 }
@@ -46,6 +47,8 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
+  witness_target_reached = state.witness_target_reached;
+  cycle_branch_map = state.cycle_branch_map;
   return *this;
 }
 

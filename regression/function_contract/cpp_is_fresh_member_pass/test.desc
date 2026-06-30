@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--function byteAt --enforce-contract byteAt
+^VERIFICATION SUCCESSFUL$

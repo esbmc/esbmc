@@ -1,24 +1,12 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type_handler.h>
-#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/migrate.h>
 #include <util/std_code.h>
 
-namespace
-{
-// V.3: build `&obj` in IREP2 (exact round-trip of address_of_exprt). The two
-// callers take the address of a lambda function symbol, so the pointer subtype
-// is the symbol's code type, which migrate_type round-trips faithfully.
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-} // namespace
+using namespace python_expr;
 
 // Initialize static counter
 int python_lambda::lambda_counter_ = 0;

@@ -1,40 +1,17 @@
 #include "char_utils.h"
 
-#include <irep2/irep2_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/migrate.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>
+
+using namespace python_expr;
 
 namespace python_char_utils
 {
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving). Back-migrated for the legacy seam.
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-}
-
-exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-exprt build_dereference(const exprt &ptr, const typet &t)
-{
-  expr2tc ptr2;
-  migrate_expr(ptr, ptr2);
-  return migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-}
-
 bool is_char_array_of_length(const typet &type, std::size_t expected_length)
 {
   if (!type.is_array())

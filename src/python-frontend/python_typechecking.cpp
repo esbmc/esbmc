@@ -5,69 +5,10 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <unordered_set>
-#include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
 
-namespace
-{
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving). Back-migrated for the legacy adjust/goto-convert seam. The
-// member/dereference variants guard the dyn-sized-array round-trip hazard and
-// restore the exact result type (#cpp_type that migrate_type drops).
-bool contains_dyn_array(const typet &t)
-{
-  if (t.is_array())
-  {
-    const array_typet &at = to_array_type(t);
-    if (at.size().is_nil() || !at.size().is_constant())
-      return true;
-    return contains_dyn_array(at.subtype());
-  }
-  if (t.is_pointer())
-    return contains_dyn_array(t.subtype());
-  return false;
-}
-
-exprt build_symbol(const symbolt &sym)
-{
-  if (contains_dyn_array(sym.get_type()))
-    return symbol_expr(sym);
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_dereference(const exprt &ptr, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return dereference_exprt(ptr, t);
-  expr2tc ptr2;
-  migrate_expr(ptr, ptr2);
-  exprt result = migrate_expr_back(dereference2tc(migrate_type(t), ptr2));
-  result.type() = t;
-  return result;
-}
-
-// member2t needs a struct/union/symbol source (the is_none access here is over
-// an Optional struct or a dereference of one). Falls back to legacy otherwise.
-exprt build_member(const exprt &base, const irep_idt &name, const typet &t)
-{
-  if (contains_dyn_array(t))
-    return member_exprt(base, name, t);
-  expr2tc base2;
-  migrate_expr(base, base2);
-  if (
-    is_struct_type(base2->type) || is_union_type(base2->type) ||
-    is_symbol_type(base2->type))
-  {
-    exprt result = migrate_expr_back(member2tc(migrate_type(t), base2, name));
-    result.type() = t;
-    return result;
-  }
-  return member_exprt(base, name, t);
-}
-} // namespace
+using namespace python_expr;
 
 python_typechecking::python_typechecking(python_converter &converter)
   : converter_(converter)
@@ -290,8 +231,14 @@ exprt python_typechecking::build_none_check(const exprt &value_expr) const
       return build_member(deref, "is_none", bool_type());
     }
 
+    // V.3: build the `value == NULL` check in IREP2. Keep the legacy
+    // gen_zero(original_type) so the null-pointer constant is preserved
+    // exactly (round-tripped through migrate), then compare in IREP2.
     exprt null_expr = gen_zero(original_type);
-    return equality_exprt(value_expr, null_expr);
+    expr2tc ve2, null2;
+    migrate_expr(value_expr, ve2);
+    migrate_expr(null_expr, null2);
+    return migrate_expr_back(equality2tc(ve2, null2));
   }
 
   if (resolved_type == none_type())
@@ -337,16 +284,20 @@ bool python_typechecking::build_type_assertion(
   if (checks.empty())
     return false;
 
-  exprt assertion_expr = checks.front();
+  // V.3: build the OR-fold of the type checks in IREP2, back-migrated once
+  // at the legacy code_assertt seam. Each check is migrated forward and the
+  // disjunction is composed with or2tc; operand order (assertion-so-far on
+  // the left, next check on the right) is preserved from the legacy fold.
+  expr2tc assertion2;
+  migrate_expr(checks.front(), assertion2);
   for (size_t i = 1; i < checks.size(); ++i)
   {
-    exprt or_expr("or", typet("bool"));
-    or_expr.move_to_operands(assertion_expr);
-    or_expr.move_to_operands(checks[i]);
-    assertion_expr = or_expr;
+    expr2tc check2;
+    migrate_expr(checks[i], check2);
+    assertion2 = or2tc(assertion2, check2);
   }
 
-  out_assert = code_assertt(assertion_expr);
+  out_assert = code_assertt(migrate_expr_back(assertion2));
   out_assert.location() = location;
 
   if (!context_name.empty())

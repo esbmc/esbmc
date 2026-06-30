@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/python_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -249,6 +250,33 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
+
+  // V.4 B.2: optionally run the IREP2-native Python adjuster. Default off.
+  //
+  // It runs *after* clang_cpp_adjust for now: reading get_value2() migrates each
+  // legacy value to IREP2, which requires its types to already be resolved —
+  // before clang_cpp_adjust they are still by-name symbol_types and migrating a
+  // constant aggregate trips constant_struct2t's (un-relaxed) assert. Post-adjust
+  // the types are resolved, so the walk is safe; it currently resolves nothing
+  // (clang_cpp_adjust already did) and only writes a symbol back when it changes
+  // the value, so the flag is behaviour-inert.
+  //
+  // B.3 experiment (2026-06-25, negative result, do not retry as-is): moving the
+  // pass *before* clang_cpp_adjust to exercise resolution was prototyped. It
+  // additionally needs member2t/index2t to tolerate a transient pointer source
+  // (the Python frontend stores instances/containers behind a pointer) plus a
+  // pointer auto-deref in resolve_source. With those, migration no longer aborts,
+  // but the whole 20-test fixture then produced *no verdict* under the flag
+  // (symex crash/hang): running the IREP2 adjuster before clang_cpp_adjust while
+  // clang_cpp_adjust still runs afterwards double-resolves the same nodes — the
+  // "two-places-resolve hazard" the V.1k spike flagged. Conclusion: the
+  // before-placement is only viable once it *replaces* clang_cpp_adjust for
+  // Python (B.5), which is a dedicated effort, not a reorder of this call.
+  if (config.options.get_bool_option("python-irep2-adjust"))
+  {
+    python_adjust py_adjuster(context);
+    py_adjuster.adjust();
+  }
 
   return false;
 }

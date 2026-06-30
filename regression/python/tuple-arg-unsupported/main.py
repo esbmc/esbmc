@@ -1,6 +1,6 @@
-# tuple() over a non-list, non-tuple iterable (here a string) is not
-# modelled. ESBMC must reject it with an explicit error rather than relabel
-# the operand with an empty type (which previously made every comparison
-# over the result silently lower to a nondet bool). This program is valid
-# CPython (s becomes ('a', 'b')).
+# tuple() over a string yields a tuple of single-character strings
+# (s becomes ('a', 'b')). This was previously rejected with an explicit
+# error; it is now modelled (see python/tuple_from_str). Kept as a
+# regression that the constant-string case verifies.
 s = tuple("ab")
+assert s[0] == "a" and s[1] == "b" and len(s) == 2

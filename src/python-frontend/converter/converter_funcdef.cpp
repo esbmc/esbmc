@@ -12,10 +12,12 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/symbolic_types.h>
@@ -640,6 +642,15 @@ size_t python_converter::register_function_argument(
   if (arg_type.is_array())
     arg_type = gen_pointer_type(arg_type.subtype());
 
+  // Object-model migration (#3067/#4773): a class-typed parameter receives a
+  // migrated `Class*` instance, and Python passes objects by reference. Type
+  // the formal as `Class*` (like `self`) so the call signature matches the
+  // pointer argument and mutations through the parameter are visible to the
+  // caller. A by-value struct formal would mismatch the pointer argument and
+  // produce a malformed call expression.
+  if (is_user_class_struct_type(arg_type))
+    arg_type = gen_pointer_type(arg_type);
+
   assert(arg_type != typet());
 
   code_typet::argumentt arg;
@@ -934,7 +945,8 @@ void python_converter::validate_return_paths(
   locationt loc = get_location_from_decl(function_node);
 
   code_assertt missing_return_assert;
-  missing_return_assert.assertion() = gen_boolean(false);
+  // V.3: build the always-fail assert condition in IREP2.
+  missing_return_assert.assertion() = migrate_expr_back(gen_false_expr());
   missing_return_assert.location() = loc;
   missing_return_assert.location().comment(
     "Missing return statement detected in function '" + current_func_name_ +
@@ -1201,6 +1213,37 @@ void python_converter::get_function_definition(
   // Process function arguments
   process_function_arguments(function_node, type, id, location);
 
+  // Stage 1 object-model migration (#3067): a function returning a user-defined
+  // class instance returns a *reference* (pointer) to the heap object, matching
+  // CPython and the pointer representation already used for locals, parameters
+  // and `self`. Returning by value copied the struct out of the callee frame,
+  // which (a) breaks identity/aliasing across the call (`y = f(x); y.v = 1`
+  // would not be observed through `x`) and (b) forces a pointer->value
+  // dereference on `return self`/`return param` that crashes the SMT backend
+  // with a sort mismatch. None is encoded as a NULL pointer, so such a return
+  // is already nullable and must not be re-wrapped in Optional below.
+  //
+  // Skip @overload stubs: each carries a single-class annotation (`-> Foo`),
+  // but the overload set is polymorphic — the effective return type is resolved
+  // per call site from the argument types. Migrating a stub to one Class* loses
+  // the alternatives and overrides that call-site resolution (e.g. a
+  // `Literal["bar"] -> Bar` overload would be mis-typed as `Foo*`, #3057). The
+  // real implementation (a union return) is typed `void*` and never reaches
+  // this branch. The same migration is applied below to a return type recovered
+  // by post-annotation inference (e.g. `return self`).
+  auto migrate_user_class_return = [&](typet &t) -> bool {
+    if (
+      is_user_class_struct_type(t) &&
+      !json_utils::has_overload_decorator(function_node))
+    {
+      t = gen_pointer_type(t);
+      return true;
+    }
+    return false;
+  };
+  if (migrate_user_class_return(type.return_type()))
+    current_element_type = type.return_type();
+
   // Create and register function symbol
   symbolt symbol = create_symbol(
     module_name, current_func_name_, id.to_string(), location, type);
@@ -1242,7 +1285,7 @@ void python_converter::get_function_definition(
   };
 
   bool already_optional =
-    annotation_is_optional ||
+    annotation_is_optional || is_user_class_pointer(type.return_type()) ||
     (type.return_type().is_struct() && to_struct_type(type.return_type())
                                          .tag()
                                          .as_string()
@@ -1282,6 +1325,15 @@ void python_converter::get_function_definition(
   if (type.return_type().is_empty())
   {
     typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    // Stage 1 object-model migration (#3067): an unannotated function whose
+    // body returns a user class instance (e.g. `return self` in __getitem__,
+    // #4514) is inferred to the value struct here — apply the same Cls* ->
+    // reference migration as the annotated path, so the declared return type
+    // matches the pointer the body actually returns. Without this, the callee
+    // returns a `Cls*` (self/param) while its declared return type is the value
+    // struct, and the assignment binds a pointer into a struct slot, tripping
+    // value-set's make_member assertion at the field read.
+    migrate_user_class_return(inferred_type);
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
@@ -1294,8 +1346,11 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body
-  exprt function_body = get_block(function_node["body"]);
+  // Process function body. Mark it as a function body (not a conditional one)
+  // so straight-line retyping (#4770/#4774) is permitted on the function's own
+  // unconditional statements — see the retype gate in get_var_assign.
+  exprt function_body =
+    get_block(function_node["body"], /*is_function_body=*/true);
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;

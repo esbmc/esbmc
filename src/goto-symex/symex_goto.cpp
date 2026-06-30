@@ -106,56 +106,13 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
-  // Violation-witness: steer branch direction if a branching waypoint in the
-  // current segment matches this location.  Skip backward GOTOs (loop back
-  // edges).
-  //
-  // 'avoid' waypoints are persistent: scan all entries in the segment each
-  // time; matching ones apply their constraint without advancing the segment.
-  // 'follow' waypoints consume the segment on match (advance_witness_position).
-  // Non-matching 'follow' entries stop the scan (they are ordered).
-  if (
-    validate_witness && forward &&
-    cur_state->cur_seg < cur_state->witness_segs.size())
-  {
-    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    const auto &loc = cur_state->source.pc->location;
-
-    for (size_t wp_idx = 0; wp_idx < seg.size(); ++wp_idx)
-    {
-      const waypoint &wp = seg[wp_idx];
-      if (wp.type != waypoint::branching)
-        continue;
-
-      const bool loc_matches =
-        !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-        (wp.function_id.empty() || wp.function_id == loc.get_function());
-
-      if (loc_matches)
-      {
-        const bool is_avoid = (wp.action == waypoint::avoid);
-        bool direction_true = (wp.value == "true") ^ is_avoid;
-        bool goto_taken =
-          instruction.flipped_guard ? direction_true : !direction_true;
-        if (goto_taken)
-        {
-          new_guard_true = true;
-          new_guard_false = false;
-        }
-        else
-        {
-          new_guard_false = true;
-          new_guard_true = false;
-        }
-        if (!is_avoid)
-          cur_state->advance_witness_position();
-        break;
-      }
-
-      if (wp.action != waypoint::avoid)
-        break;
-    }
-  }
+  symex_witness_branching(
+    old_guard,
+    new_guard,
+    forward,
+    new_guard_true,
+    new_guard_false,
+    instruction);
 
   if (new_guard_false)
   {

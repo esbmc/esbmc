@@ -590,6 +590,55 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
+smt_astt bitwuzla_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function constant. Bitwuzla mints a fresh const on
+  // every bitwuzla_mk_const, so it is cached and reused across applications;
+  // sharing one declaration is what makes the solver enforce congruence.
+  auto it = uf_decls.find(name);
+  BitwuzlaTerm fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<BitwuzlaSort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<BitwuzlaSort>(arg->sort)->s);
+
+    BitwuzlaSort fun_sort = bitwuzla_mk_fun_sort(
+      bitw_term_manager,
+      domain.size(),
+      domain.data(),
+      to_solver_smt_sort<BitwuzlaSort>(rangesort)->s);
+    fun = bitwuzla_mk_const(bitw_term_manager, fun_sort, name.c_str());
+    uf_decls.emplace(name, fun);
+  }
+
+  // BITWUZLA_KIND_APPLY expects [function, arg0, arg1, ...].
+  std::vector<BitwuzlaTerm> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<bitw_smt_ast>(arg)->a);
+
+  return new_ast(
+    bitwuzla_mk_term(
+      bitw_term_manager,
+      BITWUZLA_KIND_APPLY,
+      apply_args.size(),
+      apply_args.data()),
+    rangesort);
+}
+
 smt_astt
 bitwuzla_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {

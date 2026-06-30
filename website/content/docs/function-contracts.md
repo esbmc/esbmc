@@ -452,8 +452,12 @@ document each one explicitly.
 
 **Array assigns is bounded to 100 elements.** The nondet-witness approach used
 for `__ESBMC_assigns(arr[i])` ranges over indices 0 to 99
-(`ARRAY_ALLOC_ELEMS = 100`). If `i` can exceed 99, assigns compliance for
-out-of-range writes will not be detected.
+(`ARRAY_ALLOC_ELEMS = 100`) for arrays allocated by the validity-assumption
+pass. If `i` can exceed 99, assigns compliance for out-of-range writes will not
+be detected. When the array pointer was allocated by `__ESBMC_is_fresh(a, n)`,
+the witness index is instead bounded by the real element count (`n /
+sizeof(elem)`), so an in-bounds element of a buffer smaller than 100 no longer
+reports a spurious bounds violation.
 
 **Global array element assigns is unsupported.** `__ESBMC_assigns(global[i])`
 does not work correctly for global arrays. Use `__ESBMC_assigns(global)` (the

@@ -6,6 +6,7 @@
 #include <cassert>
 #include <ostream>
 #include <set>
+#include <vector>
 #include <irep2/irep2_utils.h>
 #include <util/location.h>
 #include <util/namespace.h>
@@ -167,6 +168,11 @@ public:
     // folded into "IF cond GOTO target". The guard is then the positive source
     // condition, so GOTO-taken means the branch body (original target) IS reached.
     bool flipped_guard;
+
+    // Set by convert_switch: decimal strings of all case constants whose
+    // target is this GOTO, used by witness waypoint matching.  Contains more
+    // than one entry when multiple case labels fall through to the same body.
+    std::vector<std::string> switch_case_ids;
 
     //! is this node a branch target?
     inline bool is_target() const
@@ -404,6 +410,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(other.switch_case_ids),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -434,6 +441,7 @@ public:
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         flipped_guard(other.flipped_guard),
+        switch_case_ids(std::move(other.switch_case_ids)),
         location_number(other.location_number),
         loop_number(other.loop_number),
         pragma_unroll_count(other.pragma_unroll_count),
@@ -471,6 +479,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(flipped_guard, instruction.flipped_guard);
+      instruction.switch_case_ids.swap(switch_case_ids);
       // Swap location_number too — same copy-assign-through-swap
       // reasoning as for labels.
       std::swap(instruction.location_number, location_number);

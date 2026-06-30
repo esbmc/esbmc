@@ -1106,6 +1106,45 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return new_ast(e, s);
 }
 
+smt_astt cvc_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function variable so every application shares it and
+  // the solver enforces functional congruence natively.
+  auto it = uf_decls.find(name);
+  CVC4::Expr fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<CVC4::Type> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<CVC4::Type>(arg->sort)->s);
+
+    CVC4::Type fun_type =
+      em.mkFunctionType(domain, to_solver_smt_sort<CVC4::Type>(rangesort)->s);
+    fun = em.mkVar(name, fun_type);
+    uf_decls.emplace(name, fun);
+  }
+
+  // APPLY_UF takes [function, arg0, arg1, ...].
+  std::vector<CVC4::Expr> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<cvc_smt_ast>(arg)->a);
+
+  return new_ast(em.mkExpr(CVC4::kind::APPLY_UF, apply_args), rangesort);
+}
+
 smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv

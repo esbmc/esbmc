@@ -1,5 +1,6 @@
 #include <python-frontend/python_set.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_list.h>
 #include <c2goto/library/python/python_types.h>
 #include <util/arith_tools.h>
@@ -11,63 +12,14 @@
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 
+using namespace python_expr;
+
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip; behaviour-
-// preserving -- migrate_expr already lowers the legacy nodes through these
-// same paths downstream). Back-migrated for the legacy adjust/goto-convert
-// seam; the caller sets .location() where it did before.
-exprt build_symbol(const symbolt &sym)
+// Build v + 1 : size_type via the shared add helper (V.3).
+exprt build_size_inc(const exprt &v)
 {
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
-exprt build_address_of(const exprt &obj)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  return migrate_expr_back(address_of2tc(obj2->type, obj2));
-}
-
-// The one call site indexes an is_array()-guarded char array, so the index2t
-// array-source precondition holds.
-exprt build_index(const exprt &arr, const exprt &idx, const typet &t)
-{
-  expr2tc arr2, idx2;
-  migrate_expr(arr, arr2);
-  migrate_expr(idx, idx2);
-  return migrate_expr_back(index2tc(migrate_type(t), arr2, idx2));
-}
-
-exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(side_effect_function_call2tc(
-    migrate_type(return_type), symbol_expr2tc(fn), args2));
-}
-
-// Build (*obj).field : field_type in IREP2, back-migrated once (V.3). `obj` is
-// a pointer to a PyObject struct, so the dereferenced struct is the resolved
-// member source and member2t's source precondition holds.
-exprt build_deref_member(
-  const exprt &obj,
-  const irep_idt &field,
-  const typet &field_type)
-{
-  expr2tc obj2;
-  migrate_expr(obj, obj2);
-  expr2tc deref2 = dereference2tc(migrate_type(obj.type().subtype()), obj2);
-  return migrate_expr_back(member2tc(migrate_type(field_type), deref2, field));
+  return build_add(v, gen_one(size_type()), size_type());
 }
 } // namespace
 
@@ -246,8 +198,8 @@ exprt python_set::get_from_iterable(
 
     // Ensure bounded strlen doesn't exceed the configured limit.
     // If it does, the model would silently truncate, so assert to make it explicit.
-    exprt bound_check("<=", bool_type());
-    bound_check.copy_to_operands(
+    // (len_sym and the bound literal are both size_type — same width.)
+    exprt bound_check = build_less_equal(
       build_symbol(len_sym),
       from_integer(BigInt(ESBMC_PY_STRNLEN_BOUND), size_type()));
     code_assertt bound_assert(bound_check);
@@ -275,7 +227,10 @@ exprt python_set::get_from_iterable(
   idx_init.location() = loc;
   converter_.add_instruction(idx_init);
 
-  // Loop condition: i < length
+  // Loop condition: i < length. Kept legacy: idx_sym (size_type) and
+  // length_expr can have mismatched bit-widths here (the .lower()/runtime-string
+  // path), which the legacy "<" node tolerates and clang_cpp_adjust reconciles;
+  // lessthan2t asserts width consistency, so building it pre-adjust would abort.
   exprt cond("<", bool_type());
   cond.copy_to_operands(build_symbol(idx_sym), length_expr);
 
@@ -386,17 +341,19 @@ exprt python_set::get_from_iterable(
     }
     else
     {
-      // char* case: *(iterable + i)
-      exprt ptr_add("+", iterable.type());
-      ptr_add.copy_to_operands(iterable, build_symbol(idx_sym));
-      dereference_exprt deref(char_type());
-      deref.op0() = ptr_add;
-      elem_expr = deref;
+      // char* case: *(iterable + i). iterable is a resolved char* and idx_sym
+      // a synthetic size_type, so build the pointer arithmetic in IREP2 (V.3).
+      exprt ptr_add =
+        build_add(iterable, build_symbol(idx_sym), iterable.type());
+      // ptr_add is a synthetic char* value, so build the dereference in IREP2.
+      elem_expr = build_dereference(ptr_add, char_type());
       list_helper.add_type_info(set_id, std::string(), elem_expr.type());
 
-      // Break if we hit the null terminator
-      exprt is_zero("=", bool_type());
-      is_zero.copy_to_operands(elem_expr, gen_zero(char_type()));
+      // Break if we hit the null terminator (V.3: built in IREP2).
+      expr2tc elem2;
+      migrate_expr(elem_expr, elem2);
+      exprt is_zero = migrate_expr_back(
+        equality2tc(elem2, gen_zero(migrate_type(char_type()))));
       code_breakt brk;
       code_ifthenelset break_if;
       break_if.cond() = is_zero;
@@ -432,7 +389,10 @@ exprt python_set::get_from_iterable(
       contains_call.location() = loc;
       loop_body.copy_to_operands(contains_call);
 
-      not_exprt not_contains(build_symbol(contains_result));
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc cr2;
+      migrate_expr(build_symbol(contains_result), cr2);
+      exprt not_contains = migrate_expr_back(not2tc(cr2));
 
       code_blockt push_block;
       exprt push_call = build_call_expr(
@@ -457,7 +417,10 @@ exprt python_set::get_from_iterable(
     {
       exprt contains_expr =
         list_helper.contains(elem_expr, build_symbol(set_symbol));
-      not_exprt not_contains(contains_expr);
+      // V.3: build the "not contained" guard in IREP2.
+      expr2tc ce2;
+      migrate_expr(contains_expr, ce2);
+      exprt not_contains = migrate_expr_back(not2tc(ce2));
 
       code_blockt push_block;
       exprt push_call =
@@ -470,8 +433,9 @@ exprt python_set::get_from_iterable(
       loop_body.copy_to_operands(push_if);
     }
 
-    // Increment index: i++
-    plus_exprt idx_inc(build_symbol(idx_sym), gen_one(size_type()));
+    // Increment index: i = i + 1 (V.3: built in IREP2).
+    exprt idx_inc =
+      build_add(build_symbol(idx_sym), gen_one(size_type()), size_type());
     code_assignt idx_update(build_symbol(idx_sym), idx_inc);
     loop_body.copy_to_operands(idx_update);
   }
@@ -529,8 +493,7 @@ exprt python_set::build_set_difference_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -589,8 +552,10 @@ exprt python_set::build_set_difference_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -598,7 +563,7 @@ exprt python_set::build_set_difference_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -655,8 +620,7 @@ exprt python_set::build_set_intersection_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -721,7 +685,7 @@ exprt python_set::build_set_intersection_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -732,6 +696,15 @@ exprt python_set::build_set_intersection_call(
   converter_.add_instruction(loop);
 
   return build_symbol(result_set);
+}
+
+exprt python_set::build_set_copy(
+  const symbolt &self,
+  const nlohmann::json &element)
+{
+  // self ∪ ∅ is a fresh deduplicated copy of self.
+  symbolt &empty = create_set_list();
+  return build_set_union_call(build_symbol(self), build_symbol(empty), element);
 }
 
 exprt python_set::build_set_union_call(
@@ -793,8 +766,7 @@ exprt python_set::build_set_union_call(
   converter_.add_instruction(i_init);
 
   // Loop condition: i < n
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -852,8 +824,10 @@ exprt python_set::build_set_union_call(
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  exprt not_contains("not", bool_type());
-  not_contains.copy_to_operands(build_symbol(contains_result));
+  // V.3: build the "not contained" guard in IREP2.
+  expr2tc cr2;
+  migrate_expr(build_symbol(contains_result), cr2);
+  exprt not_contains = migrate_expr_back(not2tc(cr2));
 
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
@@ -861,7 +835,7 @@ exprt python_set::build_set_union_call(
   body.copy_to_operands(if_stmt);
 
   // Increment counter
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   code_assignt i_step(build_symbol(i_sym), i_inc);
   body.copy_to_operands(i_step);
 
@@ -919,8 +893,7 @@ void python_set::emit_filtered_extend(
   converter.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -969,11 +942,7 @@ void python_set::emit_filtered_extend(
 
   exprt guard = build_symbol(contains_result);
   if (!want_in_ref)
-  {
-    exprt neg("not", bool_type());
-    neg.copy_to_operands(guard);
-    guard = neg;
-  }
+    guard = build_not(guard);
 
   code_blockt then_block;
   then_block.copy_to_operands(converter.convert_expression_to_code(push_call));
@@ -983,7 +952,7 @@ void python_set::emit_filtered_extend(
   if_stmt.copy_to_operands(guard, then_block);
   body.copy_to_operands(if_stmt);
 
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   codet loop;
@@ -1006,9 +975,13 @@ exprt python_set::build_set_relation_call(
   };
 
   // A.issubset(B) holds iff every element of A is in B; issuperset is the
-  // mirror (every element of B is in A). Iterate one list, clear a bool
-  // result initialised to true when an element is missing from the other.
+  // mirror (every element of B is in A). A.isdisjoint(B) holds iff no element
+  // of A is in B. Iterate one list, clear a bool result initialised to true
+  // when the per-element predicate fails (an element missing from the other
+  // set for subset/superset; an element present in the other set for
+  // disjoint).
   const bool superset = method_name == "issuperset";
+  const bool disjoint = method_name == "isdisjoint";
   const exprt iterated = superset ? as_ptr(other) : as_ptr(self);
   const exprt container = superset ? as_ptr(self) : as_ptr(other);
 
@@ -1041,8 +1014,7 @@ exprt python_set::build_set_relation_call(
   converter_.add_instruction(
     code_assignt(build_symbol(i_sym), gen_zero(size_type())));
 
-  exprt cond("<", bool_type());
-  cond.copy_to_operands(build_symbol(i_sym), build_symbol(n_sym));
+  exprt cond = build_less_than(build_symbol(i_sym), build_symbol(n_sym));
 
   code_blockt body;
 
@@ -1080,17 +1052,21 @@ exprt python_set::build_set_relation_call(
   contains_call.location() = loc;
   body.copy_to_operands(contains_call);
 
-  exprt not_in("not", bool_type());
-  not_in.copy_to_operands(build_symbol(in));
+  // disjoint clears on presence (`in`); subset/superset clear on absence.
+  exprt trigger;
+  if (disjoint)
+    trigger = build_symbol(in);
+  else
+    trigger = build_not(build_symbol(in));
   code_blockt then_block;
   then_block.copy_to_operands(
     code_assignt(build_symbol(result), gen_boolean(false)));
   codet if_stmt;
   if_stmt.set_statement("ifthenelse");
-  if_stmt.copy_to_operands(not_in, then_block);
+  if_stmt.copy_to_operands(trigger, then_block);
   body.copy_to_operands(if_stmt);
 
-  plus_exprt i_inc(build_symbol(i_sym), gen_one(size_type()));
+  exprt i_inc = build_size_inc(build_symbol(i_sym)); // V.3
   body.copy_to_operands(code_assignt(build_symbol(i_sym), i_inc));
 
   codet loop;
@@ -1107,7 +1083,9 @@ exprt python_set::build_set_method_call(
   const nlohmann::json &element,
   const std::string &method_name)
 {
-  if (method_name == "issubset" || method_name == "issuperset")
+  if (
+    method_name == "issubset" || method_name == "issuperset" ||
+    method_name == "isdisjoint")
     return build_set_relation_call(
       build_symbol(self), other, element, method_name);
 
@@ -1120,15 +1098,20 @@ exprt python_set::build_set_method_call(
   }
 
   if (method_name == "symmetric_difference")
-  {
-    // (self - other) ∪ (other - self) — collect into a fresh set.
-    symbolt &result = create_set_list();
-    emit_filtered_extend(
-      converter_, build_symbol(self), other, result, false, element);
-    emit_filtered_extend(
-      converter_, other, build_symbol(self), result, false, element);
-    return build_symbol(result);
-  }
+    return build_set_symmetric_difference_call(
+      build_symbol(self), other, element);
+
+  // The non-mutating union/intersection/difference methods reuse the same
+  // builders as the |, & and - operators; each returns a fresh set and leaves
+  // self unchanged.
+  if (method_name == "union")
+    return build_set_union_call(build_symbol(self), other, element);
+
+  if (method_name == "intersection")
+    return build_set_intersection_call(build_symbol(self), other, element);
+
+  if (method_name == "difference")
+    return build_set_difference_call(build_symbol(self), other, element);
 
   throw std::runtime_error("unsupported set method: " + method_name);
 }
@@ -1191,6 +1174,21 @@ exprt python_set::handle_operations(
     return set_handler.build_set_intersection_call(lhs, rhs, element);
   else if (op == "BitOr") // Set union: a | b
     return set_handler.build_set_union_call(lhs, rhs, element);
+  else if (op == "BitXor") // Set symmetric difference: a ^ b
+    return set_handler.build_set_symmetric_difference_call(lhs, rhs, element);
 
   return nil_exprt();
+}
+
+exprt python_set::build_set_symmetric_difference_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // (lhs - rhs) ∪ (rhs - lhs) — collect into a fresh set, mirroring the
+  // symmetric_difference() method.
+  symbolt &result = create_set_list();
+  emit_filtered_extend(converter_, lhs, rhs, result, false, element);
+  emit_filtered_extend(converter_, rhs, lhs, result, false, element);
+  return build_symbol(result);
 }

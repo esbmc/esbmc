@@ -31,19 +31,23 @@ public:
   {
   }
 
+  // @p from_right selects rsplit() semantics (split at the rightmost @p count
+  // separators) over split() (the leftmost). Defaults to split().
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const std::string &input,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   static exprt build_split_list(
     python_converter &converter,
     const nlohmann::json &call_node,
     const exprt &input_expr,
     const std::string &separator,
-    long long count);
+    long long count,
+    bool from_right = false);
 
   exprt get();
 
@@ -195,7 +199,8 @@ public:
   exprt extract_pyobject_value(
     const exprt &pyobject_expr,
     const typet &elem_type,
-    bool mixed_numeric = false);
+    bool mixed_numeric = false,
+    bool string_safe = false);
 
   /**
    * @brief Check if all elements in a list have the same type.
@@ -282,6 +287,17 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Materialise a tuple value into a fresh list, pushing each component
+   * in order. Used by list(tuple) (and any context that converts a tuple to a
+   * list), so the list model sees a real PyListObject* rather than the tuple
+   * struct. @p tuple_expr must have tuple struct type.
+   */
+  static exprt build_list_from_tuple(
+    python_converter &converter,
+    const exprt &tuple_expr,
+    const nlohmann::json &element);
+
+  /**
    * @brief Build a list copy operation
    * @param list The list symbol to copy from
    * @param element The AST node for location information
@@ -329,6 +345,18 @@ public:
     const symbolt &list,
     const nlohmann::json &op,
     const exprt &elem);
+
+  /**
+   * @brief Build a list.index(x, start[, end]) call — position of the first
+   * element equal to x within the slice l[start:end]. start/end follow CPython
+   * slice-bound normalization. Raises ValueError (via assertion) if not found.
+   */
+  exprt build_index_range_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const exprt &start,
+    const exprt &end);
 
   /// Shared implementation of build_count_list_call / build_index_list_call;
   /// @p func_id selects the `c:@F@__ESBMC_list_{count,index}` model.
@@ -414,14 +442,14 @@ public:
 private:
   friend class python_dict_handler;
 
-  // Repeat `list_elem` a runtime number of times (`count` may be any integer
-  // expression: a constant, a symbol like `n`, or a compound like `m + 1`).
-  // Builds a fresh list, so a literal source's pre-populated element is not
-  // reused (avoids an off-by-one).
+  // Repeat the elements in `list_elems` `count` times at runtime (`count` may
+  // be any integer expression: a constant, a symbol like `n`, or a compound
+  // like `m + 1`). Each iteration pushes every element in order. Builds a
+  // fresh list so a literal source's element is not reused (avoids off-by-one).
   exprt create_vla(
     const nlohmann::json &element,
     const exprt &count,
-    const exprt &list_elem);
+    const std::vector<exprt> &list_elems);
 
   exprt build_list_at_call(
     const exprt &list,

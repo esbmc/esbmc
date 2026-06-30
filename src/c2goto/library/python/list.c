@@ -4,6 +4,18 @@
 #include <string.h>
 #include "python_types.h"
 
+// Allocate a Python object instance. The frontend emits a call to this for
+// `ClassName(...)` so class instances get CPython reference semantics (a
+// pointer to a non-expiring object) and survive escaping their defining
+// function, instead of dangling as expired stack locals. This body is a
+// placeholder: symex intercepts the call (symex_mem_inf) and allocates a typed,
+// non-expiring infinite object of the class struct carried by the call's
+// result pointer type.
+void *__ESBMC_new_object()
+{
+  return 0;
+}
+
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;
@@ -492,15 +504,28 @@ bool __ESBMC_list_set_at(
 
 bool __ESBMC_list_insert(
   PyListObject *l,
-  size_t index,
+  int64_t index,
   const void *value,
   size_t type_id,
   size_t type_size,
   size_t float_type_id,
   int ptr_free)
 {
-  // If index is beyond the end, just append
-  if (index >= l->size)
+  // Normalize a Python insert index: a negative index counts from the end and
+  // the result is clamped to [0, size]. insert() never raises for an
+  // out-of-range index (CPython): l.insert(-1, x) inserts before the last
+  // element, l.insert(len, x)/beyond appends, and a too-negative index clamps
+  // to the front.
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  // If index is at or beyond the end, just append.
+  if (index >= n)
     return __ESBMC_list_push(
       l, value, type_id, type_size, float_type_id, ptr_free);
 
@@ -587,6 +612,52 @@ size_t __ESBMC_list_index(
 
   size_t i = 0;
   while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
+size_t __ESBMC_list_index_range(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size,
+  int64_t start,
+  int64_t end)
+{
+  if (!l || !item)
+    return 0;
+
+  // Normalize start/end like CPython slice bounds: a negative bound counts
+  // from the end, then start and end each clamp to [0, size]. The search
+  // covers l[start:end] for list.index(x, start[, end]).
+  int64_t n = (int64_t)l->size;
+  if (start < 0)
+  {
+    start += n;
+    if (start < 0)
+      start = 0;
+  }
+  if (start > n)
+    start = n;
+  if (end < 0)
+  {
+    end += n;
+    if (end < 0)
+      end = 0;
+  }
+  if (end > n)
+    end = n;
+
+  size_t i = (size_t)start;
+  while (i < (size_t)end)
   {
     const PyObject *elem = &l->items[i];
     if (

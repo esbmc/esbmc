@@ -1,0 +1,5 @@
+CORE
+main.c
+--function rec --enforce-contract rec
+^VERIFICATION FAILED$
+^.*contract requires.*$

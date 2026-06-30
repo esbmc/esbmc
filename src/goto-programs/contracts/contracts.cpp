@@ -1,6 +1,8 @@
 #include <cstdlib>
 #include <algorithm>
+#include <map>
 #include <goto-programs/contracts/contracts.h>
+#include <util/type_byte_size.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
@@ -842,6 +844,25 @@ void code_contractst::enforce_contracts(
           if (comment == "contract::ensures" || comment == "contract::requires")
           {
             instructions_to_remove.insert(it);
+
+            // The GOTO pointer/arithmetic-safety pass emits auto-generated
+            // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
+            // clause expression, immediately preceding this ASSUME. They are
+            // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
+            // ensures clause they reference __ESBMC_return_value, which is
+            // unbound in the original body, yielding a spurious violation
+            // (#5043). The wrapper re-checks the clause with return_value
+            // properly bound, so drop the contiguous run of safety asserts
+            // belonging to this clause. Contract clauses precede the function
+            // body, so a real body assertion never sits directly before a
+            // clause ASSUME; walking back over asserts cannot reach body code.
+            for (auto p = it; p != renamed_body.instructions.begin();)
+            {
+              --p;
+              if (!p->is_assert())
+                break;
+              instructions_to_remove.insert(p);
+            }
           }
         }
       }
@@ -885,6 +906,34 @@ void code_contractst::enforce_contracts(
       {
         renamed_body.instructions.erase(it);
       }
+    }
+
+    // Recursive self-calls: under enforcement the function body is executed by
+    // the checking wrapper, and a self-call resolves to that same wrapper, so
+    // the real recursion is unwound unboundedly (OOM) instead of using the
+    // function's own contract (#5313). Replace each self-call in the original
+    // body with the contract (assert requires → havoc assigns → assume ensures),
+    // exactly as --replace-call-with-contract does. original_body_copy still
+    // carries the contract clauses (the renamed body has them stripped), so use
+    // it as the contract source.
+    {
+      goto_programt &self_body =
+        goto_functions.function_map[original_name_id].body;
+      std::vector<goto_programt::targett> self_calls;
+      Forall_goto_program_instructions (i_it, self_body)
+      {
+        if (!i_it->is_function_call() || !is_code_function_call2t(i_it->code))
+          continue;
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        if (
+          is_symbol2t(call.function) &&
+          to_symbol2t(call.function).get_symbol_name() ==
+            id2string(original_id))
+          self_calls.push_back(i_it);
+      }
+      for (auto call_it : self_calls)
+        generate_replacement_at_call(
+          *func_sym, original_body_copy, call_it, self_body);
     }
 
     // Extract is_fresh mappings from function body for ensures clause replacement
@@ -1010,6 +1059,59 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
 
+  // Records each is_fresh pointer's byte-size so the Phase 2B array-element
+  // witness index can be bounded by the real allocation rather than the default
+  // ARRAY_ALLOC_ELEMS (which only applies to validity-assumption allocations).
+  std::map<irep_idt, expr2tc> is_fresh_sizes;
+
+  // Emit the malloc + non-null assume for one resolved is_fresh pointer lvalue.
+  auto emit_is_fresh_alloc =
+    [&](const expr2tc &ptr_var, const expr2tc &size_expr) {
+      // Use u8 as the alloc element type so that size_expr (in bytes) equals
+      // the element count.  symex_mem casts the u8* result to lhs->type.
+      type2tc char_type = get_uint8_type();
+      expr2tc malloc_expr = sideeffect2tc(
+        pointer_type2tc(char_type),
+        expr2tc(),
+        size_expr,
+        std::vector<expr2tc>(),
+        char_type,
+        sideeffect2t::allockind::malloc);
+
+      goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
+      assign_inst->location = location;
+      assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
+
+      // Remember the allocation so the wrapper can free it before returning.
+      wrapper_heap_ptrs.push_back(ptr_var);
+
+      // Record the allocation size keyed by the pointer symbol so Phase 2B can
+      // bound its array-element witness index by the real allocation.
+      if (is_symbol2t(ptr_var))
+        is_fresh_sizes[to_symbol2t(ptr_var).thename] = size_expr;
+
+      // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
+      // valid memory block.  Without this, symex_mem's non-deterministic
+      // malloc-failure path can produce NULL, causing later derefs to fail.
+      expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
+      expr2tc not_null = notequal2tc(ptr_var, null_ptr);
+      auto assume_nn = wrapper.add_instruction(ASSUME);
+      assume_nn->guard = not_null;
+      assume_nn->location = location;
+      assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
+    };
+
+  // is_fresh pointers whose lvalue reads through another pointer — e.g. a
+  // member access `this->p` in a C++ method — must be allocated AFTER that base
+  // pointer's harness storage is set up. add_pointer_validity_assumptions (step
+  // 1) havocs the receiver struct with NONDET, which would otherwise clobber a
+  // malloc emitted here, leaving `this->p` pointing at a nondet (invalid)
+  // address. Defer those to step 1b. Plain symbol params are not havoced in
+  // enforce mode, so allocate them up-front where old-snapshots and validity
+  // assumptions can see them. Issue #6.
+  std::vector<is_fresh_info> deferred_is_fresh;
+
   for (const auto &info : is_fresh_calls)
   {
     // Strip typecasts (e.g. (void*)(&hdr_len) → &hdr_len) to recover the
@@ -1051,34 +1153,18 @@ goto_programt code_contractst::generate_checking_wrapper(
       ptr_var = stripped;
     }
 
-    // Use u8 as the alloc element type so that size_expr (in bytes) equals
-    // the element count.  symex_mem casts the u8* result to lhs->type.
-    type2tc char_type = get_uint8_type();
-    expr2tc malloc_expr = sideeffect2tc(
-      pointer_type2tc(char_type),
-      expr2tc(),
-      info.size_expr,
-      std::vector<expr2tc>(),
-      char_type,
-      sideeffect2t::allockind::malloc);
-
-    goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
-    assign_inst->location = location;
-    assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
-
-    // Remember the allocation so the wrapper can free it before returning.
-    wrapper_heap_ptrs.push_back(ptr_var);
-
-    // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
-    // valid memory block.  Without this, symex_mem's non-deterministic
-    // malloc-failure path can produce NULL, causing later dereferences to fail.
-    expr2tc null_ptr = symbol2tc(ptr_var->type, "NULL");
-    expr2tc not_null = notequal2tc(ptr_var, null_ptr);
-    auto assume_nn = wrapper.add_instruction(ASSUME);
-    assume_nn->guard = not_null;
-    assume_nn->location = location;
-    assume_nn->location.comment("__ESBMC_is_fresh: pointer is non-null");
+    // A plain symbol lvalue is independent of any harness setup — allocate now.
+    // An indirect lvalue (member/index/dereference) reads through a base
+    // pointer that step 1 sets up, so defer it.
+    if (is_symbol2t(ptr_var))
+      emit_is_fresh_alloc(ptr_var, info.size_expr);
+    else
+    {
+      is_fresh_info deferred;
+      deferred.ptr_arg = ptr_var;
+      deferred.size_expr = info.size_expr;
+      deferred_is_fresh.push_back(deferred);
+    }
   }
 
   // Collect the set of params already allocated by __ESBMC_is_fresh so that
@@ -1136,6 +1222,13 @@ goto_programt code_contractst::generate_checking_wrapper(
       is_fresh_allocated_params,
       wrapper_heap_ptrs);
   }
+
+  // 1b. Allocate deferred is_fresh pointers (those reading through a base
+  //     pointer, e.g. a C++ method's this->member) now that the base pointer's
+  //     harness storage exists and has been havoced. See the note where
+  //     deferred_is_fresh is populated. Issue #6.
+  for (const auto &info : deferred_is_fresh)
+    emit_is_fresh_alloc(info.ptr_arg, info.size_expr);
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
   //    Comes after is_fresh allocation so that old-snapshot assignments can
@@ -1233,7 +1326,12 @@ goto_programt code_contractst::generate_checking_wrapper(
 
     // 3b-v. Phase 2B: nondet-witness snapshot for array element assigns
     arr_elem_snaps = materialize_arr_elem_snapshots(
-      classified_assigns, assigns_targets, wrapper, location, func_name);
+      classified_assigns,
+      assigns_targets,
+      wrapper,
+      location,
+      func_name,
+      is_fresh_sizes);
     if (!arr_elem_snaps.empty())
     {
       log_debug(
@@ -2357,6 +2455,92 @@ code_contractst::materialize_ptr_deref_snapshots(
         if (is_pointer_type(ftype) || is_code_type(ftype))
           continue;
 
+        // Array field: a whole-array rvalue read through the pointer is
+        // illegal C (dereference cannot build an array rvalue). Snapshot the
+        // scalar element (*p).field[k] at a nondet witness index k in [0,n)
+        // and later assert it is unchanged -- sound by the same forall-via-
+        // witness argument as Phase 2B (avoids dereference.cpp abort).
+        if (is_array_type(ftype))
+        {
+          const array_type2t &atype = to_array_type(ftype);
+          type2tc elem_type = atype.subtype;
+          if (is_symbol_type(elem_type))
+            elem_type = ns.follow(elem_type);
+          // Only constant-size arrays of scalar elements (skip VLAs and
+          // nested array/struct elements, which would recurse into the same
+          // array-rvalue problem).
+          if (
+            !is_constant_int2t(atype.array_size) || !is_scalar_type(elem_type))
+            continue;
+          type2tc k_type = atype.array_size->type;
+
+          std::string base = func_name + "_" + id2string(param_id) + "_" +
+                             id2string(field) + "_" +
+                             std::to_string(ptr_deref_snap_counter++);
+
+          // nondet witness index k, constrained to [0, n)
+          symbolt k_obj;
+          k_obj.name = k_obj.id = "__ESBMC_frame_pderef_k_" + base;
+          set_symbol_type(k_obj, k_type);
+          k_obj.lvalue = true;
+          k_obj.static_lifetime = false;
+          k_obj.file_local = false;
+          symbolt *k_added = context.move_symbol_to_context(k_obj);
+          expr2tc witness_k = symbol2tc(k_type, k_added->id);
+
+          goto_programt::targett k_decl = wrapper.add_instruction(DECL);
+          k_decl->code = code_decl2tc(k_type, k_added->id);
+          k_decl->location = location;
+          k_decl->location.comment("frame: ptr-deref array witness (Phase 2C)");
+
+          goto_programt::targett k_asg = wrapper.add_instruction(ASSIGN);
+          k_asg->code = code_assign2tc(witness_k, gen_nondet(k_type));
+          k_asg->location = location;
+
+          goto_programt::targett k_rng = wrapper.add_instruction(ASSUME);
+          k_rng->guard = and2tc(
+            greaterthanequal2tc(witness_k, gen_zero(k_type)),
+            lessthan2tc(witness_k, atype.array_size));
+          k_rng->location = location;
+          k_rng->location.comment(
+            "frame: constrain ptr-deref index (Phase 2C)");
+
+          // scalar snapshot of (*p).field[k]
+          symbolt s_obj;
+          s_obj.name = s_obj.id = "__ESBMC_frame_snap_pderef_" + base;
+          set_symbol_type(s_obj, elem_type);
+          s_obj.lvalue = true;
+          s_obj.static_lifetime = false;
+          s_obj.file_local = false;
+          symbolt *s_added = context.move_symbol_to_context(s_obj);
+          expr2tc snap_expr = symbol2tc(elem_type, s_added->id);
+
+          goto_programt::targett s_decl = wrapper.add_instruction(DECL);
+          s_decl->code = code_decl2tc(elem_type, s_added->id);
+          s_decl->location = location;
+          s_decl->location.comment(
+            "frame: ptr-deref array snapshot (Phase 2C)");
+
+          expr2tc field_arr = member2tc(ftype, deref_expr, field);
+          goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
+          s_asg->code = code_assign2tc(
+            snap_expr, index2tc(elem_type, field_arr, witness_k));
+          s_asg->location = location;
+          s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
+
+          ptr_deref_snapshot_t entry;
+          entry.ptr_sym = ptr_sym;
+          entry.pointee_type = pointee;
+          entry.field_name = field;
+          entry.value_type = elem_type;
+          entry.snapshot_sym = snap_expr;
+          entry.array_index = witness_k;
+          entry.member_type =
+            ftype; // array type, for member access at assert time
+          result.push_back(entry);
+          continue;
+        }
+
         std::string snap_name = "__ESBMC_frame_snap_pderef_" + func_name + "_" +
                                 id2string(param_id) + "_" + id2string(field) +
                                 "_" + std::to_string(ptr_deref_snap_counter++);
@@ -2455,9 +2639,24 @@ void code_contractst::emit_ptr_deref_assertions(
     {
       // Struct field: assert p->field == snapshot
       expr2tc deref_expr = dereference2tc(snap.pointee_type, snap.ptr_sym);
-      current_val = member2tc(snap.value_type, deref_expr, snap.field_name);
-      var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
-                  id2string(snap.field_name);
+      if (snap.array_index)
+      {
+        // Array field: compare the scalar element at the nondet witness index.
+        // The member's array type was captured at snapshot time, so we need not
+        // rediscover it from the (possibly typedef'd) struct.
+        expr2tc field_arr =
+          member2tc(snap.member_type, deref_expr, snap.field_name);
+        current_val = index2tc(snap.value_type, field_arr, snap.array_index);
+        var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
+                    id2string(snap.field_name) +
+                    "[k] (k: nondet witness index)";
+      }
+      else
+      {
+        current_val = member2tc(snap.value_type, deref_expr, snap.field_name);
+        var_label = id2string(to_symbol2t(snap.ptr_sym).thename) + "->" +
+                    id2string(snap.field_name);
+      }
     }
 
     expr2tc guard = equality2tc(current_val, snap.snapshot_sym);
@@ -2478,7 +2677,8 @@ code_contractst::materialize_arr_elem_snapshots(
   const std::vector<expr2tc> &assigns_targets,
   goto_programt &wrapper,
   const locationt &location,
-  const std::string &func_name)
+  const std::string &func_name,
+  const std::map<irep_idt, expr2tc> &is_fresh_sizes)
 {
   std::vector<arr_elem_snapshot_t> result;
 
@@ -2552,11 +2752,27 @@ code_contractst::materialize_arr_elem_snapshots(
     j_assign->location.comment("frame: nondet witness index (Phase 2B)");
 
     // Constrain j to the allocated range so that arr[j] is a valid access.
-    // The allocation in add_pointer_validity_assumptions uses ARRAY_ALLOC_ELEMS
-    // elements, so j must be in [0, ARRAY_ALLOC_ELEMS).
+    // Two allocation sources exist: __ESBMC_is_fresh(p, n) allocates exactly n
+    // bytes (n/sizeof(elem) elements), while add_pointer_validity_assumptions
+    // allocates ARRAY_ALLOC_ELEMS elements for the remaining array params.  Use
+    // the real is_fresh element count when known; otherwise fall back to
+    // ARRAY_ALLOC_ELEMS.  Over-bounding j here makes arr[j] read past the real
+    // allocation and trips a spurious "array bounds violated" (see #5314).
     {
       expr2tc j_lo = gen_zero(j_type);
       expr2tc j_hi = constant_int2tc(j_type, BigInt(ARRAY_ALLOC_ELEMS));
+      auto fresh_it = is_fresh_sizes.find(to_symbol2t(arr_ptr).thename);
+      if (fresh_it != is_fresh_sizes.end())
+      {
+        BigInt elem_sz = type_byte_size(elem_type, &ns);
+        if (elem_sz > 0)
+        {
+          expr2tc size_bytes = typecast2tc(j_type, fresh_it->second);
+          expr2tc elem_sz_e = constant_int2tc(j_type, elem_sz);
+          j_hi = div2tc(j_type, size_bytes, elem_sz_e);
+          simplify(j_hi);
+        }
+      }
       expr2tc in_range = and2tc(
         greaterthanequal2tc(witness_j, j_lo), lessthan2tc(witness_j, j_hi));
       goto_programt::targett range_assume = wrapper.add_instruction(ASSUME);
@@ -3032,26 +3248,54 @@ expr2tc code_contractst::fix_comparison_types(
             get_type_id(*ret_val->type));
         }
       }
-      // Case 3: return_value is an integer compared with an integer operand of
-      // a different width — e.g. an `int` return value against a `long`
-      // constant that does not fit in `int`. remove_incorrect_casts above
-      // stripped the usual-arithmetic-conversion cast Clang inserted, leaving a
-      // width mismatch the SMT backend rejects (mk_bvsgt requires equal operand
-      // widths). Re-apply the conversion by widening the narrower side to the
-      // wider integer type. Issue #5312.
+      // Cases 3 & 4: a comparison where one side is the return_value symbol.
+      // Two SMT-level sort mismatches can survive Clang's typing once
+      // get_decl_ref has corrected the symbol to the function's real return
+      // type, both because the global __ESBMC_return_value is declared `int`:
+      //
+      //   * Bool vs BitVector (issue #4): `__ESBMC_return_value == (c > 0)`
+      //     promotes the boolean operand to int. For a bool-returning function
+      //     the symbol is bool, leaving one side Bool and the other
+      //     (_ BitVec 32) — which Z3 rejects with "Sorts Bool and
+      //     (_ BitVec 32) are incompatible" (and core-dumps).
+      //
+      //   * Integer width (issue #5312): an `int` return value compared with a
+      //     wider integer operand after remove_incorrect_casts stripped the
+      //     usual-arithmetic-conversion cast (mk_bvsgt requires equal widths).
       else if (side1_is_retval || side2_is_retval)
       {
+        expr2tc *rv = side1_is_retval ? side1 : side2;
+        expr2tc *other = side1_is_retval ? side2 : side1;
+
         auto is_int = [](const type2tc &t) {
           return is_signedbv_type(t) || is_unsignedbv_type(t);
         };
-        if (
-          is_int((*side1)->type) && is_int((*side2)->type) &&
-          (*side1)->type->get_width() != (*side2)->type->get_width())
+
+        if (is_bool_type((*rv)->type) != is_bool_type((*other)->type))
         {
-          if ((*side1)->type->get_width() < (*side2)->type->get_width())
-            *side1 = typecast2tc((*side2)->type, *side1);
+          // Bool vs BitVector sort mismatch: promote the boolean side to the
+          // other operand's type, matching C's usual arithmetic conversions
+          // (a bool is widened to int, never the reverse). Casting the boolean
+          // up is value-preserving ({0,1} fits any wider type); demoting the
+          // other side to bool would collapse values >1 and silently satisfy
+          // postconditions such as `__ESBMC_return_value == (x & 3)`.
+          expr2tc *boolean = is_bool_type((*rv)->type) ? rv : other;
+          expr2tc *wider = (boolean == rv) ? other : rv;
+          *boolean = typecast2tc((*wider)->type, *boolean);
+          log_debug(
+            "contracts",
+            "Fixed bool/bitvector comparison: promoted boolean operand to {}",
+            get_type_id(*(*wider)->type));
+        }
+        else if (
+          is_int((*rv)->type) && is_int((*other)->type) &&
+          (*rv)->type->get_width() != (*other)->type->get_width())
+        {
+          // Integer width mismatch: widen the narrower side.
+          if ((*rv)->type->get_width() < (*other)->type->get_width())
+            *rv = typecast2tc((*other)->type, *rv);
           else
-            *side2 = typecast2tc((*side1)->type, *side2);
+            *other = typecast2tc((*rv)->type, *other);
           log_debug(
             "contracts",
             "Fixed integer comparison: widened return_value comparison to "

@@ -6,6 +6,8 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -20,8 +22,11 @@
 #include <util/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <cfenv>
+#include <cstdio>
 #include <cmath>
 #include <climits>
 #include <iomanip>
@@ -34,70 +39,61 @@
 
 #include <util/message.h>
 
+using namespace python_expr;
+
 namespace
 {
-// V.3: IREP2 expression-construction helpers (exact round-trip of the legacy
-// constructors; behaviour-preserving -- migrate_expr already lowers the legacy
-// nodes through these same paths downstream). Back-migrated for the legacy
-// adjust/goto-convert seam; the caller sets .location() where it did before.
-static exprt build_call_impl(
-  const expr2tc &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  std::vector<expr2tc> args2;
-  args2.reserve(args.size());
-  for (const exprt &a : args)
-  {
-    expr2tc a2;
-    migrate_expr(a, a2);
-    args2.push_back(std::move(a2));
-  }
-  return migrate_expr_back(
-    side_effect_function_call2tc(migrate_type(return_type), fn, args2));
-}
-
-// Callee resolved from a symbol-table entry (legacy symbol_expr(symbolt)).
-static exprt build_call_expr(
-  const symbolt &fn,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  return build_call_impl(symbol_expr2tc(fn), return_type, args);
-}
-
-// Callee referenced by name with a placeholder code type (legacy
-// symbol_exprt(id, code_typet())); round-tripped through migrate_expr.
-static exprt build_call_expr(
-  const irep_idt &fn_id,
-  const typet &return_type,
-  const std::vector<exprt> &args)
-{
-  expr2tc fn2;
-  migrate_expr(symbol_exprt(fn_id, code_typet()), fn2);
-  return build_call_impl(fn2, return_type, args);
-}
-
-static exprt build_typecast(const exprt &from, const typet &t)
-{
-  expr2tc from2;
-  migrate_expr(from, from2);
-  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
-}
-
-static exprt build_symbol(const symbolt &sym)
-{
-  return migrate_expr_back(symbol_expr2tc(sym));
-}
-
 static bool get_constant_int(const exprt &expr, long long &out)
 {
   if (expr.is_nil())
     return false;
   BigInt tmp;
-  if (!to_integer(expr, tmp))
+  // to_integer() returns false on success (CBMC convention), so the guard must
+  // bail when it returns true. The earlier `!to_integer(...)` was inverted: it
+  // rejected every valid integer constant (and accepted non-constants with an
+  // unset value), so width/fill string methods — center/ljust/rjust/zfill and
+  // expandtabs's tabsize — silently fell back to a nondet/default result.
+  if (to_integer(expr, tmp))
     return false;
   out = tmp.to_int64();
+  return true;
+}
+
+// Extract the constant byte values of a bytes receiver (literal or a variable
+// resolved to its literal). Bytes are modelled as a non-char int array, which
+// distinguishes them from a str (char array). Returns false for a non-constant
+// or non-bytes receiver.
+static bool extract_constant_bytes(
+  python_converter &converter,
+  const nlohmann::json &node,
+  std::vector<uint8_t> &out)
+{
+  exprt recv = converter.get_expr(node);
+  if (recv.is_symbol())
+  {
+    const symbolt *s =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (s && !s->get_value().is_nil())
+      recv = s->get_value();
+  }
+  // An unresolved variable (e.g. a bytes parameter, or a value not stored as a
+  // constant) stays a bare symbol with the array type but no operands; folding
+  // it would silently yield an empty result. Reject so the caller falls through
+  // to the runtime model. A genuine b"" literal is a constant array (not a
+  // symbol), so empty-bytes folding is preserved.
+  if (recv.is_symbol())
+    return false;
+  const typet &rt = recv.type();
+  if (!rt.is_array() || rt.subtype() == char_type())
+    return false;
+  out.clear();
+  for (const exprt &op : recv.operands())
+  {
+    BigInt v;
+    if (to_integer(op, v)) // true == not a constant integer
+      return false;
+    out.push_back(static_cast<uint8_t>(v.to_int64() & 0xff));
+  }
   return true;
 }
 
@@ -144,6 +140,223 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     return value;
 
   throw std::runtime_error("format() requires constant arguments");
+}
+
+// Pins the host floating-point rounding mode to round-to-nearest for its
+// lifetime and restores the previous mode on destruction. Float specs are
+// folded with host snprintf, whose output depends on the ambient rounding mode;
+// a statically linked solver (e.g. CVC5 on the Linux build) can leave that mode
+// set to FE_UPWARD, which turns "{:.2f}".format(3.14159) into "3.15" instead of
+// CPython's "3.14". Pinning the mode keeps the fold deterministic and matches
+// CPython's round-half-to-even.
+struct round_to_nearest_guard
+{
+  round_to_nearest_guard() : saved_(std::fegetround())
+  {
+    std::fesetround(FE_TONEAREST);
+  }
+  ~round_to_nearest_guard()
+  {
+    std::fesetround(saved_);
+  }
+  int saved_;
+};
+
+// Format a constant value per a str.format/format() format spec
+// ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or
+// spec feature not modelled here, so the caller can fall back to a sound nondet
+// string rather than mis-folding.
+std::string apply_format_spec(
+  const nlohmann::json &arg,
+  const std::string &spec,
+  python_converter &converter)
+{
+  // Only constant numeric/string literals are folded; anything else (a
+  // variable, a computed value) throws and degrades to the nondet fallback.
+  if (arg.value("_type", std::string()) != "Constant" || !arg.contains("value"))
+    throw std::runtime_error("format spec on a non-constant value");
+  const auto &val = arg["value"];
+
+  enum
+  {
+    KIND_INT,
+    KIND_FLOAT,
+    KIND_STR
+  } kind;
+  long long ival = 0;
+  double dval = 0;
+  std::string sval;
+  if (val.is_number_integer())
+  {
+    kind = KIND_INT;
+    ival = val.get<long long>();
+  }
+  else if (val.is_boolean())
+  {
+    kind = KIND_INT;
+    ival = val.get<bool>() ? 1 : 0;
+  }
+  else if (val.is_number_float())
+  {
+    kind = KIND_FLOAT;
+    dval = val.get<double>();
+  }
+  else if (val.is_string())
+  {
+    kind = KIND_STR;
+    sval = val.get<std::string>();
+  }
+  else
+    throw std::runtime_error("format spec on an unsupported constant type");
+
+  // Parse the spec.
+  size_t p = 0;
+  char fill = ' ';
+  char align = '\0';
+  auto is_align = [](char ch) {
+    return ch == '<' || ch == '>' || ch == '^' || ch == '=';
+  };
+  if (spec.size() >= 2 && is_align(spec[1]))
+  {
+    fill = spec[0];
+    align = spec[1];
+    p = 2;
+  }
+  else if (!spec.empty() && is_align(spec[0]))
+    align = spec[p++];
+  char sign = '-';
+  if (p < spec.size() && (spec[p] == '+' || spec[p] == '-' || spec[p] == ' '))
+    sign = spec[p++];
+  if (p < spec.size() && spec[p] == '#')
+    throw std::runtime_error("unsupported '#' in format spec");
+  if (p < spec.size() && spec[p] == '0')
+  {
+    // The '0' flag forces '0' fill even when an explicit alignment precedes it
+    // ("{:<05d}" -> "70000"); align defaults to '=' only when none was given.
+    fill = '0';
+    if (align == '\0')
+      align = '=';
+    ++p;
+  }
+  int width = 0;
+  while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
+    width = width * 10 + (spec[p++] - '0');
+  if (p < spec.size() && (spec[p] == ',' || spec[p] == '_'))
+    throw std::runtime_error("unsupported grouping in format spec");
+  int prec = -1;
+  if (p < spec.size() && spec[p] == '.')
+  {
+    ++p;
+    prec = 0;
+    while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
+      prec = prec * 10 + (spec[p++] - '0');
+  }
+  char type = (p < spec.size()) ? spec[p++] : '\0';
+  if (p != spec.size())
+    throw std::runtime_error("invalid format spec");
+  (void)converter;
+
+  // Build the value body (without field padding) and a default alignment.
+  std::string body;
+  char default_align;
+  if (kind == KIND_STR)
+  {
+    if (type != '\0' && type != 's')
+      throw std::runtime_error("unsupported type for str in format spec");
+    body = sval;
+    if (prec >= 0 && static_cast<int>(body.size()) > prec)
+      body.resize(static_cast<size_t>(prec)); // truncate, like %.Ns
+    default_align = '<';
+  }
+  else if (
+    kind == KIND_INT && (type == '\0' || type == 'd' || type == 'x' ||
+                         type == 'X' || type == 'o' || type == 'b'))
+  {
+    const bool neg = ival < 0;
+    unsigned long long mag = neg ? 0ULL - static_cast<unsigned long long>(ival)
+                                 : static_cast<unsigned long long>(ival);
+    std::string digits;
+    if (type == '\0' || type == 'd')
+      digits = std::to_string(mag);
+    else
+    {
+      const unsigned base = (type == 'o') ? 8 : (type == 'b') ? 2 : 16;
+      const char *alpha =
+        (type == 'X') ? "0123456789ABCDEF" : "0123456789abcdef";
+      if (mag == 0)
+        digits = "0";
+      for (; mag != 0; mag /= base)
+        digits.insert(digits.begin(), alpha[mag % base]);
+    }
+    const std::string sgn =
+      neg ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
+    body = sgn + digits;
+    default_align = '>';
+  }
+  else if (
+    kind == KIND_FLOAT && (type == 'f' || type == 'F' || type == 'e' ||
+                           type == 'E' || type == 'g' || type == 'G'))
+  {
+    // A typeless float spec ("{:8}", "{:.2}") uses CPython's general format,
+    // which is not faithfully snprintf-expressible (e.g. 1.0 -> "1.0", not
+    // "1"); it is left to the nondet fallback via the final throw below.
+    const round_to_nearest_guard rounding_guard;
+    const int pr = prec >= 0 ? prec : 6;
+    const char t = type;
+    int n = 0;
+    if (t == 'f' || t == 'F')
+      n = std::snprintf(nullptr, 0, "%.*f", pr, dval);
+    else if (t == 'e' || t == 'E')
+      n = std::snprintf(nullptr, 0, "%.*e", pr, dval);
+    else
+      n = std::snprintf(nullptr, 0, "%.*g", pr, dval);
+    if (n < 0)
+      throw std::runtime_error("format spec float error");
+    std::string num(static_cast<size_t>(n), '\0');
+    if (t == 'f' || t == 'F')
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*f", pr, dval);
+    else if (t == 'e' || t == 'E')
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*e", pr, dval);
+    else
+      std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*g", pr, dval);
+    if (t == 'F' || t == 'E' || t == 'G')
+      for (char &ch : num)
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    // Apply +/space sign to a non-negative result.
+    if (!num.empty() && num[0] != '-')
+    {
+      if (sign == '+')
+        num = "+" + num;
+      else if (sign == ' ')
+        num = " " + num;
+    }
+    body = num;
+    default_align = '>';
+  }
+  else
+    throw std::runtime_error("unsupported type/value in format spec");
+
+  if (align == '\0')
+    align = default_align;
+
+  // Pad to width.
+  if (static_cast<int>(body.size()) >= width)
+    return body;
+  const int padn = width - static_cast<int>(body.size());
+  if (align == '<')
+    return body + std::string(padn, fill);
+  if (align == '>')
+    return std::string(padn, fill) + body;
+  if (align == '^')
+  {
+    const int l = padn / 2;
+    return std::string(l, fill) + body + std::string(padn - l, fill);
+  }
+  // '=' : pad after a leading sign (numeric).
+  size_t s =
+    (!body.empty() && (body[0] == '-' || body[0] == '+' || body[0] == ' ')) ? 1
+                                                                            : 0;
+  return body.substr(0, s) + std::string(padn, fill) + body.substr(s);
 }
 } // namespace
 
@@ -312,21 +525,26 @@ std::optional<exprt> dispatch_split_method(
   const std::function<exprt()> &get_receiver_expr,
   python_converter &converter)
 {
-  if (method_name != "split")
+  if (method_name != "split" && method_name != "rsplit")
     return std::nullopt;
+
+  // rsplit() differs from split() only in the direction maxsplit counts from
+  // (the rightmost separators rather than the leftmost).
+  const bool from_right = (method_name == "rsplit");
 
   ensure_allowed_keywords(method_name, keyword_values, {"sep", "maxsplit"});
   if (args.size() > 2)
   {
     throw std::runtime_error(
-      "split() requires zero, one, or two arguments in minimal support");
+      method_name +
+      "() requires zero, one, or two arguments in minimal support");
   }
 
   split_method_argst parsed;
   const nlohmann::json *sep_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "sep", 0, false);
+    method_name, args, keyword_values, "sep", 0, false);
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
-    "split", args, keyword_values, "maxsplit", 1, false);
+    method_name, args, keyword_values, "maxsplit", 1, false);
 
   if (sep_node == nullptr || is_none_literal_json(*sep_node))
   {
@@ -336,19 +554,21 @@ std::optional<exprt> dispatch_split_method(
              *sep_node, converter, parsed.separator))
   {
     throw std::runtime_error(
-      "split() only supports constant sep in minimal support");
+      method_name + "() only supports constant sep in minimal support");
   }
 
   if (maxsplit_node != nullptr)
   {
     parsed.maxsplit = required_constant_int_arg(
       *maxsplit_node,
-      "split() only supports constant maxsplit in minimal support",
+      method_name + "() only supports constant maxsplit in minimal support",
       converter);
   }
 
+  // The BinOp fast path splits at the FIRST separator (split semantics); it is
+  // unsound for rsplit, which would split at the last, so skip it there.
   if (
-    !parsed.separator.empty() && parsed.maxsplit == 1 &&
+    !from_right && !parsed.separator.empty() && parsed.maxsplit == 1 &&
     receiver_json.contains("_type") && receiver_json["_type"] == "BinOp" &&
     receiver_json.contains("op") && receiver_json["op"].contains("_type") &&
     receiver_json["op"]["_type"] == "Add")
@@ -396,11 +616,16 @@ std::optional<exprt> dispatch_split_method(
   {
     exprt obj_expr = get_receiver_expr();
     return python_list::build_split_list(
-      converter, call_json, obj_expr, parsed.separator, parsed.maxsplit);
+      converter,
+      call_json,
+      obj_expr,
+      parsed.separator,
+      parsed.maxsplit,
+      from_right);
   }
 
   return python_list::build_split_list(
-    converter, call_json, input, parsed.separator, parsed.maxsplit);
+    converter, call_json, input, parsed.separator, parsed.maxsplit, from_right);
 }
 
 std::optional<exprt> dispatch_no_arg_string_methods(
@@ -461,13 +686,31 @@ std::optional<exprt> dispatch_one_arg_string_methods(
     const char *arg_name;
     one_arg_handler_t handler;
   };
-  static constexpr std::array<one_arg_handler_entryt, 5> one_arg_handlers = {{
+  static constexpr std::array<one_arg_handler_entryt, 6> one_arg_handlers = {{
     {"startswith", "prefix", &string_handler::handle_string_startswith},
     {"endswith", "suffix", &string_handler::handle_string_endswith},
     {"removeprefix", "prefix", &string_handler::handle_string_removeprefix},
     {"removesuffix", "suffix", &string_handler::handle_string_removesuffix},
     {"partition", "sep", &string_handler::handle_string_partition},
+    {"rpartition", "sep", &string_handler::handle_string_rpartition},
   }};
+
+  // startswith()/endswith() accept optional start/end position arguments:
+  // s.startswith(prefix, start[, end]). Handle the 2/3-arg forms before the
+  // single-argument table below.
+  if (
+    (method_name == "startswith" || method_name == "endswith") &&
+    args.size() >= 2)
+  {
+    if (args.size() > 3)
+      throw std::runtime_error(method_name + "() takes at most 3 arguments");
+    return self.handle_startswith_endswith_with_pos(
+      get_receiver_expr(),
+      args,
+      converter,
+      get_location(),
+      method_name == "endswith");
+  }
 
   for (const auto &[name, arg_name, handler] : one_arg_handlers)
   {
@@ -551,7 +794,9 @@ std::optional<exprt> dispatch_search_string_methods(
   const std::function<locationt()> &get_location,
   python_converter &converter)
 {
-  if (method_name != "find" && method_name != "index" && method_name != "rfind")
+  if (
+    method_name != "find" && method_name != "index" &&
+    method_name != "rfind" && method_name != "rindex")
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
@@ -572,6 +817,20 @@ std::optional<exprt> dispatch_search_string_methods(
       return self.handle_string_index(
         call_json, obj_expr, parsed.needle, get_location());
     return self.handle_string_index_range(
+      call_json,
+      obj_expr,
+      parsed.needle,
+      parsed.start,
+      parsed.end,
+      get_location());
+  }
+
+  if (method_name == "rindex")
+  {
+    if (!parsed.has_range)
+      return self.handle_string_rindex(
+        call_json, obj_expr, parsed.needle, get_location());
+    return self.handle_string_rindex_range(
       call_json,
       obj_expr,
       parsed.needle,
@@ -675,6 +934,50 @@ std::optional<exprt> dispatch_decode_join_method(
       {
         return converter.get_expr(receiver_json["func"]["value"]);
       }
+    }
+
+    // Standalone b"...".decode(): a constant bytes object decodes to the str
+    // of its byte values as characters. ASCII only — UTF-8 multi-byte decoding
+    // is deferred, so non-ASCII bytes fall through to the clean error.
+    std::vector<uint8_t> bytes;
+    if (decode_utf8 && extract_constant_bytes(converter, receiver_json, bytes))
+    {
+      if (std::all_of(
+            bytes.begin(), bytes.end(), [](uint8_t b) { return b < 0x80; }))
+        return converter.get_string_builder().build_string_literal(
+          std::string(bytes.begin(), bytes.end()));
+    }
+    return nil_exprt();
+  }
+
+  if (method_name == "encode")
+  {
+    ensure_allowed_keywords(method_name, keyword_values, {"encoding"});
+    if (args.size() > 1)
+      throw std::runtime_error("encode() takes at most one argument");
+
+    bool encode_utf8 = args.empty();
+    if (args.size() == 1)
+      encode_utf8 = is_utf8_literal_json(args[0]);
+    if (
+      const nlohmann::json *encoding_kw =
+        find_keyword_value(keyword_values, "encoding"))
+      encode_utf8 = is_utf8_literal_json(*encoding_kw);
+
+    // Standalone "...".encode(): a constant str encodes to its bytes. The
+    // UTF-8 encoding of an ASCII string is the identical byte sequence; a
+    // non-ASCII character needs multi-byte UTF-8 (deferred), so it falls
+    // through to the clean error.
+    std::string s;
+    if (
+      encode_utf8 &&
+      string_handler::extract_constant_string(receiver_json, converter, s))
+    {
+      if (std::all_of(s.begin(), s.end(), [](char c) {
+            return static_cast<unsigned char>(c) < 0x80;
+          }))
+        return converter.get_string_builder().build_raw_byte_array(
+          std::vector<uint8_t>(s.begin(), s.end()));
     }
     return nil_exprt();
   }
@@ -828,11 +1131,105 @@ std::optional<exprt> dispatch_format_methods(
 }
 } // namespace string_method_dispatch
 
+exprt string_handler::handle_startswith_endswith_with_pos(
+  const exprt &string_obj,
+  const nlohmann::json &args,
+  python_converter &converter,
+  const locationt &location,
+  bool is_suffix)
+{
+  const char *name = is_suffix ? "endswith" : "startswith";
+
+  // s.startswith(prefix, start[, end]) == s[start:end].startswith(prefix)
+  // (and likewise for endswith). Compute the s[start:end] substring on a
+  // constant receiver and run the base method on it. start/end must be
+  // constant ints; a non-constant receiver is rejected cleanly (matching the
+  // constant-only support of the other string methods).
+  std::string s;
+  if (!try_extract_const_string_expr(string_obj, s))
+    throw std::runtime_error(
+      std::string(name) +
+      "() with start/end is only supported on a constant string");
+
+  const long long len = static_cast<long long>(s.size());
+  const long long start = string_call_utils::required_constant_int_arg(
+    args[1], std::string(name) + "() start must be a constant int", converter);
+  const long long end =
+    (args.size() == 3) ? string_call_utils::required_constant_int_arg(
+                           args[2],
+                           std::string(name) + "() end must be a constant int",
+                           converter)
+                       : len;
+
+  // CPython: once the raw start runs past the end of the string, both methods
+  // return False even for an empty affix. Without this guard the start would
+  // clamp to len, yielding an empty slice that the base handler's empty-affix
+  // short-circuit would wrongly report as a match. (start == len still matches
+  // an empty affix, so the comparison is strict.)
+  if (start > len)
+    return gen_boolean(false);
+
+  // Python slice clamping for s[start:end].
+  auto clamp = [len](long long i) {
+    if (i < 0)
+      i += len;
+    if (i < 0)
+      i = 0;
+    if (i > len)
+      i = len;
+    return i;
+  };
+  const long long lo = clamp(start);
+  const long long hi = clamp(end);
+  const std::string sub =
+    (lo < hi) ? s.substr(static_cast<size_t>(lo), static_cast<size_t>(hi - lo))
+              : std::string();
+
+  exprt sub_expr = string_builder_->build_string_literal(sub);
+  exprt affix_expr = converter.get_expr(args[0]);
+  return is_suffix ? handle_string_endswith(sub_expr, affix_expr, location)
+                   : handle_string_startswith(sub_expr, affix_expr, location);
+}
+
+exprt string_handler::build_affix_tuple_match(
+  const exprt &string_obj,
+  const exprt &affix_tuple,
+  const locationt &location,
+  bool is_suffix)
+{
+  // Python: s.startswith(t) / s.endswith(t) where t is a tuple of strings is
+  // True iff s matches ANY element. Build the disjunction over the per-element
+  // single-affix matches. Only tuple literals (a struct_exprt whose operands
+  // are the elements) are supported; a tuple passed by symbol has no inline
+  // operands here, and silently treating it as a string would be unsound, so
+  // we reject it with a clean error instead.
+  if (affix_tuple.operands().empty())
+    throw std::runtime_error(
+      std::string(is_suffix ? "endswith" : "startswith") +
+      "() with a tuple argument is only supported for tuple literals");
+
+  exprt result = gen_boolean(false);
+  for (const exprt &elem : affix_tuple.operands())
+  {
+    exprt one = is_suffix
+                  ? handle_string_endswith(string_obj, elem, location)
+                  : handle_string_startswith(string_obj, elem, location);
+    // result and one are synthetic bools (constant / startswith-endswith
+    // results), so build the disjunction in IREP2 (V.3).
+    result = build_or(result, one);
+  }
+  return result;
+}
+
 exprt string_handler::handle_string_startswith(
   const exprt &string_obj,
   const exprt &prefix_arg,
   const locationt &location)
 {
+  // A tuple of prefixes: True if the string starts with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(prefix_arg.type()))
+    return build_affix_tuple_match(string_obj, prefix_arg, location, false);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt prefix_copy = prefix_arg;
@@ -854,10 +1251,10 @@ exprt string_handler::handle_string_startswith(
     const array_typet &prefix_type = to_array_type(prefix_expr.type());
     exprt prefix_len = prefix_type.size();
 
-    // Subtract 1 for null terminator
-    exprt one = from_integer(1, prefix_len.type());
-    actual_len = exprt("-", prefix_len.type());
-    actual_len.copy_to_operands(prefix_len, one);
+    // Subtract 1 for null terminator. prefix_len (the array dimension) and the
+    // literal share prefix_len.type(), so build it in IREP2 (V.3).
+    actual_len = build_sub(
+      prefix_len, from_integer(1, prefix_len.type()), prefix_len.type());
   }
   else
   {
@@ -881,22 +1278,22 @@ exprt string_handler::handle_string_startswith(
     *strncmp_symbol, int_type(), {str_addr, prefix_addr, actual_len});
   strncmp_call.location() = location;
 
-  // Check if result == 0 (strings match)
-  exprt zero = gen_zero(int_type());
-  exprt equal("=", bool_type());
-  equal.copy_to_operands(strncmp_call, zero);
+  // V.3: build `(actual_len == 0) || (strncmp(...) == 0)` in IREP2, back
+  // -migrating once. Python treats the empty string as a prefix of every
+  // string, so s.startswith("") is always True; the empty-prefix guard keeps
+  // the result correct for a symbolic empty prefix and is robust to
+  // strncmp(_,_,0), which the operational model evaluates to a non-zero value.
+  expr2tc strncmp2, zero2;
+  migrate_expr(strncmp_call, strncmp2);
+  migrate_expr(gen_zero(int_type()), zero2);
+  expr2tc equal2 = equality2tc(strncmp2, zero2);
 
-  // Python treats the empty string as a prefix of every string, so
-  // s.startswith("") is always True. Guard this case explicitly: it keeps the
-  // result correct for a symbolic empty prefix and is robust to strncmp(_,_,0),
-  // which the operational model evaluates to a non-zero value.
-  exprt is_empty("=", bool_type());
-  is_empty.copy_to_operands(actual_len, gen_zero(actual_len.type()));
+  expr2tc len2, len_zero2;
+  migrate_expr(actual_len, len2);
+  migrate_expr(gen_zero(actual_len.type()), len_zero2);
+  expr2tc is_empty2 = equality2tc(len2, len_zero2);
 
-  exprt result("or", bool_type());
-  result.copy_to_operands(is_empty, equal);
-
-  return result;
+  return migrate_expr_back(or2tc(is_empty2, equal2));
 }
 
 exprt string_handler::handle_string_endswith(
@@ -904,6 +1301,10 @@ exprt string_handler::handle_string_endswith(
   const exprt &suffix_arg,
   const locationt &location)
 {
+  // A tuple of suffixes: True if the string ends with any of them.
+  if (converter_.get_tuple_handler().is_tuple_type(suffix_arg.type()))
+    return build_affix_tuple_match(string_obj, suffix_arg, location, true);
+
   // Ensure both are proper null-terminated strings
   exprt string_copy = string_obj;
   exprt suffix_copy = suffix_arg;
@@ -941,17 +1342,15 @@ exprt string_handler::handle_string_endswith(
     build_call_expr(*strlen_symbol, size_type(), {suffix_addr});
   suffix_strlen_call.location() = location;
 
-  // Check if suffix is longer than string
-  exprt len_check(">", bool_type());
-  len_check.copy_to_operands(suffix_strlen_call, str_strlen_call);
+  // Check if suffix is longer than string. Both operands are synthetic
+  // size_type strlen() results, so build the comparison in IREP2 (V.3).
+  exprt len_check = build_greater_than(suffix_strlen_call, str_strlen_call);
 
   // Calculate offset: strlen(str) - strlen(suffix)
-  exprt offset("-", size_type());
-  offset.copy_to_operands(str_strlen_call, suffix_strlen_call);
+  exprt offset = build_sub(str_strlen_call, suffix_strlen_call, size_type());
 
   // Get pointer to the position: str + offset
-  exprt offset_ptr("+", gen_pointer_type(char_type()));
-  offset_ptr.copy_to_operands(str_addr, offset);
+  exprt offset_ptr = build_add(str_addr, offset, gen_pointer_type(char_type()));
 
   // Find strncmp symbol
   symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
@@ -963,19 +1362,18 @@ exprt string_handler::handle_string_endswith(
     *strncmp_symbol, int_type(), {offset_ptr, suffix_addr, suffix_strlen_call});
   strncmp_call.location() = location;
 
-  // Check if result == 0 (strings match)
-  exprt zero = gen_zero(int_type());
-  exprt strings_equal("=", bool_type());
-  strings_equal.copy_to_operands(strncmp_call, zero);
+  // V.3: build `!(suffix_len > str_len) && (strncmp(...) == 0)` in IREP2,
+  // back-migrating once. Order and operands match the legacy nodes exactly.
+  expr2tc strncmp2, zero2;
+  migrate_expr(strncmp_call, strncmp2);
+  migrate_expr(gen_zero(int_type()), zero2);
+  expr2tc strings_equal2 = equality2tc(strncmp2, zero2);
 
-  // Return: (suffix_len <= str_len) && (strncmp(...) == 0)
-  exprt len_ok("not", bool_type());
-  len_ok.copy_to_operands(len_check);
+  expr2tc len_check2;
+  migrate_expr(len_check, len_check2);
+  expr2tc len_ok2 = not2tc(len_check2);
 
-  exprt result("and", bool_type());
-  result.copy_to_operands(len_ok, strings_equal);
-
-  return result;
+  return migrate_expr_back(and2tc(len_ok2, strings_equal2));
 }
 
 exprt string_handler::handle_string_isdigit(
@@ -1098,12 +1496,13 @@ exprt string_handler::handle_char_isspace(
   exprt call = build_call_expr(func_symbol_id, int_type(), {char_as_int});
   call.location() = location;
 
-  // Convert result to boolean (isspace returns non-zero for whitespace)
-  exprt result("notequal", bool_type());
-  result.copy_to_operands(call);
-  result.copy_to_operands(from_integer(0, int_type()));
-
-  return result;
+  // V.3: convert the C isspace() result to a boolean in IREP2 (isspace
+  // returns non-zero for whitespace), back-migrating once. Operand order
+  // (call != 0) and the bool result type match the legacy node.
+  expr2tc call2, zero2;
+  migrate_expr(call, call2);
+  migrate_expr(from_integer(0, int_type()), zero2);
+  return migrate_expr_back(notequal2tc(call2, zero2));
 }
 
 exprt string_handler::handle_string_lstrip(
@@ -1804,8 +2203,11 @@ exprt string_handler::build_string_index_result(
   assign.location() = location;
   converter_.add_instruction(assign);
 
-  exprt not_found =
-    equality_exprt(build_symbol(find_result), from_integer(-1, int_type()));
+  // V.3: build the `find_result == -1` not-found check in IREP2.
+  expr2tc fr2;
+  migrate_expr(build_symbol(find_result), fr2);
+  exprt not_found = migrate_expr_back(
+    equality2tc(fr2, from_integer(BigInt(-1), migrate_type(int_type()))));
   exprt raise = python_exception_utils::make_exception_raise(
     type_handler_, "ValueError", "substring not found", &location);
 
@@ -1882,6 +2284,31 @@ exprt string_handler::handle_string_rfind_range(
   rfind_call.location() = location;
 
   return rfind_call;
+}
+
+exprt string_handler::handle_string_rindex(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const locationt &location)
+{
+  // rindex is rfind that raises ValueError when the substring is not found,
+  // exactly as index relates to find (build_string_index_result raises on -1).
+  exprt rfind_expr = handle_string_rfind(string_obj, find_arg, location);
+  return build_string_index_result(call, rfind_expr, location);
+}
+
+exprt string_handler::handle_string_rindex_range(
+  const nlohmann::json &call,
+  const exprt &string_obj,
+  const exprt &find_arg,
+  const exprt &start_arg,
+  const exprt &end_arg,
+  const locationt &location)
+{
+  exprt rfind_expr = handle_string_rfind_range(
+    string_obj, find_arg, start_arg, end_arg, location);
+  return build_string_index_result(call, rfind_expr, location);
 }
 
 exprt string_handler::handle_string_replace(
@@ -2418,6 +2845,11 @@ exprt string_handler::handle_string_format(
 
   std::vector<std::string> args;
   std::unordered_map<std::string, std::string> keywords;
+  // Parallel AST nodes, kept so a `{:spec}` field can re-format the original
+  // value rather than the already-stringified one. call is a const ref held by
+  // the caller, so these pointers stay valid for this function.
+  std::vector<const nlohmann::json *> arg_nodes;
+  std::unordered_map<std::string, const nlohmann::json *> keyword_nodes;
   try
   {
     if (call.contains("args") && call["args"].is_array())
@@ -2425,6 +2857,7 @@ exprt string_handler::handle_string_format(
       for (const auto &arg : call["args"])
       {
         args.push_back(format_value_from_json(arg, converter_));
+        arg_nodes.push_back(&arg);
       }
     }
 
@@ -2438,6 +2871,7 @@ exprt string_handler::handle_string_format(
         if (!kw.contains("value"))
           throw std::runtime_error("format() keyword missing value");
         keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+        keyword_nodes.emplace(key, &kw["value"]);
       }
     }
   }
@@ -2481,37 +2915,79 @@ exprt string_handler::handle_string_format(
         throw std::runtime_error("format() unmatched '{'");
 
       std::string field = format_str.substr(i + 1, end - (i + 1));
-      if (field.empty())
+
+      // A field is `name[:spec]`. Split off the format spec at the first ':'.
+      std::string fmt_spec;
+      const size_t colon = field.find(':');
+      std::string name = field;
+      if (colon != std::string::npos)
+      {
+        name = field.substr(0, colon);
+        fmt_spec = field.substr(colon + 1);
+      }
+
+      // !r/!s conversions and .attr/[idx] field access are not folded.
+      if (
+        name.find('!') != std::string::npos ||
+        name.find('.') != std::string::npos ||
+        name.find('[') != std::string::npos)
+        return build_nondet_string_fallback(location);
+
+      // Resolve the field name to its stringified value and AST node.
+      std::string str_val;
+      const nlohmann::json *node = nullptr;
+      if (name.empty())
       {
         if (arg_index >= args.size())
           throw std::runtime_error("format() missing arguments");
-        result += args[arg_index++];
+        str_val = args[arg_index];
+        node = arg_nodes[arg_index];
+        ++arg_index;
       }
       else
       {
         bool all_digits = true;
-        for (char fc : field)
-        {
+        for (char fc : name)
           if (!std::isdigit(static_cast<unsigned char>(fc)))
           {
             all_digits = false;
             break;
           }
-        }
 
         if (all_digits)
         {
-          size_t idx = static_cast<size_t>(std::stoull(field));
+          const size_t idx = static_cast<size_t>(std::stoull(name));
           if (idx >= args.size())
             throw std::runtime_error("format() argument index out of range");
-          result += args[idx];
+          str_val = args[idx];
+          node = arg_nodes[idx];
         }
         else
         {
-          auto it = keywords.find(field);
+          auto it = keywords.find(name);
           if (it == keywords.end())
             throw std::runtime_error("format() missing keyword argument");
-          result += it->second;
+          str_val = it->second;
+          auto nit = keyword_nodes.find(name);
+          node = (nit != keyword_nodes.end()) ? nit->second : nullptr;
+        }
+      }
+
+      if (fmt_spec.empty())
+        result += str_val;
+      else
+      {
+        // Apply the format spec to the original value; an unsupported spec or
+        // non-constant value degrades the whole call to a sound nondet string.
+        try
+        {
+          if (node == nullptr)
+            throw std::runtime_error("format spec without a value node");
+          result += apply_format_spec(*node, fmt_spec, converter_);
+        }
+        catch (const std::runtime_error &)
+        {
+          return build_nondet_string_fallback(location);
         }
       }
 
@@ -2546,6 +3022,24 @@ exprt string_handler::handle_string_partition(
   const exprt &sep_arg,
   const locationt &location)
 {
+  return build_partition_tuple(string_obj, sep_arg, location, false);
+}
+
+exprt string_handler::handle_string_rpartition(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location)
+{
+  return build_partition_tuple(string_obj, sep_arg, location, true);
+}
+
+exprt string_handler::build_partition_tuple(
+  const exprt &string_obj,
+  const exprt &sep_arg,
+  const locationt &location,
+  bool from_right)
+{
+  const char *method_name = from_right ? "rpartition" : "partition";
   // Build a 3-tuple (before, sep, after) as a struct tagged like a regular
   // Python tuple ("tag-tuple_..."). The tag is what lets the assignment target
   // fixup, len(), and subscript recognise the result as a tuple rather than a
@@ -2565,6 +3059,7 @@ exprt string_handler::handle_string_partition(
       tag += "_" + elems[i]->type().to_string();
     }
     tuple_type.tag(tag);
+    set_python_aggregate_kind(tuple_type, "tuple");
 
     struct_exprt tuple_expr(tuple_type);
     tuple_expr.operands() = {a, b, c};
@@ -2586,27 +3081,42 @@ exprt string_handler::handle_string_partition(
     // report VFAILED, but GOTO conversion no longer aborts (#4807).
     log_debug(
       "python-string",
-      "partition() on non-constant receiver/separator: empty-tuple "
-      "fallback");
+      "{}() on non-constant receiver/separator: empty-tuple fallback",
+      method_name);
     if (!string_builder_)
-      throw std::runtime_error("string_builder not set for partition()");
+      throw std::runtime_error(
+        std::string("string_builder not set for ") + method_name + "()");
     exprt empty_a = string_builder_->build_string_literal("");
     exprt empty_b = string_builder_->build_string_literal("");
     exprt empty_c = string_builder_->build_string_literal("");
     return make_tuple3(empty_a, empty_b, empty_c);
   }
   if (sep.empty())
-    throw std::runtime_error("partition() separator cannot be empty");
+    throw std::runtime_error(
+      std::string(method_name) + "() separator cannot be empty");
 
   std::string before;
   std::string after;
   std::string mid;
-  size_t pos = input.find(sep);
+  // partition() splits at the first occurrence of sep; rpartition() at the
+  // last. When sep is absent, partition() returns (input, "", "") and
+  // rpartition() returns ("", "", input) — the unmatched receiver goes in the
+  // first vs. the last element respectively.
+  size_t pos = from_right ? input.rfind(sep) : input.find(sep);
   if (pos == std::string::npos)
   {
-    before = input;
-    mid = "";
-    after = "";
+    if (from_right)
+    {
+      before = "";
+      mid = "";
+      after = input;
+    }
+    else
+    {
+      before = input;
+      mid = "";
+      after = "";
+    }
   }
   else
   {
@@ -2616,7 +3126,8 @@ exprt string_handler::handle_string_partition(
   }
 
   if (!string_builder_)
-    throw std::runtime_error("string_builder not set for partition()");
+    throw std::runtime_error(
+      std::string("string_builder not set for ") + method_name + "()");
 
   exprt before_expr = string_builder_->build_string_literal(before);
   exprt mid_expr = string_builder_->build_string_literal(mid);

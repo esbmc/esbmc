@@ -16,6 +16,8 @@ enum class FunctionType
 };
 
 class symbol_id;
+class code_function_callt;
+class locationt;
 
 class function_call_expr
 {
@@ -117,6 +119,11 @@ private:
   exprt build_constant_from_arg() const;
 
   /*
+   * Folds bytes.fromhex("..") over a constant hex string into a byte array.
+   */
+  exprt handle_bytes_fromhex() const;
+
+  /*
    * Sets the function_type_ attribute based on the call information.
    */
   void get_function_type();
@@ -144,6 +151,22 @@ private:
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
   exprt handle_int_to_bytes() const;
+
+  /*
+   * Folds a zero-argument int method on a constant literal receiver
+   * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
+   * BinOp receiver already routes through the int operational model; a bare
+   * literal receiver is not classified as an int instance, so fold it here.
+   */
+  exprt handle_int_literal_method() const;
+
+  /*
+   * Folds float.is_integer() on a constant literal receiver
+   * (e.g. (2.0).is_integer()). A Name receiver already routes through the
+   * float operational model; a bare literal is not classified as a float
+   * instance, so fold it here to a Python bool.
+   */
+  exprt handle_float_is_integer_literal() const;
 
   /*
    * Extracts a string representation from a symbol's constant value.
@@ -253,6 +276,14 @@ private:
    * \xNN / \uNNNN / \UNNNNNNNN, following Python 3 `ascii()` semantics.
    */
   exprt handle_ascii() const;
+
+  /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
 
   /*
    * Handles ord(str) conversions by extracting the Unicode code point
@@ -443,6 +474,95 @@ private:
 
   // General function call handler
   exprt handle_general_function_call();
+
+  // --- handle_general_function_call() decomposition helpers ---
+  // Each "try_"/optional-returning helper extracts a self-contained block of
+  // handle_general_function_call(). A returned value is the result the caller
+  // must return immediately; std::nullopt means "no match — fall through",
+  // preserving the original sequential control flow exactly.
+
+  /*
+   * sorted() fast-path: a single-arg sorted() over a concrete int/tuple list is
+   * materialized in the frontend, avoiding the runtime list sort/equality model.
+   * Honours reverse=<constant bool>; returns nullopt for any other shape.
+   */
+  std::optional<exprt> try_fold_sorted();
+  std::optional<exprt> fold_sorted_int_list(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_constant_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_symbolic_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse);
+
+  /*
+   * Folds the builtin round() on a Name receiver when it is not user-defined or
+   * user-imported. Returns nullopt to leave round() to the typed dispatch.
+   */
+  std::optional<exprt> try_handle_round(bool is_user_imported);
+
+  /*
+   * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
+   * _float/_str/_default suffix to actual_func_name based on element type, and
+   * may early-return the inline comparison for a mixed int/float min/max list.
+   */
+  std::optional<exprt> apply_builtin_dispatch(
+    std::string &actual_func_name,
+    bool is_user_imported,
+    bool is_numpy_model_call);
+
+  /*
+   * Indirect call through a variable holding a function pointer, e.g.
+   * times3 = make_multiplier(3); times3(4). Returns nullopt when the Name does
+   * not resolve to a non-code variable symbol.
+   */
+  std::optional<exprt> try_indirect_variable_call();
+
+  /*
+   * Resolves the callee when the direct symbol lookup failed: dataclass
+   * __post_init__ forward refs, base-class method resolution for
+   * constructors/instance methods, AttributeError generation, global-scope
+   * forward references, and the undefined-function fallback. On success either
+   * returns the expression to emit, or returns nullopt after binding
+   * func_symbol so the common call-building path continues.
+   */
+  std::optional<exprt> resolve_missing_function_symbol(
+    const symbolt *&func_symbol,
+    const std::string &func_symbol_id,
+    symbolt *obj_symbol,
+    const symbol_id &obj_symbol_id);
+
+  /*
+   * Builds the resolved code_function_callt in three phases, mirroring the
+   * original inline sequence:
+   *  - bind_call_receiver: prepends self/cls for ctor/instance/class methods
+   *    and returns the parameter offset for subsequent positional binding;
+   *  - build_positional_arguments: converts and appends positional args
+   *    (returns early for the __ESBMC_get_object_size/strlen list-size case);
+   *  - finalize_call: forwards keyword args, fills defaults, and adds the
+   *    constructor temp-self, returning the final call (or an early result).
+   */
+  size_t bind_call_receiver(
+    code_function_callt &call,
+    symbolt *obj_symbol,
+    const symbolt *func_symbol,
+    const locationt &location);
+  std::optional<exprt> build_positional_arguments(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol);
+  exprt finalize_call(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol,
+    symbolt *obj_symbol);
 
   const symbolt *cached_find_symbol(const std::string &id) const;
 

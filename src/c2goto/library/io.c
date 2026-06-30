@@ -18,6 +18,11 @@
 #  undef ferror
 #endif
 
+/* True when ESBMC runs in SV-COMP mode (--sv-comp). Lowered to a constant by
+ * symex from the runtime option, so fopen/fclose can skip malloc/free for
+ * SV-COMP without a separate build of this model. */
+_Bool __ESBMC_sv_comp(void);
+
 #undef putchar
 #undef puts
 #undef getc
@@ -96,22 +101,25 @@ __ESBMC_HIDE:;
 FILE *fopen(const char *filename, const char *m)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-  FILE *f = (void *)1;
-#else
-  FILE *f = malloc(sizeof(FILE));
-#endif
+  /* In SV-COMP mode, avoid allocating a FILE so callers that never fclose()
+   * don't trip memory-leak checks; return a non-null sentinel instead. */
+  FILE *f = __ESBMC_sv_comp() ? (void *)1 : malloc(sizeof(FILE));
   return f;
 }
 
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-// Don't clear pending state here - let it remain for verification
-#if __ESBMC_SVCOMP
-#else
-  free(stream);
-#endif
+  // Don't clear pending state here - let it remain for verification.
+  // Mirror fopen: in SV-COMP mode the stream is a sentinel, not heap memory.
+  // Outside SV-COMP, only release storage we actually allocated on the heap
+  // (fopen/fdopen).  The standard streams stdin/stdout/stderr are not heap
+  // objects, so free()ing them would spuriously report "invalid pointer
+  // freed" even though fclose(stdout) is well-defined.  Guarding on
+  // __ESBMC_is_dynamic keeps a genuine double-fclose of an fopen'd stream
+  // detectable as a double free (the flag stays set after free()).
+  if (!__ESBMC_sv_comp() && __ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)])
+    free(stream);
   return nondet_int();
 }
 
@@ -493,6 +501,16 @@ int *__errno_location(void)
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
+
+// macOS/BSD expose errno as (*__error()); model it like __errno_location so
+// that errno-setting models work under the Apple/BSD sysroot too.
+#if defined(__APPLE__) || defined(__FreeBSD__)
+int *__error(void)
+{
+__ESBMC_HIDE:;
+  return &__esbmc_errno;
+}
+#endif
 
 int pipe(int pipefd[2])
 {

@@ -1,5 +1,0 @@
-properties:
-  - id: PROBE
-    kind: absence
-    expression: "Water_Pump || !Water_Pump"
-    description: "Always-true probe to force a counterexample trace"

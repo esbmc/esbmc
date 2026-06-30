@@ -187,21 +187,16 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   restore_value_locations(roundtrip_body_storage, locationt());
   const codet &code = to_code(roundtrip_body_storage);
 
-  // code_block2t carries only #location, not #end_location, so the round-trip
-  // drops the closing-brace location the frontend stamped onto the block (see
-  // clang_c_convert.cpp). That location is the END_FUNCTION instruction's
-  // location; for an empty function body it is the *only* located instruction,
-  // so losing it leaves the whole function unlocated and passes keyed on
-  // instruction location skip it (e.g. --branch-function-coverage stops
-  // counting the function entry point). Recover it from the still-authoritative
-  // legacy value, which retains the #end_location IREP2 cannot represent.
+  // The closing-brace location is the END_FUNCTION instruction's location; for
+  // an empty function body it is the *only* located instruction, so losing it
+  // leaves the whole function unlocated and passes keyed on instruction
+  // location skip it (e.g. --branch-function-coverage stops counting the
+  // function entry point). code_block2t now carries #end_location through the
+  // round-trip (W1, esbmc/esbmc#4715), so read it straight off the body block.
   locationt end_location;
-  // legacy_body is guaranteed to be code (the early check above aborts
-  // otherwise); a nil body is already handled before this point.
-  const codet &legacy_body = to_code(symbol.get_value());
-  if (legacy_body.get_statement() == "block")
+  if (code.get_statement() == "block")
     end_location =
-      static_cast<const locationt &>(to_code_block(legacy_body).end_location());
+      static_cast<const locationt &>(to_code_block(code).end_location());
   else
     end_location.make_nil();
 

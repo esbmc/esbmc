@@ -213,6 +213,15 @@ protected:
   void symex_return(const expr2tc &code);
   void
   symex_witness_function_return(expr2tc ret_val, const irep_idt &call_line);
+  bool symex_witness_function_enter(const irep_idt &call_line);
+  void symex_witness_branching(
+    const expr2tc &old_guard,
+    const expr2tc &new_guard,
+    bool forward,
+    bool &new_guard_true,
+    bool &new_guard_false,
+    const goto_programt::instructiont &instruction);
+  void symex_witness_assert(expr2tc &new_expr, const std::string &msg);
 
   /**
    *  Interpret an OTHER instruction.
@@ -359,6 +368,18 @@ protected:
   void pop_frame();
 
   /**
+   *  Whether `base` is a user-defined Python class instance that follows
+   *  garbage-collected lifetime semantics (issue #4773). Such objects are kept
+   *  alive past their defining frame so references captured into a returned or
+   *  otherwise escaping aggregate stay valid, matching CPython (which heap-
+   *  allocates objects and frees them only when unreachable). Internal Python
+   *  model aggregates (tuples, dicts, and the list/slice/object/type
+   *  operational-model structs) are excluded: they manage their own
+   *  representation and must not have frame teardown skipped.
+   */
+  bool is_python_gc_object(const symbolt *base) const;
+
+  /**
    *  Create assignment for return statement.
    *  Generate an assignment to the return variable from this return statement.
    *  @param assign Assignment expression. Output.
@@ -401,6 +422,22 @@ protected:
    *  @param code Function code to actually call
    */
   virtual void symex_function_call_code(const expr2tc &call);
+
+  /**
+   *  Model a call to a "__ESBMC_uninterpreted_*" or "__CPROVER_uninterpreted_*"
+   *  function as a genuine uninterpreted function: assign the return an
+   *  uninterpreted_func2t application of the (mangled) callee to its renamed
+   *  arguments. Functional congruence (equal arguments imply an equal result)
+   *  is enforced downstream by the SMT backend's native uninterpreted-function
+   *  support, not here. The concrete body, if present, is deliberately ignored
+   *  (CBMC semantics). Returns true when the call was handled here (caller must
+   *  then advance the program counter).
+   *  @param call The function-call code being executed.
+   *  @param identifier The (mangled) callee symbol name.
+   */
+  bool symex_uninterpreted_function(
+    const code_function_call2t &call,
+    const irep_idt &identifier);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -1262,8 +1299,7 @@ protected:
   bool inductive_step;
   /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
   bool validate_witness;
-  /** Pre-interned target waypoint line; empty when no target is present. */
-  irep_idt witness_target_line;
+
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
