@@ -55,8 +55,7 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  const bool &is_compact_trace)
+  goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
 
@@ -66,7 +65,12 @@ void build_goto_trace(
   // without any explicit scope management here.
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (SSA_step.hidden && is_compact_trace)
+    // Hidden steps are internal SSA bookkeeping (e.g. phi-merge nodes at
+    // control-flow joins). They carry a synthesised value and a source
+    // location borrowed from a branch, so surfacing them in the trace yields
+    // contradictory-looking states (see discussion #5701). They are never a
+    // user-visible source assignment, so drop them regardless of slicing.
+    if (SSA_step.hidden)
       continue;
 
     if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())

@@ -8,8 +8,7 @@
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  const bool &is_compact_trace);
+  goto_tracet &goto_trace);
 
 void build_successful_goto_trace(
   const symex_target_equationt &target,
