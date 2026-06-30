@@ -264,25 +264,27 @@ exprt python_list::handle_range_slice(
         return expr;
       return build_typecast(expr, size_type());
     };
-    auto size_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-      plus_exprt out(lhs, rhs);
-      out.type() = size_type();
-      return out;
+    // V.1k keystone: slice-bound size_type arithmetic built in IREP2. Every
+    // call site feeds size_type operands (process_bound, to_size_expr,
+    // array_len and logical_len all yield size_type), so operand and result
+    // widths match the size_type result — no reconciliation needed.
+    auto size_add = [](const exprt &lhs, const exprt &rhs) -> exprt {
+      return build_add(lhs, rhs, size_type());
     };
-    auto size_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-      minus_exprt out(lhs, rhs);
-      out.type() = size_type();
-      return out;
+    auto size_sub = [](const exprt &lhs, const exprt &rhs) -> exprt {
+      return build_sub(lhs, rhs, size_type());
     };
-    auto size_mul = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-      mult_exprt out(lhs, rhs);
-      out.type() = size_type();
-      return out;
+    auto size_mul = [](const exprt &lhs, const exprt &rhs) -> exprt {
+      expr2tc l, r;
+      migrate_expr(lhs, l);
+      migrate_expr(rhs, r);
+      return migrate_expr_back(mul2tc(migrate_type(size_type()), l, r));
     };
-    auto size_div = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-      div_exprt out(lhs, rhs);
-      out.type() = size_type();
-      return out;
+    auto size_div = [](const exprt &lhs, const exprt &rhs) -> exprt {
+      expr2tc l, r;
+      migrate_expr(lhs, l);
+      migrate_expr(rhs, r);
+      return migrate_expr_back(div2tc(migrate_type(size_type()), l, r));
     };
 
     // Determine element type and logical length
@@ -401,9 +403,9 @@ exprt python_list::handle_range_slice(
     exprt result_size = slice_len;
     if (needs_null_term)
     {
-      plus_exprt with_null(slice_len, gen_one(size_type()));
-      with_null.type() = size_type();
-      result_size = with_null;
+      // slice_len and the literal are both size_type (built above), so this is
+      // a clean IREP2 add (V.1k keystone).
+      result_size = build_add(slice_len, gen_one(size_type()), size_type());
     }
     array_typet result_type(elem_type, result_size);
 
