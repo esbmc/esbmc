@@ -502,6 +502,15 @@ set(_slow_regression_tests
     # does not touch its code path). Give it the 2x budget so transient
     # runner-speed differences don't flap it.
     "regression/python/str_rsplit"
+    # set_variadic_methods verifies SUCCESSFUL but is heavy: under
+    # --incremental-bmc it climbs k while re-running symex over the set/list
+    # operational models (variadic union/intersection/difference fold to
+    # __ESBMC_list_extend + __memcpy_impl loops), re-encoding ~1400 VCCs and a
+    # fresh Bitwuzla query each step. It lands ~137s locally and timed out at
+    # 120.71s on the DebugOpt Linux runner in #5705 CI -- a run that does not
+    # touch its code path. Give it the 2x budget so transient CI slowness does
+    # not flap it.
+    "regression/python/set_variadic_methods"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
