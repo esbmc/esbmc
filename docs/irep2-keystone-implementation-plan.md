@@ -68,7 +68,18 @@ matched-text parity over the affected regression suite, asserts build.
    the `mod(lhs,rhs)` node (nested width-hazard on lhs/rhs), the bool `xor`
    (must stay bool-xor, not bitxor — #4548 Bitwuzla crash), `and`, the modulo
    `if(cond, rhs, 0)` (mismatched branch widths), and the outer `+`/`-`.
-5. **D** `builtins.cpp:369`/`447` — `isinstance` NoneType/tuple.
+4b. **W** [DONE] `list_mutation.cpp:935` — `idx < str_len` in
+   build_extend_list_call. Commit fe23ac42b5. **With this, every clean
+   loop-condition / sign-test width-hazard is drained.** A full census
+   (`grep '("<"' etc. across src/python-frontend`) leaves only: the entangled
+   `python_math` tree nodes (task 4 remaining) and one float site
+   `numpy_call_expr.cpp:2503` (ieee_sub + rounding-mode — a different hazard).
+
+5. **D** `builtins.cpp:369`/`447` — `isinstance` NoneType/tuple. **This is the
+   real remaining keystone work (F-P11 deferred-operand), harder than the
+   width-hazards: the operand may be a member/index subexpression whose source
+   resolution is deferred to clang_cpp_adjust, so a naive migrate aborts on
+   some inputs (regression risk). Needs resolve-then-build, not a leaf swap.**
 6. **D** `converter_stmt.cpp` BoolOp short-circuit; `converter_compare.cpp`
    is-none inequality; `python_list.cpp:1444`-`1683` slice-bound arithmetic;
    `numpy_call_expr.cpp:1607` complex int→double; `converter_expr.cpp:1369`/
