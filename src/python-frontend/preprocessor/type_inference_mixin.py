@@ -80,9 +80,8 @@ class TypeInferenceMixin:
         for n in ast.walk(module):
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
                 a = n.args
-                for arg in (a.posonlyargs + a.args + a.kwonlyargs
-                            + ([a.vararg] if a.vararg else [])
-                            + ([a.kwarg] if a.kwarg else [])):
+                for arg in (a.posonlyargs + a.args + a.kwonlyargs +
+                            ([a.vararg] if a.vararg else []) + ([a.kwarg] if a.kwarg else [])):
                     poisoned.add(arg.arg)
         for n in ast.walk(module):
             if not (isinstance(n, ast.Assign) and len(n.targets) == 1
@@ -291,8 +290,7 @@ class TypeInferenceMixin:
             if attr_class:
                 return attr_class
         if isinstance(iterable_node, ast.Name):
-            list_var_class = getattr(self, "list_var_element_classes", {}).get(
-                iterable_node.id)
+            list_var_class = getattr(self, "list_var_element_classes", {}).get(iterable_node.id)
             if list_var_class:
                 return list_var_class
         if isinstance(iterable_node, ast.List) and iterable_node.elts:
