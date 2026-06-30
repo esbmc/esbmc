@@ -1,14 +1,16 @@
-// Standalone diagnostic harness for py_percent_format (PR #5695 Linux CI repro).
-// Extracts the exact helper functions from
-// src/python-frontend/converter/converter_binop.cpp and exercises the cases
-// from regression/python/percent_format_spec/main.py. Depends only on the
-// standard library + nlohmann/json. Temporary debug artifact; not for merge.
+// Standalone diagnostic + fix-verification harness for py_percent_format
+// (PR #5695 Linux CI repro). Extracts the helper functions verbatim from
+// src/python-frontend/converter/converter_binop.cpp and proves both the root
+// cause (glibc printf honours the host FP rounding mode) and the fix (fmt_double
+// pins FE_TONEAREST). Depends only on the standard library + nlohmann/json.
+// Temporary debug artifact; not for merge.
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 #include <map>
 #include <cstdio>
 #include <cctype>
+#include <cfenv>
 #include <sstream>
 #include <algorithm>
 #include <stdexcept>
@@ -222,6 +224,27 @@ std::string py_percent_format(
 
     // Two-pass snprintf with a literal format (stays -Wformat-nonliteral-safe).
     auto fmt_double = [](char conv, int p, double d) -> std::string {
+      // glibc's printf rounds %f/%e/%g per the host FP rounding mode, and the
+      // surrounding pipeline can leave the host in a non-default mode; under
+      // FE_UPWARD, e.g. "%.2f" % 3.14159 would render "3.15" instead of "3.14".
+      // CPython formats with round-half-to-even, i.e. FE_TONEAREST, so pin that
+      // mode for both snprintf passes and restore it, keeping the fold correct
+      // and platform-independent (Apple libc ignores the mode; glibc honours
+      // it). The guard restores on every return path.
+      struct round_guard
+      {
+        int saved;
+        round_guard() : saved(std::fegetround())
+        {
+          if (saved != FE_TONEAREST)
+            std::fesetround(FE_TONEAREST);
+        }
+        ~round_guard()
+        {
+          if (saved >= 0 && saved != FE_TONEAREST)
+            std::fesetround(saved);
+        }
+      } guard;
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -359,36 +382,48 @@ std::string py_percent_format(
 }
 } // namespace
 
-static void dump_bytes(const std::string& s) {
-  std::printf("  bytes=[");
-  for (size_t i=0;i<s.size();++i) std::printf("%s%d", i?",":"", (int)(unsigned char)s[i]);
-  std::printf("]\n");
+static std::string raw_snprintf_2f(double d) {
+  int n = std::snprintf(nullptr, 0, "%.2f", d);
+  std::string b; b.resize((size_t)n);
+  std::snprintf(&b[0], (size_t)n + 1, "%.2f", d);
+  return b;
+}
+
+static std::string fold(const char* fmt, double v) {
+  nlohmann::json j; j["_type"] = "Constant"; j["value"] = v;
+  std::vector<nlohmann::json> args{j};
+  std::map<std::string, nlohmann::json> mapping;
+  return py_percent_format(fmt, args, mapping);
 }
 
 int main() {
-  struct Case { const char* fmt; nlohmann::json arg; const char* expect; };
-  auto fnode = [](double v){ nlohmann::json j; j["_type"]="Constant"; j["value"]=v; return j; };
-  auto inode = [](long long v){ nlohmann::json j; j["_type"]="Constant"; j["value"]=v; return j; };
-  std::vector<Case> cases = {
-    {"%.2f", fnode(3.14159), "3.14"},
-    {"%.1f", fnode(3.14159), "3.1"},
-    {"%.3f", fnode(3.14159), "3.142"},
-    {"%f",   fnode(3.14),    "3.140000"},
-    {"%8.2f",fnode(3.14159), "    3.14"},
-    {"%07.2f",fnode(-3.1),   "-003.10"},
-    {"%e",   fnode(1000.0),  "1.000000e+03"},
-    {"%5d",  inode(42),      "   42"},
-  };
   int fails = 0;
-  std::printf("g++/clang build; testing py_percent_format on this libc/libstdc++\n");
-  for (auto& c : cases) {
-    std::vector<nlohmann::json> args; args.push_back(c.arg);
-    std::map<std::string, nlohmann::json> mapping;
-    std::string got = py_percent_format(c.fmt, args, mapping);
-    bool ok = (got == c.expect);
-    std::printf("[%s] fmt=%-7s got=\"%s\" (len=%zu) expect=\"%s\"\n",
-                ok?"OK":"FAIL", c.fmt, got.c_str(), got.size(), c.expect);
-    if (!ok) { dump_bytes(got); fails++; }
+  const int modes[] = {FE_TONEAREST, FE_UPWARD, FE_DOWNWARD, FE_TOWARDZERO};
+  const char* names[] = {"FE_TONEAREST", "FE_UPWARD", "FE_DOWNWARD", "FE_TOWARDZERO"};
+  for (int i = 0; i < 4; ++i) {
+    std::fesetround(modes[i]);
+    std::string raw = raw_snprintf_2f(3.14159);          // shows glibc honouring mode
+    std::string folded = fold("%.2f", 3.14159);          // fixed fmt_double
+    int after = std::fegetround();                       // must be restored
+    bool ok = (folded == "3.14");
+    bool restored = (after == modes[i]);
+    std::printf("[%s] host=%-13s raw_snprintf=\"%s\"  py_percent_format=\"%s\"  restored=%s\n",
+                (ok && restored) ? "OK" : "FAIL", names[i], raw.c_str(), folded.c_str(),
+                restored ? "yes" : "NO");
+    if (!ok || !restored) fails++;
+  }
+  // Sanity: the full spec cases under a deliberately-hostile mode.
+  std::fesetround(FE_UPWARD);
+  struct C { const char* f; double v; const char* e; };
+  C cs[] = {{"%.2f",3.14159,"3.14"},{"%.1f",3.14159,"3.1"},{"%.3f",3.14159,"3.142"},
+            {"%f",3.14,"3.140000"},{"%8.2f",3.14159,"    3.14"},{"%07.2f",-3.1,"-003.10"},
+            {"%e",1000.0,"1.000000e+03"}};
+  std::printf("--- full spec cases with host mode = FE_UPWARD ---\n");
+  for (auto& c : cs) {
+    std::string g = fold(c.f, c.v);
+    bool ok = (g == c.e);
+    std::printf("[%s] %-7s -> \"%s\" (expect \"%s\")\n", ok?"OK":"FAIL", c.f, g.c_str(), c.e);
+    if (!ok) fails++;
   }
   std::printf("\n%d failure(s)\n", fails);
   return fails ? 1 : 0;

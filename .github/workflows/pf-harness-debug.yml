@@ -6,42 +6,21 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-dump:
+  harness:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-
-      - name: Build ESBMC (DebugOpt, same as CI)
-        run: ./scripts/build.sh -b DebugOpt -e ON
-
-      - name: Locate binary
+      - name: Toolchain
+        run: { g++ --version; ldd --version | head -1; } || true
+      - name: Fetch nlohmann/json single header
         run: |
-          ESBMC=$(find "$PWD" -type f -name esbmc -path '*bin*' 2>/dev/null | head -1)
-          if [ -z "$ESBMC" ]; then ESBMC=$(find "$PWD" -type f -name esbmc -path '*src/esbmc*' 2>/dev/null | head -1); fi
-          echo "ESBMC=$ESBMC" | tee -a "$GITHUB_ENV"
-          "$ESBMC" --version || true
-
-      - name: Reproduce and dump folds
+          mkdir -p third_party/nlohmann
+          curl -sSL https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp -o third_party/nlohmann/json.hpp
+      - name: Compile and run harness (multiple configs)
         run: |
           set +e
-          E="$ESBMC"
-          echo "############ percent_format_spec (expect FAIL line 4) ############"
-          "$E" regression/python/percent_format_spec/main.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column|assertion"
-          dump() {
-            local name="$1"; local prog="$2"
-            printf '%s' "$prog" > /tmp/t.py
-            echo "############ $name ############"
-            echo "--- source ---"; cat /tmp/t.py
-            echo "--- verdict ---"
-            "$E" /tmp/t.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column" | head -3
-            echo "--- GOTO (assign/assert/decl in main) ---"
-            "$E" /tmp/t.py --goto-functions-only 2>&1 | awk '/function main/{p=1} p' | grep -E "ASSIGN [xy]=|DECL .*[xy];|ASSERT (0|1)$" | head -10
-          }
-          dump "inline_fail"     $'def main() -> None:\n    assert "%.2f" % 3.14159 == "3.14"\nmain()\n'
-          dump "via_var"         $'def main() -> None:\n    x = "%.2f" % 3.14159\n    assert x == "3.14"\nmain()\n'
-          dump "literal_control" $'def main() -> None:\n    assert "3.14" == "3.14"\nmain()\n'
-          dump "prec3_5char"     $'def main() -> None:\n    assert ("%.3f" % 3.14159) == "3.142"\nmain()\n'
-          dump "prec1_3char"     $'def main() -> None:\n    assert ("%.1f" % 3.14159) == "3.1"\nmain()\n'
-          dump "padded_8char"    $'def main() -> None:\n    assert ("%8.2f" % 3.14159) == "    3.14"\nmain()\n'
-          dump "two_vars"        $'def main() -> None:\n    x = "%.2f" % 3.14159\n    y = "3.14"\n    assert x == y\nmain()\n'
-          echo "############ done ############"
+          run() { echo "==================== $1 ===================="; shift; "$@" -Ithird_party tools/pf_harness.cpp -o /tmp/h 2>/tmp/e || { echo COMPILE_FAIL; cat /tmp/e; return; }; /tmp/h; echo "exit=$?"; }
+          run "g++ -O2"               g++     -std=c++17 -O2 -g
+          run "g++ -O2 asan+ubsan"    g++     -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          run "clang++ -O2"           clang++ -std=c++17 -O2 -g
+          echo "==================== done ===================="
