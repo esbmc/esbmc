@@ -939,6 +939,46 @@ exprt function_call_expr::build_constant_from_arg() const
   return expr;
 }
 
+exprt function_call_expr::handle_int_literal_method() const
+{
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      function_id_.get_function() + "() takes no arguments");
+
+  long long v = 0;
+  if (!json_utils::extract_constant_integer(
+        call_["func"]["value"],
+        converter_.get_current_func_name(),
+        converter_.get_ast_json(),
+        v))
+    throw std::runtime_error(
+      function_id_.get_function() +
+      "() literal receiver is not a constant integer");
+  const std::string &method = function_id_.get_function();
+
+  long long result;
+  if (method == "conjugate")
+    result = v; // an int is its own complex conjugate
+  else
+  {
+    // bit_length/bit_count operate on the magnitude (CPython ignores the sign).
+    // Negate in the unsigned domain so LLONG_MIN does not overflow.
+    unsigned long long mag = v < 0 ? 0ULL - static_cast<unsigned long long>(v)
+                                   : static_cast<unsigned long long>(v);
+    result = 0;
+    if (method == "bit_length")
+      for (; mag != 0; mag >>= 1)
+        ++result;
+    else // bit_count
+      for (; mag != 0; mag >>= 1)
+        result += static_cast<long long>(mag & 1ULL);
+  }
+
+  return from_integer(result, long_long_int_type());
+}
+
 exprt function_call_expr::handle_float_is_integer_literal() const
 {
   if (
@@ -2469,6 +2509,45 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_int_to_bytes(); },
      "int.to_bytes()"},
 
+    // Zero-arg int methods on a constant literal receiver, e.g.
+    // (255).bit_length() / (7).bit_count() / (5).conjugate(). A Name/BinOp
+    // receiver already routes through the int operational model; a bare
+    // literal is not classified as an int instance, so fold it here.
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       const std::string &m = function_id_.get_function();
+       if (m != "bit_length" && m != "bit_count" && m != "conjugate")
+         return false;
+       // A constant int literal, or a unary +/- over one (e.g. (-5)); a Name
+       // receiver is left to the int operational model. The magnitude must fit
+       // a signed 64-bit value (folding a larger literal would truncate it),
+       // and only USub/UAdd are accepted -- the operators
+       // extract_constant_integer resolves; ~ / not fall through to the model.
+       auto fits_int64 = [](const nlohmann::json &c) {
+         return c.contains("value") && c["value"].is_number_integer() &&
+                !(c["value"].is_number_unsigned() &&
+                  c["value"].get<unsigned long long>() > 0x7fffffffffffffffULL);
+       };
+       const auto &obj = call_["func"]["value"];
+       if (obj["_type"] == "Constant")
+         return fits_int64(obj);
+       if (
+         obj["_type"] == "UnaryOp" && obj.contains("op") &&
+         obj.contains("operand"))
+       {
+         const auto &op = obj["op"];
+         const bool is_sign =
+           (op.is_object() && (op.value("_type", "") == "USub" ||
+                               op.value("_type", "") == "UAdd")) ||
+           (op.is_string() && (op == "USub" || op == "UAdd"));
+         return is_sign && fits_int64(obj["operand"]);
+       }
+       return false;
+     },
+     [this]() { return handle_int_literal_method(); },
+     "int-literal method"},
+
     // float.is_integer() on a constant literal receiver, e.g.
     // (2.0).is_integer(). A Name receiver routes through the float operational
     // model; a bare literal is not classified as a float instance, so fold it.
@@ -2520,6 +2599,28 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return converter_.get_expr(call_["func"]["value"]); },
      "__iter__ on builtin iterables"},
+
+    // x.__str__() on a built-in scalar (int/float/bool/str) — route to str(x).
+    // A user object's __str__ has a class var_type (not a builtin scalar) and
+    // falls through to the instance-method path so its definition is used.
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "__str__" || !call_["args"].empty())
+         return false;
+       const auto &recv = call_["func"]["value"];
+       if (recv.value("_type", std::string()) == "Constant")
+         return recv.contains("value") &&
+                (recv["value"].is_number() || recv["value"].is_boolean() ||
+                 recv["value"].is_string());
+       const std::string t = type_handler_.get_var_type(get_object_name());
+       return t == "int" || t == "float" || t == "bool" || t == "str";
+     },
+     [this]() {
+       exprt recv_expr = converter_.get_expr(call_["func"]["value"]);
+       return converter_.get_string_handler().convert_to_string(recv_expr);
+     },
+     "__str__ on builtin scalars"},
 
     // Tuple methods (count, index) — matched before list/dict so a tuple
     // receiver doesn't fall through to either.

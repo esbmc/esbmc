@@ -538,7 +538,12 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (kind == "dict")
+    // Recognise a dict by its struct tag as well as its aggregate-kind marker.
+    // The kind irep can be dropped while a dict value flows through type
+    // inference (e.g. a dict comprehension result), but the `__python_dict__`
+    // tag is preserved — and subscript/len already key off the tag — so without
+    // this `x in {…comprehension…}` wrongly hit the unsupported-operand throw.
+    if (kind == "dict" || dict_handler_->is_dict_type(rhs_resolved_type))
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
@@ -681,6 +686,66 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // V.3: constant fold built in IREP2.
       return migrate_expr_back(
         op == "NotEq" ? gen_true_expr() : gen_false_expr());
+    }
+  }
+
+  // Content equality for value arrays of long_long_int. bytes are modelled as
+  // arrays of long_long_int and are value sequences, so `==`/`!=` compare
+  // element-by-element like CPython, not by identity. Two such array operands
+  // otherwise fall through to the generic binop path, which lowers `a == b` to
+  // `&a[0] == &b[0]` (an address compare) — wrong for distinct-but-equal byte
+  // sequences (e.g. a `bytes([2,3])` stored in two variables, or a bytes slice
+  // vs a literal). This element-wise fold is a strict improvement over the
+  // address compare for any value array of this element type; numpy integer
+  // arrays that are materialised as array *values* share the representation and
+  // are likewise compared by content here (their full elementwise-bool-array
+  // `==` semantics is a separate, unimplemented feature — but content equality
+  // is still more correct than the prior identity compare). numpy arrays held
+  // as pointers are not arrays and are untouched. Only constant-length operands
+  // up to a bound are folded; longer or symbolic-length operands fall through.
+  if (op == "Eq" || op == "NotEq")
+  {
+    // Cap the unrolled comparison so a pathologically large constant length
+    // cannot build a huge equality chain; such lengths do not arise for real
+    // byte literals and fall through to the existing path.
+    constexpr long long kMaxUnrolledEqElems = 4096;
+    auto is_value_int_array = [](const typet &t) {
+      return t.is_array() && t.subtype() == long_long_int_type();
+    };
+    if (is_value_int_array(lhs.type()) && is_value_int_array(rhs.type()))
+    {
+      const exprt &ls = to_array_type(lhs.type()).size();
+      const exprt &rs = to_array_type(rhs.type()).size();
+      if (ls.is_constant() && rs.is_constant())
+      {
+        const BigInt ln =
+          binary2integer(to_constant_expr(ls).value().c_str(), false);
+        const BigInt rn =
+          binary2integer(to_constant_expr(rs).value().c_str(), false);
+        if (ln != rn)
+          return migrate_expr_back(
+            op == "NotEq" ? gen_true_expr() : gen_false_expr());
+
+        const long long n = ln.to_int64();
+        if (n == 0)
+          return migrate_expr_back(
+            op == "Eq" ? gen_true_expr() : gen_false_expr());
+
+        if (n <= kMaxUnrolledEqElems)
+        {
+          expr2tc acc;
+          for (long long i = 0; i < n; ++i)
+          {
+            const exprt idx = from_integer(i, index_type());
+            expr2tc li, ri;
+            migrate_expr(index_exprt(lhs, idx, long_long_int_type()), li);
+            migrate_expr(index_exprt(rhs, idx, long_long_int_type()), ri);
+            expr2tc eq = equality2tc(li, ri);
+            acc = i == 0 ? eq : and2tc(acc, eq);
+          }
+          return migrate_expr_back(op == "Eq" ? acc : not2tc(acc));
+        }
+      }
     }
   }
 
