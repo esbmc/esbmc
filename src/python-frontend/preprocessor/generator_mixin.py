@@ -1047,18 +1047,29 @@ class GeneratorMixin:
             if left is None or right is None:
                 return None
             return self._apply_arith(node.op, left, right)
-        if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
-                and node.value.id == param and isinstance(node.slice, ast.Constant)
-                and isinstance(node.slice.value, int) and node.slice.value >= 0):
-            if not (isinstance(element, ast.Tuple) and node.slice.value < len(element.elts)):
+        index = self._param_subscript_index(node, param)
+        if index is not None:
+            if not (isinstance(element, ast.Tuple) and index < len(element.elts)):
                 return None
-            return self._const_scalar_value(element.elts[node.slice.value])
+            return self._const_scalar_value(element.elts[index])
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 and node.func.id in ("abs", "len") and len(node.args) == 1
                 and not node.keywords):
             return self._apply_builtin(
                 node.func.id, self._eval_key_body(node.args[0], param, element))
         return None
+
+    @staticmethod
+    def _param_subscript_index(node, param):
+        """Return the constant non-negative index of ``param[K]``, or None when
+        ``node`` is not a constant subscript on the lambda parameter ``param``."""
+        if not (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                and node.value.id == param):
+            return None
+        if not (isinstance(node.slice, ast.Constant)
+                and isinstance(node.slice.value, int) and node.slice.value >= 0):
+            return None
+        return node.slice.value
 
     @staticmethod
     def _apply_builtin(name, value):
