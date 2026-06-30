@@ -114,38 +114,31 @@ class TypeInferenceMixin:
             return getattr(self, "instance_var_classes", {}).get(elt.id)
         return None
 
-    def _scan_list_var_element_classes(self, module):
-        """Map a list-variable name -> the single class its elements hold, for
-        `v = [a, b]` (instances of one class) and identity comprehensions
-        `v = [x for x in src ...]` over such a list. Used to type a
-        `for e in v` / comprehension loop target when v carries no element
-        annotation; without it the target falls back to ``Any`` (void*), the
-        element is stored with a zero type-id, and a later attribute access
-        dereferences an invalid pointer (#4805 comprehension type-id loss).
-        """
-        class_names, var_classes = self._build_var_class_map(module)
+    @staticmethod
+    def _list_element_class(elt, class_names, var_classes):
+        """Class an element expression evaluates to: a `Cls(...)` constructor
+        call or a name already known to hold an instance; otherwise None."""
+        if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
+                and elt.func.id in class_names):
+            return elt.func.id
+        if isinstance(elt, ast.Name):
+            return var_classes.get(elt.id)
+        return None
 
-        def element_class(elt):
-            if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
-                    and elt.func.id in class_names):
-                return elt.func.id
-            if isinstance(elt, ast.Name):
-                return var_classes.get(elt.id)
-            return None
+    @staticmethod
+    def _record_single_class(mapping, name, cls):
+        """Merge cls into mapping[name], collapsing to None on any conflict."""
+        mapping[name] = cls if mapping.get(name, cls) == cls else None
 
-        def record(mapping, name, cls):
-            mapping[name] = cls if mapping.get(name, cls) == cls else None
-
-        list_classes = {}
-        # Pass 1: `v = [instances of one class]`.
+    def _collect_list_literal_classes(self, module, class_names, var_classes, list_classes):
+        """Pass 1: `v = [instances of one class]` -> list_classes[v] = class."""
         for n in ast.walk(module):
-            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.List)
-                    and n.value.elts):
+            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.List) and n.value.elts):
                 continue
             cls = None
             ok = True
             for elt in n.value.elts:
-                c = element_class(elt)
+                c = self._list_element_class(elt, class_names, var_classes)
                 if c is None or (cls is not None and c != cls):
                     ok = False
                     break
@@ -154,11 +147,12 @@ class TypeInferenceMixin:
                 continue
             for t in n.targets:
                 if isinstance(t, ast.Name):
-                    record(list_classes, t.id, cls)
+                    self._record_single_class(list_classes, t.id, cls)
 
-        # Pass 2 (fixpoint): identity comprehension `v = [x for x in src ...]`
-        # inherits src's element class. Iterated so chained comprehensions
-        # resolve regardless of source order.
+    def _propagate_comprehension_classes(self, module, list_classes):
+        """Pass 2 (fixpoint): identity comprehension `v = [x for x in src ...]`
+        inherits src's element class. Iterated so chained comprehensions
+        resolve regardless of source order."""
         changed = True
         while changed:
             changed = False
@@ -184,10 +178,23 @@ class TypeInferenceMixin:
                     # sources (e.g. `v=[A...]; v=[B...]`).
                     sentinel = object()
                     before = list_classes.get(t.id, sentinel)
-                    record(list_classes, t.id, src_cls)
+                    self._record_single_class(list_classes, t.id, src_cls)
                     if list_classes.get(t.id, sentinel) != before:
                         changed = True
 
+    def _scan_list_var_element_classes(self, module):
+        """Map a list-variable name -> the single class its elements hold, for
+        `v = [a, b]` (instances of one class) and identity comprehensions
+        `v = [x for x in src ...]` over such a list. Used to type a
+        `for e in v` / comprehension loop target when v carries no element
+        annotation; without it the target falls back to ``Any`` (void*), the
+        element is stored with a zero type-id, and a later attribute access
+        dereferences an invalid pointer (#4805 comprehension type-id loss).
+        """
+        class_names, var_classes = self._build_var_class_map(module)
+        list_classes = {}
+        self._collect_list_literal_classes(module, class_names, var_classes, list_classes)
+        self._propagate_comprehension_classes(module, list_classes)
         return {name: cls for name, cls in list_classes.items() if cls}
 
     def _scan_attr_list_element_classes(self, module):
@@ -199,14 +206,6 @@ class TypeInferenceMixin:
         """
         class_names, var_classes = self._build_var_class_map(module)
 
-        def element_class(elt):
-            if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
-                    and elt.func.id in class_names):
-                return elt.func.id
-            if isinstance(elt, ast.Name):
-                return var_classes.get(elt.id)
-            return None
-
         attr_classes = {}
         for n in ast.walk(module):
             if not (isinstance(n, ast.Assign) and len(n.targets) == 1
@@ -214,7 +213,7 @@ class TypeInferenceMixin:
                 continue
             attr = n.targets[0].attr
             for elt in n.value.elts:
-                cls = element_class(elt)
+                cls = self._list_element_class(elt, class_names, var_classes)
                 if cls is None or attr_classes.get(attr, cls) != cls:
                     attr_classes[attr] = None
                 else:
