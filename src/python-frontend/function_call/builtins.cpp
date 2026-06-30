@@ -883,13 +883,28 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     }
     else
     {
-      // round(x, n) -> float rounded to n decimals
+      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
+      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
+      // unwrap the minus to recover the integer; otherwise the constant fold is
+      // skipped and the (much more expensive) symbolic path is taken, which
+      // times out for round(int, -n).
       auto ndigits_arg = args[1];
+      bool ndigits_negated = false;
+      if (
+        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
+        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
+        ndigits_arg.contains("operand"))
+      {
+        ndigits_arg = ndigits_arg["operand"];
+        ndigits_negated = true;
+      }
       if (
         ndigits_arg.contains("value") &&
         ndigits_arg["value"].is_number_integer())
       {
         int n = ndigits_arg["value"].get<int>();
+        if (ndigits_negated)
+          n = -n;
         double val = arg["value"].is_number_integer()
                        ? static_cast<double>(arg["value"].get<int>())
                        : arg["value"].get<double>();
@@ -1494,6 +1509,40 @@ exprt function_call_expr::handle_min_max(
   exprs.reserve(args.size());
   for (const auto &arg : args)
     exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
+
+  // With a key= keyword the comparison is on key(x), not the operands
+  // themselves, so non-numeric operands (e.g. max(s1, s2, key=len)) are
+  // legitimate. handle_min_max does not yet apply the key here (it is dropped,
+  // matching the pre-existing single-iterable fallback), but we must not reject
+  // these calls outright: doing so aborts conversion of any branch containing
+  // such a call even when that branch is unreachable.
+  bool has_key_kwarg = false;
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw.value("arg", "") == "key")
+      {
+        has_key_kwarg = true;
+        break;
+      }
+
+  // The comparison chain below lowers to arithmetic </> over the operands,
+  // which is only meaningful for numeric (and bool) values. Over strings,
+  // tuples or lists it builds a bitvector/pointer comparison that the SMT
+  // backend rejects in compute_pointer_offset (a crash) or that silently
+  // yields a wrong result. Reject those cleanly and point at the single-
+  // iterable form, which the model handles lexicographically.
+  if (!has_key_kwarg)
+    for (const exprt &e : exprs)
+    {
+      const typet &t = converter_.ns.follow(e.type());
+      if (!(t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+            t.is_fixedbv() || t.is_bool()))
+        throw std::runtime_error(
+          func_name +
+          "() with multiple non-numeric arguments is not supported; pass a "
+          "single iterable instead, e.g. " +
+          func_name + "([...])");
+    }
 
   // Determine common promoted type across all arguments.
   typet result_type = exprs[0].type();

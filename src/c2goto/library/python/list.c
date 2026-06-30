@@ -504,15 +504,28 @@ bool __ESBMC_list_set_at(
 
 bool __ESBMC_list_insert(
   PyListObject *l,
-  size_t index,
+  int64_t index,
   const void *value,
   size_t type_id,
   size_t type_size,
   size_t float_type_id,
   int ptr_free)
 {
-  // If index is beyond the end, just append
-  if (index >= l->size)
+  // Normalize a Python insert index: a negative index counts from the end and
+  // the result is clamped to [0, size]. insert() never raises for an
+  // out-of-range index (CPython): l.insert(-1, x) inserts before the last
+  // element, l.insert(len, x)/beyond appends, and a too-negative index clamps
+  // to the front.
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  // If index is at or beyond the end, just append.
+  if (index >= n)
     return __ESBMC_list_push(
       l, value, type_id, type_size, float_type_id, ptr_free);
 

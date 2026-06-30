@@ -2568,6 +2568,28 @@ function_call_expr::get_dispatch_table()
      [this]() { return converter_.get_expr(call_["func"]["value"]); },
      "__iter__ on builtin iterables"},
 
+    // x.__str__() on a built-in scalar (int/float/bool/str) — route to str(x).
+    // A user object's __str__ has a class var_type (not a builtin scalar) and
+    // falls through to the instance-method path so its definition is used.
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "__str__" || !call_["args"].empty())
+         return false;
+       const auto &recv = call_["func"]["value"];
+       if (recv.value("_type", std::string()) == "Constant")
+         return recv.contains("value") &&
+                (recv["value"].is_number() || recv["value"].is_boolean() ||
+                 recv["value"].is_string());
+       const std::string t = type_handler_.get_var_type(get_object_name());
+       return t == "int" || t == "float" || t == "bool" || t == "str";
+     },
+     [this]() {
+       exprt recv_expr = converter_.get_expr(call_["func"]["value"]);
+       return converter_.get_string_handler().convert_to_string(recv_expr);
+     },
+     "__str__ on builtin scalars"},
+
     // Tuple methods (count, index) — matched before list/dict so a tuple
     // receiver doesn't fall through to either.
     {[this]() { return is_tuple_method_call(); },
