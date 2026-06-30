@@ -80,6 +80,13 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Build a fresh shallow copy of @p self as a new set. Used for the
+   * zero-argument variadic forms s.union()/intersection()/difference(), which
+   * return a copy of the set in CPython.
+   */
+  exprt build_set_copy(const symbolt &self, const nlohmann::json &element);
+
+  /**
    * @brief Build set symmetric difference (set1 ^ set2):
    *        (lhs - rhs) ∪ (rhs - lhs), collected into a fresh set.
    * @param lhs Left operand (set expression)
