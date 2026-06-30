@@ -1179,16 +1179,23 @@ class CoreVisitorsMixin:
         return self.known_variable_types.get(name) == "dict"
 
     def _maybe_rewrite_dict_to_list_call(self, node):
-        """Rewrite list(d) -> d.keys() and sorted(d, ...) -> sorted(d.keys(), ...).
+        """Rewrite iterating builtins over a dict to use d.keys().
 
-        The bare list()/sorted() builtins reinterpret the dict struct as a list
-        (wrong length, unsound subscript). Routing through d.keys() reuses the
-        correctly-typed dict-keys list path. Only fires for names reliably known
-        to be dicts. (GitHub #4790)
+        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        The bare builtins reinterpret the dict struct as a list (wrong length,
+        unsound subscript / wrong reduction). Routing through d.keys() reuses the
+        correctly-typed dict-keys list path — Python iterates a dict over its
+        keys. Only fires for names reliably known to be dicts. (GitHub #4790)
         """
-        if not (isinstance(node.func, ast.Name) and node.func.id in ("list", "sorted")):
+        if not (isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted", "max", "min", "sum")):
             return None
         if not node.args or (node.keywords and node.func.id == "list"):
+            return None
+        # max()/min() with several positional arguments is the variadic form
+        # (the max/min OF the arguments), not reduction over a single iterable —
+        # a dict argument there is compared, not iterated, so leave it alone.
+        if node.func.id in ("max", "min") and len(node.args) != 1:
             return None
         first = node.args[0]
         if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
