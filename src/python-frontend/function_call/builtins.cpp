@@ -1510,6 +1510,40 @@ exprt function_call_expr::handle_min_max(
   for (const auto &arg : args)
     exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
 
+  // With a key= keyword the comparison is on key(x), not the operands
+  // themselves, so non-numeric operands (e.g. max(s1, s2, key=len)) are
+  // legitimate. handle_min_max does not yet apply the key here (it is dropped,
+  // matching the pre-existing single-iterable fallback), but we must not reject
+  // these calls outright: doing so aborts conversion of any branch containing
+  // such a call even when that branch is unreachable.
+  bool has_key_kwarg = false;
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw.value("arg", "") == "key")
+      {
+        has_key_kwarg = true;
+        break;
+      }
+
+  // The comparison chain below lowers to arithmetic </> over the operands,
+  // which is only meaningful for numeric (and bool) values. Over strings,
+  // tuples or lists it builds a bitvector/pointer comparison that the SMT
+  // backend rejects in compute_pointer_offset (a crash) or that silently
+  // yields a wrong result. Reject those cleanly and point at the single-
+  // iterable form, which the model handles lexicographically.
+  if (!has_key_kwarg)
+    for (const exprt &e : exprs)
+    {
+      const typet &t = converter_.ns.follow(e.type());
+      if (!(t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+            t.is_fixedbv() || t.is_bool()))
+        throw std::runtime_error(
+          func_name +
+          "() with multiple non-numeric arguments is not supported; pass a "
+          "single iterable instead, e.g. " +
+          func_name + "([...])");
+    }
+
   // Determine common promoted type across all arguments.
   typet result_type = exprs[0].type();
   for (size_t i = 1; i < exprs.size(); ++i)
