@@ -3751,6 +3751,47 @@ constraint the keystone task must respect:
    20-test acceptance fixture (§V.1k design (b)) back to green; the F-P11/
    width-hazard sites build in-converter with zero `irep2_expr.h` aborts;
    verdict + text unchanged.
+
+   > **Spike result (2026-06-30) — the open service-vs-materialise question,
+   > settled toward materialise+replace, with a per-site hybrid caveat.** A
+   > read-only spike over the converter's actual construction sites refines the
+   > residue into two distinct, separately-grounded classes — *neither* is a
+   > pure tag-following problem:
+   >
+   > 1. **Deferred-resolution operands (the F-P11 wall).** Where the converter
+   >    *directly* builds a class-attribute member it already resolves the source
+   >    inline: `build_member_expr_from_class` (`converter_expr.cpp:1160`) reads
+   >    the resolved `struct_typet` off `class_symbol->get_type()` and follows
+   >    symbol types via `ns.follow` (`:1165`,`:1172`), and the subscript handler
+   >    does the same (`:1371`,`:1379`,`:1392`). So directly-constructed member/
+   >    index sources are *not* actually blocked. The F-P11 abort instead comes
+   >    from the *enclosing* sites — `isinstance`/is-none (`builtins.cpp:369`),
+   >    `BoolOp`, is-none inequality — building a node over an **operand that is
+   >    itself a member/index subexpression** produced earlier by recursive
+   >    conversion, whose source resolution is deferred to the body-wide
+   >    `clang_cpp_adjust` pass. A construction-time *service* cannot supply that
+   >    piecemeal: the unresolved operand is not built at the enclosing site.
+   > 2. **Width-hazard arithmetic.** The `python_math` modulo/floor-div
+   >    sign-correction (`python_math.cpp:674`-`753`) builds `<`/`-`/`!=` over
+   >    operands with **concrete but mismatched** widths (`lhs` vs
+   >    `gen_zero(div_type)`). The legacy `exprt` tolerates this because
+   >    `clang_cpp_adjust` later inserts the reconciling typecast; `lessthan2t`/
+   >    `sub2t` reject it at construction. Migrating these needs the converter to
+   >    replicate `clang_cpp_adjust`'s *implicit arithmetic conversions* (common
+   >    type + typecast insertion), not tag-following — and a blind cast is
+   >    unsound (Part IV §0, #5581).
+   >
+   > **Conclusion.** Class (1) requires whole-body deferred resolution and class
+   > (2) requires the implicit-conversion logic — both body-wide concerns the
+   > converter cannot discharge per-construction-site. The evidence therefore
+   > settles the open question toward **materialise IREP2 bodies + replace
+   > `clang_cpp_adjust`** for the *general* operand surface, consistent with the
+   > B.3 negative result. The **hybrid caveat:** the inline `ns.follow` already
+   > proven by `build_member_expr_from_class` is the correct mechanism for
+   > *directly-constructed* member/index sources, so the adjuster's novel work is
+   > exactly (1) body-wide deferred member/index resolution and (2)
+   > implicit-arithmetic-conversion (typecast) insertion — not a re-implementation
+   > of the resolution the converter already does at its own construction sites.
 2. **V.2 — IREP2-native attribute carriage (W3).** Fold `#cpp_type`/
    `#member_name`/`#cformat` onto the typed IREP2 companion; the (b) adjuster is
    the natural home, so V.1k and V.2 land together.
