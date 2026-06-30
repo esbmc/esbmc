@@ -11,7 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Toolchain
-        run: { g++ --version; ldd --version | head -1; } || true
+        run: |
+          g++ --version || true
+          ldd --version | head -1 || true
       - name: Fetch nlohmann/json single header
         run: |
           mkdir -p third_party/nlohmann
@@ -20,7 +22,7 @@ jobs:
         run: |
           set +e
           run() { echo "==================== $1 ===================="; shift; "$@" -Ithird_party tools/pf_harness.cpp -o /tmp/h 2>/tmp/e || { echo COMPILE_FAIL; cat /tmp/e; return; }; /tmp/h; echo "exit=$?"; }
-          run "g++ -O2"               g++     -std=c++17 -O2 -g
-          run "g++ -O2 asan+ubsan"    g++     -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
-          run "clang++ -O2"           clang++ -std=c++17 -O2 -g
+          run "g++ -O2"            g++     -std=c++17 -O2 -g
+          run "g++ -O2 asan+ubsan" g++     -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          run "clang++ -O2"        clang++ -std=c++17 -O2 -g
           echo "==================== done ===================="
