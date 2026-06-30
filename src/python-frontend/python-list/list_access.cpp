@@ -16,6 +16,27 @@ exprt python_list::build_list_at_call(
 
   locationt location = converter_.get_location_from_decl(element);
 
+  // An unsigned index (size_type, used throughout for loop counters: list
+  // comprehensions, starred unpacking, boolean-mask filtering, ...) can never
+  // be negative, so the negative-index normalization below is provably dead
+  // for it. Skipping it avoids emitting a redundant __ESBMC_list_size call
+  // and an unreachable IndexError guard on every loop iteration that indexes
+  // a list this way -- each one otherwise becomes its own extra symbolic-
+  // execution step purely to prove what the index's type already guarantees.
+  const bool index_may_be_negative = !index.type().is_unsignedbv();
+
+  if (!index_may_be_negative)
+  {
+    exprt index_as_size = build_typecast(index, size_type());
+    exprt list_at_call = build_call_expr(
+      *list_at_func_sym,
+      obj_type,
+      {list.type().is_pointer() ? list : build_address_of(list),
+       index_as_size});
+    list_at_call.location() = location;
+    return list_at_call;
+  }
+
   // Get list size
   const symbolt *size_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
