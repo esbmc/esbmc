@@ -53,9 +53,10 @@ does. The keystone's remaining work is **converter-side inline resolution**:
 Each lands as its own commit, gated on dual-solver (Bitwuzla + Z3) verdict +
 matched-text parity over the affected regression suite, asserts build.
 
-1. **W** `python_set.cpp:171` — `arr_type.size() - 1` (the loop-length bound).
-   Smallest self-contained site; the loop `<` at `:234` stays legacy for now.
-2. **W** `python_set.cpp:234` — `idx < length_expr` loop condition.
+1. **W** [DONE] `python_set.cpp:171` — `arr_type.size() - 1` (loop-length
+   bound) → `sub2tc` via `gen_typecast_arithmetic`. Commit 23b46705be.
+2. **W** [DONE] `python_set.cpp:234` — `idx < length_expr` loop condition →
+   `build_less_than` over reconciled operands. Commit eff4bc08ae.
 3. **W** `python_list.cpp:4120`, `:4533` — analogous list guards.
 4. **W** `python_math.cpp:674`-`753` — floor-div/modulo sign-correction trees
    (relational + arith leaves; larger, migrate the whole correction subtree).
