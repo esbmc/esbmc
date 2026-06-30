@@ -58,6 +58,24 @@ type2tc add_struct_type(
   return struct_t;
 }
 
+// Register a type symbol `tag-<name>` = int[] so that
+// ns.follow(symbol_type2t("tag-<name>")) yields the resolved array.
+type2tc add_array_type(contextt &ctx, const std::string &name)
+{
+  const type2tc array_t =
+    array_type2tc(get_int32_type(), expr2tc(), /*infinite=*/true);
+
+  symbolt type_sym;
+  type_sym.id = "tag-" + name;
+  type_sym.name = "tag-" + name;
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(array_t);
+  ctx.add(type_sym);
+
+  return array_t;
+}
+
 // A nullary `void()` code type — the discriminator adjust() walks on.
 type2tc code_symbol_type()
 {
@@ -152,6 +170,27 @@ TEST_CASE(
 
   REQUIRE(is_member2t(member));
   REQUIRE(to_member2t(member).source_value->type == struct_t);
+}
+
+TEST_CASE(
+  "python_adjust B.1 follows a symbol_type index source to its array",
+  "[python-adjust]")
+{
+  // The index2t arm: a subscript `arr[0]` whose source carries the transient
+  // symbol_type2t("tag-IntArr") is followed to the resolved array type, the
+  // is_array_type arm of is_resolved_aggregate the member tests never reach.
+  contextt ctx;
+  const type2tc array_t = add_array_type(ctx, "IntArr");
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-IntArr"), "arr");
+  const expr2tc zero = gen_zero(get_uint32_type());
+  expr2tc index = index2tc(get_int32_type(), source, zero);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(index);
+
+  REQUIRE(is_index2t(index));
+  REQUIRE(to_index2t(index).source_value->type == array_t);
 }
 
 TEST_CASE(
