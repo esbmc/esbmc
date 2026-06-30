@@ -3423,7 +3423,7 @@ unpacking.
 
 ### 73a. New isolated, soundly-fixable defect found & fixed
 **A `**` unpack inside a dict literal crashed ESBMC with an uncaught `nlohmann::json type_error`
-(PR #5716).**
+(PR #5718).**
 
 `{**m}`, `{**m, "y": 2}`, and `{**a, **b}` aborted with `terminating due to uncaught exception of
 type nlohmann::json::detail::type_error` (SIGABRT / core dump) during the annotation pass — as a bare
