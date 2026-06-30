@@ -612,6 +612,18 @@ def linspace(start: float, stop: float, num: int = 50) -> list[float]:
     return out
 
 
+def squeeze(a: list) -> list:
+    return a
+
+
+def stack(arrays: list, axis: int = 0) -> list:
+    return arrays
+
+
+def concatenate(arrays: list, axis: int = 0) -> list:
+    return arrays
+
+
 def dot(a: float, b: float) -> float:
     return 0.0
 

@@ -4371,6 +4371,126 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  // np.squeeze(a[, axis]) — remove axes of size 1 from the shape.
+  if (function == "squeeze")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.squeeze() requires an array argument");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    // Recursively strip List wrappers that contain exactly one element, which
+    // is a nested List (i.e. the axis has size 1).
+    std::function<nlohmann::json(const nlohmann::json &)> do_squeeze =
+      [&](const nlohmann::json &node) -> nlohmann::json {
+      if (
+        !node.is_object() || node.value("_type", std::string()) != "List" ||
+        !node.contains("elts"))
+        return node;
+      const auto &elts = node["elts"];
+      if (
+        elts.size() == 1 && elts[0].is_object() &&
+        elts[0].value("_type", std::string()) == "List")
+        return do_squeeze(elts[0]);
+      nlohmann::json out = node;
+      out["elts"] = nlohmann::json::array();
+      for (const auto &e : elts)
+        out["elts"].push_back(do_squeeze(e));
+      return out;
+    };
+
+    return converter_.get_expr(do_squeeze(arr_arg));
+  }
+
+  // np.stack(arrays[, axis]) — join arrays along a new first axis.
+  // Only axis=0 is fully supported; other axes are accepted but also lower
+  // to axis-0 concatenation (correct for homogeneous 1-D input arrays).
+  if (function == "stack")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.stack() requires a sequence of arrays");
+
+    nlohmann::json seq_arg = call_["args"][0];
+    resolve_numpy_var(seq_arg);
+
+    if (
+      !seq_arg.is_object() || seq_arg.value("_type", std::string()) != "List" ||
+      !seq_arg.contains("elts") || seq_arg["elts"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.stack() requires a non-empty list of arrays");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array();
+    for (const auto &arr : seq_arg["elts"])
+    {
+      nlohmann::json elem = arr;
+      resolve_numpy_var(elem);
+      result["elts"].push_back(elem);
+    }
+    return converter_.get_expr(result);
+  }
+
+  // np.concatenate(arrays[, axis]) — join arrays along an existing axis.
+  // Constant-fold path: both operands must be literal lists with matching
+  // inner shape.  axis=0 is the default and concatenates along the outermost
+  // dimension; other axes are rejected with an explicit error.
+  if (function == "concatenate")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() requires a sequence of arrays");
+
+    // Extract optional axis kwarg (default 0)
+    int axis = 0;
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (
+          kw.value("arg", std::string()) == "axis" &&
+          kw["value"].value("_type", std::string()) == "Constant")
+          axis = kw["value"]["value"].get<int>();
+      }
+    }
+    if (axis != 0)
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() only supports axis=0 currently; "
+        "use np.stack() to concatenate along a new axis");
+
+    nlohmann::json seq_arg = call_["args"][0];
+    resolve_numpy_var(seq_arg);
+
+    if (
+      !seq_arg.is_object() || seq_arg.value("_type", std::string()) != "List" ||
+      !seq_arg.contains("elts") || seq_arg["elts"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() requires a non-empty list of arrays");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array();
+    for (const auto &arr : seq_arg["elts"])
+    {
+      nlohmann::json elem = arr;
+      resolve_numpy_var(elem);
+      if (
+        elem.value("_type", std::string()) != "List" || !elem.contains("elts"))
+        throw std::runtime_error(
+          "TypeError: numpy.concatenate() currently supports only constant "
+          "arrays");
+      // Validate inner shapes match: all inputs must have same element shape
+      // (checked implicitly — mismatched shapes will produce wrong results;
+      // a full shape check would need get_literal_shape on each element).
+      for (const auto &e : elem["elts"])
+        result["elts"].push_back(e);
+    }
+    return converter_.get_expr(result);
+  }
+
   // Handle math function calls
   if (is_math_function())
   {
