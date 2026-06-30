@@ -1,0 +1,44 @@
+name: pf-harness-debug
+
+on:
+  push:
+    branches: [ 'debug/pf-harness' ]
+  workflow_dispatch:
+
+jobs:
+  harness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: |
+          g++ --version || true
+          clang++ --version || true
+          ldd --version | head -1 || true
+
+      - name: Fetch nlohmann/json single header
+        run: |
+          mkdir -p third_party/nlohmann
+          curl -sSL https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp \
+            -o third_party/nlohmann/json.hpp
+          wc -l third_party/nlohmann/json.hpp
+
+      - name: Compile and run (multiple configs)
+        run: |
+          set +e
+          INC="-Ithird_party"
+          run() {
+            local tag="$1"; shift
+            echo "==================== $tag ===================="
+            "$@" $INC tools/pf_harness.cpp -o /tmp/h_$$ 2>/tmp/cc.err
+            if [ $? -ne 0 ]; then echo "COMPILE FAILED"; cat /tmp/cc.err; return; fi
+            /tmp/h_$$
+            echo "harness exit=$?"
+          }
+          run "g++ -O2"            g++  -std=c++17 -O2 -g
+          run "g++ -O0"            g++  -std=c++17 -O0 -g
+          run "g++ -O2 asan+ubsan" g++  -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          run "clang++ -O2"        clang++ -std=c++17 -O2 -g
+          run "clang++ -O2 asan+ubsan" clang++ -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          echo "==================== all configs done ===================="
