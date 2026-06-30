@@ -1769,6 +1769,62 @@ expectation, and the infeasible `hashlib` case all stand; the §5 priority order
 
 ---
 
+## 42. 2026-06-28 re-validation (thirty-second sweep) & int methods on a literal receiver
+
+Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery over the int instance methods surfaced a literal-receiver dispatch gap — the same
+shape §34 fixed for `int.to_bytes`, here affecting the zero-argument `bit_length`/`bit_count`/
+`conjugate` methods.
+
+### 42a. New isolated, soundly-fixable defect found & fixed
+**`(255).bit_length()` (an int method on a *constant literal* receiver) reported a spurious
+`Unsupported function`.**
+
+`x.bit_length()` on a variable verifies (the int operational model handles it), but the bare-literal
+forms `(255).bit_length()`, `(7).bit_count()`, `(5).conjugate()` reported `Unsupported function
+'bit_length'` → `FAILED`. A literal receiver is not classified as an int instance (only a `Name`/
+`BinOp` receiver is), so the call never reached the model — the same class-resolution gap §34 found
+for `int.to_bytes`.
+
+**Fix** (`function_call/expr.cpp`): add a `handle_int_literal_method()` constant-fold, dispatched from
+`get_dispatch_table()` (next to the §34 `int.to_bytes` entry) when the method is `bit_length`/
+`bit_count`/`conjugate` and the receiver is a constant int literal or a unary `+`/`-` over one. It
+computes the result directly — `bit_length`/`bit_count` over the magnitude (CPython ignores the sign;
+the negation is done in the unsigned domain so `LLONG_MIN` cannot overflow), `conjugate` is the
+identity — and returns a `long_long_int_type()` constant (the type Python int literals already use).
+The predicate matches only `Constant`/`UnaryOp` receivers, so the working `Name` (variable) and
+`BinOp` paths are untouched; a magnitude exceeding signed-64-bit, a non-`USub`/`UAdd` unary operator
+(`~`, `not`), or any argument is declined and falls through to the model — sound, never a wrong fold.
+
+Like §31a/§34a this **restores a working feature**. New regression pair
+`regression/python/int_literal_method{,_fail}` (CORE) covering positive/zero/negative/unary-plus
+literals for all three methods, arithmetic composition, and the unchanged variable form; the positive
+test is the liveness witness (`Unsupported`→`FAILED` pre-fix → `SUCCESSFUL` post-fix). Verified
+bit-for-bit against CPython; CPython sanity passes
+(`scripts/check_python_tests.sh int_literal_method`); the focused
+`regression/python/(int_literal_method|int_bit_count|int_bit_length|int_conjugate)` ctest subset is
+green (the pre-existing `--ir` Z3-only `github_1964_bit_length_bignum` excepted, on this Bitwuzla-only
+build). Code-reviewed (1 high + 1 medium + 1 low finding, all fixed before commit: a `~`/`not`
+predicate/handler mismatch, a `[2^63, 2^64)` literal truncation, and an unguarded keyword argument).
+Solver-agnostic (a frontend constant-fold, no SMT encoding).
+
+### 42b. Next candidate & everything else: unchanged disposition
+The int instance-method family now folds on literal receivers. Remaining catalogued candidates:
+`str.maketrans`/`translate` dict-table and non-constant forms (fall through cleanly today); multi-byte
+(non-ASCII) UTF-8 encode/decode; the §36a bytes-literal-argument lowering (deferred); and
+`float.is_integer()`/`as_integer_ratio()` on literal receivers (the float analogue of this gap). The
+separately-tracked inline-`len`/strlen concern (§14b/§32b/§33b) still stands. Other deferred
+candidates stand: `zip()` (materialisation via `list(zip(...))` — a larger feature), symbolic/
+user-function `max`/`min(key=)`, `list.index()`-in-`try/except`, `float.hex()` (infeasible), and
+`str.isascii()` (string-soundness, §5-#2). The §3 design-level blockers, §3c timeouts, §3d questionable
+expectation, and the infeasible `hashlib` case all stand; the §5 priority order stands.
+
+> **Note on numbering.** §39 (PR #5661, `bytes.hex(sep)`), §40 (PR #5663, `int.from_bytes`
+> `byteorder=`), and §41 (PR #5665, `bytes.fromhex()`) are in flight and not yet on `master`; this
+> sweep is appended as §42. When all land, the maintainer orders §39 → §40 → §41 → §42.
+
+---
+
 ## 49. 2026-06-28 re-validation (thirty-ninth sweep) & bytes.index()/rindex()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
@@ -1920,6 +1976,9 @@ the infeasible `hashlib` case all stand; the §5 priority order stands.
 
 > **Note on numbering.** §39–§49 (PRs #5661–#5675) are in flight and not yet on `master`; this sweep is
 > appended as §50. When all land, the maintainer orders §39 → … → §50.
+
+---
+
 ## 48. 2026-06-28 re-validation (thirty-eighth sweep) & bytes.find()/rfind()
 
 Re-test against current `master` (tip `810d1bc2d5`). KNOWNBUG classification unchanged — §3 holds.
