@@ -11,7 +11,7 @@
 #include <util/std_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
-#include <clang-c-frontend/typecast.h>
+#include <util/c_typecast.h>
 
 using namespace python_expr;
 
@@ -171,13 +171,13 @@ exprt python_set::get_from_iterable(
     const array_typet &arr_type = to_array_type(iterable.type());
     // V.1k keystone (W): build `size - 1` in IREP2. The array dimension is not
     // guaranteed to be size_type-wide (see the loop-condition note below), so
-    // reconcile operand widths with the same gen_typecast_arithmetic
+    // reconcile operand widths with the same c_implicit_typecast_arithmetic
     // clang_cpp_adjust applies to the legacy minus_exprt -- a byte-identical,
     // idempotent transform that lets sub2t's matched-width invariant hold.
     exprt size_op = arr_type.size();
     exprt one_op = gen_one(size_type());
     namespacet ns(converter_.symbol_table());
-    gen_typecast_arithmetic(ns, size_op, one_op);
+    c_implicit_typecast_arithmetic(size_op, one_op, ns);
     expr2tc size2, one2;
     migrate_expr(size_op, size2);
     migrate_expr(one_op, one2);
@@ -243,13 +243,13 @@ exprt python_set::get_from_iterable(
   // Loop condition: i < length, built in IREP2 (V.1k keystone, W). idx_sym
   // (size_type) and length_expr can have mismatched bit-widths (the
   // runtime-string path), so reconcile the operands with the same
-  // gen_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies -- a
-  // byte-identical, idempotent transform -- letting lessthan2t's matched-width
-  // invariant hold at construction.
+  // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies
+  // -- a byte-identical, idempotent transform -- letting lessthan2t's
+  // matched-width invariant hold at construction.
   exprt idx_op = build_symbol(idx_sym);
   exprt len_op = length_expr;
   namespacet ns(converter_.symbol_table());
-  gen_typecast_arithmetic(ns, idx_op, len_op);
+  c_implicit_typecast_arithmetic(idx_op, len_op, ns);
   exprt cond = build_less_than(idx_op, len_op);
 
   code_blockt loop_body;

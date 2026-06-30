@@ -1,6 +1,6 @@
 #include "python_list_internal.h"
 
-#include <clang-c-frontend/typecast.h>
+#include <util/c_typecast.h>
 
 using namespace python_expr;
 using namespace python_list_detail;
@@ -291,12 +291,12 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   // 10. Create while loop: while (i < length), built in IREP2 (V.1k keystone,
   // W). index_var (size_type) and length_expr can have mismatched widths (the
   // array path, length_expr = arr_type.size()), so reconcile with the same
-  // gen_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
+  // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
   // byte-identical, idempotent -- before building lessthan2t.
   exprt idx_op = build_symbol(index_var);
   exprt len_op = length_expr;
   namespacet ns(converter_.symbol_table());
-  gen_typecast_arithmetic(ns, idx_op, len_op);
+  c_implicit_typecast_arithmetic(idx_op, len_op, ns);
   exprt loop_condition = build_less_than(idx_op, len_op);
 
   codet while_stmt;

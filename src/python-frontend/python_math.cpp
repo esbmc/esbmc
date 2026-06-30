@@ -6,7 +6,7 @@
 #include <python-frontend/math_guard_utils.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/python_expr_builder.h>
-#include <clang-c-frontend/typecast.h>
+#include <util/c_typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -29,8 +29,8 @@ const BigInt kMaxConstantFoldExponent = 1024;
 // Build the sign test `value < 0` in IREP2 (V.1k keystone, W). `value` and the
 // zero literal can have mismatched bit-widths (the operand may be narrower than
 // the division result type), so reconcile them with the same
-// gen_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies -- a
-// byte-identical, idempotent transform -- before building lessthan2t.
+// c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
+// a byte-identical, idempotent transform -- before building lessthan2t.
 exprt build_sign_test(
   const namespacet &ns,
   const exprt &value,
@@ -38,7 +38,7 @@ exprt build_sign_test(
 {
   exprt op0 = value;
   exprt op1 = zero;
-  gen_typecast_arithmetic(ns, op0, op1);
+  c_implicit_typecast_arithmetic(op0, op1, ns);
   return python_expr::build_less_than(op0, op1);
 }
 
