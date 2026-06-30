@@ -525,6 +525,15 @@ exprt python_dict_handler::create_dict_from_literal(
   const auto &keys = element["keys"];
   const auto &values = element["values"];
 
+  // A `**` unpack inside a dict literal (e.g. {**a, "b": 2}) serialises the
+  // unpacked source with a null key. Dict unpacking is not modelled, so reject
+  // it with a clean diagnostic rather than crashing on get_expr(null) below
+  // (mirrors the dict-union '|' guard in converter_binop.cpp).
+  for (const auto &key_node : keys)
+    if (key_node.is_null())
+      throw std::runtime_error(
+        "dict unpacking ({**d}) is not supported");
+
   python_list list_handler(converter_, element);
 
   // Enable the float storage path only when *every* value is statically float

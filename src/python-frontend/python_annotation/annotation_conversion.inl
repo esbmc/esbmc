@@ -546,6 +546,13 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
+  // A `**` unpack inside a dict literal (e.g. {**m}) serialises its key as a
+  // null entry — there is no AST node and hence no inferable type. Returning a
+  // safe default keeps the annotation pass from dereferencing a null json
+  // (the converter rejects dict unpacking with a clean diagnostic later).
+  if (!arg.is_object())
+    return "Any";
+
   if (arg["_type"] == "Constant")
     return get_type_from_constant(arg);
   else if (arg["_type"] == "Subscript")
