@@ -15,36 +15,33 @@ jobs:
         run: ./scripts/build.sh -b DebugOpt -e ON
 
       - name: Locate binary
-        id: bin
         run: |
           ESBMC=$(find "$PWD" -type f -name esbmc -path '*bin*' 2>/dev/null | head -1)
-          [ -z "$ESBMC" ] && ESBMC=$(find "$PWD" -type f -name esbmc -path '*src/esbmc*' 2>/dev/null | head -1)
+          if [ -z "$ESBMC" ]; then ESBMC=$(find "$PWD" -type f -name esbmc -path '*src/esbmc*' 2>/dev/null | head -1); fi
           echo "ESBMC=$ESBMC" | tee -a "$GITHUB_ENV"
           "$ESBMC" --version || true
 
-      - name: Reproduce + dump folds
+      - name: Reproduce and dump folds
         run: |
           set +e
           E="$ESBMC"
           echo "############ percent_format_spec (expect FAIL line 4) ############"
           "$E" regression/python/percent_format_spec/main.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column|assertion"
           dump() {
-            local name="$1" body="$2"
-            printf 'def main() -> None:\n    %s\nmain()\n' "$body" > /tmp/t.py
-            echo "############ $name : $body ############"
+            local name="$1"; local prog="$2"
+            printf '%s' "$prog" > /tmp/t.py
+            echo "############ $name ############"
+            echo "--- source ---"; cat /tmp/t.py
             echo "--- verdict ---"
             "$E" /tmp/t.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column" | head -3
-            echo "--- GOTO (assign/assert in main) ---"
-            "$E" /tmp/t.py --goto-functions-only 2>&1 | awk '/function main/{p=1} p' | grep -E "ASSIGN (x|y)=|DECL.*(x|y);|ASSERT (0|1)$" | head -8
+            echo "--- GOTO (assign/assert/decl in main) ---"
+            "$E" /tmp/t.py --goto-functions-only 2>&1 | awk '/function main/{p=1} p' | grep -E "ASSIGN [xy]=|DECL .*[xy];|ASSERT (0|1)$" | head -10
           }
-          dump "inline_fail"      'assert "%.2f" % 3.14159 == "3.14"'
-          dump "via_var"          'x = "%.2f" % 3.14159
-    assert x == "3.14"'
-          dump "literal_control"  'assert "3.14" == "3.14"'
-          dump "prec3_5char"      'assert ("%.3f" % 3.14159) == "3.142"'
-          dump "prec1_3char"      'assert ("%.1f" % 3.14159) == "3.1"'
-          dump "padded_8char"     'assert ("%8.2f" % 3.14159) == "    3.14"'
-          dump "two_vars"         'x = "%.2f" % 3.14159
-    y = "3.14"
-    assert x == y'
+          dump "inline_fail"     $'def main() -> None:\n    assert "%.2f" % 3.14159 == "3.14"\nmain()\n'
+          dump "via_var"         $'def main() -> None:\n    x = "%.2f" % 3.14159\n    assert x == "3.14"\nmain()\n'
+          dump "literal_control" $'def main() -> None:\n    assert "3.14" == "3.14"\nmain()\n'
+          dump "prec3_5char"     $'def main() -> None:\n    assert ("%.3f" % 3.14159) == "3.142"\nmain()\n'
+          dump "prec1_3char"     $'def main() -> None:\n    assert ("%.1f" % 3.14159) == "3.1"\nmain()\n'
+          dump "padded_8char"    $'def main() -> None:\n    assert ("%8.2f" % 3.14159) == "    3.14"\nmain()\n'
+          dump "two_vars"        $'def main() -> None:\n    x = "%.2f" % 3.14159\n    y = "3.14"\n    assert x == y\nmain()\n'
           echo "############ done ############"
