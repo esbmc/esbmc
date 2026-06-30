@@ -62,8 +62,12 @@ matched-text parity over the affected regression suite, asserts build.
    (The doc's stale `python_list.cpp:4120/4533` line numbers; python-list is now
    split. Other list loop conditions — `list_access`, `list_construction:165`,
    `list_comprehension:494` — were already migrated by earlier V.3 sweeps.)
-4. **W** `python_math.cpp:674`-`753` — floor-div/modulo sign-correction trees
-   (relational + arith leaves; larger, migrate the whole correction subtree).
+4. **W** [PARTIAL] `python_math.cpp` floor-div/modulo sign-correction trees —
+   the four `value < 0` sign tests migrated via a shared `build_sign_test`
+   helper. Commit 5642865dfa. REMAINING in these trees (deferred, entangled):
+   the `mod(lhs,rhs)` node (nested width-hazard on lhs/rhs), the bool `xor`
+   (must stay bool-xor, not bitxor — #4548 Bitwuzla crash), `and`, the modulo
+   `if(cond, rhs, 0)` (mismatched branch widths), and the outer `+`/`-`.
 5. **D** `builtins.cpp:369`/`447` — `isinstance` NoneType/tuple.
 6. **D** `converter_stmt.cpp` BoolOp short-circuit; `converter_compare.cpp`
    is-none inequality; `python_list.cpp:1444`-`1683` slice-bound arithmetic;
