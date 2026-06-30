@@ -2332,6 +2332,55 @@ questionable expectation, and the infeasible `hashlib` case all stand; the §5 p
 
 ---
 
+## 58. 2026-06-28 re-validation (forty-eighth sweep) & len() of a bytes slice
+
+Re-test against current `master` (tip `81cdad042c`). KNOWNBUG classification unchanged — §3 holds. This
+sweep fixed a wrong-value bug in `len()` of a bytes slice.
+
+### 58a. New isolated, soundly-fixable defect found & fixed
+**`len(b[1:3])` returned 1 instead of 2 for a bytes value `b`.**
+
+bytes are modelled as arrays of `long_long_int` (8-byte elements; `type_handler.cpp` builds `bytes` as
+`build_array(long_long_int_type(), n)`). A bytes slice `b[a:b]` was produced by `handle_range_slice`
+(`python-list/list_access.cpp`), which (1) sized the result array as `slice_len + 1` and wrote a
+trailing null terminator — string behaviour — and (2) the resulting value lost its "bytes" frontend
+type, so `len()` routed to `strlen`. `strlen` over a wide-int array stops at the first element's zero
+high bytes, so `len(bytes([1,2,3,4])[1:3])` evaluated to **1**. The slice *content* was already correct
+(`s[0] == 2`, `s[1] == 3`); only the length was wrong (a false verdict on any program branching on a
+bytes-slice length).
+
+**Fix** (two files, three changes):
+- `list_access.cpp`: gate the null terminator on `elem_type == char_type()`. String (char-array)
+  slices keep the `slice_len + 1` size and the null write; non-char (bytes / numpy) slices are sized
+  exactly `slice_len` with no phantom null element.
+- `builder.cpp` (`len` routing): a Name whose followed symbol type is a non-char array now routes to
+  `__ESBMC_get_object_size` (element count) instead of `strlen` — covers `s = b[a:b]; len(s)`; and an
+  inline `len(b[a:b])` whose base `Name` has frontend type "bytes" routes the same way. String bases
+  (var_type "str") and single-index subscripts are excluded, so the string `strlen` path is untouched.
+
+This is a **wrong-value/soundness fix**. New regression pair `bytes_slice_len{,_fail}` (CORE) covering
+the inline and variable forms, open-ended slices, embedded zero bytes (which `strlen` would have stopped
+at), and element access; the positive is the liveness witness (`len(b[1:3])` was 1 pre-fix). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh bytes_slice`); the
+focused `bytes`/`slice` ctest subset (83 tests) is 100% green, and string / list / **numpy** 1-D slice
+tests are unaffected (a bonus: numpy slices flow through the same path, so their `len` — previously
+`slice_len + 1` — is now also corrected to `slice_len`). Code-reviewed (0 critical/high; the char-array
+gating, the non-char-array routing predicate non-regression, the narrow inline predicate's
+misfire/JSON-safety, and the numpy net-improvement all confirmed by an independent rebuild). Solver-
+agnostic.
+
+A **separate, still-open** facet was found and left for a follow-up: bytes-slice **equality**
+(`b[1:3] == bytes([2,3])`) is still wrong — fixing sizing/`len` did not resolve it, so the comparison
+has a distinct root (the slice value is not recognised as a `bytes` object by the equality path). The
+durable fix for both this and the inline/`call()`-base `len` corner is to **propagate the `bytes`
+frontend type through a slice** so the slice value routes through the same paths as a real bytes value;
+recorded as the top bytes-slice follow-up.
+
+### 58b. Next candidates & everything else: unchanged disposition
+Priority follow-ups: (i) **bytes-slice equality / bytes type-propagation through slicing** (above);
+(ii) `sorted`/`sort` with an arithmetic/function `key` silently sorts by natural order (§56b/§57b);
+(iii) `int`-literal-receiver methods (`(255).bit_length()`) unsupported though the variable form works
+(§57b classification gap).
 ## 59. 2026-06-28 re-validation (forty-ninth sweep) & bytes content equality
 
 Re-test against current `master` (tip `c11d07e970`). KNOWNBUG classification unchanged — §3 holds. This
@@ -2876,6 +2925,8 @@ dict-table; and multi-byte UTF-8 encode/decode. The separately-tracked inline-`l
 The §3 design-level blockers, §3c timeouts, §3d questionable expectation, and the infeasible `hashlib`
 case all stand; the §5 priority order stands.
 
+> **Note on numbering.** §42/§43 and §48–§57 (PRs #5668, #5669, #5674–#5683) are in flight and not yet
+> on `master` (§39/§40/§41/§44/§45/§46/§47 merged); this sweep is appended as §58.
 > **Note on numbering.** §42/§43 and §49–§59 (PRs #5668, #5669, #5675–#5685) are in flight and not yet
 > on `master`; this sweep is appended as §60.
 > **Note on numbering.** §42/§43 and §49–§60 (PRs #5668, #5669, #5675–#5686) are in flight and not yet
