@@ -105,9 +105,13 @@ matched-text parity over the affected regression suite, asserts build.
      (process_bound/to_size_expr/array_len/logical_len all yield size_type), so
      no reconciliation — verified by inspection (arith assert is release-inert;
      CI DebugOpt is the asserts-on gate). 56-test slice suite + A/B parity.
-   - [TODO, probe] `converter_expr.cpp:1369`/`:1388` subscript-base derefs
-     (deref, probe member-operand); `numpy_call_expr.cpp:1607` complex int→double
-     (float — risky, rounding-mode).
+   - [DONE] `converter_expr.cpp` tuple-pointer subscript-base deref (the #4539
+     `__getitem__` path) → `build_dereference` (commit a22a6486fe). The base is a
+     pointer-to-tuple parameter; build_dereference handles #cpp_type + dyn-array
+     fallback. github_4539 suite (9) + A/B parity.
+   - [TODO, risky] `numpy_call_expr.cpp:1607` complex int→double — FLOAT
+     (ieee ops + rounding-mode; the `out.type()=...` + adjust_float_arith
+     rounding-mode is the known-fragile migration path, defer).
 
 ## Verification protocol per commit
 
