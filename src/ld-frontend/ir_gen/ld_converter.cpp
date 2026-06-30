@@ -390,8 +390,8 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
     if (s)
       return symbol_exprt(prefix + nm, s->get_type());
     auto it = declared_kinds.find(nm);
-    const typet t = (it != declared_kinds.end()) ? type_of_kind(it->second)
-                                                 : int32_t_();
+    const typet t =
+      (it != declared_kinds.end()) ? type_of_kind(it->second) : int32_t_();
     return declare_scoped(prefix + nm, t);
   };
 
@@ -430,8 +430,7 @@ codet ld_converter::translate_user_fb(const UserFBExec &ex)
   for (const auto &iv : ex.input_vars)
   {
     symbol_exprt s = resolve(iv.name);
-    blk.copy_to_operands(
-      code_assignt(s, side_effect_expr_nondett(s.type())));
+    blk.copy_to_operands(code_assignt(s, side_effect_expr_nondett(s.type())));
   }
   for (const auto &op : body.operands())
     blk.copy_to_operands(static_cast<const codet &>(op));

@@ -107,8 +107,9 @@ std::string st_fb_translator::next_word()
 {
   skip_ws();
   size_t start = pos_;
-  if (pos_ < src_.size() &&
-      (std::isalpha(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '_'))
+  if (
+    pos_ < src_.size() &&
+    (std::isalpha(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '_'))
   {
     while (pos_ < src_.size() &&
            (std::isalnum(static_cast<unsigned char>(src_[pos_])) ||
@@ -131,8 +132,8 @@ bool st_fb_translator::accept_kw(const char *kw)
 void st_fb_translator::expect_kw(const char *kw)
 {
   if (!accept_kw(kw))
-    throw std::runtime_error(std::string("st_fb_translator: expected '") + kw +
-                             "'");
+    throw std::runtime_error(
+      std::string("st_fb_translator: expected '") + kw + "'");
 }
 
 bool st_fb_translator::accept_sym(const char *s)
@@ -150,8 +151,8 @@ bool st_fb_translator::accept_sym(const char *s)
 void st_fb_translator::expect_sym(const char *s)
 {
   if (!accept_sym(s))
-    throw std::runtime_error(std::string("st_fb_translator: expected '") + s +
-                             "'");
+    throw std::runtime_error(
+      std::string("st_fb_translator: expected '") + s + "'");
 }
 
 // -----------------------------------------------------------------------
@@ -162,15 +163,17 @@ exprt st_fb_translator::parse_primary()
 {
   skip_ws();
   // integer or REAL literal
-  if (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_])))
+  if (
+    pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_])))
   {
     size_t start = pos_;
     while (pos_ < src_.size() &&
            std::isdigit(static_cast<unsigned char>(src_[pos_])))
       ++pos_;
     bool is_real = false;
-    if (pos_ + 1 < src_.size() && src_[pos_] == '.' &&
-        std::isdigit(static_cast<unsigned char>(src_[pos_ + 1])))
+    if (
+      pos_ + 1 < src_.size() && src_[pos_] == '.' &&
+      std::isdigit(static_cast<unsigned char>(src_[pos_ + 1])))
     {
       is_real = true;
       ++pos_;
@@ -206,8 +209,10 @@ exprt st_fb_translator::parse_primary()
     int depth = 1;
     while (pos_ < src_.size() && depth > 0)
     {
-      if (src_[pos_] == '(') ++depth;
-      else if (src_[pos_] == ')') --depth;
+      if (src_[pos_] == '(')
+        ++depth;
+      else if (src_[pos_] == ')')
+        --depth;
       ++pos_;
     }
     return side_effect_expr_nondett(int_type());
@@ -435,8 +440,13 @@ codet st_fb_translator::parse_stmt()
     next_word();
     while (!eof())
     {
-      if (peek_word() == "end_var") { next_word(); break; }
-      if (next_word().empty()) ++pos_; // advance over a symbol/token
+      if (peek_word() == "end_var")
+      {
+        next_word();
+        break;
+      }
+      if (next_word().empty())
+        ++pos_; // advance over a symbol/token
     }
     accept_sym(";");
     return code_blockt();
@@ -453,8 +463,10 @@ codet st_fb_translator::parse_stmt()
     int depth = 1;
     while (pos_ < src_.size() && depth > 0)
     {
-      if (src_[pos_] == '(') ++depth;
-      else if (src_[pos_] == ')') --depth;
+      if (src_[pos_] == '(')
+        ++depth;
+      else if (src_[pos_] == ')')
+        --depth;
       ++pos_;
     }
     accept_sym(";");
@@ -477,7 +489,8 @@ codet st_fb_translator::parse_stmt()
   {
     require_tolerant("non-assignment statement");
     while (!eof() && !accept_sym(";"))
-      if (next_word().empty()) ++pos_;
+      if (next_word().empty())
+        ++pos_;
     return code_blockt();
   }
   symbol_exprt lhs = resolve_(name);

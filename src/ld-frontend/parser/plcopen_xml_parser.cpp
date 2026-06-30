@@ -684,9 +684,8 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
       if (!first)
         return VarKind::INT; // numeric default for an untyped FB variable
       std::string tag = first.name();
-      std::string type_str = (tag == "derived")
-                               ? first.attribute("name").as_string()
-                               : tag;
+      std::string type_str =
+        (tag == "derived") ? first.attribute("name").as_string() : tag;
       return var_kind_from_string(type_str);
     };
     for (auto v : pou.select_nodes(".//interface/inputVars/variable"))
@@ -734,8 +733,7 @@ LdAst PlcopenXmlParser::parse(const std::string &path)
     // means "<prog_var> := <fb_instance>.<pin>".  This propagates a (possibly
     // forged) FB output into the program so value/actuator-manipulation bombs
     // become observable, and makes the model faithful instead of vacuous.
-    for (auto xp :
-         root.select_nodes("//pou[@pouType='program']//outVariable"))
+    for (auto xp : root.select_nodes("//pou[@pouType='program']//outVariable"))
     {
       pugi::xml_node ov = xp.node();
       std::string pv = ov.child("expression").child_value();

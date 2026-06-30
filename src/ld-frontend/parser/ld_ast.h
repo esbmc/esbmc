@@ -191,19 +191,19 @@ struct FBVarDecl
 
 struct UserFBDef
 {
-  std::string type_name;              // e.g. "EQ_0"
-  std::vector<FBVarDecl> input_vars;  // formal inputs (IN1, IN2, ...) + types
-  std::vector<FBVarDecl> local_vars;  // FB-local variables (e.g. "i") + types
-  std::string output_var;             // formal output name (OUT)
+  std::string type_name;               // e.g. "EQ_0"
+  std::vector<FBVarDecl> input_vars;   // formal inputs (IN1, IN2, ...) + types
+  std::vector<FBVarDecl> local_vars;   // FB-local variables (e.g. "i") + types
+  std::string output_var;              // formal output name (OUT)
   VarKind output_kind = VarKind::BOOL; // OUT declared type
-  std::string st_body;                // raw Structured Text body
+  std::string st_body;                 // raw Structured Text body
 };
 
 // Wiring of an FB output pin to a program variable: "prog_var := <inst>__pin".
 struct FBOutWire
 {
   std::string prog_var; // program variable driven by the pin (e.g. MV1)
-  std::string pin;       // FB formal output name (e.g. OUT_MV1)
+  std::string pin;      // FB formal output name (e.g. OUT_MV1)
 };
 
 struct UserFBInstance

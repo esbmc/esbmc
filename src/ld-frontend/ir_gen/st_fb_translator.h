@@ -32,7 +32,9 @@ public:
   // (ld_converter) declares one symbol per FB-local variable and supplies this.
   using resolver_t = std::function<symbol_exprt(const std::string &)>;
 
-  explicit st_fb_translator(resolver_t resolve) : resolve_(std::move(resolve)) {}
+  explicit st_fb_translator(resolver_t resolve) : resolve_(std::move(resolve))
+  {
+  }
 
   // Translate a whole FB body into a code_blockt.
   code_blockt translate(const std::string &body);
@@ -46,18 +48,19 @@ private:
   // lexer
   void skip_ws();
   bool eof();
-  std::string peek_word();          // next identifier/keyword (lowercased), no consume
-  std::string next_word();          // consume identifier/keyword (original case)
-  bool accept_kw(const char *kw);   // consume if next word == kw (case-insensitive)
+  std::string peek_word(); // next identifier/keyword (lowercased), no consume
+  std::string next_word(); // consume identifier/keyword (original case)
+  bool
+  accept_kw(const char *kw); // consume if next word == kw (case-insensitive)
   void expect_kw(const char *kw);
-  bool accept_sym(const char *s);   // consume punctuation/operator if it matches
+  bool accept_sym(const char *s); // consume punctuation/operator if it matches
   void expect_sym(const char *s);
 
   // parser -> codet/exprt
   void parse_stmt_list(code_blockt &out, const char *const *terminators);
   codet parse_stmt();
   exprt parse_condition();
-  exprt parse_expr();    // additive  (+ -), left-assoc
-  exprt parse_term();    // multiplicative (* /), binds tighter than + -
+  exprt parse_expr(); // additive  (+ -), left-assoc
+  exprt parse_term(); // multiplicative (* /), binds tighter than + -
   exprt parse_primary();
 };

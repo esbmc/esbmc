@@ -144,7 +144,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "nondeterministic (no over-approximation, zero false positives)"},
     {"ld-scan-watchdog",
      NULL,
-     "Instrument WHILE loops in user function-block bodies with a scan-watchdog "
+     "Instrument WHILE loops in user function-block bodies with a "
+     "scan-watchdog "
      "assertion that fails once a loop exceeds --ld-scan-budget iterations, "
      "modelling a PLC scan overrun (changes the verified model)"},
     {"ld-scan-budget",
