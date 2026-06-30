@@ -6,39 +6,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  harness:
+  build-and-dump:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
-      - name: Show toolchain
-        run: |
-          g++ --version || true
-          clang++ --version || true
-          ldd --version | head -1 || true
+      - name: Build ESBMC (DebugOpt, same as CI)
+        run: ./scripts/build.sh -b DebugOpt -e ON
 
-      - name: Fetch nlohmann/json single header
+      - name: Locate binary
+        id: bin
         run: |
-          mkdir -p third_party/nlohmann
-          curl -sSL https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp \
-            -o third_party/nlohmann/json.hpp
-          wc -l third_party/nlohmann/json.hpp
+          ESBMC=$(find "$PWD" -type f -name esbmc -path '*bin*' 2>/dev/null | head -1)
+          [ -z "$ESBMC" ] && ESBMC=$(find "$PWD" -type f -name esbmc -path '*src/esbmc*' 2>/dev/null | head -1)
+          echo "ESBMC=$ESBMC" | tee -a "$GITHUB_ENV"
+          "$ESBMC" --version || true
 
-      - name: Compile and run (multiple configs)
+      - name: Reproduce + dump folds
         run: |
           set +e
-          INC="-Ithird_party"
-          run() {
-            local tag="$1"; shift
-            echo "==================== $tag ===================="
-            "$@" $INC tools/pf_harness.cpp -o /tmp/h_$$ 2>/tmp/cc.err
-            if [ $? -ne 0 ]; then echo "COMPILE FAILED"; cat /tmp/cc.err; return; fi
-            /tmp/h_$$
-            echo "harness exit=$?"
+          E="$ESBMC"
+          echo "############ percent_format_spec (expect FAIL line 4) ############"
+          "$E" regression/python/percent_format_spec/main.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column|assertion"
+          dump() {
+            local name="$1" body="$2"
+            printf 'def main() -> None:\n    %s\nmain()\n' "$body" > /tmp/t.py
+            echo "############ $name : $body ############"
+            echo "--- verdict ---"
+            "$E" /tmp/t.py --incremental-bmc 2>&1 | grep -E "VERIFICATION|line [0-9]+ column" | head -3
+            echo "--- GOTO (assign/assert in main) ---"
+            "$E" /tmp/t.py --goto-functions-only 2>&1 | awk '/function main/{p=1} p' | grep -E "ASSIGN (x|y)=|DECL.*(x|y);|ASSERT (0|1)$" | head -8
           }
-          run "g++ -O2"            g++  -std=c++17 -O2 -g
-          run "g++ -O0"            g++  -std=c++17 -O0 -g
-          run "g++ -O2 asan+ubsan" g++  -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
-          run "clang++ -O2"        clang++ -std=c++17 -O2 -g
-          run "clang++ -O2 asan+ubsan" clang++ -std=c++17 -O2 -g -fsanitize=address,undefined -fno-omit-frame-pointer
-          echo "==================== all configs done ===================="
+          dump "inline_fail"      'assert "%.2f" % 3.14159 == "3.14"'
+          dump "via_var"          'x = "%.2f" % 3.14159
+    assert x == "3.14"'
+          dump "literal_control"  'assert "3.14" == "3.14"'
+          dump "prec3_5char"      'assert ("%.3f" % 3.14159) == "3.142"'
+          dump "prec1_3char"      'assert ("%.1f" % 3.14159) == "3.1"'
+          dump "padded_8char"     'assert ("%8.2f" % 3.14159) == "    3.14"'
+          dump "two_vars"         'x = "%.2f" % 3.14159
+    y = "3.14"
+    assert x == y'
+          echo "############ done ############"
