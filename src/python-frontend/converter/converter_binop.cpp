@@ -20,6 +20,7 @@
 #include <util/std_code.h>
 
 #include <functional>
+#include <map>
 #include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -148,11 +149,17 @@ std::string apply_sign_flags(const std::string &s, bool plus, bool space)
 // arithmetic (which crashed the SMT backend, #5495).
 std::string py_percent_format(
   const std::string &fmt,
-  const std::vector<nlohmann::json> &args)
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping)
 {
   std::string out;
   size_t argi = 0;
+  // When a `%(name)` mapping key was just parsed, `forced` points at its value
+  // node and next_arg() returns it (without consuming a positional argument).
+  const nlohmann::json *forced = nullptr;
   auto next_arg = [&]() -> const nlohmann::json & {
+    if (forced != nullptr)
+      return *forced;
     if (argi >= args.size())
       throw std::runtime_error(
         "TypeError: not enough arguments for format string");
@@ -168,6 +175,26 @@ std::string py_percent_format(
     }
     if (i + 1 >= fmt.size())
       throw std::runtime_error("ValueError: incomplete format");
+
+    // Mapping form: %(name)<conv> looks `name` up in the right-hand dict.
+    // Per CPython's %[(key)][flags][width][.precision]conv grammar the key
+    // comes first, before any flags/width/precision.
+    forced = nullptr;
+    if (fmt[i + 1] == '(')
+    {
+      const size_t close = fmt.find(')', i + 2);
+      if (close == std::string::npos)
+        throw std::runtime_error("ValueError: incomplete format key");
+      const std::string key = fmt.substr(i + 2, close - (i + 2));
+      const auto it = mapping.find(key);
+      if (it == mapping.end())
+        throw std::runtime_error(
+          "KeyError: '" + key + "' in str % mapping (or non-constant key)");
+      forced = &it->second;
+      i = close; // advance to ')'; the conversion spec follows
+      if (i + 1 >= fmt.size())
+        throw std::runtime_error("ValueError: incomplete format");
+    }
 
     // Parse an optional conversion spec: %[flags][width][.precision]<conv>.
     // Cap width/precision so a pathological digit run cannot overflow int
@@ -684,7 +711,12 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
-    if (kind == "dict")
+    // Recognise a dict by its struct tag as well as its aggregate-kind marker.
+    // The kind irep can be dropped while a dict value flows through type
+    // inference (e.g. a dict comprehension result), but the `__python_dict__`
+    // tag is preserved — and subscript/len already key off the tag — so without
+    // this `x in {…comprehension…}` wrongly hit the unsupported-operand throw.
+    if (kind == "dict" || dict_handler_->is_dict_type(rhs_resolved_type))
     {
       return dict_handler_->handle_dict_membership(lhs, rhs, invert);
     }
@@ -830,6 +862,66 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  // Content equality for value arrays of long_long_int. bytes are modelled as
+  // arrays of long_long_int and are value sequences, so `==`/`!=` compare
+  // element-by-element like CPython, not by identity. Two such array operands
+  // otherwise fall through to the generic binop path, which lowers `a == b` to
+  // `&a[0] == &b[0]` (an address compare) — wrong for distinct-but-equal byte
+  // sequences (e.g. a `bytes([2,3])` stored in two variables, or a bytes slice
+  // vs a literal). This element-wise fold is a strict improvement over the
+  // address compare for any value array of this element type; numpy integer
+  // arrays that are materialised as array *values* share the representation and
+  // are likewise compared by content here (their full elementwise-bool-array
+  // `==` semantics is a separate, unimplemented feature — but content equality
+  // is still more correct than the prior identity compare). numpy arrays held
+  // as pointers are not arrays and are untouched. Only constant-length operands
+  // up to a bound are folded; longer or symbolic-length operands fall through.
+  if (op == "Eq" || op == "NotEq")
+  {
+    // Cap the unrolled comparison so a pathologically large constant length
+    // cannot build a huge equality chain; such lengths do not arise for real
+    // byte literals and fall through to the existing path.
+    constexpr long long kMaxUnrolledEqElems = 4096;
+    auto is_value_int_array = [](const typet &t) {
+      return t.is_array() && t.subtype() == long_long_int_type();
+    };
+    if (is_value_int_array(lhs.type()) && is_value_int_array(rhs.type()))
+    {
+      const exprt &ls = to_array_type(lhs.type()).size();
+      const exprt &rs = to_array_type(rhs.type()).size();
+      if (ls.is_constant() && rs.is_constant())
+      {
+        const BigInt ln =
+          binary2integer(to_constant_expr(ls).value().c_str(), false);
+        const BigInt rn =
+          binary2integer(to_constant_expr(rs).value().c_str(), false);
+        if (ln != rn)
+          return migrate_expr_back(
+            op == "NotEq" ? gen_true_expr() : gen_false_expr());
+
+        const long long n = ln.to_int64();
+        if (n == 0)
+          return migrate_expr_back(
+            op == "Eq" ? gen_true_expr() : gen_false_expr());
+
+        if (n <= kMaxUnrolledEqElems)
+        {
+          expr2tc acc;
+          for (long long i = 0; i < n; ++i)
+          {
+            const exprt idx = from_integer(i, index_type());
+            expr2tc li, ri;
+            migrate_expr(index_exprt(lhs, idx, long_long_int_type()), li);
+            migrate_expr(index_exprt(rhs, idx, long_long_int_type()), ri);
+            expr2tc eq = equality2tc(li, ri);
+            acc = i == 0 ? eq : and2tc(acc, eq);
+          }
+          return migrate_expr_back(op == "Eq" ? acc : not2tc(acc));
+        }
+      }
+    }
+  }
+
   // Handle set operations (difference, intersection, union, symmetric diff)
   typet list_type = type_handler_.get_list_type();
   if (
@@ -899,8 +991,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       throw std::runtime_error(
         "unsupported: str % formatting requires a literal format string");
 
+    // A right-hand dict drives the %(name)s mapping form: build a constant
+    // key -> value-node map. Folding requires constant string keys; a
+    // non-constant key leaves the map without that entry, so %(key) below
+    // surfaces a clean KeyError-style diagnostic instead of a wrong fold.
+    std::map<std::string, nlohmann::json> mapping;
     std::vector<nlohmann::json> args;
-    if (right.is_object() && right.value("_type", "") == "Tuple")
+    if (right.is_object() && right.value("_type", "") == "Dict")
+    {
+      const auto &keys = right["keys"];
+      const auto &values = right["values"];
+      for (size_t k = 0; k < keys.size() && k < values.size(); ++k)
+        if (
+          keys[k].is_object() && keys[k].value("_type", "") == "Constant" &&
+          keys[k].contains("value") && keys[k]["value"].is_string())
+          // Last write wins for duplicate keys, matching Python dict literals.
+          mapping[keys[k]["value"].get<std::string>()] = values[k];
+    }
+    else if (right.is_object() && right.value("_type", "") == "Tuple")
       for (const auto &e : right["elts"])
         args.push_back(e);
     else
@@ -911,7 +1019,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // len("ab")), which materialises it correctly when consumed inline by
     // len()/==. Building the array directly left it unaddressable inline.
     nlohmann::json folded = left;
-    folded["value"] = py_percent_format(left["value"].get<std::string>(), args);
+    folded["value"] =
+      py_percent_format(left["value"].get<std::string>(), args, mapping);
     return get_expr(folded);
   }
 

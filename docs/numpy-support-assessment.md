@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-06-27.
+**Updated:** 2026-06-28.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Features that already work are not listed here — check the
@@ -8,12 +8,19 @@ module. Features that already work are not listed here — check the
 
 ---
 
-## Blocking bugs (must fix before further indexing work)
+## Recently completed
 
-| Bug | Symptom | Root cause |
+| Feature | PR / commit | Notes |
 |---|---|---|
-| Boolean array construction crash | `np.array([True, False, True])` segfaults | `migrate_type_back` receives an unrepresentable bool-list type from `build_push_list_call` → `get_list_element_info` |
-| 2-D nested-list element access | `m[0:2][0][0]` crashes in solver | `smt_solver.cpp:decompose_store_chain` assertion failure on nested store chains |
+| Boolean array construction | This branch | `np.array([True, False, True])` works; bool type preserved |
+| SMT store-chain for nested lists | This branch | `decompose_store_chain` / `decompose_select_chain` handle single-level chains gracefully |
+| `reshape` / `ravel` / `flatten` | This branch | Constant-folded at JSON level; supports n-D; `-1` inferred dimension |
+| dtype promotion table | This branch | `promote_numpy_dtype()` follows NumPy casting hierarchy |
+| Variable-referenced shapes | This branch | `n = 3; np.zeros(n)` resolves at parse time |
+| `linalg.inv` | This branch | 2×2 and 3×3; singular matrix detection |
+| `linalg.solve` | This branch | 2×2 and 3×3 via matrix inverse; singular detection |
+| `linalg.norm` | This branch | Frobenius norm for 1-D and 2-D arrays |
+| n-D array support | This branch | Hard limit raised from 2-D to 8-D; `np.array()`, `np.zeros()`, `np.ones()`, `np.reshape()` all support n-D |
 
 ---
 
@@ -21,11 +28,11 @@ module. Features that already work are not listed here — check the
 
 | Feature | Status | Notes |
 |---|---|---|
-| 2-D slicing `a[:,j]`, `a[i,:]` | Unsupported | Frontend lowering exists but blocked by SMT store-chain bug above |
-| Boolean-mask indexing `a[mask]` | Missing | Blocked by bool-array construction crash above |
+| 2-D slicing `a[:,j]`, `a[i,:]` | Partially supported | Store-chain fix unblocks basic cases; full fancy indexing still missing |
+| Boolean-mask indexing `a[mask]` | Missing | Bool arrays work but mask-based selection has no handler |
 | Fancy/integer-array indexing `a[[0,2]]` | Missing | No handler |
 | Strided slicing `a[::2]` | Untested | List slice model supports step but not tested for numpy |
-| 3-D+ indexing | Unsupported by design | Hard 2-D ceiling |
+| n-D tuple indexing `a[i,j,k]` | Missing | Need lowering for multi-axis tuple subscript |
 
 ---
 
@@ -34,11 +41,11 @@ module. Features that already work are not listed here — check the
 | Category | Missing items |
 |---|---|
 | Array creation | `empty` |
-| Shape manipulation | `reshape`, `ravel`, `flatten`, `squeeze`, `stack`, `concatenate` |
+| Shape manipulation | `squeeze`, `stack`, `concatenate` |
 | Sorting / searching | `sort`, `argsort`, `searchsorted`, `unique` |
 | Statistics | `std`, `var`, `median`, `percentile` |
-| Linear algebra | `linalg.inv`, `linalg.solve`, `linalg.eig`, `linalg.svd`, `linalg.norm`; `det` limited to ≤3×3 |
-| Type casting | `astype`; full NumPy promotion table |
+| Linear algebra | `linalg.eig`, `linalg.svd`; `det`/`inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius |
+| Type casting | `astype`; runtime dtype promotion for symbolic arrays |
 | Random | `np.random.*` (all) |
 | Structured arrays | Record dtypes |
 | Views / strides | No aliasing model — all ops copy |
@@ -67,10 +74,10 @@ Either model correctly or downgrade to explicit "unsupported".
 
 ## Prioritised next steps
 
-1. **Fix bool-array construction crash** — unblocks boolean-mask indexing.
-2. **Fix SMT store-chain for nested lists** — unblocks 2-D slicing.
-3. **`reshape` / `ravel` / `flatten`** — unlocks tensor-style code.
-4. **Symbolic shapes / dtype promotion** — allows shape values that are
-   symbolic within a static bound.
-5. **`linalg.{inv,solve,norm}`** — extend beyond `det`.
-6. **Lift 2-D ceiling** — requires flat backing + reshape + n-D indexing.
+1. **n-D tuple indexing** — lower `a[i,j,k]` to chained indexing for n-D arrays.
+2. **Boolean-mask indexing** — `a[mask]` requires a runtime loop model.
+3. **`astype` / runtime dtype casting** — needed for symbolic array dtype interop.
+4. **`squeeze` / `stack` / `concatenate`** — shape manipulation completeness.
+5. **`linalg.eig` / `linalg.svd`** — extend linear algebra beyond inv/solve/norm.
+6. **SMT-array backing** — replace unrolled lists with SMT arrays for scalability.
+7. **Symbolic shapes at runtime** — bounded-loop list construction for truly nondet sizes.

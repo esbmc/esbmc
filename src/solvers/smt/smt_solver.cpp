@@ -2510,8 +2510,15 @@ smt_solver_baset::decompose_select_chain(const expr2tc &expr, expr2tc &base)
       typecast2tc(subtype, idx->index)));
   }
 
-  // We should only enter this method when handling multidimensional arrays
-  assert(multiplications.size() != 1);
+  if (multiplications.size() == 1)
+  {
+    // Single-level select into a multi-dimensional type (e.g. reading one row
+    // of a 2-D array after a slice). Return the lone index directly.
+    base = idx->source_value;
+    expr2tc output = multiplications[0];
+    simplify(output);
+    return output;
+  }
 
   // Add them together
   expr2tc output = gen_additions(subtype, multiplications);
@@ -2561,8 +2568,15 @@ expr2tc smt_solver_baset::decompose_store_chain(
       typecast2tc(subtype, with->update_field)));
   }
 
-  // We should only enter this method when handling multidimensional arrays
-  assert(multiplications.size() != 1);
+  if (multiplications.size() == 1)
+  {
+    // Single-level store into a multi-dimensional type (e.g. updating one row
+    // of a 2-D array after a slice). Return the lone index directly.
+    update_val = with->update_value;
+    expr2tc output = typecast2tc(subtype, to_with2t(expr).update_field);
+    simplify(output);
+    return output;
+  }
 
   // Add them together
   expr2tc output = gen_additions(subtype, multiplications);
