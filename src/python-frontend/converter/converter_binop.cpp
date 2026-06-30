@@ -24,6 +24,7 @@
 #include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
+#include <cfenv>
 #include <cstdio>
 #include <sstream>
 
@@ -240,6 +241,27 @@ std::string py_percent_format(
 
     // Two-pass snprintf with a literal format (stays -Wformat-nonliteral-safe).
     auto fmt_double = [](char conv, int p, double d) -> std::string {
+      // printf rounds %f/%e/%g per the host FP rounding mode, and the
+      // surrounding pipeline can leave the host in a non-default mode; under
+      // FE_UPWARD, e.g. "%.2f" % 3.14159 would render "3.15" instead of "3.14"
+      // (observed on the Linux CI, where the host was left rounding upward).
+      // CPython formats with round-half-to-even, i.e. FE_TONEAREST, so pin that
+      // mode for both snprintf passes and restore it, keeping the fold correct
+      // regardless of the host's mode. The guard restores on every return path.
+      struct round_guard
+      {
+        int saved;
+        round_guard() : saved(std::fegetround())
+        {
+          if (saved != FE_TONEAREST)
+            std::fesetround(FE_TONEAREST);
+        }
+        ~round_guard()
+        {
+          if (saved >= 0 && saved != FE_TONEAREST)
+            std::fesetround(saved);
+        }
+      } guard;
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
