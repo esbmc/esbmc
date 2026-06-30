@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cfenv>
 #include <cstdio>
 #include <cmath>
 #include <climits>
@@ -141,6 +142,26 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
   throw std::runtime_error("format() requires constant arguments");
 }
 
+// Pins the host floating-point rounding mode to round-to-nearest for its
+// lifetime and restores the previous mode on destruction. Float specs are
+// folded with host snprintf, whose output depends on the ambient rounding mode;
+// a statically linked solver (e.g. CVC5 on the Linux build) can leave that mode
+// set to FE_UPWARD, which turns "{:.2f}".format(3.14159) into "3.15" instead of
+// CPython's "3.14". Pinning the mode keeps the fold deterministic and matches
+// CPython's round-half-to-even.
+struct round_to_nearest_guard
+{
+  round_to_nearest_guard() : saved_(std::fegetround())
+  {
+    std::fesetround(FE_TONEAREST);
+  }
+  ~round_to_nearest_guard()
+  {
+    std::fesetround(saved_);
+  }
+  int saved_;
+};
+
 // Format a constant value per a str.format/format() format spec
 // ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or
 // spec feature not modelled here, so the caller can fall back to a sound nondet
@@ -247,13 +268,13 @@ std::string apply_format_spec(
       body.resize(static_cast<size_t>(prec)); // truncate, like %.Ns
     default_align = '<';
   }
-  else if (kind == KIND_INT && (type == '\0' || type == 'd' || type == 'x' ||
-                                type == 'X' || type == 'o' || type == 'b'))
+  else if (
+    kind == KIND_INT && (type == '\0' || type == 'd' || type == 'x' ||
+                         type == 'X' || type == 'o' || type == 'b'))
   {
     const bool neg = ival < 0;
-    unsigned long long mag =
-      neg ? 0ULL - static_cast<unsigned long long>(ival)
-          : static_cast<unsigned long long>(ival);
+    unsigned long long mag = neg ? 0ULL - static_cast<unsigned long long>(ival)
+                                 : static_cast<unsigned long long>(ival);
     std::string digits;
     if (type == '\0' || type == 'd')
       digits = std::to_string(mag);
@@ -273,13 +294,13 @@ std::string apply_format_spec(
     default_align = '>';
   }
   else if (
-    kind == KIND_FLOAT &&
-    (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' ||
-     type == 'G'))
+    kind == KIND_FLOAT && (type == 'f' || type == 'F' || type == 'e' ||
+                           type == 'E' || type == 'g' || type == 'G'))
   {
     // A typeless float spec ("{:8}", "{:.2}") uses CPython's general format,
     // which is not faithfully snprintf-expressible (e.g. 1.0 -> "1.0", not
     // "1"); it is left to the nondet fallback via the final throw below.
+    const round_to_nearest_guard rounding_guard;
     const int pr = prec >= 0 ? prec : 6;
     const char t = type;
     int n = 0;
@@ -332,10 +353,9 @@ std::string apply_format_spec(
     return std::string(l, fill) + body + std::string(padn - l, fill);
   }
   // '=' : pad after a leading sign (numeric).
-  size_t s = (!body.empty() && (body[0] == '-' || body[0] == '+' ||
-                                body[0] == ' '))
-               ? 1
-               : 0;
+  size_t s =
+    (!body.empty() && (body[0] == '-' || body[0] == '+' || body[0] == ' ')) ? 1
+                                                                            : 0;
   return body.substr(0, s) + std::string(padn, fill) + body.substr(s);
 }
 } // namespace
