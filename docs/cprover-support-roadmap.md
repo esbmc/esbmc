@@ -133,30 +133,33 @@ nondet return in both CBMC's own model and ESBMC's libm operational model, sides
 the exprt path entirely on both sides; `signbit` is CBMC's own naming for `__CPROVER`'s
 sign-extraction predicate under the *upstream ESBMC* id — real CBMC binaries use `"sign"`
 instead, per §4.4's `isinf` note below, so this is latent-gap protection, not a live fix).
-Segfault→crash-free confirmed for `isnan`/`isinf`/`isnormal` via real CBMC binaries; two
-residual, distinct gaps found and left as concretely-diagnosed follow-up (not fixed by
-this pass — see `cbmc_isnan`/`cbmc_isinf` KNOWNBUG regressions):
+Segfault→crash-free confirmed for `isnan`/`isinf`/`isnormal` via real CBMC binaries.
 
-- **`isnan` doesn't reach CBMC's verdict** because of an *unrelated* Phase 2 gap: CBMC
-  emits float division as a plain `"/"` node, and `migrate_expr`'s `"/"` handler
-  (`exprt::div` → `div2tc`) is type-blind, always building the generic (non-IEEE)
-  division regardless of operand type. ESBMC's own C frontend avoids this by promoting
-  `"/"`/`"+"`/`"-"`/`"*"` to `"ieee_div"`/`"ieee_add"`/`"ieee_sub"`/`"ieee_mul"` whenever
-  the type is `floatbv` (`clang_c_adjust_expr.cpp::adjust_float_arith`) — the CBMC
-  adapter has no equivalent promotion. Consequence: `goto_check.cpp`'s division-by-zero
-  property (which explicitly skips `ieee_div`, "as it's defined behavior") wrongly fires
-  on CBMC-sourced float division, so `0.0f/0.0f` reports FAILED instead of matching
-  CBMC's SUCCESSFUL. **Next task**: port `adjust_float_arith`'s type-driven `+`/`-`/`*`/`/`
-  promotion into `fix_expression`.
-- **`isinf` still fails outright** (no longer segfaults, but aborts with "migrate expr
-  failed") because glibc's `isinf` additionally uses CBMC's `"sign"` predicate (a
-  sign-bit extraction, type `bool`), which has no `migrate_expr` counterpart under that
-  name — ESBMC's own equivalent is `"signbit"`, typed `int_type()`. A straightforward
-  id-rename-and-retype was attempted and got past the abort, but surfaced a further,
-  unresolved SMT-encoding error (Bitwuzla: "expected Boolean term") in
-  `smt_fp_conv.cpp::convert_signbit`, suggesting the `bool`-vs-`int32` mismatch is not
-  the only issue. **Next task**: investigate `convert_signbit`'s type handling once the
-  `sign`→`signbit` rename lands, rather than attempting both at once.
+**Float-arithmetic type promotion — ✅ landed.** `isnan` didn't reach CBMC's verdict
+because of an *unrelated* Phase 2 gap: CBMC emits float division as a plain `"/"` node,
+and `migrate_expr`'s `"/"` handler (`exprt::div` → `div2tc`) is type-blind, always
+building the generic (non-IEEE) division regardless of operand type. ESBMC's own C
+frontend avoids this by promoting `"/"`/`"+"`/`"-"`/`"*"` to
+`"ieee_div"`/`"ieee_add"`/`"ieee_sub"`/`"ieee_mul"` whenever the type is `floatbv`
+(`clang_c_adjust_expr.cpp::adjust_float_arith`); the CBMC adapter had no equivalent
+promotion, so `goto_check.cpp`'s division-by-zero property (which explicitly skips
+`ieee_div`, "as it's defined behavior") wrongly fired on CBMC-sourced float division.
+Fixed by porting the same type-driven promotion into `fix_expression`: `isnan` now
+matches CBMC's verdict exactly (reclassified `cbmc_isnan` KNOWNBUG→CORE), and general
+float arithmetic from CBMC binaries is verdict-tested directly (`cbmc_float_arith`,
+`cbmc_float_arith_fail`). Contained to the CBMC-binary path only — `fix_expression` is
+never reached by ESBMC's native frontends, so this cannot regress native C/C++/Python.
+
+**Still open — `isinf`.** No longer segfaults, but still aborts ("migrate expr failed")
+because glibc's `isinf` additionally uses CBMC's `"sign"` predicate (a sign-bit
+extraction, type `bool`), which has no `migrate_expr` counterpart under that name —
+ESBMC's own equivalent is `"signbit"`, typed `int_type()`. A straightforward
+id-rename-and-retype was attempted and got past the abort, but surfaced a further,
+unresolved SMT-encoding error (Bitwuzla: "expected Boolean term") in
+`smt_fp_conv.cpp::convert_signbit`, suggesting the `bool`-vs-`int32` mismatch is not the
+only issue. **Next task**: investigate `convert_signbit`'s type handling once the
+`sign`→`signbit` rename lands, rather than attempting both at once. Pinned as KNOWNBUG
+(`cbmc_isinf`).
 
 ### 4.5 Symbol metadata (Phase 2)
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
