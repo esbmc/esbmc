@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-06-30.
+**Updated:** 2026-07-01.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Features that already work are not listed here — check the
@@ -21,13 +21,13 @@ module. Features that already work are not listed here — check the
 | `linalg.solve` | Previous branch | 2×2 and 3×3 via matrix inverse; singular detection |
 | `linalg.norm` | Previous branch | Frobenius norm for 1-D and 2-D arrays |
 | n-D array support | Previous branch | Hard limit raised from 2-D to 8-D; `np.array()`, `np.zeros()`, `np.ones()`, `np.reshape()` all support n-D |
-| **n-D tuple indexing** `a[i,j,k]` | `feat/numpy-indexing-shape-linalg` | Generic loop over all tuple axes; rank-mismatch → `IndexError` |
-| **Boolean-mask indexing** `a[mask]` | `feat/numpy-indexing-shape-linalg` | 1-D static arrays; bounded while-loop; compile-time length check |
-| **`astype` / runtime dtype casting** | `feat/numpy-indexing-shape-linalg` | `ndarray.astype("float64")` etc.; element-wise cast via `build_typecast` |
-| **`squeeze` / `stack` / `concatenate`** | `feat/numpy-indexing-shape-linalg` | Shape manipulation completeness for 1-D static arrays |
-| **`linalg.eig` / `linalg.svd`** | `feat/numpy-indexing-shape-linalg` | Small concrete matrices (≤3×3); eigenvalue/singular-value symbolic assertion |
-| **Per-iteration loop overhead reduction** | `feat/numpy-indexing-shape-linalg` | Unsigned-index fast path in `build_list_at_call` skips dead negative-index machinery |
-| **Symbolic shapes at runtime** | `feat/numpy-indexing-shape-linalg` | `np.zeros(n)`, `np.ones(n)`, `np.full(n, v)` for nondet/symbolic `n`; bounded while-loop fill; `--unwind` controls bound |
+| **n-D tuple indexing** `a[i,j,k]` | `feat/numpy-indexing-shape-linalg` (this PR) | Generic loop over all tuple axes; rank-mismatch → `IndexError` |
+| **Boolean-mask indexing** `a[mask]` | `feat/numpy-indexing-shape-linalg` (this PR) | 1-D static arrays; bounded while-loop; compile-time length check |
+| **`astype` / runtime dtype casting** | `feat/numpy-indexing-shape-linalg` (this PR) | `ndarray.astype("float64")` etc.; element-wise cast via `build_typecast` |
+| **`squeeze` / `stack` / `concatenate`** | `feat/numpy-indexing-shape-linalg` (this PR) | Shape manipulation completeness for 1-D static arrays |
+| **`linalg.eig` / `linalg.svd`** | `feat/numpy-indexing-shape-linalg` (this PR) | Small concrete matrices (≤3×3); eigenvalue/singular-value symbolic assertion |
+| **Per-iteration loop overhead reduction** | `feat/numpy-indexing-shape-linalg` (this PR) | Unsigned-index fast path in `build_list_at_call` skips dead negative-index machinery |
+| **Symbolic shapes at runtime** | `feat/numpy-indexing-shape-linalg` (this PR) | `np.zeros(n)`, `np.ones(n)`, `np.full(n, v)` for nondet/symbolic `n`; bounded while-loop fill; `--unwind` controls bound |
 
 ---
 
@@ -62,8 +62,10 @@ module. Features that already work are not listed here — check the
 1. **Constant-folding bypasses ESBMC's overflow/rounding checks** for the
    folded path. Use `--python-no-fold` to force SMT encoding and compare
    verdicts.
-2. **`umath.c` float element-wise ops** are now typed, but symbolic array
-   broadcasting still only works for concrete shapes.
+2. **`umath.c` float element-wise ops** are now typed. Symbolic shapes are
+   now supported for array *creation* (`zeros`, `ones`, `full`), but
+   element-wise broadcasting (e.g. `np.add(a, b)`) still requires concrete
+   shapes at conversion time.
 3. **Scalability wall** (#5121): every array is a fully-unrolled value list.
    Large arrays explode. Symbolic shapes mitigate this via `--unwind` but do
    not eliminate the underlying state-explosion for large bounds.
