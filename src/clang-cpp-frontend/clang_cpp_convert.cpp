@@ -280,6 +280,14 @@ bool clang_cpp_convertert::get_type(
   const clang::Type &the_type,
   typet &new_type)
 {
+  // C++-specific type classes (member pointers, template specialisations, ...)
+  // are handled here and recurse without reaching the base-class default case,
+  // so apply the same recursion-depth guard to avoid a stack overflow on a
+  // pathologically deep type. See #5048.
+  type_recursion_guardt type_guard(type_recursion_depth);
+  if (type_recursion_limit_reached())
+    return true;
+
   switch (the_type.getTypeClass())
   {
   case clang::Type::SubstTemplateTypeParm:

@@ -934,8 +934,29 @@ bool clang_c_convertert::get_type(
   return false;
 }
 
+// Report (once) and signal when get_type recursion has nested too deeply.
+bool clang_c_convertert::type_recursion_limit_reached()
+{
+  if (type_recursion_depth > max_type_recursion_depth)
+  {
+    log_error(
+      "type nesting exceeds the supported depth ({}); refusing to convert a "
+      "pathologically deep type",
+      max_type_recursion_depth);
+    return true;
+  }
+  return false;
+}
+
 bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 {
+  // Guard against unbounded recursion on a pathologically deep type (e.g. a long
+  // pointer/array chain) that would otherwise overflow the call stack. See
+  // #5048.
+  type_recursion_guardt type_guard(type_recursion_depth);
+  if (type_recursion_limit_reached())
+    return true;
+
   switch (the_type.getTypeClass())
   {
   // Builtin types like integer
