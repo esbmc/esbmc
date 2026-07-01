@@ -846,7 +846,8 @@ bool __ESBMC_dict_eq(
   const PyListObject *lhs_keys,
   const PyListObject *lhs_values,
   const PyListObject *rhs_keys,
-  const PyListObject *rhs_values)
+  const PyListObject *rhs_values,
+  size_t float_type_id)
 {
   if (!lhs_keys || !lhs_values || !rhs_keys || !rhs_values)
     return false;
@@ -899,6 +900,23 @@ bool __ESBMC_dict_eq(
         (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
                                : *(const PyListObject **)rhs_value->value;
       if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0, 0))
+        return false;
+    }
+    else if (
+      float_type_id != 0 && lhs_value->size == 8 && rhs_value->size == 8 &&
+      (lhs_value->type_id == float_type_id) !=
+        (rhs_value->type_id == float_type_id))
+    {
+      // int-vs-float: Python compares numerically (1 == 1.0), but the two
+      // store different bit patterns, so a byte compare would wrongly
+      // differ. Mirrors __ESBMC_list_eq's int/float fallback.
+      const double lv = (lhs_value->type_id == float_type_id)
+                          ? *(const double *)lhs_value->value
+                          : (double)*(const int64_t *)lhs_value->value;
+      const double rv = (rhs_value->type_id == float_type_id)
+                          ? *(const double *)rhs_value->value
+                          : (double)*(const int64_t *)rhs_value->value;
+      if (lv != rv)
         return false;
     }
     else

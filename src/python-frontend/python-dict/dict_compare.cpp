@@ -33,7 +33,19 @@ exprt python_dict_handler::compare(
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
 
-  // Call __ESBMC_dict_eq(lhs_keys, lhs_values, rhs_keys, rhs_values)
+  // float_type_id: the runtime type_id Python's `float` is stamped with
+  // everywhere (see get_list_element_info in list_mutation.cpp), so
+  // __ESBMC_dict_eq can numerically compare an int value against a float
+  // value (Python's `1 == 1.0`) instead of rejecting them on a type_id byte
+  // mismatch. This is a single global constant, not per-dict state -- float
+  // always lowers to the same type, unlike list's type map which also has to
+  // distinguish string/int for its own flags.
+  const size_t float_type_id =
+    std::hash<std::string>{}(type_handler_.type_to_string(
+      type_handler_.get_typet(std::string("float"))));
+
+  // Call __ESBMC_dict_eq(lhs_keys, lhs_values, rhs_keys, rhs_values,
+  // float_type_id)
   code_function_callt dict_eq_call;
   dict_eq_call.function() = build_symbol(*dict_eq_func);
   dict_eq_call.lhs() = build_symbol(result_var);
@@ -41,6 +53,7 @@ exprt python_dict_handler::compare(
   dict_eq_call.arguments().push_back(lhs_values);
   dict_eq_call.arguments().push_back(rhs_keys);
   dict_eq_call.arguments().push_back(rhs_values);
+  dict_eq_call.arguments().push_back(from_integer(float_type_id, size_type()));
   dict_eq_call.type() = bool_type();
   dict_eq_call.location() = location;
   converter_.add_instruction(dict_eq_call);
