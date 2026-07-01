@@ -2699,9 +2699,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "r_ok")
+  if (expr.id() == "r_ok" || expr.id() == "w_ok" || expr.id() == "rw_ok")
   {
-    // FUTURE: call __ESBMC_r_ok
+    // FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok
     true_exprt t;
     migrate_expr(t, new_expr_ref);
     return;

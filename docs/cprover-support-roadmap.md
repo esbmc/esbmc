@@ -72,6 +72,9 @@ and the symbol/function table layout.
 | CPROVER irep → intrinsic-call migration (overflow_result, r_ok) | ✅ (PR #2443) | migration + `regression/goto-transcoder/` |
 | Unit tests (varint/string/header, real v6 parse, load into context/goto_functions) | ✅ | `unit/goto-programs/read_cbmc_goto_object.test.cpp` |
 | Parity harness vs goto-transcoder reference | ✅ | `goto-transcoder/scripts/esbmc_parity.sh` |
+| CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
+| Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
+| Pointer predicates: `pointer_offset` operand-wrap crash fix, `w_ok`/`rw_ok` stubs (§4.4, Phase 2, partial) | ✅ (PR TBD) | `cbmc_adapter.cpp`, `migrate.cpp` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -84,26 +87,27 @@ end with no manual library step.
 
 These are the items between "loads and trivially verifies" and "fully supports CPROVER".
 
-### 4.1 Instruction-type fidelity (Phase 1)
+### 4.1 Instruction-type fidelity (Phase 1) — ✅ DONE (PR #5717)
 ESBMC and CBMC share the `goto_program_instruction_typet` heritage, so values **0–18
 agree** (`OTHER=4`, `SKIP=5`, `ATOMIC_BEGIN=10`, `ASSIGN=13`, `FUNCTION_CALL=16`,
 `THROW=17`, `CATCH=18`). They **diverge at 19**: CBMC `INCOMPLETE_GOTO` vs ESBMC
-`THROW_DECL` — hence the adapter's `assert(instr_type != 19)`. `convert()` casts the raw
-`typeid` straight to the enum, so any divergence above 18, or any instruction whose
-`typeid` is not faithfully carried, surfaces in symex as
-`GOTO instruction type <N> not handled in goto_symext::symex_step`. Some harnesses
-(e.g. `mul.goto --function mul_harness`) hit this **identically via the reference
-converter**, so it is a translation-pipeline gap, not specific to the native reader.
-Needs: an explicit CBMC→ESBMC instruction-type mapping table + an audit of which CBMC
-instruction kinds reach a final binary.
+`THROW_DECL`. Resolved by `cbmc_adapter.cpp::map_cbmc_instruction_type()`, an explicit,
+auditable table: identity for shared kinds, a named diagnostic for `START_THREAD`/
+`END_THREAD` (ESBMC models concurrency as intrinsic calls) and `INCOMPLETE_GOTO`. Pinned
+by a unit test mapping every shared kind to its ESBMC enumerator.
 
-### 4.2 Entry-point bridging (Phase 1)
-CBMC's entry is `__CPROVER__start`; ESBMC's symex looks for `__ESBMC_main`. Today the
-auto-synthesised additions provide an `__ESBMC_main` that calls the *boilerplate*
-`c:@F@main`, not the CBMC program's `main`/harness — fine for smoke runs, wrong for real
-verification. Needs: wire the synthesised `__ESBMC_main` to dispatch into the CBMC binary's
-entry (`__CPROVER__start`, or the `--function` harness), reconciling the `main` vs
-`c:@F@main` symbol-id conventions.
+### 4.2 Entry-point bridging (Phase 1) — ✅ DONE (PR #5719)
+CBMC's entry is `__CPROVER__start`; ESBMC's symex looks for `__ESBMC_main`. Previously the
+auto-synthesised additions provided an `__ESBMC_main` that called the *boilerplate*
+`c:@F@main`, not the CBMC program's `main`/harness — verification ran over an effectively
+empty program and could report a spurious SUCCESSFUL. Resolved by
+`retarget_esbmc_main()` in `esbmc_parseoptions.cpp`: an explicit `--function` wins,
+otherwise a CBMC binary dispatches into `__CPROVER__start`. Regression-tested with real
+CBMC 6.8.0 binaries (`cbmc_entry_bridge`, `cbmc_entry_bridge_fail`) — the failing-assert
+case is the load-bearing guard, since without bridging it would spuriously report
+SUCCESSFUL. **Open follow-up:** selecting a CBMC harness via `--function` still needs
+work — today it is consumed by the boilerplate-additions synthesis rather than reaching
+the retarget logic; the default `__CPROVER__start` bridge (the common case) is fixed.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
 `cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
@@ -113,13 +117,30 @@ CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the orig
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
 
-### 4.4 Intrinsic & expression coverage (Phase 2)
-`fix_expression` recognises a fixed set of ~40 expression ids. CBMC's surface is much
-larger: pointer predicates (`__CPROVER_r_ok`/`w_ok`/`same_object`, `POINTER_OFFSET`,
-`POINTER_OBJECT`), `__CPROVER_assume`/`assert`, array/quantifier predicates, IEEE-754
-rounding-mode operations, `byte_update`, big-endian byte ops, etc. Unmapped ids pass
-through unwrapped and may break downstream. Needs a systematic, tested mapping keyed off
-the CBMC `irep_idt` vocabulary, extending the PR #2443 intrinsic approach.
+### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
+`fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
+wrapped into the `"operands"` named-sub `exprt::operands()` expects; anything missing from
+that set either passes through unwrapped (silent downstream breakage) or, if the id also
+has no `migrate_expr` handler, aborts. Concrete gaps found and fixed by direct testing
+against real CBMC binaries: `pointer_offset` was missing from the wrap-set despite
+`migrate_expr` already supporting it — **this caused a segfault**, not a clean error, since
+`migrate_expr`'s unary-operand access read past an empty operand list. `w_ok` and `rw_ok`
+(CBMC's `r_or_w_ok_exprt` family alongside the pre-existing `r_ok`: `__CPROVER_w_ok` is the
+writable-object-check counterpart, `__CPROVER_rw_ok` the combined read+write check — CBMC's
+own typechecker builds all three from the same node type, distinguished only by id, per
+`c_typecheck_expr.cpp`) had no support at all; both now get the same treatment as the
+pre-existing `r_ok` stub (unconditionally `true` — a known-unsound placeholder,
+`// FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok`; the `w_ok`-vs-CBMC-FAILED
+case is a KNOWNBUG regression, `cbmc_w_ok_false`, mirroring the pre-existing `r_ok_false`
+limitation). `same_object` was checked and needs no change — CBMC's typechecker desugars it
+at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
+as a `same_object`/`same-object` node in the first place.
+
+Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
+rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
+IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
+audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
+gap-by-gap discovery.
 
 ### 4.5 Symbol metadata (Phase 2)
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
