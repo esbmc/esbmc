@@ -1,5 +1,9 @@
 # SV-COMP Issue Triage & Fix Plan
 
+**Last updated:** 2026-07-01 (Pass 11 — recover regression tests stranded on an orphaned branch and
+reconcile three witness-issue closures (#1470, #1471, #4611) plus the scanf overflow-check fix (#5666)
+that had already landed on master undocumented; see §15. Pass 10 in §14, Pass 9 in §13, Pass 8 in §12,
+Pass 7 in §11)
 **Last updated:** 2026-07-01 (Pass 11 — reconcile the two merged PRs that closed the #5565 residual
 after Pass 9: **#5650** (`fclose` frees only heap streams ⇒ `fclose(stdout)` sound) closed item-8's
 `fclose(stdout)` half and **CLOSED #5565**; **#5530** replaced the compile-time `ESBMC_SVCOMP` build
@@ -1337,6 +1341,103 @@ unreproducible in isolation here, per §13.3 item 6).
 
 ---
 
+## 15. Pass 11 — recover work stranded on an orphaned branch + reconcile witness closures (2026-07-01)
+
+**Process finding, not a benchmark triage.** While resuming this plan, the #5660 PR chain (§14) turned
+out to have a bookkeeping defect worth recording so it is not repeated. Follow-up PRs #5662, #5664 and
+#5667 — a Pass-11 reconciliation, the `#1470` witness-assignment regression tests, and a Pass-13/14
+reconciliation — were opened **stacked on #5660's branch** (`fix/5142-int-conversion-universal`) with
+the intent to retarget to `master` once #5660 merged. When #5660 was instead **closed without merging**
+(§14), the three stacked PRs had already been merged **into that side branch**, not into `master` — so
+they show as `MERGED` on GitHub while being completely absent from `master`'s history
+(`git merge-base --is-ancestor <commit> master` is false for all three). This document's own Pass 10
+entry (§14) did not catch the gap because it only reconciled the rejected code change, not the doc/test
+PRs stacked above it.
+
+**What this stranded.** Two regression tests (`regression/esbmc/github_1470_overflow_witness{,_fail}`,
+from #5664) and three doc-only passes (Pass 11/13/14 content, from #5662/#5667) never reached `master`.
+Separately, **PR #5666** (`[goto-check] fix scanf overflow-check false pos/neg on numeric, %%/%*`) *was*
+based directly on `master` and merged cleanly (2026-06-29) — it is present and unaffected.
+
+**Recovery in this pass.**
+* Cherry-picked the two `github_1470_overflow_witness{,_fail}` test directories from `33121f3db5` (no
+  docs, no code — pure test addition) onto `master`. Both **pass** on current master
+  (`ctest -R github_1470`): the `_fail` variant's GraphML witness contains `data == 9223372036854775807`
+  on the assignment edge; the companion (`__ESBMC_assume(data < INT64_MAX)`) variant is
+  `VERIFICATION SUCCESSFUL`.
+* Independently re-verified (not just trusted the stranded doc text) the three claims behind the
+  witness-issue closures below, directly against current `master`:
+  - **scanf fix (#5666) is in master.** `goto_check.cpp`'s `input_overflow_check` restricts the `INF`
+    sentinel to `%s`/`%[...]`/`%S`/`%ls`; width-less numeric/char conversions get `BOUNDED`. Full `cstd`
+    label (142 tests, including the four new scanf regressions) passes 142/142.
+  - **Witness key format (#4611).** `witnesses.cpp` emits the modern-spec `enterFunction`/
+    `returnFromFunction` GraphML keys (confirmed at `witnesses.cpp:337-347,590-592`) — the naming the
+    issue asked for, not the deprecated ones.
+  - **Struct-constant witness handling (#1471).** `witnesses.cpp:1175` special-cases `is_struct_type`
+    when rendering witness values, consistent with the issue's fix being present.
+* Confirmed via `gh issue view` that **#1470, #1471 and #4611 are closed** on GitHub (all closed
+  2026-06-28, cross-referenced from #5664/#5667's discussion) — the closures themselves are real and
+  already reflected upstream even though the supporting doc/test commits were stranded. Current open
+  SV-COMP issue count: **17** (`gh issue list --label SV-COMP --state open`), matching what the
+  stranded Pass-14 draft had already computed (20 → 17).
+
+**Why recover rather than re-derive from scratch.** The stranded commits' analysis was sound — this
+pass independently re-checked each concrete claim above rather than taking the orphaned branch's word
+for it, per the project's verification policy. Re-deriving the regression tests from scratch would have
+duplicated exactly the two files already written and reviewed on the stranded branch; cherry-picking
+them (with independent re-validation that they still pass on current `master`) was the correct-cost
+path.
+
+**No new PR this pass for #4427.** The remaining "close-out pending CI" item, #4427
+(`megaraid_mm.ko` false negative on `unreach-call`), needs the actual sv-benchmarks `.i` file fetched
+from GitLab and a multi-minute `--k-induction --max-inductive-step 3` run to re-confirm the Pass-6
+"fixed-on-master by #4484" claim (§10.4) now that an x86_64 host is available (it was previously only
+confirmed on aarch64-adjacent reasoning). That fetch-and-run is scoped as the next task (§15.2) rather
+than rushed here.
+
+### 15.1 Pass-11 running report
+
+**Analysed.** The #5660 stacked-PR bookkeeping gap (root-caused via `gh pr view --json baseRefName` on
+#5660/#5662/#5664/#5666/#5667 and `git merge-base --is-ancestor`); independent re-verification of the
+scanf fix, witness key format, and struct-constant handling on current `master`.
+
+**PRs opened.** One: recovers `github_1470_overflow_witness{,_fail}` (test-only, no ESBMC source
+change) and this doc reconciliation. No code fix — the code fix (#5666) was already on `master`.
+
+**Duplicated work avoided.** Did not re-implement the scanf fix (already in `master` via #5666). Did
+not re-write the Pass 11/13/14 analysis prose verbatim — re-verified its conclusions independently and
+recorded them in this pass's own words.
+
+**Remaining work (priority order, updated 2026-07-01, Pass 11).** Unchanged from Pass 10 except #4427
+promoted to the top of the concretely-actionable (non-research-grade) items, since it only needs a
+benchmark fetch + a run, not a design change:
+1. **#4427** — re-fetch `megaraid_mm.ko` from sv-benchmarks and re-run the issue's exact
+   `--k-induction --max-inductive-step 3` command on the current x86_64 host to confirm the Pass-6
+   "fixed by #4484" claim (§10.4); close if confirmed, re-triage if not.
+2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+3. **#5400 / #5138** — value-set reachability for `valid-memtrack`; #5138 narrowed to the `strcmp`
+   argv-string residual (other layers fixed by #5564/#5624 + the `fclose` guard).
+4. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+5. **#4980 / #4438** — k-induction precision (termination recogniser + neural-network float CE);
+   full-set validation.
+6. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+7. **#5142 residual** — no-overflow precision layer once parsed under `--sv-comp` (x86 +
+   full-benchmark-gated).
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+9. **Validation-only (need CPAchecker/Ultimate):** #1492 FP witness validation; #1447 umbrella;
+   #1440 wrapper-script sub-property handling.
+
+### 15.2 Next task selected for the following pass
+
+**#4427** (`megaraid_mm.ko` `unreach-call` false negative) — the only remaining "close-out pending CI"
+item, and the only item in the backlog that is a bounded verification task (fetch one `.i` file, run one
+command) rather than a design effort. Fetch
+`c/ldv-linux-4.2-rc1/linux-4.2-rc1.tar.xz-43_2a-drivers--scsi--megaraid--megaraid_mm.ko-entry_point.cil.out.i`
+from the sv-benchmarks GitLab (read-only, untrusted input, matching this document's established
+methodology), run the issue's exact wrapper/ESBMC invocation, and either close the issue (if #4484
+resolved it, matching the ground truth `false` now correctly detected) or re-open the RCA (if it still
+reports the unsound `true`, in which case this is a live soundness bug and the highest-severity item in
+the backlog).
 ## 15. Pass 11 — reconcile #5565 closure (#5650) + `ESBMC_SVCOMP`→`--sv-comp` migration (#5530) (2026-07-01)
 
 Pass 9 (2026-06-26, §13) shipped the `getopt_long`/`optarg` fix for #5565 and left item 8 of its
