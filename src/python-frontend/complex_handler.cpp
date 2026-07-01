@@ -221,7 +221,7 @@ exprt complex_handler::promote_int_arith_to_double(
   std::size_t depth) const
 {
   if (depth > 64)
-    return typecast_exprt(input_expr, cached_double_type());
+    return complex_typecast(input_expr, cached_double_type());
 
   if (input_expr.statement() == "cpp-throw")
     return input_expr;

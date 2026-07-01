@@ -1,0 +1,9 @@
+# Exercises complex_handler::promote_int_arith_to_double's depth>64
+# recursion-limit fallback: 65 nested `+` operators push the real-part
+# promotion past its defensive recursion guard.
+z = complex(
+    (((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1)+1),
+    2,
+)
+assert z.real == 66.0
+assert z.imag == 2.0
