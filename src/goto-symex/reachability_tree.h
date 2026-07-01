@@ -13,6 +13,17 @@
 #include <util/message.h>
 #include <util/options.h>
 
+/** White-list of ESBMC internal symbol names that must never be treated as
+ *  race-eligible user globals. */
+inline bool is_esbmc_internal_symbol(const std::string &n)
+{
+  return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+         n == "c:@__ESBMC_is_dynamic" ||
+         n == "c:@__ESBMC_blocked_threads_count" ||
+         n == "c:@__ESBMC_rounding_mode" ||
+         n.find("c:pthread_lib") != std::string::npos;
+}
+
 /**
  *  Class to explore states reachable through threading.
  *  Runs an execution_statet that explores code containing threading functions,
@@ -366,8 +377,8 @@ protected:
    *  may_be_written() gates this flag on address_taken_globals. */
   bool any_indirect_write = false;
 
-  /** Master switch; wired to --no-cswitch-on-readonly-globals. */
-  bool readonly_global_opt = true;
+  /** Master switch; wired to --cswitch-on-readonly-globals. */
+  bool readonly_global_opt = false;
 
   /** Walk all goto instructions once and collect the names of every global
    *  that may be written. */

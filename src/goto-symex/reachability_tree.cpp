@@ -42,16 +42,6 @@ reachability_treet::reachability_treet(
   scan_program_writes();
 }
 
-/* White-list of ESBMC internal symbols, mirrors get_expr_globals(). */
-static bool is_internal_global_name(const std::string &sn)
-{
-  return sn == "c:@__ESBMC_alloc" || sn == "c:@__ESBMC_alloc_size" ||
-         sn == "c:@__ESBMC_is_dynamic" ||
-         sn == "c:@__ESBMC_blocked_threads_count" ||
-         sn == "c:@__ESBMC_rounding_mode" ||
-         sn.find("c:pthread_lib") != std::string::npos;
-}
-
 /* Insert `name` into `out` if it names a storage-bearing user global. */
 static void add_if_global(
   const irep_idt &name,
@@ -59,7 +49,7 @@ static void add_if_global(
   std::unordered_set<irep_idt, irep_id_hash> &out)
 {
   const symbolt *s = ns.lookup(name);
-  if (!s || is_internal_global_name(name.as_string()))
+  if (!s || is_esbmc_internal_symbol(name.as_string()))
     return;
   if (s->static_lifetime || s->get_type().is_dynamic_set())
     out.insert(name);

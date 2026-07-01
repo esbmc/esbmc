@@ -780,14 +780,6 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    auto is_internal_name = [](const std::string &n) {
-      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
-             n == "c:@__ESBMC_is_dynamic" ||
-             n == "c:@__ESBMC_blocked_threads_count" ||
-             n.find("c:pthread_lib") != std::string::npos ||
-             n == "c:@__ESBMC_rounding_mode";
-    };
-
     // Resolve pointer parameters/locals BEFORE applying the internal-name
     // filter. The pointer variable itself may live in pthread_lib (e.g. the
     // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
@@ -818,7 +810,7 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
-          if (is_internal_name(n))
+          if (is_esbmc_internal_symbol(n))
             continue;
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
@@ -832,7 +824,7 @@ void execution_statet::get_expr_globals(
 
     // Drop the pointer symbol itself if it is an internal pthread_lib name,
     // unless we've resolved it to a user global above.
-    if (is_internal_name(name) && !point_to_global)
+    if (is_esbmc_internal_symbol(name) && !point_to_global)
       return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
