@@ -1,15 +1,12 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-07-01 (Pass 11 — recover regression tests stranded on an orphaned branch and
-reconcile three witness-issue closures (#1470, #1471, #4611) plus the scanf overflow-check fix (#5666)
-that had already landed on master undocumented; see §15. Pass 10 in §14, Pass 9 in §13, Pass 8 in §12,
-Pass 7 in §11)
-**Last updated:** 2026-07-01 (Pass 11 — reconcile the two merged PRs that closed the #5565 residual
-after Pass 9: **#5650** (`fclose` frees only heap streams ⇒ `fclose(stdout)` sound) closed item-8's
-`fclose(stdout)` half and **CLOSED #5565**; **#5530** replaced the compile-time `ESBMC_SVCOMP` build
-macro with the runtime `--sv-comp` flag, obsoleting the `-DESBMC_SVCOMP=On` reproduction recipe; no
-new SV-COMP issues since Pass 9; remaining-work list re-based; see §15. Pass 10 in §14, Pass 9 in §13,
-Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (Pass 12 — consolidate two Pass-11 PRs that merged in parallel and both
+appended a `## 15` section, colliding the heading and the `Last updated` banner: **#5730** (recover the
+stranded `github_1470_overflow_witness` tests + reconcile the #1470/#1471/#4611 witness closures and the
+#5666 scanf fix already on master) stays **§15**; **#5735** (#5565 CLOSED by #5650; #5530 retired the
+compile-time `ESBMC_SVCOMP` macro for the runtime `--sv-comp` flag; aws-hash scouting) is renumbered to
+**§16**. Canonical remaining-work list and next task (#4427) live in §15.1/§15.2. See §16. Pass 11 in
+§15, Pass 10 in §14, Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1438,17 +1435,22 @@ methodology), run the issue's exact wrapper/ESBMC invocation, and either close t
 resolved it, matching the ground truth `false` now correctly detected) or re-open the RCA (if it still
 reports the unsound `true`, in which case this is a live soundness bug and the highest-severity item in
 the backlog).
-## 15. Pass 11 — reconcile #5565 closure (#5650) + `ESBMC_SVCOMP`→`--sv-comp` migration (#5530) (2026-07-01)
+## 16. Pass 12 — consolidate the two parallel Pass-11 merges (#5730 + #5735); carry the #5565/#5530 reconciliation (2026-07-01)
 
-Pass 9 (2026-06-26, §13) shipped the `getopt_long`/`optarg` fix for #5565 and left item 8 of its
-remaining-work list open: the `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free plus the
-`strcmp` argv-string pointer-validity residual. Two PRs merged **after** Pass 9's binary was cut, and
-Pass 10 (2026-07-01, §14) was scoped to the #5142 parse layer only, so neither reconciled them. This
-pass records both, closes item 8, and re-bases the remaining-work list. Verdicts here are **repro**
-against master `91f4acd2b8` (the Pass-10 tip) plus direct GitHub-state inspection; no new code — every
-still-open item remains the research-grade / host-blocked / in-flight class documented in §13.
+**Process finding.** Two independent Pass-11 PRs landed on `master` within minutes of each other and
+both appended a `## 15. Pass 11` section plus a second `**Last updated:**` banner: #5730 (§15 —
+orphaned-branch recovery + witness closures) and #5735 (this block — the #5565/#5530 reconciliation). The
+parallel merge left the document with a duplicate `## 15` heading, duplicate `### 15.1/15.2/15.3`
+subsection numbers, and two banners. This Pass-12 pass repairs the structure: #5730's section keeps
+**§15** (it also owns the canonical, more-current remaining-work list at §15.1 and the selected next
+task #4427 at §15.2); the #5735 content below is renumbered to **§16** and its subsections to 16.x. No
+content is dropped — the #5565/#5530 findings are still accurate and complementary to §15. The one
+reconciliation between the two: §16.3's remaining-work list is **superseded by §15.1** (which adds #4427
+at the top and #4438/#1492/#1447/#1440); it is kept here only as the record of what #5735 saw.
 
-### 15.1 #5565 residual — CLOSED by #5650; `strcmp` half resolved upstream of it
+The #5565/#5530 reconciliation carried forward from PR #5735 follows.
+
+### 16.1 #5565 residual — CLOSED by #5650; `strcmp` half resolved upstream of it
 
 * **`fclose(stdout)` static-stream free — FIXED.** Merged **PR #5650** (`[om] fclose: free only heap
   streams so fclose(stdout) is sound`, 2026-06-27) guards the `free(stream)` in ESBMC's `fclose`
@@ -1467,7 +1469,7 @@ still-open item remains the research-grade / host-blocked / in-flight class docu
 * **Issue state.** **#5565 is CLOSED.** Its two-layer residual is fully discharged (`fclose` by #5650,
   `strcmp` by the Pass-9 `getopt_long` OM). No further ESBMC-side work is owed on #5565.
 
-### 15.2 `ESBMC_SVCOMP` build macro retired → runtime `--sv-comp` flag (#5530)
+### 16.2 `ESBMC_SVCOMP` build macro retired → runtime `--sv-comp` flag (#5530)
 
 Merged **PR #5530** (`[svcomp] Replace ESBMC_SVCOMP build macro with runtime --sv-comp flag`,
 2026-06-25) removed the compile-time `-DESBMC_SVCOMP=On` CMake option that baked `__ESBMC_SVCOMP` into
@@ -1477,10 +1479,10 @@ OMs (`__ESBMC_sv_comp()`). **Consequence for this document:** every reproduction
 gating note) is obsolete — the SV-COMP-mode OM behaviour is now selected per-run with the `--sv-comp`
 flag on a stock binary, no dedicated build required. Those historical pass sections are left intact as
 the record of how the run was done at the time; the corrected instruction is: **reproduce
-`--sv-comp`-gated OM behaviour by passing `--sv-comp` at run time.** #5138 (§15.3 item 2) is the one
+`--sv-comp`-gated OM behaviour by passing `--sv-comp` at run time.** #5138 (§16.3 item 2) is the one
 open issue whose reproduction recipe this simplifies.
 
-### 15.3 Pass-11 running report
+### 16.3 Pass-11 running report (PR #5735)
 
 **Analysed.** #5565 (now CLOSED — #5650 + Pass-9 `getopt_long`) reconciled against current GitHub
 state; the #5530 `ESBMC_SVCOMP`→`--sv-comp` migration and its effect on every "`ESBMC_SVCOMP`-build"
@@ -1495,8 +1497,11 @@ pass is the recurring triage-doc update (established cadence: Pass 4 → #5234, 
 **Duplicated work avoided.** #5565 not re-fixed — CLOSED by #5650 (`fclose`) + the Pass-9 `getopt_long`
 OM (`strcmp`). No re-proposal of a compile-time SV-COMP build — retired by #5530.
 
-**Remaining work (priority order, updated 2026-07-01).** Item 8 (#5565 residual) is dropped — closed.
-The rest is unchanged from §13.3, with #5138's recipe simplified to the runtime `--sv-comp` flag:
+**Remaining work — SUPERSEDED by §15.1.** The list below is what PR #5735 saw; the canonical,
+more-current priority list is **§15.1** (from the sibling Pass-11 PR #5730), which adds #4427 at the top
+plus #4438 and the validation-only items #1492/#1447/#1440. Item 8 here (#5565 residual) is dropped —
+closed. Retained verbatim as the #5735 record, with #5138's recipe simplified to the runtime `--sv-comp`
+flag:
 1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency: the general mechanism
    is RCA-closed as **#5369** (fresh, non-deduplicated pointer identity minted per read through an
    unresolvable/byte-reconstructed pointer, in `make_failed_symbol` and `convert_typecast_to_ptr`); a
@@ -1512,7 +1517,7 @@ The rest is unchanged from §13.3, with #5138's recipe simplified to the runtime
 7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
 8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
 
-### 15.4 Next-task scouting — #5145 / #5393 / #5394 (aws-hash) is research-grade, no loop-scoped fix
+### 16.4 Next-task scouting — #5145 / #5393 / #5394 (aws-hash) is research-grade, no loop-scoped fix
 
 Scouted the top remaining-work item to confirm whether a sound localized fix is available before the
 next coding pass commits to it. **Conclusion: not loop-scoped — the tractable half is already shipped
@@ -1540,7 +1545,14 @@ and the open half is research-grade.** Evidence:
   records SV-COMP repro was done on x86_64 Linux — the k≥2 divergence is not reproducible in isolation
   on the aarch64/macOS host available to this pass, so even a candidate fix could not be validated here.
 
-**Disposition.** #5145/#5393/#5394 stays item 1, flagged **research-grade (k≥2 SMT re-versioning)** —
-the same "reproduced, sound over-approximation, no localized fix" class as the LDV-environment cluster.
-The next loop-scoped candidate to scout is item 8 (witness end-to-end validation / close-outs), pending
-a witness-validator tool in the environment.
+**Disposition.** #5145/#5393/#5394 stays flagged **research-grade (k≥2 SMT re-versioning)** — the same
+"reproduced, sound over-approximation, no localized fix" class as the LDV-environment cluster. It is #5735's
+item 1; in the reconciled §15.1 list it is item 2, behind **#4427** (the selected next task, §15.2 —
+a bounded fetch-and-run, not a design effort).
+
+**Item-8 witness scouting (this Pass-12 pass).** Also scouted #5735's item-8 (witness) before adopting
+#4427: #1470/#1471/#4611 are all **CLOSED** (reconciled by §15), so the residual witness *quality*
+concern (GraphML violation path in `goto_trace.cpp:302-362` lacks the system-header file-path filter and
+symbol dedup the YAML path has at `witnesses.cpp:1292-1308`) is not a live issue and any change to it is
+soundness-gated on a witness validator (CPAchecker/Ultimate) absent here. So item 8 offers no
+loop-scoped verifiable fix either — confirming #4427 as the correct next task over it.
