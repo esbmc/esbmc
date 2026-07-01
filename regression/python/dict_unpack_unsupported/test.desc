@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: dict unpacking \(\{\*\*d\}\) is not supported

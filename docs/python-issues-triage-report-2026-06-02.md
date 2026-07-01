@@ -3415,6 +3415,47 @@ case all stand; the §5 priority order stands.
 
 ---
 
+## 73. 2026-06-30 re-validation (sixty-third sweep) & dict `**` unpacking crash→diagnostic
+
+Re-test against current `master` (tip `efc3a92b5f`). KNOWNBUG classification unchanged — §3 holds.
+An idiom battery surfaced an isolated **SIGABRT crash** (uncaught C++ exception) on dict-literal `**`
+unpacking.
+
+### 73a. New isolated, soundly-fixable defect found & fixed
+**A `**` unpack inside a dict literal crashed ESBMC with an uncaught `nlohmann::json type_error`
+(PR #5718).**
+
+`{**m}`, `{**m, "y": 2}`, and `{**a, **b}` aborted with `terminating due to uncaught exception of
+type nlohmann::json::detail::type_error` (SIGABRT / core dump) during the annotation pass — as a bare
+statement, a function argument, a return value, or a nested value. Python's AST serialises `**m` as a
+`Dict` element with a **null key** (no AST node). Two sites dereferenced that null: the type-inference
+helper `get_argument_type` (`python_annotation/annotation_conversion.inl`) read `keys[0]["_type"]`
+when the first element was an unpack, and the converter `create_dict_from_literal`
+(`python-dict/dict_construction.cpp`) would later call `get_expr(null)`.
+
+Dict `**` unpacking is not modelled (the same status as dict union `|`, §15). **Fix** — a
+crash→clean-diagnostic robustness change in two layers: (1) `get_argument_type` returns the safe
+default `"Any"` for a non-object arg (`!arg.is_object()`), so the annotation pass no longer
+dereferences the null key; (2) `create_dict_from_literal` scans the key array for a null entry and
+throws a clean `std::runtime_error` reported as
+`ERROR: dict unpacking ({**d}) is not supported` before any null deref. A literal `None` key
+(`{None: 1}`) is unaffected — it serialises as a `Constant(None)` node (an object), not a null, so
+`is_null()` distinguishes the two exactly (verified: `{None: 1, "b": 2}` still verifies SUCCESSFUL).
+
+This is the §5-item-5 robustness category (crash → clean diagnostic) and, like #5042/§15, **does not
+flip a KNOWNBUG** — it removes a crash on an unmodelled feature. New regression test (CORE)
+`regression/python/dict_unpack_unsupported` pins the diagnostic (valid CPython, ESBMC-rejected — the
+`bytearray_unsupported`/`dict_union_unsupported` convention) and is the **C-Live** liveness witness
+for the added guard (it SIGABRT'd pre-fix). Verified across all `**` positions and contexts
+(bare/arg/return/nested); CPython sanity passes (`scripts/check_python_tests.sh dict_unpack`); the
+`regression/python/dict` ctest subset (206 tests) shows zero non-environmental failures (only the
+pre-existing `--z3`/`--ir` set on this Bitwuzla-only build). Normal dict literals and comprehensions
+are untouched. Solver-agnostic (a frontend guard, no SMT encoding).
+
+Modelling dict merge proper (`{**a, **b}` = copy-then-update with right-wins precedence) is a feature
+for a dedicated change, the same disposition dict union `|` carries.
+
+### 73b. Everything else: unchanged disposition
 ## 72. 2026-06-30 re-validation (sixty-second sweep) & arithmetic key in sorted/min/max
 
 Re-test against current `master` (tip `efc3a92b5f`). KNOWNBUG classification unchanged — §3 holds.
