@@ -13,3 +13,9 @@ def solve(a: list, b: list) -> list:
 
 def norm(a: list) -> float:
     return 1.0
+
+def eig(a: list) -> list:
+    return [1.0]
+
+def svd(a: list, full_matrices: bool = True) -> list:
+    return [1.0]

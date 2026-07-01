@@ -33,6 +33,86 @@ symbolt &python_list::create_list()
   return list_symbol;
 }
 
+exprt python_list::build_symbolic_fill_list(
+  const exprt &size,
+  const exprt &fill_value,
+  const typet &elem_type)
+{
+  using namespace python_list_detail;
+  locationt location = converter_.get_location_from_decl(list_value_);
+
+  symbolt &result = create_list();
+  const std::string result_id = result.id.as_string();
+
+  // i = 0
+  symbolt &index_var = converter_.create_tmp_symbol(
+    list_value_, "$sfill_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(build_symbol(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(build_symbol(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  // Materialise symbolic size once to avoid re-evaluating a side-effecting
+  // expression on every loop iteration.
+  symbolt &size_sym = converter_.create_tmp_symbol(
+    list_value_, "$sfill_n$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(build_symbol(size_sym));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  if (!size.type().is_unsignedbv())
+  {
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "negative dimensions are not allowed");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    code_ifthenelset guard;
+    guard.cond() = build_less_than(size, gen_zero(size.type()));
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  exprt size_as_unsigned =
+    size.type().is_unsignedbv() ? size : build_typecast(size, size_type());
+  code_assignt size_assign(build_symbol(size_sym), size_as_unsigned);
+  size_assign.location() = location;
+  converter_.add_instruction(size_assign);
+
+  // Build loop body in current_block-redirect pattern so that
+  // build_push_list_call's internal declarations land inside the loop.
+  code_blockt loop_body;
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+
+  exprt push_call = build_push_list_call(result, list_value_, fill_value);
+
+  converter_.current_block = saved_block;
+  loop_body.copy_to_operands(push_call);
+
+  exprt increment =
+    build_add(build_symbol(index_var), gen_one(size_type()), size_type());
+  code_assignt index_increment(build_symbol(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  exprt loop_cond =
+    build_less_than(build_symbol(index_var), build_symbol(size_sym));
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_cond, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  add_type_info_entry(result_id, "", elem_type);
+
+  return build_symbol(result);
+}
+
 exprt python_list::get()
 {
   symbolt &list_symbol = create_list();

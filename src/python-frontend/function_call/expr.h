@@ -378,6 +378,10 @@ private:
   exprt handle_list_count() const;
   exprt handle_list_index() const;
 
+  // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
+  bool is_numpy_astype_call() const;
+  exprt handle_numpy_astype() const;
+
   /*
    * Check if the current function call is to a regular expression module function
    * Returns true if the function is match, search, or fullmatch from the re module

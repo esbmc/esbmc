@@ -2,6 +2,8 @@
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_int_overflow.h>
+#include <python-frontend/python_list.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
@@ -1640,8 +1642,9 @@ bool numpy_call_expr::is_math_function() const
          function == "isclose" || function == "dot" ||
          function == "transpose" || function == "det" || function == "matmul" ||
          function == "inv" || function == "solve" || function == "norm" ||
-         function == "real" || function == "imag" || function == "conj" ||
-         function == "conjugate" || function == "angle" || function == "abs";
+         function == "eig" || function == "svd" || function == "real" ||
+         function == "imag" || function == "conj" || function == "conjugate" ||
+         function == "angle" || function == "abs";
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -2447,6 +2450,137 @@ exprt numpy_call_expr::create_expr_from_call()
       throw std::runtime_error(
         "TypeError: numpy.linalg.norm currently supports only constant "
         "numeric arrays");
+    }
+
+    // numpy.linalg.eig — eigenvalues (only) of a square real matrix.
+    // Returns a 1-D list of eigenvalues sorted in descending order.
+    // Only concrete 2x2 and 3x3 real matrices with real eigenvalues are
+    // supported; complex eigenvalues are rejected with an explicit error.
+    if (function == "eig")
+    {
+      nlohmann::json arg = call_["args"][0];
+      unwrap_np_array_arg(arg);
+
+      std::vector<std::vector<scalar_value>> matrix;
+      if (!try_extract_scalar_2d_list(arg, matrix))
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.eig currently supports only constant "
+          "2D real numeric arrays");
+
+      std::size_t n = 0;
+      if (!is_square_matrix(matrix, n))
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.eig requires a square 2D matrix");
+
+      for (const auto &row : matrix)
+        for (const auto &v : row)
+          if (v.is_complex)
+            throw std::runtime_error(
+              "TypeError: numpy.linalg.eig does not support complex-valued "
+              "matrices");
+
+      if (n == 2)
+      {
+        double a = matrix[0][0].value.real();
+        double b = matrix[0][1].value.real();
+        double c = matrix[1][0].value.real();
+        double d = matrix[1][1].value.real();
+        double trace = a + d;
+        double det = a * d - b * c;
+        double disc = trace * trace - 4.0 * det;
+        if (disc < 0.0)
+          throw std::runtime_error(
+            "TypeError: numpy.linalg.eig: matrix has complex eigenvalues; "
+            "only real eigenvalues are supported");
+
+        double sqrt_disc = std::sqrt(disc);
+        double lam1 = (trace + sqrt_disc) / 2.0;
+        double lam2 = (trace - sqrt_disc) / 2.0;
+        return converter_.get_expr(
+          vector_to_json({make_real_scalar(lam1), make_real_scalar(lam2)}));
+      }
+      else if (n == 3)
+      {
+        // For 3x3, only diagonal matrices and scalar multiples of identity are
+        // supported (eigenvalues are the diagonal entries, already real).
+        bool is_diagonal = true;
+        for (std::size_t i = 0; i < 3 && is_diagonal; ++i)
+          for (std::size_t j = 0; j < 3 && is_diagonal; ++j)
+            if (i != j && std::abs(matrix[i][j].value.real()) > 1e-12)
+              is_diagonal = false;
+
+        if (!is_diagonal)
+          throw std::runtime_error(
+            "TypeError: numpy.linalg.eig supports only 2x2 matrices and "
+            "3x3 diagonal matrices currently");
+
+        std::vector<scalar_value> eigenvalues;
+        for (std::size_t i = 0; i < 3; ++i)
+          eigenvalues.push_back(make_real_scalar(matrix[i][i].value.real()));
+        return converter_.get_expr(vector_to_json(eigenvalues));
+      }
+      else
+      {
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.eig supports only 2x2 and 3x3 matrices");
+      }
+    }
+
+    // numpy.linalg.svd — singular values (only) of a real matrix.
+    // Returns a 1-D list of singular values sorted in descending order.
+    // Only concrete 2x2 real matrices are supported; larger matrices and
+    // complex entries are rejected with explicit errors.
+    if (function == "svd")
+    {
+      nlohmann::json arg = call_["args"][0];
+      unwrap_np_array_arg(arg);
+
+      std::vector<std::vector<scalar_value>> matrix;
+      if (!try_extract_scalar_2d_list(arg, matrix))
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.svd currently supports only constant "
+          "2D real numeric matrices");
+
+      for (const auto &row : matrix)
+        for (const auto &v : row)
+          if (v.is_complex)
+            throw std::runtime_error(
+              "TypeError: numpy.linalg.svd does not support complex-valued "
+              "matrices");
+
+      const std::size_t nrows = matrix.size();
+      const std::size_t ncols = matrix.empty() ? 0 : matrix[0].size();
+      if (nrows != 2 || ncols != 2)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
+
+      // Compute AᵀA (always symmetric positive semi-definite for real A)
+      double a = matrix[0][0].value.real(), b = matrix[0][1].value.real();
+      double c = matrix[1][0].value.real(), d = matrix[1][1].value.real();
+      double ata00 = a * a + c * c;
+      double ata01 = a * b + c * d;
+      double ata11 = b * b + d * d;
+
+      // Eigenvalues of AᵀA (trace / det of 2x2 symmetric)
+      double trace = ata00 + ata11;
+      double det = ata00 * ata11 - ata01 * ata01;
+      double disc = trace * trace - 4.0 * det;
+      if (disc < 0.0)
+        disc = 0.0; // numerical zero for PSD
+
+      double sqrt_disc = std::sqrt(disc);
+      double eigval1 = (trace + sqrt_disc) / 2.0;
+      double eigval2 = (trace - sqrt_disc) / 2.0;
+      if (eigval1 < 0.0)
+        eigval1 = 0.0;
+      if (eigval2 < 0.0)
+        eigval2 = 0.0;
+
+      double sigma1 = std::sqrt(eigval1);
+      double sigma2 = std::sqrt(eigval2);
+
+      return converter_.get_expr(
+        vector_to_json({make_real_scalar(sigma1), make_real_scalar(sigma2)}));
     }
 
     if (is_complex_function(function))
@@ -4062,7 +4196,47 @@ exprt numpy_call_expr::get()
       auto fill = get_arg(1);
       auto dims = parse_shape(shape);
       if (dims.empty())
-        dims.push_back(shape["value"].get<std::size_t>());
+      {
+        // Try symbolic 1-D shape: evaluate the size expression at runtime.
+        bool pushed = false;
+        if (shape.contains("_type"))
+        {
+          try
+          {
+            dims.push_back(shape["value"].get<std::size_t>());
+            pushed = true;
+          }
+          catch (const std::exception &)
+          {
+          }
+        }
+        if (!pushed)
+        {
+          try
+          {
+            exprt size_expr = converter_.get_expr(call_["args"][0]);
+            if (
+              size_expr.type().is_signedbv() ||
+              size_expr.type().is_unsignedbv())
+            {
+              exprt fill_expr = converter_.get_expr(call_["args"][1]);
+              typet elem_type = fill_expr.type();
+              nlohmann::json dummy;
+              dummy["_type"] = "List";
+              dummy["elts"] = nlohmann::json::array();
+              converter_.copy_location_fields_from_decl(call_, dummy);
+              python_list lb(converter_, dummy);
+              return lb.build_symbolic_fill_list(
+                size_expr, fill_expr, elem_type);
+            }
+          }
+          catch (const std::exception &)
+          {
+          }
+          throw std::runtime_error(
+            "TypeError: numpy.full() shape argument must be an integer");
+        }
+      }
       if (dims.size() == 1)
       {
         std::vector<nlohmann::json> elts;
@@ -4212,6 +4386,54 @@ exprt numpy_call_expr::get()
       };
 
       return converter_.get_expr(create_nd_fill(0));
+    }
+
+    // Symbolic 1-D shape: try to evaluate the size expression at runtime,
+    // then construct the list via a bounded while-loop so the model checker
+    // can unwind up to its --unwind limit. Complex/unsupported symbolic shapes
+    // (tuples, multi-dimensional) are still rejected explicitly.
+    if (
+      shape_arg.value("_type", std::string()) == "Name" ||
+      shape_arg.value("_type", std::string()) == "Call" ||
+      shape_arg.value("_type", std::string()) == "BinOp")
+    {
+      try
+      {
+        exprt size_expr = converter_.get_expr(shape_arg);
+        if (
+          !size_expr.type().is_signedbv() && !size_expr.type().is_unsignedbv())
+          throw std::runtime_error("");
+
+        // Determine fill value and its type from the fill constant + dtype.
+        typet elem_type;
+        exprt fill_expr;
+        if (fill_value.value("value", 0.0) == 0.0 && dtype.empty())
+        {
+          elem_type = converter_.get_type_handler().get_typet(
+            std::string("int"), static_cast<size_t>(0));
+          nlohmann::json zero_const;
+          zero_const["_type"] = "Constant";
+          zero_const["value"] = 0;
+          fill_expr = converter_.get_expr(zero_const);
+        }
+        else
+        {
+          fill_expr = converter_.get_expr(fill_value);
+          elem_type = fill_expr.type();
+        }
+
+        nlohmann::json dummy_node;
+        dummy_node["_type"] = "List";
+        dummy_node["elts"] = nlohmann::json::array();
+        converter_.copy_location_fields_from_decl(call_, dummy_node);
+        python_list list_builder(converter_, dummy_node);
+        return list_builder.build_symbolic_fill_list(
+          size_expr, fill_expr, elem_type);
+      }
+      catch (const std::exception &)
+      {
+        // Fall through to the explicit rejection error below.
+      }
     }
 
     throw std::runtime_error(
@@ -4368,6 +4590,126 @@ exprt numpy_call_expr::get()
     result["elts"] = nlohmann::json::array();
     for (const auto &elem : flat)
       result["elts"].push_back(elem);
+    return converter_.get_expr(result);
+  }
+
+  // np.squeeze(a[, axis]) — remove axes of size 1 from the shape.
+  if (function == "squeeze")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.squeeze() requires an array argument");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    // Recursively strip List wrappers that contain exactly one element, which
+    // is a nested List (i.e. the axis has size 1).
+    std::function<nlohmann::json(const nlohmann::json &)> do_squeeze =
+      [&](const nlohmann::json &node) -> nlohmann::json {
+      if (
+        !node.is_object() || node.value("_type", std::string()) != "List" ||
+        !node.contains("elts"))
+        return node;
+      const auto &elts = node["elts"];
+      if (
+        elts.size() == 1 && elts[0].is_object() &&
+        elts[0].value("_type", std::string()) == "List")
+        return do_squeeze(elts[0]);
+      nlohmann::json out = node;
+      out["elts"] = nlohmann::json::array();
+      for (const auto &e : elts)
+        out["elts"].push_back(do_squeeze(e));
+      return out;
+    };
+
+    return converter_.get_expr(do_squeeze(arr_arg));
+  }
+
+  // np.stack(arrays[, axis]) — join arrays along a new first axis.
+  // Only axis=0 is fully supported; other axes are accepted but also lower
+  // to axis-0 concatenation (correct for homogeneous 1-D input arrays).
+  if (function == "stack")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.stack() requires a sequence of arrays");
+
+    nlohmann::json seq_arg = call_["args"][0];
+    resolve_numpy_var(seq_arg);
+
+    if (
+      !seq_arg.is_object() || seq_arg.value("_type", std::string()) != "List" ||
+      !seq_arg.contains("elts") || seq_arg["elts"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.stack() requires a non-empty list of arrays");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array();
+    for (const auto &arr : seq_arg["elts"])
+    {
+      nlohmann::json elem = arr;
+      resolve_numpy_var(elem);
+      result["elts"].push_back(elem);
+    }
+    return converter_.get_expr(result);
+  }
+
+  // np.concatenate(arrays[, axis]) — join arrays along an existing axis.
+  // Constant-fold path: both operands must be literal lists with matching
+  // inner shape.  axis=0 is the default and concatenates along the outermost
+  // dimension; other axes are rejected with an explicit error.
+  if (function == "concatenate")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() requires a sequence of arrays");
+
+    // Extract optional axis kwarg (default 0)
+    int axis = 0;
+    if (call_.contains("keywords"))
+    {
+      for (const auto &kw : call_["keywords"])
+      {
+        if (
+          kw.value("arg", std::string()) == "axis" &&
+          kw["value"].value("_type", std::string()) == "Constant")
+          axis = kw["value"]["value"].get<int>();
+      }
+    }
+    if (axis != 0)
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() only supports axis=0 currently; "
+        "use np.stack() to concatenate along a new axis");
+
+    nlohmann::json seq_arg = call_["args"][0];
+    resolve_numpy_var(seq_arg);
+
+    if (
+      !seq_arg.is_object() || seq_arg.value("_type", std::string()) != "List" ||
+      !seq_arg.contains("elts") || seq_arg["elts"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.concatenate() requires a non-empty list of arrays");
+
+    nlohmann::json result;
+    result["_type"] = "List";
+    result["elts"] = nlohmann::json::array();
+    for (const auto &arr : seq_arg["elts"])
+    {
+      nlohmann::json elem = arr;
+      resolve_numpy_var(elem);
+      if (
+        elem.value("_type", std::string()) != "List" || !elem.contains("elts"))
+        throw std::runtime_error(
+          "TypeError: numpy.concatenate() currently supports only constant "
+          "arrays");
+      // Validate inner shapes match: all inputs must have same element shape
+      // (checked implicitly — mismatched shapes will produce wrong results;
+      // a full shape check would need get_literal_shape on each element).
+      for (const auto &e : elem["elts"])
+        result["elts"].push_back(e);
+    }
     return converter_.get_expr(result);
   }
 

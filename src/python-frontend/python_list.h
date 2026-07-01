@@ -63,7 +63,37 @@ public:
    */
   exprt build_list_from_exprs(const std::vector<exprt> &elems);
 
+  /**
+   * @brief Build a runtime PyListObject filled with @p fill_value repeated
+   * @p size times. @p size may be a symbolic expression; the resulting while-
+   * loop is bounded by the model checker's --unwind setting. A runtime guard
+   * rejects negative sizes with ValueError before the unsigned cast.
+   * @param size     Expression giving the number of elements (often symbolic).
+   * @param fill_value Element value pushed on each iteration.
+   * @param elem_type  IRep2 type of @p fill_value, recorded in list_type_map.
+   */
+  exprt build_symbolic_fill_list(
+    const exprt &size,
+    const exprt &fill_value,
+    const typet &elem_type);
+
   exprt index(const exprt &array, const nlohmann::json &slice_node);
+
+  /**
+   * @brief Lower boolean-mask indexing `a[mask]` to a runtime loop that
+   * builds a fresh list holding the elements of @p array whose matching
+   * @p mask entry is True (NumPy fancy-indexing semantics). Both operands
+   * must be fixed-size arrays (the numpy array model); a compile-time
+   * length mismatch between @p array and @p mask is rejected explicitly.
+   * @param array  Source 1-D array expression; multi-dimensional sources are
+   *               rejected with TypeError at conversion time.
+   * @param mask   Boolean array expression, same length as @p array.
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_bool_mask_index(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
 
   /**
    * @brief Lower a list slice assignment l[lower:upper:step] = value to a
