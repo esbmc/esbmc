@@ -1015,8 +1015,7 @@ class GeneratorMixin:
         if isinstance(key_node, ast.Lambda):
             if len(key_node.args.args) != 1:
                 return None
-            return self._eval_key_body(
-                key_node.body, key_node.args.args[0].arg, element)
+            return self._eval_key_body(key_node.body, key_node.args.args[0].arg, element)
         # Matched by name: assumes abs/len are the builtins (ESBMC does not model
         # user code shadowing them, consistent with the rest of the frontend).
         if isinstance(key_node, ast.Name) and key_node.id in ("abs", "len"):
@@ -1053,10 +1052,9 @@ class GeneratorMixin:
                 return None
             return self._const_scalar_value(element.elts[index])
         if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id in ("abs", "len") and len(node.args) == 1
-                and not node.keywords):
-            return self._apply_builtin(
-                node.func.id, self._eval_key_body(node.args[0], param, element))
+                and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
+            return self._apply_builtin(node.func.id,
+                                       self._eval_key_body(node.args[0], param, element))
         return None
 
     @staticmethod
@@ -1066,8 +1064,8 @@ class GeneratorMixin:
         if not (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
                 and node.value.id == param):
             return None
-        if not (isinstance(node.slice, ast.Constant)
-                and isinstance(node.slice.value, int) and node.slice.value >= 0):
+        if not (isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
+                and node.slice.value >= 0):
             return None
         return node.slice.value
 
