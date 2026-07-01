@@ -130,14 +130,8 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   log_progress("Building error trace");
 
-  bool is_compact_trace = true;
-  if (
-    options.get_bool_option("no-slice") &&
-    !options.get_bool_option("compact-trace"))
-    is_compact_trace = false;
-
   goto_tracet goto_trace;
-  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
+  build_goto_trace(eq, smt_conv, goto_trace);
 
   std::string output_file = options.get_option("cex-output");
   if (output_file != "")
@@ -2078,12 +2072,6 @@ smt_resultt bmct::multi_property_check(
         return;
       }
 
-      bool is_compact_trace = true;
-      if (
-        options.get_bool_option("no-slice") &&
-        !options.get_bool_option("compact-trace"))
-        is_compact_trace = false;
-
       // --all-witnesses: re-solve with blocking clauses on the nondet input
       // tuple to enumerate further violating inputs at the current k.
       // No re-encoding: we only push extra assertions onto the live solver.
@@ -2129,7 +2117,7 @@ smt_resultt bmct::multi_property_check(
       while (enum_result == P_SATISFIABLE)
       {
         witness_recordt w;
-        build_goto_trace(local_eq, *solver_ptr, w.trace, is_compact_trace);
+        build_goto_trace(local_eq, *solver_ptr, w.trace);
         // Collecting nondet values walks every SSA step and queries the
         // solver model per nondet symbol — non-trivial on coverage runs
         // with many claims and large arrays. Skip it when we don't need
