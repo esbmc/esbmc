@@ -5,8 +5,11 @@ appended a `## 15` section, colliding the heading and the `Last updated` banner:
 stranded `github_1470_overflow_witness` tests + reconcile the #1470/#1471/#4611 witness closures and the
 #5666 scanf fix already on master) stays **§15**; **#5735** (#5565 CLOSED by #5650; #5530 retired the
 compile-time `ESBMC_SVCOMP` macro for the runtime `--sv-comp` flag; aws-hash scouting) is renumbered to
-**§16**. Canonical remaining-work list and next task (#4427) live in §15.1/§15.2. See §16. Pass 11 in
-§15, Pass 10 in §14, Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
+**§16**. Canonical remaining-work list lives in §15.1. **Pass 13 (§17)** then executed the §15.2 next task:
+re-ran #4427's exact reproducer on current master and confirmed the `megaraid_mm.ko` false-negative
+**no longer reproduces — #4484's fn-ptr inductive-step guard fixed it** (sound `UNKNOWN`/timeout, no
+unsound TRUE); recommend closing after an x86 CI cross-check. See §16/§17. Pass 11 in §15, Pass 10 in
+§14, Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1556,3 +1559,68 @@ concern (GraphML violation path in `goto_trace.cpp:302-362` lacks the system-hea
 symbol dedup the YAML path has at `witnesses.cpp:1292-1308`) is not a live issue and any change to it is
 soundness-gated on a witness validator (CPAchecker/Ultimate) absent here. So item 8 offers no
 loop-scoped verifiable fix either — confirming #4427 as the correct next task over it.
+
+---
+
+## 17. Pass 13 — #4427 megaraid_mm.ko false-negative no longer reproduces (fixed by #4484) (2026-07-01)
+
+Executed the next task selected in §15.2: fetched the benchmark and re-ran #4427's exact reproducer on
+current master. **Result: the false-negative soundness bug does not reproduce — #4484 fixed it.**
+Confirmed on an aarch64/macOS host; an x86 CI cross-check is still advisable before closing (this
+document's standing recommendation for #4427).
+
+**What was run.** Fetched
+`c/ldv-linux-4.2-rc1/linux-4.2-rc1.tar.xz-43_2a-drivers--scsi--megaraid--megaraid_mm.ko-entry_point.cil.out.i`
+(5371 lines, read-only from the sv-benchmarks GitLab raw endpoint; contains the `ERROR` label; no
+`__regparm__` to strip on this host) and ran the issue's **exact** underlying ESBMC command
+(`--k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --error-label ERROR
+--enable-unreachability-intrinsic --interval-analysis --floatbv --64 …`) against the local ESBMC 8.3.0
+binary built from a master that includes **#4484** (commit `b49db0942d`,
+`[k-induction] deep-dive batch: … pointer handling …`).
+
+**Root cause of the original false negative (now closed).** The megaraid ioctl path dispatches through
+function pointers (`*adp->issue_uioc`; the issue's own log shows `No target candidate for function call
+*adp->issue_uioc`). On ESBMC 8.2.0 the k-induction **inductive step ran on this fn-ptr program and
+unsoundly concluded `VERIFICATION SUCCESSFUL`** (the reported false negative; ground truth `false`).
+The current binary emits, at `k = 1`:
+
+```
+WARNING: k-induction does not support function pointer calls yet. Disabling inductive step
+```
+
+— i.e. **#4484 detects the function-pointer calls and disables the (unsound-for-fn-ptr) inductive
+step**, removing the path that produced the spurious TRUE.
+
+**Observed behaviour on current master.** With the inductive step disabled, k-induction reduces to
+base-case falsification + forward-condition proof:
+* **Base case** finds *no* bug through `k = 17` (`No bug has been found in the base case` at each step) —
+  sound; the real violation needs deeper unwinding than the run reached.
+* **Forward condition** never proves the property (`The forward condition is unable to prove the
+  property`) because the driver's loops are not fully unwound at these depths.
+* Neither converging, the run **escalates and times out at 280 s** (no `VERIFICATION SUCCESSFUL`
+  anywhere in 4533 log lines) = **sound `UNKNOWN`**, not the previous unsound TRUE.
+
+**Disposition.** #4427's soundness bug (false negative) is **fixed by #4484** — the unsound
+`VERIFICATION SUCCESSFUL` no longer occurs; the tool now safely fails to conclude rather than reporting
+an incorrect TRUE. This confirms the Pass-6 "fixed-on-master by #4484" hypothesis with a concrete local
+run. **Recommend closing #4427 after an x86_64 CI cross-check** (host parity with the original SV-COMP
+26 run). A residual, lower-priority follow-up: the benchmark now yields `UNKNOWN` (timeout) rather than
+the ground-truth `false` — obtaining the actual counterexample would need deeper base-case unwinding or
+a targeted falsification run, but that is a *precision/perf* item, not the *soundness* bug the issue
+filed.
+
+### 17.1 Pass-13 running report
+
+**Analysed.** #4427 — exact-command re-run on current master; root-caused the original false negative to
+the pre-#4484 inductive step running on function-pointer dispatch, and confirmed #4484's fn-ptr guard
+(`Disabling inductive step`) removes the unsound TRUE.
+
+**PRs opened.** This entry extends the Pass-12 consolidation PR (#5739) rather than opening a third
+doc PR against a master that still carries the pre-consolidation `## 15` collision — and, per the
+stranded-PR lesson recorded in §15, is based directly on `master`, not stacked on a branch that could be
+closed unmerged.
+
+**Remaining work.** §15.1 list, with #4427 moved from "selected next task" to **recommend-close pending
+x86 CI**. No remaining item is loop-scoped without infra (x86 host + SV-benchmarks + witness validator):
+the rest are research-grade (#5145 k≥2, #5012, #5400/#5138), overlap in-flight PRs (#4980/#4919), or
+x86-host-gated (#4432, #5142 no-overflow layer, the LDV clusters).
