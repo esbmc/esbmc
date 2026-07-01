@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: Variable 'np' is not defined
+^ERROR: TypeError: astype\(\) target dtype 'dt' is not supported$
