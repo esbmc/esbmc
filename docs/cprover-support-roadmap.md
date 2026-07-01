@@ -127,12 +127,15 @@ binaries.** `math.h`'s `isnan`/`isinf`/`isnormal` lower (via `__builtin_isnan` e
 CBMC ireps of the same name, which `migrate_expr` already fully supports (unary,
 `op0()`) — but none were in the adapter's operand-wrap set, so all three **segfaulted**
 (`op0()` on an empty operand list). Fixed by adding `isnan`/`isinf`/`isnormal` (plus
-`isfinite`/`nearbyint`, defensive — `migrate_expr` supports both, but this corpus never
-exercises them: both CBMC's own model and ESBMC's libm operational model fall back to an
-unimplemented-function nondet return for these two specific builtins here, sidestepping
-the exprt path entirely on both sides). Segfault→crash-free confirmed for all three via
-real CBMC binaries; two residual, distinct gaps found and left as concretely-diagnosed
-follow-up (not fixed by this pass — see `cbmc_isnan`/`cbmc_isinf` KNOWNBUG regressions):
+`isfinite`/`nearbyint`/`signbit`, defensive — `migrate_expr` supports all three, but this
+corpus never exercises them: `isfinite`/`nearbyint` fall back to an unimplemented-function
+nondet return in both CBMC's own model and ESBMC's libm operational model, sidestepping
+the exprt path entirely on both sides; `signbit` is CBMC's own naming for `__CPROVER`'s
+sign-extraction predicate under the *upstream ESBMC* id — real CBMC binaries use `"sign"`
+instead, per §4.4's `isinf` note below, so this is latent-gap protection, not a live fix).
+Segfault→crash-free confirmed for `isnan`/`isinf`/`isnormal` via real CBMC binaries; two
+residual, distinct gaps found and left as concretely-diagnosed follow-up (not fixed by
+this pass — see `cbmc_isnan`/`cbmc_isinf` KNOWNBUG regressions):
 
 - **`isnan` doesn't reach CBMC's verdict** because of an *unrelated* Phase 2 gap: CBMC
   emits float division as a plain `"/"` node, and `migrate_expr`'s `"/"` handler

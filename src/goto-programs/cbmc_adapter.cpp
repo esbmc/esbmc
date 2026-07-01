@@ -134,7 +134,8 @@ void fix_expression(irept &irep)
     "isinf",
     "isnormal",
     "isfinite",
-    "nearbyint"};
+    "nearbyint",
+    "signbit"};
 
   const std::string cur = irep.id_string();
 
