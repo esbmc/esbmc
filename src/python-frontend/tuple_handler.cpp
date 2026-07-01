@@ -109,16 +109,28 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   // Create struct type for the tuple
   struct_typet tuple_type = create_tuple_struct_type(element_types);
 
-  // Create struct expression with tuple type
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = element_exprs;
+  // Create the tuple struct expression. V.3: build the value in IREP2,
+  // back-migrating once. The operands are the already-materialised element temp
+  // symbols; a struct2t literal over them round-trips exactly through migrate.
+  std::vector<expr2tc> members;
+  members.reserve(element_exprs.size());
+  for (const exprt &e : element_exprs)
+  {
+    expr2tc e2;
+    migrate_expr(e, e2);
+    members.push_back(std::move(e2));
+  }
+  exprt tuple_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+  // Restore the full struct type: migrate_type does not model the frontend-only
+  // aggregate-kind marker set_python_aggregate_kind attaches, and the
+  // `in`/membership dispatch reads it (python_aggregate_kind) with no tag-based
+  // fallback for tuples. Re-attaching mirrors type_handler's lower_to_seam.
+  tuple_expr.type() = tuple_type;
 
   // Set location information
   if (element.contains("lineno"))
-  {
-    locationt loc = converter_.get_location_from_decl(element);
-    tuple_expr.location() = loc;
-  }
+    tuple_expr.location() = converter_.get_location_from_decl(element);
 
   return tuple_expr;
 }
