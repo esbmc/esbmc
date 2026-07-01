@@ -1410,3 +1410,36 @@ The rest is unchanged from §13.3, with #5138's recipe simplified to the runtime
    is the intended, sole gate for `-Wno-int-conversion`; PR #5660 rejected).
 7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
 8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+### 15.4 Next-task scouting — #5145 / #5393 / #5394 (aws-hash) is research-grade, no loop-scoped fix
+
+Scouted the top remaining-work item to confirm whether a sound localized fix is available before the
+next coding pass commits to it. **Conclusion: not loop-scoped — the tractable half is already shipped
+and the open half is research-grade.** Evidence:
+
+* **RCA #5369 (CLOSED)** localises the mechanism precisely: a read through an *unresolvable* /
+  byte-reconstructed pointer mints fresh `(object, offset)` identity at each layer
+  (`make_failed_symbol` in `src/pointer-analysis/dereference.cpp`; `convert_typecast_to_ptr` in
+  `src/solvers/smt/smt_casts.cpp`), so two reads of the same location with no intervening write can
+  compare unequal — a spurious "location changed without a write" counterexample. **Precision, not
+  soundness** (over-approximation → false alarm; ground truth `true`).
+* **The k=1 base case is solved and validated:** congruence on the int→ptr reconstruction plus a
+  location-keyed failed-symbol cache passes the full 148-test pointer/dereference/memory suite and the
+  `github_2153{,_2..5}` soundness guards (RCA §"What has been validated").
+* **The open half is k≥2**, where the dereference-result expressions are structurally identical across
+  reads yet fail to deduplicate at the SMT layer. The RCA lists **two unresolved hypotheses** — (a)
+  `convert_ast` cache eviction across push/pop, (b) post-dereference SSA re-versioning of a shared
+  symbol — and states that separating them "needs SSA-trace / solver-internal correlation." That is a
+  multi-session solver-internals investigation, not a localized OM/frontend patch.
+* **Guard rails.** The one already-tried shortcut — forcing the reconstructed value non-zero — was
+  **refuted as unsound** and closed (PR #5283); any fix must stay gated on the `github_2153` guards,
+  which *rely* on a byte-reconstructed pointer being free to alias a valid object (PR #3924). This is a
+  soundness tripwire, so a speculative dedup change is high-risk.
+* **Host.** The aws-hash harnesses are x86 SV-COMP benchmarks; this repo's own note (§13 host banner)
+  records SV-COMP repro was done on x86_64 Linux — the k≥2 divergence is not reproducible in isolation
+  on the aarch64/macOS host available to this pass, so even a candidate fix could not be validated here.
+
+**Disposition.** #5145/#5393/#5394 stays item 1, flagged **research-grade (k≥2 SMT re-versioning)** —
+the same "reproduced, sound over-approximation, no localized fix" class as the LDV-environment cluster.
+The next loop-scoped candidate to scout is item 8 (witness end-to-end validation / close-outs), pending
+a witness-validator tool in the environment.
