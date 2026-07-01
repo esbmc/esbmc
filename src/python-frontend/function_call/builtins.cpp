@@ -365,12 +365,13 @@ exprt function_call_expr::handle_isinstance() const
       if (!obj_expr.type().is_pointer())
         return gen_zero(typet("bool")); // false
 
-      // For pointer types, check if it's null
-      exprt null_ptr = gen_zero(obj_expr.type());
-      exprt equality("=", typet("bool"));
-      equality.copy_to_operands(obj_expr);
-      equality.move_to_operands(null_ptr);
-      return equality;
+      // For pointer types, check if it's null. Built in IREP2 (V.1k keystone,
+      // D), mirroring the list-pointer case below: obj_expr and the null
+      // literal share obj_expr's pointer type, so this is a clean equality
+      // round-trip (migrate lowers a legacy "=" to equality2tc).
+      expr2tc obj2;
+      migrate_expr(obj_expr, obj2);
+      return migrate_expr_back(equality2tc(obj2, gen_zero(obj2->type)));
     }
 
     // Regular type checking

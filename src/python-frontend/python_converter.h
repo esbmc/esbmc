@@ -460,8 +460,10 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt
-  get_block(const nlohmann::json &ast_block, bool is_function_body = false);
+  exprt get_block(
+    const nlohmann::json &ast_block,
+    bool is_function_body = false,
+    bool is_loop_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
@@ -1163,6 +1165,14 @@ private:
   /// function_body_depth_ frame, so the equality fails and retyping is refused.
   /// Fail-safe: an unrecognised block kind is treated as conditional.
   unsigned function_body_depth_ = 0;
+
+  /// How many enclosing get_block() frames are while/for loop bodies. A loop
+  /// target variable (and any rebinding inside the body) leaks past the loop in
+  /// Python, so reverting its retype at the body's join would be wrong (it would
+  /// hide the leaked value). Dynamic retyping (#4770/#4774) is therefore refused
+  /// while loop_body_depth_ > 0 and left to the existing fallback — the
+  /// pre-#5716 behaviour — whereas if/else/try bodies do retype-with-revert.
+  unsigned loop_body_depth_ = 0;
 
   function_call_cache function_call_cache_;
 

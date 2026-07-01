@@ -47,13 +47,18 @@ exprt python_list::compare(
 
   const bool lhs_is_set = lhs_symbol->is_set;
   const bool rhs_is_set = rhs_symbol->is_set;
-  // Note: Python set ordering (< as strict subset, <= as subset-or-equal)
-  // is not yet implemented here.  Ordering operators on sets currently
-  // fall through to the Eq/NotEq path and will return incorrect results.
   if (lhs_is_set || rhs_is_set)
   {
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
+
+    // Python set ordering (< strict subset, <= subset-or-equal, and the > / >=
+    // supersets) requires proper subset checking, which is not yet modelled.
+    // Reject it explicitly rather than silently returning the Eq/NotEq result,
+    // which would be wrong for these operators.
+    if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
+      throw std::runtime_error(
+        "set ordering (<, <=, >, >=) is not yet supported");
 
     symbolt *set_eq_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
