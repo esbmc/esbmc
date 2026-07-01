@@ -531,8 +531,7 @@ exprt python_dict_handler::create_dict_from_literal(
   // (mirrors the dict-union '|' guard in converter_binop.cpp).
   for (const auto &key_node : keys)
     if (key_node.is_null())
-      throw std::runtime_error(
-        "dict unpacking ({**d}) is not supported");
+      throw std::runtime_error("dict unpacking ({**d}) is not supported");
 
   python_list list_handler(converter_, element);
 
