@@ -59,6 +59,143 @@ class TypeInferenceMixin:
             return element_annotation.value.id
         return None
 
+    def _build_var_class_map(self, module):
+        """Return (class_names, var_classes) where var_classes maps a variable
+        name to the class of `v = ClassName(...)`. Shared by the attribute-list
+        and list-variable element-class scans.
+
+        The map is keyed by bare name across the whole module (no scope), so it
+        is built conservatively: a name is recorded only when *every* plain
+        assignment to it (in any scope) constructs the same class. A name
+        rebound to a different class, or to any non-constructor value anywhere
+        (e.g. the same local name reused for a non-class value in another
+        function), is dropped -- otherwise a forced loop-target annotation
+        could mis-type it (a soundness hazard, the inverse of #4805)."""
+        class_names = {n.name for n in ast.walk(module) if isinstance(n, ast.ClassDef)}
+        var_classes = {}
+        poisoned = set()
+        # A name bound as a function parameter anywhere is not a fixed class
+        # instance -- drop it so a same-named class local in another scope can
+        # never force a wrong annotation onto the parameter.
+        for n in ast.walk(module):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                a = n.args
+                for arg in (a.posonlyargs + a.args + a.kwonlyargs +
+                            ([a.vararg] if a.vararg else []) + ([a.kwarg] if a.kwarg else [])):
+                    poisoned.add(arg.arg)
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)):
+                continue
+            name = n.targets[0].id
+            func = n.value.func if isinstance(n.value, ast.Call) else None
+            cls = func.id if isinstance(func, ast.Name) and func.id in class_names \
+                else None
+            if cls is None or var_classes.get(name, cls) != cls:
+                poisoned.add(name)
+            else:
+                var_classes[name] = cls
+        for name in poisoned:
+            var_classes.pop(name, None)
+        return class_names, var_classes
+
+    def _element_instance_class(self, elt):
+        """Return the user-class name of a list element when it is a class
+        instance — a constructor call ``ClassName(...)`` or a variable bound to
+        one — else None. Order-independent (resolved from the module-wide
+        ``instance_var_classes`` map), so it works during module rewrite before
+        the main visit pass populates ``known_variable_types``."""
+        class_names = getattr(self, "module_class_names", set())
+        if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
+                and elt.func.id in class_names):
+            return elt.func.id
+        if isinstance(elt, ast.Name):
+            return getattr(self, "instance_var_classes", {}).get(elt.id)
+        return None
+
+    @staticmethod
+    def _list_element_class(elt, class_names, var_classes):
+        """Class an element expression evaluates to: a `Cls(...)` constructor
+        call or a name already known to hold an instance; otherwise None."""
+        if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
+                and elt.func.id in class_names):
+            return elt.func.id
+        if isinstance(elt, ast.Name):
+            return var_classes.get(elt.id)
+        return None
+
+    @staticmethod
+    def _record_single_class(mapping, name, cls):
+        """Merge cls into mapping[name], collapsing to None on any conflict."""
+        mapping[name] = cls if mapping.get(name, cls) == cls else None
+
+    def _collect_list_literal_classes(self, module, class_names, var_classes, list_classes):
+        """Pass 1: `v = [instances of one class]` -> list_classes[v] = class."""
+        for n in ast.walk(module):
+            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.List) and n.value.elts):
+                continue
+            cls = None
+            ok = True
+            for elt in n.value.elts:
+                c = self._list_element_class(elt, class_names, var_classes)
+                if c is None or (cls is not None and c != cls):
+                    ok = False
+                    break
+                cls = c
+            if not (ok and cls):
+                continue
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    self._record_single_class(list_classes, t.id, cls)
+
+    def _propagate_comprehension_classes(self, module, list_classes):
+        """Pass 2 (fixpoint): identity comprehension `v = [x for x in src ...]`
+        inherits src's element class. Iterated so chained comprehensions
+        resolve regardless of source order."""
+        changed = True
+        while changed:
+            changed = False
+            for n in ast.walk(module):
+                if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.ListComp)
+                        and len(n.value.generators) == 1):
+                    continue
+                comp = n.value
+                gen = comp.generators[0]
+                if not (isinstance(comp.elt, ast.Name) and isinstance(gen.target, ast.Name)
+                        and comp.elt.id == gen.target.id and isinstance(gen.iter, ast.Name)):
+                    continue
+                src_cls = list_classes.get(gen.iter.id)
+                if src_cls is None:
+                    continue
+                for t in n.targets:
+                    if not isinstance(t, ast.Name):
+                        continue
+                    # Flag progress only on an actual transition: absent->class
+                    # and class->None (conflict) each fire once, then converge.
+                    # A target already finalized to None must NOT re-flag, or the
+                    # fixpoint never terminates on conflicting comprehension
+                    # sources (e.g. `v=[A...]; v=[B...]`).
+                    sentinel = object()
+                    before = list_classes.get(t.id, sentinel)
+                    self._record_single_class(list_classes, t.id, src_cls)
+                    if list_classes.get(t.id, sentinel) != before:
+                        changed = True
+
+    def _scan_list_var_element_classes(self, module):
+        """Map a list-variable name -> the single class its elements hold, for
+        `v = [a, b]` (instances of one class) and identity comprehensions
+        `v = [x for x in src ...]` over such a list. Used to type a
+        `for e in v` / comprehension loop target when v carries no element
+        annotation; without it the target falls back to ``Any`` (void*), the
+        element is stored with a zero type-id, and a later attribute access
+        dereferences an invalid pointer (#4805 comprehension type-id loss).
+        """
+        class_names, var_classes = self._build_var_class_map(module)
+        list_classes = {}
+        self._collect_list_literal_classes(module, class_names, var_classes, list_classes)
+        self._propagate_comprehension_classes(module, list_classes)
+        return {name: cls for name, cls in list_classes.items() if cls}
+
     def _scan_attr_list_element_classes(self, module):
         """Map attribute name -> the single class that every list assigned to
         that attribute anywhere in the module holds (`x.attr = [a, b]` with all
@@ -66,30 +203,7 @@ class TypeInferenceMixin:
         ambiguous or not class instances are dropped. Used to type the target
         of a loop over `obj.attr` when obj's class cannot be resolved (#4805).
         """
-        class_names = {n.name for n in ast.walk(module) if isinstance(n, ast.ClassDef)}
-
-        # name -> class for `v = ClassName(...)`; None when rebound to
-        # different classes.
-        var_classes = {}
-        for n in ast.walk(module):
-            if not (isinstance(n, ast.Assign) and len(n.targets) == 1
-                    and isinstance(n.value, ast.Call)):
-                continue
-            target, func = n.targets[0], n.value.func
-            if not (isinstance(target, ast.Name) and isinstance(func, ast.Name)
-                    and func.id in class_names):
-                continue
-            name = target.id
-            cls = func.id
-            var_classes[name] = cls if var_classes.get(name, cls) == cls else None
-
-        def element_class(elt):
-            if (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
-                    and elt.func.id in class_names):
-                return elt.func.id
-            if isinstance(elt, ast.Name):
-                return var_classes.get(elt.id)
-            return None
+        class_names, var_classes = self._build_var_class_map(module)
 
         attr_classes = {}
         for n in ast.walk(module):
@@ -98,7 +212,7 @@ class TypeInferenceMixin:
                 continue
             attr = n.targets[0].attr
             for elt in n.value.elts:
-                cls = element_class(elt)
+                cls = self._list_element_class(elt, class_names, var_classes)
                 if cls is None or attr_classes.get(attr, cls) != cls:
                     attr_classes[attr] = None
                 else:
@@ -175,10 +289,20 @@ class TypeInferenceMixin:
             attr_class = self.attr_list_element_classes.get(iterable_node.attr)
             if attr_class:
                 return attr_class
+        if isinstance(iterable_node, ast.Name):
+            list_var_class = getattr(self, "list_var_element_classes", {}).get(iterable_node.id)
+            if list_var_class:
+                return list_var_class
         if isinstance(iterable_node, ast.List) and iterable_node.elts:
             first_elem = iterable_node.elts[0]
             if isinstance(first_elem, ast.Constant):
                 return type(first_elem.value).__name__
+            elem_class = self._element_instance_class(first_elem)
+            if elem_class:
+                return elem_class
+            inferred = self._infer_type_from_value(first_elem)
+            if inferred and inferred != "Any":
+                return inferred
         if container_type.lower() in ["list", "tuple"]:
             annotation_element_type = self._extract_list_tuple_annotation_element_type(
                 iterable_node)

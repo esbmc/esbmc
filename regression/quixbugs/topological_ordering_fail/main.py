@@ -1,3 +1,23 @@
+# KNOWNBUG (#4805). The QuixBugs `topological_ordering` bug is that the guard
+# reads `nextnode.outgoing_nodes` where it should read `nextnode.incoming_nodes`.
+# ESBMC cannot genuinely detect it within a practical BMC budget: the algorithm
+# builds a list of graph nodes by comprehension and then repeatedly evaluates
+# `set(ordered_nodes).issuperset(...)`, `nextnode not in ordered_nodes`, and
+# `ordered_nodes.append(...)` over a symbolic-size list of heap objects. That
+# membership/append machinery is combinatorially hard for the SMT backend -- it
+# does not converge even on a 3-node graph (decision procedure ~50s at one
+# unwind; full graphs time out). This is the #5121 symbolic-lists-of-objects
+# scalability wall, the same wall as the sibling `github_4782_object_size`.
+# The object-handling correctness fixes that #4805 surfaced have all merged
+# (issuperset lowering / object_size abort / OM copy in PR #5306; Class*-pointer
+# reads in PR #5339; `obj in [obj]` membership in PR #5569; list-comprehension
+# element type-id preservation, with `github_4805_comprehension_obj`). What
+# remains is pure solver scalability, so the test stays KNOWNBUG. The earlier
+# `VERIFICATION FAILED` here was vacuous -- it came from a truncated-loop
+# unwinding assertion, not from detecting the algorithmic bug (adding
+# `--no-unwinding-assertions` makes ESBMC report SUCCESSFUL). The KNOWNBUG flags
+# keep `--no-unwinding-assertions` so the recorded result honestly reflects that
+# ESBMC cannot detect the bug, mirroring the sibling `topological_ordering`.
 class Node:
     def __init__(
         self,

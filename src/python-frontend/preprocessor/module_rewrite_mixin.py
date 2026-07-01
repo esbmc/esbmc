@@ -312,7 +312,10 @@ class ModuleRewriteMixin:
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
         self._scan_dict_literal_bindings_and_calls(node)
+        self.module_class_names, self.instance_var_classes = \
+            self._build_var_class_map(node)
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
+        self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
 
