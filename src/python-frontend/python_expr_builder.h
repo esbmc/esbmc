@@ -77,11 +77,25 @@ exprt build_greater_equal(const exprt &a, const exprt &b);
 // byte-identical round-trip.
 exprt build_or(const exprt &a, const exprt &b);
 
+// Boolean conjunction `a && b`, both operands bool-typed. migrate lowers a
+// legacy binary "and" node to and2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip.
+exprt build_and(const exprt &a, const exprt &b);
+
+// Boolean exclusive-or `a ^ b`, both operands bool-typed. migrate lowers a
+// legacy binary "xor" node to xor2tc(migrate(a), migrate(b)), so this is the
+// byte-identical round-trip. Not to be confused with `bitxor` -- a bool-typed
+// bitxor2t is malformed and crashes the Bitwuzla BV encoder (GitHub #4548).
+exprt build_xor(const exprt &a, const exprt &b);
+
 // `a + b : t` over same-width operands (add2t asserts width consistency).
 exprt build_add(const exprt &a, const exprt &b, const typet &t);
 
 // `a - b : t` over same-width operands (sub2t asserts width consistency).
 exprt build_sub(const exprt &a, const exprt &b, const typet &t);
+
+// `a % b : t` over same-width operands (modulus2t asserts width consistency).
+exprt build_mod(const exprt &a, const exprt &b, const typet &t);
 
 // Equality `a == b` over same-typed operands. migrate lowers a legacy
 // "=" node to equality2tc(migrate(a), migrate(b)), so this is the

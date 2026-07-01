@@ -203,6 +203,20 @@ exprt build_or(const exprt &a, const exprt &b)
     a, b, [](const expr2tc &x, const expr2tc &y) { return or2tc(x, y); });
 }
 
+// `a && b`, both operands bool-typed.
+exprt build_and(const exprt &a, const exprt &b)
+{
+  return migrate_binary(
+    a, b, [](const expr2tc &x, const expr2tc &y) { return and2tc(x, y); });
+}
+
+// `a ^ b`, both operands bool-typed (see header: not `bitxor`, GitHub #4548).
+exprt build_xor(const exprt &a, const exprt &b)
+{
+  return migrate_binary(
+    a, b, [](const expr2tc &x, const expr2tc &y) { return xor2tc(x, y); });
+}
+
 exprt build_add(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(
@@ -216,6 +230,14 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
   return migrate_typed_binary(
     a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
       return sub2tc(ty, x, y);
+    });
+}
+
+exprt build_mod(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return modulus2tc(ty, x, y);
     });
 }
 

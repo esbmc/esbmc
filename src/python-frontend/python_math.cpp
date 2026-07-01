@@ -26,20 +26,55 @@ namespace
 {
 const BigInt kMaxConstantFoldExponent = 1024;
 
+// Reconcile `value` to exactly `target_type`'s width. `c_implicit_typecast_
+// arithmetic` (the same arithmetic promotion clang_cpp_adjust's adjust_expr_rel
+// applies) buckets operands into coarse C ranks with a minimum promotion of
+// `int` (src/util/c_typecast.cpp), so it does NOT preserve a sub-`int` target
+// (e.g. a numpy int8/uint8/int16/uint16 dtype, which -- unlike a plain C
+// integer -- keeps its declared width across `%`/`//`). Apply it for
+// correctness against `value`'s own type, then narrow/widen the result back to
+// `target_type` explicitly so the width-asserting IREP2 constructors
+// (modulus2t/sub2t/if2t's then-branch-typed result) always see exactly
+// `target_type`. Skipping the typecast when already equal keeps the common
+// (already-matching-width) case a byte-identical, idempotent no-op.
+exprt reconcile_operand(
+  const namespacet &ns,
+  const exprt &value,
+  const typet &target_type)
+{
+  exprt op0 = value;
+  exprt op1 = gen_zero(target_type);
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+  if (op0.type() == target_type)
+    return op0;
+  return python_expr::build_typecast(op0, target_type);
+}
+
 // Build the sign test `value < 0` in IREP2 (V.1k keystone, W). `value` and the
 // zero literal can have mismatched bit-widths (the operand may be narrower than
-// the division result type), so reconcile them with the same
-// c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
-// a byte-identical, idempotent transform -- before building lessthan2t.
+// the division result type), so reconcile them before building lessthan2t.
 exprt build_sign_test(
   const namespacet &ns,
   const exprt &value,
   const exprt &zero)
 {
-  exprt op0 = value;
-  exprt op1 = zero;
-  c_implicit_typecast_arithmetic(op0, op1, ns);
-  return python_expr::build_less_than(op0, op1);
+  return python_expr::build_less_than(
+    reconcile_operand(ns, value, zero.type()), zero);
+}
+
+// Build `lhs % rhs : mod_type` in IREP2 (V.1k keystone). Operands may have
+// mismatched bit-widths (same hazard as build_sign_test), so reconcile each
+// against mod_type before building modulus2t.
+exprt build_remainder(
+  const namespacet &ns,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &mod_type)
+{
+  return python_expr::build_mod(
+    reconcile_operand(ns, lhs, mod_type),
+    reconcile_operand(ns, rhs, mod_type),
+    mod_type);
 }
 
 // V.3: build an IREP2 expression-context call `func(args...)` returning
@@ -684,36 +719,29 @@ exprt python_math::handle_floor_division(
 
   typet div_type = bin_expr.type();
 
-  // remainder = num % den;
-  exprt remainder("mod", div_type);
-  remainder.copy_to_operands(lhs, rhs);
-
-  // Get num/den signals (built in IREP2, see build_sign_test).
+  // Built in IREP2 (V.1k keystone): num/den signals, remainder = num % den,
+  // and the correction term, all width-reconciled against div_type.
   namespacet ns(symbol_table);
   exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(div_type));
   exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(div_type));
 
   // remainder != 0
-  exprt pos_remainder("notequal", bool_type());
-  pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
+  exprt remainder = build_remainder(ns, lhs, rhs, div_type);
+  exprt pos_remainder =
+    python_expr::build_notequal(remainder, gen_zero(div_type));
 
   // diff_signals = is_num_neg ^ is_den_neg;
   // Boolean XOR — `bitxor` over bool-typed operands is malformed and
   // crashes Bitwuzla's BV encoder ("term with unexpected sort"); GitHub #4548.
-  exprt diff_signals("xor", bool_type());
-  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+  exprt diff_signals = python_expr::build_xor(is_num_neg, is_den_neg);
 
-  exprt cond("and", bool_type());
-  cond.copy_to_operands(pos_remainder, diff_signals);
+  exprt cond = python_expr::build_and(pos_remainder, diff_signals);
 
-  exprt if_expr("if", div_type);
-  if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
+  exprt if_expr =
+    python_expr::build_if(cond, gen_one(div_type), gen_zero(div_type));
 
   // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
-  exprt floor_div("-", div_type);
-  floor_div.copy_to_operands(bin_expr, if_expr); // bin_expr contains lhs/rhs
-
-  return floor_div;
+  return python_expr::build_sub(bin_expr, if_expr, div_type);
 }
 
 exprt python_math::handle_int_modulo(
@@ -745,26 +773,25 @@ exprt python_math::handle_int_modulo(
   }
 
   // Symbolic: corrected = rem + (rhs if (rem != 0 and signs_differ) else 0),
-  // where rem is the C remainder already in bin_expr.
+  // where rem is the C remainder already in bin_expr. Built in IREP2 (V.1k
+  // keystone); rhs is reconciled to mod_type first so the `if` branches
+  // (rhs vs. the mod_type-typed zero) share a width, per build_if's
+  // then-branch-typed result.
   namespacet ns(symbol_table);
   exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(mod_type));
   exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(mod_type));
 
-  exprt rem_nonzero("notequal", bool_type());
-  rem_nonzero.copy_to_operands(bin_expr, gen_zero(mod_type));
+  exprt rem_nonzero = python_expr::build_notequal(bin_expr, gen_zero(mod_type));
 
   // Boolean XOR (not bitxor — see handle_floor_division / GitHub #4548).
-  exprt diff_signals("xor", bool_type());
-  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+  exprt diff_signals = python_expr::build_xor(is_num_neg, is_den_neg);
 
-  exprt cond("and", bool_type());
-  cond.copy_to_operands(rem_nonzero, diff_signals);
+  exprt cond = python_expr::build_and(rem_nonzero, diff_signals);
 
-  exprt correction("if", mod_type);
-  correction.copy_to_operands(cond, rhs, gen_zero(mod_type));
+  exprt correction = python_expr::build_if(
+    cond, reconcile_operand(ns, rhs, mod_type), gen_zero(mod_type));
 
-  exprt result("+", mod_type);
-  result.copy_to_operands(bin_expr, correction);
+  exprt result = python_expr::build_add(bin_expr, correction, mod_type);
   result.location() = bin_expr.location();
 
   return result;
