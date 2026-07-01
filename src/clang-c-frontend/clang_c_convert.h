@@ -242,6 +242,15 @@ protected:
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
+  // Lower a derived-to-base conversion as a chain of nested base-subobject
+  // member accesses (base subobjects are nested members; see the C++
+  // frontend's get_base_components_methods). Handles pointer/reference and
+  // object operands; falls back to a plain typecast for virtual bases.
+  bool build_base_subobject_access(
+    const clang::CastExpr &cast,
+    exprt &expr,
+    const typet &dest_type);
+
   void get_default_symbol(
     symbolt &symbol,
     irep_idt module_name,

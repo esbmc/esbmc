@@ -91,16 +91,34 @@ public:
    *  - ctor_type: type of the constructor symbol
    *  - new_code: the code expression for vptr initialization
    */
+  // Recurse over a class' components, emitting vptr-init assignments for the
+  // class' own vptr(s) and for each nested base subobject's vptr. access_path
+  // is the chain of base-subobject components to step through to reach the
+  // current components (empty for the most-derived class itself).
+  void gen_vptr_inits_for_components(
+    const struct_typet::componentst &components,
+    const std::vector<struct_typet::componentt> &access_path,
+    code_blockt &ctor_body,
+    const code_typet &ctor_type);
   void gen_vptr_init_code(
     const struct_union_typet::componentt &comp,
+    const std::vector<struct_typet::componentt> &access_path,
     side_effect_exprt &new_code,
     const code_typet &ctor_type);
   exprt gen_vptr_init_lhs(
     const struct_union_typet::componentt &comp,
+    const std::vector<struct_typet::componentt> &access_path,
     const code_typet &ctor_type);
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
+    const std::vector<struct_typet::componentt> &access_path,
     const code_typet &ctor_type);
+
+  // Is access_path the primary (offset-0) base chain of class `derived` (its
+  // tag-prefixed id)? Such a vptr is the one physically shared at offset 0.
+  bool is_primary_chain(
+    const std::string &derived,
+    const std::vector<struct_typet::componentt> &access_path);
 
   /**
    * ancillary methods to support the expr/code adjustments above

@@ -273,7 +273,10 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  // Direct base classes in declaration order: (class_id, base decl). Order
+  // matters for nested base-subobject layout, so this is a vector, not a map.
+  using base_map =
+    std::vector<std::pair<std::string, const clang::CXXRecordDecl *>>;
   /*
    * Recursively get the bases for this derived class.
    *
@@ -312,7 +315,13 @@ protected:
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  void get_base_components_methods(
+    base_map &map,
+    const clang::CXXRecordDecl &derived,
+    struct_union_typet &type);
+
+  // Component name of the nested subobject for a direct base class.
+  static std::string base_subobject_name(const std::string &base_class_id);
 
   /*
    * Methods for virtual tables and virtual pointers
@@ -377,6 +386,28 @@ protected:
    * This is done the first time we encounter a virtual method in a class
    */
   void add_vptr(struct_typet &type);
+
+  // True if the class already has a polymorphic base subobject at offset 0
+  // whose vtable pointer it shares (Itanium primary-base sharing), so it must
+  // not allocate its own vptr.
+  bool has_primary_base_vptr(const struct_typet &type);
+
+  // Primary base (first polymorphic base subobject) class id, or empty.
+  irep_idt primary_base_id(const struct_typet &type);
+
+  // Make the most-derived class' own vtable extend its primary base's view
+  // (type + variable, in lock step) so the shared vtable pointer resolves both
+  // inherited and own virtual methods.
+  void merge_primary_base_vtable(const struct_typet &type);
+
+  // Build an lvalue access to the vtable pointer named vptr_name on the object
+  // lvalue, navigating into base subobjects when the vptr is shared from a
+  // (possibly nested) primary base. Returns false on success.
+  bool build_vptr_member_access(
+    const exprt &object,
+    const irep_idt &vptr_name,
+    const typet &vptr_member_type,
+    exprt &result);
   /*
    * Add an entry to the virtual table type
    *

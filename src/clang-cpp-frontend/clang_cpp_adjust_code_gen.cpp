@@ -53,25 +53,54 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   exprt value = symbol.get_value();
   code_blockt &ctor_body = to_code_block(to_code(value));
 
-  // iterate over the `components` and initialize each virtual pointers
-  for (const auto &comp : components)
-  {
-    if (!comp.get_bool("is_vtptr"))
-      continue;
-
-    side_effect_exprt new_code("assign");
-    gen_vptr_init_code(comp, new_code, ctor_type);
-    codet code_expr("expression");
-    code_expr.move_to_operands(new_code);
-    ctor_body.operands().push_back(code_expr);
-  }
+  // Initialize every vptr reachable from this class: the class' own vptr(s)
+  // plus the vptr of each nested base subobject. Base subobjects are nested
+  // members now (#is_base_subobject), so a base vptr lives at
+  // `this->base::@base...->vptr`; we carry an access path so the LHS member
+  // chain steps into the right subobject. RHS still points at the derived's
+  // (thunk) vtable for that class, so dispatch through the base sees the
+  // most-derived override.
+  gen_vptr_inits_for_components(components, {}, ctor_body, ctor_type);
 
   value.need_vptr_init(false);
   symbol.set_value(std::move(value));
 }
 
+void clang_cpp_adjust::gen_vptr_inits_for_components(
+  const struct_typet::componentst &components,
+  const std::vector<struct_typet::componentt> &access_path,
+  code_blockt &ctor_body,
+  const code_typet &ctor_type)
+{
+  for (const auto &comp : components)
+  {
+    if (comp.get_bool("is_vtptr"))
+    {
+      side_effect_exprt new_code("assign");
+      gen_vptr_init_code(comp, access_path, new_code, ctor_type);
+      codet code_expr("expression");
+      code_expr.move_to_operands(new_code);
+      ctor_body.operands().push_back(code_expr);
+    }
+    else if (comp.get_bool("#is_base_subobject"))
+    {
+      // Recurse into the nested base subobject, extending the access path.
+      const symbolt *base_symb =
+        namespacet(context).lookup(comp.type().identifier());
+      assert(base_symb);
+      const struct_typet::componentst &base_components =
+        to_struct_type(base_symb->get_type()).components();
+      std::vector<struct_typet::componentt> nested = access_path;
+      nested.push_back(comp);
+      gen_vptr_inits_for_components(
+        base_components, nested, ctor_body, ctor_type);
+    }
+  }
+}
+
 void clang_cpp_adjust::gen_vptr_init_code(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   side_effect_exprt &new_code,
   const code_typet &ctor_type)
 {
@@ -79,6 +108,8 @@ void clang_cpp_adjust::gen_vptr_init_code(
    * Generate the statement to assign each vptr the corresponding
    * vtable address, e.g.:
    *  this->vptr = &<vtable_struct_var_name>
+   * For a base subobject vptr the LHS steps through the subobject chain in
+   * access_path: this->base::@base...->vptr.
    */
 
   // 1. set the type
@@ -86,10 +117,10 @@ void clang_cpp_adjust::gen_vptr_init_code(
   new_code.type() = comp.type();
 
   // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr = gen_vptr_init_lhs(comp, ctor_type);
+  exprt lhs_expr = gen_vptr_init_lhs(comp, access_path, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
+  exprt rhs_expr = gen_vptr_init_rhs(comp, access_path, ctor_type);
 
   // now push them to the assignment statement code
   new_code.operands().push_back(lhs_expr);
@@ -98,39 +129,48 @@ void clang_cpp_adjust::gen_vptr_init_code(
 
 exprt clang_cpp_adjust::gen_vptr_init_lhs(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   const code_typet &ctor_type)
 {
   /*
    * Generate the LHS expression for virtual pointer initialization,
    * as in:
    *  this->vptr = &<vtable_struct_variable>
+   * or, for a base subobject vptr:
+   *  this->base::@base...->vptr = &<vtable_struct_variable>
    */
 
-  exprt lhs_code;
+  // Build `*this` from the constructor's `this` argument using its declared
+  // pointer type (matching the copy-ctor adjuster). Reconstructing it from the
+  // class struct type instead would give the dereference the wrong static type
+  // and make the nested base-subobject member chain mis-select (e.g. resolve
+  // to a whole `<base>::@base` struct instead of the scalar vtable pointer).
+  // dereference_exprt(op, tp) sets its result type to tp.subtype(), so pass the
+  // `this` argument's pointer type: the deref then has the pointee struct type.
+  const auto &this_argument = ctor_type.arguments().at(0);
+  dereference_exprt this_deref(
+    symbol_exprt(this_argument.cmt_identifier(), this_argument.type()),
+    this_argument.type());
 
-  // get the `this` argument symbol
-  const symbolt *this_symb = namespacet(context).lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
-  assert(this_symb);
+  // step into each nested base subobject along the access path
+  exprt base_expr = this_deref;
+  for (const auto &step : access_path)
+  {
+    exprt step_member = member_exprt(step.name(), step.type());
+    step_member.operands().push_back(base_expr);
+    base_expr = step_member;
+  }
 
-  // prepare dereference operand
-  exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
-
-  // get the reference symbol
-  dereference_exprt this_deref(deref_operand.type());
-  this_deref.operands().resize(0);
-  this_deref.operands().push_back(deref_operand);
-
-  // now we can get the member expr for "this->vptr"
-  lhs_code = member_exprt(comp.name(), comp.type());
-  lhs_code.operands().push_back(this_deref);
+  // now we can get the member expr for "...->vptr"
+  exprt lhs_code = member_exprt(comp.name(), comp.type());
+  lhs_code.operands().push_back(base_expr);
 
   return lhs_code;
 }
 
 exprt clang_cpp_adjust::gen_vptr_init_rhs(
   const struct_union_typet::componentt &comp,
+  const std::vector<struct_typet::componentt> &access_path,
   const code_typet &ctor_type)
 {
   /*
@@ -139,21 +179,70 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
    *  this->vptr = &<vtable_struct_variable>
    */
 
-  exprt rhs_code;
+  const std::string derived = ctor_type.get("#member_name").as_string();
 
-  // get the corresponding vtable variable symbol
-  std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.get("#member_name").as_string();
+  // Default: the vtable variable for this vptr's class in the most-derived
+  // object (e.g. virtual_table::tag-Base@tag-Derived).
+  std::string vtable_var_id =
+    comp.type().subtype().identifier().as_string() + "@" + derived;
+
+  // Itanium primary-base sharing: the vptr physically at offset 0 is the
+  // primary base subobject's and carries the most-derived class' MERGED
+  // vtable (primary view as a prefix + D's own). Detect that vptr — its access
+  // path enters only the primary (first) base subobject at each level — and
+  // retarget it to the merged vtable variable virtual_table::tag-D::merged@tag-D
+  // that merge_primary_base_vtable built as the prefix-compatible superset.
+  bool retargeted = false;
+  if (is_primary_chain(derived, access_path))
+  {
+    const std::string merged_id =
+      "virtual_table::" + derived + "::merged@" + derived;
+    if (context.find_symbol(merged_id) != nullptr)
+    {
+      vtable_var_id = merged_id;
+      retargeted = true;
+    }
+  }
+
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 
-  // get the operand for address_of expr as in `&<vtable_struct_variable>`
+  (void)retargeted;
   exprt vtable_var =
     symbol_exprt(vtable_var_symb->id, vtable_var_symb->get_type());
   vtable_var.name(vtable_var_symb->name);
+  // Store the address with the merged vtable's own pointer type (no cast to the
+  // slot's declared pointer(vtable_type::Base) type): dispatch reads the shared
+  // slot as the merged type, and a Base*-typed read stays valid by prefix
+  // compatibility. A cast here would pin the stored static type to the base
+  // view and hide the merged slots from the SMT-level member offset.
+  return address_of_exprt(vtable_var);
+}
 
-  // now we can get the address_of expr for "&<vtable_struct_variable>"
-  rhs_code = address_of_exprt(vtable_var);
-
-  return rhs_code;
+// Is access_path the primary (offset-0) base chain of class `derived` (its
+// tag-prefixed id)? Such a vptr is the one physically shared at offset 0.
+bool clang_cpp_adjust::is_primary_chain(
+  const std::string &derived,
+  const std::vector<struct_typet::componentt> &access_path)
+{
+  if (access_path.empty())
+    return false;
+  irep_idt cur = derived; // already tag-prefixed class id
+  for (const auto &step : access_path)
+  {
+    const symbolt *s = context.find_symbol(cur);
+    if (!s || s->get_type().id() != "struct")
+      return false;
+    irep_idt first_base;
+    for (const auto &c : to_struct_type(s->get_type()).components())
+      if (c.get_bool("#is_base_subobject"))
+      {
+        first_base = c.type().identifier();
+        break;
+      }
+    if (step.type().identifier() != first_base)
+      return false;
+    cur = first_base;
+  }
+  return true;
 }
