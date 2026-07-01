@@ -241,9 +241,21 @@ exprt tuple_handler::handle_tuple_subscript(
       elem_types.push_back(components[k].type());
     struct_typet new_type = create_tuple_struct_type(elem_types);
 
-    struct_exprt result(new_type);
+    // V.3: build the sub-tuple value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership dispatch (see
+    // get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(kept.size());
     for (size_t k : kept)
-      result.copy_to_operands(get_tuple_element(array, tuple_type, k));
+    {
+      expr2tc m2;
+      migrate_expr(get_tuple_element(array, tuple_type, k), m2);
+      members.push_back(std::move(m2));
+    }
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
