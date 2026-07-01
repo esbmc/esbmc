@@ -1,0 +1,4 @@
+KNOWNBUG
+cbmc_isnan.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -129,7 +129,12 @@ void fix_expression(irept &irep)
     "bitnot",
     "struct",
     "return",
-    "r_ok"};
+    "r_ok",
+    "isnan",
+    "isinf",
+    "isnormal",
+    "isfinite",
+    "nearbyint"};
 
   const std::string cur = irep.id_string();
 
