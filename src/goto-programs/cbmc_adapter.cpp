@@ -76,6 +76,26 @@ void fix_expression(irept &irep)
     irep.id("string-constant");
   else if (irep.id() == "ieee_float_equal")
     irep.id("=");
+  else if (
+    (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
+     irep.id() == "/") &&
+    irep.find("type").id() == "floatbv")
+  {
+    // CBMC emits plain +/-/*// for float arithmetic, type-blind; ESBMC's own
+    // C frontend promotes these to their ieee_ counterparts whenever the
+    // type is floatbv (clang_c_adjust_expr.cpp::adjust_float_arith), and
+    // downstream checks rely on that distinction (e.g. goto_check.cpp skips
+    // the division-by-zero check for ieee_div, since it's defined IEEE-754
+    // behaviour, not UB). Mirror that promotion here.
+    if (irep.id() == "+")
+      irep.id("ieee_add");
+    else if (irep.id() == "-")
+      irep.id("ieee_sub");
+    else if (irep.id() == "*")
+      irep.id("ieee_mul");
+    else
+      irep.id("ieee_div");
+  }
 
   if (irep.id() == "constant")
   {
@@ -102,6 +122,10 @@ void fix_expression(irept &irep)
     "/",
     "+",
     "-",
+    "ieee_add",
+    "ieee_sub",
+    "ieee_mul",
+    "ieee_div",
     "=",
     "<",
     "<=",
@@ -129,7 +153,13 @@ void fix_expression(irept &irep)
     "bitnot",
     "struct",
     "return",
-    "r_ok"};
+    "r_ok",
+    "isnan",
+    "isinf",
+    "isnormal",
+    "isfinite",
+    "nearbyint",
+    "signbit"};
 
   const std::string cur = irep.id_string();
 

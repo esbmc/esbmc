@@ -194,3 +194,36 @@ TEST_CASE(
 
   migrate_namespace_lookup = nullptr;
 }
+
+TEST_CASE(
+  "defines c:@__ESBMC_rounding_mode without relying on the C frontend",
+  "[cbmc-reader]")
+{
+  // cbmc_adapter.cpp's fix_expression promotes CBMC's float arithmetic to
+  // ieee_add/sub/mul/div, whose migrate_expr handlers reference
+  // c:@__ESBMC_rounding_mode. In the normal esbmc_parseoptionst driver path
+  // that symbol comes from synthesize_cprover_additions (which runs the C
+  // frontend over a boilerplate TU before read_cbmc_goto_object), so calling
+  // read_cbmc_goto_object directly -- as this test does, with no C frontend
+  // involved at all -- is exactly the scenario that would be broken if
+  // read_cbmc_goto_object depended on that unrelated driver step.
+  const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";
+  std::ifstream in(path, std::ios::in | std::ios::binary);
+  REQUIRE(in.good());
+
+  contextt context;
+  goto_functionst goto_functions;
+  namespacet ns(context);
+  migrate_namespace_lookup = &ns;
+
+  const bool failed = read_cbmc_goto_object(in, path, context, goto_functions);
+  REQUIRE_FALSE(failed);
+
+  const symbolt *rounding_mode =
+    context.find_symbol("c:@__ESBMC_rounding_mode");
+  REQUIRE(rounding_mode != nullptr);
+  REQUIRE(rounding_mode->get_type().id() == "signedbv");
+  REQUIRE(rounding_mode->static_lifetime);
+
+  migrate_namespace_lookup = nullptr;
+}

@@ -1,0 +1,4 @@
+KNOWNBUG
+cbmc_isinf.goto
+--binary
+^VERIFICATION SUCCESSFUL$
