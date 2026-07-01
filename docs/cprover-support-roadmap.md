@@ -149,6 +149,26 @@ matches CBMC's verdict exactly (reclassified `cbmc_isnan` KNOWNBUG→CORE), and 
 float arithmetic from CBMC binaries is verdict-tested directly (`cbmc_float_arith`,
 `cbmc_float_arith_fail`). Contained to the CBMC-binary path only — `fix_expression` is
 never reached by ESBMC's native frontends, so this cannot regress native C/C++/Python.
+Incidentally, promoting `+`/`-`/`*` (not just `/`) also gives CBMC-sourced float
+arithmetic the overflow/NaN instrumentation `goto_check.cpp` applies to `ieee_*` nodes,
+which the untyped generic path silently skipped entirely (not wrongly instrumented —
+just uninstrumented). Two scope cuts, both intentional and low-risk, left for follow-up:
+- **SIMD/vector floats.** `adjust_float_arith`'s `is_vector() && subtype().is_floatbv()`
+  fallback isn't replicated — a CBMC float-vector `"+"` node has `type: vector`, not
+  `floatbv`, so the promotion simply doesn't fire (identical to pre-fix behaviour, no
+  regression, just unaddressed). No CBMC-vector-binary test corpus exists yet to verify
+  against.
+- **Rounding-mode symbol dependency.** The promoted `ieee_*` nodes rely on
+  `migrate_expr` defaulting to `c:@__ESBMC_rounding_mode` when no explicit
+  `rounding_mode` operand is present — that symbol isn't defined by the CBMC
+  reader/adapter itself, only by `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+  step, which every normal `--binary` invocation runs. `--no-cprover-additions` skips it,
+  but currently fails earlier for an unrelated reason (`main symbol not found`) before
+  this would matter — so no live bug today, but a latent gap if that unrelated failure is
+  ever fixed independently. `src/ld-frontend/ir_gen/ld_converter.cpp` already solves the
+  identical problem for a different frontend by defining the symbol itself, guarded by
+  `find_symbol`, if absent — the CBMC adapter should do the same rather than depend on an
+  unrelated driver step always running first.
 
 **Still open — `isinf`.** No longer segfaults, but still aborts ("migrate expr failed")
 because glibc's `isinf` additionally uses CBMC's `"sign"` predicate (a sign-bit
