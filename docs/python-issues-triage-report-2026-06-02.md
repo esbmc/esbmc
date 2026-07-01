@@ -3412,3 +3412,46 @@ case all stand; the §5 priority order stands.
 
 > **Note on numbering.** §42/§43 and §47–§55 (PRs #5668, #5669, #5673–#5681) are in flight and not yet
 > on `master` (§39/§40/§41/§44/§45/§46 merged); this sweep is appended as §56.
+
+---
+
+## 74. 2026-06-30 re-validation (sixty-fourth sweep) & str.isascii/isdecimal/isprintable
+
+Re-test against current `master` (tip `efc3a92b5f`). KNOWNBUG classification unchanged — §3 holds.
+A string-predicate battery found three `is*` methods that reported a spurious verdict for want of a
+model.
+
+### 74a. New isolated, soundly-fixable defect found & fixed
+**`str.isascii()`, `str.isdecimal()`, and `str.isprintable()` on a constant string were unmodelled,
+reporting a spurious `VERIFICATION FAILED` (PR #5720).**
+
+`"abc".isascii()`, `"123".isdecimal()`, and `"abc".isprintable()` each hit the "Unsupported function"
+→ `assert(false)` fallback, so any program calling them reported `FAILED` (a false alarm). The sibling
+predicates `isalpha`/`isdigit`/`isalnum`/`isspace`/`isupper`/`islower` were already constant-folded;
+these three had simply never been added.
+
+**Fix** (`src/python-frontend/python_consteval.cpp`): add three entries to the existing `pred_all`
+constant-fold helper — the same per-character mechanism the sibling predicates use — with the correct
+predicate and empty-string result: `isascii` (char < 128, True on empty), `isdecimal` (`'0'..'9'`,
+False on empty), `isprintable` (`std::isprint`, True on empty). Like the existing predicates this is a
+byte-level model: it matches CPython exactly for ASCII (the constant-fold domain) and shares the
+sibling predicates' known non-ASCII/Unicode limitation. Operands are cast to `unsigned char`, so the
+ctype calls are well-defined.
+
+This **restores working behaviour** (the three predicates now verify with exact values). New
+regression pair `regression/python/str_is_predicates{,_fail}` (CORE): the positive is the liveness
+witness, covering all three predicates across ASCII text, the empty string, tab, DEL (`0x7f`), and a
+high byte (`0x80`); the `_fail` pins `"a\tb".isprintable()` as a real `FAILED`. Verified bit-for-bit
+against CPython; CPython sanity passes (`scripts/check_python_tests.sh str_is_predicates`); the
+focused `str`/`string`/`consteval` ctest subset (457 tests) shows zero non-environmental regression
+(only the pre-existing `--z3`/`--ir`/`--boolector` set on this Bitwuzla-only build). Solver-agnostic
+(a frontend constant fold, no SMT encoding).
+
+`str.istitle()` remains unmodelled — it needs word-boundary (cased-run) tracking rather than a flat
+per-character predicate, so it is a separate change. Variable-string receivers (`s.isascii()` for a
+non-literal `s`) still route to the runtime handler, which models a different subset; extending that
+is orthogonal.
+
+### 74b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
