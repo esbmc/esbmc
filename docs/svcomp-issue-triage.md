@@ -1297,3 +1297,38 @@ its `fclose`/`strcmp` residual (lower priority, `ESBMC_SVCOMP`-gated):
 8. **#5565 residual** — `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free + `strcmp` argv-string
    pointer-validity; reproduce under a `-DESBMC_SVCOMP=On` build.
 9. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+---
+
+## 14. Pass 10 — #5142 parse-blocker layer: PR #5660 rejected, `--sv-comp` gate kept (2026-07-01)
+
+PR #5660 (`[clang-frontend] apply -Wno-int-conversion universally, not only under --sv-comp`) proposed
+moving `-Wno-int-conversion` out of the `--sv-comp` block in `clang_c_languaget::build_compiler_args`
+(`src/clang-c-frontend/clang_c_language.cpp`) so a plain `esbmc foo.c` run on clang 15+ would no longer
+hard-error on the implicit int↔pointer conversions common in CIL-preprocessed kernel inputs (the #5142
+parse layer, §12.5). It was closed without merging; this entry records why, so the same relaxation is
+not re-proposed in a later pass.
+
+**Why closed.** The PR's own justification was "GCC (the compiler ESBMC targets) only *warns* on this
+construct, so matching GCC is the correct behaviour." That reasoning targets the wrong compiler: ESBMC's
+C frontend *is* clang — it is the parser that produces the AST ESBMC converts to GOTO. A plain ESBMC run
+should therefore surface clang's own default diagnostic severity (a hard error on clang 15+ for
+`-Wint-conversion`), not silently downgrade it to GCC's warn-only behaviour for every user. Doing so
+would mean ESBMC accepts, by default, a class of int↔pointer conversions that the very compiler
+front-ending it rejects — a widening of accepted input with no counterpart hard case for a plain-mode
+user to detect.
+
+**Why `--sv-comp` stays the only gate.** The `--sv-comp` relaxation is a narrow, justified accommodation:
+SV-COMP benchmarks are frequently CIL-preprocessed kernel sources (the `m0_drivers-media-rc-imon`
+sentinel-pointer initialiser cited in §12.5 is one instance) that rely on GCC-accepted implicit
+conversions as an artefact of that preprocessing pipeline, not as a property of the code a general
+ESBMC user writes. Scoping the relaxation to `--sv-comp` keeps that accommodation local to the
+benchmark-replay use case instead of promoting it to a universal default.
+
+**Disposition.** Master's pre-#5660 behaviour is retained unchanged: `-Wno-int-conversion` applies only
+inside the `--sv-comp` branch of `build_compiler_args`; a plain run still reports `ERROR: PARSING ERROR`
+on GCC-acceptable, clang-15+-rejected implicit int↔pointer conversions, matching clang's own default.
+#5142 stays open against both of its layers: the parse-blocker layer (relaxation-under-`--sv-comp`-only
+confirmed as the intended behaviour, not a bug — see above) and the no-overflow precision layer (whether
+the benchmark verdict is correct once parsed under `--sv-comp`; still x86 + full-benchmark-gated,
+unreproducible in isolation here, per §13.3 item 6).
