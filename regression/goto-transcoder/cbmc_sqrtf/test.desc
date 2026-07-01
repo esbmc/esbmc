@@ -1,0 +1,4 @@
+KNOWNBUG
+cbmc_sqrtf.goto
+--binary
+^VERIFICATION SUCCESSFUL$
