@@ -135,7 +135,7 @@ to bridge CBMC's encoding onto it rather than re-implement.
 Only CBMC binary **version 6** is accepted. No graceful handling of other versions, and the
 reader `abort()`s on malformed input rather than returning a recoverable error.
 
-### 4.8 Math-library intrinsics arrive as bodyless FUNCTION_CALLs (Phase 2) — 🔶 newly diagnosed, not yet fixed
+### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 newly diagnosed, not yet fixed
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level FUNCTION_CALL
 targets**, not expression ireps. Found by direct testing: `sqrtf`/`fabsf`/`ceilf`/`floorf`/
 `truncf`/`roundf` all produce `WARNING: no body for function <name>` when loaded via
@@ -171,12 +171,37 @@ expression ireps, not instruction-level call targets), likely needing its own fu
 `cbmc_adapter.cpp` alongside `fix_expression`. Not attempted here — this needs its own
 design pass rather than a rushed fix layered onto existing `fix_expression` logic.
 
-**Also observed, not yet root-caused**: `malloc`/`free` also don't match CBMC's verdict on
-a minimal alloc/write/free program (ESBMC: "Incorrect alignment when accessing data
-object"; unlike the libm case, this is a different failure mode, not "no body for
-function" — `malloc` does get a real body, since ESBMC's embedded `libclibs.a` provides
-one independent of the C frontend / CBMC binary distinction). Whether this is the same
-class of gap or an unrelated pre-existing bug is unconfirmed; flagging so it isn't lost.
+**Correction, and a second confirmed instance of the same root cause**: `malloc`/`free`
+were first flagged here as a *possibly-different* failure mode ("Incorrect alignment when
+accessing data object", assumed to mean `malloc` has a real body). That assumption was
+wrong — re-checked with full log output: `malloc`/`free` **also** produce `WARNING: no
+body for function malloc`/`free`; the "Incorrect alignment" error is a downstream symptom
+of dereferencing the resulting nondet/invalid pointer, not a distinct bug. And `malloc` is
+**not** a body-based `libclibs.a` function either — `grep`ing `src/c2goto/library/` for a
+real `malloc` definition finds none. Like `sqrtf`, ESBMC recognises `malloc`/`alloca` as a
+special case and rewrites the call, but at a *different* stage than `sqrtf`:
+`src/goto-programs/builtin_functions.cpp::goto_convertt::do_mem` (`base_name == "malloc"`)
+runs during **`goto_convert`** — the AST-code-to-GOTO-instructions lowering pass — turning
+a `FUNCTION_CALL` statement into a `side_effect_exprt("malloc", ...)`, which symex knows
+how to handle as dynamic allocation. CBMC binaries never go through `goto_convert` at
+all: `read_cbmc_goto_object` builds `goto_programt` directly from the already-GOTO-shaped
+CBMC irep via `goto_program_irep.cpp::convert()`, a mechanical 1:1 translator with no
+builtin-function recognition of any kind. So this is the **same class of gap** as §4.8's
+libm functions (a compile-time/convert-time rewrite that CBMC-sourced GOTO instructions
+never pass through), not an unrelated bug — but the *fix shape* differs again: `do_mem`
+already operates at GOTO-instruction level (unlike `clang_c_adjust_expr.cpp`'s AST-level
+`sqrtf` handling), so it may be more directly reusable for a CBMC-adapter equivalent than
+the libm case is. Likely not the only such builtin — `goto_convertt`'s other
+`do_*`-prefixed special-cases (`free`, `printf`-family, `__ESBMC_*` intrinsics reached via
+plain C names) are worth auditing together rather than one at a time.
+
+Unlike `sqrtf`, a clean minimal verdict-mismatch reproducer for `malloc` proved harder to
+construct in the time available: `malloc`'s own semantics is inherently nondeterministic
+(CBMC's own model allows a may-fail-NULL return, so `assert(p != 0)` alone already reports
+`VERIFICATION FAILED` on **both** tools, just for different reasons underneath — CBMC's
+deliberate may-fail modelling vs. ESBMC's much wider unconstrained-nondet fallback). No
+regression test added for this one; the `sqrtf` KNOWNBUG test and this write-up are enough
+to point at the shared root cause.
 
 ---
 
