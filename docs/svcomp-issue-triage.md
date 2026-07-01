@@ -8,8 +8,11 @@ compile-time `ESBMC_SVCOMP` macro for the runtime `--sv-comp` flag; aws-hash sco
 **§16**. Canonical remaining-work list lives in §15.1. **Pass 13 (§17)** then executed the §15.2 next task:
 re-ran #4427's exact reproducer on current master and confirmed the `megaraid_mm.ko` false-negative
 **no longer reproduces — #4484's fn-ptr inductive-step guard fixed it** (sound `UNKNOWN`/timeout, no
-unsound TRUE); recommend closing after an x86 CI cross-check. See §16/§17. Pass 11 in §15, Pass 10 in
-§14, Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
+unsound TRUE); recommend closing after an x86 CI cross-check. **Pass 14 (§18)** probed #4432 (`mcslock`)
+and found it **x86-host-gated** (`regparm` parse artifact + no in-budget local repro) — with #4427 done,
+the confirm-and-close backlog is exhausted; remaining items need x86 infra / a witness validator / merged
+in-flight PRs / research-grade work. See §16/§17/§18. Pass 11 in §15, Pass 10 in §14, Pass 9 in §13,
+Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1624,3 +1627,52 @@ closed unmerged.
 x86 CI**. No remaining item is loop-scoped without infra (x86 host + SV-benchmarks + witness validator):
 the rest are research-grade (#5145 k≥2, #5012, #5400/#5138), overlap in-flight PRs (#4980/#4919), or
 x86-host-gated (#4432, #5142 no-overflow layer, the LDV clusters).
+
+---
+
+## 18. Pass 14 — #4432 mcslock host-gating probe; confirm-and-close backlog exhausted (2026-07-01)
+
+Pass 12's consolidation merged (#5739), so `master`'s report is structurally clean (single banner,
+monotonic §14–§17). With #4427 resolved (§17), the "already-fixed, confirm-and-close" backlog is
+**exhausted** — every other open SV-COMP item is research-grade, blocked on an in-flight PR, or
+x86-host-gated. This pass probes the one remaining open question that a local run can answer — **is the
+#4432 `mcslock` no-data-race false alarm host-independent, or x86-only?** — and records the answer so the
+next pass does not re-attempt it blind.
+
+### 18.1 #4432 — x86-host-gated (regparm parse artifact + no local repro within budget)
+
+Fetched `c/libvsync/mcslock.i` and ran #4432's exact command
+(`--incremental-bmc --data-races-check-only --no-por --smt-symex-guard --bitwuzla --32 …`).
+
+* **Parse blocker (x86 artifact).** As-fetched, clang rejects the file on aarch64/macOS:
+  `error: 'regparm' is not valid on this platform` (three `__attribute__((__regparm__(1)))` sites). This
+  is the known x86-only `.i` artifact (repo methodology: strip `__regparm__` to parse SV-COMP `.i` on
+  non-x86). After stripping the three attributes the file parses and symex runs.
+* **No local reproduction of the false race within budget.** The stripped run explored **371+ thread
+  interleavings** under incremental-BMC and **timed out at 260 s with no `VERIFICATION FAILED` and no
+  data-race counterexample** — it did *not* surface the spurious `false(no-data-race)` the x86 CI
+  reported (which fired at a specific interleaving, "State 57 … thread 3"). This is **inconclusive, not
+  a clean non-repro**: the triggering interleaving may lie deeper than 260 s reached, and a
+  32-bit-*modelled*-on-aarch64 run is not authoritative for an x86 CI verdict regardless.
+* **Disposition.** #4432 is **x86-host-gated for authoritative triage** — it needs the original x86_64
+  Linux host both to parse without stripping and to reach the reported interleaving in the SV-COMP time
+  budget. The eventual fix (data-race-checker interleaving reduction on `__atomic_*`) is independently
+  research-grade. Matches the memory-note uncertainty ("some wrong-verdicts are x86-only") — resolved
+  here to: *treat #4432 as x86-gated; do not re-probe locally.*
+
+### 18.2 Pass-14 running report
+
+**Analysed.** #4432 reproducibility on aarch64/macOS (parse + 260 s incremental-BMC run); confirmed the
+`regparm` x86 parse artifact and no in-budget local repro of the false race.
+
+**PRs opened.** One doc PR (this entry), based directly on `master` (clean post-#5739). No code — #4432
+offers no loop-scoped verifiable fix on this host.
+
+**Environment wall (explicit).** The SV-COMP loop has reached the limit of what this aarch64/macOS
+environment can verify. Every open item now needs one of: an **x86_64 Linux host** with the
+SV-benchmarks tree (#4432, #5142 no-overflow, #4438 via its `--32` float path, the #5396–#5399 LDV
+clusters), a **witness validator** (#1492 and the closed-but-unvalidated witness set), a **merged
+in-flight PR** (#4438→#4480, #4980→#4919), or **multi-session solver-internals work** (#5145 k≥2, #5012
+`va_list`, #5400/#5138 value-set reachability). Recommended next step for the maintainer: run the
+recommended-close confirmations (#4427, and the witness closures) on the x86 CI, and treat the
+research-grade items as scheduled design work rather than triage-loop candidates.
