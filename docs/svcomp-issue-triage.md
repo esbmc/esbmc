@@ -1,9 +1,11 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-26 (Pass 9 — reconcile four closures since Pass 8 (#5395/#5399/#5400 and the
-new #5593, an Intel-TDX `havoc_memory` recurrence of #5224 fixed by merged PR #5602); triage the new
-live issue #5565 and **fix its first post-#5564 residual** — an unmodeled `getopt_long` left `optarg` an
-invalid pointer, a sound localized OM fix; see §13. Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (Pass 11 — reconcile the two merged PRs that closed the #5565 residual
+after Pass 9: **#5650** (`fclose` frees only heap streams ⇒ `fclose(stdout)` sound) closed item-8's
+`fclose(stdout)` half and **CLOSED #5565**; **#5530** replaced the compile-time `ESBMC_SVCOMP` build
+macro with the runtime `--sv-comp` flag, obsoleting the `-DESBMC_SVCOMP=On` reproduction recipe; no
+new SV-COMP issues since Pass 9; remaining-work list re-based; see §15. Pass 10 in §14, Pass 9 in §13,
+Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1332,3 +1334,112 @@ on GCC-acceptable, clang-15+-rejected implicit int↔pointer conversions, matchi
 confirmed as the intended behaviour, not a bug — see above) and the no-overflow precision layer (whether
 the benchmark verdict is correct once parsed under `--sv-comp`; still x86 + full-benchmark-gated,
 unreproducible in isolation here, per §13.3 item 6).
+
+---
+
+## 15. Pass 11 — reconcile #5565 closure (#5650) + `ESBMC_SVCOMP`→`--sv-comp` migration (#5530) (2026-07-01)
+
+Pass 9 (2026-06-26, §13) shipped the `getopt_long`/`optarg` fix for #5565 and left item 8 of its
+remaining-work list open: the `ESBMC_SVCOMP`-gated `fclose(stdout)` static-stream free plus the
+`strcmp` argv-string pointer-validity residual. Two PRs merged **after** Pass 9's binary was cut, and
+Pass 10 (2026-07-01, §14) was scoped to the #5142 parse layer only, so neither reconciled them. This
+pass records both, closes item 8, and re-bases the remaining-work list. Verdicts here are **repro**
+against master `91f4acd2b8` (the Pass-10 tip) plus direct GitHub-state inspection; no new code — every
+still-open item remains the research-grade / host-blocked / in-flight class documented in §13.
+
+### 15.1 #5565 residual — CLOSED by #5650; `strcmp` half resolved upstream of it
+
+* **`fclose(stdout)` static-stream free — FIXED.** Merged **PR #5650** (`[om] fclose: free only heap
+  streams so fclose(stdout) is sound`, 2026-06-27) guards the `free(stream)` in ESBMC's `fclose`
+  operational model on `__ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)]`
+  (`src/c2goto/library/io.c:121`). Outside SV-COMP mode `fclose` previously called `free(stream)`
+  unconditionally; the standard streams `stdin`/`stdout`/`stderr` are not heap objects (`stdout`
+  resolves to `invalid-object`), so coreutils' `close_stdout` `atexit` handler — `fclose(stdout)` —
+  raised a spurious `dereference failure: invalid pointer freed`. The guard releases only streams ESBMC
+  itself allocated (`fopen`/`fdopen`), keeping a genuine double-`fclose` of an `fopen`'d stream
+  detectable while making `fclose(stdout)` sound. This is exactly the residual §13.2's *Residual* note
+  and §13.3 item 8 named.
+* **`strcmp` invalid-pointer — resolved upstream of it.** The `strcmp` half #5565 predicted was
+  downstream of the `optarg` layer: `strcmp(optarg, …)` deref'd the unmodeled-`getopt_long` invalid
+  pointer, fixed in Pass 9 (§13.2, merged as `[om] model getopt_long/getopt_long_only …`). With
+  `optarg` bound to a real argv element, the `strcmp` deref is on a valid pointer.
+* **Issue state.** **#5565 is CLOSED.** Its two-layer residual is fully discharged (`fclose` by #5650,
+  `strcmp` by the Pass-9 `getopt_long` OM). No further ESBMC-side work is owed on #5565.
+
+### 15.2 `ESBMC_SVCOMP` build macro retired → runtime `--sv-comp` flag (#5530)
+
+Merged **PR #5530** (`[svcomp] Replace ESBMC_SVCOMP build macro with runtime --sv-comp flag`,
+2026-06-25) removed the compile-time `-DESBMC_SVCOMP=On` CMake option that baked `__ESBMC_SVCOMP` into
+the operational models, replacing it with the runtime `--sv-comp` flag already threaded through the
+OMs (`__ESBMC_sv_comp()`). **Consequence for this document:** every reproduction recipe that says
+"needs an `ESBMC_SVCOMP` build" / "build with `-DESBMC_SVCOMP=On`" (§8.4, §11.6, and the §13.3 item-8
+gating note) is obsolete — the SV-COMP-mode OM behaviour is now selected per-run with the `--sv-comp`
+flag on a stock binary, no dedicated build required. Those historical pass sections are left intact as
+the record of how the run was done at the time; the corrected instruction is: **reproduce
+`--sv-comp`-gated OM behaviour by passing `--sv-comp` at run time.** #5138 (§15.3 item 2) is the one
+open issue whose reproduction recipe this simplifies.
+
+### 15.3 Pass-11 running report
+
+**Analysed.** #5565 (now CLOSED — #5650 + Pass-9 `getopt_long`) reconciled against current GitHub
+state; the #5530 `ESBMC_SVCOMP`→`--sv-comp` migration and its effect on every "`ESBMC_SVCOMP`-build"
+reproduction recipe in this document. Open SV-COMP label re-enumerated: **no issue filed since Pass 9**
+(newest open items #5396–#5398 predate Pass 8).
+
+**PRs opened.** None code — the two reconciled items (#5650, #5530) merged independently before this
+pass; every still-open backlog item is the research-grade / host-blocked / in-flight class of §13. This
+pass is the recurring triage-doc update (established cadence: Pass 4 → #5234, Pass 6 → #5389, Pass 7 →
+#5405, Pass 8 → doc-only, Pass 10 → #5728).
+
+**Duplicated work avoided.** #5565 not re-fixed — CLOSED by #5650 (`fclose`) + the Pass-9 `getopt_long`
+OM (`strcmp`). No re-proposal of a compile-time SV-COMP build — retired by #5530.
+
+**Remaining work (priority order, updated 2026-07-01).** Item 8 (#5565 residual) is dropped — closed.
+The rest is unchanged from §13.3, with #5138's recipe simplified to the runtime `--sv-comp` flag:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency: the general mechanism
+   is RCA-closed as **#5369** (fresh, non-deduplicated pointer identity minted per read through an
+   unresolvable/byte-reconstructed pointer, in `make_failed_symbol` and `convert_typecast_to_ptr`); a
+   sound fix must tie the minted identity across reads of the same location. Precision, not soundness.
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation of
+   "reachable"); #5564 advanced the live-stack-reachability half. **#5138 now reproduces with a stock
+   binary under `--sv-comp`** (no `-DESBMC_SVCOMP=On` build — see §15.2).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies; overlaps open PR #4919.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (x86 host repro blocker).
+6. **#5142** — no-overflow precision layer only; the parse-blocker layer is settled (§14: `--sv-comp`
+   is the intended, sole gate for `-Wno-int-conversion`; PR #5660 rejected).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+### 15.4 Next-task scouting — #5145 / #5393 / #5394 (aws-hash) is research-grade, no loop-scoped fix
+
+Scouted the top remaining-work item to confirm whether a sound localized fix is available before the
+next coding pass commits to it. **Conclusion: not loop-scoped — the tractable half is already shipped
+and the open half is research-grade.** Evidence:
+
+* **RCA #5369 (CLOSED)** localises the mechanism precisely: a read through an *unresolvable* /
+  byte-reconstructed pointer mints fresh `(object, offset)` identity at each layer
+  (`make_failed_symbol` in `src/pointer-analysis/dereference.cpp`; `convert_typecast_to_ptr` in
+  `src/solvers/smt/smt_casts.cpp`), so two reads of the same location with no intervening write can
+  compare unequal — a spurious "location changed without a write" counterexample. **Precision, not
+  soundness** (over-approximation → false alarm; ground truth `true`).
+* **The k=1 base case is solved and validated:** congruence on the int→ptr reconstruction plus a
+  location-keyed failed-symbol cache passes the full 148-test pointer/dereference/memory suite and the
+  `github_2153{,_2..5}` soundness guards (RCA §"What has been validated").
+* **The open half is k≥2**, where the dereference-result expressions are structurally identical across
+  reads yet fail to deduplicate at the SMT layer. The RCA lists **two unresolved hypotheses** — (a)
+  `convert_ast` cache eviction across push/pop, (b) post-dereference SSA re-versioning of a shared
+  symbol — and states that separating them "needs SSA-trace / solver-internal correlation." That is a
+  multi-session solver-internals investigation, not a localized OM/frontend patch.
+* **Guard rails.** The one already-tried shortcut — forcing the reconstructed value non-zero — was
+  **refuted as unsound** and closed (PR #5283); any fix must stay gated on the `github_2153` guards,
+  which *rely* on a byte-reconstructed pointer being free to alias a valid object (PR #3924). This is a
+  soundness tripwire, so a speculative dedup change is high-risk.
+* **Host.** The aws-hash harnesses are x86 SV-COMP benchmarks; this repo's own note (§13 host banner)
+  records SV-COMP repro was done on x86_64 Linux — the k≥2 divergence is not reproducible in isolation
+  on the aarch64/macOS host available to this pass, so even a candidate fix could not be validated here.
+
+**Disposition.** #5145/#5393/#5394 stays item 1, flagged **research-grade (k≥2 SMT re-versioning)** —
+the same "reproduced, sound over-approximation, no localized fix" class as the LDV-environment cluster.
+The next loop-scoped candidate to scout is item 8 (witness end-to-end validation / close-outs), pending
+a witness-validator tool in the environment.
