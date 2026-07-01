@@ -3415,6 +3415,71 @@ case all stand; the §5 priority order stands.
 
 ---
 
+## 72. 2026-06-30 re-validation (sixty-second sweep) & arithmetic key in sorted/min/max
+
+Re-test against current `master` (tip `efc3a92b5f`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the §56b/§57b priority follow-up: `sorted`/`sort`/`min`/`max` with an *arithmetic*
+or function `key` silently sorted by natural order — a **soundness** hole (false verdicts), the
+highest-value class.
+
+### 72a. New isolated, soundly-fixable defect found & fixed
+**An arithmetic/identity `key=` was silently dropped, so `sorted`/`list.sort`/`min`/`max` returned
+the wrong order and could verify *false* assertions as `SUCCESSFUL` (PR #5715).**
+
+`sorted([1, 2, 3], key=lambda v: -v)` returned `[1, 2, 3]` instead of `[3, 2, 1]`, so
+`assert sorted([1, 2, 3], key=lambda v: -v) == [1, 2, 3]` verified **SUCCESSFUL** (CPython:
+`[3, 2, 1]`). The same drop affected `a.sort(key=lambda v: -v)` (which the preprocessor rewrites to
+`a = sorted(a, key=...)`), `max([1, -5, 3], key=lambda v: -v)`, `min(..., key=lambda v: v * v)`, and
+`sorted([...], key=len)` over a list of *strings*. Only `lambda x: x[K]` (subscript over tuples) and
+the bare `abs`/`len` builtins were constant-folded; every other key form fell through to a dispatch
+that drops `key=`.
+
+**Root cause** (`src/python-frontend/preprocessor/generator_mixin.py`). `_lower_sorted_with_key_call`
+only matched a single subscript-over-tuple key shape, and `_eval_min_max_key_values` only matched
+that shape plus the `abs`/`len` builtin names. Any other key returned None → the lowerer returned
+None → the regular dispatch dropped the key (the in-code note "which today drops the key= keyword").
+The dropped result is in natural order, which can satisfy an incorrect assertion.
+
+**Fix**: replace the two narrow matchers with one shared recursive evaluator, `_eval_const_key_value`
+/ `_eval_key_body` (and rename the per-element helper to `_eval_const_key_values`), that constant-
+folds any key built from the parameter, numeric constants, unary `+`/`-`, binary arithmetic
+(`+ - * % // / **`), a constant subscript `p[K]`, and the `abs`/`len` builtins, over a constant list
+literal. The key is evaluated at preprocess time using CPython semantics and the **original element
+nodes are reordered** (a stable sort, first-occurrence tie-break) — the elements themselves are
+untouched, so their runtime values are unchanged and the computed ordering matches CPython
+bit-for-bit, independent of ESBMC's integer width (the key is never encoded as SMT). Both `sorted`
+and `min`/`max` now share this evaluator; the now-redundant `_extract_min_max_key_index` helper was
+removed (a net de-duplication). Non-constant/symbolic iterables keep the pre-existing behaviour (key
+still dropped — out of scope for this constant-fold sweep), so no new over-abort is introduced and
+the maintainers' "don't reject unreachable branches" decision in `function_call/builtins.cpp` is
+respected.
+
+**Crash guard (code-review catch).** The generalization made identity/arithmetic keys foldable over
+*any* constant list, so a heterogeneous list (`sorted([1, "a"], key=lambda v: v)`) would compare
+mixed `str`/`int` keys and raise an uncaught `TypeError` in the preprocessor — a crash the old narrow
+matcher never reached (it folded only subscript/abs/len, which can't mix types). The comparison sites
+(`sorted(...)` and `_select_min_max_index`) now bail on `TypeError` to the existing fallback, which
+emits the same clean `ERROR: Type mismatch in sorted()/min() call` a keyless `sorted([1, "a"])`
+already produces. No preprocessor crash.
+
+This is a **wrong-value/soundness fix** (and a feature extension: `sorted(key=abs)` now folds too).
+New regression tests (all CORE): `sorted_min_max_arith_key` is the liveness witness, covering
+arithmetic/unary/identity/`%`/`len`/subscript keys across `sorted`, `list.sort`, `min`, and `max`,
+plus the previously-supported `abs`/`len`/subscript forms; `sorted_min_max_arith_key_fail` pins the
+previously-false-SUCCESSFUL assertion (`sorted([1,2,3], key=lambda v:-v) == [1,2,3]`), now correctly
+FAILED; `sorted_mixed_key_fail` pins the graceful mixed-type diagnostic (no crash). Verified
+bit-for-bit against CPython; CPython sanity passes (`scripts/check_python_tests.sh sorted_m`); a
+focused `sort`/`lambda`/`min_max`/`list`/`tuple` ctest subset shows zero non-environmental regression
+(the only failures are the pre-existing `--z3`/`--ir`/`--boolector` tests on this Bitwuzla-only
+build). Solver-agnostic (a frontend constant fold, no SMT encoding).
+
+Residuals left out of scope (pre-existing, narrowed but not closed by this fold): a `key=` over a
+*symbolic* (non-literal) iterable, or a non-foldable key shape (a `Compare`, a user function, an
+unsupported operator like `~`/`&`, or a key that legitimately evaluates to `None`), is still dropped
+to a natural-order sort — applying a key to a symbolic sequence, or rejecting an unfoldable key over
+a known-constant list, are separate changes on the §5 roadmap.
+
+### 72b. Everything else: unchanged disposition
 ## 74. 2026-06-30 re-validation (sixty-fourth sweep) & str.isascii/isdecimal/isprintable
 
 Re-test against current `master` (tip `efc3a92b5f`). KNOWNBUG classification unchanged — §3 holds.

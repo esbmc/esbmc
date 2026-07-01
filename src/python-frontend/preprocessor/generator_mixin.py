@@ -67,18 +67,6 @@ class GeneratorMixin:
                 return [assign] + body_copy
             return self.generic_visit(node)
 
-    @staticmethod
-    def _extract_min_max_key_index(key_lambda):
-        if len(key_lambda.args.args) != 1:
-            return None
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
-                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
-                and isinstance(body.slice.value, int) and body.slice.value >= 0):
-            return None
-        return body.slice.value
-
     def _resolve_list_literal_iterable(self, iterable_expr):
         if isinstance(iterable_expr, ast.List):
             return iterable_expr
@@ -906,57 +894,47 @@ class GeneratorMixin:
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
 
-    def _lower_sorted_with_key_call(self, call_node):  # pylint: disable=too-many-branches
-        """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
+    def _lower_sorted_with_key_call(self, call_node):
+        """Lower ``sorted(iterable, key=...)`` for constant list-literal iterables.
+
+        Supports any constant-foldable ``key=`` (see ``_eval_const_key_value``):
+        identity ``lambda x: x``, unary ``-x``/``+x``, binary arithmetic over the
+        parameter and constants, a constant subscript ``lambda x: x[K]`` over a
+        tuple element, and the ``abs``/``len`` builtins. The key is evaluated at
+        preprocess time on each constant element and the original element nodes
+        are reordered accordingly (a stable sort, matching CPython); the elements
+        themselves are preserved, so their runtime values are unchanged. Returns
+        ``(prefix, expr)`` on success, or None when the iterable or key is not
+        constant-foldable (the caller then leaves ``key=`` unapplied, as before).
+        """
         if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
                 and call_node.func.id == "sorted" and len(call_node.args) == 1):
             return None
 
         key_kw = None
         for kw in call_node.keywords:
-            if kw.arg == "key":
-                if key_kw is not None:
-                    return None
+            if kw.arg == "key" and key_kw is None:
                 key_kw = kw
             else:
                 return None
-
-        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+        if key_kw is None:
             return None
 
-        key_lambda = key_kw.value
-        if len(key_lambda.args.args) != 1:
-            return None
-
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
-                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
-                and isinstance(body.slice.value, int) and body.slice.value >= 0):
-            return None
-
-        key_index = body.slice.value
-        iterable_expr = call_node.args[0]
-
-        iterable_literal = None
-        if isinstance(iterable_expr, ast.List):
-            iterable_literal = iterable_expr
-        elif isinstance(iterable_expr, ast.Name):
-            iterable_literal = self.list_literal_values.get(iterable_expr.id)
-
+        iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
         if iterable_literal is None:
             return None
 
-        key_values = []
-        for elt in iterable_literal.elts:
-            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                return None
-            key_node = elt.elts[key_index]
-            if not isinstance(key_node, ast.Constant):
-                return None
-            key_values.append(key_node.value)
+        key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
+        if key_values is None:
+            return None
 
-        order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+        try:
+            order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+        except TypeError:
+            # Mutually incomparable key values (e.g. mixed str/int) — CPython
+            # raises at runtime; bail to the existing key-drop fallback rather
+            # than crashing the preprocessor.
+            return None
         folded_sorted = ast.List(
             elts=[copy.deepcopy(iterable_literal.elts[i]) for i in order],
             ctx=ast.Load(),
@@ -1006,55 +984,133 @@ class GeneratorMixin:
             # so the empty case (default= or ValueError) is handled uniformly.
             return None
 
-        key_values = self._eval_min_max_key_values(key_kw.value, iterable_literal.elts)
+        key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
         if key_values is None:
             return None
 
         is_min = call_node.func.id == "min"
         # Pick the index whose key is the minimum / maximum, breaking ties
         # toward the first occurrence (matches CPython semantics).
-        best_idx = self._select_min_max_index(key_values, is_min)
+        try:
+            best_idx = self._select_min_max_index(key_values, is_min)
+        except TypeError:
+            # Mutually incomparable key values — bail to the regular dispatch
+            # rather than crashing the preprocessor.
+            return None
 
         result = copy.deepcopy(iterable_literal.elts[best_idx])
         self.ensure_all_locations(result, call_node)
         ast.fix_missing_locations(result)
         return [], result
 
-    def _eval_min_max_key_values(self, key_node, elts):
+    def _eval_const_key_values(self, key_node, elts):
         """Return the list of constant key values for `key=` applied to each
         element, or None when the key form or elements are not constant-
-        foldable. Supports ``lambda x: x[K]`` over tuple literals and the
-        ``abs``/``len`` builtins over constant scalar/string elements."""
-        if isinstance(key_node, ast.Lambda):
-            key_index = self._extract_min_max_key_index(key_node)
-            if key_index is None:
+        foldable. See ``_eval_const_key_value`` for the supported key forms."""
+        values = []
+        for elt in elts:
+            value = self._eval_const_key_value(key_node, elt)
+            if value is None:
                 return None
-            values = []
-            for elt in elts:
-                if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                    return None
-                kn = elt.elts[key_index]
-                if not isinstance(kn, ast.Constant):
-                    return None
-                values.append(kn.value)
-            return values
+            values.append(value)
+        return values
 
-        # Matched by name: assumes abs/len are the builtins (ESBMC does not
-        # model user code shadowing them, consistent with the rest of the
-        # frontend).
+    def _eval_const_key_value(self, key_node, element):
+        """Evaluate a constant-foldable ``key=`` argument over one constant list
+        element, returning the key's Python value or None when not foldable.
+
+        ``element`` is the element's AST node (a constant scalar, a unary +/-
+        over one, or a tuple of such constants). ``key_node`` is either a
+        one-parameter ``lambda`` whose body is built from the parameter, numeric
+        constants, unary +/-, binary arithmetic, a constant subscript ``p[K]``,
+        and the ``abs``/``len`` builtins; or the bare ``abs``/``len`` builtin
+        name. None means "leave the key unapplied" (the caller's existing
+        fallback), so a value of None is never treated as a foldable key."""
+        if isinstance(key_node, ast.Lambda):
+            if len(key_node.args.args) != 1:
+                return None
+            return self._eval_key_body(key_node.body, key_node.args.args[0].arg, element)
+        # Matched by name: assumes abs/len are the builtins (ESBMC does not model
+        # user code shadowing them, consistent with the rest of the frontend).
         if isinstance(key_node, ast.Name) and key_node.id in ("abs", "len"):
-            fn = abs if key_node.id == "abs" else len
-            values = []
-            for elt in elts:
-                value = self._const_scalar_value(elt)
-                if value is None:
-                    return None
-                try:
-                    values.append(fn(value))
-                except TypeError:
-                    return None
-            return values
+            return self._apply_builtin(key_node.id, self._const_scalar_value(element))
+        return None
 
+    def _eval_key_body(self, node, param, element):
+        """Evaluate a lambda key body for the parameter bound to ``element``."""
+        if isinstance(node, ast.Name):
+            return self._const_scalar_value(element) if node.id == param else None
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.UnaryOp):
+            value = self._eval_key_body(node.operand, param, element)
+            if value is None:
+                return None
+            try:
+                if isinstance(node.op, ast.USub):
+                    return -value
+                if isinstance(node.op, ast.UAdd):
+                    return +value
+            except TypeError:
+                return None
+            return None
+        if isinstance(node, ast.BinOp):
+            left = self._eval_key_body(node.left, param, element)
+            right = self._eval_key_body(node.right, param, element)
+            if left is None or right is None:
+                return None
+            return self._apply_arith(node.op, left, right)
+        index = self._param_subscript_index(node, param)
+        if index is not None:
+            if not (isinstance(element, ast.Tuple) and index < len(element.elts)):
+                return None
+            return self._const_scalar_value(element.elts[index])
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
+            return self._apply_builtin(node.func.id,
+                                       self._eval_key_body(node.args[0], param, element))
+        return None
+
+    @staticmethod
+    def _param_subscript_index(node, param):
+        """Return the constant non-negative index of ``param[K]``, or None when
+        ``node`` is not a constant subscript on the lambda parameter ``param``."""
+        if not (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                and node.value.id == param):
+            return None
+        if not (isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)
+                and node.slice.value >= 0):
+            return None
+        return node.slice.value
+
+    @staticmethod
+    def _apply_builtin(name, value):
+        if value is None:
+            return None
+        try:
+            return abs(value) if name == "abs" else len(value)
+        except TypeError:
+            return None
+
+    @staticmethod
+    def _apply_arith(op, left, right):
+        try:
+            if isinstance(op, ast.Add):
+                return left + right
+            if isinstance(op, ast.Sub):
+                return left - right
+            if isinstance(op, ast.Mult):
+                return left * right
+            if isinstance(op, ast.Mod):
+                return left % right
+            if isinstance(op, ast.FloorDiv):
+                return left // right
+            if isinstance(op, ast.Div):
+                return left / right
+            if isinstance(op, ast.Pow):
+                return left**right
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
         return None
 
     @staticmethod
