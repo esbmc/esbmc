@@ -5,6 +5,8 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/python_expr_builder.h>
+#include <util/c_typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -23,6 +25,22 @@
 namespace
 {
 const BigInt kMaxConstantFoldExponent = 1024;
+
+// Build the sign test `value < 0` in IREP2 (V.1k keystone, W). `value` and the
+// zero literal can have mismatched bit-widths (the operand may be narrower than
+// the division result type), so reconcile them with the same
+// c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies --
+// a byte-identical, idempotent transform -- before building lessthan2t.
+exprt build_sign_test(
+  const namespacet &ns,
+  const exprt &value,
+  const exprt &zero)
+{
+  exprt op0 = value;
+  exprt op1 = zero;
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+  return python_expr::build_less_than(op0, op1);
+}
 
 // V.3: build an IREP2 expression-context call `func(args...)` returning
 // `return_type` (side_effect_function_call2tc + symbol_expr2tc), back-migrated
@@ -670,13 +688,10 @@ exprt python_math::handle_floor_division(
   exprt remainder("mod", div_type);
   remainder.copy_to_operands(lhs, rhs);
 
-  // Get num signal
-  exprt is_num_neg("<", bool_type());
-  is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
-
-  // Get den signal
-  exprt is_den_neg("<", bool_type());
-  is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
+  // Get num/den signals (built in IREP2, see build_sign_test).
+  namespacet ns(symbol_table);
+  exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(div_type));
+  exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(div_type));
 
   // remainder != 0
   exprt pos_remainder("notequal", bool_type());
@@ -731,11 +746,9 @@ exprt python_math::handle_int_modulo(
 
   // Symbolic: corrected = rem + (rhs if (rem != 0 and signs_differ) else 0),
   // where rem is the C remainder already in bin_expr.
-  exprt is_num_neg("<", bool_type());
-  is_num_neg.copy_to_operands(lhs, gen_zero(mod_type));
-
-  exprt is_den_neg("<", bool_type());
-  is_den_neg.copy_to_operands(rhs, gen_zero(mod_type));
+  namespacet ns(symbol_table);
+  exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(mod_type));
+  exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(mod_type));
 
   exprt rem_nonzero("notequal", bool_type());
   rem_nonzero.copy_to_operands(bin_expr, gen_zero(mod_type));
