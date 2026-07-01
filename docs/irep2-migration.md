@@ -3806,6 +3806,72 @@ allows; everything remaining is the V.1k keystone and what it unblocks. The
 deeper W1 body round-trip (V.4) is the one piece retained by design — it is a
 shared goto-convert concern, not part of the Python 100 % target.
 
+#### V.1k keystone task 1 — landed (2026-07-01), residue narrower than framed
+
+Commit `cc5012235b` (PR #5710) implemented the ordered task-1 sites above by
+migrating each blocked construction directly at its call site (`sub2tc`/
+`build_less_than`/`equality2tc`/`not2tc`/`build_dereference`, each
+width-reconciled with `c_implicit_typecast_arithmetic` where needed) rather
+than standing up the separate whole-body IREP2-native adjuster the task
+originally scoped. Two findings from that work, folded into the plan:
+
+- **F-P11 is milder than framed for plain-comparison sites.** Several
+  "deferred-resolution operand" sites (`isinstance(x, type(None))`,
+  `BoolOp`-`or` short-circuit `not`, tuple-pointer subscript deref) resolve
+  cleanly in-converter without the whole-body adjuster; the wall applies to
+  *building new IREP2 nodes over unresolved custom Python predicates*
+  (`isinstance`/`isnone`), not to member/index operand resolution generally.
+- **A genuine, narrower retain boundary:** some "D-class" sites build
+  **custom Python nodes** (`isinstance2t`/`isnone2t`) that `migrate_expr`
+  cannot lower from a legacy source — not migratable without a
+  `migrate_expr` extension, out of scope for this task.
+
+**Follow-up (2026-07-01, same day):** the remaining documented residue —
+`python_math.cpp`'s floor-division/modulo sign-correction trees (`mod`, the
+bool `xor`/`and` from #4548, and the mismatched-branch `if`) — was migrated on
+branch `feat/v3-python-math-mod-xor-if-irep2`. Three builders added to the
+shared `python_expr_builder` module (`build_mod`/`build_and`/`build_xor`,
+mirroring the existing `build_sub`/`build_or` pattern); the width-hazard
+reconciliation already proven for `build_sign_test` (`c_implicit_typecast_
+arithmetic` against the result type) is reused via an extracted
+`reconcile_operand` helper, including for the `if`-branch that used to defeat
+migration (IREP2 `if2t`'s result type follows the *then*-branch, unlike the
+legacy `if_exprt`'s explicit type, so the branch needs reconciling to the
+result type first).
+
+**Bug found and fixed during review, same commit.** Both the `esbmc-verifier`
+and `code-reviewer` passes independently caught a real width-reconciliation
+defect in the first cut of `reconcile_operand`: `c_implicit_typecast_
+arithmetic` buckets operands into coarse C ranks with a **minimum promotion of
+`int`** (`src/util/c_typecast.cpp`), so it does not preserve a sub-`int` target
+width — a numpy `int8`/`uint8`/`int16`/`uint16` dtype (which, unlike a plain C
+integer, keeps its declared width across `%`/`//`) got silently promoted to
+32-bit while the reused `zero`/`if`-branch peer stayed at the original width.
+`esbmc-verifier` reproduced it concretely: `a = np.add(7, 0, dtype=np.int8);
+b = np.add(3, 0, dtype=np.int8); a % b` aborted an asserts-on (`DebugOpt`)
+build on `assert_arith_2ops_consistency` (`irep2_expr.cpp:670`); confirmed via
+A/B (`git stash`/rebuild) that the pre-patch legacy path does not hit this
+(clang_cpp_adjust promotes type *and* operands together downstream, not at
+construction time) — a genuine regression, not pre-existing. Fix:
+`reconcile_operand` now force-narrows/widens the promoted result back to the
+exact `target_type` via `python_expr::build_typecast`, skipping the typecast
+when already equal (keeps the common already-matching-width case a
+byte-identical no-op — confirmed via `--goto-functions-only` diff against a
+stashed pre-patch rebuild for the mainline `divmod_sign_correction` case).
+Regression tests added: `regression/numpy/int8_mod_floordiv{,_fail}`
+(the exact reproducer, both `%` and `//`, positive and negative dividend).
+
+Validated (post-fix): DebugOpt (asserts-on) build shows no
+`assert_arith_2ops_consistency`/`if2t` width-assert violations, including on
+the narrow-dtype reproducers that crashed the first cut; 44
+floor-div/divmod/modulo + 146 set/math/arith + 2 new narrow-dtype +
+**415/415 full `regression/numpy`** tests green (one pre-existing, unrelated
+flaky timeout in `set_variadic_methods_fail`); 32 migrate unit tests green;
+clang-format clean. This drains every node the parent commit's "Out of scope" list named
+except the numpy complex int→double site (`numpy_call_expr.cpp`, ieee +
+rounding mode) and the `isinstance`/`isnone` custom-node retain boundary
+above.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
