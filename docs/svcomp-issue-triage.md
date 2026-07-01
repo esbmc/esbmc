@@ -1,17 +1,22 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-07-01 (**Pass 15 (§19)** ran on the first available **x86_64 Linux** host and
-cleared the environment wall Pass 14 hit: **#4427** got the x86 CI cross-check Pass 13 asked for — ~36
-CPU-minutes across two k-steps, no unsound TRUE, **recommend closing**; **#4432** reached 2733 thread
-interleavings (7.4× Pass 14's aarch64 depth) with no violation, downgraded from "host-gated" to
-"not reproducible within a generous local budget"; **#4438** needs no new triage — open PR #4480 already
-fixes it and just needs a rebase + merge; **#5142**'s no-overflow layer is confirmed reproducible on x86
-once `--sv-comp` is added (the deliberate `-Wno-int-conversion` gate from Pass 10), landing on a sibling
-shift site to the one filed. Pass 12 consolidated two parallel Pass-11 PRs that both appended a `## 15`
-section: **#5730** (witness-closure reconciliation) stays **§15**; **#5735** (#5565 closed by #5650;
-`--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**. Canonical
-remaining-work list is now §19.5. See §16/§17/§18/§19. Pass 11 in §15, Pass 10 in §14, Pass 9 in §13,
-Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (**Pass 16 (§20)** followed up on the x86_64 host with the aws-hash
+byte-addressed pointer-read-consistency cluster: **#5145** reproduces the same `Bug found (k = 1)`
+verdict Pass 6 recorded on aarch64/macOS, now confirmed unchanged on native x86 against current master;
+**#5393**/**#5394** get their **first genuine local reproduction** (Pass 7 only presumed cluster
+membership without running them) and exactly match their reported `k = 129` depth. Disposition unchanged
+— RCA #5369's open half needs multi-session SSA-trace/solver-internal correlation, too high-risk for a
+speculative fix (the one prior shortcut was refuted as unsound, PR #5283); no PR/code this pass, value
+is closing the reproducibility gap for the next session. **Pass 15 (§19)** ran on the first available
+x86_64 Linux host and cleared the environment wall Pass 14 hit: **#4427** got the x86 CI cross-check
+Pass 13 asked for — no unsound TRUE, **recommend closing**; **#4432** reached 2733 thread interleavings
+with no violation, downgraded from "host-gated" to "not reproducible within a generous local budget";
+**#4438** needs no new triage — open PR #4480 just needs a rebase + merge; **#5142**'s no-overflow layer
+reproduces on x86 once `--sv-comp` is added. Pass 12 consolidated two parallel Pass-11 PRs that both
+appended a `## 15` section: **#5730** (witness-closure reconciliation) stays **§15**; **#5735** (#5565
+closed by #5650; `--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**.
+Canonical remaining-work list is now §20.4. See §16/§17/§18/§19/§20. Pass 11 in §15, Pass 10 in §14,
+Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1786,6 +1791,94 @@ re-implemented — #4480 already provides a sound, tested fix awaiting merge.
    reproduction budget now exhausted on the correct host, see §19.2).
 7. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
    confirmed-reproducible on x86, see §19.4).
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker,
+   already RCA'd in Pass 8, no localized fix.
+9. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator (CPAchecker/Ultimate),
+   absent in this environment.
+
+---
+
+## 20. Pass 16 — aws-hash cluster (#5145/#5393/#5394) reproduced natively on x86 for the first time (2026-07-01)
+
+Pass 15's PR (#5744) was still open (unmerged) when this pass started, so this branch cherry-picks its
+one commit the same way Pass 15 cherry-picked Pass 14's — dropped automatically by `git rebase` once
+#5744 merges. Priorities 1–3 from the standing loop brief (#4427, #4432, #4438/CIL-LDV) are already
+closed out by Pass 15; this pass follows §19.5's own "remaining work" list to its top item instead of
+re-running finished work: the **aws-hash byte-addressed pointer-read-consistency cluster**
+(#5145/#5393/#5394). §16.4 explicitly flagged this cluster's reproduction as **also host-gated** — "the
+k≥2 divergence is not reproducible in isolation on the aarch64/macOS host available to this pass" — so,
+like #4427/#4432/#5142 before it, native x86 closes a reproducibility gap even though the underlying fix
+stays out of scope (see disposition below).
+
+### 20.1 #5145 — unchanged verdict on x86, confirms no regression across ~10 merged passes
+
+Fetched `aws_hash_table_create_harness.i` and ran the issue's exact k-induction command. Result:
+`VERIFICATION FAILED` / **`Bug found (k = 1)`** — byte-for-byte the same verdict Pass 6 (§10.2) recorded
+on an aarch64/macOS host against master `74da7c0400`, now reproduced on native x86_64 against current
+master (`888efe3f56`, ~15 passes and several merged fixes later, including #4484's fn-ptr guard and the
+#5364/#5382 UF modelling). **No regression, no change** — the residual is still Bug B from §10.2's RCA
+(havoc'd-slot pointer-read-consistency), not a new failure mode. Note this benchmark fails already at
+`k = 1`, not `k ≥ 2` — the "k = 1 fixed, k ≥ 2 open" split in RCA #5369 describes the *general
+mechanism's* minimal toy reproducer (`a == b` after two reads), not this specific compound-multi-layer
+harness, which §10.2 already classified as a "known memory-model limitation" broader than the general
+fix covers.
+
+### 20.2 #5393 / #5394 — first genuine reproduction (Pass 7 only presumed the cluster membership)
+
+Pass 7 (§11.3) filed these as "siblings... share the same byte-addressed... modelling" without a local
+run — that host's own limitation (§11.4 shows Pass 7 predated the x86 unlock in Pass 8). This pass ran
+both exact reproducers natively:
+
+* **#5393** (`aws_hash_table_init_bounded_harness.i`): `VERIFICATION FAILED` / **`Bug found (k = 129)`**
+  in 250 s (each unwind iteration ~0.7–0.9 s — this harness's `k` counts cheap loop-unwind iterations of
+  a `--goto-unwind --unlimited-goto-unwind` scan, not restarted k-induction rounds, so depth 129 is fast
+  here unlike #4427's per-k-step symex cost).
+* **#5394** (`aws_hash_table_init_unbounded_harness.i`): `VERIFICATION FAILED` / **`Bug found (k = 129)`**
+  in 2m50s.
+* Both **exactly match** the depth (`k = 129`) each issue's own SV-COMP CI log reports. This upgrades
+  Pass 7's presumption from "same cluster by inspection" to an **empirically confirmed** identical
+  false-alarm mechanism on the correct host architecture.
+
+### 20.3 Disposition — unchanged: research-grade, no session-scoped fix attempted
+
+All three benchmarks are now x86-confirmed, but the fix itself remains out of scope for a triage pass,
+per RCA #5369's own risk assessment: the open k≥2 divergence needs "SSA-trace / solver-internal
+correlation" to distinguish `convert_ast` cache eviction from post-dereference SSA re-versioning — a
+multi-session solver-internals investigation, not a localized patch — and the one shortcut previously
+tried (forcing the reconstructed value non-zero) was refuted as **unsound** and closed (PR #5283). Per
+the correctness-first mandate, this pass does not attempt a speculative fix under that risk profile.
+**No PR, no code change** — the value delivered is closing the reproducibility gap (§16.4's stated
+blocker) so a future session attempting the SSA-trace correlation work can validate on the correct host
+from the outset, and does not need to re-derive that these three verdicts are unchanged.
+
+### 20.4 Pass-16 running report
+
+**Analysed.** #5145 (re-run, unchanged verdict, host gap closed), #5393/#5394 (first genuine x86
+reproduction, exact depth match to CI reports).
+
+**PRs opened.** One doc PR (this entry), branched from `master` with Pass 15's still-unmerged commit
+cherry-picked on top (auto-drops via `git rebase` once #5744 merges, same pattern as Pass 15).
+
+**Duplicated work avoided.** No fix attempted for the aws-hash cluster — RCA #5369 already rules out a
+low-risk localized patch; re-attempting the refuted non-zero-forcing shortcut (PR #5283) was not
+considered. #5393/#5394 not further decomposed — same root cause as #5145, no separate PR per Pass 7's
+original folding decision (§11.3), now empirically justified rather than presumed.
+
+**Remaining work (priority order, updated 2026-07-01).**
+1. Close out: **#4427** (Pass 15 x86 cross-check) and **#4480→#4438** (rebase + merge, not new code) —
+   both pending maintainer action, not further loop work.
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation,
+   PR #4919 in flight).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (research-grade; local
+   reproduction budget exhausted on the correct host, see §19.2).
+6. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
+   confirmed-reproducible on x86, see §19.4).
+7. **#5145 / #5393 / #5394** — aws-hash SSA-trace/solver-internal correlation (research-grade,
+   multi-session; now fully x86-confirmed, see §20.3). Demoted from position 2 — reproduction work here
+   is exhausted; what remains is a design-level solver-internals investigation, not a bounded triage
+   task.
 8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker,
    already RCA'd in Pass 8, no localized fix.
 9. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator (CPAchecker/Ultimate),
