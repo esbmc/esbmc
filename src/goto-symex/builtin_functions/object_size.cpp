@@ -182,22 +182,40 @@ void goto_symext::intrinsic_get_object_size(
   // or the resolved object is not an array, that count is undefined: reading
   // internal_deref_items.front() on an empty container is UB (SIGSEGV in
   // release) and to_array_type() on a non-array trips an assertion. The Python
-  // set/graph operational models can route such a pointer here (issues #4782,
-  // #4804, #4805). Emit a clean diagnostic instead of crashing. The array path
-  // below is byte-for-byte unchanged, so C/C++ callers — which always pass an
-  // array object — are unaffected.
+  // set/graph/bytes operational models can route such a pointer here (issues
+  // #4782, #4804, #4805, #5658) — e.g. a `bytes` function parameter has no
+  // compile-time array bound, so it decays to a plain pointer with nothing for
+  // internal_deref_items to resolve. Rather than aborting, model the count as
+  // an unconstrained non-negative nondet value: any concrete length the caller
+  // could have passed is covered by some assignment, matching how symex
+  // already treats other unresolvable-but-legal sizes (e.g. asprintf's
+  // unbounded %s, io.cpp). The array path below is byte-for-byte unchanged, so
+  // C/C++ callers — which always pass an array object — are unaffected.
+  expr2tc obj_size;
+
   if (
     internal_deref_items.empty() ||
     !is_array_type(internal_deref_items.front().object->type))
   {
-    log_error(
-      "__ESBMC_get_object_size: cannot determine the size of a non-array "
-      "object");
-    abort();
-  }
+    log_debug(
+      "goto-symex",
+      "__ESBMC_get_object_size: object is not a resolvable array; "
+      "modelling its size as an unconstrained nondet value");
 
-  const type2tc &obj_type = internal_deref_items.front().object->type;
-  expr2tc obj_size = to_array_type(obj_type).array_size;
+    obj_size = sideeffect2tc(
+      size_type2(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::allockind::nondet);
+    replace_nondet(obj_size);
+  }
+  else
+  {
+    const type2tc &obj_type = internal_deref_items.front().object->type;
+    obj_size = to_array_type(obj_type).array_size;
+  }
 
   expr2tc ret_ref = func_call.ret;
   if (!is_nil_expr(ret_ref))
