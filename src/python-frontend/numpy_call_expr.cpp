@@ -4395,7 +4395,6 @@ exprt numpy_call_expr::get()
     if (
       shape_arg.value("_type", std::string()) == "Name" ||
       shape_arg.value("_type", std::string()) == "Call" ||
-      shape_arg.value("_type", std::string()) == "BinOp" ||
       shape_arg.value("_type", std::string()) == "BinOp")
     {
       try

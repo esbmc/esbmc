@@ -66,8 +66,8 @@ public:
   /**
    * @brief Build a runtime PyListObject filled with @p fill_value repeated
    * @p size times. @p size may be a symbolic expression; the resulting while-
-   * loop is bounded by the model checker's --unwind setting.
-   * @param element  AST node supplying source location.
+   * loop is bounded by the model checker's --unwind setting. A runtime guard
+   * rejects negative sizes with ValueError before the unsigned cast.
    * @param size     Expression giving the number of elements (often symbolic).
    * @param fill_value Element value pushed on each iteration.
    * @param elem_type  IRep2 type of @p fill_value, recorded in list_type_map.
@@ -85,9 +85,9 @@ public:
    * @p mask entry is True (NumPy fancy-indexing semantics). Both operands
    * must be fixed-size arrays (the numpy array model); a compile-time
    * length mismatch between @p array and @p mask is rejected explicitly.
-   * @param array  Source array expression (1-D or n-D; a row is pushed
-   *               whole when array is multi-dimensional).
-   * @param mask   Boolean array expression, same outer length as @p array.
+   * @param array  Source 1-D array expression; multi-dimensional sources are
+   *               rejected with TypeError at conversion time.
+   * @param mask   Boolean array expression, same length as @p array.
    * @param element The Subscript AST node, used for location info.
    */
   exprt build_bool_mask_index(
