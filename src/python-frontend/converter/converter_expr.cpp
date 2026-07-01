@@ -7,6 +7,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
@@ -1392,8 +1393,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       typet pointed = ns.follow(array_type.subtype());
       if (pointed.is_struct() && tuple_handler_->is_tuple_type(pointed))
       {
-        array = dereference_exprt(array, pointed);
-        array.type() = pointed;
+        // V.1k keystone (D): deref of the tuple pointer built in IREP2.
+        // build_dereference restores #cpp_type and falls back to legacy for
+        // dyn-array pointees, so it reproduces the legacy node exactly.
+        array = python_expr::build_dereference(array, pointed);
         array_type = pointed;
       }
     }

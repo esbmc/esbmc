@@ -120,7 +120,7 @@ For a multi-solver build see [Building with all solvers](#building-with-all-solv
 ### Install prerequisites
 
 ```sh
-brew install llvm@21 z3 boost cmake ninja python
+brew install llvm@21 z3 boost cmake ninja python bison
 ```
 
 > [!NOTE]

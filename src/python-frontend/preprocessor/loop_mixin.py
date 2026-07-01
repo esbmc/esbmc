@@ -506,10 +506,25 @@ class LoopMixin:
             if target_is_name:
                 rhs = ast.Name(id=temp_names[idx], ctx=ast.Load())
                 self.ensure_all_locations(rhs, node)
-                target_assign = ast.Assign(
-                    targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
-                    value=rhs,
-                )
+                # Annotate the binding with the element's class when known, so a
+                # user-class element keeps its type even if the body never
+                # touches its attributes. Without this, the loop variable falls
+                # back to Any (void*), and appending it to a list stores a
+                # zero type-id, so a later attribute access on a read-back
+                # element dereferences an invalid pointer (#4805).
+                elem_class = self._element_instance_class(elt)
+                if elem_class:
+                    target_assign = ast.AnnAssign(
+                        target=ast.Name(id=node.target.id, ctx=ast.Store()),
+                        annotation=ast.Name(id=elem_class, ctx=ast.Load()),
+                        value=rhs,
+                        simple=1,
+                    )
+                else:
+                    target_assign = ast.Assign(
+                        targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+                        value=rhs,
+                    )
             else:
                 # Tuple/list unpacking: keep the RHS as the original literal so
                 # the converter's tuple-unpacking path can still extract elts.

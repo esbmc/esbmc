@@ -493,12 +493,26 @@ class GeneratorMixin:
 
     @staticmethod
     def _is_recursive_call(func_name, body):
-        """Return True if any Call node in body has func.id == func_name."""
-        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
+        """Return True if any Call in *body* references func_name directly.
+
+        Skips nested FunctionDef/AsyncFunctionDef/Lambda bodies: a call to
+        func_name from inside a nested helper belongs to that helper's scope,
+        not the generator's, so it must not be treated as a recursive call
+        (otherwise an unrelated nested helper that happens to reference the
+        outer name triggers a false-positive recursive-generator transform).
+        """
+
+        def walk(node):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                return
             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                     and node.func.id == func_name):
-                return True
-        return False
+                yield node
+            for child in ast.iter_child_nodes(node):
+                yield from walk(child)
+
+        module = ast.Module(body=body, type_ignores=[])
+        return any(True for _ in walk(module))
 
     def _transform_recursive_generator(self, node):
         """Transform a recursive generator function to accumulate-and-return.

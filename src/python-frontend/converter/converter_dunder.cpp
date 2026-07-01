@@ -296,9 +296,11 @@ exprt python_converter::dispatch_unary_dunder_operator(
 
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},
+    {"UAdd", "__pos__"},
     {"abs", "__abs__"},
     {"complex", "__complex__"},
     {"float", "__float__"},
+    {"int", "__int__"},
     {"index", "__index__"},
     {"str", "__str__"},
   };

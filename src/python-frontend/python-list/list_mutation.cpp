@@ -1,5 +1,7 @@
 #include "python_list_internal.h"
 
+#include <util/c_typecast.h>
+
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -931,9 +933,16 @@ exprt python_list::build_extend_list_call(
     code_assignt idx_init(build_symbol(idx), gen_zero(size_type()));
     converter_.add_instruction(idx_init);
 
-    // Loop condition: idx < str_len
-    exprt loop_cond("<", bool_type());
-    loop_cond.copy_to_operands(build_symbol(idx), str_len);
+    // Loop condition: idx < str_len, built in IREP2 (V.1k keystone, W). idx
+    // (size_type) and str_len can have mismatched widths (str_len may be
+    // arr_size.type()-typed), so reconcile with the same
+    // c_implicit_typecast_arithmetic clang_cpp_adjust's adjust_expr_rel applies
+    // before building lessthan2t.
+    exprt idx_op = build_symbol(idx);
+    exprt len_op = str_len;
+    namespacet ns(converter_.symbol_table());
+    c_implicit_typecast_arithmetic(idx_op, len_op, ns);
+    exprt loop_cond = build_less_than(idx_op, len_op);
 
     code_blockt loop_body;
 

@@ -11,7 +11,9 @@
 #include <catch2/catch.hpp>
 
 #include <goto-programs/read_cbmc_goto_object.h>
+#include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_program.h>
 #include <util/context.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
@@ -128,6 +130,33 @@ TEST_CASE("parses a real CBMC v6 goto-binary", "[cbmc-reader]")
 }
 
 TEST_CASE(
+  "CBMC instruction types map to the matching ESBMC kind",
+  "[cbmc-reader]")
+{
+  // CBMC and ESBMC share the goto_program_instruction_typet numbering for every
+  // kind that survives into a finished straight-line/control-flow binary, so the
+  // adapter maps them by identity. Pin each one against the ESBMC enumerator so a
+  // future renumbering on either side is caught here rather than in symex.
+  REQUIRE(map_cbmc_instruction_type(0) == NO_INSTRUCTION_TYPE);
+  REQUIRE(map_cbmc_instruction_type(1) == GOTO);
+  REQUIRE(map_cbmc_instruction_type(2) == ASSUME);
+  REQUIRE(map_cbmc_instruction_type(3) == ASSERT);
+  REQUIRE(map_cbmc_instruction_type(4) == OTHER);
+  REQUIRE(map_cbmc_instruction_type(5) == SKIP);
+  REQUIRE(map_cbmc_instruction_type(8) == LOCATION);
+  REQUIRE(map_cbmc_instruction_type(9) == END_FUNCTION);
+  REQUIRE(map_cbmc_instruction_type(10) == ATOMIC_BEGIN);
+  REQUIRE(map_cbmc_instruction_type(11) == ATOMIC_END);
+  REQUIRE(map_cbmc_instruction_type(12) == RETURN);
+  REQUIRE(map_cbmc_instruction_type(13) == ASSIGN);
+  REQUIRE(map_cbmc_instruction_type(14) == DECL);
+  REQUIRE(map_cbmc_instruction_type(15) == DEAD);
+  REQUIRE(map_cbmc_instruction_type(16) == FUNCTION_CALL);
+  REQUIRE(map_cbmc_instruction_type(17) == THROW);
+  REQUIRE(map_cbmc_instruction_type(18) == CATCH);
+}
+
+TEST_CASE(
   "loads a CBMC binary into a symbol table and goto functions",
   "[cbmc-reader]")
 {
@@ -153,6 +182,15 @@ TEST_CASE(
   REQUIRE(
     goto_functions.function_map.find("__CPROVER__start") !=
     goto_functions.function_map.end());
+
+  // Every instruction in the loaded body carries an ESBMC instruction type that
+  // came through map_cbmc_instruction_type, and a well-formed function ends with
+  // END_FUNCTION. A raw, unmapped CBMC value would surface as an unknown kind.
+  const goto_programt &body = it->second.body;
+  REQUIRE_FALSE(body.instructions.empty());
+  for (const auto &ins : body.instructions)
+    REQUIRE(ins.type <= CATCH); // the mapper only ever returns 0..18
+  REQUIRE(body.instructions.back().type == END_FUNCTION);
 
   migrate_namespace_lookup = nullptr;
 }
