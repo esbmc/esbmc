@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <regex>

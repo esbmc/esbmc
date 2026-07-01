@@ -63,6 +63,19 @@ exprt python_list::build_symbolic_fill_list(
   size_decl.location() = location;
   converter_.add_instruction(size_decl);
 
+  if (!size.type().is_unsignedbv())
+  {
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "negative dimensions are not allowed");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    code_ifthenelset guard;
+    guard.cond() = build_less_than(size, gen_zero(size.type()));
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
   exprt size_as_unsigned =
     size.type().is_unsignedbv() ? size : build_typecast(size, size_type());
   code_assignt size_assign(build_symbol(size_sym), size_as_unsigned);
