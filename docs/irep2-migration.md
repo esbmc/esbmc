@@ -3858,7 +3858,7 @@ exact `target_type` via `python_expr::build_typecast`, skipping the typecast
 when already equal (keeps the common already-matching-width case a
 byte-identical no-op — confirmed via `--goto-functions-only` diff against a
 stashed pre-patch rebuild for the mainline `divmod_sign_correction` case).
-Regression tests added: `regression/python/numpy_int8_mod_floordiv{,_fail}`
+Regression tests added: `regression/numpy/int8_mod_floordiv{,_fail}`
 (the exact reproducer, both `%` and `//`, positive and negative dividend).
 
 Validated (post-fix): DebugOpt (asserts-on) build shows no
