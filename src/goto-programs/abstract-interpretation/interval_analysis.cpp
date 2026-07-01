@@ -122,28 +122,65 @@ inline void instrument_symbol_constraints(
   goto_programt::instructionst::iterator &it,
   goto_functiont &goto_function)
 {
-  std::vector<expr2tc> symbol_constraints;
   auto state_iterator = interval_analysis.state_map.find(it);
   // We may be trying to instrument an unreachable state
   if (state_iterator == interval_analysis.state_map.end())
     return;
   const interval_domaint &d = state_iterator->second;
+
+  // Partition by symbol type so the existing k-induction optimization
+  // can still tag non-float assumptions as inductive-step-only, while
+  // float assumptions are emitted in all phases.  Float interval
+  // bounds expand to `lower <= x` and `x <= upper` (or `x == c` in
+  // singleton intervals), all of which evaluate to false when x is
+  // NaN (IEEE 754).  The base case relies on these interval-derived
+  // assumes to propagate range-restricting guards (e.g.
+  // `if (a <= x && x <= b)`) forward to later program points.
+  // Tagging them inductive-step-only loses that propagation and lets
+  // the base case observe spurious NaN traces produced by libm
+  // operational models such as expf/logf — see issue #4438.
+  std::vector<expr2tc> non_float_constraints;
+  std::vector<expr2tc> float_constraints;
   for (const auto &symbol_expr : symbols)
   {
     expr2tc tmp = d.make_expression(symbol_expr);
-    if (!is_true(tmp))
-      symbol_constraints.push_back(tmp);
+    if (is_true(tmp))
+      continue;
+    if (is_floatbv_type(symbol_expr->type))
+      float_constraints.push_back(tmp);
+    else
+      non_float_constraints.push_back(tmp);
   }
 
-  if (!symbol_constraints.empty())
-  {
-    goto_programt::instructiont instruction;
-    instruction.make_assumption(conjunction(symbol_constraints));
-    instruction.inductive_step_instruction = config.options.is_kind();
-    instruction.location = it->location;
-    instruction.function = it->function;
-    goto_function.body.insert_swap(it++, instruction);
-  }
+  // Both assumes must execute before the original instruction at `it`.
+  // `insert_swap(it, ...)` swaps the assume into `it`'s slot and moves
+  // the previous content into a new slot immediately after.  Calling
+  // it on the same `it` twice (float first, then non-float) yields
+  // source order [non_float] [float] [orig], and jumps to the original
+  // slot now pass through both assumes before reaching the original
+  // instruction.  After N insertions the original instruction lives
+  // N positions past `it`, so we advance `it` by N+1 to match the
+  // original `insert_swap(it++, ...)` post-condition of pointing one
+  // past the original instruction.
+  std::size_t insertion_count = 0;
+  auto insert_at_target =
+    [&](const std::vector<expr2tc> &constraints, bool inductive_step_only) {
+      if (constraints.empty())
+        return;
+      goto_programt::instructiont instruction;
+      instruction.make_assumption(conjunction(constraints));
+      instruction.inductive_step_instruction = inductive_step_only;
+      instruction.location = it->location;
+      instruction.function = it->function;
+      goto_function.body.insert_swap(it, instruction);
+      ++insertion_count;
+    };
+
+  insert_at_target(float_constraints, false);
+  insert_at_target(non_float_constraints, config.options.is_kind());
+
+  if (insertion_count > 0)
+    std::advance(it, insertion_count + 1);
 }
 
 /**
