@@ -1,5 +1,4 @@
 import ast
-import importlib.util
 import os
 import sys
 
@@ -11,16 +10,9 @@ if PY_FRONTEND_DIR not in sys.path:
     sys.path.insert(0, PY_FRONTEND_DIR)
 
 
-def _load_module(module_name: str, rel_path: str):
-    module_path = os.path.join(ROOT, rel_path)
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-parser_mod = _load_module("esbmc_parser", "src/python-frontend/parser.py")
-preprocessor_mod = _load_module("esbmc_preprocessor", "src/python-frontend/preprocessor.py")
+# pylint: disable=wrong-import-position
+from parser import parser as parser_mod
+import preprocessor as preprocessor_mod
 
 
 def require(condition: bool, message: str) -> None:
