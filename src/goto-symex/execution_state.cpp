@@ -787,16 +787,17 @@ void execution_statet::get_expr_globals(
              n == "c:@__ESBMC_rounding_mode";
     };
 
-    // Resolve pointer parameters/locals BEFORE applying the internal-name
-    // filter. The pointer variable itself may live in pthread_lib (e.g. the
-    // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
-    // still point to a user global whose access must be recorded as an MPOR
-    // dependency.
+    // Resolve pointers BEFORE applying the internal-name filter. The pointer
+    // variable itself may live in pthread_lib (e.g. the `mutex` parameter of
+    // pthread_mutex_lock) and so match the filter, yet still point to a user
+    // global whose access must be recorded as an MPOR dependency. This applies
+    // to file-scope pointers too: a write through a static-lifetime pointer
+    // (`int *p = &g; *p = 1;`) must be attributed to the pointee `g`, not to
+    // `p`, otherwise MPOR sees the writer as independent of a thread reading
+    // `g` and unsoundly prunes the racing interleaving.
     expr2tc p = expr;
     bool point_to_global = false;
-    if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+    if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */
