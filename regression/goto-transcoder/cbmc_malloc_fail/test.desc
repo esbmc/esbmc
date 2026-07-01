@@ -1,0 +1,4 @@
+CORE
+cbmc_malloc_fail.goto
+--binary
+^VERIFICATION FAILED$
