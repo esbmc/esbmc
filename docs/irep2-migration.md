@@ -3694,6 +3694,23 @@ pre-V.4:
 Both classes need the **V.1k/V.4 IREP2-native adjuster** (resolve-then-build),
 not site-by-site migration.
 
+**Correction (2026-07-01, PR #5727):** the "complex int→double promotion"
+item above was mis-scoped as F-P11 (resolved-source-blocked). The actual
+site — `complex_handler.cpp`'s `promote_int_arith_to_double` (the file moved;
+`numpy_call_expr.cpp:1607` is stale) — is a `depth > 64` defensive
+recursion-limit guard, not an operand-resolution wall. It had been left
+legacy by an earlier commit (#5260) on the belief that the branch was
+"ungateable" (no realistic input reaches it). That belief was checked and
+found false: a 65+-deep nested-arithmetic literal (e.g.
+`complex(((...((1+1)+1)...)+1), 2)`) is ordinary, parseable Python source
+that does reach it. Migrated to the file's own `complex_typecast` helper
+(matching the leaf case two lines below) with a dedicated regression test
+at that depth (`regression/python/complex_deep_int_promotion{,_fail}`).
+Verified byte-identical GOTO on the reproducer and 168/168 complex-number
+regression tests green. Lesson for future sessions: a "no test can exercise
+this" claim is itself a factual claim — verify it before accepting a site as
+permanently blocked.
+
 #### V.3 follow-up (2026-06-24) — truthiness/membership stragglers drained
 
 A re-census after the pass above found the "fully drained" claim was slightly
