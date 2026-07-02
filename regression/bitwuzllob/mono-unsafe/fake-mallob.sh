@@ -5,7 +5,7 @@ f=""
 for arg in "$@"; do case "$arg" in -mono=*) f="${arg#-mono=}";; esac; done
 [ -n "$f" ] || f="$1"
 echo "c fake-mallob solving $f"
-case "$(z3 -smt2 "$f" | tail -1)" in
+case "$(z3 -smt2 "$f" | tail -n 1)" in
   sat) echo "s SATISFIABLE";;
   unsat) echo "s UNSATISFIABLE";;
   *) echo "s UNKNOWN";;

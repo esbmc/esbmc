@@ -5,4 +5,4 @@ f=""
 for arg in "$@"; do case "$arg" in -mono=*) f="${arg#-mono=}";; esac; done
 [ -n "$f" ] || f="$1"
 echo "c fake-mallob solving $f"
-z3 -smt2 "$f" | tail -1
+z3 -smt2 "$f" | tail -n 1

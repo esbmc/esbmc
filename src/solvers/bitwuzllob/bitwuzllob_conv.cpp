@@ -3,10 +3,15 @@
 #include <util/message.h>
 
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <list>
 #include <optional>
+
+#ifndef _WIN32
+#  include <sys/wait.h>
+#endif
 
 static std::string prog_command(const optionst &options)
 {
@@ -172,6 +177,19 @@ static std::optional<smt_resultt> parse_verdict_line(const std::string &line)
   return {};
 }
 
+/* pclose() returns a waitpid()-style status word, not the process exit code;
+ * decode it so logs show "exit code 10" rather than 2560. */
+static std::string describe_exit_status(int status)
+{
+#ifndef _WIN32
+  if (WIFEXITED(status))
+    return "exit code " + std::to_string(WEXITSTATUS(status));
+  if (WIFSIGNALED(status))
+    return "signal " + std::to_string(WTERMSIG(status));
+#endif
+  return "status " + std::to_string(status);
+}
+
 smt_resultt bitwuzllob_convt::run_bitwuzllob()
 {
   std::string cmd = prog_command(options);
@@ -232,10 +250,10 @@ smt_resultt bitwuzllob_convt::run_bitwuzllob()
     for (const std::string &line : tail)
       tail_str += "\n  " + line;
     log_error(
-      "bitwuzllob: no sat/unsat verdict in the output of \"{}\" (exit status "
-      "{}); last output lines:{}",
+      "bitwuzllob: no sat/unsat verdict in the output of \"{}\" ({}); last "
+      "output lines:{}",
       cmd,
-      status,
+      describe_exit_status(status),
       tail_str);
     return P_ERROR;
   }
@@ -245,8 +263,8 @@ smt_resultt bitwuzllob_convt::run_bitwuzllob()
   if (status != 0)
     log_debug(
       "bitwuzllob",
-      "solver command exited with status {} after verdict",
-      status);
+      "solver command exited with {} after verdict",
+      describe_exit_status(status));
 
   if (*verdict == P_ERROR)
     log_error("bitwuzllob: solver returned unknown");
