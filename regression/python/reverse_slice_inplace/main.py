@@ -2,9 +2,11 @@
 # frontend collapses it to a single in-place range-reverse pass instead of a
 # slice-read + reversed() rebuild + slice-assign (three heap copies).
 
+
 def rev_suffix(xs):
     xs[1:] = reversed(xs[1:])
     return xs
+
 
 a = [1, 2, 3, 4]
 rev_suffix(a)

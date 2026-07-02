@@ -34,8 +34,9 @@ bool ast_equal_ignoring_location(
     {
       if (is_loc_key(it.key()))
         continue;
-      if (!b.contains(it.key()) ||
-          !ast_equal_ignoring_location(it.value(), b[it.key()]))
+      if (
+        !b.contains(it.key()) ||
+        !ast_equal_ignoring_location(it.value(), b[it.key()]))
         return false;
     }
     for (auto it = b.begin(); it != b.end(); ++it)
