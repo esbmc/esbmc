@@ -1044,8 +1044,7 @@ class CoreVisitorsMixin:
         strings, is left as bare 'str' -- the pre-existing (safe) refusal
         path for that component.
         """
-        if not (isinstance(key_ann, ast.Subscript)
-                and self._get_base_type_name(key_ann) == "tuple"
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
                 and isinstance(key_ann.slice, ast.Tuple)):
             return key_ann
         elts = key_ann.slice.elts
