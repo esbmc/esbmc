@@ -17,6 +17,18 @@ appended a `## 15` section: **#5730** (witness-closure reconciliation) stays **�
 closed by #5650; `--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**.
 Canonical remaining-work list is now §20.4. See §16/§17/§18/§19/§20. Pass 11 in §15, Pass 10 in §14,
 Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (**Pass 15 (§19)** ran on the first available **x86_64 Linux** host and
+cleared the environment wall Pass 14 hit: **#4427** got the x86 CI cross-check Pass 13 asked for — ~36
+CPU-minutes across two k-steps, no unsound TRUE, **recommend closing**; **#4432** reached 2733 thread
+interleavings (7.4× Pass 14's aarch64 depth) with no violation, downgraded from "host-gated" to
+"not reproducible within a generous local budget"; **#4438** needs no new triage — open PR #4480 already
+fixes it and just needs a rebase + merge; **#5142**'s no-overflow layer is confirmed reproducible on x86
+once `--sv-comp` is added (the deliberate `-Wno-int-conversion` gate from Pass 10), landing on a sibling
+shift site to the one filed. Pass 12 consolidated two parallel Pass-11 PRs that both appended a `## 15`
+section: **#5730** (witness-closure reconciliation) stays **§15**; **#5735** (#5565 closed by #5650;
+`--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**. Canonical
+remaining-work list is now §19.5. See §16/§17/§18/§19. Pass 11 in §15, Pass 10 in §14, Pass 9 in §13,
+Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
