@@ -29,8 +29,10 @@ def load_math_model():
     )
     spec = importlib.util.spec_from_file_location("math_model", model_path)
     mod = importlib.util.module_from_spec(spec)
-    mod.__ESBMC_isinf = math.isinf
-    mod.__ESBMC_isnan = math.isnan
+    # Bind the ESBMC intrinsics the model expects; the __ESBMC_ names are
+    # module attributes, not protected members, so silence protected-access.
+    mod.__ESBMC_isinf = math.isinf  # pylint: disable=protected-access
+    mod.__ESBMC_isnan = math.isnan  # pylint: disable=protected-access
     spec.loader.exec_module(mod)
     return mod
 

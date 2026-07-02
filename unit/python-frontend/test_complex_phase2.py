@@ -10,7 +10,9 @@ if PY_FRONTEND_DIR not in sys.path:
     sys.path.insert(0, PY_FRONTEND_DIR)
 
 
-# pylint: disable=wrong-import-position
+# The local frontend `parser` package (added to sys.path above) shadows the
+# removed stdlib `parser` module; deprecated-module is a false positive here.
+# pylint: disable=wrong-import-position,deprecated-module
 from parser import parser as parser_mod
 import preprocessor as preprocessor_mod
 
