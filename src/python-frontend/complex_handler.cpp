@@ -195,11 +195,22 @@ exprt complex_handler::complex_log(
   exprt zr = complex_member(z, "real", dt);
   exprt zi = complex_member(z, "imag", dt);
 
-  exprt zr2 = ieee_binop("ieee_mul", zr, zr);
-  exprt zi2 = ieee_binop("ieee_mul", zi, zi);
-  exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
+  // V.3: build |z|^2 = zr*zr + zi*zi in IREP2, back-migrating once for the
+  // legacy handle_sqrt consumer. The IEEE ops carry the default
+  // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node,
+  // so the back-migrated node matches the legacy ieee_binop tree (goto
+  // byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(dt);
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc zr_2, zi_2;
+  migrate_expr(zr, zr_2);
+  migrate_expr(zi, zi_2);
+  const expr2tc zr_sq = ieee_mul2tc(dt2, zr_2, zr_2, rm);
+  const expr2tc zi_sq = ieee_mul2tc(dt2, zi_2, zi_2, rm);
+  const expr2tc abs2_2 = ieee_add2tc(dt2, zr_sq, zi_sq, rm);
 
-  exprt abs_z = converter_.get_math_handler().handle_sqrt(abs2, loc_source);
+  exprt abs_z = converter_.get_math_handler().handle_sqrt(
+    migrate_expr_back(abs2_2), loc_source);
   if (abs_z.statement() == "cpp-throw")
     return abs_z;
 
@@ -234,8 +245,17 @@ exprt complex_handler::complex_exp(
   if (sin_imag.statement() == "cpp-throw")
     return sin_imag;
 
-  exprt real = ieee_binop("ieee_mul", exp_real, cos_imag);
-  exprt imag = ieee_binop("ieee_mul", exp_real, sin_imag);
+  // V.3: e^zr * cos(zi) and e^zr * sin(zi) built in IREP2, back-migrated for
+  // the legacy make_complex consumer (default __ESBMC_rounding_mode; goto
+  // byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(dt);
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc er, ci, si;
+  migrate_expr(exp_real, er);
+  migrate_expr(cos_imag, ci);
+  migrate_expr(sin_imag, si);
+  exprt real = migrate_expr_back(ieee_mul2tc(dt2, er, ci, rm));
+  exprt imag = migrate_expr_back(ieee_mul2tc(dt2, er, si, rm));
   return make_complex(real, imag);
 }
 
