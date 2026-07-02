@@ -1540,6 +1540,18 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       }
       else if (part["_type"] == "FormattedValue")
       {
+        // A format spec or a !r/!a conversion changes the rendered text
+        // ("{x:03d}" pads to "007"; "{s!r}" quotes); folding while
+        // ignoring it would produce a wrong value that can satisfy a
+        // false assertion — decline instead and let the string handler
+        // deal with it. !s (115) renders the same text as the default.
+        if (part.contains("format_spec") && !part["format_spec"].is_null())
+          return std::nullopt;
+        if (
+          part.contains("conversion") && part["conversion"].is_number() &&
+          part["conversion"].get<int>() != -1 &&
+          part["conversion"].get<int>() != 's')
+          return std::nullopt;
         auto val = eval_expr(part["value"], env);
         if (!val)
           return std::nullopt;
