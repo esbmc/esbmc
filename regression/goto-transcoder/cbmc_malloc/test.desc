@@ -1,4 +1,4 @@
 CORE
-cbmc_sqrtf.goto
+cbmc_malloc.goto
 --binary
 ^VERIFICATION SUCCESSFUL$
