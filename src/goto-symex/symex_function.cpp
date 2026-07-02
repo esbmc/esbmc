@@ -501,6 +501,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // assign arguments (goto_function.type is already IREP2)
   frame.va_index = argument_assignments(
     identifier, to_code_type(goto_function.type), arguments);
+  frame.va_cursor = frame.va_index;
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
