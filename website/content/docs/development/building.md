@@ -322,6 +322,11 @@ ESBMC supports **Bitwuzla**, **Boolector**, **CVC4**, **CVC5**, **MathSAT**,
 cannot verify most programs. For a single-solver build, the platform tabs above
 are enough.
 
+ESBMC can additionally drive **Bitwuzllob** — Bitwuzla running on the massively
+parallel [Mallob](https://satres.kikit.kit.edu/) platform — as an external
+process; see [Using Bitwuzllob](#using-bitwuzllob) below. It needs no build-time
+setup (the backend is enabled by default, `-DENABLE_BITWUZLLOB=ON`).
+
 The recipe below mirrors the multi-solver build used in ESBMC's CI: build each
 solver into the project directory, then point the configure step at them. Build
 only the solvers you need.
@@ -418,6 +423,32 @@ ESBMC is installed into the `release` folder. Add `-DCMAKE_BUILD_TYPE=Debug` to
 enable ESBMC's internal assertions.
 
 {{% /steps %}}
+
+## Using Bitwuzllob
+
+Bitwuzllob (Schreiber, Niemetz, Preiner — TACAS'26) integrates Bitwuzla into
+the massively parallel Mallob platform, distributing the bit-blasted SAT
+queries across hundreds of cores. Mallob is an MPI program that cannot be
+linked into ESBMC, so the `--bitwuzllob` backend writes the verification
+condition to an SMT-LIB2 file and runs Mallob's one-shot *mono* mode on it as
+an external process. Notes:
+
+- **Linux only** (Mallob supports x86/ARM Linux). Build Mallob with the SMT
+  application engine following the artifact of the TACAS'26 paper
+  (https://doi.org/10.5281/zenodo.17478480), and make sure the `mallob` binary
+  and its MPI runtime are available.
+- The command is configurable via `--bitwuzllob-prog`; every `%f` is replaced
+  by the formula file (default: `mallob -mono=%f -mono-app=SMT`). For example:
+  `esbmc file.c --bitwuzllob --bitwuzllob-prog "mpirun -np 8 mallob -mono=%f -mono-app=SMT"`.
+- A terminated mono process cannot answer model queries, so building a
+  counterexample additionally needs a local interactive SMT-LIB2 solver via
+  `--bitwuzllob-model-prog` (e.g. `"z3 -in"` or `"bitwuzla"`); it replays the
+  same formula and serves the `(get-value ...)` queries. Alternatively pass
+  `--result-only` to skip the counterexample.
+- One-shot mono mode serves a single `(check-sat)`, so incremental strategies
+  (`--incremental-bmc`, `--k-induction`, ...) are rejected — use a linked
+  solver such as `--bitwuzla` for those. Like Bitwuzla, Bitwuzllob is
+  bit-vector-only and cannot serve `--ir`/`--ir-ieee`.
 
 ## Advanced
 

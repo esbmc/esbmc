@@ -183,9 +183,20 @@ class smtlib_convt : public smt_solver_baset,
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
+  /* Used by process-based derived backends (e.g. bitwuzllob) that need the
+   * interactive-pipe and file sinks configured independently of the
+   * --smtlib-solver-prog and --output options. */
+  smtlib_convt(
+    const namespacet &_ns,
+    const optionst &options,
+    const std::string &solver_prog,
+    const std::string &output_path);
   ~smtlib_convt() override;
 
   smt_resultt dec_solve() override;
+  /* Read and parse the solver's response to an already-emitted (check-sat)
+   * from the interactive pipe. Requires emit_proc. */
+  smt_resultt read_check_sat_response();
   const std::string solver_text() override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;

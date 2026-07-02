@@ -351,11 +351,24 @@ smtlib_convt::process_emitter::~process_emitter() noexcept
 }
 
 smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
+  : smtlib_convt(
+      _ns,
+      _options,
+      _options.get_option("smtlib-solver-prog"),
+      _options.get_option("output"))
+{
+}
+
+smtlib_convt::smtlib_convt(
+  const namespacet &_ns,
+  const optionst &_options,
+  const std::string &solver_prog,
+  const std::string &output_path)
   : smt_solver_baset(_ns, _options),
     array_iface(true, false),
     fp_convt(this),
-    emit_proc(_options.get_option("smtlib-solver-prog")),
-    emit_opt_output(_options.get_option("output"))
+    emit_proc(solver_prog),
+    emit_opt_output(output_path)
 {
   std::string logic =
     options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
@@ -630,6 +643,13 @@ smt_resultt smtlib_convt::dec_solve()
   // If we're just outputing to a file, this is where we terminate.
   if (!emit_proc)
     return P_SMTLIB;
+
+  return read_check_sat_response();
+}
+
+smt_resultt smtlib_convt::read_check_sat_response()
+{
+  assert(emit_proc);
 
   // And read in the output
   smtlib_send_start_code = 1;

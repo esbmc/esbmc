@@ -518,6 +518,18 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzllob",
+     NULL,
+     "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
+     "running an external mallob binary in one-shot mono mode"},
+    {"bitwuzllob-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running Mallob in mono mode; every %f is replaced by the "
+     "SMT-LIB2 formula file (default: \"mallob -mono=%f -mono-app=SMT\")"},
+    {"bitwuzllob-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
