@@ -2509,18 +2509,15 @@ exprt string_handler::handle_string_title(
     return build_nondet_string_fallback(location);
   }
 
-  bool new_word = true;
+  // A letter starts a new word iff the previous character is uncased
+  // (CPython semantics -- digits are uncased, so they *end* a word:
+  // "3d movie".title() == "3D Movie"). Matches __python_str_title.
+  bool prev_cased = false;
   for (char &ch : input)
   {
-    if (std::isalpha(static_cast<unsigned char>(ch)))
-    {
-      ch = new_word ? to_upper_char(ch) : to_lower_char(ch);
-      new_word = false;
-    }
-    else
-    {
-      new_word = !std::isalnum(static_cast<unsigned char>(ch));
-    }
+    bool cased = std::isalpha(static_cast<unsigned char>(ch)) != 0;
+    ch = prev_cased ? to_lower_char(ch) : to_upper_char(ch);
+    prev_cased = cased;
   }
 
   if (!string_builder_)

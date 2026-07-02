@@ -3561,3 +3561,44 @@ is orthogonal.
 ### 74b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 76. 2026-07-02 re-validation (sixty-sixth sweep) & str.title() digit word-boundary
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+The §75 code review surfaced a **wrong-value/soundness** defect in the `title()` constant fold — the
+highest-value class — and fixing it exposed a second copy of the same bug in a different fold site.
+
+### 76a. New isolated, soundly-fixable defect found & fixed
+**`str.title()` on a constant string used alnum-based word boundaries, so digit-adjacent letters
+folded wrong and a false assertion could verify `SUCCESSFUL`.**
+
+`"3d movie".title()` folded to `"3d Movie"` instead of CPython's `"3D Movie"`, and `"a1a".title()`
+to `"A1a"` instead of `"A1A"` — so `assert "3d movie".title() == "3d Movie"` verified **SUCCESSFUL**
+(a false claim) and the valid `assert "3d movie".title() == "3D Movie"` reported a spurious
+`FAILED`. CPython (`Objects/unicodeobject.c` `do_title`) titlecases a letter iff the *previous*
+character is **uncased**; digits are uncased, so they *end* a word. The old fold used
+`new_word = !isalnum(c)`, treating digits as word-internal.
+
+**Two fold sites had the same bug** — `python_consteval.cpp` (the `title` fold) and
+`string_method_handler.cpp` `handle_string_title` (the constant-receiver path). They cover
+*different* routing contexts (the initial single-site fix flipped one battery while the identical
+top-level claim still folded wrong through the other handler — caught in this sweep's validation),
+so both were switched to the same `prev_cased` state machine. Notably the **runtime OM**
+`__python_str_title` (`src/c2goto/library/python/string.c`) already implemented the correct
+cased-boundary rule, and the `python_str_title_runtime_model` test explicitly documented the
+consteval divergence as a known pre-existing gap ("digits don't break words; that pre-existing
+divergence is out of scope here") — this sweep closes exactly that documented divergence, and the
+stale comment is updated. All three implementations now agree.
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_title_digit_boundary{,_fail}` (CORE): the positive is the liveness witness
+(digit-boundary cases `"3d movie"`/`"a1a"`/`"x2y3z"`/`"123abc"` plus unchanged non-digit boundary
+behaviour, apostrophes, hyphens, all-caps, empty); the `_fail` pins the previously-false-SUCCESSFUL
+`assert "3d movie".title() == "3d Movie"`, now correctly `FAILED`. Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh str_title_digit`); the `title` ctest
+subset (12 tests) and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100%.
+Solver-agnostic (frontend constant folds, no SMT encoding).
+
+### 76b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
