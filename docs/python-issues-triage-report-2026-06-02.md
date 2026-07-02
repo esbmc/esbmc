@@ -3561,3 +3561,45 @@ is orthogonal.
 ### 74b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 79. 2026-07-02 re-validation (sixty-ninth sweep) & as_integer_ratio() literal fold
+
+Re-test against current `master` (tip `e92296d1fe`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took a §78-battery residual: `float.as_integer_ratio()` was undefined, and unpacking its
+result **crashed conversion**. (The battery's other hits resolved themselves: `str.encode()` now
+passes on current master; set-method timeouts are the §3c perf-banned class;
+`str.maketrans`/`translate` needs a dict intermediate — catalogued, not taken.)
+
+### 79a. New isolated, soundly-fixable defect found & fixed
+**`as_integer_ratio()` was undefined — `assert(false)` stub on call, and a conversion crash
+(`Cannot unpack empty`) when the result was tuple-unpacked.**
+
+`(2.5).as_integer_ratio()` hit "Undefined function … replacing with assert(false)" (spurious
+`FAILED` for any caller), and `n, d = v.as_integer_ratio()` aborted the whole conversion with
+`ERROR: Cannot unpack empty - only tuples and arrays can be unpacked`.
+
+**Fix** (`src/python-frontend/preprocessor/core_visitors_mixin.py`): a preprocess-time fold
+`_maybe_fold_as_integer_ratio`, following the Decimal-constructor precedent — the ratio is computed
+by **CPython itself** during preprocessing, so the folded `(numerator, denominator)` tuple matches
+the interpreter bit-for-bit (e.g. `0.1` → `(3602879701896397, 36028797018963968)`). Scope: int and
+float literals, and unary `+`/`-` over one. Declines (unchanged behaviour) on bool receivers,
+non-literals, `inf`/`nan`, and ratios exceeding 2⁶³−1. Tuple contexts (compare, unpack) work
+because the result is an ordinary tuple literal.
+
+This **restores working behaviour** for literal receivers and removes the unpack crash on that
+path. New regression pair `regression/python/as_integer_ratio{,_fail}` (CORE): the positive covers
+dyadic/non-dyadic floats, negatives, ints, zero, and tuple unpacking (the pre-fix crash shape); the
+`_fail` pins a wrong ratio as a real `FAILED`. Code review differentially tested the imported fold
+against CPython over ~9,000 generated cases (uniform floats, 62-bit ints, wide-exponent floats,
+negative zero, boundary 2⁶³±1, must-decline set incl. `True`/`1e300`/`1e400`/`~5`) — bit-for-bit
+exact, decline predicate exact. CPython sanity passes; the
+decimal/from_bytes/gcd/lcm/preprocessor-adjacent subset (36) passes 100%; the `tuple|float` subset
+shows only the two pre-existing `--ir`/`--z3` environmental failures (verified identical on vanilla
+master). Solver-agnostic (a preprocess-time fold).
+
+Variable receivers (`v.as_integer_ratio()`) keep the prior unsupported behaviour (no wrong fold) —
+a runtime model needs frexp-style bit manipulation in the OM, a separate change.
+
+### 79b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.

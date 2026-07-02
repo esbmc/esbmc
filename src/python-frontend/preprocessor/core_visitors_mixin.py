@@ -798,6 +798,43 @@ class CoreVisitorsMixin:
         return node
 
     @staticmethod
+    def _maybe_fold_as_integer_ratio(node):
+        # (2.5).as_integer_ratio() on a numeric literal folds to its exact
+        # (numerator, denominator) tuple, computed by CPython itself, so the
+        # result matches the interpreter bit-for-bit. Non-literal receivers
+        # are left to the regular dispatch.
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "as_integer_ratio"
+                and not node.args and not node.keywords):
+            return None
+        recv = node.func.value
+        value = None
+        if (isinstance(recv, ast.Constant) and isinstance(recv.value, (int, float))
+                and not isinstance(recv.value, bool)):
+            value = recv.value
+        elif (isinstance(recv, ast.UnaryOp) and isinstance(recv.op, (ast.USub, ast.UAdd))
+              and isinstance(recv.operand, ast.Constant)
+              and isinstance(recv.operand.value, (int, float))
+              and not isinstance(recv.operand.value, bool)):
+            value = -recv.operand.value if isinstance(recv.op, ast.USub) else recv.operand.value
+        if value is None:
+            return None
+        try:
+            num, den = value.as_integer_ratio()
+        except (OverflowError, ValueError):  # inf / nan
+            return None
+        # Stay within the frontend's 64-bit integer comfort zone; larger
+        # ratios (huge exponents) fall through unfolded.
+        if abs(num) > 2**63 - 1 or den > 2**63 - 1:
+            return None
+        result = ast.Tuple(
+            elts=[ast.Constant(value=num), ast.Constant(value=den)],
+            ctx=ast.Load(),
+        )
+        ast.copy_location(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    @staticmethod
     def _normalize_int_from_bytes_endianness(node):
         if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "int" and node.func.attr == "from_bytes"):
@@ -1242,6 +1279,10 @@ class CoreVisitorsMixin:
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:
             return rewritten_decimal
+
+        rewritten_ratio = self._maybe_fold_as_integer_ratio(node)
+        if rewritten_ratio is not None:
+            return rewritten_ratio
 
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
