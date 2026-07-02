@@ -1281,6 +1281,38 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           return PyConstValue::make_bool(seen_cased);
         }
 
+        // istitle: uppercase letters may only follow uncased characters,
+        // lowercase letters only cased ones, and at least one cased
+        // character must be present (CPython semantics, byte-level ASCII).
+        if (m == "istitle")
+        {
+          if (!args_arr.empty())
+            return std::nullopt;
+          bool cased = false;
+          bool prev_cased = false;
+          for (char c : s)
+          {
+            auto uc = static_cast<unsigned char>(c);
+            if (std::isupper(uc))
+            {
+              if (prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else if (std::islower(uc))
+            {
+              if (!prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else
+              prev_cased = false;
+          }
+          return PyConstValue::make_bool(cased);
+        }
+
         if (m == "startswith" || m == "endswith")
         {
           if (args_arr.size() != 1)
