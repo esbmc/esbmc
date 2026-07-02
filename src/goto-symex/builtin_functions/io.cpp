@@ -134,8 +134,7 @@ bool goto_symext::recover_va_list_args(
     }
     // Address taken anywhere (e.g. memcpy(&ap, ...)): treat as laundered.
     bool addr_taken = false;
-    std::function<void(const expr2tc &)> scan = [&](const expr2tc &e)
-    {
+    std::function<void(const expr2tc &)> scan = [&](const expr2tc &e) {
       if (is_nil_expr(e) || addr_taken)
         return;
       if (is_address_of2t(e))
