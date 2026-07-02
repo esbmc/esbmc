@@ -813,8 +813,8 @@ class CoreVisitorsMixin:
             value = recv.value
         elif (isinstance(recv, ast.UnaryOp) and isinstance(recv.op, (ast.USub, ast.UAdd))
               and isinstance(recv.operand, ast.Constant)
-              and isinstance(recv.operand.value, (int, float))
-              and not isinstance(recv.operand.value, bool)):
+              and isinstance(recv.operand.value,
+                             (int, float)) and not isinstance(recv.operand.value, bool)):
             value = -recv.operand.value if isinstance(recv.op, ast.USub) else recv.operand.value
         if value is None:
             return None
