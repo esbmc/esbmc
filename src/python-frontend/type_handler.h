@@ -49,13 +49,23 @@ inline bool is_complex_type(const typet &type)
 
 inline exprt make_complex(const exprt &real, const exprt &imag)
 {
-  struct_exprt complex_expr(get_complex_struct_type());
+  // V.3: build the complex struct literal in IREP2, back-migrating once. Each
+  // non-double operand's int/bool/float -> double conversion is exactly the
+  // typecast2t migrate_expr builds for the legacy typecast_exprt (ieee cast,
+  // rounding mode implicit), so the back-migrated struct is byte-identical to
+  // the old struct_exprt. Mirrors complex_typecast / complex_to_bool_expr.
   const typet &dt = cached_double_type();
-  complex_expr.operands().push_back(
-    real.type() == dt ? real : typecast_exprt(real, dt));
-  complex_expr.operands().push_back(
-    imag.type() == dt ? imag : typecast_exprt(imag, dt));
-  return complex_expr;
+  const type2tc dt2 = migrate_type(dt);
+
+  auto to_double2 = [&](const exprt &v) -> expr2tc {
+    expr2tc v2;
+    migrate_expr(v, v2);
+    return v.type() == dt ? v2 : typecast2tc(dt2, v2);
+  };
+
+  std::vector<expr2tc> members{to_double2(real), to_double2(imag)};
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 }
 
 inline exprt promote_to_complex(const exprt &value)

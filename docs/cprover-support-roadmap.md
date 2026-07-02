@@ -197,6 +197,12 @@ rewrite mechanism itself:
 the fix's shape (`fix_builtin_call` already dispatches on callee name — extending it is
 additive), but weren't attempted here to keep this change reviewable.
 
+**Ruled out as an alternative fix** (for the remaining libm family, from the #5743
+diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
+work — because there is no body to link (`ieee_sqrt` is an operator, not a library
+function), so this produces no observable effect. Tried and reverted.
+
 ---
 
 ## 5. Phased plan

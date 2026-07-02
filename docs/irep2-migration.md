@@ -3889,6 +3889,20 @@ except the numpy complex int→double site (`numpy_call_expr.cpp`, ieee +
 rounding mode) and the `isinstance`/`isnone` custom-node retain boundary
 above.
 
+**Follow-up (2026-07-01) — the numpy complex int→double site is now drained.**
+`make_complex` (`type_handler.h`), the shared builder behind every complex
+struct literal in the numpy/complex paths, built a `struct_exprt` over two
+legacy `typecast_exprt(x, double)` int/bool/float→double conversions (the ieee
+cast, rounding mode implicit). It is now `constant_struct2tc` over `typecast2tc`
+operands, back-migrated once — the same idiom as `complex_typecast` and the
+`complex_to_bool_expr` exemplar in the same header. Behaviour-preserving:
+`--goto-functions-only` output byte-identical (modulo pre-existing
+astgen-tempdir / unpack-temp non-determinism) across 9 representative
+numpy+python complex tests; 164 complex + 415/415 `regression/numpy` green. The
+only V.3 residual now is the `isinstance`/`isnone` custom-node retain boundary
+(needs a `migrate_expr` extension, out of scope), plus the V.1k keystone and
+what it unblocks (V.2/V.4/V.5/V.6).
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
