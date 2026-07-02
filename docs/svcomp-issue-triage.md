@@ -1895,3 +1895,92 @@ original folding decision (§11.3), now empirically justified rather than presum
    already RCA'd in Pass 8, no localized fix.
 9. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator (CPAchecker/Ultimate),
    absent in this environment.
+
+---
+
+## 21. Pass 17 — #5138 `comm_3args_ok` false alarm no longer reproduces; fix stack #5564/#5624/#5650 confirmed end-to-end (2026-07-02)
+
+Pass 16's PR (#5746) merged, so this pass branches from a clean `master` (`c177d64d51`). Task selection
+followed §20.4's priority list, with two stale entries reconciled against live GitHub state first:
+
+* **§20.4 item 2 is half-closed.** #5400 was **fixed and closed by merged PR #5419**
+  (`[symex] Fix missed memtrack leak in --no-reachable-memory-leak`, 2026-06-19) — the `maybe_global_target`
+  guard-drop and per-symbol `visited` cull defects in `add_memory_leak_checks` (§11.5's RCA) got a sound
+  localized fix after all, upstream of this loop. That leaves **#5138** as the item's open half.
+* **§20.4 item 4's "PR #4919 in flight" was stale.** #4919 merged **2026-06-02** (`cef3b73c6a`), and §7.2
+  already re-validated #4980 against it: the false alarm **still reproduces post-#4919** (ranking-recogniser
+  gap on FUNCTION_CALL bodies; research-grade, full-set validation required). Item 4 remains open but its
+  blocker is a recogniser extension, not a pending merge — no re-run owed.
+
+With item 1 (maintainer close-outs) out of loop scope, **#5138 is the top actionable item** — and it had a
+genuinely undone, bounded task attached: every layer of its false-alarm stack now has a merged fix, but no
+pass had re-run the full reproducer end-to-end on a binary containing all of them. The stack, as this
+document recorded it piecewise: the `forgotten memory` leak layer (§11.6 RCA) fixed by **#5564**
+(stack-reachable heap treated as live, 2026-06-26, "Refs #5138"); the `getopt_long`/`optarg`→`strcmp` layer
+fixed by the Pass-9 OM (**#5624**, 2026-06-26); the `fclose(stdout)` static-stream free fixed by **#5650**
+(2026-06-27); and the `ESBMC_SVCOMP` special-build repro blocker retired by **#5530** (runtime `--sv-comp`,
+§16.2, which explicitly named #5138 as "the one open issue whose reproduction recipe this simplifies").
+Residual-tracker #5565 is CLOSED (§16.1). This pass closes the loop on that prediction.
+
+### 21.1 The re-run — no bug through k = 11, the exact depth of the original FALSE_MEMTRACK
+
+Fetched `c/coreutils-v8.31/comm_3args_ok.c` (208 693 lines) from the sv-benchmarks `main` branch and ran
+the issue's **exact** underlying ESBMC command (`--memory-leak-check --no-reachable-memory-leak
+--no-abnormal-memory-leak --malloc-zero-is-null --incremental-bmc --64 …`) **plus `--sv-comp`** (the
+runtime equivalent of the wrapper's OM gating per §16.2) against a binary rebuilt this pass from `master`
+`c177d64d51` (aarch64/macOS, Bitwuzla 0.9.0), 480 s budget.
+
+* **Original issue (8.3.0 `0e3612575f`):** `dereference failure: forgotten memory: dynamic_21_array` at
+  `exit` (`stdlib.c:64`) → `VERIFICATION FAILED` / **`Bug found (k = 11)`** / `FALSE_MEMTRACK`.
+* **Current master:** `No bug has been found in the base case` at **k = 1, 3, 5, 7, 9, and 11** — the
+  incremental-BMC run sails cleanly past the exact depth where the spurious counterexample fired — and was
+  still solving k = 13 (9253 VCCs) when the budget expired. **Zero violated properties of any kind in the
+  log**: no `forgotten memory`, no `invalid pointer freed` (the #5650 layer), no `strcmp` invalid-pointer
+  (the #5624 layer).
+
+The false alarm the issue filed is therefore **resolved on master by the #5564 + #5624 + #5650 stack**.
+The run does not reach a full `VERIFICATION SUCCESSFUL` in-budget — incremental-BMC keeps deepening on a
+208 k-line coreutils benchmark with a 12-iteration `quotearg` scan loop — but that is the ordinary
+completeness/perf frontier for this benchmark class, not the *wrong-verdict* defect #5138 reports. A
+sound `UNKNOWN`-so-far replaces an unsound `FALSE`.
+
+### 21.2 Disposition
+
+**Recommend closing #5138** (fixed by #5564/#5624/#5650), after the standing x86_64 CI cross-check —
+this pass's run is aarch64/macOS; §13.1 previously reproduced the pre-fix layers on x86, so parity is
+expected but should be confirmed on the competition architecture as was done for #4427 (§19.1). The
+regression tests shipped with #5564 (`stack-reachable heap`), #5624 (`github_5565_getopt_long_optarg`
+pair), and #5650 (`fclose` heap-stream guard) pin each layer individually, so no additional regression
+harness is owed by this pass.
+
+### 21.3 Pass-17 running report
+
+**Analysed.** #5138 (end-to-end reproducer re-run on current master — false alarm gone at its original
+k = 11 depth; recommend close). Reconciled two stale §20.4 entries against GitHub: #5400 fixed+closed by
+#5419 (2026-06-19); #4919 merged 2026-06-02, so #4980's blocker is the §7.2 recogniser gap, not a pending
+merge.
+
+**PRs opened.** One doc PR (this entry), branched from clean post-#5746 `master`.
+
+**Duplicated work avoided.** #5565 not re-validated — CLOSED with both layers discharged (§16.1). No
+re-fix of the leak-check subsystem — #5419/#5564 already landed upstream; this pass only supplies the
+end-to-end confirmation those PRs' unit-level regressions could not (the full coreutils stack under the
+issue's exact flag set).
+
+**Remaining work (priority order, updated 2026-07-02).**
+1. Close out (maintainer actions, no further loop work): **#4427** (x86-confirmed, §19.1), **#5138**
+   (this pass, pending x86 cross-check), **#4480→#4438** (rebase + merge).
+2. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+3. **#4980** — termination ranking recogniser for side-effect-only call bodies (research-grade; #4919
+   merged 2026-06-02 and does **not** cover it, per §7.2; any extension needs full 2413-benchmark
+   termination-set validation).
+4. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (research-grade; local
+   reproduction budget exhausted on the correct host, §19.2).
+5. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
+   x86-confirmed, §19.4).
+6. **#5145 / #5393 / #5394** — aws-hash SSA-trace/solver-internal correlation (research-grade,
+   multi-session; fully x86-confirmed, §20.3).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker
+   (Pass-8 RCA, no localized fix).
+8. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator
+   (CPAchecker/Ultimate), absent in this environment.

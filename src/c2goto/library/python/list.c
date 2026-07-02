@@ -1430,3 +1430,58 @@ void __ESBMC_list_reverse(PyListObject *l)
     right--;
   }
 }
+
+// In-place reverse of the sub-range l[lower:upper] (step 1). Lowers the idiom
+// `l[lower:upper] = reversed(l[lower:upper])` to a single swap pass, avoiding
+// the three heap passes the literal form generates (slice-read copy,
+// reversed() rebuild, slice-assign resize+copy). Bounds are normalized exactly
+// as CPython's slice.indices for step 1 — the same clamping
+// __ESBMC_list_slice_assign uses — so the observable result is identical to the
+// three-step form. has_lower/has_upper distinguish an absent bound (None) from
+// an explicit one; the slice length equals itself, so no resize is needed.
+void __ESBMC_list_reverse_range(
+  PyListObject *l,
+  int64_t lower,
+  int has_lower,
+  int64_t upper,
+  int has_upper)
+{
+  __ESBMC_assert(l != NULL, "list_reverse_range: list is null");
+
+  int64_t size = (int64_t)l->size;
+
+  int64_t start;
+  if (has_lower)
+  {
+    start = (lower < 0) ? lower + size : lower;
+    if (start < 0)
+      start = 0;
+    if (start > size)
+      start = size;
+  }
+  else
+    start = 0;
+
+  int64_t stop;
+  if (has_upper)
+  {
+    stop = (upper < 0) ? upper + size : upper;
+    if (stop < 0)
+      stop = 0;
+    if (stop > size)
+      stop = size;
+  }
+  else
+    stop = size;
+
+  int64_t left = start;
+  int64_t right = stop - 1;
+  while (left < right)
+  {
+    PyObject tmp = l->items[left];
+    l->items[left] = l->items[right];
+    l->items[right] = tmp;
+    left++;
+    right--;
+  }
+}

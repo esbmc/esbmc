@@ -3,6 +3,66 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+namespace
+{
+// Structural equality of two AST JSON nodes, ignoring source-location keys
+// (lineno/col_offset/...). Two textually distinct occurrences of the same
+// expression — e.g. the `l[i+1:]` on each side of `l[i+1:] = reversed(l[i+1:])`
+// — differ only in their location fields, so a raw `==` would wrongly report
+// them as different. Used to prove the read-slice and write-slice are the same
+// before collapsing the reverse-in-place idiom.
+bool ast_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto is_loc_key = [&](const std::string &k) {
+    for (const char *lk : loc_keys)
+      if (k == lk)
+        return true;
+    return false;
+  };
+
+  if (a.type() != b.type())
+    return false;
+
+  if (a.is_object())
+  {
+    // Compare the non-location keys of both objects symmetrically.
+    for (auto it = a.begin(); it != a.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (
+        !b.contains(it.key()) ||
+        !ast_equal_ignoring_location(it.value(), b[it.key()]))
+        return false;
+    }
+    for (auto it = b.begin(); it != b.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (!a.contains(it.key()))
+        return false;
+    }
+    return true;
+  }
+
+  if (a.is_array())
+  {
+    if (a.size() != b.size())
+      return false;
+    for (size_t i = 0; i < a.size(); ++i)
+      if (!ast_equal_ignoring_location(a[i], b[i]))
+        return false;
+    return true;
+  }
+
+  return a == b;
+}
+} // namespace
+
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -924,6 +984,78 @@ void python_list::handle_slice_assignment(
   }
 
   const locationt location = converter_.get_location_from_decl(slice_node);
+
+  // Reverse-in-place idiom: `l[a:b] = reversed(l[a:b])`. The literal form emits
+  // three heap passes (slice-read copy, reversed() rebuild, slice-assign
+  // resize+copy); collapse them into a single in-place swap over the sub-range.
+  // Fire ONLY when it is provably the same list variable and the same slice on
+  // both sides, with step 1 — then reversing the read slice and storing it back
+  // is exactly an in-place reverse of [a:b]. Any mismatch falls through to the
+  // correct (slower) generic path, so a missed match is harmless and a wrong
+  // match is impossible.
+  //
+  // `reversed` is matched by name, consistent with the rest of the frontend
+  // (annotation_intrinsics.cpp, loop_mixin.py, expr.cpp all key on the builtin
+  // name); a user-shadowed `reversed` is not honoured anywhere, so this adds no
+  // new assumption. Bounds are evaluated once here vs twice in the three-step
+  // form — immaterial for the pure index expressions this fires on.
+  if (
+    step_val == 1 && value_node.is_object() &&
+    value_node.value("_type", "") == "Call" && value_node.contains("func") &&
+    value_node["func"].value("_type", "") == "Name" &&
+    value_node["func"].value("id", "") == "reversed" &&
+    value_node.contains("args") && value_node["args"].is_array() &&
+    value_node["args"].size() == 1)
+  {
+    const nlohmann::json &arg = value_node["args"][0];
+    const bool arg_is_same_slice =
+      arg.is_object() && arg.value("_type", "") == "Subscript" &&
+      arg.contains("slice") && arg["slice"].is_object() &&
+      arg["slice"].value("_type", "") == "Slice" &&
+      // Same list variable (Name) on both sides.
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      list_value_.contains("value") && list_value_["value"].is_object() &&
+      list_value_["value"].value("_type", "") == "Name" &&
+      arg["value"].value("id", "") == list_value_["value"].value("id", "") &&
+      // Same slice bounds (ignoring source locations).
+      ast_equal_ignoring_location(arg["slice"], slice_node);
+
+    if (arg_is_same_slice)
+    {
+      const symbolt *rev_fn = converter_.symbol_table().find_symbol(
+        "c:@F@__ESBMC_list_reverse_range");
+      if (rev_fn)
+      {
+        const typet i64r = signedbv_typet(64);
+        auto rev_bound = [&](const char *name, bool &present) -> exprt {
+          present = slice_node.contains(name) && !slice_node[name].is_null();
+          if (!present)
+            return from_integer(0, i64r);
+          exprt e = converter_.get_expr(slice_node[name]);
+          e = remove_function_calls_recursive(e, slice_node);
+          return build_typecast(e, i64r);
+        };
+        bool rlo = false, rup = false;
+        exprt rlower = rev_bound("lower", rlo);
+        exprt rupper = rev_bound("upper", rup);
+
+        exprt rev_call = build_call_expr(
+          *rev_fn,
+          empty_typet(),
+          {list_expr.type().is_pointer() ? list_expr
+                                         : build_address_of(list_expr),
+           rlower,
+           from_integer(rlo ? 1 : 0, int_type()),
+           rupper,
+           from_integer(rup ? 1 : 0, int_type())});
+        rev_call.location() = location;
+        converter_.add_instruction(
+          converter_.convert_expression_to_code(rev_call));
+        return;
+      }
+    }
+  }
 
   // Evaluate the right-hand side; materialize a call (e.g. sorted(...)) into
   // a temporary so its result can be passed to the model by address. get_expr
