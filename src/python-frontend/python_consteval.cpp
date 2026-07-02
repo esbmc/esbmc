@@ -1199,21 +1199,19 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return PyConstValue::make_string(out);
           });
 
+        // title: a letter starts a new word iff the previous character is
+        // uncased (CPython semantics — digits are uncased, so they *end* a
+        // word: "3d movie".title() == "3D Movie", "a1a".title() == "A1A").
         if (m == "title")
           return unary([](const std::string &x) {
             std::string out(x);
-            bool new_word = true;
+            bool prev_cased = false;
             for (char &c : out)
             {
               auto uc = static_cast<unsigned char>(c);
-              if (std::isalpha(uc))
-              {
-                c = static_cast<char>(
-                  new_word ? std::toupper(uc) : std::tolower(uc));
-                new_word = false;
-              }
-              else
-                new_word = !std::isalnum(uc);
+              c = static_cast<char>(
+                prev_cased ? std::tolower(uc) : std::toupper(uc));
+              prev_cased = std::isalpha(uc) != 0;
             }
             return PyConstValue::make_string(out);
           });
@@ -1279,6 +1277,38 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             }
           }
           return PyConstValue::make_bool(seen_cased);
+        }
+
+        // istitle: uppercase letters may only follow uncased characters,
+        // lowercase letters only cased ones, and at least one cased
+        // character must be present (CPython semantics, byte-level ASCII).
+        if (m == "istitle")
+        {
+          if (!args_arr.empty())
+            return std::nullopt;
+          bool cased = false;
+          bool prev_cased = false;
+          for (char c : s)
+          {
+            auto uc = static_cast<unsigned char>(c);
+            if (std::isupper(uc))
+            {
+              if (prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else if (std::islower(uc))
+            {
+              if (!prev_cased)
+                return PyConstValue::make_bool(false);
+              prev_cased = true;
+              cased = true;
+            }
+            else
+              prev_cased = false;
+          }
+          return PyConstValue::make_bool(cased);
         }
 
         if (m == "startswith" || m == "endswith")
