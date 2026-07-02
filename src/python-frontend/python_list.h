@@ -134,10 +134,12 @@ public:
    * @brief Lower integer-array (fancy) indexing `a[[0, 2]]` to a bounded,
    * unrolled sequence of element reads: each entry of @p indices must be a
    * concrete integer literal (or its negation), resolved and bounds-checked
-   * at conversion time. @p array must be a 1-D fixed-size array; a
-   * non-scalar element type (whole-row fancy indexing) is rejected with
-   * TypeError.
-   * @param array   Source 1-D array expression.
+   * at conversion time. @p array must be a fixed-size 1-D or 2-D array; for
+   * 2-D arrays the selected rows are copied element-by-element. A 3-D+
+   * element type (i.e. @p array itself being 3-D+) is rejected with
+   * TypeError, since a deeper row would require a recursive element-wise
+   * copy this helper does not implement.
+   * @param array   Source fixed-shape (1-D or 2-D) array expression.
    * @param indices AST nodes for each requested index (elts of the List
    *                literal used as the subscript).
    * @param element The Subscript AST node, used for location info.

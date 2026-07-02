@@ -598,7 +598,16 @@ exprt python_list::build_fancy_index(
   if (elem_type.is_array())
   {
     const array_typet &row_array_type = to_array_type(elem_type);
-    const typet row_elem_type = row_array_type.subtype();
+    const typet row_elem_type = ns.follow(row_array_type.subtype());
+    if (row_elem_type.is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: fancy indexing currently supports only up to 2-D "
+             "arrays; 3-D+ arrays are not modelled";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
     const BigInt num_cols =
       binary2integer(row_array_type.size().value().c_str(), false);
 
