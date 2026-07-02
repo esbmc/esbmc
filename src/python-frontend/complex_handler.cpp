@@ -127,36 +127,46 @@ exprt complex_handler::complex_div(
   const exprt &y,
   const nlohmann::json &loc_source) const
 {
-  const typet &dt = cached_double_type();
-  exprt xr = complex_member(x, "real", dt);
-  exprt xi = complex_member(x, "imag", dt);
-  exprt yr = complex_member(y, "real", dt);
-  exprt yi = complex_member(y, "imag", dt);
-  exprt zero = from_double(0.0, dt);
+  // V.3: build the whole quotient in IREP2, back-migrating once. Operands are
+  // the double-typed .real/.imag members (member2t over the complex struct, as
+  // complex_member does) and each IEEE op carries the default
+  // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node
+  // -- so the back-migrated struct matches the legacy make_complex(ieee_binop)
+  // path (goto byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(cached_double_type());
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc x2, y2, zero;
+  migrate_expr(x, x2);
+  migrate_expr(y, y2);
+  migrate_expr(from_double(0.0, cached_double_type()), zero);
+  const expr2tc xr = member2tc(dt2, x2, "real");
+  const expr2tc xi = member2tc(dt2, x2, "imag");
+  const expr2tc yr = member2tc(dt2, y2, "real");
+  const expr2tc yi = member2tc(dt2, y2, "imag");
 
-  exprt ac = ieee_binop("ieee_mul", xr, yr);
-  exprt bd = ieee_binop("ieee_mul", xi, yi);
-  exprt bc = ieee_binop("ieee_mul", xi, yr);
-  exprt ad = ieee_binop("ieee_mul", xr, yi);
-  exprt c2 = ieee_binop("ieee_mul", yr, yr);
-  exprt d2 = ieee_binop("ieee_mul", yi, yi);
+  auto ieee_mul = [&](const expr2tc &a, const expr2tc &b) {
+    return ieee_mul2tc(dt2, a, b, rm);
+  };
+  const expr2tc ac = ieee_mul(xr, yr);
+  const expr2tc bd = ieee_mul(xi, yi);
+  const expr2tc bc = ieee_mul(xi, yr);
+  const expr2tc ad = ieee_mul(xr, yi);
+  const expr2tc c2 = ieee_mul(yr, yr);
+  const expr2tc d2 = ieee_mul(yi, yi);
 
-  exprt numer_real = ieee_binop("ieee_add", ac, bd);
-  exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
-  exprt denom = ieee_binop("ieee_add", c2, d2);
+  const expr2tc numer_real = ieee_add2tc(dt2, ac, bd, rm);
+  const expr2tc numer_imag = ieee_sub2tc(dt2, bc, ad, rm);
+  const expr2tc denom = ieee_add2tc(dt2, c2, d2, rm);
 
-  exprt normal_result = make_complex(
-    ieee_binop("ieee_div", numer_real, denom),
-    ieee_binop("ieee_div", numer_imag, denom));
+  std::vector<expr2tc> members{
+    ieee_div2tc(dt2, numer_real, denom, rm),
+    ieee_div2tc(dt2, numer_imag, denom, rm)};
+  exprt normal_result = migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 
   // Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
-  // V.3: built in IREP2, back-migrated for the legacy code_ifthenelset guard.
-  expr2tc yr2, yi2, zero2;
-  migrate_expr(yr, yr2);
-  migrate_expr(yi, yi2);
-  migrate_expr(zero, zero2);
   exprt denom_is_zero =
-    migrate_expr_back(and2tc(equality2tc(yr2, zero2), equality2tc(yi2, zero2)));
+    migrate_expr_back(and2tc(equality2tc(yr, zero), equality2tc(yi, zero)));
 
   exprt raise_zdiv = converter_.get_exception_handler().gen_exception_raise(
     "ZeroDivisionError", "complex division by zero");
