@@ -4,6 +4,7 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <util/c_types.h>
 #include <util/message.h>
 
 #include <algorithm>
@@ -263,15 +264,6 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   }
 }
 
-// CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
-// goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
-// side_effect_exprt, done by goto-programs/builtin_functions.cpp during that
-// pass) never fire for them; the call instead surfaces as a bodyless
-// external function at symex time (roadmap §4.8). Recognise the small set of
-// well-known allocation builtins by callee name here instead, rewriting the
-// FUNCTION_CALL's `code` into the ASSIGN shape goto_convert would have
-// produced. Returns true if `code` was rewritten (the caller must then also
-// override the instruction's typeid to ASSIGN).
 // Builds the malloc side_effect_exprt (irep shape) do_mem would have built,
 // falling back to element type char -- do_mem's own fallback whenever the
 // size argument isn't a recognisable sizeof(T) pattern, which a CBMC
@@ -284,22 +276,24 @@ irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
   if (args.size() != 1)
     return get_nil_irep();
 
+  // get_alloc_size (goto-programs/builtin_functions.cpp) always coerces the
+  // allocation size to size_t; mirror that instead of assuming CBMC's raw
+  // argument already has the right width.
+  irept size_arg(irep_idt("typecast"));
+  size_arg.add("type") = static_cast<const irept &>(size_type());
+  size_arg.get_sub().push_back(args[0]);
   // fix_expression only ever recurses into get_sub()/get_named_sub(), never
   // comments -- normalise (e.g. constant hex->binary) explicitly, since this
   // copy is about to be embedded in the "#size" comment, which no later pass
   // will otherwise reach.
-  irept size_arg = args[0];
   fix_expression(size_arg);
-
-  irept char_type(irep_idt("signedbv"));
-  char_type.add("width") = mk("8");
 
   irept sideeffect(irep_idt("sideeffect"));
   sideeffect.add("type") = lhs.find("type");
   sideeffect.add("statement") = mk("malloc");
   sideeffect.get_sub().push_back(args[0]);
   sideeffect.add("#size") = size_arg;
-  sideeffect.add("#type") = char_type;
+  sideeffect.add("#type") = static_cast<const irept &>(char_type());
   return sideeffect;
 }
 
@@ -307,7 +301,13 @@ irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
 // clang_c_adjust_expr.cpp builds for a syntactically-recognised sqrt/sqrtf/
 // sqrtl call. No explicit rounding_mode operand -- migrate_expr's ieee_sqrt
 // handler defaults to the standard c:@__ESBMC_rounding_mode symbol when one
-// isn't present, same as it does for the ieee_add/sub/mul/div family.
+// isn't present, same as it does for the ieee_add/sub/mul/div family. That
+// default symbol is defined by esbmc_parseoptions.cpp's
+// synthesize_cprover_additions, which runs before read_cbmc_goto_object in
+// every *normal* --binary invocation, but not under --no-cprover-additions
+// -- currently masked there by an unrelated, pre-existing entry-point
+// resolution gap, not a live bug today, but not this function's to assume
+// away either.
 irept build_sqrt_rhs(const irept &lhs, const irept::subt &args)
 {
   if (args.size() != 1)

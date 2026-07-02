@@ -1,8 +1,10 @@
 #include <stdlib.h>
-#include <assert.h>
 int main()
 {
   int *p = malloc(sizeof(int));
-  assert(p != 0);
+  if (p)
+  {
+    p[1] = 5;
+  }
   return 0;
 }
