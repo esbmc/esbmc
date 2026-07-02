@@ -90,19 +90,36 @@ exprt complex_handler::ieee_binop(
 
 exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
 {
-  const typet &dt = cached_double_type();
-  exprt xr = complex_member(x, "real", dt);
-  exprt xi = complex_member(x, "imag", dt);
-  exprt yr = complex_member(y, "real", dt);
-  exprt yi = complex_member(y, "imag", dt);
+  // V.3: build the whole complex product in IREP2, back-migrating once. Members
+  // are double-typed (member2t over the complex struct source, like
+  // complex_member); each IEEE op carries the default __ESBMC_rounding_mode
+  // symbol migrate_expr attaches to a legacy ieee_* node; the double-typed
+  // result needs no typecast -- so this back-migrates to the same struct the
+  // legacy make_complex(ieee_binop...) path produced (goto byte-identical,
+  // verified via --goto-functions-only diff on the complex-power tests).
+  // Mirrors complex_member / complex_typecast.
+  const type2tc dt2 = migrate_type(cached_double_type());
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc x2, y2;
+  migrate_expr(x, x2);
+  migrate_expr(y, y2);
 
-  exprt ac = ieee_binop("ieee_mul", xr, yr);
-  exprt bd = ieee_binop("ieee_mul", xi, yi);
-  exprt ad = ieee_binop("ieee_mul", xr, yi);
-  exprt bc = ieee_binop("ieee_mul", xi, yr);
+  auto mem = [&](const expr2tc &b, const irep_idt &n) {
+    return member2tc(dt2, b, n);
+  };
+  expr2tc xr = mem(x2, "real"), xi = mem(x2, "imag");
+  expr2tc yr = mem(y2, "real"), yi = mem(y2, "imag");
 
-  return make_complex(
-    ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
+  expr2tc ac = ieee_mul2tc(dt2, xr, yr, rm);
+  expr2tc bd = ieee_mul2tc(dt2, xi, yi, rm);
+  expr2tc ad = ieee_mul2tc(dt2, xr, yi, rm);
+  expr2tc bc = ieee_mul2tc(dt2, xi, yr, rm);
+  expr2tc re = ieee_sub2tc(dt2, ac, bd, rm);
+  expr2tc im = ieee_add2tc(dt2, ad, bc, rm);
+
+  std::vector<expr2tc> members{re, im};
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 }
 
 exprt complex_handler::complex_div(
