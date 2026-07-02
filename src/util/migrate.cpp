@@ -1485,7 +1485,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = pointer_offset2tc(type, theval);
+    // pointer_offset2t requires a signed, address-width result type. CBMC
+    // goto binaries may declare __CPROVER_POINTER_OFFSET as an unsigned,
+    // size_t-like type, so build the intrinsic with the canonical signed
+    // type and cast back to the declared type when they differ (mirroring
+    // the construction in smt_memspace.cpp).
+    type2tc offs_type = get_int_type(config.ansi_c.address_width);
+    expr2tc offs = pointer_offset2tc(offs_type, theval);
+    new_expr_ref = (type == offs_type) ? offs : typecast2tc(type, offs);
     return;
   }
 
@@ -2699,9 +2706,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "r_ok")
+  if (expr.id() == "r_ok" || expr.id() == "w_ok" || expr.id() == "rw_ok")
   {
-    // FUTURE: call __ESBMC_r_ok
+    // FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok
     true_exprt t;
     migrate_expr(t, new_expr_ref);
     return;
