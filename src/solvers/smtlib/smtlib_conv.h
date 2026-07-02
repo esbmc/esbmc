@@ -194,6 +194,10 @@ public:
   ~smtlib_convt() override;
 
   smt_resultt dec_solve() override;
+  /* Emit (check-sat) to the configured sinks and flush them. Non-template so
+   * derived backends in other translation units can call it without relying
+   * on cross-TU instantiations of the emit() member template. */
+  void emit_check_sat();
   /* Read and parse the solver's response to an already-emitted (check-sat)
    * from the interactive pipe. Requires emit_proc. */
   smt_resultt read_check_sat_response();

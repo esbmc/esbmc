@@ -1,13 +1,14 @@
-if(NOT ENABLE_BITWUZLLOB)
-  set(ESBMC_ENABLE_bitwuzllob 0 PARENT_SCOPE)
-  return()
-endif()
-
 # The bitwuzllob backend drives an external Mallob binary at runtime; there is
 # no library to find or link. It reuses the smtlib backend's serializer and
-# response parser, so it cannot be built without it.
-if(NOT ENABLE_SMTLIB)
-  message(FATAL_ERROR "ENABLE_BITWUZLLOB requires ENABLE_SMTLIB")
+# response parser, so it cannot be built without it. As ENABLE_BITWUZLLOB
+# defaults to ON, degrade gracefully instead of failing the configure when
+# smtlib is unavailable (e.g. on Windows CI).
+if(NOT ENABLE_BITWUZLLOB OR NOT ENABLE_SMTLIB)
+  if(ENABLE_BITWUZLLOB AND NOT ENABLE_SMTLIB)
+    message(STATUS "Disabling the bitwuzllob backend: it requires ENABLE_SMTLIB")
+  endif()
+  set(ESBMC_ENABLE_bitwuzllob 0 PARENT_SCOPE)
+  return()
 endif()
 
 add_library(solverbitwuzllob bitwuzllob_conv.cpp)

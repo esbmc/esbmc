@@ -626,6 +626,14 @@ void smtlib_smt_ast::dump() const
   ctx_m->emit_proc.out_stream = tmp_proc;
 }
 
+void smtlib_convt::emit_check_sat()
+{
+  emit("%s", "(check-sat)\n");
+
+  // Flush out command, starting model check
+  flush();
+}
+
 smt_resultt smtlib_convt::dec_solve()
 {
   pre_solve();
@@ -635,10 +643,7 @@ smt_resultt smtlib_convt::dec_solve()
   // Emit constraints
   // check-sat
 
-  emit("%s", "(check-sat)\n");
-
-  // Flush out command, starting model check
-  flush();
+  emit_check_sat();
 
   // If we're just outputing to a file, this is where we terminate.
   if (!emit_proc)

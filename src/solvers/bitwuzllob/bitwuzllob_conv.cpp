@@ -130,8 +130,7 @@ smt_resultt bitwuzllob_convt::dec_solve()
   /* The (check-sat) goes to both sinks: the formula file for Mallob, and the
    * local model solver's pipe (if configured), which starts solving in
    * parallel and only gets waited for when a model is actually needed. */
-  emit("%s", "(check-sat)\n");
-  flush();
+  emit_check_sat();
 
   smt_resultt res = run_bitwuzllob();
   if (res != P_SATISFIABLE)

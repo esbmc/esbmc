@@ -88,9 +88,11 @@ endfunction()
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
-if(ENABLE_BITWUZLLOB)
-    # The suite drives the backend through a z3-based stand-in for Mallob's
-    # mono mode (Mallob itself is Linux/MPI-only), so it needs a z3 binary.
+if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
+    # The backend is only built when smtlib is (see its CMakeLists.txt). The
+    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
+    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
+    # shell.
     find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3)
     if(ESBMC_BITWUZLLOB_TEST_Z3)
         set(REGRESSIONS_BITWUZLLOB bitwuzllob)
