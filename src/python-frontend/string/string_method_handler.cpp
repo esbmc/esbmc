@@ -3312,8 +3312,11 @@ exprt string_handler::handle_string_center(
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
 
+  // CPython puts the extra fill char on the LEFT when both the margin and
+  // the width are odd (Objects/unicodeobject.c unicode_center_impl:
+  // left = marg/2 + (marg & width & 1)), e.g. "ab".center(7) == "---ab--".
   long long pad = width - static_cast<long long>(input.size());
-  long long left = pad / 2;
+  long long left = pad / 2 + (pad & width & 1);
   long long right = pad - left;
   std::string result(static_cast<size_t>(left), fill);
   result += input;
