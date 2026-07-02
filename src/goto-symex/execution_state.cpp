@@ -795,8 +795,7 @@ void execution_statet::get_expr_globals(
     expr2tc p = expr;
     bool point_to_global = false;
     if (
-      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
-      !symbol->static_lifetime)
+      symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
       expr2tc tmp = expr;
       /* Rename it so that it can be dereferenced in current state */
