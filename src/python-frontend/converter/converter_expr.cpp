@@ -1664,28 +1664,41 @@ static exprt make_slice_struct_expr(
     return node && !node->is_null();
   };
 
-  struct_exprt slice_expr(struct_type);
+  // V.3: build the PySliceObject value in IREP2. Each member is built exactly
+  // as the legacy struct_exprt did -- start/stop/step (a value, nondet, or an
+  // IREP2 typecast from lower_int), the has_* flags, and a zero for the
+  // anonymous trailing padding member -- then migrated; the constant_struct2t
+  // over those members back-migrates to the same struct value. Re-attach the
+  // followed struct type afterwards: migrate_type_back does not reproduce the
+  // component #cpp_type attributes / padding layout of the C model struct.
+  std::vector<expr2tc> members;
+  members.reserve(struct_type.components().size());
   for (const auto &component : struct_type.components())
   {
     const std::string name = component.get_name().as_string();
+    exprt member;
     if (name == "start")
-      slice_expr.operands().push_back(lower_int(lower, component.type()));
+      member = lower_int(lower, component.type());
     else if (name == "stop")
-      slice_expr.operands().push_back(lower_int(upper, component.type()));
+      member = lower_int(upper, component.type());
     else if (name == "step")
-      slice_expr.operands().push_back(lower_int(step, component.type()));
+      member = lower_int(step, component.type());
     else if (name == "has_start")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(lower) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(lower) ? 1 : 0, component.type());
     else if (name == "has_stop")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(upper) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(upper) ? 1 : 0, component.type());
     else if (name == "has_step")
-      slice_expr.operands().push_back(
-        from_integer(present_flag(step) ? 1 : 0, component.type()));
+      member = from_integer(present_flag(step) ? 1 : 0, component.type());
     else
-      slice_expr.operands().push_back(gen_zero(component.type()));
+      member = gen_zero(component.type());
+    expr2tc m2;
+    migrate_expr(member, m2);
+    members.push_back(std::move(m2));
   }
+
+  exprt slice_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(struct_type), members));
+  slice_expr.type() = struct_type;
 
   if (source_node.contains("lineno"))
     slice_expr.location() = conv.get_location_from_decl(source_node);
