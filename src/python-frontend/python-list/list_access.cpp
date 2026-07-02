@@ -328,7 +328,10 @@ exprt python_list::build_bool_mask_row_select(
   // "array type ... is not assignable" -- so each row is copied column by
   // column instead, mirroring build_column_select's element-wise copy.
   const array_typet &row_array_type = to_array_type(ns.follow(row_type));
-  const typet elem_type = row_array_type.subtype();
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+    return reject(
+      "currently supports only 2-D arrays; 3-D+ rows are not modelled");
   const BigInt num_cols =
     binary2integer(row_array_type.size().value().c_str(), false);
 
