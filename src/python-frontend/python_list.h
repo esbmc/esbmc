@@ -96,6 +96,58 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Lower whole-row boolean-mask selection `a[mask]` on a 2-D array.
+   * The runtime-list model used by build_bool_mask_index cannot hold an
+   * array-typed element (confirmed empirically: pushing a row produces a
+   * bit-vector/array sort mismatch at the SMT backend), so this requires
+   * @p mask to resolve to a concrete boolean literal (`np.array([True,
+   * False, ...])`) whose declaring assignment is found via AST lookup —
+   * the selected row count is then known at conversion time and the result
+   * is built as a fixed-size array, mirroring build_column_select. A
+   * symbolic (non-literal) mask is rejected explicitly.
+   * @param array   Source 2-D array expression.
+   * @param mask    Boolean mask array expression (used only for its type/
+   *                length; values are re-read from the AST).
+   * @param element The Subscript AST node, used for location info and to
+   *                recover the mask's variable name.
+   */
+  exprt build_bool_mask_row_select(
+    const exprt &array,
+    const exprt &mask,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower 2-D column selection `a[:, j]` to a bounded copy over every
+   * row of a fixed-shape 2-D array, collecting `row[j]` into a fresh 1-D
+   * array. @p array must be a fixed-size array of fixed-size rows (numpy
+   * static-shape model); anything else is rejected with TypeError.
+   * @param array          Source 2-D array expression.
+   * @param col_index_node AST node for the column index (axis 1).
+   * @param element        The Subscript AST node, used for location info.
+   */
+  exprt build_column_select(
+    const exprt &array,
+    const nlohmann::json &col_index_node,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Lower integer-array (fancy) indexing `a[[0, 2]]` to a bounded,
+   * unrolled sequence of element reads: each entry of @p indices must be a
+   * concrete integer literal (or its negation), resolved and bounds-checked
+   * at conversion time. @p array must be a 1-D fixed-size array; a
+   * non-scalar element type (whole-row fancy indexing) is rejected with
+   * TypeError.
+   * @param array   Source 1-D array expression.
+   * @param indices AST nodes for each requested index (elts of the List
+   *                literal used as the subscript).
+   * @param element The Subscript AST node, used for location info.
+   */
+  exprt build_fancy_index(
+    const exprt &array,
+    const std::vector<nlohmann::json> &indices,
+    const nlohmann::json &element);
+
+  /**
    * @brief Lower a list slice assignment l[lower:upper:step] = value to a
    * __ESBMC_list_slice_assign model call. The step must be a constant literal
    * (or absent); the value must evaluate to a list.
@@ -496,6 +548,27 @@ private:
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
+
+  /**
+   * @brief Resolve an index expression against a compile-time-known axis
+   * length, normalizing negative values and rejecting out-of-range indices.
+   * A literal (constant, or negated constant) index is fully resolved and
+   * bounds-checked at conversion time, producing a precise "IndexError:
+   * index N is out of bounds for axis A with size L" frontend error. A
+   * non-constant (runtime) index is normalized and bounds-checked with an
+   * in-model IndexError raise instead, since the concrete value is unknown
+   * until symbolic execution.
+   * @param idx_node  AST node for the index expression.
+   * @param axis_len  Compile-time length of the axis being indexed.
+   * @param axis      Axis number, used only in the error message.
+   * @param element   AST node used for location info.
+   * @return A size_type expression holding the normalized, in-bounds index.
+   */
+  exprt resolve_fixed_axis_index(
+    const nlohmann::json &idx_node,
+    const BigInt &axis_len,
+    unsigned axis,
+    const nlohmann::json &element);
 
   // Returns (registering if absent) the __python_str_slice symbol:
   //   char* __python_str_slice(const char*, long long, long long, long long)
