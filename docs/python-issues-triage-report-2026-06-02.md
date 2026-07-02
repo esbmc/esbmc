@@ -3561,3 +3561,52 @@ is orthogonal.
 ### 74b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 75. 2026-07-02 re-validation (sixty-fifth sweep) — graph-quixbug class-instance signatures shifted post-heap-lifetime (characterized, deferred)
+
+Re-test against current `master` (tip `c177d64d51`), focused on the class-graph cluster that the
+object-model design note (`docs/python-object-model-design-2026-06-12.md`) tracks as its Stage 2.
+The design note's Stage 1 (heap-allocated instances, PR #5339) and the Stage 2 escape/lifetime work
+(GC lifetime for escaping instances #5424; `reverse_linked_list` #5438) have all **landed**, and
+`reverse_linked_list` has flipped KNOWNBUG→CORE. The three remaining graph quixbugs the note names
+(`detect_cycle`, `depth_first_search`, `topological_ordering`) stay KNOWNBUG — but their failure
+signatures have **shifted off the crashes recorded in §3b/§6a**, which narrows the residual and is
+worth pinning before the next fix cycle.
+
+### 75a. Signature shift (characterized, no point fix)
+- **`detect_cycle`** (§3b: `ERROR: Cannot resolve nested attribute: successor`; §6a: the
+  short-circuit `is None` SMT abort) → now a **clean but spurious** `dereference failure: NULL
+  pointer` (CWE-476) at `main.py:11` (`hare = hare.successor.successor`) — a false alarm, not a
+  crash. GOTO evidence: the guard `if hare is None or hare.successor is None: return False` lowers
+  to `IF !(ISNONE(hare, 0) || ISNONE(hare->successor, 0)) THEN GOTO 2`, which is a structurally
+  correct short-circuit, yet symex still reaches line 11 with `hare->successor == NULL`. So the
+  residual is precisely that **the null branch past an `is None` guard is not pruned for a
+  heap-allocated `Class*` field whose value is `None` (a null `Class*`)** — i.e. `ISNONE` on a
+  null-valued instance attribute is not forcing the guarded early return. This is a strictly
+  smaller, better-localised problem than the pre-heap-lifetime "cannot resolve attribute" abort.
+- **`depth_first_search`** (§3b: internal `ABORT: is_array_type(internal_deref_items...)`) → **no
+  longer aborts**; it now exercises the recursion (`search_from` self-call + `node in nodesvisited`
+  set membership + the `any(...)` generator) and does not converge under `--incremental-bmc` within
+  a 120 s budget. Crash removed; residual is now traversal/unwinding, not a deref-model abort.
+- **`topological_ordering`** (§3b/§3d: `SEGFAULT`) → **no longer segfaults**; it now drives the
+  graph-traversal unwinder (`main.py:4` loop) without converging in-budget. Crash removed.
+
+**Disposition: characterized, deferred** (like §36) — no isolated point fix is shipped this sweep.
+The `detect_cycle` residual is the concrete next task: root-cause why `ISNONE(<null Class*>, 0)`
+does not prune the guarded branch (candidates: the `is None`/`ISNONE` lowering vs the null-`Class*`
+representation in `python_converter`'s `BoolOp`/`Compare` handling, or the entry harness feeding a
+nondet receiver into `detect_cycle`). That is a focused frontend investigation + a `Class*`
+null-guard fix with a pass/fail regression pair, dual-solver (Bitwuzla+Z3) and Mode C on the changed
+branch — not a same-sweep edit.
+
+**Branch hygiene note.** The long-lived local `feat/python-object-heap-lifetime` branch is now
+**badly stale** — ~78 k lines diverged from current `master`, and it *deletes* unrelated files that
+`master` has since added. Its useful Stage-1/Stage-2 content already reached `master` through the
+focused PRs above (#5339/#5424/#5438, plus #5651 return-by-reference for #3067); the branch must
+**not** be merged. New work on this cluster should branch fresh from `master`.
+
+### 75b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands; the object-model design note's
+Stage 2 remains the home for the `detect_cycle` null-guard follow-up, with Stage 3 (#3067
+`ClassHandler`/MRO refactor) still separable and unstarted.
