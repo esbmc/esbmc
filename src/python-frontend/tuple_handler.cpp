@@ -556,6 +556,27 @@ typet tuple_handler::get_tuple_type_from_annotation(
   struct_typet tuple_type;
   const auto &slice = annotation_node["slice"];
 
+  // A concrete string literal embedded in place of the bare 'str' name (see
+  // preprocessor core_visitors_mixin.py::_size_tuple_str_components, #5444):
+  // the caller-stamped literal's length, not the type name, sizes this
+  // component. Sized exactly like a real string literal conversion
+  // (string_builder::build_string_literal) -- always length + 1 for the null
+  // terminator -- so the struct this produces matches the byte layout
+  // list_push/list_at actually store/copy at runtime; the generic
+  // type_handler_::get_typet(json) string-sizing path is not reused here
+  // because its "size stays put for a single-char string" special case
+  // disagrees with that layout and silently corrupts the read-back value.
+  auto elem_type_from_slice_node = [&](const nlohmann::json &node) -> typet {
+    if (
+      node.contains("_type") && node["_type"] == "Constant" &&
+      node.contains("value") && node["value"].is_string())
+      return type_handler_.get_typet(
+        "str", node["value"].get<std::string>().size() + 1);
+    if (node.contains("id"))
+      return type_handler_.get_typet(node["id"].get<std::string>());
+    return type_handler_.get_typet(node);
+  };
+
   // Build tag name matching the pattern used in get_tuple_expr
   std::vector<typet> element_types;
 
@@ -564,15 +585,7 @@ typet tuple_handler::get_tuple_type_from_annotation(
     // Multiple element types: tuple[int, str, float]
     const auto &elts = slice["elts"];
     for (size_t i = 0; i < elts.size(); i++)
-    {
-      typet elem_type;
-      if (elts[i].contains("id"))
-        elem_type = type_handler_.get_typet(elts[i]["id"].get<std::string>());
-      else
-        elem_type = type_handler_.get_typet(elts[i]);
-
-      element_types.push_back(elem_type);
-    }
+      element_types.push_back(elem_type_from_slice_node(elts[i]));
   }
   else
   {
@@ -580,11 +593,7 @@ typet tuple_handler::get_tuple_type_from_annotation(
     // (a bare Name or nested subscript), not an elts list. Without this the
     // tuple would get zero components — the opaque struct the callers of this
     // function are specifically avoiding.
-    if (slice.contains("id") && slice["id"].is_string())
-      element_types.push_back(
-        type_handler_.get_typet(slice["id"].get<std::string>()));
-    else
-      element_types.push_back(type_handler_.get_typet(slice));
+    element_types.push_back(elem_type_from_slice_node(slice));
   }
 
   return create_tuple_struct_type(element_types);
