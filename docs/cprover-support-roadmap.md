@@ -75,7 +75,9 @@ and the symbol/function table layout.
 | CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
 | Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
 | Pointer predicates: `pointer_offset` operand-wrap crash fix, `w_ok`/`rw_ok` stubs (§4.4, Phase 2, partial) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
-| Float-classification predicates: `isnan`/`isinf`/`isnormal` operand-wrap crash fix (§4.4, Phase 2, partial) | ✅ (PR TBD) | `cbmc_adapter.cpp` |
+| Float-classification predicates: `isnan`/`isinf`/`isnormal` operand-wrap crash fix (§4.4, Phase 2, partial) | ✅ (PR #5741) | `cbmc_adapter.cpp` |
+| Pointer subtype double-wrap fix (§4.3) — every local pointer DECL without an immediate initializer was silently downgraded to `void*` | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_type` |
+| Builtin-call rewrite for `malloc`/`sqrtf` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -117,6 +119,20 @@ the retarget logic; the default `__CPROVER__start` bridge (the common case) is f
 CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Pointer subtype double-wrap — ✅ fixed.** Found while chasing an unrelated `malloc`
+verdict mismatch (§4.8): `fix_type`'s `pointer` branch, unlike the near-identical `array`
+branch three lines below it, wrapped the pointed-to type's positional sub in an
+intermediate, id-less group irep before assigning it to `"subtype"`
+(`self.add("subtype") = operands;` where `operands.get_sub() = self.get_sub();`, instead
+of `self.add("subtype") = self.get_sub()[0];` the way `array` correctly does it).
+`typet::subtype()` (`util/type.h`) is a direct `find("subtype")` with no unwrapping, so
+`migrate_type` received the wrapper — an irep with no matching case — and silently fell
+through to `void`. This affected **any local pointer declared without an initializer that
+pins its type from elsewhere** (`int *p;` followed by a later assignment), which is common
+enough that it was previously undiscovered simply because nothing had exercised a
+`malloc`-then-typed-write pattern far enough to notice the pointer was void* the whole
+time. Fixed by mirroring the `array` branch's direct assignment exactly.
 
 ### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
 `fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
@@ -216,73 +232,57 @@ to bridge CBMC's encoding onto it rather than re-implement.
 Only CBMC binary **version 6** is accepted. No graceful handling of other versions, and the
 reader `abort()`s on malformed input rather than returning a recoverable error.
 
-### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 newly diagnosed, not yet fixed
-Distinct from §4.4 (expression-id coverage): this is about **instruction-level FUNCTION_CALL
-targets**, not expression ireps. Found by direct testing: `sqrtf`/`fabsf`/`ceilf`/`floorf`/
-`truncf`/`roundf` all produce `WARNING: no body for function <name>` when loaded via
-`--binary`, so symex treats the return value as unconstrained nondet — CBMC reports
-SUCCESSFUL on assertions these functions would trivially satisfy (e.g. `sqrtf(x) >= 0`),
-ESBMC reports FAILED (a nondet counterexample violates the assertion).
+### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf` landed, family audit still open
+Distinct from §4.4 (expression-id coverage): this is about **instruction-level
+FUNCTION_CALL targets**, not expression ireps. ESBMC's own C frontend never emits a real
+`malloc`/`sqrtf` function call at all — it recognises these calls **syntactically** and
+rewrites them at conversion time: `sqrtf`/`sqrt`/`sqrtl` at AST-adjust time
+(`clang_c_adjust_expr.cpp`, `compare_float_suffix`), `malloc`/`alloca` at
+AST-to-GOTO-lowering time (`goto-programs/builtin_functions.cpp::do_mem`, during
+`goto_convert`). CBMC binaries never go through either pass — `read_cbmc_goto_object`
+builds `goto_programt` directly from the already-GOTO-shaped CBMC irep via
+`goto_program_irep.cpp::convert()`, a mechanical 1:1 translator with no builtin
+recognition — so these calls previously surfaced as bodyless externals at symex time,
+returning unconstrained nondet and diverging from CBMC's verdict.
 
-**Root cause, confirmed by inspecting both sides' GOTO output.** ESBMC's own C frontend
-never emits a real `sqrtf` function call at all: `clang_c_adjust_expr.cpp` (~line 1278,
-`compare_float_suffix(identifier, "sqrt")`) recognises the call **syntactically at parse
-time** and rewrites it directly into an `ieee_sqrt` expression — confirmed via
-`--goto-functions-only` on native `sqrtf(x)`, which shows `ASSIGN y=ieee_sqrt(...)`, no
-`sqrtf` symbol anywhere. CBMC's own goto-binary format has no equivalent expression node:
-`goto-instrument --dump-c` / `--show-goto-functions` on a real `sqrtf`-using `.goto` file
-both show a genuine `CALL return_value_sqrtf := sqrtf(x)` instruction, resolved only when
-`cbmc` itself later runs ("Adding CPROVER library (x86_64)" in its own log) — a library
-linked **inside the `cbmc` binary at verification time**, never baked into the `.goto`
-file. So `--binary`-loaded CBMC programs and ESBMC's own C-parsed programs take genuinely
-different paths to the same operator, and nothing bridges them.
+**Fixed**: `cbmc_adapter.cpp::fix_builtin_call`, called from `instruction_to_esbmc_irep`
+before the generic FUNCTION_CALL handling runs, recognises `malloc` and `sqrtf`/`sqrt`/
+`sqrtl` by callee name and rewrites the instruction's `code` from a `function_call`
+statement into the `assign` shape the native pipeline would have produced — a
+`side_effect_exprt("malloc", ...)` (mirroring `do_mem`'s own char-element-type fallback,
+sound since `sizeof(T)` is always pre-folded to a byte count by the time a `.goto` file
+exists) or an `ieee_sqrt` expression respectively. The instruction's own `typeid` is
+overridden to `ASSIGN` to match (§4.1's shared numbering means `13` is the same value on
+both sides). All six `malloc`/pointer verdict-parity probes and two `sqrtf` probes built
+during this work now match CBMC exactly (`cbmc_malloc`, `cbmc_malloc_fail`,
+`cbmc_malloc_large`, `cbmc_ptr_decl`, `cbmc_sqrtf`, `cbmc_sqrtf_fail`).
 
-**Ruled out as the fix**: making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+Two further bugs surfaced and were fixed along the way, both real independent of this
+rewrite mechanism itself:
+- **Dangling reference**: the first `fix_builtin_call` draft held `const irept &lhs`/
+  `args` referencing into `code.get_sub()`, then called `code.get_sub().clear()` before
+  reading them — UB that "worked" for small constants and segfaulted for others purely by
+  luck of allocator reuse. Fixed by copying out (`const irept lhs = sub[0];` etc.) before
+  any mutation.
+- **Comment fields skip `fix_expression`**: `fix_expression` only ever recurses into
+  `get_sub()`/`get_named_sub()`, never `get_comments()` — so a constant embedded directly
+  in `#size` (needed for the malloc `side_effect_exprt`) never got its hex→binary
+  normalisation, and `migrate_expr` downstream silently computed the wrong array size from
+  the raw hex string. This produced correct-looking-but-wrong dereference bounds, not a
+  crash — the value `4` happened to be short enough to not visibly break, `100` didn't.
+  Fixed by calling `fix_expression` explicitly on the copy embedded in `#size` before use.
+
+**Still open**: only `malloc`, `sqrtf`/`sqrt`/`sqrtl` are recognised. `fabsf`/`ceilf`/
+`floorf`/`truncf`/`roundf` (§4.4/§4.8's original finding), `free`/`alloca`/`realloc`, and
+`printf`-family `goto_convertt::do_*` special-cases are the same class of gap and share
+the fix's shape (`fix_builtin_call` already dispatches on callee name — extending it is
+additive), but weren't attempted here to keep this change reviewable.
+
+**Ruled out as an alternative fix** (for the remaining libm family, from the #5743
+diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
 boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
 work — because there is no body to link (`ieee_sqrt` is an operator, not a library
 function), so this produces no observable effect. Tried and reverted.
-
-**Needed fix**: the CBMC adapter needs to recognise `FUNCTION_CALL` instructions whose
-callee matches a known libm symbol name (`sqrtf`/`sqrt`/`sqrtl`, `fabsf`/`fabs`/`fabsl`,
-etc.) and rewrite them into the equivalent `ieee_sqrt`/`abs`/... expression assigned
-directly to the call's return-value target, mirroring `clang_c_adjust_expr.cpp`'s logic
-but operating on GOTO-level CALL instructions instead of AST call expressions — a
-different code shape than `fix_expression`'s id-based rewriting (which only ever sees
-expression ireps, not instruction-level call targets), likely needing its own function in
-`cbmc_adapter.cpp` alongside `fix_expression`. Not attempted here — this needs its own
-design pass rather than a rushed fix layered onto existing `fix_expression` logic.
-
-**Correction, and a second confirmed instance of the same root cause**: `malloc`/`free`
-were first flagged here as a *possibly-different* failure mode ("Incorrect alignment when
-accessing data object", assumed to mean `malloc` has a real body). That assumption was
-wrong — re-checked with full log output: `malloc`/`free` **also** produce `WARNING: no
-body for function malloc`/`free`; the "Incorrect alignment" error is a downstream symptom
-of dereferencing the resulting nondet/invalid pointer, not a distinct bug. And `malloc` is
-**not** a body-based `libclibs.a` function either — `grep`ing `src/c2goto/library/` for a
-real `malloc` definition finds none. Like `sqrtf`, ESBMC recognises `malloc`/`alloca` as a
-special case and rewrites the call, but at a *different* stage than `sqrtf`:
-`src/goto-programs/builtin_functions.cpp::goto_convertt::do_mem` (`base_name == "malloc"`)
-runs during **`goto_convert`** — the AST-code-to-GOTO-instructions lowering pass — turning
-a `FUNCTION_CALL` statement into a `side_effect_exprt("malloc", ...)`, which symex knows
-how to handle as dynamic allocation. CBMC binaries never go through `goto_convert` at
-all: `read_cbmc_goto_object` builds `goto_programt` directly from the already-GOTO-shaped
-CBMC irep via `goto_program_irep.cpp::convert()`, a mechanical 1:1 translator with no
-builtin-function recognition of any kind. So this is the **same class of gap** as §4.8's
-libm functions (a compile-time/convert-time rewrite that CBMC-sourced GOTO instructions
-never pass through), not an unrelated bug — but the *fix shape* differs again: `do_mem`
-already operates at GOTO-instruction level (unlike `clang_c_adjust_expr.cpp`'s AST-level
-`sqrtf` handling), so it may be more directly reusable for a CBMC-adapter equivalent than
-the libm case is. Likely not the only such builtin — `goto_convertt`'s other
-`do_*`-prefixed special-cases (`free`, `printf`-family, `__ESBMC_*` intrinsics reached via
-plain C names) are worth auditing together rather than one at a time.
-
-Unlike `sqrtf`, a clean minimal verdict-mismatch reproducer for `malloc` proved harder to
-construct in the time available: `malloc`'s own semantics is inherently nondeterministic
-(CBMC's own model allows a may-fail-NULL return, so `assert(p != 0)` alone already reports
-`VERIFICATION FAILED` on **both** tools, just for different reasons underneath — CBMC's
-deliberate may-fail modelling vs. ESBMC's much wider unconstrained-nondet fallback). No
-regression test added for this one; the `sqrtf` KNOWNBUG test and this write-up are enough
-to point at the shared root cause.
 
 ---
 
@@ -300,11 +300,11 @@ Each phase is independently shippable and gated by a concrete acceptance test.
 ### Phase 2 — Intrinsic & expression coverage
 - Enumerate CBMC's expression/intrinsic vocabulary; add a tested mapping table; extend the
   intrinsic-call bodies (the synthesised additions) to cover them (§4.4, §4.5).
-- Recognise known libm `FUNCTION_CALL` targets (`sqrtf`, `fabsf`, ...) and rewrite them to
-  their `ieee_*`/intrinsic equivalents, the instruction-level counterpart to §4.4's
-  expression-level rewriting (§4.8).
+- Recognise known builtin `FUNCTION_CALL` targets (`malloc` ✅, `sqrtf` ✅, `free`/`alloca`/
+  `realloc`/other libm still open) and rewrite them to their native-pipeline equivalents,
+  the instruction-level counterpart to §4.4's expression-level rewriting (§4.8).
 - **Acceptance:** a curated suite of single-feature CBMC binaries (pointer predicates,
-  overflow, byte ops, FP rounding, libm calls) all verify to the CBMC verdict.
+  overflow, byte ops, FP rounding, builtin calls) all verify to the CBMC verdict.
 
 ### Phase 3 — Full type system
 - Port/replace `Anon2Struct` to resolve `tag-#anon#...` aggregates; widen constant handling
