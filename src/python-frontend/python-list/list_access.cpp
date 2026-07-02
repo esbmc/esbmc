@@ -496,7 +496,16 @@ exprt python_list::build_column_select(
   }
 
   const array_typet &row_array_type = to_array_type(row_type);
-  const typet elem_type = row_array_type.subtype();
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: 2-D column slicing (a[:, j]) currently supports only "
+           "2-D arrays; 3-D+ arrays are not modelled";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
   const BigInt num_rows =
     binary2integer(outer_type.size().value().c_str(), false);
   const BigInt num_cols =
