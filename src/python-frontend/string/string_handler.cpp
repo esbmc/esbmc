@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -615,6 +616,10 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
+  // std::pow/std::round and the ostream conversion below honour the host FP
+  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
+  // so the decimal fold matches CPython regardless of the host's mode.
+  const round_to_nearest_guard rounding_guard;
   double val = 0.0;
 
   if (width == 32 && float_bits.length() == 32)
