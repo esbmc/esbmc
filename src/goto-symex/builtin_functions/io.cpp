@@ -12,7 +12,171 @@
 #include <util/std_types.h>
 #include <vector>
 #include <algorithm>
+#include <functional>
 #include <util/array2string.h>
+
+bool goto_symext::recover_va_list_args(
+  const code_printf2t &call,
+  size_t fmt_idx,
+  std::list<expr2tc> &out)
+{
+  switch (call.kind)
+  {
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    break;
+  default:
+    return false;
+  }
+
+  // Every v* signature takes the va_list as its last operand, right after
+  // the format string.
+  if (call.operands.size() != fmt_idx + 2)
+    return false;
+
+  // The frontends model a va_list as an opaque token: under the clang
+  // frontend va_start assigns nothing, and va_arg reads the frame-materialised
+  // `<fn>::va_arg<N>` symbols through the frame cursor. The only state that
+  // identifies which arguments a va_list denotes is therefore the frame
+  // itself, so recovery is restricted to the case where that identification
+  // is exact:
+  //   1. the v* call sits in the variadic function's own frame (its va_args
+  //      were materialised at this activation's call site);
+  //   2. no va_arg has been consumed yet (once the cursor moved, a va_start
+  //      rewind -- invisible to symex -- is indistinguishable from further
+  //      consumption, so the specifier-to-argument alignment is unknown);
+  //   3. the va_list operand is one of this function's own locals, not a
+  //      formal parameter (a parameter could carry a va_list from a *further*
+  //      variadic ancestor, whose arguments these are not).
+  // Anything else declines; the caller keeps the sound unbounded fallback.
+  const goto_symex_statet::framet &frame = cur_state->top();
+  if (frame.va_index == UINT_MAX || frame.va_cursor != frame.va_index)
+    return false;
+
+  expr2tc ap = call.operands[fmt_idx + 1];
+  while (true)
+  {
+    if (is_typecast2t(ap))
+      ap = to_typecast2t(ap).from;
+    else if (is_address_of2t(ap))
+      ap = to_address_of2t(ap).ptr_obj;
+    else if (is_index2t(ap))
+      ap = to_index2t(ap).source_value;
+    else
+      break;
+  }
+  if (!is_symbol2t(ap))
+    return false;
+  const irep_idt &ap_id = to_symbol2t(ap).thename;
+
+  // Recovery is limited to targets where va_list is a plain pointer (e.g.
+  // AArch64 SysV/Darwin): there every va_list copy is a visible ASSIGN --
+  // va_copy included, since goto conversion lowers it to a real assignment
+  // for pointer va_lists (builtin_functions.cpp) -- so the freshness scan
+  // below is exhaustive. Where va_list is a struct array (x86_64 SysV),
+  // va_copy stays erased at goto conversion (assigning arrays breaks the
+  // pointer analysis), a copied foreign va_list would be invisible, and
+  // recovery must stay off until va_copy leaves a symex-visible marker
+  // there too.
+  if (!is_pointer_type(ap->type))
+    return false;
+
+  // Owning-function check: a local of function F is mangled
+  // `<file>@<offset>@F@<F>@<name>` while F itself is `<prefix>@F@<F>`. Only
+  // F's own locals/parameters (and globals, which carry no `@F@`) can appear
+  // syntactically as an operand in F's body, so containing `@F@<F>@` pins the
+  // symbol to this frame's function.
+  const std::string fid = id2string(frame.function_identifier);
+  const size_t at = fid.rfind("@F@");
+  if (at == std::string::npos)
+    return false;
+  if (id2string(ap_id).find(fid.substr(at) + "@") == std::string::npos)
+    return false;
+
+  // Exclude formal parameters (condition 3).
+  const symbolt *fsym = ns.lookup(frame.function_identifier);
+  if (fsym == nullptr || !fsym->get_type().is_code())
+    return false;
+  for (const auto &param : to_code_type(fsym->get_type()).arguments())
+    if (param.get_identifier() == ap_id)
+      return false;
+
+  // Freshness scan (condition 3 continued): being a non-parameter local is
+  // not enough -- a foreign va_list can be laundered into one (va_copy from
+  // a parameter or a global, plain assignment on pointer-va_list targets, or
+  // memcpy), after which it denotes some OTHER activation's arguments. All
+  // such channels are visible in the function body on pointer-va_list
+  // targets: decline unless the operand's only assignment is its
+  // declaration-time nondet and its address is never taken.
+  auto fn_it = goto_functions.function_map.find(frame.function_identifier);
+  if (
+    fn_it == goto_functions.function_map.end() || !fn_it->second.body_available)
+    return false;
+  for (const auto &insn : fn_it->second.body.instructions)
+  {
+    if (is_nil_expr(insn.code))
+      continue;
+    if (is_code_assign2t(insn.code))
+    {
+      const code_assign2t &assign = to_code_assign2t(insn.code);
+      expr2tc tgt = assign.target;
+      while (is_typecast2t(tgt))
+        tgt = to_typecast2t(tgt).from;
+      if (
+        is_symbol2t(tgt) && to_symbol2t(tgt).thename == ap_id &&
+        !(is_sideeffect2t(assign.source) &&
+          to_sideeffect2t(assign.source).kind ==
+            sideeffect2t::allockind::nondet))
+        return false;
+    }
+    // Address taken anywhere (e.g. memcpy(&ap, ...)): treat as laundered.
+    bool addr_taken = false;
+    std::function<void(const expr2tc &)> scan = [&](const expr2tc &e)
+    {
+      if (is_nil_expr(e) || addr_taken)
+        return;
+      if (is_address_of2t(e))
+      {
+        expr2tc obj = to_address_of2t(e).ptr_obj;
+        while (is_typecast2t(obj) || is_index2t(obj))
+          obj = is_typecast2t(obj) ? to_typecast2t(obj).from
+                                   : to_index2t(obj).source_value;
+        if (is_symbol2t(obj) && to_symbol2t(obj).thename == ap_id)
+        {
+          addr_taken = true;
+          return;
+        }
+      }
+      e->foreach_operand(scan);
+    };
+    scan(insn.code);
+    if (addr_taken)
+      return false;
+  }
+
+  // Collect this activation's va_arg values, L2-renamed so constant
+  // propagation exposes string-literal arguments to the formatter. Probing
+  // stops at the first missing symbol: later activations have not
+  // materialised yet, so the run ends exactly at this activation's argument
+  // count (a nested completed activation of the same function can extend it,
+  // but those extra values are only ever consumed by a format string with
+  // more specifiers than passed arguments -- undefined behaviour).
+  const std::string va_prefix = fid + "::va_arg";
+  for (unsigned k = frame.va_index; k < frame.va_index + 256; k++)
+  {
+    const symbolt *s = new_context.find_symbol(va_prefix + std::to_string(k));
+    if (s == nullptr)
+      break;
+    expr2tc arg = symbol2tc(migrate_symbol_type(*s), s->id);
+    cur_state->rename(arg);
+    do_simplify(arg);
+    out.push_back(arg);
+  }
+  return true;
+}
 
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 {
@@ -208,6 +372,17 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   if (is_allocating && !new_rhs.operands.empty())
     strp = new_rhs.operands[0];
 
+  // va_list %s recovery (G-C, GitHub #5012): when the va_list-to-argument
+  // mapping is provably exact, substitute the recovered arguments for the
+  // opaque va_list below, so the formatter can bound -- or pin -- the output
+  // length exactly as it does for the direct printf-family forms. Uses the
+  // original (unrenamed) rhs: the operand's L0 symbol identifies whose
+  // va_list this is.
+  std::list<expr2tc> recovered_args;
+  const bool va_recovered =
+    !is_nil_expr(lhs) && format_is_constant &&
+    recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
+
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
     new_rhs.operands.erase(new_rhs.operands.begin());
@@ -231,6 +406,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     printf_code.location() = rhs_expr.location();
 
     migrate_expr(printf_code, rhs);
+
+    // With a successful va_list recovery the single va_list operand is
+    // replaced by the actual variadic arguments, restoring the direct-call
+    // argument shape the formatter expects.
+    if (va_recovered)
+      args = recovered_args;
 
     // 2 check if it is a char array. if so, convert it to a string
     // this is due to printf_formatter does not handle the char array.
@@ -290,6 +471,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       printf_formatter.args_reliable = true;
       break;
     }
+    // A successful recovery replaced the va_list with the actual arguments,
+    // so they are exactly as reliable as a direct call's.
+    if (va_recovered)
+      printf_formatter.args_reliable = true;
     printf_formatter(fmt.as_string(), args);
     printf_formatter.as_string(); // populate min_outlen / max_outlen
 
