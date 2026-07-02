@@ -3061,8 +3061,21 @@ exprt string_handler::build_partition_tuple(
     tuple_type.tag(tag);
     set_python_aggregate_kind(tuple_type, "tuple");
 
-    struct_exprt tuple_expr(tuple_type);
-    tuple_expr.operands() = {a, b, c};
+    // V.3: build the tuple struct value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership/subscript dispatch
+    // (see tuple_handler::get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(elems.size());
+    for (const exprt *e : elems)
+    {
+      expr2tc m2;
+      migrate_expr(*e, m2);
+      members.push_back(std::move(m2));
+    }
+    exprt tuple_expr =
+      migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+    tuple_expr.type() = tuple_type;
     tuple_expr.location() = location;
     return tuple_expr;
   };
