@@ -3598,5 +3598,41 @@ Variable-string receivers (`s.istitle()` for a non-literal `s`) still route to t
 the same disposition the §74 predicates carry — extending the runtime string model is orthogonal.
 
 ### 75b. Everything else: unchanged disposition
+## 77. 2026-07-02 re-validation (sixty-seventh sweep) & str.center() odd-padding split
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery (padding/formatting/numeric-base/dict-mutation idioms) found one CPython
+divergence: `str.center()` split odd padding on the wrong side — a **wrong-value/soundness** defect
+(the battery's deliberately-wrong oracle verified `SUCCESSFUL`).
+
+### 77a. New isolated, soundly-fixable defect found & fixed
+**`str.center()` put the extra fill char on the right for odd margins, so
+`assert "ab".center(7, "-") == "--ab---"` verified `SUCCESSFUL` (CPython: `"---ab--"`).**
+
+CPython (`Objects/unicodeobject.c` `unicode_center_impl`) computes
+`left = marg/2 + (marg & width & 1)` — the extra fill char goes on the **left** exactly when both
+the margin and the width are odd (`"ab".center(7)` → left 3/right 2; but `"a".center(4)` → left
+1/right 2, since the width is even). `handle_string_center`
+(`string_method_handler.cpp`) used the naive `left = pad / 2`, so every odd-margin/odd-width call
+folded to the mirror-image string: the valid assertion reported a spurious `FAILED` and the false
+one verified `SUCCESSFUL`. Single site — neither `python_consteval.cpp` nor the runtime OM models
+`center` (non-constant receivers/widths take the nondet fallback), and `ljust`/`rjust`/`zfill`
+(one-sided pads) are unaffected (battery-confirmed).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_center_odd_padding{,_fail}` (CORE): the positive is the liveness witness
+(odd margin+width with custom and default fill, odd margin+even width, even splits, degenerate
+`width <= len`, empty receiver); the `_fail` pins the previously-false-SUCCESSFUL mirror-image
+claim, now correctly `FAILED`. Code review differential-tested the patched fold against real
+CPython `str.center` over 448 (length, width, fill) combinations — zero mismatches. CPython sanity
+passes (`scripts/check_python_tests.sh str_center`); the `center`/`width` ctest subset (11 tests)
+and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100% (existing center tests use
+even margins and are unaffected). Solver-agnostic (a frontend constant fold, no SMT encoding).
+
+The rest of the battery (`ljust`/`rjust`/`zfill`/`expandtabs`/`bit_length`/3-arg `pow`/
+`setdefault`/`popitem`/`enumerate(start=)`/str-mult/slice-step/`bin`/`oct`/`hex`/format-specs/
+`removeprefix`/`int(s, base)`) matches CPython — no further divergence found this sweep.
+
+### 77b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.

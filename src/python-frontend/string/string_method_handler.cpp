@@ -3061,8 +3061,21 @@ exprt string_handler::build_partition_tuple(
     tuple_type.tag(tag);
     set_python_aggregate_kind(tuple_type, "tuple");
 
-    struct_exprt tuple_expr(tuple_type);
-    tuple_expr.operands() = {a, b, c};
+    // V.3: build the tuple struct value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership/subscript dispatch
+    // (see tuple_handler::get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(elems.size());
+    for (const exprt *e : elems)
+    {
+      expr2tc m2;
+      migrate_expr(*e, m2);
+      members.push_back(std::move(m2));
+    }
+    exprt tuple_expr =
+      migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+    tuple_expr.type() = tuple_type;
     tuple_expr.location() = location;
     return tuple_expr;
   };
@@ -3312,8 +3325,11 @@ exprt string_handler::handle_string_center(
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
 
+  // CPython puts the extra fill char on the LEFT when both the margin and
+  // the width are odd (Objects/unicodeobject.c unicode_center_impl:
+  // left = marg/2 + (marg & width & 1)), e.g. "ab".center(7) == "---ab--".
   long long pad = width - static_cast<long long>(input.size());
-  long long left = pad / 2;
+  long long left = pad / 2 + (pad & width & 1);
   long long right = pad - left;
   std::string result(static_cast<size_t>(left), fill);
   result += input;
