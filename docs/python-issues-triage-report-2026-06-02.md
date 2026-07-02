@@ -3610,3 +3610,115 @@ The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable ex
 infeasible `hashlib` case all stand. The §5 priority order stands; the object-model design note's
 Stage 2 remains the home for the `detect_cycle` null-guard follow-up, with Stage 3 (#3067
 `ClassHandler`/MRO refactor) still separable and unstarted.
+## 76. 2026-07-02 re-validation (sixty-sixth sweep) & str.title() digit word-boundary
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+The §75 code review surfaced a **wrong-value/soundness** defect in the `title()` constant fold — the
+highest-value class — and fixing it exposed a second copy of the same bug in a different fold site.
+
+### 76a. New isolated, soundly-fixable defect found & fixed
+**`str.title()` on a constant string used alnum-based word boundaries, so digit-adjacent letters
+folded wrong and a false assertion could verify `SUCCESSFUL`.**
+
+`"3d movie".title()` folded to `"3d Movie"` instead of CPython's `"3D Movie"`, and `"a1a".title()`
+to `"A1a"` instead of `"A1A"` — so `assert "3d movie".title() == "3d Movie"` verified **SUCCESSFUL**
+(a false claim) and the valid `assert "3d movie".title() == "3D Movie"` reported a spurious
+`FAILED`. CPython (`Objects/unicodeobject.c` `do_title`) titlecases a letter iff the *previous*
+character is **uncased**; digits are uncased, so they *end* a word. The old fold used
+`new_word = !isalnum(c)`, treating digits as word-internal.
+
+**Two fold sites had the same bug** — `python_consteval.cpp` (the `title` fold) and
+`string_method_handler.cpp` `handle_string_title` (the constant-receiver path). They cover
+*different* routing contexts (the initial single-site fix flipped one battery while the identical
+top-level claim still folded wrong through the other handler — caught in this sweep's validation),
+so both were switched to the same `prev_cased` state machine. Notably the **runtime OM**
+`__python_str_title` (`src/c2goto/library/python/string.c`) already implemented the correct
+cased-boundary rule, and the `python_str_title_runtime_model` test explicitly documented the
+consteval divergence as a known pre-existing gap ("digits don't break words; that pre-existing
+divergence is out of scope here") — this sweep closes exactly that documented divergence, and the
+stale comment is updated. All three implementations now agree.
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_title_digit_boundary{,_fail}` (CORE): the positive is the liveness witness
+(digit-boundary cases `"3d movie"`/`"a1a"`/`"x2y3z"`/`"123abc"` plus unchanged non-digit boundary
+behaviour, apostrophes, hyphens, all-caps, empty); the `_fail` pins the previously-false-SUCCESSFUL
+`assert "3d movie".title() == "3d Movie"`, now correctly `FAILED`. Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh str_title_digit`); the `title` ctest
+subset (12 tests) and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100%.
+Solver-agnostic (frontend constant folds, no SMT encoding).
+
+### 76b. Everything else: unchanged disposition
+## 75. 2026-07-02 re-validation (sixty-fifth sweep) & str.istitle()
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the §74a named follow-up: `str.istitle()` was the one remaining unmodelled `is*`
+string predicate.
+
+### 75a. New isolated, soundly-fixable defect found & fixed
+**`str.istitle()` on a constant string was unmodelled, reporting a spurious `VERIFICATION FAILED`.**
+
+`"Hello World".istitle()` hit the "Unsupported function" → `assert(false)` fallback, so any program
+calling it reported `FAILED` (a false alarm). §74 deferred it because it needs word-boundary (cased-
+run) tracking rather than the flat per-character `pred_all` mechanism.
+
+**Fix** (`src/python-frontend/python_consteval.cpp`): add an `istitle` entry beside the existing
+`isupper`/`islower` stateful block, implementing CPython's exact state machine
+(`Objects/unicodeobject.c`): an uppercase letter may only follow an *uncased* character, a lowercase
+letter may only follow a *cased* one, and at least one cased character must be present (empty string
+→ `False`). Like the sibling predicates this is a byte-level ASCII model (operands cast to
+`unsigned char` before the ctype calls, so they are well-defined) and shares their known
+non-ASCII/Unicode limitation. The `title()` *transformer* was already modelled; this closes the
+predicate side.
+
+This **restores working behaviour** (the predicate now verifies with exact values). New regression
+pair `regression/python/str_istitle{,_fail}` (CORE): the positive is the liveness witness for every
+added branch, covering titlecased text, single letters, apostrophe boundaries (`"It'S A Dog"` True vs
+`"It's A Dog"` False), double spaces, hyphens, digit-led words (`"3D Movie"` True vs `"3d Movie"`
+False), the empty string, all-caps, and all-lower; the `_fail` pins `"Hello world".istitle()` as a
+real `FAILED`. Verified bit-for-bit against CPython on all 13 cases; CPython sanity passes
+(`scripts/check_python_tests.sh str_istitle`); the focused `str`/`string`/`consteval` ctest subset
+(1194 tests) passes 100% with zero failures. Solver-agnostic (a frontend constant fold, no SMT
+encoding).
+
+Variable-string receivers (`s.istitle()` for a non-literal `s`) still route to the runtime handler,
+the same disposition the §74 predicates carry — extending the runtime string model is orthogonal.
+
+### 75b. Everything else: unchanged disposition
+## 77. 2026-07-02 re-validation (sixty-seventh sweep) & str.center() odd-padding split
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery (padding/formatting/numeric-base/dict-mutation idioms) found one CPython
+divergence: `str.center()` split odd padding on the wrong side — a **wrong-value/soundness** defect
+(the battery's deliberately-wrong oracle verified `SUCCESSFUL`).
+
+### 77a. New isolated, soundly-fixable defect found & fixed
+**`str.center()` put the extra fill char on the right for odd margins, so
+`assert "ab".center(7, "-") == "--ab---"` verified `SUCCESSFUL` (CPython: `"---ab--"`).**
+
+CPython (`Objects/unicodeobject.c` `unicode_center_impl`) computes
+`left = marg/2 + (marg & width & 1)` — the extra fill char goes on the **left** exactly when both
+the margin and the width are odd (`"ab".center(7)` → left 3/right 2; but `"a".center(4)` → left
+1/right 2, since the width is even). `handle_string_center`
+(`string_method_handler.cpp`) used the naive `left = pad / 2`, so every odd-margin/odd-width call
+folded to the mirror-image string: the valid assertion reported a spurious `FAILED` and the false
+one verified `SUCCESSFUL`. Single site — neither `python_consteval.cpp` nor the runtime OM models
+`center` (non-constant receivers/widths take the nondet fallback), and `ljust`/`rjust`/`zfill`
+(one-sided pads) are unaffected (battery-confirmed).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_center_odd_padding{,_fail}` (CORE): the positive is the liveness witness
+(odd margin+width with custom and default fill, odd margin+even width, even splits, degenerate
+`width <= len`, empty receiver); the `_fail` pins the previously-false-SUCCESSFUL mirror-image
+claim, now correctly `FAILED`. Code review differential-tested the patched fold against real
+CPython `str.center` over 448 (length, width, fill) combinations — zero mismatches. CPython sanity
+passes (`scripts/check_python_tests.sh str_center`); the `center`/`width` ctest subset (11 tests)
+and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100% (existing center tests use
+even margins and are unaffected). Solver-agnostic (a frontend constant fold, no SMT encoding).
+
+The rest of the battery (`ljust`/`rjust`/`zfill`/`expandtabs`/`bit_length`/3-arg `pow`/
+`setdefault`/`popitem`/`enumerate(start=)`/str-mult/slice-step/`bin`/`oct`/`hex`/format-specs/
+`removeprefix`/`int(s, base)`) matches CPython — no further divergence found this sweep.
+
+### 77b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.

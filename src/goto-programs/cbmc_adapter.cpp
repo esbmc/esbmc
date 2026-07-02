@@ -119,6 +119,7 @@ void fix_expression(irept &irep)
     "index",
     "byte_extract_little_endian",
     "pointer_object",
+    "pointer_offset",
     "array_of",
     "sideeffect",
     "dereference",
@@ -129,7 +130,9 @@ void fix_expression(irept &irep)
     "bitnot",
     "struct",
     "return",
-    "r_ok"};
+    "r_ok",
+    "w_ok",
+    "rw_ok"};
 
   const std::string cur = irep.id_string();
 
