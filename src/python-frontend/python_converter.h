@@ -386,6 +386,15 @@ private:
     const locationt &location,
     codet &target_block);
 
+  // Same, but boxing behind an explicit pointer type instead of
+  // `current_func_return_type_` (e.g. `char (*)[N]` for a local string
+  // array whose bytes must survive the frame, #5571).
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block,
+    const typet &ptr_type);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -444,6 +453,15 @@ private:
 
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
+
+  /// Same as above, but for callers that already have a resolved
+  /// `locationt` (e.g. string_handler's nondet-fallback materialisation)
+  /// rather than an AST node to derive one from.
+  symbolt &create_tmp_symbol(
+    const locationt &location,
     const std::string var_name,
     const typet &symbol_type,
     const exprt &symbol_value);

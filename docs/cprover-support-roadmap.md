@@ -72,6 +72,12 @@ and the symbol/function table layout.
 | CPROVER irep → intrinsic-call migration (overflow_result, r_ok) | ✅ (PR #2443) | migration + `regression/goto-transcoder/` |
 | Unit tests (varint/string/header, real v6 parse, load into context/goto_functions) | ✅ | `unit/goto-programs/read_cbmc_goto_object.test.cpp` |
 | Parity harness vs goto-transcoder reference | ✅ | `goto-transcoder/scripts/esbmc_parity.sh` |
+| CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
+| Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
+| Pointer predicates: `pointer_offset` operand-wrap crash fix, `w_ok`/`rw_ok` stubs (§4.4, Phase 2, partial) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
+| Float-classification predicates: `isnan`/`isinf`/`isnormal` crash fix + verdict parity (ieee arith promotion, `sign`→`signbit(x)!=0` rewrite) (§4.4, Phase 2) | ✅ (PR #5741) | `cbmc_adapter.cpp` |
+| Pointer subtype double-wrap fix (§4.3) — every local pointer DECL without an immediate initializer was silently downgraded to `void*` | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_type` |
+| Builtin-call rewrite for `malloc`/`sqrtf` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -84,26 +90,27 @@ end with no manual library step.
 
 These are the items between "loads and trivially verifies" and "fully supports CPROVER".
 
-### 4.1 Instruction-type fidelity (Phase 1)
+### 4.1 Instruction-type fidelity (Phase 1) — ✅ DONE (PR #5717)
 ESBMC and CBMC share the `goto_program_instruction_typet` heritage, so values **0–18
 agree** (`OTHER=4`, `SKIP=5`, `ATOMIC_BEGIN=10`, `ASSIGN=13`, `FUNCTION_CALL=16`,
 `THROW=17`, `CATCH=18`). They **diverge at 19**: CBMC `INCOMPLETE_GOTO` vs ESBMC
-`THROW_DECL` — hence the adapter's `assert(instr_type != 19)`. `convert()` casts the raw
-`typeid` straight to the enum, so any divergence above 18, or any instruction whose
-`typeid` is not faithfully carried, surfaces in symex as
-`GOTO instruction type <N> not handled in goto_symext::symex_step`. Some harnesses
-(e.g. `mul.goto --function mul_harness`) hit this **identically via the reference
-converter**, so it is a translation-pipeline gap, not specific to the native reader.
-Needs: an explicit CBMC→ESBMC instruction-type mapping table + an audit of which CBMC
-instruction kinds reach a final binary.
+`THROW_DECL`. Resolved by `cbmc_adapter.cpp::map_cbmc_instruction_type()`, an explicit,
+auditable table: identity for shared kinds, a named diagnostic for `START_THREAD`/
+`END_THREAD` (ESBMC models concurrency as intrinsic calls) and `INCOMPLETE_GOTO`. Pinned
+by a unit test mapping every shared kind to its ESBMC enumerator.
 
-### 4.2 Entry-point bridging (Phase 1)
-CBMC's entry is `__CPROVER__start`; ESBMC's symex looks for `__ESBMC_main`. Today the
-auto-synthesised additions provide an `__ESBMC_main` that calls the *boilerplate*
-`c:@F@main`, not the CBMC program's `main`/harness — fine for smoke runs, wrong for real
-verification. Needs: wire the synthesised `__ESBMC_main` to dispatch into the CBMC binary's
-entry (`__CPROVER__start`, or the `--function` harness), reconciling the `main` vs
-`c:@F@main` symbol-id conventions.
+### 4.2 Entry-point bridging (Phase 1) — ✅ DONE (PR #5719)
+CBMC's entry is `__CPROVER__start`; ESBMC's symex looks for `__ESBMC_main`. Previously the
+auto-synthesised additions provided an `__ESBMC_main` that called the *boilerplate*
+`c:@F@main`, not the CBMC program's `main`/harness — verification ran over an effectively
+empty program and could report a spurious SUCCESSFUL. Resolved by
+`retarget_esbmc_main()` in `esbmc_parseoptions.cpp`: an explicit `--function` wins,
+otherwise a CBMC binary dispatches into `__CPROVER__start`. Regression-tested with real
+CBMC 6.8.0 binaries (`cbmc_entry_bridge`, `cbmc_entry_bridge_fail`) — the failing-assert
+case is the load-bearing guard, since without bridging it would spuriously report
+SUCCESSFUL. **Open follow-up:** selecting a CBMC harness via `--function` still needs
+work — today it is consumed by the boilerplate-additions synthesis rather than reaching
+the retarget logic; the default `__CPROVER__start` bridge (the common case) is fixed.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
 `cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
@@ -113,13 +120,120 @@ CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the orig
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
 
-### 4.4 Intrinsic & expression coverage (Phase 2)
-`fix_expression` recognises a fixed set of ~40 expression ids. CBMC's surface is much
-larger: pointer predicates (`__CPROVER_r_ok`/`w_ok`/`same_object`, `POINTER_OFFSET`,
-`POINTER_OBJECT`), `__CPROVER_assume`/`assert`, array/quantifier predicates, IEEE-754
-rounding-mode operations, `byte_update`, big-endian byte ops, etc. Unmapped ids pass
-through unwrapped and may break downstream. Needs a systematic, tested mapping keyed off
-the CBMC `irep_idt` vocabulary, extending the PR #2443 intrinsic approach.
+**Pointer subtype double-wrap — ✅ fixed.** Found while chasing an unrelated `malloc`
+verdict mismatch (§4.8): `fix_type`'s `pointer` branch, unlike the near-identical `array`
+branch three lines below it, wrapped the pointed-to type's positional sub in an
+intermediate, id-less group irep before assigning it to `"subtype"`
+(`self.add("subtype") = operands;` where `operands.get_sub() = self.get_sub();`, instead
+of `self.add("subtype") = self.get_sub()[0];` the way `array` correctly does it).
+`typet::subtype()` (`util/type.h`) is a direct `find("subtype")` with no unwrapping, so
+`migrate_type` received the wrapper — an irep with no matching case — and silently fell
+through to `void`. This affected **any local pointer declared without an initializer that
+pins its type from elsewhere** (`int *p;` followed by a later assignment), which is common
+enough that it was previously undiscovered simply because nothing had exercised a
+`malloc`-then-typed-write pattern far enough to notice the pointer was void* the whole
+time. Fixed by mirroring the `array` branch's direct assignment exactly.
+
+### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
+`fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
+wrapped into the `"operands"` named-sub `exprt::operands()` expects; anything missing from
+that set either passes through unwrapped (silent downstream breakage) or, if the id also
+has no `migrate_expr` handler, aborts. Concrete gaps found and fixed by direct testing
+against real CBMC binaries: `pointer_offset` was missing from the wrap-set despite
+`migrate_expr` already supporting it — **this caused a segfault**, not a clean error, since
+`migrate_expr`'s unary-operand access read past an empty operand list. `w_ok` and `rw_ok`
+(CBMC's `r_or_w_ok_exprt` family alongside the pre-existing `r_ok`: `__CPROVER_w_ok` is the
+writable-object-check counterpart, `__CPROVER_rw_ok` the combined read+write check — CBMC's
+own typechecker builds all three from the same node type, distinguished only by id, per
+`c_typecheck_expr.cpp`) had no support at all; both now get the same treatment as the
+pre-existing `r_ok` stub (unconditionally `true` — a known-unsound placeholder,
+`// FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok`; the `w_ok`-vs-CBMC-FAILED
+case is a KNOWNBUG regression, `cbmc_w_ok_false`, mirroring the pre-existing `r_ok_false`
+limitation). `same_object` was checked and needs no change — CBMC's typechecker desugars it
+at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
+as a `same_object`/`same-object` node in the first place.
+
+Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
+rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
+IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
+audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
+gap-by-gap discovery.
+
+**Float-classification predicates, investigated by direct testing against real CBMC
+binaries.** `math.h`'s `isnan`/`isinf`/`isnormal` lower (via `__builtin_isnan` etc.) to
+CBMC ireps of the same name, which `migrate_expr` already fully supports (unary,
+`op0()`) — but none were in the adapter's operand-wrap set, so all three **segfaulted**
+(`op0()` on an empty operand list). Fixed by adding `isnan`/`isinf`/`isnormal` (plus
+`isfinite`/`nearbyint`/`signbit`, defensive — `migrate_expr` supports all three, but this
+corpus never exercises them: `isfinite`/`nearbyint` fall back to an unimplemented-function
+nondet return in both CBMC's own model and ESBMC's libm operational model, sidestepping
+the exprt path entirely on both sides; `signbit` is ESBMC's own id for the
+sign-extraction predicate — real CBMC binaries emit `"sign"`, which the adapter now
+renames to `"signbit"` for exactly the `isinf` path documented below).
+Segfault→crash-free confirmed for `isnan`/`isinf`/`isnormal` via real CBMC binaries.
+
+**Float-arithmetic type promotion — ✅ landed.** `isnan` didn't reach CBMC's verdict
+because of an *unrelated* Phase 2 gap: CBMC emits float division as a plain `"/"` node,
+and `migrate_expr`'s `"/"` handler (`exprt::div` → `div2tc`) is type-blind, always
+building the generic (non-IEEE) division regardless of operand type. ESBMC's own C
+frontend avoids this by promoting `"/"`/`"+"`/`"-"`/`"*"` to
+`"ieee_div"`/`"ieee_add"`/`"ieee_sub"`/`"ieee_mul"` whenever the type is `floatbv`
+(`clang_c_adjust_expr.cpp::adjust_float_arith`); the CBMC adapter had no equivalent
+promotion, so `goto_check.cpp`'s division-by-zero property (which explicitly skips
+`ieee_div`, "as it's defined behavior") wrongly fired on CBMC-sourced float division.
+Fixed by porting the same type-driven promotion into `fix_expression`: `isnan` now
+matches CBMC's verdict exactly (reclassified `cbmc_isnan` KNOWNBUG→CORE), and general
+float arithmetic from CBMC binaries is verdict-tested directly (`cbmc_float_arith`,
+`cbmc_float_arith_fail`). Contained to the CBMC-binary path only — `fix_expression` is
+never reached by ESBMC's native frontends, so this cannot regress native C/C++/Python.
+Incidentally, promoting `+`/`-`/`*` (not just `/`) also gives CBMC-sourced float
+arithmetic the overflow/NaN instrumentation `goto_check.cpp` applies to `ieee_*` nodes,
+which the untyped generic path silently skipped entirely (not wrongly instrumented —
+just uninstrumented). Two scope cuts, both intentional and low-risk, left for follow-up:
+- **SIMD/vector floats.** `adjust_float_arith`'s `is_vector() && subtype().is_floatbv()`
+  fallback isn't replicated — a CBMC float-vector `"+"` node has `type: vector`, not
+  `floatbv`, so the promotion simply doesn't fire (identical to pre-fix behaviour, no
+  regression, just unaddressed). No CBMC-vector-binary test corpus exists yet to verify
+  against.
+- **Rounding-mode symbol dependency.** The promoted `ieee_*` nodes rely on
+  `migrate_expr` defaulting to `c:@__ESBMC_rounding_mode` when no explicit
+  `rounding_mode` operand is present — that symbol isn't defined by the CBMC
+  reader/adapter itself, only by `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+  step, which every normal `--binary` invocation runs. `--no-cprover-additions` skips it,
+  but currently fails earlier for an unrelated reason (`main symbol not found`) before
+  this would matter — so no live bug today, but a latent gap if that unrelated failure is
+  ever fixed independently. `src/ld-frontend/ir_gen/ld_converter.cpp` already solves the
+  identical problem for a different frontend by defining the symbol itself, guarded by
+  `find_symbol`, if absent — the CBMC adapter should do the same rather than depend on an
+  unrelated driver step always running first.
+
+**`isinf` sign-bit predicate — ✅ landed.** glibc's `isinf` (via `__builtin_isinf_sign`)
+additionally uses CBMC's `"sign"` predicate — a sign-bit extraction typed `bool`, used
+directly as the condition of the classifier's `x ? -1 : 1` ternary. It has no
+`migrate_expr` counterpart under that name; ESBMC's own equivalent is `"signbit"`, but
+that irep is structurally fixed to `int32` (`ESBMC_DEFINE_OVERFLOW_INT32_1OP`), returning
+1 iff the sign bit is set. The root cause was purely this `bool`-vs-`int32` type mismatch:
+feeding an `int32` where the ternary condition demands a `bool` (rename-only reproduces it
+as `goto_check.cpp`'s `is_bool_type(i.cond)` assertion — the int32 signbit sitting in the
+ternary's condition slot). Fixed entirely in the adapter's `fix_expression`: CBMC's
+bool-typed `sign(x)` is rewritten to `notequal(signbit(x), 0)` — exactly the form ESBMC's
+own C frontend emits for a sign-bit test in boolean context
+(`clang_c_adjust_expr.cpp::__builtin_isinf_sign` wraps `signbit` in `typecast(_, bool)`,
+which is the same predicate). `signbit2t`'s well-exercised `int32` SMT encoding
+(`convert_signbit`) is left untouched, so the earlier `retype`-based attempt's downstream
+Bitwuzla error ("expected Boolean term") never arises.
+
+The fix **must** be CBMC-scoped, not in the shared `migrate_expr`: a `migrate`-level "if
+the signbit exprt is `bool`-typed, wrap in `!= 0`" gate looks equivalent but *regresses
+native float tests* (`Float_lib1`, `Float-no-simp9` crash in Bitwuzla `mk_eq` on a
+width mismatch). ESBMC's own libm models routinely produce bool-typed `signbit` ireps too
+(the `typecast(signbit, bool)` above, folded), and baseline relies on `migrate` collapsing
+them to the bare `int32` node — native parents accept the `int32`, only CBMC's strict
+ternary condition does not. Since the two are structurally identical (bool-typed `signbit`,
+float operand), `migrate` cannot tell them apart; `fix_expression` runs only on the CBMC
+`--binary` path, so doing the rewrite there is the only way to fix `isinf` without
+perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
+`cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
 ### 4.5 Symbol metadata (Phase 2)
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
@@ -134,6 +248,58 @@ to bridge CBMC's encoding onto it rather than re-implement.
 ### 4.7 Versioning & robustness (Phase 5)
 Only CBMC binary **version 6** is accepted. No graceful handling of other versions, and the
 reader `abort()`s on malformed input rather than returning a recoverable error.
+
+### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf` landed, family audit still open
+Distinct from §4.4 (expression-id coverage): this is about **instruction-level
+FUNCTION_CALL targets**, not expression ireps. ESBMC's own C frontend never emits a real
+`malloc`/`sqrtf` function call at all — it recognises these calls **syntactically** and
+rewrites them at conversion time: `sqrtf`/`sqrt`/`sqrtl` at AST-adjust time
+(`clang_c_adjust_expr.cpp`, `compare_float_suffix`), `malloc`/`alloca` at
+AST-to-GOTO-lowering time (`goto-programs/builtin_functions.cpp::do_mem`, during
+`goto_convert`). CBMC binaries never go through either pass — `read_cbmc_goto_object`
+builds `goto_programt` directly from the already-GOTO-shaped CBMC irep via
+`goto_program_irep.cpp::convert()`, a mechanical 1:1 translator with no builtin
+recognition — so these calls previously surfaced as bodyless externals at symex time,
+returning unconstrained nondet and diverging from CBMC's verdict.
+
+**Fixed**: `cbmc_adapter.cpp::fix_builtin_call`, called from `instruction_to_esbmc_irep`
+before the generic FUNCTION_CALL handling runs, recognises `malloc` and `sqrtf`/`sqrt`/
+`sqrtl` by callee name and rewrites the instruction's `code` from a `function_call`
+statement into the `assign` shape the native pipeline would have produced — a
+`side_effect_exprt("malloc", ...)` (mirroring `do_mem`'s own char-element-type fallback,
+sound since `sizeof(T)` is always pre-folded to a byte count by the time a `.goto` file
+exists) or an `ieee_sqrt` expression respectively. The instruction's own `typeid` is
+overridden to `ASSIGN` to match (§4.1's shared numbering means `13` is the same value on
+both sides). All six `malloc`/pointer verdict-parity probes and two `sqrtf` probes built
+during this work now match CBMC exactly (`cbmc_malloc`, `cbmc_malloc_fail`,
+`cbmc_malloc_large`, `cbmc_ptr_decl`, `cbmc_sqrtf`, `cbmc_sqrtf_fail`).
+
+Two further bugs surfaced and were fixed along the way, both real independent of this
+rewrite mechanism itself:
+- **Dangling reference**: the first `fix_builtin_call` draft held `const irept &lhs`/
+  `args` referencing into `code.get_sub()`, then called `code.get_sub().clear()` before
+  reading them — UB that "worked" for small constants and segfaulted for others purely by
+  luck of allocator reuse. Fixed by copying out (`const irept lhs = sub[0];` etc.) before
+  any mutation.
+- **Comment fields skip `fix_expression`**: `fix_expression` only ever recurses into
+  `get_sub()`/`get_named_sub()`, never `get_comments()` — so a constant embedded directly
+  in `#size` (needed for the malloc `side_effect_exprt`) never got its hex→binary
+  normalisation, and `migrate_expr` downstream silently computed the wrong array size from
+  the raw hex string. This produced correct-looking-but-wrong dereference bounds, not a
+  crash — the value `4` happened to be short enough to not visibly break, `100` didn't.
+  Fixed by calling `fix_expression` explicitly on the copy embedded in `#size` before use.
+
+**Still open**: only `malloc`, `sqrtf`/`sqrt`/`sqrtl` are recognised. `fabsf`/`ceilf`/
+`floorf`/`truncf`/`roundf` (§4.4/§4.8's original finding), `free`/`alloca`/`realloc`, and
+`printf`-family `goto_convertt::do_*` special-cases are the same class of gap and share
+the fix's shape (`fix_builtin_call` already dispatches on callee name — extending it is
+additive), but weren't attempted here to keep this change reviewable.
+
+**Ruled out as an alternative fix** (for the remaining libm family, from the #5743
+diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+boilerplate *call* `sqrtf` so ESBMC's normal C-frontend linking supplies a body doesn't
+work — because there is no body to link (`ieee_sqrt` is an operator, not a library
+function), so this produces no observable effect. Tried and reverted.
 
 ---
 
@@ -151,8 +317,11 @@ Each phase is independently shippable and gated by a concrete acceptance test.
 ### Phase 2 — Intrinsic & expression coverage
 - Enumerate CBMC's expression/intrinsic vocabulary; add a tested mapping table; extend the
   intrinsic-call bodies (the synthesised additions) to cover them (§4.4, §4.5).
+- Recognise known builtin `FUNCTION_CALL` targets (`malloc` ✅, `sqrtf` ✅, `free`/`alloca`/
+  `realloc`/other libm still open) and rewrite them to their native-pipeline equivalents,
+  the instruction-level counterpart to §4.4's expression-level rewriting (§4.8).
 - **Acceptance:** a curated suite of single-feature CBMC binaries (pointer predicates,
-  overflow, byte ops, FP rounding) all verify to the CBMC verdict.
+  overflow, byte ops, FP rounding, builtin calls) all verify to the CBMC verdict.
 
 ### Phase 3 — Full type system
 - Port/replace `Anon2Struct` to resolve `tag-#anon#...` aggregates; widen constant handling

@@ -4,6 +4,7 @@
 // mirror the Rust to keep the two implementations easy to diff.
 
 #include <goto-programs/cbmc_adapter.h>
+#include <util/c_types.h>
 #include <util/message.h>
 
 #include <algorithm>
@@ -70,12 +71,66 @@ bool irep_contains(const irept &i, const irep_idt &id)
 
 void fix_expression(irept &irep)
 {
+  if (irep.id() == "sign" && irep.find("type").id() == "bool")
+  {
+    // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
+    // boolean contexts (e.g. the ternary condition in glibc's isinf). ESBMC's
+    // equivalent irep, "signbit", is structurally fixed to int32 (1 iff the
+    // sign bit is set), so it can't stand in for a bool. Rewrite sign(x) to
+    // the boolean signbit(x) != 0 -- exactly the form ESBMC's own C frontend
+    // produces for a sign-bit test in boolean context (clang_c_adjust_expr.cpp
+    // __builtin_isinf_sign) -- so it type-checks where CBMC uses it. Scoped to
+    // this CBMC path, so it never perturbs ESBMC's native signbit handling.
+    irept operand;
+    if (!irep.get_sub().empty())
+      operand = irep.get_sub()[0];
+
+    irept int_ty("signedbv");
+    int_ty.set("width", "32");
+
+    irept signbit("signbit");
+    signbit.add("type") = int_ty;
+    signbit.get_sub().push_back(operand);
+
+    irept zero("constant");
+    zero.add("type") = int_ty;
+    zero.add("value") = mk(std::string(32, '0'));
+
+    // Rebuild the node as notequal(signbit(x), 0); its bool type is retained.
+    // The operand-wrap step below moves [signbit, zero] into "operands" and
+    // the recursion normalises them (signbit's operand, the zero constant).
+    irep.id("notequal");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(signbit);
+    irep.get_sub().push_back(zero);
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
     irep.id("string-constant");
   else if (irep.id() == "ieee_float_equal")
     irep.id("=");
+  else if (
+    (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
+     irep.id() == "/") &&
+    irep.find("type").id() == "floatbv")
+  {
+    // CBMC emits plain +/-/*// for float arithmetic, type-blind; ESBMC's own
+    // C frontend promotes these to their ieee_ counterparts whenever the
+    // type is floatbv (clang_c_adjust_expr.cpp::adjust_float_arith), and
+    // downstream checks rely on that distinction (e.g. goto_check.cpp skips
+    // the division-by-zero check for ieee_div, since it's defined IEEE-754
+    // behaviour, not UB). Mirror that promotion here.
+    if (irep.id() == "+")
+      irep.id("ieee_add");
+    else if (irep.id() == "-")
+      irep.id("ieee_sub");
+    else if (irep.id() == "*")
+      irep.id("ieee_mul");
+    else
+      irep.id("ieee_div");
+  }
 
   if (irep.id() == "constant")
   {
@@ -102,6 +157,10 @@ void fix_expression(irept &irep)
     "/",
     "+",
     "-",
+    "ieee_add",
+    "ieee_sub",
+    "ieee_mul",
+    "ieee_div",
     "=",
     "<",
     "<=",
@@ -119,6 +178,7 @@ void fix_expression(irept &irep)
     "index",
     "byte_extract_little_endian",
     "pointer_object",
+    "pointer_offset",
     "array_of",
     "sideeffect",
     "dereference",
@@ -129,7 +189,16 @@ void fix_expression(irept &irep)
     "bitnot",
     "struct",
     "return",
-    "r_ok"};
+    "r_ok",
+    "w_ok",
+    "rw_ok",
+    "isnan",
+    "isinf",
+    "isnormal",
+    "isfinite",
+    "nearbyint",
+    "signbit",
+    "ieee_sqrt"};
 
   const std::string cur = irep.id_string();
 
@@ -195,13 +264,21 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
       v.id("component"); // fix_struct
   }
 
-  if (self.id() == "pointer" && !has_sub(self, "subtype"))
+  if (
+    self.id() == "pointer" && !has_sub(self, "subtype") &&
+    !self.get_sub().empty())
   {
     for (auto &v : self.get_sub())
       fix_type(v, cache);
-    irept operands;
-    operands.get_sub() = self.get_sub();
-    self.add("subtype") = operands;
+    // The pointed-to type is the sole positional sub, exactly like the array
+    // case below -- it must be assigned directly, not wrapped in an
+    // intermediate group irep. typet::subtype() (util/type.h) is a direct
+    // find("subtype"): wrapping here would make it return the wrapper
+    // instead of the real type, silently downgrading every such pointer to
+    // void* once migrate_type resolves it (irep2.h has no case for an
+    // id-less group irep).
+    irept magic = self.get_sub()[0];
+    self.add("subtype") = magic;
     self.get_sub().clear();
   }
 
@@ -252,6 +329,108 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     for (auto &p : self.get_comments())
       fix_type(p.second, cache);
   }
+}
+
+// Builds the malloc side_effect_exprt (irep shape) do_mem would have built,
+// falling back to element type char -- do_mem's own fallback whenever the
+// size argument isn't a recognisable sizeof(T) pattern, which a CBMC
+// binary's argument never is (sizeof is constant-folded away by goto-cc
+// well before the .goto file exists). A byte-granularity allocation is a
+// sound, if less precise, model of any malloc(n) call regardless of the
+// pointer type it's later cast to.
+irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 1)
+    return get_nil_irep();
+
+  // get_alloc_size (goto-programs/builtin_functions.cpp) always coerces the
+  // allocation size to size_t; mirror that instead of assuming CBMC's raw
+  // argument already has the right width.
+  irept size_arg(irep_idt("typecast"));
+  size_arg.add("type") = static_cast<const irept &>(size_type());
+  size_arg.get_sub().push_back(args[0]);
+  // fix_expression only ever recurses into get_sub()/get_named_sub(), never
+  // comments -- normalise (e.g. constant hex->binary) explicitly, since this
+  // copy is about to be embedded in the "#size" comment, which no later pass
+  // will otherwise reach.
+  fix_expression(size_arg);
+
+  irept sideeffect(irep_idt("sideeffect"));
+  sideeffect.add("type") = lhs.find("type");
+  sideeffect.add("statement") = mk("malloc");
+  sideeffect.get_sub().push_back(args[0]);
+  sideeffect.add("#size") = size_arg;
+  sideeffect.add("#type") = static_cast<const irept &>(char_type());
+  return sideeffect;
+}
+
+// Builds an ieee_sqrt exprt (irep shape), mirroring what
+// clang_c_adjust_expr.cpp builds for a syntactically-recognised sqrt/sqrtf/
+// sqrtl call. No explicit rounding_mode operand -- migrate_expr's ieee_sqrt
+// handler defaults to the standard c:@__ESBMC_rounding_mode symbol when one
+// isn't present, same as it does for the ieee_add/sub/mul/div family. That
+// default symbol is defined by esbmc_parseoptions.cpp's
+// synthesize_cprover_additions, which runs before read_cbmc_goto_object in
+// every *normal* --binary invocation, but not under --no-cprover-additions
+// -- currently masked there by an unrelated, pre-existing entry-point
+// resolution gap, not a live bug today, but not this function's to assume
+// away either.
+irept build_sqrt_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 1)
+    return get_nil_irep();
+
+  irept result(irep_idt("ieee_sqrt"));
+  result.add("type") = lhs.find("type");
+  result.get_sub().push_back(args[0]);
+  return result;
+}
+
+// CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
+// goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
+// side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
+// ieee_sqrt via clang-c-frontend/clang_c_adjust_expr.cpp) never fire for
+// them; the call instead surfaces as a bodyless external function at symex
+// time (roadmap §4.8). Recognise the small set of well-known builtins by
+// callee name here instead, rewriting the FUNCTION_CALL's `code` into the
+// ASSIGN shape the native pipeline would have produced. Returns true if
+// `code` was rewritten (the caller must then also override the
+// instruction's typeid to ASSIGN).
+bool fix_builtin_call(irept &code)
+{
+  if (code.id() == "nil" || code.find("statement").id() != "function_call")
+    return false;
+
+  const irept::subt &sub = code.get_sub();
+  if (sub.size() != 3 || sub[1].id() != "symbol")
+    return false;
+
+  if (sub[0].is_nil())
+    return false; // do_mem/the AST rewrite are themselves no-ops here
+
+  const std::string callee = sub[1].find("identifier").id_string();
+  // Copy out of `code` before mutating it below -- sub/args (and anything
+  // referencing into them) alias code.get_sub(), which code.get_sub().clear()
+  // invalidates.
+  const irept lhs = sub[0];
+  const irept::subt args = sub[2].get_sub();
+
+  irept rhs;
+  if (callee == "malloc")
+    rhs = build_malloc_rhs(lhs, args);
+  else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
+    rhs = build_sqrt_rhs(lhs, args);
+  else
+    return false; // not (yet) a recognised builtin; see roadmap §4.8
+
+  if (rhs.is_nil())
+    return false; // wrong arity for the builtin matched above
+
+  code.set("statement", "assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(lhs);
+  code.get_sub().push_back(rhs);
+  return true;
 }
 
 irept symbol_to_esbmc_irep(const cbmc_symbolt &sym)
@@ -306,6 +485,7 @@ irept instruction_to_esbmc_irep(
 
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
+  const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
   operands.get_sub() = code.get_sub();
   code.get_sub().clear();
@@ -320,8 +500,14 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  result.add("typeid") =
-    mk(std::to_string(map_cbmc_instruction_type(ins.instr_type)));
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN; the instruction
+  // kind must agree with the rewritten code, not CBMC's original raw type.
+  // 13 is goto_program_instruction_typet::ASSIGN (shared numbering, see
+  // map_cbmc_instruction_type).
+  result.add("typeid") = mk(
+    rewrote_builtin_call
+      ? "13"
+      : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
 
   if (!ins.targets.empty())

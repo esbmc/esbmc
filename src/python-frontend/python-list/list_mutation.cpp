@@ -144,6 +144,30 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       from_integer(1, strlen_result.get_type()),
       strlen_result.get_type());
   }
+  // A char array at the fixed tuple-string-member width may be NUL-padded
+  // (#5571): its identity for membership and dict-key comparisons is the
+  // content, not the storage width. Store and probe with content-length + 1
+  // bytes so a padded 'B' (unpacked from a tuple) and a tight 'B' literal
+  // agree on size. The length is a loop-free ITE chain over the fixed width
+  // — a strlen() call here would hide the size behind a loop and return
+  // garbage under --no-unwinding-assertions with a small --unwind (the
+  // github_3560_2_fail false-SUCCESSFUL). Content without a NUL (e.g. a
+  // fully symbolic buffer) keeps the full width, the pre-#5571 behaviour.
+  else if (
+    elem_symbol.get_type() ==
+    type_handler_.get_typet("str", tuple_handler::tuple_str_member_size))
+  {
+    exprt sz =
+      from_integer(BigInt(tuple_handler::tuple_str_member_size), size_type());
+    for (size_t i = tuple_handler::tuple_str_member_size; i-- > 0;)
+    {
+      exprt ch =
+        build_index(build_symbol(elem_symbol), from_integer(i, index_type()));
+      exprt is_nul = equality_exprt(ch, gen_zero(char_type()));
+      sz = if_exprt(is_nul, from_integer(i + 1, size_type()), sz);
+    }
+    elem_size = sz;
+  }
   else
   {
     // Handle arrays and other types

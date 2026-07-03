@@ -2,6 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -25,7 +26,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cfenv>
 #include <cstdio>
 #include <cmath>
 #include <climits>
@@ -141,26 +141,6 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 
   throw std::runtime_error("format() requires constant arguments");
 }
-
-// Pins the host floating-point rounding mode to round-to-nearest for its
-// lifetime and restores the previous mode on destruction. Float specs are
-// folded with host snprintf, whose output depends on the ambient rounding mode;
-// a statically linked solver (e.g. CVC5 on the Linux build) can leave that mode
-// set to FE_UPWARD, which turns "{:.2f}".format(3.14159) into "3.15" instead of
-// CPython's "3.14". Pinning the mode keeps the fold deterministic and matches
-// CPython's round-half-to-even.
-struct round_to_nearest_guard
-{
-  round_to_nearest_guard() : saved_(std::fegetround())
-  {
-    std::fesetround(FE_TONEAREST);
-  }
-  ~round_to_nearest_guard()
-  {
-    std::fesetround(saved_);
-  }
-  int saved_;
-};
 
 // Format a constant value per a str.format/format() format spec
 // ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or
@@ -795,8 +775,8 @@ std::optional<exprt> dispatch_search_string_methods(
   python_converter &converter)
 {
   if (
-    method_name != "find" && method_name != "index" &&
-    method_name != "rfind" && method_name != "rindex")
+    method_name != "find" && method_name != "index" && method_name != "rfind" &&
+    method_name != "rindex")
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
@@ -1208,12 +1188,57 @@ exprt string_handler::build_affix_tuple_match(
       std::string(is_suffix ? "endswith" : "startswith") +
       "() with a tuple argument is only supported for tuple literals");
 
+  // Tight constant content of a (possibly symbol-backed) char-array value.
+  // Unlike try_extract_const_string_expr this REJECTS values with any
+  // non-constant operand: a padded member snapshotting a runtime string has
+  // the shape { s[0], s[1], 0, ... }, and skipping the variable operands
+  // would silently yield "" — turning the affix test constant-true (#5571).
+  auto tight_const_content = [this](const exprt &e, std::string &out) -> bool {
+    exprt v = e;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (!sym || sym->get_value().is_nil())
+        return false;
+      v = sym->get_value();
+    }
+    if (
+      !v.is_constant() || !v.type().is_array() ||
+      v.type().subtype() != char_type())
+      return false;
+    out.clear();
+    forall_operands (it, v)
+    {
+      if (!it->is_constant())
+        return false;
+      BigInt val =
+        binary2integer(it->value().as_string(), it->type().is_signedbv());
+      if (val == 0)
+        return true;
+      out += static_cast<char>(val.to_uint64());
+    }
+    return true;
+  };
+
   exprt result = gen_boolean(false);
   for (const exprt &elem : affix_tuple.operands())
   {
+    // Tuple string members are NUL-padded to a fixed width (#5571), while
+    // the single-affix handlers below take an array affix's length from its
+    // dimension — which would include the padding. Rebuild a tight literal
+    // from fully-constant content; otherwise decay the member to char* so
+    // the pointer path measures the affix with strlen() at runtime.
+    exprt affix = elem;
+    std::string content;
+    if (tight_const_content(affix, content))
+      affix = string_builder_->build_string_literal(content);
+    else if (affix.type().is_array())
+      affix = get_array_base_address(affix);
+
     exprt one = is_suffix
-                  ? handle_string_endswith(string_obj, elem, location)
-                  : handle_string_startswith(string_obj, elem, location);
+                  ? handle_string_endswith(string_obj, affix, location)
+                  : handle_string_startswith(string_obj, affix, location);
     // result and one are synthetic bools (constant / startswith-endswith
     // results), so build the disjunction in IREP2 (V.3).
     result = build_or(result, one);
@@ -2509,18 +2534,15 @@ exprt string_handler::handle_string_title(
     return build_nondet_string_fallback(location);
   }
 
-  bool new_word = true;
+  // A letter starts a new word iff the previous character is uncased
+  // (CPython semantics -- digits are uncased, so they *end* a word:
+  // "3d movie".title() == "3D Movie"). Matches __python_str_title.
+  bool prev_cased = false;
   for (char &ch : input)
   {
-    if (std::isalpha(static_cast<unsigned char>(ch)))
-    {
-      ch = new_word ? to_upper_char(ch) : to_lower_char(ch);
-      new_word = false;
-    }
-    else
-    {
-      new_word = !std::isalnum(static_cast<unsigned char>(ch));
-    }
+    bool cased = std::isalpha(static_cast<unsigned char>(ch)) != 0;
+    ch = prev_cased ? to_lower_char(ch) : to_upper_char(ch);
+    prev_cased = cased;
   }
 
   if (!string_builder_)
@@ -3061,8 +3083,21 @@ exprt string_handler::build_partition_tuple(
     tuple_type.tag(tag);
     set_python_aggregate_kind(tuple_type, "tuple");
 
-    struct_exprt tuple_expr(tuple_type);
-    tuple_expr.operands() = {a, b, c};
+    // V.3: build the tuple struct value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership/subscript dispatch
+    // (see tuple_handler::get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(elems.size());
+    for (const exprt *e : elems)
+    {
+      expr2tc m2;
+      migrate_expr(*e, m2);
+      members.push_back(std::move(m2));
+    }
+    exprt tuple_expr =
+      migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+    tuple_expr.type() = tuple_type;
     tuple_expr.location() = location;
     return tuple_expr;
   };
@@ -3312,8 +3347,11 @@ exprt string_handler::handle_string_center(
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
 
+  // CPython puts the extra fill char on the LEFT when both the margin and
+  // the width are odd (Objects/unicodeobject.c unicode_center_impl:
+  // left = marg/2 + (marg & width & 1)), e.g. "ab".center(7) == "---ab--".
   long long pad = width - static_cast<long long>(input.size());
-  long long left = pad / 2;
+  long long left = pad / 2 + (pad & width & 1);
   long long right = pad - left;
   std::string result(static_cast<size_t>(left), fill);
   result += input;

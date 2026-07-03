@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: IndexError: index 5 is out of bounds for axis 0 with size 3

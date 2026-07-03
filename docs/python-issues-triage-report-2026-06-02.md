@@ -3561,3 +3561,256 @@ is orthogonal.
 ### 74b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 78. 2026-07-02 re-validation (sixty-eighth sweep) & f-string format specs
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery found f-string format specs on variables **silently dropped** — a
+**wrong-value/soundness** defect: `assert f"{x:03d}" == "7"` verified `SUCCESSFUL` (CPython renders
+`"007"`), and the valid `== "007"` claim reported a spurious `FAILED`.
+
+### 78a. New isolated, soundly-fixable defect found & fixed
+**f-string format specs were dropped in two sites; unmodelled specs folded to an exact-but-wrong
+unformatted value.**
+
+Sites: (1) the consteval JoinedStr fold ignored `format_spec` (and `!r`/`!a` conversions) entirely;
+(2) `apply_format_specification` (`string_handler.cpp`) only understood `[[fill]align][width]` and
+whole-format `d`/`i`/`.Nf` — everything else (zero-pad `03d`, width+type `5d`, width+precision
+`07.2f`, `x`, …) fell through to the unformatted `str()` value.
+
+**Fix (both sites, review-hardened):**
+- consteval declines to fold any `FormattedValue` carrying a `format_spec` or a `!r`/`!a`
+  conversion (`!s` renders identically), routing to the string handler.
+- `parse_format_padding` learns the `0`-before-width shorthand as a `zero_pad` flag whose implied
+  alignment is resolved **by type** at the call site — CPython zero-fills numbers sign-aware (`=`)
+  but strings left-aligned (`format('ab','05') == 'ab000'`; the initial single-flag version wrongly
+  implied `=` for strings — caught by code review, F1).
+- `'='` alignment is sign-aware (`f"{-42:05d}"` → `"-0042"`, not `"00-42"`).
+- The padding branch accepts trailing `d`/`i` on integers and `s` on any value; resolves symbols to
+  compile-time constants (`unary-` over a constant for negative int literals; string symbols to
+  their constant arrays), so `f"{s:>5}"` and `f"{n:05d}"` fold instead of aborting.
+- The float `.Nf` branch composes the parsed fill/align/width with the precision-formatted text
+  (`f"{1.5:07.2f}"` → `"0001.50"`; review F2 — previously the width was silently dropped) and sees
+  through `unary-` for negative float literals (IEEE sign-bit flip).
+- `joinedstr_len` declines when a part carries a spec/conversion (review F4 — a `len()` fold
+  bypassed the decline and returned the unpadded length).
+- **Soundness keystone:** any spec/conversion still unmodelled (e.g. `x`, `,`, `!r`) now yields a
+  **nondet string** (with a warning) instead of the exact-but-wrong unformatted value — a false
+  claim can no longer verify `SUCCESSFUL`; comparisons against the nondet either FAIL or abort with
+  a clean diagnostic (verified in both function and module contexts).
+
+This is a **wrong-value/soundness fix** plus a feature extension. New regression pair
+`regression/python/fstring_zero_pad{,_fail}` (CORE): the positive covers zero-pad/width/type-char
+combos on positive/negative ints, string alignment incl. `{s:05}` → `"ab000"`, and float
+width+precision incl. `-1.5` → `"-001.50"`; the `_fail` pins the previously-false-SUCCESSFUL
+`f"{x:03d}" == "7"`. Code review differential-tested the fold against CPython `format()` over 5 int
+values × 16 specs + strings × 8 specs (each as `==` and `!=`) — all correct. CPython sanity passes;
+the `fstring`/`format`/`joined` subset (46) and `str`/`string`/`consteval` subset (1192 on-branch)
+pass 100%. Solver-agnostic (frontend constant folds).
+
+Residuals (documented, sound): specs/conversions outside the modelled set (`x`, `b`, `,`, `e`, `%`,
+`!r`) render a nondet string — imprecise, never wrong; module-level comparisons against that nondet
+abort with `Cannot compare non-function side effects` (a pre-existing comparison limitation,
+separate work).
+
+### 78b. Everything else: unchanged disposition
+
+## 79. 2026-07-02 re-validation (sixty-ninth sweep) & as_integer_ratio() literal fold
+
+Re-test against current `master` (tip `e92296d1fe`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took a §78-battery residual: `float.as_integer_ratio()` was undefined, and unpacking its
+result **crashed conversion**. (The battery's other hits resolved themselves: `str.encode()` now
+passes on current master; set-method timeouts are the §3c perf-banned class;
+`str.maketrans`/`translate` needs a dict intermediate — catalogued, not taken.)
+
+### 79a. New isolated, soundly-fixable defect found & fixed
+**`as_integer_ratio()` was undefined — `assert(false)` stub on call, and a conversion crash
+(`Cannot unpack empty`) when the result was tuple-unpacked.**
+
+`(2.5).as_integer_ratio()` hit "Undefined function … replacing with assert(false)" (spurious
+`FAILED` for any caller), and `n, d = v.as_integer_ratio()` aborted the whole conversion with
+`ERROR: Cannot unpack empty - only tuples and arrays can be unpacked`.
+
+**Fix** (`src/python-frontend/preprocessor/core_visitors_mixin.py`): a preprocess-time fold
+`_maybe_fold_as_integer_ratio`, following the Decimal-constructor precedent — the ratio is computed
+by **CPython itself** during preprocessing, so the folded `(numerator, denominator)` tuple matches
+the interpreter bit-for-bit (e.g. `0.1` → `(3602879701896397, 36028797018963968)`). Scope: int and
+float literals, and unary `+`/`-` over one. Declines (unchanged behaviour) on bool receivers,
+non-literals, `inf`/`nan`, and ratios exceeding 2⁶³−1. Tuple contexts (compare, unpack) work
+because the result is an ordinary tuple literal.
+
+This **restores working behaviour** for literal receivers and removes the unpack crash on that
+path. New regression pair `regression/python/as_integer_ratio{,_fail}` (CORE): the positive covers
+dyadic/non-dyadic floats, negatives, ints, zero, and tuple unpacking (the pre-fix crash shape); the
+`_fail` pins a wrong ratio as a real `FAILED`. Code review differentially tested the imported fold
+against CPython over ~9,000 generated cases (uniform floats, 62-bit ints, wide-exponent floats,
+negative zero, boundary 2⁶³±1, must-decline set incl. `True`/`1e300`/`1e400`/`~5`) — bit-for-bit
+exact, decline predicate exact. CPython sanity passes; the
+decimal/from_bytes/gcd/lcm/preprocessor-adjacent subset (36) passes 100%; the `tuple|float` subset
+shows only the two pre-existing `--ir`/`--z3` environmental failures (verified identical on vanilla
+master). Solver-agnostic (a preprocess-time fold).
+
+Variable receivers (`v.as_integer_ratio()`) keep the prior unsupported behaviour (no wrong fold) —
+a runtime model needs frexp-style bit manipulation in the OM, a separate change.
+
+### 79b. Everything else: unchanged disposition
+## 75. 2026-07-02 re-validation (sixty-fifth sweep) — graph-quixbug class-instance signatures shifted post-heap-lifetime (characterized, deferred)
+
+Re-test against current `master` (tip `c177d64d51`), focused on the class-graph cluster that the
+object-model design note (`docs/python-object-model-design-2026-06-12.md`) tracks as its Stage 2.
+The design note's Stage 1 (heap-allocated instances, PR #5339) and the Stage 2 escape/lifetime work
+(GC lifetime for escaping instances #5424; `reverse_linked_list` #5438) have all **landed**, and
+`reverse_linked_list` has flipped KNOWNBUG→CORE. The three remaining graph quixbugs the note names
+(`detect_cycle`, `depth_first_search`, `topological_ordering`) stay KNOWNBUG — but their failure
+signatures have **shifted off the crashes recorded in §3b/§6a**, which narrows the residual and is
+worth pinning before the next fix cycle.
+
+### 75a. Signature shift (characterized, no point fix)
+- **`detect_cycle`** (§3b: `ERROR: Cannot resolve nested attribute: successor`; §6a: the
+  short-circuit `is None` SMT abort) → now a **clean but spurious** `dereference failure: NULL
+  pointer` (CWE-476) at `main.py:11` (`hare = hare.successor.successor`) — a false alarm, not a
+  crash. GOTO evidence: the guard `if hare is None or hare.successor is None: return False` lowers
+  to `IF !(ISNONE(hare, 0) || ISNONE(hare->successor, 0)) THEN GOTO 2`, which is a structurally
+  correct short-circuit, yet symex still reaches line 11 with `hare->successor == NULL`. So the
+  residual is precisely that **the null branch past an `is None` guard is not pruned for a
+  heap-allocated `Class*` field whose value is `None` (a null `Class*`)** — i.e. `ISNONE` on a
+  null-valued instance attribute is not forcing the guarded early return. This is a strictly
+  smaller, better-localised problem than the pre-heap-lifetime "cannot resolve attribute" abort.
+- **`depth_first_search`** (§3b: internal `ABORT: is_array_type(internal_deref_items...)`) → **no
+  longer aborts**; it now exercises the recursion (`search_from` self-call + `node in nodesvisited`
+  set membership + the `any(...)` generator) and does not converge under `--incremental-bmc` within
+  a 120 s budget. Crash removed; residual is now traversal/unwinding, not a deref-model abort.
+- **`topological_ordering`** (§3b/§3d: `SEGFAULT`) → **no longer segfaults**; it now drives the
+  graph-traversal unwinder (`main.py:4` loop) without converging in-budget. Crash removed.
+
+**Disposition: characterized, deferred** (like §36) — no isolated point fix is shipped this sweep.
+The `detect_cycle` residual is the concrete next task: root-cause why `ISNONE(<null Class*>, 0)`
+does not prune the guarded branch (candidates: the `is None`/`ISNONE` lowering vs the null-`Class*`
+representation in `python_converter`'s `BoolOp`/`Compare` handling, or the entry harness feeding a
+nondet receiver into `detect_cycle`). That is a focused frontend investigation + a `Class*`
+null-guard fix with a pass/fail regression pair, dual-solver (Bitwuzla+Z3) and Mode C on the changed
+branch — not a same-sweep edit.
+
+**Branch hygiene note.** The long-lived local `feat/python-object-heap-lifetime` branch is now
+**badly stale** — ~78 k lines diverged from current `master`, and it *deletes* unrelated files that
+`master` has since added. Its useful Stage-1/Stage-2 content already reached `master` through the
+focused PRs above (#5339/#5424/#5438, plus #5651 return-by-reference for #3067); the branch must
+**not** be merged. New work on this cluster should branch fresh from `master`.
+
+### 75b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands; the object-model design note's
+Stage 2 remains the home for the `detect_cycle` null-guard follow-up, with Stage 3 (#3067
+`ClassHandler`/MRO refactor) still separable and unstarted.
+## 76. 2026-07-02 re-validation (sixty-sixth sweep) & str.title() digit word-boundary
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+The §75 code review surfaced a **wrong-value/soundness** defect in the `title()` constant fold — the
+highest-value class — and fixing it exposed a second copy of the same bug in a different fold site.
+
+### 76a. New isolated, soundly-fixable defect found & fixed
+**`str.title()` on a constant string used alnum-based word boundaries, so digit-adjacent letters
+folded wrong and a false assertion could verify `SUCCESSFUL`.**
+
+`"3d movie".title()` folded to `"3d Movie"` instead of CPython's `"3D Movie"`, and `"a1a".title()`
+to `"A1a"` instead of `"A1A"` — so `assert "3d movie".title() == "3d Movie"` verified **SUCCESSFUL**
+(a false claim) and the valid `assert "3d movie".title() == "3D Movie"` reported a spurious
+`FAILED`. CPython (`Objects/unicodeobject.c` `do_title`) titlecases a letter iff the *previous*
+character is **uncased**; digits are uncased, so they *end* a word. The old fold used
+`new_word = !isalnum(c)`, treating digits as word-internal.
+
+**Two fold sites had the same bug** — `python_consteval.cpp` (the `title` fold) and
+`string_method_handler.cpp` `handle_string_title` (the constant-receiver path). They cover
+*different* routing contexts (the initial single-site fix flipped one battery while the identical
+top-level claim still folded wrong through the other handler — caught in this sweep's validation),
+so both were switched to the same `prev_cased` state machine. Notably the **runtime OM**
+`__python_str_title` (`src/c2goto/library/python/string.c`) already implemented the correct
+cased-boundary rule, and the `python_str_title_runtime_model` test explicitly documented the
+consteval divergence as a known pre-existing gap ("digits don't break words; that pre-existing
+divergence is out of scope here") — this sweep closes exactly that documented divergence, and the
+stale comment is updated. All three implementations now agree.
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_title_digit_boundary{,_fail}` (CORE): the positive is the liveness witness
+(digit-boundary cases `"3d movie"`/`"a1a"`/`"x2y3z"`/`"123abc"` plus unchanged non-digit boundary
+behaviour, apostrophes, hyphens, all-caps, empty); the `_fail` pins the previously-false-SUCCESSFUL
+`assert "3d movie".title() == "3d Movie"`, now correctly `FAILED`. Verified bit-for-bit against
+CPython; CPython sanity passes (`scripts/check_python_tests.sh str_title_digit`); the `title` ctest
+subset (12 tests) and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100%.
+Solver-agnostic (frontend constant folds, no SMT encoding).
+
+### 76b. Everything else: unchanged disposition
+## 75. 2026-07-02 re-validation (sixty-fifth sweep) & str.istitle()
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took the §74a named follow-up: `str.istitle()` was the one remaining unmodelled `is*`
+string predicate.
+
+### 75a. New isolated, soundly-fixable defect found & fixed
+**`str.istitle()` on a constant string was unmodelled, reporting a spurious `VERIFICATION FAILED`.**
+
+`"Hello World".istitle()` hit the "Unsupported function" → `assert(false)` fallback, so any program
+calling it reported `FAILED` (a false alarm). §74 deferred it because it needs word-boundary (cased-
+run) tracking rather than the flat per-character `pred_all` mechanism.
+
+**Fix** (`src/python-frontend/python_consteval.cpp`): add an `istitle` entry beside the existing
+`isupper`/`islower` stateful block, implementing CPython's exact state machine
+(`Objects/unicodeobject.c`): an uppercase letter may only follow an *uncased* character, a lowercase
+letter may only follow a *cased* one, and at least one cased character must be present (empty string
+→ `False`). Like the sibling predicates this is a byte-level ASCII model (operands cast to
+`unsigned char` before the ctype calls, so they are well-defined) and shares their known
+non-ASCII/Unicode limitation. The `title()` *transformer* was already modelled; this closes the
+predicate side.
+
+This **restores working behaviour** (the predicate now verifies with exact values). New regression
+pair `regression/python/str_istitle{,_fail}` (CORE): the positive is the liveness witness for every
+added branch, covering titlecased text, single letters, apostrophe boundaries (`"It'S A Dog"` True vs
+`"It's A Dog"` False), double spaces, hyphens, digit-led words (`"3D Movie"` True vs `"3d Movie"`
+False), the empty string, all-caps, and all-lower; the `_fail` pins `"Hello world".istitle()` as a
+real `FAILED`. Verified bit-for-bit against CPython on all 13 cases; CPython sanity passes
+(`scripts/check_python_tests.sh str_istitle`); the focused `str`/`string`/`consteval` ctest subset
+(1194 tests) passes 100% with zero failures. Solver-agnostic (a frontend constant fold, no SMT
+encoding).
+
+Variable-string receivers (`s.istitle()` for a non-literal `s`) still route to the runtime handler,
+the same disposition the §74 predicates carry — extending the runtime string model is orthogonal.
+
+### 75b. Everything else: unchanged disposition
+## 77. 2026-07-02 re-validation (sixty-seventh sweep) & str.center() odd-padding split
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery (padding/formatting/numeric-base/dict-mutation idioms) found one CPython
+divergence: `str.center()` split odd padding on the wrong side — a **wrong-value/soundness** defect
+(the battery's deliberately-wrong oracle verified `SUCCESSFUL`).
+
+### 77a. New isolated, soundly-fixable defect found & fixed
+**`str.center()` put the extra fill char on the right for odd margins, so
+`assert "ab".center(7, "-") == "--ab---"` verified `SUCCESSFUL` (CPython: `"---ab--"`).**
+
+CPython (`Objects/unicodeobject.c` `unicode_center_impl`) computes
+`left = marg/2 + (marg & width & 1)` — the extra fill char goes on the **left** exactly when both
+the margin and the width are odd (`"ab".center(7)` → left 3/right 2; but `"a".center(4)` → left
+1/right 2, since the width is even). `handle_string_center`
+(`string_method_handler.cpp`) used the naive `left = pad / 2`, so every odd-margin/odd-width call
+folded to the mirror-image string: the valid assertion reported a spurious `FAILED` and the false
+one verified `SUCCESSFUL`. Single site — neither `python_consteval.cpp` nor the runtime OM models
+`center` (non-constant receivers/widths take the nondet fallback), and `ljust`/`rjust`/`zfill`
+(one-sided pads) are unaffected (battery-confirmed).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_center_odd_padding{,_fail}` (CORE): the positive is the liveness witness
+(odd margin+width with custom and default fill, odd margin+even width, even splits, degenerate
+`width <= len`, empty receiver); the `_fail` pins the previously-false-SUCCESSFUL mirror-image
+claim, now correctly `FAILED`. Code review differential-tested the patched fold against real
+CPython `str.center` over 448 (length, width, fill) combinations — zero mismatches. CPython sanity
+passes (`scripts/check_python_tests.sh str_center`); the `center`/`width` ctest subset (11 tests)
+and the focused `str`/`string`/`consteval` subset (1194 tests) pass 100% (existing center tests use
+even margins and are unaffected). Solver-agnostic (a frontend constant fold, no SMT encoding).
+
+The rest of the battery (`ljust`/`rjust`/`zfill`/`expandtabs`/`bit_length`/3-arg `pow`/
+`setdefault`/`popitem`/`enumerate(start=)`/str-mult/slice-step/`bin`/`oct`/`hex`/format-specs/
+`removeprefix`/`int(s, base)`) matches CPython — no further divergence found this sweep.
+
+### 77b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.

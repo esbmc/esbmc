@@ -642,7 +642,11 @@ void ld_converter::convert()
     symbolt rm;
     rm.id = "c:@__ESBMC_rounding_mode";
     rm.name = "__ESBMC_rounding_mode";
-    rm.module = "ld";
+    // This mirrors the C frontend's intrinsic (C-mangled id, C mode), so it
+    // is not an LD-language symbol: tagging it module "ld" would break the
+    // invariant that every LD-module symbol has mode "LD"
+    // (unit/ld-frontend/test_ir_gen.cpp).
+    rm.module = "C";
     rm.mode = "C";
     rm.lvalue = true;
     rm.static_lifetime = true;

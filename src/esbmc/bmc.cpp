@@ -40,6 +40,7 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
@@ -768,9 +769,23 @@ void report_coverage(
     const int tracked_instance = reached_mul_claims.size();
     const int total_instance = goto_coveraget::total_assert_ins;
 
+    // Assertions never observed during symbolic execution: either their
+    // branch was pruned by a constant guard, or their path guard is
+    // unsatisfiable so the claim is vacuously valid (discussion #5745).
+    std::vector<std::string> unreached_claims;
+    for (const auto &[claim_msg, claim_loc] : goto_coveraget::all_claims)
+    {
+      const std::string claim_sig = claim_msg + "\t" + claim_loc;
+      if (reached_mul_claims.count(claim_sig) == 0)
+        unreached_claims.push_back(claim_sig);
+    }
+
     log_success("\n[Coverage]\n");
     // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+    // "Total/Unreached Asserts" count static claims; the "Instances" lines
+    // count their goto-unwound copies.
     log_result("Total Asserts: {}", total);
+    log_result("Unreached Asserts: {}", unreached_claims.size());
     if (total_instance >= tracked_instance)
       log_result("Total Assertion Instances: {}", total_instance);
     else
@@ -786,7 +801,12 @@ void report_coverage(
       // reached claims:
       for (const auto &claim : reached_mul_claims)
       {
-        log_status("  {}", prettify_solidity_expr(claim));
+        log_status("  {} : REACHED", prettify_solidity_expr(claim));
+      }
+      // unreached claims:
+      for (const auto &claim : unreached_claims)
+      {
+        log_status("  {} : UNREACHED", prettify_solidity_expr(claim));
       }
     }
 

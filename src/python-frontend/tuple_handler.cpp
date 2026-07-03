@@ -51,6 +51,52 @@ struct_typet tuple_handler::create_tuple_struct_type(
   return tuple_type;
 }
 
+/* Widen a string element to char[tuple_str_member_size], NUL-padded. Tuple
+ * types built from annotations (tuple[str, ...]) cannot know each literal's
+ * length, so construction and annotation must agree on one static member
+ * width for the sorts to match (#5571). Padding keeps members plain byte
+ * values, so every content-based path (struct equality, dict-key lookup,
+ * list contains/count/index) works exactly as it does for unpadded strings;
+ * a pointer representation instead would make those byte comparisons
+ * reinterpret pointer bits, which the memory model does not support. */
+exprt tuple_handler::pad_string_element(const exprt &elem) const
+{
+  const typet padded_type =
+    type_handler_.get_typet("str", tuple_str_member_size);
+  if (elem.type() == padded_type)
+    return elem;
+
+  size_t n = 1; // a bare char is a 1-character string
+  if (elem.type().is_array())
+  {
+    const exprt &size = to_array_type(elem.type()).size();
+    if (!size.is_constant())
+      return elem; // dynamically-sized: leave unchanged
+    n =
+      binary2integer(to_constant_expr(size).value().c_str(), false).to_uint64();
+  }
+
+  // A longer string keeps its tight width: padding cannot represent it, and
+  // truncating would be unsound. Unannotated tuples then behave exactly as
+  // before this fix; only reads through a tuple[str, ...] annotation (which
+  // assumes the fixed width) remain unsupported for such elements.
+  if (n > tuple_str_member_size)
+    return elem;
+
+  exprt padded = gen_zero(padded_type);
+  for (size_t i = 0; i < n; i++)
+  {
+    if (!elem.type().is_array())
+      padded.operands().at(i) = elem;
+    else if (elem.is_constant())
+      padded.operands().at(i) = elem.operands().at(i);
+    else
+      padded.operands().at(i) =
+        build_index(elem, from_integer(i, index_type()));
+  }
+  return padded;
+}
+
 exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
 {
   assert(element.contains("_type") && element["_type"] == "Tuple");
@@ -101,6 +147,15 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
     exprt elem_expr = converter_.get_expr(elts[i]);
     converter_.current_lhs = saved_lhs;
 
+    // Widen string elements to the fixed tuple member width so the struct
+    // sort matches tuple types built from annotations (see
+    // pad_string_element). Symbolic char* strings are left as-is.
+    if (
+      (elem_expr.type().is_array() &&
+       elem_expr.type().subtype() == char_type()) ||
+      type_utils::is_char_type(elem_expr.type()))
+      elem_expr = pad_string_element(elem_expr);
+
     elem_expr = materialize_tuple_elem(elem_expr);
     element_types.push_back(elem_expr.type());
     element_exprs.push_back(elem_expr);
@@ -109,16 +164,28 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   // Create struct type for the tuple
   struct_typet tuple_type = create_tuple_struct_type(element_types);
 
-  // Create struct expression with tuple type
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = element_exprs;
+  // Create the tuple struct expression. V.3: build the value in IREP2,
+  // back-migrating once. The operands are the already-materialised element temp
+  // symbols; a struct2t literal over them round-trips exactly through migrate.
+  std::vector<expr2tc> members;
+  members.reserve(element_exprs.size());
+  for (const exprt &e : element_exprs)
+  {
+    expr2tc e2;
+    migrate_expr(e, e2);
+    members.push_back(std::move(e2));
+  }
+  exprt tuple_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+  // Restore the full struct type: migrate_type does not model the frontend-only
+  // aggregate-kind marker set_python_aggregate_kind attaches, and the
+  // `in`/membership dispatch reads it (python_aggregate_kind) with no tag-based
+  // fallback for tuples. Re-attaching mirrors type_handler's lower_to_seam.
+  tuple_expr.type() = tuple_type;
 
   // Set location information
   if (element.contains("lineno"))
-  {
-    locationt loc = converter_.get_location_from_decl(element);
-    tuple_expr.location() = loc;
-  }
+    tuple_expr.location() = converter_.get_location_from_decl(element);
 
   return tuple_expr;
 }
@@ -241,9 +308,21 @@ exprt tuple_handler::handle_tuple_subscript(
       elem_types.push_back(components[k].type());
     struct_typet new_type = create_tuple_struct_type(elem_types);
 
-    struct_exprt result(new_type);
+    // V.3: build the sub-tuple value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership dispatch (see
+    // get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(kept.size());
     for (size_t k : kept)
-      result.copy_to_operands(get_tuple_element(array, tuple_type, k));
+    {
+      expr2tc m2;
+      migrate_expr(get_tuple_element(array, tuple_type, k), m2);
+      members.push_back(std::move(m2));
+    }
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);
@@ -535,20 +614,33 @@ typet tuple_handler::get_tuple_type_from_annotation(
   // Build tag name matching the pattern used in get_tuple_expr
   std::vector<typet> element_types;
 
+  // A str member's length is unknown from the annotation, so use the fixed
+  // width get_tuple_expr pads stored strings to; get_typet("str") with no
+  // size would yield a degenerate char[0] that can never match a stored
+  // value (#5571). bytes members are rejected loudly: bytes values are
+  // modelled as int-list objects, and neither get_typet("bytes") (a
+  // degenerate int64[0] array) nor the list-pointer type lines up with how
+  // tuple construction stores them — reads through such an annotation
+  // produce silent false alarms rather than a crash.
+  auto elem_type_from = [this](const nlohmann::json &node) -> typet {
+    if (node.contains("id") && node["id"].is_string())
+    {
+      const std::string &id = node["id"].get<std::string>();
+      if (id == "str" || id == "string")
+        return type_handler_.get_typet("str", tuple_str_member_size);
+      if (id == "bytes")
+        throw std::runtime_error(
+          "tuple[bytes, ...] annotations are not supported");
+      return type_handler_.get_typet(id);
+    }
+    return type_handler_.get_typet(node);
+  };
+
   if (slice.contains("elts"))
   {
     // Multiple element types: tuple[int, str, float]
-    const auto &elts = slice["elts"];
-    for (size_t i = 0; i < elts.size(); i++)
-    {
-      typet elem_type;
-      if (elts[i].contains("id"))
-        elem_type = type_handler_.get_typet(elts[i]["id"].get<std::string>());
-      else
-        elem_type = type_handler_.get_typet(elts[i]);
-
-      element_types.push_back(elem_type);
-    }
+    for (const auto &elt : slice["elts"])
+      element_types.push_back(elem_type_from(elt));
   }
   else
   {
@@ -556,11 +648,7 @@ typet tuple_handler::get_tuple_type_from_annotation(
     // (a bare Name or nested subscript), not an elts list. Without this the
     // tuple would get zero components — the opaque struct the callers of this
     // function are specifically avoiding.
-    if (slice.contains("id") && slice["id"].is_string())
-      element_types.push_back(
-        type_handler_.get_typet(slice["id"].get<std::string>()));
-    else
-      element_types.push_back(type_handler_.get_typet(slice));
+    element_types.push_back(elem_type_from(slice));
   }
 
   return create_tuple_struct_type(element_types);

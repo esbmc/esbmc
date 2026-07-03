@@ -5,6 +5,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
@@ -241,27 +242,10 @@ std::string py_percent_format(
 
     // Two-pass snprintf with a literal format (stays -Wformat-nonliteral-safe).
     auto fmt_double = [](char conv, int p, double d) -> std::string {
-      // printf rounds %f/%e/%g per the host FP rounding mode, and the
-      // surrounding pipeline can leave the host in a non-default mode; under
-      // FE_UPWARD, e.g. "%.2f" % 3.14159 would render "3.15" instead of "3.14"
-      // (observed on the Linux CI, where the host was left rounding upward).
-      // CPython formats with round-half-to-even, i.e. FE_TONEAREST, so pin that
-      // mode for both snprintf passes and restore it, keeping the fold correct
-      // regardless of the host's mode. The guard restores on every return path.
-      struct round_guard
-      {
-        int saved;
-        round_guard() : saved(std::fegetround())
-        {
-          if (saved != FE_TONEAREST)
-            std::fesetround(FE_TONEAREST);
-        }
-        ~round_guard()
-        {
-          if (saved >= 0 && saved != FE_TONEAREST)
-            std::fesetround(saved);
-        }
-      } guard;
+      // printf rounds %f/%e/%g per the host FP rounding mode, which the
+      // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
+      // passes so the fold matches CPython's round-half-to-even.
+      const round_to_nearest_guard guard;
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -1758,17 +1742,25 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the concatenated tuple value in IREP2. Each component is the
+    // exact round-trip of a member_exprt over the migrated operand; the struct
+    // literal is assembled via constant_struct2tc and back-migrated once, then
+    // the full struct type is re-attached -- migrate_type drops the frontend-only
+    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
+    // tag fallback (mirrors tuple_handler::get_tuple_expr).
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
+    std::vector<expr2tc> members;
+    members.reserve(lhs_components.size() + rhs_components.size());
     for (const auto &c : lhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1804,14 +1796,19 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the repeated tuple value in IREP2 (see the concat path above).
     expr2tc tuple2;
     migrate_expr(tuple, tuple2);
+    std::vector<expr2tc> members;
+    members.reserve(components.size() * n);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(migrate_expr_back(
-          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
+        members.push_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1916,6 +1913,92 @@ exprt python_converter::handle_tuple_operations(
       n.copy_to_operands(result);
       result = n;
     }
+    result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Equality, lowered element-wise so string members compare by content
+  // (strcmp): tuples store their strings as char* (#5571), and the native
+  // struct equality the comparison would otherwise fall through to compares
+  // those members by pointer identity. Members of unrelated types make the
+  // pair unequal, as in Python; differing arity likewise.
+  if (lhs_is_tuple && rhs_is_tuple && (op == "Eq" || op == "NotEq"))
+  {
+    const struct_typet &lt = to_struct_type(lhs.type());
+    const struct_typet &rt = to_struct_type(rhs.type());
+    const bool negate = op == "NotEq";
+
+    auto constant_bool = [&](bool holds) -> exprt {
+      exprt result =
+        migrate_expr_back(holds != negate ? gen_true_expr() : gen_false_expr());
+      result.location() = get_location_from_decl(element);
+      return result;
+    };
+
+    if (lt.components().size() != rt.components().size())
+      return constant_bool(false);
+
+    auto is_num = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+             t == bool_type();
+    };
+
+    expr2tc result2 = gen_true_expr();
+    for (size_t i = 0; i < lt.components().size(); i++)
+    {
+      exprt li = tuple_handler_->get_tuple_element(lhs, lt, i);
+      exprt ri = tuple_handler_->get_tuple_element(rhs, rt, i);
+
+      expr2tc eq2;
+      if (
+        type_utils::is_string_type(li.type()) &&
+        type_utils::is_string_type(ri.type()))
+      {
+        // String content equality via the shared comparison machinery, which
+        // either folds to a boolean or sets up a strcmp(...) == 0 expression
+        // (signalled by a nil return — assemble it like the binop caller does).
+        exprt equality = handle_string_comparison("Eq", li, ri, element);
+        if (equality.is_nil())
+        {
+          expr2tc l2, r2;
+          migrate_expr(li, l2);
+          migrate_expr(ri, r2);
+          eq2 = equality2tc(l2, r2);
+        }
+        else
+          migrate_expr(equality, eq2);
+      }
+      else if (is_num(li.type()) && is_num(ri.type()))
+      {
+        // Promote a mixed int/float pair to double (Python int->float).
+        // Ints >= 2^53 conflate with nearby floats under this promotion —
+        // the same documented limitation as __ESBMC_list_eq (PR #5207).
+        if (li.type() != ri.type())
+        {
+          li = typecast_exprt(li, double_type());
+          ri = typecast_exprt(ri, double_type());
+        }
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else if (li.type() == ri.type())
+      {
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else
+        return constant_bool(false);
+
+      result2 = and2tc(result2, eq2);
+    }
+
+    if (negate)
+      result2 = not2tc(result2);
+    exprt result = migrate_expr_back(result2);
     result.location() = get_location_from_decl(element);
     return result;
   }

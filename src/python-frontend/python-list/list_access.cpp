@@ -3,6 +3,66 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+namespace
+{
+// Structural equality of two AST JSON nodes, ignoring source-location keys
+// (lineno/col_offset/...). Two textually distinct occurrences of the same
+// expression — e.g. the `l[i+1:]` on each side of `l[i+1:] = reversed(l[i+1:])`
+// — differ only in their location fields, so a raw `==` would wrongly report
+// them as different. Used to prove the read-slice and write-slice are the same
+// before collapsing the reverse-in-place idiom.
+bool ast_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto is_loc_key = [&](const std::string &k) {
+    for (const char *lk : loc_keys)
+      if (k == lk)
+        return true;
+    return false;
+  };
+
+  if (a.type() != b.type())
+    return false;
+
+  if (a.is_object())
+  {
+    // Compare the non-location keys of both objects symmetrically.
+    for (auto it = a.begin(); it != a.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (
+        !b.contains(it.key()) ||
+        !ast_equal_ignoring_location(it.value(), b[it.key()]))
+        return false;
+    }
+    for (auto it = b.begin(); it != b.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (!a.contains(it.key()))
+        return false;
+    }
+    return true;
+  }
+
+  if (a.is_array())
+  {
+    if (a.size() != b.size())
+      return false;
+    for (size_t i = 0; i < a.size(); ++i)
+      if (!ast_equal_ignoring_location(a[i], b[i]))
+        return false;
+    return true;
+  }
+
+  return a == b;
+}
+} // namespace
+
 exprt python_list::build_list_at_call(
   const exprt &list,
   const exprt &index,
@@ -153,21 +213,16 @@ exprt python_list::build_bool_mask_index(
   const locationt location = converter_.get_location_from_decl(element);
   const typet elem_type = array_type.subtype();
 
-  // Whole-row selection (mask over the outer axis of an n-D array) would
-  // need to push an array-typed element into the runtime list model, which
-  // is not supported by the list element encoding yet (mirrors the same gap
-  // for list comprehensions over n-D arrays). Reject explicitly rather than
-  // emitting IR the solver back end cannot encode.
+  // Whole-row selection (mask over the outer axis of an n-D array) cannot
+  // reuse the runtime-list path below: pushing an array-typed element into
+  // the PyListObject model produces a bit-vector/array sort mismatch at the
+  // solver backend (confirmed empirically: "Sorts (_ BitVec N) and (Array
+  // ...) are incompatible"), matching the encoding gap already flagged for
+  // list comprehensions over n-D arrays. Route it through
+  // build_bool_mask_row_select instead, which selects rows into a
+  // fixed-size array result the same way build_column_select does.
   if (elem_type.is_array())
-  {
-    std::ostringstream msg;
-    msg << "TypeError: boolean-mask indexing of a multi-dimensional array "
-           "(whole-row selection) is not supported; mask must select "
-           "scalar elements";
-    if (!location.is_nil())
-      msg << " at " << location.get_file() << ":" << location.get_line();
-    throw std::runtime_error(msg.str());
-  }
+    return build_bool_mask_row_select(array, mask, element);
 
   symbolt &result_list = create_list();
   const std::string result_list_id = result_list.id.as_string();
@@ -225,6 +280,432 @@ exprt python_list::build_bool_mask_index(
   add_type_info_entry(result_list_id, "", elem_type);
 
   return build_symbol(result_list);
+}
+
+exprt python_list::build_bool_mask_row_select(
+  const exprt &array,
+  const exprt &mask,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const array_typet &outer_type =
+    static_cast<const array_typet &>(ns.follow(array.type()));
+  const typet row_type = outer_type.subtype();
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const locationt location = converter_.get_location_from_decl(element);
+
+  const array_typet &mask_type =
+    static_cast<const array_typet &>(ns.follow(mask.type()));
+  const BigInt mask_len =
+    binary2integer(mask_type.size().value().c_str(), false);
+  if (mask_len != num_rows)
+  {
+    std::ostringstream msg;
+    msg << "IndexError: boolean index did not match indexed array; mask "
+           "length "
+        << mask_len << " does not match array length " << num_rows;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  auto reject = [&](const std::string &reason) -> exprt {
+    std::ostringstream msg;
+    msg << "TypeError: boolean-mask row selection (a[mask]) " << reason;
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  };
+
+  if (
+    !element.contains("slice") ||
+    element["slice"].value("_type", "") != "Name" ||
+    !element["slice"].contains("id"))
+    return reject(
+      "requires a mask variable whose value is a concrete boolean literal");
+
+  const std::string mask_name = element["slice"]["id"].get<std::string>();
+
+  // find_var_decl returns the first textual assignment to mask_name in
+  // scope, not the one that actually reaches this use site. If the mask is
+  // reassigned anywhere in scope, trusting that first declaration could
+  // silently select rows using a stale mask value instead of the one
+  // actually in effect here, so reject rather than risk an unsound result.
+  if (json_utils::has_multiple_assignments_in_scope(
+        mask_name, converter_.current_function_name(), converter_.ast()))
+    return reject(
+      "requires a mask variable that is assigned exactly once (no "
+      "reassignment) so its literal value can be resolved unambiguously");
+
+  const nlohmann::json mask_decl = json_utils::find_var_decl(
+    mask_name, converter_.current_function_name(), converter_.ast());
+
+  if (
+    mask_decl.is_null() || !mask_decl.contains("value") ||
+    mask_decl["value"].value("_type", "") != "Call" ||
+    !mask_decl["value"].contains("args") ||
+    mask_decl["value"]["args"].empty() ||
+    mask_decl["value"]["args"][0].value("_type", "") != "List")
+    return reject(
+      "requires a mask variable whose value is a concrete boolean literal, "
+      "e.g. mask = np.array([True, False, ...])");
+
+  const nlohmann::json &mask_elts = mask_decl["value"]["args"][0]["elts"];
+
+  std::vector<bool> mask_values;
+  mask_values.reserve(mask_elts.size());
+  for (const auto &elt : mask_elts)
+  {
+    if (
+      elt.value("_type", "") != "Constant" || !elt.contains("value") ||
+      !elt["value"].is_boolean())
+      return reject("requires every mask element to be a literal bool");
+    mask_values.push_back(elt["value"].get<bool>());
+  }
+
+  if (BigInt(mask_values.size()) != num_rows)
+    return reject(
+      "requires the mask literal's element count to match the mask's "
+      "declared array length");
+
+  BigInt selected_count = 0;
+  for (bool v : mask_values)
+    if (v)
+      ++selected_count;
+
+  const array_typet result_type(
+    row_type, from_integer(selected_count, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$bool_mask_rows$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Whole-array assignment (`dst[k] = src[i]` where both sides are
+  // themselves arrays) is not valid C and is unsupported by the backend --
+  // confirmed empirically, ESBMC's C frontend itself rejects `b[0]=a[0]` as
+  // "array type ... is not assignable" -- so each row is copied column by
+  // column instead, mirroring build_column_select's element-wise copy.
+  const array_typet &row_array_type = to_array_type(ns.follow(row_type));
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+    return reject(
+      "currently supports only 2-D arrays; 3-D+ rows are not modelled");
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  BigInt dst_row = 0;
+  for (BigInt src_row = 0; src_row < num_rows; ++src_row)
+  {
+    if (!mask_values[src_row.to_uint64()])
+      continue;
+
+    exprt src_row_expr =
+      build_index(array, from_integer(src_row, size_type()), row_type);
+    exprt dst_row_expr = build_index(
+      build_symbol(result), from_integer(dst_row, size_type()), row_type);
+
+    for (BigInt col = 0; col < num_cols; ++col)
+    {
+      exprt src_elem =
+        build_index(src_row_expr, from_integer(col, size_type()), elem_type);
+      exprt dst_elem =
+        build_index(dst_row_expr, from_integer(col, size_type()), elem_type);
+      code_assignt assign(dst_elem, src_elem);
+      assign.location() = location;
+      converter_.add_instruction(assign);
+    }
+    ++dst_row;
+  }
+
+  return build_symbol(result);
+}
+
+namespace
+{
+// Recognizes a literal integer index node: a plain Constant, or a negated
+// Constant (UnaryOp USub), and extracts its signed value. Used to resolve
+// 2-D column/row indices and fancy-index entries entirely at conversion
+// time, without needing a runtime representation for the index list.
+bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
+{
+  // Booleans are deliberately excluded: NumPy treats an all-bool literal
+  // list (`a[[True, False]]`) as a boolean mask, not positional indices, so
+  // accepting them here would silently compute the wrong result instead of
+  // rejecting it. Let callers fail with a clear TypeError instead.
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    out = BigInt(node["value"].get<long long>());
+    return true;
+  }
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("op") && node["op"]["_type"] == "USub" &&
+    node.contains("operand") && node["operand"]["_type"] == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+  {
+    out = -BigInt(node["operand"]["value"].get<long long>());
+    return true;
+  }
+  return false;
+}
+} // namespace
+
+exprt python_list::resolve_fixed_axis_index(
+  const nlohmann::json &idx_node,
+  const BigInt &axis_len,
+  unsigned axis,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  BigInt literal_value;
+  if (try_get_literal_int(idx_node, literal_value))
+  {
+    BigInt normalized = literal_value;
+    if (normalized < 0)
+      normalized += axis_len;
+
+    if (normalized < 0 || normalized >= axis_len)
+    {
+      std::ostringstream msg;
+      msg << "IndexError: index " << literal_value
+          << " is out of bounds for axis " << axis << " with size " << axis_len;
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    return from_integer(normalized, size_type());
+  }
+
+  // Runtime (non-constant) index: normalize negative values against the
+  // compile-time-known axis length and guard with an in-model IndexError,
+  // mirroring build_list_at_call's negative-index normalization.
+  exprt idx_expr = converter_.get_expr(idx_node);
+  const typet signed_t = signed_size_type();
+  exprt idx_signed = build_typecast(idx_expr, signed_t);
+  exprt len_signed = from_integer(axis_len, signed_t);
+
+  const type2tc signed_t2 = migrate_type(signed_t);
+  expr2tc idx2, len2;
+  migrate_expr(idx_signed, idx2);
+  migrate_expr(len_signed, len2);
+
+  expr2tc is_negative = lessthan2tc(idx2, gen_zero(signed_t2));
+  expr2tc positive_index = add2tc(signed_t2, len2, idx2);
+  expr2tc normalized2 = if2tc(signed_t2, is_negative, positive_index, idx2);
+  exprt normalized = migrate_expr_back(normalized2);
+
+  if (!config.options.get_bool_option("no-bounds-check"))
+  {
+    expr2tc norm2;
+    migrate_expr(normalized, norm2);
+    expr2tc oob = or2tc(
+      lessthan2tc(norm2, gen_zero(signed_t2)),
+      greaterthanequal2tc(norm2, len2));
+
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "IndexError", "index is out of bounds for axis " + std::to_string(axis));
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(oob);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    converter_.add_instruction(guard);
+  }
+
+  return build_typecast(normalized, size_type());
+}
+
+exprt python_list::build_column_select(
+  const exprt &array,
+  const nlohmann::json &col_index_node,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (!resolved_array_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: 2-D column slicing (a[:, j]) requires a fixed-shape "
+           "2-D array";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &outer_type = to_array_type(resolved_array_type);
+  const typet row_type = ns.follow(outer_type.subtype());
+  if (!row_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+           "supported; numpy arrays are modelled as 1D lists";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &row_array_type = to_array_type(row_type);
+  const typet elem_type = ns.follow(row_array_type.subtype());
+  if (elem_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: 2-D column slicing (a[:, j]) currently supports only "
+           "2-D arrays; 3-D+ arrays are not modelled";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+  const BigInt num_rows =
+    binary2integer(outer_type.size().value().c_str(), false);
+  const BigInt num_cols =
+    binary2integer(row_array_type.size().value().c_str(), false);
+
+  exprt col_idx =
+    resolve_fixed_axis_index(col_index_node, num_cols, 1, element);
+
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$col_slice$", array_typet(elem_type, outer_type.size()), exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  for (BigInt row = 0; row < num_rows; ++row)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), row_type);
+    exprt src_elem = build_index(row_expr, col_idx, elem_type);
+    exprt dst_elem = build_index(
+      build_symbol(result), from_integer(row, size_type()), elem_type);
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+
+  return build_symbol(result);
+}
+
+exprt python_list::build_fancy_index(
+  const exprt &array,
+  const std::vector<nlohmann::json> &indices,
+  const nlohmann::json &element)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+  const locationt location = converter_.get_location_from_decl(element);
+
+  if (!resolved_array_type.is_array())
+  {
+    std::ostringstream msg;
+    msg << "TypeError: fancy indexing (a[[i, j, ...]]) requires a "
+           "fixed-shape array";
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+    throw std::runtime_error(msg.str());
+  }
+
+  const array_typet &array_type = to_array_type(resolved_array_type);
+  const typet elem_type = ns.follow(array_type.subtype());
+
+  const BigInt array_len =
+    binary2integer(array_type.size().value().c_str(), false);
+
+  // Every requested index must be a concrete literal integer: fancy indexing
+  // is restricted here to compile-time-known selections, so each index is
+  // resolved and bounds-checked up front, before any IR for the result.
+  std::vector<exprt> resolved_indices;
+  resolved_indices.reserve(indices.size());
+  for (const auto &idx_node : indices)
+  {
+    BigInt literal_value;
+    if (!try_get_literal_int(idx_node, literal_value))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: fancy indexing only supports concrete integer "
+             "indices";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    resolved_indices.push_back(
+      resolve_fixed_axis_index(idx_node, array_len, 0, element));
+  }
+
+  const array_typet result_type(
+    array_type.subtype(),
+    from_integer(BigInt(resolved_indices.size()), size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    element, "$fancy_index$", result_type, exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Whole-array assignment (`dst[k] = src[i]` where both sides are arrays)
+  // is not valid C and is unsupported by the backend -- confirmed
+  // empirically, ESBMC's C frontend itself rejects `b[0]=a[0]` as "array
+  // type ... is not assignable" -- so a row selection (2-D fancy indexing)
+  // is copied column by column instead of via a single assignment.
+  if (elem_type.is_array())
+  {
+    const array_typet &row_array_type = to_array_type(elem_type);
+    const typet row_elem_type = ns.follow(row_array_type.subtype());
+    if (row_elem_type.is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: fancy indexing currently supports only up to 2-D "
+             "arrays; 3-D+ arrays are not modelled";
+      if (!location.is_nil())
+        msg << " at " << location.get_file() << ":" << location.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    const BigInt num_cols =
+      binary2integer(row_array_type.size().value().c_str(), false);
+
+    for (std::size_t k = 0; k < resolved_indices.size(); ++k)
+    {
+      exprt src_row = build_index(array, resolved_indices[k], elem_type);
+      exprt dst_row = build_index(
+        build_symbol(result), from_integer(BigInt(k), size_type()), elem_type);
+
+      for (BigInt col = 0; col < num_cols; ++col)
+      {
+        exprt src_elem =
+          build_index(src_row, from_integer(col, size_type()), row_elem_type);
+        exprt dst_elem =
+          build_index(dst_row, from_integer(col, size_type()), row_elem_type);
+        code_assignt assign(dst_elem, src_elem);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+      }
+    }
+
+    return build_symbol(result);
+  }
+
+  for (std::size_t k = 0; k < resolved_indices.size(); ++k)
+  {
+    exprt src_elem =
+      build_index(array, resolved_indices[k], array_type.subtype());
+    exprt dst_elem = build_index(
+      build_symbol(result),
+      from_integer(BigInt(k), size_type()),
+      array_type.subtype());
+    code_assignt assign(dst_elem, src_elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+  }
+
+  return build_symbol(result);
 }
 
 exprt python_list::remove_function_calls_recursive(
@@ -924,6 +1405,78 @@ void python_list::handle_slice_assignment(
   }
 
   const locationt location = converter_.get_location_from_decl(slice_node);
+
+  // Reverse-in-place idiom: `l[a:b] = reversed(l[a:b])`. The literal form emits
+  // three heap passes (slice-read copy, reversed() rebuild, slice-assign
+  // resize+copy); collapse them into a single in-place swap over the sub-range.
+  // Fire ONLY when it is provably the same list variable and the same slice on
+  // both sides, with step 1 — then reversing the read slice and storing it back
+  // is exactly an in-place reverse of [a:b]. Any mismatch falls through to the
+  // correct (slower) generic path, so a missed match is harmless and a wrong
+  // match is impossible.
+  //
+  // `reversed` is matched by name, consistent with the rest of the frontend
+  // (annotation_intrinsics.cpp, loop_mixin.py, expr.cpp all key on the builtin
+  // name); a user-shadowed `reversed` is not honoured anywhere, so this adds no
+  // new assumption. Bounds are evaluated once here vs twice in the three-step
+  // form — immaterial for the pure index expressions this fires on.
+  if (
+    step_val == 1 && value_node.is_object() &&
+    value_node.value("_type", "") == "Call" && value_node.contains("func") &&
+    value_node["func"].value("_type", "") == "Name" &&
+    value_node["func"].value("id", "") == "reversed" &&
+    value_node.contains("args") && value_node["args"].is_array() &&
+    value_node["args"].size() == 1)
+  {
+    const nlohmann::json &arg = value_node["args"][0];
+    const bool arg_is_same_slice =
+      arg.is_object() && arg.value("_type", "") == "Subscript" &&
+      arg.contains("slice") && arg["slice"].is_object() &&
+      arg["slice"].value("_type", "") == "Slice" &&
+      // Same list variable (Name) on both sides.
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      list_value_.contains("value") && list_value_["value"].is_object() &&
+      list_value_["value"].value("_type", "") == "Name" &&
+      arg["value"].value("id", "") == list_value_["value"].value("id", "") &&
+      // Same slice bounds (ignoring source locations).
+      ast_equal_ignoring_location(arg["slice"], slice_node);
+
+    if (arg_is_same_slice)
+    {
+      const symbolt *rev_fn = converter_.symbol_table().find_symbol(
+        "c:@F@__ESBMC_list_reverse_range");
+      if (rev_fn)
+      {
+        const typet i64r = signedbv_typet(64);
+        auto rev_bound = [&](const char *name, bool &present) -> exprt {
+          present = slice_node.contains(name) && !slice_node[name].is_null();
+          if (!present)
+            return from_integer(0, i64r);
+          exprt e = converter_.get_expr(slice_node[name]);
+          e = remove_function_calls_recursive(e, slice_node);
+          return build_typecast(e, i64r);
+        };
+        bool rlo = false, rup = false;
+        exprt rlower = rev_bound("lower", rlo);
+        exprt rupper = rev_bound("upper", rup);
+
+        exprt rev_call = build_call_expr(
+          *rev_fn,
+          empty_typet(),
+          {list_expr.type().is_pointer() ? list_expr
+                                         : build_address_of(list_expr),
+           rlower,
+           from_integer(rlo ? 1 : 0, int_type()),
+           rupper,
+           from_integer(rup ? 1 : 0, int_type())});
+        rev_call.location() = location;
+        converter_.add_instruction(
+          converter_.convert_expression_to_code(rev_call));
+        return;
+      }
+    }
+  }
 
   // Evaluate the right-hand side; materialize a call (e.g. sorted(...)) into
   // a temporary so its result can be passed to the model by address. get_expr
