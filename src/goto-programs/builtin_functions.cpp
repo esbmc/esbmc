@@ -1367,14 +1367,29 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__builtin_va_copy")
   {
     // For Clang frontend, goto_symex tracks VA args via va_index in the
-    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
-    // pointer analysis on Linux/Windows where va_list is a struct array.
+    // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
+    // crashes the pointer analysis on Linux/Windows where va_list is a
+    // struct array, so those targets keep the erased form. Where va_list is
+    // a plain pointer, emit the real copy: symex_printf's va_list recovery
+    // must be able to see that the destination now aliases another va_list
+    // (an erased copy would let a foreign va_list masquerade as a fresh
+    // local, defeating the recovery's provenance gate).
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))
     {
       log_error("va_copy argument expected to be lvalue");
       abort();
+    }
+
+    if (arguments.size() >= 2 && ns.follow(dest_expr.type()).is_pointer())
+    {
+      exprt src_expr =
+        typecast_exprt(make_va_list(arguments[1]), dest_expr.type());
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, src_expr);
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
     }
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)

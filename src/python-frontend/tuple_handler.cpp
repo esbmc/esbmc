@@ -109,16 +109,28 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   // Create struct type for the tuple
   struct_typet tuple_type = create_tuple_struct_type(element_types);
 
-  // Create struct expression with tuple type
-  struct_exprt tuple_expr(tuple_type);
-  tuple_expr.operands() = element_exprs;
+  // Create the tuple struct expression. V.3: build the value in IREP2,
+  // back-migrating once. The operands are the already-materialised element temp
+  // symbols; a struct2t literal over them round-trips exactly through migrate.
+  std::vector<expr2tc> members;
+  members.reserve(element_exprs.size());
+  for (const exprt &e : element_exprs)
+  {
+    expr2tc e2;
+    migrate_expr(e, e2);
+    members.push_back(std::move(e2));
+  }
+  exprt tuple_expr =
+    migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+  // Restore the full struct type: migrate_type does not model the frontend-only
+  // aggregate-kind marker set_python_aggregate_kind attaches, and the
+  // `in`/membership dispatch reads it (python_aggregate_kind) with no tag-based
+  // fallback for tuples. Re-attaching mirrors type_handler's lower_to_seam.
+  tuple_expr.type() = tuple_type;
 
   // Set location information
   if (element.contains("lineno"))
-  {
-    locationt loc = converter_.get_location_from_decl(element);
-    tuple_expr.location() = loc;
-  }
+    tuple_expr.location() = converter_.get_location_from_decl(element);
 
   return tuple_expr;
 }
@@ -241,9 +253,21 @@ exprt tuple_handler::handle_tuple_subscript(
       elem_types.push_back(components[k].type());
     struct_typet new_type = create_tuple_struct_type(elem_types);
 
-    struct_exprt result(new_type);
+    // V.3: build the sub-tuple value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership dispatch (see
+    // get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(kept.size());
     for (size_t k : kept)
-      result.copy_to_operands(get_tuple_element(array, tuple_type, k));
+    {
+      expr2tc m2;
+      migrate_expr(get_tuple_element(array, tuple_type, k), m2);
+      members.push_back(std::move(m2));
+    }
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = converter_.get_location_from_decl(element);

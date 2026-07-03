@@ -3889,6 +3889,35 @@ except the numpy complex int→double site (`numpy_call_expr.cpp`, ieee +
 rounding mode) and the `isinstance`/`isnone` custom-node retain boundary
 above.
 
+**Follow-up (2026-07-01) — the numpy complex int→double site is now drained.**
+`make_complex` (`type_handler.h`), the shared builder behind every complex
+struct literal in the numpy/complex paths, built a `struct_exprt` over two
+legacy `typecast_exprt(x, double)` int/bool/float→double conversions (the ieee
+cast, rounding mode implicit). It is now `constant_struct2tc` over `typecast2tc`
+operands, back-migrated once — the same idiom as `complex_typecast` and the
+`complex_to_bool_expr` exemplar in the same header. Behaviour-preserving:
+`--goto-functions-only` output byte-identical (modulo pre-existing
+astgen-tempdir / unpack-temp non-determinism) across 9 representative
+numpy+python complex tests; 164 complex + 415/415 `regression/numpy` green. The
+only V.3 residual now is the `isinstance`/`isnone` custom-node retain boundary
+(needs a `migrate_expr` extension, out of scope), plus the V.1k keystone and
+what it unblocks (V.2/V.4/V.5/V.6).
+
+**Follow-up (2026-07-02) — the tuple-struct literal drain, now including the
+string-partition site.** The `struct_exprt` tuple-value construction was drained
+across the tuple family with one shared idiom (`constant_struct2tc` over migrated
+operands, back-migrated once, then the full `struct_typet` re-attached so the
+frontend-only `#python_aggregate_kind` marker — dropped by `migrate_type` and
+read by the `in`/membership/subscript dispatch with no tag-based fallback — is
+preserved): `tuple_handler::get_tuple_expr` (#5738), `handle_tuple_subscript`'s
+slice sub-tuple (#5740), and now `string_handler::build_partition_tuple`'s
+`make_tuple3` (the 3-tuple result of `str.partition()`/`str.rpartition()`). The
+last mirrors the first two exactly. Behaviour-preserving: `--goto-functions-only`
+byte-identical across all 11 partition/rpartition tests; 605/605 matched
+string/tuple/partition tests green. The membership path is not visible in the goto diff (the
+marker is read during conversion), so the type re-attach is load-bearing and
+the full suite is the real gate — the #5738 first cut proved this.
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,

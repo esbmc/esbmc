@@ -1,9 +1,34 @@
 # SV-COMP Issue Triage & Fix Plan
 
-**Last updated:** 2026-06-26 (Pass 9 — reconcile four closures since Pass 8 (#5395/#5399/#5400 and the
-new #5593, an Intel-TDX `havoc_memory` recurrence of #5224 fixed by merged PR #5602); triage the new
-live issue #5565 and **fix its first post-#5564 residual** — an unmodeled `getopt_long` left `optarg` an
-invalid pointer, a sound localized OM fix; see §13. Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (**Pass 16 (§20)** followed up on the x86_64 host with the aws-hash
+byte-addressed pointer-read-consistency cluster: **#5145** reproduces the same `Bug found (k = 1)`
+verdict Pass 6 recorded on aarch64/macOS, now confirmed unchanged on native x86 against current master;
+**#5393**/**#5394** get their **first genuine local reproduction** (Pass 7 only presumed cluster
+membership without running them) and exactly match their reported `k = 129` depth. Disposition unchanged
+— RCA #5369's open half needs multi-session SSA-trace/solver-internal correlation, too high-risk for a
+speculative fix (the one prior shortcut was refuted as unsound, PR #5283); no PR/code this pass, value
+is closing the reproducibility gap for the next session. **Pass 15 (§19)** ran on the first available
+x86_64 Linux host and cleared the environment wall Pass 14 hit: **#4427** got the x86 CI cross-check
+Pass 13 asked for — no unsound TRUE, **recommend closing**; **#4432** reached 2733 thread interleavings
+with no violation, downgraded from "host-gated" to "not reproducible within a generous local budget";
+**#4438** needs no new triage — open PR #4480 just needs a rebase + merge; **#5142**'s no-overflow layer
+reproduces on x86 once `--sv-comp` is added. Pass 12 consolidated two parallel Pass-11 PRs that both
+appended a `## 15` section: **#5730** (witness-closure reconciliation) stays **§15**; **#5735** (#5565
+closed by #5650; `--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**.
+Canonical remaining-work list is now §20.4. See §16/§17/§18/§19/§20. Pass 11 in §15, Pass 10 in §14,
+Pass 9 in §13, Pass 8 in §12, Pass 7 in §11)
+**Last updated:** 2026-07-01 (**Pass 15 (§19)** ran on the first available **x86_64 Linux** host and
+cleared the environment wall Pass 14 hit: **#4427** got the x86 CI cross-check Pass 13 asked for — ~36
+CPU-minutes across two k-steps, no unsound TRUE, **recommend closing**; **#4432** reached 2733 thread
+interleavings (7.4× Pass 14's aarch64 depth) with no violation, downgraded from "host-gated" to
+"not reproducible within a generous local budget"; **#4438** needs no new triage — open PR #4480 already
+fixes it and just needs a rebase + merge; **#5142**'s no-overflow layer is confirmed reproducible on x86
+once `--sv-comp` is added (the deliberate `-Wno-int-conversion` gate from Pass 10), landing on a sibling
+shift site to the one filed. Pass 12 consolidated two parallel Pass-11 PRs that both appended a `## 15`
+section: **#5730** (witness-closure reconciliation) stays **§15**; **#5735** (#5565 closed by #5650;
+`--sv-comp` flag retirement of the compile-time macro; aws-hash scouting) is **§16**. Canonical
+remaining-work list is now §19.5. See §16/§17/§18/§19. Pass 11 in §15, Pass 10 in §14, Pass 9 in §13,
+Pass 8 in §12, Pass 7 in §11)
 **Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
 SV-COMP issues for context and de-duplication.
 **Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0. Pass 8 on an **x86_64 Linux** host with
@@ -1332,3 +1357,630 @@ on GCC-acceptable, clang-15+-rejected implicit int↔pointer conversions, matchi
 confirmed as the intended behaviour, not a bug — see above) and the no-overflow precision layer (whether
 the benchmark verdict is correct once parsed under `--sv-comp`; still x86 + full-benchmark-gated,
 unreproducible in isolation here, per §13.3 item 6).
+
+---
+
+## 15. Pass 11 — recover work stranded on an orphaned branch + reconcile witness closures (2026-07-01)
+
+**Process finding, not a benchmark triage.** While resuming this plan, the #5660 PR chain (§14) turned
+out to have a bookkeeping defect worth recording so it is not repeated. Follow-up PRs #5662, #5664 and
+#5667 — a Pass-11 reconciliation, the `#1470` witness-assignment regression tests, and a Pass-13/14
+reconciliation — were opened **stacked on #5660's branch** (`fix/5142-int-conversion-universal`) with
+the intent to retarget to `master` once #5660 merged. When #5660 was instead **closed without merging**
+(§14), the three stacked PRs had already been merged **into that side branch**, not into `master` — so
+they show as `MERGED` on GitHub while being completely absent from `master`'s history
+(`git merge-base --is-ancestor <commit> master` is false for all three). This document's own Pass 10
+entry (§14) did not catch the gap because it only reconciled the rejected code change, not the doc/test
+PRs stacked above it.
+
+**What this stranded.** Two regression tests (`regression/esbmc/github_1470_overflow_witness{,_fail}`,
+from #5664) and three doc-only passes (Pass 11/13/14 content, from #5662/#5667) never reached `master`.
+Separately, **PR #5666** (`[goto-check] fix scanf overflow-check false pos/neg on numeric, %%/%*`) *was*
+based directly on `master` and merged cleanly (2026-06-29) — it is present and unaffected.
+
+**Recovery in this pass.**
+* Cherry-picked the two `github_1470_overflow_witness{,_fail}` test directories from `33121f3db5` (no
+  docs, no code — pure test addition) onto `master`. Both **pass** on current master
+  (`ctest -R github_1470`): the `_fail` variant's GraphML witness contains `data == 9223372036854775807`
+  on the assignment edge; the companion (`__ESBMC_assume(data < INT64_MAX)`) variant is
+  `VERIFICATION SUCCESSFUL`.
+* Independently re-verified (not just trusted the stranded doc text) the three claims behind the
+  witness-issue closures below, directly against current `master`:
+  - **scanf fix (#5666) is in master.** `goto_check.cpp`'s `input_overflow_check` restricts the `INF`
+    sentinel to `%s`/`%[...]`/`%S`/`%ls`; width-less numeric/char conversions get `BOUNDED`. Full `cstd`
+    label (142 tests, including the four new scanf regressions) passes 142/142.
+  - **Witness key format (#4611).** `witnesses.cpp` emits the modern-spec `enterFunction`/
+    `returnFromFunction` GraphML keys (confirmed at `witnesses.cpp:337-347,590-592`) — the naming the
+    issue asked for, not the deprecated ones.
+  - **Struct-constant witness handling (#1471).** `witnesses.cpp:1175` special-cases `is_struct_type`
+    when rendering witness values, consistent with the issue's fix being present.
+* Confirmed via `gh issue view` that **#1470, #1471 and #4611 are closed** on GitHub (all closed
+  2026-06-28, cross-referenced from #5664/#5667's discussion) — the closures themselves are real and
+  already reflected upstream even though the supporting doc/test commits were stranded. Current open
+  SV-COMP issue count: **17** (`gh issue list --label SV-COMP --state open`), matching what the
+  stranded Pass-14 draft had already computed (20 → 17).
+
+**Why recover rather than re-derive from scratch.** The stranded commits' analysis was sound — this
+pass independently re-checked each concrete claim above rather than taking the orphaned branch's word
+for it, per the project's verification policy. Re-deriving the regression tests from scratch would have
+duplicated exactly the two files already written and reviewed on the stranded branch; cherry-picking
+them (with independent re-validation that they still pass on current `master`) was the correct-cost
+path.
+
+**No new PR this pass for #4427.** The remaining "close-out pending CI" item, #4427
+(`megaraid_mm.ko` false negative on `unreach-call`), needs the actual sv-benchmarks `.i` file fetched
+from GitLab and a multi-minute `--k-induction --max-inductive-step 3` run to re-confirm the Pass-6
+"fixed-on-master by #4484" claim (§10.4) now that an x86_64 host is available (it was previously only
+confirmed on aarch64-adjacent reasoning). That fetch-and-run is scoped as the next task (§15.2) rather
+than rushed here.
+
+### 15.1 Pass-11 running report
+
+**Analysed.** The #5660 stacked-PR bookkeeping gap (root-caused via `gh pr view --json baseRefName` on
+#5660/#5662/#5664/#5666/#5667 and `git merge-base --is-ancestor`); independent re-verification of the
+scanf fix, witness key format, and struct-constant handling on current `master`.
+
+**PRs opened.** One: recovers `github_1470_overflow_witness{,_fail}` (test-only, no ESBMC source
+change) and this doc reconciliation. No code fix — the code fix (#5666) was already on `master`.
+
+**Duplicated work avoided.** Did not re-implement the scanf fix (already in `master` via #5666). Did
+not re-write the Pass 11/13/14 analysis prose verbatim — re-verified its conclusions independently and
+recorded them in this pass's own words.
+
+**Remaining work (priority order, updated 2026-07-01, Pass 11).** Unchanged from Pass 10 except #4427
+promoted to the top of the concretely-actionable (non-research-grade) items, since it only needs a
+benchmark fetch + a run, not a design change:
+1. **#4427** — re-fetch `megaraid_mm.ko` from sv-benchmarks and re-run the issue's exact
+   `--k-induction --max-inductive-step 3` command on the current x86_64 host to confirm the Pass-6
+   "fixed by #4484" claim (§10.4); close if confirmed, re-triage if not.
+2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+3. **#5400 / #5138** — value-set reachability for `valid-memtrack`; #5138 narrowed to the `strcmp`
+   argv-string residual (other layers fixed by #5564/#5624 + the `fclose` guard).
+4. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+5. **#4980 / #4438** — k-induction precision (termination recogniser + neural-network float CE);
+   full-set validation.
+6. **#4432** — data-race-checker interleaving reduction on `__atomic_*`.
+7. **#5142 residual** — no-overflow precision layer once parsed under `--sv-comp` (x86 +
+   full-benchmark-gated).
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+9. **Validation-only (need CPAchecker/Ultimate):** #1492 FP witness validation; #1447 umbrella;
+   #1440 wrapper-script sub-property handling.
+
+### 15.2 Next task selected for the following pass
+
+**#4427** (`megaraid_mm.ko` `unreach-call` false negative) — the only remaining "close-out pending CI"
+item, and the only item in the backlog that is a bounded verification task (fetch one `.i` file, run one
+command) rather than a design effort. Fetch
+`c/ldv-linux-4.2-rc1/linux-4.2-rc1.tar.xz-43_2a-drivers--scsi--megaraid--megaraid_mm.ko-entry_point.cil.out.i`
+from the sv-benchmarks GitLab (read-only, untrusted input, matching this document's established
+methodology), run the issue's exact wrapper/ESBMC invocation, and either close the issue (if #4484
+resolved it, matching the ground truth `false` now correctly detected) or re-open the RCA (if it still
+reports the unsound `true`, in which case this is a live soundness bug and the highest-severity item in
+the backlog).
+## 16. Pass 12 — consolidate the two parallel Pass-11 merges (#5730 + #5735); carry the #5565/#5530 reconciliation (2026-07-01)
+
+**Process finding.** Two independent Pass-11 PRs landed on `master` within minutes of each other and
+both appended a `## 15. Pass 11` section plus a second `**Last updated:**` banner: #5730 (§15 —
+orphaned-branch recovery + witness closures) and #5735 (this block — the #5565/#5530 reconciliation). The
+parallel merge left the document with a duplicate `## 15` heading, duplicate `### 15.1/15.2/15.3`
+subsection numbers, and two banners. This Pass-12 pass repairs the structure: #5730's section keeps
+**§15** (it also owns the canonical, more-current remaining-work list at §15.1 and the selected next
+task #4427 at §15.2); the #5735 content below is renumbered to **§16** and its subsections to 16.x. No
+content is dropped — the #5565/#5530 findings are still accurate and complementary to §15. The one
+reconciliation between the two: §16.3's remaining-work list is **superseded by §15.1** (which adds #4427
+at the top and #4438/#1492/#1447/#1440); it is kept here only as the record of what #5735 saw.
+
+The #5565/#5530 reconciliation carried forward from PR #5735 follows.
+
+### 16.1 #5565 residual — CLOSED by #5650; `strcmp` half resolved upstream of it
+
+* **`fclose(stdout)` static-stream free — FIXED.** Merged **PR #5650** (`[om] fclose: free only heap
+  streams so fclose(stdout) is sound`, 2026-06-27) guards the `free(stream)` in ESBMC's `fclose`
+  operational model on `__ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)]`
+  (`src/c2goto/library/io.c:121`). Outside SV-COMP mode `fclose` previously called `free(stream)`
+  unconditionally; the standard streams `stdin`/`stdout`/`stderr` are not heap objects (`stdout`
+  resolves to `invalid-object`), so coreutils' `close_stdout` `atexit` handler — `fclose(stdout)` —
+  raised a spurious `dereference failure: invalid pointer freed`. The guard releases only streams ESBMC
+  itself allocated (`fopen`/`fdopen`), keeping a genuine double-`fclose` of an `fopen`'d stream
+  detectable while making `fclose(stdout)` sound. This is exactly the residual §13.2's *Residual* note
+  and §13.3 item 8 named.
+* **`strcmp` invalid-pointer — resolved upstream of it.** The `strcmp` half #5565 predicted was
+  downstream of the `optarg` layer: `strcmp(optarg, …)` deref'd the unmodeled-`getopt_long` invalid
+  pointer, fixed in Pass 9 (§13.2, merged as `[om] model getopt_long/getopt_long_only …`). With
+  `optarg` bound to a real argv element, the `strcmp` deref is on a valid pointer.
+* **Issue state.** **#5565 is CLOSED.** Its two-layer residual is fully discharged (`fclose` by #5650,
+  `strcmp` by the Pass-9 `getopt_long` OM). No further ESBMC-side work is owed on #5565.
+
+### 16.2 `ESBMC_SVCOMP` build macro retired → runtime `--sv-comp` flag (#5530)
+
+Merged **PR #5530** (`[svcomp] Replace ESBMC_SVCOMP build macro with runtime --sv-comp flag`,
+2026-06-25) removed the compile-time `-DESBMC_SVCOMP=On` CMake option that baked `__ESBMC_SVCOMP` into
+the operational models, replacing it with the runtime `--sv-comp` flag already threaded through the
+OMs (`__ESBMC_sv_comp()`). **Consequence for this document:** every reproduction recipe that says
+"needs an `ESBMC_SVCOMP` build" / "build with `-DESBMC_SVCOMP=On`" (§8.4, §11.6, and the §13.3 item-8
+gating note) is obsolete — the SV-COMP-mode OM behaviour is now selected per-run with the `--sv-comp`
+flag on a stock binary, no dedicated build required. Those historical pass sections are left intact as
+the record of how the run was done at the time; the corrected instruction is: **reproduce
+`--sv-comp`-gated OM behaviour by passing `--sv-comp` at run time.** #5138 (§16.3 item 2) is the one
+open issue whose reproduction recipe this simplifies.
+
+### 16.3 Pass-11 running report (PR #5735)
+
+**Analysed.** #5565 (now CLOSED — #5650 + Pass-9 `getopt_long`) reconciled against current GitHub
+state; the #5530 `ESBMC_SVCOMP`→`--sv-comp` migration and its effect on every "`ESBMC_SVCOMP`-build"
+reproduction recipe in this document. Open SV-COMP label re-enumerated: **no issue filed since Pass 9**
+(newest open items #5396–#5398 predate Pass 8).
+
+**PRs opened.** None code — the two reconciled items (#5650, #5530) merged independently before this
+pass; every still-open backlog item is the research-grade / host-blocked / in-flight class of §13. This
+pass is the recurring triage-doc update (established cadence: Pass 4 → #5234, Pass 6 → #5389, Pass 7 →
+#5405, Pass 8 → doc-only, Pass 10 → #5728).
+
+**Duplicated work avoided.** #5565 not re-fixed — CLOSED by #5650 (`fclose`) + the Pass-9 `getopt_long`
+OM (`strcmp`). No re-proposal of a compile-time SV-COMP build — retired by #5530.
+
+**Remaining work — SUPERSEDED by §15.1.** The list below is what PR #5735 saw; the canonical,
+more-current priority list is **§15.1** (from the sibling Pass-11 PR #5730), which adds #4427 at the top
+plus #4438 and the validation-only items #1492/#1447/#1440. Item 8 here (#5565 residual) is dropped —
+closed. Retained verbatim as the #5735 record, with #5138's recipe simplified to the runtime `--sv-comp`
+flag:
+1. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency: the general mechanism
+   is RCA-closed as **#5369** (fresh, non-deduplicated pointer identity minted per read through an
+   unresolvable/byte-reconstructed pointer, in `make_failed_symbol` and `convert_typecast_to_ptr`); a
+   sound fix must tie the minted identity across reads of the same location. Precision, not soundness.
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation of
+   "reachable"); #5564 advanced the live-stack-reachability half. **#5138 now reproduces with a stock
+   binary under `--sv-comp`** (no `-DESBMC_SVCOMP=On` build — see §15.2).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies; overlaps open PR #4919.
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (x86 host repro blocker).
+6. **#5142** — no-overflow precision layer only; the parse-blocker layer is settled (§14: `--sv-comp`
+   is the intended, sole gate for `-Wno-int-conversion`; PR #5660 rejected).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker.
+8. **Close-outs pending CI:** #1470, #4427; witness end-to-end validation for #1471/#1492/#4611.
+
+### 16.4 Next-task scouting — #5145 / #5393 / #5394 (aws-hash) is research-grade, no loop-scoped fix
+
+Scouted the top remaining-work item to confirm whether a sound localized fix is available before the
+next coding pass commits to it. **Conclusion: not loop-scoped — the tractable half is already shipped
+and the open half is research-grade.** Evidence:
+
+* **RCA #5369 (CLOSED)** localises the mechanism precisely: a read through an *unresolvable* /
+  byte-reconstructed pointer mints fresh `(object, offset)` identity at each layer
+  (`make_failed_symbol` in `src/pointer-analysis/dereference.cpp`; `convert_typecast_to_ptr` in
+  `src/solvers/smt/smt_casts.cpp`), so two reads of the same location with no intervening write can
+  compare unequal — a spurious "location changed without a write" counterexample. **Precision, not
+  soundness** (over-approximation → false alarm; ground truth `true`).
+* **The k=1 base case is solved and validated:** congruence on the int→ptr reconstruction plus a
+  location-keyed failed-symbol cache passes the full 148-test pointer/dereference/memory suite and the
+  `github_2153{,_2..5}` soundness guards (RCA §"What has been validated").
+* **The open half is k≥2**, where the dereference-result expressions are structurally identical across
+  reads yet fail to deduplicate at the SMT layer. The RCA lists **two unresolved hypotheses** — (a)
+  `convert_ast` cache eviction across push/pop, (b) post-dereference SSA re-versioning of a shared
+  symbol — and states that separating them "needs SSA-trace / solver-internal correlation." That is a
+  multi-session solver-internals investigation, not a localized OM/frontend patch.
+* **Guard rails.** The one already-tried shortcut — forcing the reconstructed value non-zero — was
+  **refuted as unsound** and closed (PR #5283); any fix must stay gated on the `github_2153` guards,
+  which *rely* on a byte-reconstructed pointer being free to alias a valid object (PR #3924). This is a
+  soundness tripwire, so a speculative dedup change is high-risk.
+* **Host.** The aws-hash harnesses are x86 SV-COMP benchmarks; this repo's own note (§13 host banner)
+  records SV-COMP repro was done on x86_64 Linux — the k≥2 divergence is not reproducible in isolation
+  on the aarch64/macOS host available to this pass, so even a candidate fix could not be validated here.
+
+**Disposition.** #5145/#5393/#5394 stays flagged **research-grade (k≥2 SMT re-versioning)** — the same
+"reproduced, sound over-approximation, no localized fix" class as the LDV-environment cluster. It is #5735's
+item 1; in the reconciled §15.1 list it is item 2, behind **#4427** (the selected next task, §15.2 —
+a bounded fetch-and-run, not a design effort).
+
+**Item-8 witness scouting (this Pass-12 pass).** Also scouted #5735's item-8 (witness) before adopting
+#4427: #1470/#1471/#4611 are all **CLOSED** (reconciled by §15), so the residual witness *quality*
+concern (GraphML violation path in `goto_trace.cpp:302-362` lacks the system-header file-path filter and
+symbol dedup the YAML path has at `witnesses.cpp:1292-1308`) is not a live issue and any change to it is
+soundness-gated on a witness validator (CPAchecker/Ultimate) absent here. So item 8 offers no
+loop-scoped verifiable fix either — confirming #4427 as the correct next task over it.
+
+---
+
+## 17. Pass 13 — #4427 megaraid_mm.ko false-negative no longer reproduces (fixed by #4484) (2026-07-01)
+
+Executed the next task selected in §15.2: fetched the benchmark and re-ran #4427's exact reproducer on
+current master. **Result: the false-negative soundness bug does not reproduce — #4484 fixed it.**
+Confirmed on an aarch64/macOS host; an x86 CI cross-check is still advisable before closing (this
+document's standing recommendation for #4427).
+
+**What was run.** Fetched
+`c/ldv-linux-4.2-rc1/linux-4.2-rc1.tar.xz-43_2a-drivers--scsi--megaraid--megaraid_mm.ko-entry_point.cil.out.i`
+(5371 lines, read-only from the sv-benchmarks GitLab raw endpoint; contains the `ERROR` label; no
+`__regparm__` to strip on this host) and ran the issue's **exact** underlying ESBMC command
+(`--k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --error-label ERROR
+--enable-unreachability-intrinsic --interval-analysis --floatbv --64 …`) against the local ESBMC 8.3.0
+binary built from a master that includes **#4484** (commit `b49db0942d`,
+`[k-induction] deep-dive batch: … pointer handling …`).
+
+**Root cause of the original false negative (now closed).** The megaraid ioctl path dispatches through
+function pointers (`*adp->issue_uioc`; the issue's own log shows `No target candidate for function call
+*adp->issue_uioc`). On ESBMC 8.2.0 the k-induction **inductive step ran on this fn-ptr program and
+unsoundly concluded `VERIFICATION SUCCESSFUL`** (the reported false negative; ground truth `false`).
+The current binary emits, at `k = 1`:
+
+```
+WARNING: k-induction does not support function pointer calls yet. Disabling inductive step
+```
+
+— i.e. **#4484 detects the function-pointer calls and disables the (unsound-for-fn-ptr) inductive
+step**, removing the path that produced the spurious TRUE.
+
+**Observed behaviour on current master.** With the inductive step disabled, k-induction reduces to
+base-case falsification + forward-condition proof:
+* **Base case** finds *no* bug through `k = 17` (`No bug has been found in the base case` at each step) —
+  sound; the real violation needs deeper unwinding than the run reached.
+* **Forward condition** never proves the property (`The forward condition is unable to prove the
+  property`) because the driver's loops are not fully unwound at these depths.
+* Neither converging, the run **escalates and times out at 280 s** (no `VERIFICATION SUCCESSFUL`
+  anywhere in 4533 log lines) = **sound `UNKNOWN`**, not the previous unsound TRUE.
+
+**Disposition.** #4427's soundness bug (false negative) is **fixed by #4484** — the unsound
+`VERIFICATION SUCCESSFUL` no longer occurs; the tool now safely fails to conclude rather than reporting
+an incorrect TRUE. This confirms the Pass-6 "fixed-on-master by #4484" hypothesis with a concrete local
+run. **Recommend closing #4427 after an x86_64 CI cross-check** (host parity with the original SV-COMP
+26 run). A residual, lower-priority follow-up: the benchmark now yields `UNKNOWN` (timeout) rather than
+the ground-truth `false` — obtaining the actual counterexample would need deeper base-case unwinding or
+a targeted falsification run, but that is a *precision/perf* item, not the *soundness* bug the issue
+filed.
+
+### 17.1 Pass-13 running report
+
+**Analysed.** #4427 — exact-command re-run on current master; root-caused the original false negative to
+the pre-#4484 inductive step running on function-pointer dispatch, and confirmed #4484's fn-ptr guard
+(`Disabling inductive step`) removes the unsound TRUE.
+
+**PRs opened.** This entry extends the Pass-12 consolidation PR (#5739) rather than opening a third
+doc PR against a master that still carries the pre-consolidation `## 15` collision — and, per the
+stranded-PR lesson recorded in §15, is based directly on `master`, not stacked on a branch that could be
+closed unmerged.
+
+**Remaining work.** §15.1 list, with #4427 moved from "selected next task" to **recommend-close pending
+x86 CI**. No remaining item is loop-scoped without infra (x86 host + SV-benchmarks + witness validator):
+the rest are research-grade (#5145 k≥2, #5012, #5400/#5138), overlap in-flight PRs (#4980/#4919), or
+x86-host-gated (#4432, #5142 no-overflow layer, the LDV clusters).
+
+---
+
+## 18. Pass 14 — #4432 mcslock host-gating probe; confirm-and-close backlog exhausted (2026-07-01)
+
+Pass 12's consolidation merged (#5739), so `master`'s report is structurally clean (single banner,
+monotonic §14–§17). With #4427 resolved (§17), the "already-fixed, confirm-and-close" backlog is
+**exhausted** — every other open SV-COMP item is research-grade, blocked on an in-flight PR, or
+x86-host-gated. This pass probes the one remaining open question that a local run can answer — **is the
+#4432 `mcslock` no-data-race false alarm host-independent, or x86-only?** — and records the answer so the
+next pass does not re-attempt it blind.
+
+### 18.1 #4432 — x86-host-gated (regparm parse artifact + no local repro within budget)
+
+Fetched `c/libvsync/mcslock.i` and ran #4432's exact command
+(`--incremental-bmc --data-races-check-only --no-por --smt-symex-guard --bitwuzla --32 …`).
+
+* **Parse blocker (x86 artifact).** As-fetched, clang rejects the file on aarch64/macOS:
+  `error: 'regparm' is not valid on this platform` (three `__attribute__((__regparm__(1)))` sites). This
+  is the known x86-only `.i` artifact (repo methodology: strip `__regparm__` to parse SV-COMP `.i` on
+  non-x86). After stripping the three attributes the file parses and symex runs.
+* **No local reproduction of the false race within budget.** The stripped run explored **371+ thread
+  interleavings** under incremental-BMC and **timed out at 260 s with no `VERIFICATION FAILED` and no
+  data-race counterexample** — it did *not* surface the spurious `false(no-data-race)` the x86 CI
+  reported (which fired at a specific interleaving, "State 57 … thread 3"). This is **inconclusive, not
+  a clean non-repro**: the triggering interleaving may lie deeper than 260 s reached, and a
+  32-bit-*modelled*-on-aarch64 run is not authoritative for an x86 CI verdict regardless.
+* **Disposition.** #4432 is **x86-host-gated for authoritative triage** — it needs the original x86_64
+  Linux host both to parse without stripping and to reach the reported interleaving in the SV-COMP time
+  budget. The eventual fix (data-race-checker interleaving reduction on `__atomic_*`) is independently
+  research-grade. Matches the memory-note uncertainty ("some wrong-verdicts are x86-only") — resolved
+  here to: *treat #4432 as x86-gated; do not re-probe locally.*
+
+### 18.2 Pass-14 running report
+
+**Analysed.** #4432 reproducibility on aarch64/macOS (parse + 260 s incremental-BMC run); confirmed the
+`regparm` x86 parse artifact and no in-budget local repro of the false race.
+
+**PRs opened.** One doc PR (this entry), based directly on `master` (clean post-#5739). No code — #4432
+offers no loop-scoped verifiable fix on this host.
+
+**Environment wall (explicit).** The SV-COMP loop has reached the limit of what this aarch64/macOS
+environment can verify. Every open item now needs one of: an **x86_64 Linux host** with the
+SV-benchmarks tree (#4432, #5142 no-overflow, #4438 via its `--32` float path, the #5396–#5399 LDV
+clusters), a **witness validator** (#1492 and the closed-but-unvalidated witness set), a **merged
+in-flight PR** (#4438→#4480, #4980→#4919), or **multi-session solver-internals work** (#5145 k≥2, #5012
+`va_list`, #5400/#5138 value-set reachability). Recommended next step for the maintainer: run the
+recommended-close confirmations (#4427, and the witness closures) on the x86 CI, and treat the
+research-grade items as scheduled design work rather than triage-loop candidates.
+
+---
+
+## 19. Pass 15 — native x86_64 cross-check: #4427 confirmed closeable, #4432 downgraded, #5142 `--sv-comp` unblocks parse (2026-07-01)
+
+This pass ran on the **x86_64 Linux host** Pass 14 flagged as missing infra, removing the
+aarch64/macOS host-gating for #4427, #4432 and #5142 in one session. Correction while re-reading §18's
+environment wall: it grouped "the #5396–#5399 LDV clusters" with the x86-host-gated items, but this
+document's own reference-binary note (top banner) records that **Pass 8 already ran on an x86_64 Linux
+host** and reproduced all four there — they were never host-gated, and this pass does not re-touch them.
+
+### 19.1 #4427 — x86 CI cross-check delivered: no unsound TRUE; recommend closing
+
+Pass 13's aarch64/macOS run timed out at 280 s with a sound `UNKNOWN` and explicitly asked for "an x86
+CI cross-check... before closing." This pass fetched the same
+`megaraid_mm.ko-entry_point.cil.out.i` and ran the issue's exact k-induction command natively.
+
+* Symex for the base case completed in 151 s (54 243 assignments → 48 VCCs after slicing); the run then
+  proceeded to a second, larger k-step (symex 303.6 s, 54 195 assignments → 49 VCCs) and was solving
+  that step with Bitwuzla when stopped.
+* **Total: ~36 CPU-minutes across two k-steps, no `VERIFICATION SUCCESSFUL` at any point** — 2.4× the
+  standard SV-COMP resource budget (900 s CPU) with zero occurrences of the unsound TRUE the issue
+  reported on 8.2.0. The `WARNING: k-induction does not support function pointer calls yet. Disabling
+  inductive step` guard (#4484) fires exactly as it did on aarch64.
+* **Disposition: this is the x86 cross-check Pass 13 asked for.** Native x86_64, the correct
+  architecture for the original SV-COMP run, agrees with the aarch64 finding — #4484 fixed the false
+  negative. **Recommend closing #4427.**
+
+### 19.2 #4432 — native x86 reaches 7× the aarch64 interleaving count, still no violation; downgrade from "host-gated" to "not locally reproducible at this budget"
+
+`mcslock.i` parses natively without stripping `__regparm__` (confirmed: three sites present, clang
+accepts them on x86_64 — the Pass 14 parse blocker was specifically an aarch64/macOS artifact, now
+verified rather than assumed). Ran the issue's exact incremental-BMC command.
+
+* Reached **2733 thread interleavings** (vs. 371 before the aarch64 260 s timeout) over **~30
+  CPU-minutes** (2× the SV-COMP budget) with **no `VERIFICATION FAILED` and no data-race
+  counterexample** at any point.
+* This is a much stronger non-reproduction signal than Pass 14's — correct host architecture, 7.4×
+  the interleaving depth, 2× the resource budget — but it is still not a *clean* TRUE: the run was
+  stopped, not exhausted, and incremental-BMC's interleaving enumeration order is not guaranteed to
+  match the original benchexec run's, so a specific triggering interleaving could in principle lie
+  beyond interleaving 2733 without contradicting the CI's report.
+* **Disposition revised.** Drop the "x86-host-gated" label from §18.1 — the parse blocker was host-gated,
+  but the false alarm itself no longer is: it has now been given a fair run on the correct architecture
+  and did not reproduce. Reclassify as **not reproducible locally within a generous budget**; the
+  remaining path to a definitive verdict is either the original benchexec resource envelope (15 GB
+  memory, exact solver/POR build) or the interleaving-reduction fix on `__atomic_*` already tracked as
+  research-grade (§13.2 item 5 lineage). Do not re-attempt a bare local re-run; the next useful step here
+  is design work, not more triage.
+
+### 19.3 #4438 — superseded by open PR #4480; no further triage needed
+
+#4480 (`[interval-analysis] enforce float bounds in k-induction base case`, authored by the maintainer)
+already fixes #4438: it restricts the k-induction `inductive_step_instruction` marker to integer-only
+constraint sets so float interval bounds (which NaN fails under IEEE 754) are enforced in the base case
+too, closing the spurious `FALSE_REACH` this issue reported. It ships two regression tests
+(`github_4438` positive, `github_4438_fail` negative) and a Copilot review pass with no unresolved
+comments. **Current blocker is bookkeeping, not correctness:** `mergeStateStatus` is `BEHIND` current
+master (last commit 2026-05-12; master has moved on across three merged doc/reconciliation passes since).
+No triage action needed from this loop — recommend the maintainer rebase and merge #4480.
+
+### 19.4 #5142 — `--sv-comp` unblocks the parse; no-overflow layer reproduces on x86 (different shift site than filed)
+
+Pass 10 (§14) established that `-Wno-int-conversion` is deliberately gated behind `--sv-comp` in
+`clang_c_language.cpp` and is not a bug. This pass exercises that gate on x86 for the first time:
+
+* **Without `--sv-comp`** (the issue's literal "underlying ESBMC command", which omits the wrapper's
+  `--sv-comp` flag): `imon.i` fails to parse with exactly the predicted
+  `error: incompatible integer to pointer conversion ... [-Wint-conversion]` on the CIL sentinel-pointer
+  initializer — confirms Pass 10's analysis holds on x86 too, not just aarch64.
+* **With `--sv-comp` added** (matching what the real `esbmc-wrapper.py` invocation actually passes):
+  the file parses and the incremental-BMC run produces `VERIFICATION FAILED` / `FALSE_OVERFLOW` at
+  `k = 3` — but the violated property is a shift-UB at `usb_fill_int_urb:3643`
+  (`urb->interval = 1 << (interval + -1)`), not the issue's cited `__create_pipe:3658`
+  (`dev->devnum << 8`). **Both shift sites exist verbatim in the current `main`-branch benchmark file**
+  (checked by line number), so this is not a stale fetch; it is incremental-BMC landing on a different
+  member of the same "unconstrained shift amount from an untrusted driver field" precision-gap family,
+  most likely due to path-exploration-order variance rather than benchmark drift.
+* **Disposition.** #5142's no-overflow layer is **confirmed reproducible on x86 with `--sv-comp`**, same
+  root-cause class as filed (over-approximation on a shift whose operand ESBMC cannot bound), just a
+  different concrete instance. No localized sound fix without broader interval/value-set precision work
+  on driver-supplied shift operands — stays research-grade, consistent with §13.3 item 6's prioritisation.
+
+### 19.5 Pass-15 running report
+
+**Analysed.** #4427 (x86 cross-check delivered, recommend closing), #4432 (7.4× deeper native-x86
+non-repro, disposition revised from host-gated to budget-exhausted/research-grade), #4438 (no new triage
+— superseded by open PR #4480, flagged as a rebase-and-merge bookkeeping item), #5142 (`--sv-comp` gate
+confirmed as the correct unblock on x86; no-overflow layer reproduces at a sibling shift site).
+#5396–#5399 confirmed already correctly triaged on x86 in Pass 8 — the §18 environment-wall's grouping
+of them with the host-gated items was corrected, not re-investigated.
+
+**PRs opened.** One doc PR (this entry), rebased onto current `master` post-#5742 merge (the Pass 14
+docs PR was merged by the maintainer mid-pass; this branch was rebased and the now-upstream cherry-picked
+commit dropped automatically by `git rebase`, avoiding duplicate content).
+
+**Duplicated work avoided.** #5396–#5399 not re-run — already x86-confirmed in Pass 8. #4438 not
+re-implemented — #4480 already provides a sound, tested fix awaiting merge.
+
+**Remaining work (priority order, updated 2026-07-01).**
+1. Close out: **#4427** (this pass's x86 cross-check confirms #4484 fixed it) and **#4480→#4438** (open
+   PR needs rebase + merge, not new code).
+2. **#5145 / #5393 / #5394** — aws-hash byte-addressed pointer-read-consistency (closed #5369 RCA).
+3. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+4. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+5. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation,
+   PR #4919 in flight).
+6. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (research-grade; local
+   reproduction budget now exhausted on the correct host, see §19.2).
+7. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
+   confirmed-reproducible on x86, see §19.4).
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker,
+   already RCA'd in Pass 8, no localized fix.
+9. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator (CPAchecker/Ultimate),
+   absent in this environment.
+
+---
+
+## 20. Pass 16 — aws-hash cluster (#5145/#5393/#5394) reproduced natively on x86 for the first time (2026-07-01)
+
+Pass 15's PR (#5744) was still open (unmerged) when this pass started, so this branch cherry-picks its
+one commit the same way Pass 15 cherry-picked Pass 14's — dropped automatically by `git rebase` once
+#5744 merges. Priorities 1–3 from the standing loop brief (#4427, #4432, #4438/CIL-LDV) are already
+closed out by Pass 15; this pass follows §19.5's own "remaining work" list to its top item instead of
+re-running finished work: the **aws-hash byte-addressed pointer-read-consistency cluster**
+(#5145/#5393/#5394). §16.4 explicitly flagged this cluster's reproduction as **also host-gated** — "the
+k≥2 divergence is not reproducible in isolation on the aarch64/macOS host available to this pass" — so,
+like #4427/#4432/#5142 before it, native x86 closes a reproducibility gap even though the underlying fix
+stays out of scope (see disposition below).
+
+### 20.1 #5145 — unchanged verdict on x86, confirms no regression across ~10 merged passes
+
+Fetched `aws_hash_table_create_harness.i` and ran the issue's exact k-induction command. Result:
+`VERIFICATION FAILED` / **`Bug found (k = 1)`** — byte-for-byte the same verdict Pass 6 (§10.2) recorded
+on an aarch64/macOS host against master `74da7c0400`, now reproduced on native x86_64 against current
+master (`888efe3f56`, ~15 passes and several merged fixes later, including #4484's fn-ptr guard and the
+#5364/#5382 UF modelling). **No regression, no change** — the residual is still Bug B from §10.2's RCA
+(havoc'd-slot pointer-read-consistency), not a new failure mode. Note this benchmark fails already at
+`k = 1`, not `k ≥ 2` — the "k = 1 fixed, k ≥ 2 open" split in RCA #5369 describes the *general
+mechanism's* minimal toy reproducer (`a == b` after two reads), not this specific compound-multi-layer
+harness, which §10.2 already classified as a "known memory-model limitation" broader than the general
+fix covers.
+
+### 20.2 #5393 / #5394 — first genuine reproduction (Pass 7 only presumed the cluster membership)
+
+Pass 7 (§11.3) filed these as "siblings... share the same byte-addressed... modelling" without a local
+run — that host's own limitation (§11.4 shows Pass 7 predated the x86 unlock in Pass 8). This pass ran
+both exact reproducers natively:
+
+* **#5393** (`aws_hash_table_init_bounded_harness.i`): `VERIFICATION FAILED` / **`Bug found (k = 129)`**
+  in 250 s (each unwind iteration ~0.7–0.9 s — this harness's `k` counts cheap loop-unwind iterations of
+  a `--goto-unwind --unlimited-goto-unwind` scan, not restarted k-induction rounds, so depth 129 is fast
+  here unlike #4427's per-k-step symex cost).
+* **#5394** (`aws_hash_table_init_unbounded_harness.i`): `VERIFICATION FAILED` / **`Bug found (k = 129)`**
+  in 2m50s.
+* Both **exactly match** the depth (`k = 129`) each issue's own SV-COMP CI log reports. This upgrades
+  Pass 7's presumption from "same cluster by inspection" to an **empirically confirmed** identical
+  false-alarm mechanism on the correct host architecture.
+
+### 20.3 Disposition — unchanged: research-grade, no session-scoped fix attempted
+
+All three benchmarks are now x86-confirmed, but the fix itself remains out of scope for a triage pass,
+per RCA #5369's own risk assessment: the open k≥2 divergence needs "SSA-trace / solver-internal
+correlation" to distinguish `convert_ast` cache eviction from post-dereference SSA re-versioning — a
+multi-session solver-internals investigation, not a localized patch — and the one shortcut previously
+tried (forcing the reconstructed value non-zero) was refuted as **unsound** and closed (PR #5283). Per
+the correctness-first mandate, this pass does not attempt a speculative fix under that risk profile.
+**No PR, no code change** — the value delivered is closing the reproducibility gap (§16.4's stated
+blocker) so a future session attempting the SSA-trace correlation work can validate on the correct host
+from the outset, and does not need to re-derive that these three verdicts are unchanged.
+
+### 20.4 Pass-16 running report
+
+**Analysed.** #5145 (re-run, unchanged verdict, host gap closed), #5393/#5394 (first genuine x86
+reproduction, exact depth match to CI reports).
+
+**PRs opened.** One doc PR (this entry), branched from `master` with Pass 15's still-unmerged commit
+cherry-picked on top (auto-drops via `git rebase` once #5744 merges, same pattern as Pass 15).
+
+**Duplicated work avoided.** No fix attempted for the aws-hash cluster — RCA #5369 already rules out a
+low-risk localized patch; re-attempting the refuted non-zero-forcing shortcut (PR #5283) was not
+considered. #5393/#5394 not further decomposed — same root cause as #5145, no separate PR per Pass 7's
+original folding decision (§11.3), now empirically justified rather than presumed.
+
+**Remaining work (priority order, updated 2026-07-01).**
+1. Close out: **#4427** (Pass 15 x86 cross-check) and **#4480→#4438** (rebase + merge, not new code) —
+   both pending maintainer action, not further loop work.
+2. **#5400 / #5138** — value-set reachability for `valid-memtrack` (sound under-approximation).
+3. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+4. **#4980** — termination ranking recogniser for side-effect-only call bodies (full-set validation,
+   PR #4919 in flight).
+5. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (research-grade; local
+   reproduction budget exhausted on the correct host, see §19.2).
+6. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
+   confirmed-reproducible on x86, see §19.4).
+7. **#5145 / #5393 / #5394** — aws-hash SSA-trace/solver-internal correlation (research-grade,
+   multi-session; now fully x86-confirmed, see §20.3). Demoted from position 2 — reproduction work here
+   is exhausted; what remains is a design-level solver-internals investigation, not a bounded triage
+   task.
+8. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker,
+   already RCA'd in Pass 8, no localized fix.
+9. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator (CPAchecker/Ultimate),
+   absent in this environment.
+
+---
+
+## 21. Pass 17 — #5138 `comm_3args_ok` false alarm no longer reproduces; fix stack #5564/#5624/#5650 confirmed end-to-end (2026-07-02)
+
+Pass 16's PR (#5746) merged, so this pass branches from a clean `master` (`c177d64d51`). Task selection
+followed §20.4's priority list, with two stale entries reconciled against live GitHub state first:
+
+* **§20.4 item 2 is half-closed.** #5400 was **fixed and closed by merged PR #5419**
+  (`[symex] Fix missed memtrack leak in --no-reachable-memory-leak`, 2026-06-19) — the `maybe_global_target`
+  guard-drop and per-symbol `visited` cull defects in `add_memory_leak_checks` (§11.5's RCA) got a sound
+  localized fix after all, upstream of this loop. That leaves **#5138** as the item's open half.
+* **§20.4 item 4's "PR #4919 in flight" was stale.** #4919 merged **2026-06-02** (`cef3b73c6a`), and §7.2
+  already re-validated #4980 against it: the false alarm **still reproduces post-#4919** (ranking-recogniser
+  gap on FUNCTION_CALL bodies; research-grade, full-set validation required). Item 4 remains open but its
+  blocker is a recogniser extension, not a pending merge — no re-run owed.
+
+With item 1 (maintainer close-outs) out of loop scope, **#5138 is the top actionable item** — and it had a
+genuinely undone, bounded task attached: every layer of its false-alarm stack now has a merged fix, but no
+pass had re-run the full reproducer end-to-end on a binary containing all of them. The stack, as this
+document recorded it piecewise: the `forgotten memory` leak layer (§11.6 RCA) fixed by **#5564**
+(stack-reachable heap treated as live, 2026-06-26, "Refs #5138"); the `getopt_long`/`optarg`→`strcmp` layer
+fixed by the Pass-9 OM (**#5624**, 2026-06-26); the `fclose(stdout)` static-stream free fixed by **#5650**
+(2026-06-27); and the `ESBMC_SVCOMP` special-build repro blocker retired by **#5530** (runtime `--sv-comp`,
+§16.2, which explicitly named #5138 as "the one open issue whose reproduction recipe this simplifies").
+Residual-tracker #5565 is CLOSED (§16.1). This pass closes the loop on that prediction.
+
+### 21.1 The re-run — no bug through k = 11, the exact depth of the original FALSE_MEMTRACK
+
+Fetched `c/coreutils-v8.31/comm_3args_ok.c` (208 693 lines) from the sv-benchmarks `main` branch and ran
+the issue's **exact** underlying ESBMC command (`--memory-leak-check --no-reachable-memory-leak
+--no-abnormal-memory-leak --malloc-zero-is-null --incremental-bmc --64 …`) **plus `--sv-comp`** (the
+runtime equivalent of the wrapper's OM gating per §16.2) against a binary rebuilt this pass from `master`
+`c177d64d51` (aarch64/macOS, Bitwuzla 0.9.0), 480 s budget.
+
+* **Original issue (8.3.0 `0e3612575f`):** `dereference failure: forgotten memory: dynamic_21_array` at
+  `exit` (`stdlib.c:64`) → `VERIFICATION FAILED` / **`Bug found (k = 11)`** / `FALSE_MEMTRACK`.
+* **Current master:** `No bug has been found in the base case` at **k = 1, 3, 5, 7, 9, and 11** — the
+  incremental-BMC run sails cleanly past the exact depth where the spurious counterexample fired — and was
+  still solving k = 13 (9253 VCCs) when the budget expired. **Zero violated properties of any kind in the
+  log**: no `forgotten memory`, no `invalid pointer freed` (the #5650 layer), no `strcmp` invalid-pointer
+  (the #5624 layer).
+
+The false alarm the issue filed is therefore **resolved on master by the #5564 + #5624 + #5650 stack**.
+The run does not reach a full `VERIFICATION SUCCESSFUL` in-budget — incremental-BMC keeps deepening on a
+208 k-line coreutils benchmark with a 12-iteration `quotearg` scan loop — but that is the ordinary
+completeness/perf frontier for this benchmark class, not the *wrong-verdict* defect #5138 reports. A
+sound `UNKNOWN`-so-far replaces an unsound `FALSE`.
+
+### 21.2 Disposition
+
+**Recommend closing #5138** (fixed by #5564/#5624/#5650), after the standing x86_64 CI cross-check —
+this pass's run is aarch64/macOS; §13.1 previously reproduced the pre-fix layers on x86, so parity is
+expected but should be confirmed on the competition architecture as was done for #4427 (§19.1). The
+regression tests shipped with #5564 (`stack-reachable heap`), #5624 (`github_5565_getopt_long_optarg`
+pair), and #5650 (`fclose` heap-stream guard) pin each layer individually, so no additional regression
+harness is owed by this pass.
+
+### 21.3 Pass-17 running report
+
+**Analysed.** #5138 (end-to-end reproducer re-run on current master — false alarm gone at its original
+k = 11 depth; recommend close). Reconciled two stale §20.4 entries against GitHub: #5400 fixed+closed by
+#5419 (2026-06-19); #4919 merged 2026-06-02, so #4980's blocker is the §7.2 recogniser gap, not a pending
+merge.
+
+**PRs opened.** One doc PR (this entry), branched from clean post-#5746 `master`.
+
+**Duplicated work avoided.** #5565 not re-validated — CLOSED with both layers discharged (§16.1). No
+re-fix of the leak-check subsystem — #5419/#5564 already landed upstream; this pass only supplies the
+end-to-end confirmation those PRs' unit-level regressions could not (the full coreutils stack under the
+issue's exact flag set).
+
+**Remaining work (priority order, updated 2026-07-02).**
+1. Close out (maintainer actions, no further loop work): **#4427** (x86-confirmed, §19.1), **#5138**
+   (this pass, pending x86 cross-check), **#4480→#4438** (rebase + merge).
+2. **#5012** — G-C `va_list` argument recovery (symbolic-format printf return length).
+3. **#4980** — termination ranking recogniser for side-effect-only call bodies (research-grade; #4919
+   merged 2026-06-02 and does **not** cover it, per §7.2; any extension needs full 2413-benchmark
+   termination-set validation).
+4. **#4432** — data-race-checker interleaving reduction on `__atomic_*` (research-grade; local
+   reproduction budget exhausted on the correct host, §19.2).
+5. **#5142** — shift-operand interval/value-set precision for driver-supplied fields (research-grade;
+   x86-confirmed, §19.4).
+6. **#5145 / #5393 / #5394** — aws-hash SSA-trace/solver-internal correlation (research-grade,
+   multi-session; fully x86-confirmed, §20.3).
+7. **Device-API / LDV-environment model** (`platform_get_drvdata` etc.) — shared #5396–#5399 blocker
+   (Pass-8 RCA, no localized fix).
+8. Witness end-to-end validation for #1471/#1492/#4611 — needs a witness validator
+   (CPAchecker/Ultimate), absent in this environment.
