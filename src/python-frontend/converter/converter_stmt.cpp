@@ -581,11 +581,15 @@ void python_converter::handle_assignment_type_adjustments(
         {
           // Prevent type change from scalar (int/float/bool) to string/array
           // when a prior declaration exists with the scalar type, as this
-          // creates a type inconsistency in the GOTO program.
+          // creates a type inconsistency in the GOTO program. A void-typed
+          // symbol (annotation pass could not infer, e.g. a tuple-unpack
+          // target) holds no prior scalar, so adopting the array type is the
+          // only consistent choice (#5571).
           bool is_incompatible =
             rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
             !lhs_symbol->get_type().is_pointer() &&
             !lhs_symbol->get_type().id().empty() &&
+            lhs_symbol->get_type().id() != "empty" &&
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
@@ -3523,12 +3527,22 @@ exprt python_converter::box_value_on_heap(
   const locationt &location,
   codet &target_block)
 {
+  return box_value_on_heap(
+    value, location, target_block, current_func_return_type_);
+}
+
+exprt python_converter::box_value_on_heap(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block,
+  const typet &ptr_type)
+{
   const symbolt *new_obj_sym =
     symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
   assert(new_obj_sym && "__ESBMC_new_object model required");
 
-  symbolt heap_symbol = create_return_temp_variable(
-    current_func_return_type_, location, "ctor_box");
+  symbolt heap_symbol =
+    create_return_temp_variable(ptr_type, location, "ctor_box");
   symbol_table_.add(heap_symbol);
   exprt heap_ptr = symbol_expr(heap_symbol);
 
@@ -3542,8 +3556,31 @@ exprt python_converter::box_value_on_heap(
   alloc_call.location() = location;
   target_block.copy_to_operands(alloc_call);
 
-  exprt deref("dereference", current_func_return_type_.subtype());
+  exprt deref("dereference", ptr_type.subtype());
   deref.copy_to_operands(heap_ptr);
+
+  // Whole-array assignment through a dereference is rejected by the
+  // dereference layer ("Can't construct rvalue reference to array type"),
+  // so a boxed array of statically-known size is stored element-wise.
+  if (ptr_type.subtype().is_array())
+  {
+    const array_typet &arr_t = to_array_type(ptr_type.subtype());
+    assert(arr_t.size().is_constant());
+    const size_t n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false)
+        .to_uint64();
+    for (size_t i = 0; i < n; i++)
+    {
+      exprt idx = from_integer(i, index_type());
+      code_assignt store(
+        python_expr::build_index(deref, idx, arr_t.subtype()),
+        python_expr::build_index(value, idx, arr_t.subtype()));
+      store.location() = location;
+      target_block.copy_to_operands(store);
+    }
+    return heap_ptr;
+  }
+
   code_assignt store(deref, value);
   store.location() = location;
   target_block.copy_to_operands(store);
@@ -3727,9 +3764,27 @@ void python_converter::get_return_statements(
         // V.3: build the address-of in IREP2 (operand is a string constant).
         return_value = python_expr::build_address_of(return_value);
       }
+      else if (to_array_type(return_value.type()).size().is_constant())
+      {
+        // For non-constant arrays (variables), convert to pointer. The
+        // array is function-local (e.g. a string copied out of a tuple,
+        // #5571), so its storage expires with this frame: box the bytes
+        // onto a fresh non-expiring heap object first — the same model as
+        // returning a constructed class value (#3067) — and hand back a
+        // pointer into that.
+        exprt boxed = box_value_on_heap(
+          return_value,
+          location,
+          target_block,
+          gen_pointer_type(return_value.type()));
+        exprt deref("dereference", return_value.type());
+        deref.copy_to_operands(boxed);
+        return_value = string_handler_.get_array_base_address(deref);
+      }
       else
       {
-        // For non-constant arrays (variables), convert to pointer
+        // Symbolic-size array: element-wise boxing needs a static count, so
+        // keep the plain decay (the pre-#5571 behaviour for this rare case).
         return_value = string_handler_.get_array_base_address(return_value);
       }
     }

@@ -75,6 +75,7 @@ and the symbol/function table layout.
 | CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
 | Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
 | Pointer predicates: `pointer_offset` operand-wrap crash fix, `w_ok`/`rw_ok` stubs (§4.4, Phase 2, partial) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
+| Float-classification predicates: `isnan`/`isinf`/`isnormal` crash fix + verdict parity (ieee arith promotion, `sign`→`signbit(x)!=0` rewrite) (§4.4, Phase 2) | ✅ (PR #5741) | `cbmc_adapter.cpp` |
 | Pointer subtype double-wrap fix (§4.3) — every local pointer DECL without an immediate initializer was silently downgraded to `void*` | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_type` |
 | Builtin-call rewrite for `malloc`/`sqrtf` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_builtin_call` |
 
@@ -157,6 +158,82 @@ rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier pred
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
 audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
 gap-by-gap discovery.
+
+**Float-classification predicates, investigated by direct testing against real CBMC
+binaries.** `math.h`'s `isnan`/`isinf`/`isnormal` lower (via `__builtin_isnan` etc.) to
+CBMC ireps of the same name, which `migrate_expr` already fully supports (unary,
+`op0()`) — but none were in the adapter's operand-wrap set, so all three **segfaulted**
+(`op0()` on an empty operand list). Fixed by adding `isnan`/`isinf`/`isnormal` (plus
+`isfinite`/`nearbyint`/`signbit`, defensive — `migrate_expr` supports all three, but this
+corpus never exercises them: `isfinite`/`nearbyint` fall back to an unimplemented-function
+nondet return in both CBMC's own model and ESBMC's libm operational model, sidestepping
+the exprt path entirely on both sides; `signbit` is ESBMC's own id for the
+sign-extraction predicate — real CBMC binaries emit `"sign"`, which the adapter now
+renames to `"signbit"` for exactly the `isinf` path documented below).
+Segfault→crash-free confirmed for `isnan`/`isinf`/`isnormal` via real CBMC binaries.
+
+**Float-arithmetic type promotion — ✅ landed.** `isnan` didn't reach CBMC's verdict
+because of an *unrelated* Phase 2 gap: CBMC emits float division as a plain `"/"` node,
+and `migrate_expr`'s `"/"` handler (`exprt::div` → `div2tc`) is type-blind, always
+building the generic (non-IEEE) division regardless of operand type. ESBMC's own C
+frontend avoids this by promoting `"/"`/`"+"`/`"-"`/`"*"` to
+`"ieee_div"`/`"ieee_add"`/`"ieee_sub"`/`"ieee_mul"` whenever the type is `floatbv`
+(`clang_c_adjust_expr.cpp::adjust_float_arith`); the CBMC adapter had no equivalent
+promotion, so `goto_check.cpp`'s division-by-zero property (which explicitly skips
+`ieee_div`, "as it's defined behavior") wrongly fired on CBMC-sourced float division.
+Fixed by porting the same type-driven promotion into `fix_expression`: `isnan` now
+matches CBMC's verdict exactly (reclassified `cbmc_isnan` KNOWNBUG→CORE), and general
+float arithmetic from CBMC binaries is verdict-tested directly (`cbmc_float_arith`,
+`cbmc_float_arith_fail`). Contained to the CBMC-binary path only — `fix_expression` is
+never reached by ESBMC's native frontends, so this cannot regress native C/C++/Python.
+Incidentally, promoting `+`/`-`/`*` (not just `/`) also gives CBMC-sourced float
+arithmetic the overflow/NaN instrumentation `goto_check.cpp` applies to `ieee_*` nodes,
+which the untyped generic path silently skipped entirely (not wrongly instrumented —
+just uninstrumented). Two scope cuts, both intentional and low-risk, left for follow-up:
+- **SIMD/vector floats.** `adjust_float_arith`'s `is_vector() && subtype().is_floatbv()`
+  fallback isn't replicated — a CBMC float-vector `"+"` node has `type: vector`, not
+  `floatbv`, so the promotion simply doesn't fire (identical to pre-fix behaviour, no
+  regression, just unaddressed). No CBMC-vector-binary test corpus exists yet to verify
+  against.
+- **Rounding-mode symbol dependency.** The promoted `ieee_*` nodes rely on
+  `migrate_expr` defaulting to `c:@__ESBMC_rounding_mode` when no explicit
+  `rounding_mode` operand is present — that symbol isn't defined by the CBMC
+  reader/adapter itself, only by `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
+  step, which every normal `--binary` invocation runs. `--no-cprover-additions` skips it,
+  but currently fails earlier for an unrelated reason (`main symbol not found`) before
+  this would matter — so no live bug today, but a latent gap if that unrelated failure is
+  ever fixed independently. `src/ld-frontend/ir_gen/ld_converter.cpp` already solves the
+  identical problem for a different frontend by defining the symbol itself, guarded by
+  `find_symbol`, if absent — the CBMC adapter should do the same rather than depend on an
+  unrelated driver step always running first.
+
+**`isinf` sign-bit predicate — ✅ landed.** glibc's `isinf` (via `__builtin_isinf_sign`)
+additionally uses CBMC's `"sign"` predicate — a sign-bit extraction typed `bool`, used
+directly as the condition of the classifier's `x ? -1 : 1` ternary. It has no
+`migrate_expr` counterpart under that name; ESBMC's own equivalent is `"signbit"`, but
+that irep is structurally fixed to `int32` (`ESBMC_DEFINE_OVERFLOW_INT32_1OP`), returning
+1 iff the sign bit is set. The root cause was purely this `bool`-vs-`int32` type mismatch:
+feeding an `int32` where the ternary condition demands a `bool` (rename-only reproduces it
+as `goto_check.cpp`'s `is_bool_type(i.cond)` assertion — the int32 signbit sitting in the
+ternary's condition slot). Fixed entirely in the adapter's `fix_expression`: CBMC's
+bool-typed `sign(x)` is rewritten to `notequal(signbit(x), 0)` — exactly the form ESBMC's
+own C frontend emits for a sign-bit test in boolean context
+(`clang_c_adjust_expr.cpp::__builtin_isinf_sign` wraps `signbit` in `typecast(_, bool)`,
+which is the same predicate). `signbit2t`'s well-exercised `int32` SMT encoding
+(`convert_signbit`) is left untouched, so the earlier `retype`-based attempt's downstream
+Bitwuzla error ("expected Boolean term") never arises.
+
+The fix **must** be CBMC-scoped, not in the shared `migrate_expr`: a `migrate`-level "if
+the signbit exprt is `bool`-typed, wrap in `!= 0`" gate looks equivalent but *regresses
+native float tests* (`Float_lib1`, `Float-no-simp9` crash in Bitwuzla `mk_eq` on a
+width mismatch). ESBMC's own libm models routinely produce bool-typed `signbit` ireps too
+(the `typecast(signbit, bool)` above, folded), and baseline relies on `migrate` collapsing
+them to the bare `int32` node — native parents accept the `int32`, only CBMC's strict
+ternary condition does not. Since the two are structurally identical (bool-typed `signbit`,
+float operand), `migrate` cannot tell them apart; `fix_expression` runs only on the CBMC
+`--binary` path, so doing the rewrite there is the only way to fix `isinf` without
+perturbing native handling. `isinf` now matches CBMC's verdict exactly (reclassified
+`cbmc_isinf` KNOWNBUG→CORE; negative direction covered by `cbmc_isinf_fail`).
 
 ### 4.5 Symbol metadata (Phase 2)
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,

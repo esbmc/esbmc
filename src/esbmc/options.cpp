@@ -498,6 +498,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"cswitch-skip-readonly-globals",
+     NULL,
+     "Skip context switches on globals that are never written anywhere "
+     "in the program (off by default)"},
     {"all-runs",
      NULL,
      "Check all interleavings, even if a bug was already found"}}},
@@ -730,7 +734,8 @@ const struct group_opt_templ all_cmd_options[] = {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},
      {"assertion-coverage-claims",
       NULL,
-      "Enable assertion-coverage and shows all reached claims"},
+      "Enable assertion-coverage and show all claims, "
+      "both reached and unreached"},
      {"condition-coverage",
       NULL,
       "This activates --multi-property, "

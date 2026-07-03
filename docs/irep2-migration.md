@@ -3918,6 +3918,22 @@ string/tuple/partition tests green. The membership path is not visible in the go
 marker is read during conversion), so the type re-attach is load-bearing and
 the full suite is the real gate — the #5738 first cut proved this.
 
+**Follow-up (2026-07-02) — the numpy `.shape` tuple, the last `create_tuple_
+struct_type` literal.** `build_shape_tuple_expr` (`converter_expr.cpp`, the
+builder behind `ndarray.shape` / list `.shape`) was the remaining marker-bearing
+tuple literal built via `struct_exprt` rather than the shared idiom. Migrated to
+`constant_struct2tc` over migrated operands with the full `struct_typet`
+re-attached, mirroring `get_tuple_expr` exactly. Cleaner than the sibling sites:
+all four call sites feed `int_type()` dimension exprs (`from_integer(dim,
+int_type())` for C arrays, `(int)__ESBMC_list_size(...)` for lists), so the
+operands already match the tuple's `int_type()` components and no operand surgery
+is needed. Behaviour-preserving: a clean A/B rebuild (stash → baseline → restore)
+shows `--goto-functions-only` byte-identical on `github_4666_shape_2d` (the
+shape tuple prints `ASSIGN s={ .element_0=2, .element_1=2 }` unchanged), the only
+residual diff being the astgen-tempdir hash in `__file__` and GOTO timing; 36
+shape tests green (`tuple-from-list` is a pre-existing 70 s solver test that only
+timed out under `-j4`, not on the `.shape` path).
+
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
 `code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,

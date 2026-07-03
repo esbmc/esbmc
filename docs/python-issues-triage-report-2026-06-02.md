@@ -3562,6 +3562,98 @@ is orthogonal.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
 
+## 78. 2026-07-02 re-validation (sixty-eighth sweep) & f-string format specs
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery found f-string format specs on variables **silently dropped** — a
+**wrong-value/soundness** defect: `assert f"{x:03d}" == "7"` verified `SUCCESSFUL` (CPython renders
+`"007"`), and the valid `== "007"` claim reported a spurious `FAILED`.
+
+### 78a. New isolated, soundly-fixable defect found & fixed
+**f-string format specs were dropped in two sites; unmodelled specs folded to an exact-but-wrong
+unformatted value.**
+
+Sites: (1) the consteval JoinedStr fold ignored `format_spec` (and `!r`/`!a` conversions) entirely;
+(2) `apply_format_specification` (`string_handler.cpp`) only understood `[[fill]align][width]` and
+whole-format `d`/`i`/`.Nf` — everything else (zero-pad `03d`, width+type `5d`, width+precision
+`07.2f`, `x`, …) fell through to the unformatted `str()` value.
+
+**Fix (both sites, review-hardened):**
+- consteval declines to fold any `FormattedValue` carrying a `format_spec` or a `!r`/`!a`
+  conversion (`!s` renders identically), routing to the string handler.
+- `parse_format_padding` learns the `0`-before-width shorthand as a `zero_pad` flag whose implied
+  alignment is resolved **by type** at the call site — CPython zero-fills numbers sign-aware (`=`)
+  but strings left-aligned (`format('ab','05') == 'ab000'`; the initial single-flag version wrongly
+  implied `=` for strings — caught by code review, F1).
+- `'='` alignment is sign-aware (`f"{-42:05d}"` → `"-0042"`, not `"00-42"`).
+- The padding branch accepts trailing `d`/`i` on integers and `s` on any value; resolves symbols to
+  compile-time constants (`unary-` over a constant for negative int literals; string symbols to
+  their constant arrays), so `f"{s:>5}"` and `f"{n:05d}"` fold instead of aborting.
+- The float `.Nf` branch composes the parsed fill/align/width with the precision-formatted text
+  (`f"{1.5:07.2f}"` → `"0001.50"`; review F2 — previously the width was silently dropped) and sees
+  through `unary-` for negative float literals (IEEE sign-bit flip).
+- `joinedstr_len` declines when a part carries a spec/conversion (review F4 — a `len()` fold
+  bypassed the decline and returned the unpadded length).
+- **Soundness keystone:** any spec/conversion still unmodelled (e.g. `x`, `,`, `!r`) now yields a
+  **nondet string** (with a warning) instead of the exact-but-wrong unformatted value — a false
+  claim can no longer verify `SUCCESSFUL`; comparisons against the nondet either FAIL or abort with
+  a clean diagnostic (verified in both function and module contexts).
+
+This is a **wrong-value/soundness fix** plus a feature extension. New regression pair
+`regression/python/fstring_zero_pad{,_fail}` (CORE): the positive covers zero-pad/width/type-char
+combos on positive/negative ints, string alignment incl. `{s:05}` → `"ab000"`, and float
+width+precision incl. `-1.5` → `"-001.50"`; the `_fail` pins the previously-false-SUCCESSFUL
+`f"{x:03d}" == "7"`. Code review differential-tested the fold against CPython `format()` over 5 int
+values × 16 specs + strings × 8 specs (each as `==` and `!=`) — all correct. CPython sanity passes;
+the `fstring`/`format`/`joined` subset (46) and `str`/`string`/`consteval` subset (1192 on-branch)
+pass 100%. Solver-agnostic (frontend constant folds).
+
+Residuals (documented, sound): specs/conversions outside the modelled set (`x`, `b`, `,`, `e`, `%`,
+`!r`) render a nondet string — imprecise, never wrong; module-level comparisons against that nondet
+abort with `Cannot compare non-function side effects` (a pre-existing comparison limitation,
+separate work).
+
+### 78b. Everything else: unchanged disposition
+
+## 79. 2026-07-02 re-validation (sixty-ninth sweep) & as_integer_ratio() literal fold
+
+Re-test against current `master` (tip `e92296d1fe`). KNOWNBUG classification unchanged — §3 holds.
+This sweep took a §78-battery residual: `float.as_integer_ratio()` was undefined, and unpacking its
+result **crashed conversion**. (The battery's other hits resolved themselves: `str.encode()` now
+passes on current master; set-method timeouts are the §3c perf-banned class;
+`str.maketrans`/`translate` needs a dict intermediate — catalogued, not taken.)
+
+### 79a. New isolated, soundly-fixable defect found & fixed
+**`as_integer_ratio()` was undefined — `assert(false)` stub on call, and a conversion crash
+(`Cannot unpack empty`) when the result was tuple-unpacked.**
+
+`(2.5).as_integer_ratio()` hit "Undefined function … replacing with assert(false)" (spurious
+`FAILED` for any caller), and `n, d = v.as_integer_ratio()` aborted the whole conversion with
+`ERROR: Cannot unpack empty - only tuples and arrays can be unpacked`.
+
+**Fix** (`src/python-frontend/preprocessor/core_visitors_mixin.py`): a preprocess-time fold
+`_maybe_fold_as_integer_ratio`, following the Decimal-constructor precedent — the ratio is computed
+by **CPython itself** during preprocessing, so the folded `(numerator, denominator)` tuple matches
+the interpreter bit-for-bit (e.g. `0.1` → `(3602879701896397, 36028797018963968)`). Scope: int and
+float literals, and unary `+`/`-` over one. Declines (unchanged behaviour) on bool receivers,
+non-literals, `inf`/`nan`, and ratios exceeding 2⁶³−1. Tuple contexts (compare, unpack) work
+because the result is an ordinary tuple literal.
+
+This **restores working behaviour** for literal receivers and removes the unpack crash on that
+path. New regression pair `regression/python/as_integer_ratio{,_fail}` (CORE): the positive covers
+dyadic/non-dyadic floats, negatives, ints, zero, and tuple unpacking (the pre-fix crash shape); the
+`_fail` pins a wrong ratio as a real `FAILED`. Code review differentially tested the imported fold
+against CPython over ~9,000 generated cases (uniform floats, 62-bit ints, wide-exponent floats,
+negative zero, boundary 2⁶³±1, must-decline set incl. `True`/`1e300`/`1e400`/`~5`) — bit-for-bit
+exact, decline predicate exact. CPython sanity passes; the
+decimal/from_bytes/gcd/lcm/preprocessor-adjacent subset (36) passes 100%; the `tuple|float` subset
+shows only the two pre-existing `--ir`/`--z3` environmental failures (verified identical on vanilla
+master). Solver-agnostic (a preprocess-time fold).
+
+Variable receivers (`v.as_integer_ratio()`) keep the prior unsupported behaviour (no wrong fold) —
+a runtime model needs frexp-style bit manipulation in the OM, a separate change.
+
+### 79b. Everything else: unchanged disposition
 ## 75. 2026-07-02 re-validation (sixty-fifth sweep) — graph-quixbug class-instance signatures shifted post-heap-lifetime (characterized, deferred)
 
 Re-test against current `master` (tip `c177d64d51`), focused on the class-graph cluster that the

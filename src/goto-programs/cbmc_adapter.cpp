@@ -71,12 +71,66 @@ bool irep_contains(const irept &i, const irep_idt &id)
 
 void fix_expression(irept &irep)
 {
+  if (irep.id() == "sign" && irep.find("type").id() == "bool")
+  {
+    // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
+    // boolean contexts (e.g. the ternary condition in glibc's isinf). ESBMC's
+    // equivalent irep, "signbit", is structurally fixed to int32 (1 iff the
+    // sign bit is set), so it can't stand in for a bool. Rewrite sign(x) to
+    // the boolean signbit(x) != 0 -- exactly the form ESBMC's own C frontend
+    // produces for a sign-bit test in boolean context (clang_c_adjust_expr.cpp
+    // __builtin_isinf_sign) -- so it type-checks where CBMC uses it. Scoped to
+    // this CBMC path, so it never perturbs ESBMC's native signbit handling.
+    irept operand;
+    if (!irep.get_sub().empty())
+      operand = irep.get_sub()[0];
+
+    irept int_ty("signedbv");
+    int_ty.set("width", "32");
+
+    irept signbit("signbit");
+    signbit.add("type") = int_ty;
+    signbit.get_sub().push_back(operand);
+
+    irept zero("constant");
+    zero.add("type") = int_ty;
+    zero.add("value") = mk(std::string(32, '0'));
+
+    // Rebuild the node as notequal(signbit(x), 0); its bool type is retained.
+    // The operand-wrap step below moves [signbit, zero] into "operands" and
+    // the recursion normalises them (signbit's operand, the zero constant).
+    irep.id("notequal");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(signbit);
+    irep.get_sub().push_back(zero);
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
     irep.id("string-constant");
   else if (irep.id() == "ieee_float_equal")
     irep.id("=");
+  else if (
+    (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
+     irep.id() == "/") &&
+    irep.find("type").id() == "floatbv")
+  {
+    // CBMC emits plain +/-/*// for float arithmetic, type-blind; ESBMC's own
+    // C frontend promotes these to their ieee_ counterparts whenever the
+    // type is floatbv (clang_c_adjust_expr.cpp::adjust_float_arith), and
+    // downstream checks rely on that distinction (e.g. goto_check.cpp skips
+    // the division-by-zero check for ieee_div, since it's defined IEEE-754
+    // behaviour, not UB). Mirror that promotion here.
+    if (irep.id() == "+")
+      irep.id("ieee_add");
+    else if (irep.id() == "-")
+      irep.id("ieee_sub");
+    else if (irep.id() == "*")
+      irep.id("ieee_mul");
+    else
+      irep.id("ieee_div");
+  }
 
   if (irep.id() == "constant")
   {
@@ -103,6 +157,10 @@ void fix_expression(irept &irep)
     "/",
     "+",
     "-",
+    "ieee_add",
+    "ieee_sub",
+    "ieee_mul",
+    "ieee_div",
     "=",
     "<",
     "<=",
@@ -134,6 +192,12 @@ void fix_expression(irept &irep)
     "r_ok",
     "w_ok",
     "rw_ok",
+    "isnan",
+    "isinf",
+    "isnormal",
+    "isfinite",
+    "nearbyint",
+    "signbit",
     "ieee_sqrt"};
 
   const std::string cur = irep.id_string();

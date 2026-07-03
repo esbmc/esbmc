@@ -20,6 +20,15 @@ class tuple_handler
 {
 public:
   /**
+   * @brief Fixed byte width of string tuple members (content + NUL padding)
+   *
+   * Tuple types built from annotations (tuple[str, ...]) cannot know each
+   * string's length, so construction and annotation agree on one static
+   * char-array width; strings needing more bytes are a conversion error.
+   */
+  static constexpr size_t tuple_str_member_size = 16;
+
+  /**
    * @brief Construct a new tuple handler
    * @param converter Reference to the parent python_converter
    * @param type_handler Reference to the type_handler for type operations
@@ -106,14 +115,6 @@ public:
   struct_typet
   create_tuple_struct_type(const std::vector<typet> &element_types) const;
 
-private:
-  /**
-   * @brief Build a unique tag name for a tuple based on element types
-   * @param element_types Vector of types for tuple elements
-   * @return std::string The tag name (e.g., "tag-tuple_int_str")
-   */
-  std::string build_tuple_tag(const std::vector<typet> &element_types) const;
-
   /**
    * @brief Obtain an addressable expression for tuple element @p idx
    *
@@ -132,6 +133,25 @@ private:
     const exprt &array,
     const struct_typet &tuple_type,
     size_t idx) const;
+
+private:
+  /**
+   * @brief Build a unique tag name for a tuple based on element types
+   * @param element_types Vector of types for tuple elements
+   * @return std::string The tag name (e.g., "tag-tuple_int_str")
+   */
+  std::string build_tuple_tag(const std::vector<typet> &element_types) const;
+
+  /**
+   * @brief Widen a string element to char[tuple_str_member_size], NUL-padded
+   *
+   * Annotation-built tuple types cannot know each string's length, so
+   * construction and annotation agree on one static member width (#5571).
+   * Longer strings are rejected with a conversion error.
+   * @param elem The string element (char array or bare char)
+   * @return exprt The element as a char[tuple_str_member_size] value
+   */
+  exprt pad_string_element(const exprt &elem) const;
 
   python_converter &converter_;
   type_handler &type_handler_;
