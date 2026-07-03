@@ -2,6 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -25,7 +26,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cfenv>
 #include <cstdio>
 #include <cmath>
 #include <climits>
@@ -141,26 +141,6 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 
   throw std::runtime_error("format() requires constant arguments");
 }
-
-// Pins the host floating-point rounding mode to round-to-nearest for its
-// lifetime and restores the previous mode on destruction. Float specs are
-// folded with host snprintf, whose output depends on the ambient rounding mode;
-// a statically linked solver (e.g. CVC5 on the Linux build) can leave that mode
-// set to FE_UPWARD, which turns "{:.2f}".format(3.14159) into "3.15" instead of
-// CPython's "3.14". Pinning the mode keeps the fold deterministic and matches
-// CPython's round-half-to-even.
-struct round_to_nearest_guard
-{
-  round_to_nearest_guard() : saved_(std::fegetround())
-  {
-    std::fesetround(FE_TONEAREST);
-  }
-  ~round_to_nearest_guard()
-  {
-    std::fesetround(saved_);
-  }
-  int saved_;
-};
 
 // Format a constant value per a str.format/format() format spec
 // ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or

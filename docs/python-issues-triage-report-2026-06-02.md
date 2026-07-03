@@ -3562,6 +3562,59 @@ is orthogonal.
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
 
+## 78. 2026-07-02 re-validation (sixty-eighth sweep) & f-string format specs
+
+Re-test against current `master` (tip `af8495a058`). KNOWNBUG classification unchanged — §3 holds.
+A 15-idiom battery found f-string format specs on variables **silently dropped** — a
+**wrong-value/soundness** defect: `assert f"{x:03d}" == "7"` verified `SUCCESSFUL` (CPython renders
+`"007"`), and the valid `== "007"` claim reported a spurious `FAILED`.
+
+### 78a. New isolated, soundly-fixable defect found & fixed
+**f-string format specs were dropped in two sites; unmodelled specs folded to an exact-but-wrong
+unformatted value.**
+
+Sites: (1) the consteval JoinedStr fold ignored `format_spec` (and `!r`/`!a` conversions) entirely;
+(2) `apply_format_specification` (`string_handler.cpp`) only understood `[[fill]align][width]` and
+whole-format `d`/`i`/`.Nf` — everything else (zero-pad `03d`, width+type `5d`, width+precision
+`07.2f`, `x`, …) fell through to the unformatted `str()` value.
+
+**Fix (both sites, review-hardened):**
+- consteval declines to fold any `FormattedValue` carrying a `format_spec` or a `!r`/`!a`
+  conversion (`!s` renders identically), routing to the string handler.
+- `parse_format_padding` learns the `0`-before-width shorthand as a `zero_pad` flag whose implied
+  alignment is resolved **by type** at the call site — CPython zero-fills numbers sign-aware (`=`)
+  but strings left-aligned (`format('ab','05') == 'ab000'`; the initial single-flag version wrongly
+  implied `=` for strings — caught by code review, F1).
+- `'='` alignment is sign-aware (`f"{-42:05d}"` → `"-0042"`, not `"00-42"`).
+- The padding branch accepts trailing `d`/`i` on integers and `s` on any value; resolves symbols to
+  compile-time constants (`unary-` over a constant for negative int literals; string symbols to
+  their constant arrays), so `f"{s:>5}"` and `f"{n:05d}"` fold instead of aborting.
+- The float `.Nf` branch composes the parsed fill/align/width with the precision-formatted text
+  (`f"{1.5:07.2f}"` → `"0001.50"`; review F2 — previously the width was silently dropped) and sees
+  through `unary-` for negative float literals (IEEE sign-bit flip).
+- `joinedstr_len` declines when a part carries a spec/conversion (review F4 — a `len()` fold
+  bypassed the decline and returned the unpadded length).
+- **Soundness keystone:** any spec/conversion still unmodelled (e.g. `x`, `,`, `!r`) now yields a
+  **nondet string** (with a warning) instead of the exact-but-wrong unformatted value — a false
+  claim can no longer verify `SUCCESSFUL`; comparisons against the nondet either FAIL or abort with
+  a clean diagnostic (verified in both function and module contexts).
+
+This is a **wrong-value/soundness fix** plus a feature extension. New regression pair
+`regression/python/fstring_zero_pad{,_fail}` (CORE): the positive covers zero-pad/width/type-char
+combos on positive/negative ints, string alignment incl. `{s:05}` → `"ab000"`, and float
+width+precision incl. `-1.5` → `"-001.50"`; the `_fail` pins the previously-false-SUCCESSFUL
+`f"{x:03d}" == "7"`. Code review differential-tested the fold against CPython `format()` over 5 int
+values × 16 specs + strings × 8 specs (each as `==` and `!=`) — all correct. CPython sanity passes;
+the `fstring`/`format`/`joined` subset (46) and `str`/`string`/`consteval` subset (1192 on-branch)
+pass 100%. Solver-agnostic (frontend constant folds).
+
+Residuals (documented, sound): specs/conversions outside the modelled set (`x`, `b`, `,`, `e`, `%`,
+`!r`) render a nondet string — imprecise, never wrong; module-level comparisons against that nondet
+abort with `Cannot compare non-function side effects` (a pre-existing comparison limitation,
+separate work).
+
+### 78b. Everything else: unchanged disposition
+
 ## 79. 2026-07-02 re-validation (sixty-ninth sweep) & as_integer_ratio() literal fold
 
 Re-test against current `master` (tip `e92296d1fe`). KNOWNBUG classification unchanged — §3 holds.
