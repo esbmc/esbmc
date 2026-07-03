@@ -393,8 +393,7 @@ class ModuleRewriteMixin:
             # indices would let _recover_param_dict_annotation size the
             # WRONG parameter. Refuse the whole call (None at every index).
             if any(isinstance(a, ast.Starred) for a in n.args):
-                self._dict_param_call_shapes.setdefault(n.func.id, []).append(
-                    [None] * len(n.args))
+                self._dict_param_call_shapes.setdefault(n.func.id, []).append([None] * len(n.args))
                 continue
             shapes = []
             for arg in n.args:

@@ -1104,8 +1104,8 @@ class CoreVisitorsMixin:
         if isinstance(declared, ast.Name):
             if declared.id == "str":
                 return (isinstance(sized, ast.Constant)
-                        and isinstance(sized.value, str)) or (isinstance(
-                            sized, ast.Name) and sized.id == "str")
+                        and isinstance(sized.value, str)) or (isinstance(sized, ast.Name)
+                                                              and sized.id == "str")
             return isinstance(sized, ast.Name) and sized.id == declared.id
         if isinstance(declared, ast.Subscript) and isinstance(sized, ast.Subscript):
             if ast.dump(declared.value) != ast.dump(sized.value):
@@ -1113,8 +1113,7 @@ class CoreVisitorsMixin:
             d_slice, s_slice = declared.slice, sized.slice
             if isinstance(d_slice, ast.Tuple) and isinstance(s_slice, ast.Tuple):
                 return (len(d_slice.elts) == len(s_slice.elts) and all(
-                    self._sized_matches_declared(s, d)
-                    for s, d in zip(s_slice.elts, d_slice.elts)))
+                    self._sized_matches_declared(s, d) for s, d in zip(s_slice.elts, d_slice.elts)))
             if isinstance(d_slice, ast.Tuple) != isinstance(s_slice, ast.Tuple):
                 return False
             return self._sized_matches_declared(s_slice, d_slice)
@@ -1137,8 +1136,7 @@ class CoreVisitorsMixin:
         strings, is left as bare 'str' -- the pre-existing (safe) refusal
         path for that component.
         """
-        if not (isinstance(key_ann, ast.Subscript)
-                and self._get_base_type_name(key_ann) == "tuple"
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
                 and isinstance(key_ann.slice, ast.Tuple)):
             return key_ann
         elts = key_ann.slice.elts
