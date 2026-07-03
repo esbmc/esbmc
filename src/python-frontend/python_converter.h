@@ -386,6 +386,15 @@ private:
     const locationt &location,
     codet &target_block);
 
+  // Same, but boxing behind an explicit pointer type instead of
+  // `current_func_return_type_` (e.g. `char (*)[N]` for a local string
+  // array whose bytes must survive the frame, #5571).
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block,
+    const typet &ptr_type);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
