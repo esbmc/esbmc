@@ -36,6 +36,7 @@
 #include <util/location.h>
 
 #include <util/migrate.h>
+#include <util/cwe_mapping.h>
 #include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 #include <util/cache.h>
@@ -737,6 +738,68 @@ static bool is_kpath_maximal(const std::string &claim_sig)
            {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
 }
 
+// Advisory dead-code reporter for --dead-code-check (CWE-561, issue #4495).
+//
+// Reuses the branch-coverage instrumentation: a probe (an instrumented
+// assertion over a branch guard) that multi_property_check never violated is
+// unreachable under all inputs up to the current unwinding bound — i.e. that
+// branch direction is dead. The dead set is therefore
+// `all_claims \ reached_claims`. Findings are advisory: they are printed as a
+// separate [Dead code] section and, when --sarif-output is set, emitted at
+// SARIF note level. They never flip the verdict (see report_result).
+static void report_dead_code(
+  const optionst &options,
+  const std::unordered_set<std::string> &reached_claims)
+{
+  std::vector<dead_code_finding_t> findings;
+
+  for (const auto &[comment, loc] : goto_coveraget::all_claims)
+  {
+    const std::string claim_sig = comment + "\t" + loc;
+    if (reached_claims.count(claim_sig))
+      continue; // reachable branch direction — live code
+
+    nlohmann::json parsed = parse_claim_location(loc);
+    dead_code_finding_t f;
+    f.file = parsed["file"].get<std::string>();
+    f.line = static_cast<unsigned>(parsed["line"].get<int>());
+    f.message = comment.empty()
+                  ? "dead code: unreachable branch"
+                  : "dead code: unreachable branch [guard: " + comment + "]";
+    findings.push_back(std::move(f));
+  }
+
+  const std::string cwes = format_cwe_list(cwe_for("dead code"));
+
+  log_success("\n[Dead code]\n");
+  if (findings.empty())
+  {
+    log_result("No provably-dead code found.");
+    return;
+  }
+
+  // Soundness is bounded by the unwinding depth, like every BMC result: a
+  // branch reachable only beyond the explored bound is reported here too.
+  // Scope the advisory accordingly so it is not read as an absolute proof
+  // (increase --unwind for programs with loops).
+  log_status(
+    "The following branches are unreachable up to the current unwinding "
+    "bound:");
+
+  for (const auto &f : findings)
+  {
+    if (f.line > 0)
+      log_result("{}:{}: {}", f.file, f.line, f.message);
+    else
+      log_result("{}", f.message);
+    if (!cwes.empty())
+      log_result("  CWE: {}", cwes);
+  }
+
+  // Mirror the findings into SARIF at note level when requested.
+  sarif_dead_code(options, findings);
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -744,6 +807,14 @@ void report_coverage(
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen)
 {
+  // --dead-code-check reuses the coverage machinery for instrumentation but
+  // reports its results as CWE-561 advisories rather than a coverage summary.
+  if (options.get_bool_option("dead-code-check"))
+  {
+    report_dead_code(options, reached_claims);
+    return;
+  }
+
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
@@ -1238,6 +1309,25 @@ void bmct::report_result(smt_resultt &res)
   // multi_property_check; suppress any global verdict from this level.
   if (options.get_bool_option("diagnose-unknown-properties"))
     return;
+
+  // Dead-code analysis is advisory. Its instrumented reachability probes are
+  // violated (SAT) for every *live* branch, which would otherwise drive the
+  // verdict to FAILED. The CWE-561 findings are reported separately by
+  // report_dead_code(); a completed analysis is a successful run, so never
+  // flip the verdict (SV-COMP compatibility, issue #4495). A solver error
+  // still surfaces so we don't claim success over an incomplete analysis.
+  if (options.get_bool_option("dead-code-check"))
+  {
+    if (res == P_SMTLIB)
+      return; // only a formula/VCC was emitted; no verdict to report
+    if (res == P_ERROR)
+    {
+      log_error("SMT solver failed");
+      return;
+    }
+    report_success();
+    return;
+  }
 
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -1814,6 +1904,12 @@ smt_resultt bmct::multi_property_check(
   // claim_slicer reads the witness comment, matching the form stored
   // in goto_coveraget::all_claims.
   bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
+  // "Dead code" (advisory) reuses the branch-coverage instrumentation, so it
+  // needs the same goto-cov claim handling: claim_slicer must read the probe
+  // comment and reached_claims must be keyed by "comment\tloc" to match
+  // goto_coveraget::all_claims (otherwise every probe looks unreached and
+  // every branch is misreported as dead — issue #4495).
+  bool is_dead_code = options.get_bool_option("dead-code-check");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion.
@@ -1873,6 +1969,7 @@ smt_resultt bmct::multi_property_check(
                        &is_branch_cov,
                        &is_branch_func_cov,
                        &is_k_path_cov,
+                       &is_dead_code,
                        &is_keep_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -1901,7 +1998,7 @@ smt_resultt bmct::multi_property_check(
     // as uncovered even when reached_claims has the matching reached
     // signature (PR #4330 review).
     bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov ||
-                       is_branch_func_cov || is_k_path_cov;
+                       is_branch_func_cov || is_k_path_cov || is_dead_code;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -1962,9 +2059,12 @@ smt_resultt bmct::multi_property_check(
     std::call_once(summary.solver_name_flag, [&]() {
       summary.solver_name = solver_ptr->solver_text();
     });
-    // In coverage mode, only report instrumented coverage claims
+    // In coverage mode, only report instrumented coverage claims. Dead-code
+    // detection is advisory: silence every per-claim solve/trace so only the
+    // final [Dead code] summary is shown (issue #4495).
     bool is_cov_silent =
-      is_goto_cov && claim.claim_property != "instrumented assertion";
+      is_goto_cov &&
+      (is_dead_code || claim.claim_property != "instrumented assertion");
 
     if (!is_cov_silent)
       log_status(

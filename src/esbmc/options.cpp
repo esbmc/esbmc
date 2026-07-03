@@ -657,6 +657,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
      "treats reach_error()/__VERIFIER_error() as error sentinels"},
+    {"dead-code-check",
+     NULL,
+     "Detect provably-dead (unreachable) code and report it as an advisory "
+     "CWE-561 finding (note level in SARIF). Default off; runs a dedicated "
+     "reachability analysis and does not flip the verdict to FAILED"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},

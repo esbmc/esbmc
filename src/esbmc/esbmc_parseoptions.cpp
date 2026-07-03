@@ -808,6 +808,28 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  // --dead-code-check is a standalone base-case advisory analysis: it reuses
+  // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
+  // k-induction / incremental strategies and early-stopping fail-fast drive
+  // paths it neither exercises nor can report soundly (a stopped fail-fast
+  // run leaves unsolved probes that would be misreported as dead), so reject
+  // those combinations up front (issue #4495).
+  if (cmdline.isset("dead-code-check"))
+    for (const char *incompatible :
+         {"k-induction",
+          "k-induction-parallel",
+          "incremental-bmc",
+          "falsification",
+          "termination",
+          "loop-invariant",
+          "multi-fail-fast"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--dead-code-check cannot be combined with --{}", incompatible);
+        return 1;
+      }
+
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if (cmdline.isset("preprocess"))
@@ -967,7 +989,13 @@ int esbmc_parseoptionst::doit()
   // If no strategy is chosen, just rely on the simplifier
   // and the flags set through CMD
   bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
+  int bmc_result = do_bmc(bmc);
+  // Dead-code analysis is advisory: its probes are SAT for every live branch,
+  // which would otherwise surface as a non-zero (FAILED) exit code. The
+  // findings are reported separately, so always exit 0 (issue #4495).
+  if (options.get_bool_option("dead-code-check"))
+    return 0;
+  return bmc_result;
 }
 
 // This is the parallel version of k-induction algorithm.
@@ -2425,7 +2453,8 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims") ||
                   cmdline.isset("k-path-coverage") ||
-                  cmdline.isset("k-path-coverage-claims");
+                  cmdline.isset("k-path-coverage-claims") ||
+                  cmdline.isset("dead-code-check");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -2869,6 +2898,31 @@ bool esbmc_parseoptionst::process_goto_program(
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      tmp.branch_coverage();
+    }
+
+    // Dead-code detection (CWE-561, advisory). Reuses the branch-coverage
+    // instrumentation: each conditional branch gets `assert(guard)` and
+    // `assert(!guard)` reachability probes. A probe that is never violated
+    // (proven UNSAT) means that branch direction is unreachable under all
+    // inputs — i.e. dead code. report_dead_code() reports those as note-level
+    // advisories without flipping the verdict (see bmc.cpp).
+    if (cmdline.isset("dead-code-check"))
+    {
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");

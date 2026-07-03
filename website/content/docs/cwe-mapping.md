@@ -14,6 +14,11 @@ violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193, 252, 362, 366,
 369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 681, 761, 787, 822, 823, 824,
 825, 833, 908, 1335.
 
+In addition, one **advisory** identifier — CWE-561 (Dead Code) — is emitted
+only under `--dead-code-check` (see [Dead code](#dead-code-cwe-561-advisory)
+below). Advisory findings are informational: they never flip the verdict to
+`FAILED`.
+
 The CWE ids appear in:
 
 - the textual counterexample, on a `CWE: CWE-476, CWE-125` line immediately
@@ -57,7 +62,53 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
+| `dead code` _(advisory; `--dead-code-check` only)_           | 561                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+## Dead code (CWE-561, advisory)
+
+[CWE-561](https://cwe.mitre.org/data/definitions/561.html) (Dead Code) is
+`ALLOWED` for vulnerability mapping in CWE 4.20, but ESBMC treats it as an
+**advisory** rather than a violation: it is the dual of the CWE-617
+reachability check. Where CWE-617 reports that an error location *is* reachable,
+dead-code detection reports that a statement is provably *unreachable* under all
+inputs. Unlike a compiler's `-Wunreachable-code`, BMC-based detection is sound
+under non-trivial guards.
+
+Detection is off by default and enabled with `--dead-code-check`. It reuses the
+branch-coverage instrumentation: every conditional branch is probed with a
+reachability assertion, and any probe the solver proves unsatisfiable marks that
+branch direction as dead. Because it issues one solver query per branch probe,
+it can be slow on large programs — hence the default-off gate.
+
+Findings are reported as:
+
+- a `[Dead code]` section in the textual output, one `CWE: CWE-561` line per
+  dead branch;
+- SARIF results with `result.level == "note"` (advisory, not `error`) and a
+  `result.taxa[]` reference to CWE-561, under the same `CWE` taxonomy.
+
+The verdict is **not** affected: a run with `--dead-code-check` reports
+`VERIFICATION SUCCESSFUL` regardless of how many dead branches are found, so the
+`FALSE_*` / `TRUE` classification used by the SV-COMP wrapper is preserved.
+Soundness is bounded by the unwinding depth, as with all BMC results; use a
+sufficient `--unwind` for programs with loops. The mode is a standalone
+base-case analysis and cannot be combined with the k-induction / incremental
+strategies (`--k-induction`, `--incremental-bmc`, `--falsification`,
+`--termination`, `--loop-invariant`) or `--multi-fail-fast`. As with the other
+coverage modes, instrumentation is keyed off the source locations of the input
+translation units, so it has no effect on a pre-compiled `.goto` binary.
+
+```
+$ esbmc dead.c --dead-code-check
+
+[Dead code]
+
+dead.c:9: dead code: unreachable branch [guard: x > 5]
+  CWE: CWE-561
+
+VERIFICATION SUCCESSFUL
+```
 
 ## Ids dropped vs. published mappings
 

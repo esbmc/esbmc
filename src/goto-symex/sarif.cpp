@@ -179,3 +179,114 @@ void sarif_goto_trace(
   }
   out << serialised << "\n";
 }
+
+void sarif_dead_code(
+  const optionst &options,
+  const std::vector<dead_code_finding_t> &findings)
+{
+  const std::string out_path = options.get_option("sarif-output");
+  if (out_path.empty() || findings.empty())
+    return;
+
+  // Single source of truth: the dead-code rule (id / description / CWE-561)
+  // comes from util/cwe_mapping, shared with the textual output.
+  const cwe_rule_t &rule = cwe_rule_for("dead code");
+
+  json doc;
+  doc["$schema"] =
+    "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cs01/schemas/"
+    "sarif-schema-2.1.0.json";
+  doc["version"] = "2.1.0";
+
+  json run;
+  run["tool"]["driver"]["name"] = "ESBMC";
+  run["tool"]["driver"]["version"] = ESBMC_VERSION;
+  run["tool"]["driver"]["informationUri"] = "https://esbmc.org";
+
+  json sarif_rule;
+  sarif_rule["id"] = rule.sarif_id;
+  sarif_rule["shortDescription"]["text"] = rule.short_description;
+  {
+    json tags = json::array();
+    for (unsigned cwe : rule.cwes)
+      tags.push_back("external/cwe/cwe-" + std::to_string(cwe));
+    if (!tags.empty())
+      sarif_rule["properties"]["tags"] = tags;
+  }
+  run["tool"]["driver"]["rules"] = json::array({sarif_rule});
+
+  // CWE taxonomy, pinned to 4.20 to match sarif_goto_trace.
+  if (!rule.cwes.empty())
+  {
+    json taxonomy;
+    taxonomy["name"] = "CWE";
+    taxonomy["organization"] = "MITRE";
+    taxonomy["version"] = "4.20";
+    taxonomy["informationUri"] = "https://cwe.mitre.org/";
+    taxonomy["shortDescription"]["text"] = "Common Weakness Enumeration";
+    json taxa = json::array();
+    for (unsigned id : rule.cwes)
+    {
+      json t;
+      t["id"] = std::to_string(id);
+      std::string_view name = cwe_name(id);
+      if (!name.empty())
+        t["shortDescription"]["text"] = std::string(name);
+      t["helpUri"] = "https://cwe.mitre.org/data/definitions/" +
+                     std::to_string(id) + ".html";
+      taxa.push_back(t);
+    }
+    taxonomy["taxa"] = taxa;
+    run["taxonomies"] = json::array({taxonomy});
+  }
+
+  json results_json = json::array();
+  for (const auto &f : findings)
+  {
+    json result;
+    result["ruleId"] = rule.sarif_id;
+    // Advisory finding: "note", not "error" — the dead-code verdict never
+    // flips a run to FAILED (issue #4495).
+    result["level"] = "note";
+    result["message"]["text"] = f.message.empty() ? "Dead code" : f.message;
+
+    json loc;
+    loc["physicalLocation"]["artifactLocation"]["uri"] = f.file;
+    if (f.line > 0)
+      loc["physicalLocation"]["region"]["startLine"] = f.line;
+    result["locations"] = json::array({loc});
+
+    if (!rule.cwes.empty())
+    {
+      json taxa_refs = json::array();
+      for (unsigned id : rule.cwes)
+      {
+        json ref;
+        ref["id"] = std::to_string(id);
+        ref["toolComponent"]["name"] = "CWE";
+        taxa_refs.push_back(ref);
+      }
+      result["taxa"] = taxa_refs;
+    }
+
+    results_json.push_back(result);
+  }
+  run["results"] = results_json;
+
+  doc["runs"] = json::array({run});
+
+  const std::string serialised = doc.dump(2);
+  if (out_path == "-")
+  {
+    std::cout << serialised << "\n";
+    return;
+  }
+
+  std::ofstream out(out_path);
+  if (!out)
+  {
+    log_error("Could not open SARIF output file: {}", out_path);
+    return;
+  }
+  out << serialised << "\n";
+}

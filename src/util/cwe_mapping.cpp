@@ -105,6 +105,10 @@ const std::vector<entry_t> &rules_table()
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
+      // Dead code (advisory, CWE-561). Emitted only under --dead-code-check;
+      // the dual of the CWE-617 reachability check above — a statement that
+      // the solver proves unreachable under all inputs.
+      {"dead code", {"dead-code", "Dead code", {561}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -145,6 +149,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {457, "Use of Uninitialized Variable"},
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
+    {561, "Dead Code"},
     {562, "Return of Stack Variable Address"},
     {590, "Free of Memory not on the Heap"},
     {617, "Reachable Assertion"},

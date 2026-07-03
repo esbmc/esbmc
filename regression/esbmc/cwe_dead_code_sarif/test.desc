@@ -1,0 +1,9 @@
+CORE
+main.c
+--dead-code-check --sarif-output -
+^VERIFICATION SUCCESSFUL$
+"version": "2.1.0"
+"ruleId": "dead-code"
+"level": "note"
+"id": "561"
+"name": "CWE"
