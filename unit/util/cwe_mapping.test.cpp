@@ -161,6 +161,21 @@ TEST_CASE("cwe_for matches uncontrolled recursion", "[util][cwe_mapping]")
     std::string(cwe_rule_for("uncontrolled recursion in ackermann").sarif_id) ==
     "uncontrolled-recursion");
 }
+TEST_CASE("cwe_for matches excessive allocation size", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("excessive allocation size: malloc") == std::vector<unsigned>{789});
+  REQUIRE(
+    cwe_for("excessive allocation size: operator new[]") ==
+    std::vector<unsigned>{789});
+  REQUIRE(
+    std::string(cwe_rule_for("excessive allocation size: realloc").sarif_id) ==
+    "excessive-allocation");
+  REQUIRE(
+    std::string(
+      cwe_rule_for("excessive allocation size: malloc").short_description) ==
+    "Memory allocation with excessive size");
+}
 
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
@@ -194,6 +209,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   REQUIRE(
     cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
+  REQUIRE(cwe_name(789) == "Memory Allocation with Excessive Size Value");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());

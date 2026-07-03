@@ -115,6 +115,13 @@ const std::vector<entry_t> &rules_table()
       // Unchecked return value of fallible call (CWE-252).
       {"unchecked return value",
        {"unchecked-return-value", "Unchecked return value", {252}}},
+      // Attacker-controlled allocation size above the --excessive-alloc-check
+      // bound (CWE-789). CWE-770 is the class entry; 789 is the variant we
+      // map to.
+      {"excessive allocation size",
+       {"excessive-allocation",
+        "Memory allocation with excessive size",
+        {789}}},
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
@@ -182,6 +189,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {681, "Incorrect Conversion between Numeric Types"},
     {761, "Free of Pointer not at Start of Buffer"},
     {787, "Out-of-bounds Write"},
+    {789, "Memory Allocation with Excessive Size Value"},
     {822, "Untrusted Pointer Dereference"},
     {823, "Use of Out-of-range Pointer Offset"},
     {824, "Access of Uninitialized Pointer"},
