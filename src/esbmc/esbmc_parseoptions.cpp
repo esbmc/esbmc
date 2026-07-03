@@ -56,6 +56,8 @@ extern "C"
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
+#include <goto-programs/dead_store_analysis.h>
+#include <util/cwe_mapping.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -843,6 +845,14 @@ int esbmc_parseoptionst::doit()
     if (cmdline.isset("unchecked-return-value-check"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<goto_check_unchecked_return>(context));
+
+    // Dead-store advisory (CWE-563). Must also run before mark_decl_as_non_det,
+    // which rewrites uninitialised DECLs into `DECL; ASSIGN x = nondet` — that
+    // synthetic store would otherwise be reported as a spurious dead store.
+    if (cmdline.isset("dead-store-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_dead_store>(
+          context, dead_store_advisories));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
@@ -2005,6 +2015,10 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
+  // Forward dead-store advisories (CWE-563) to bmc so they reach SARIF on both
+  // the success and failure paths. Empty unless --dead-store-check is set.
+  bmc.dead_store_advisories = dead_store_advisories;
+
   smt_resultt res;
   try
   {
@@ -2503,6 +2517,17 @@ bool esbmc_parseoptionst::process_goto_program(
         algorithm->setTarget(cmdline.getval("function"));
       algorithm->run(goto_functions);
     }
+
+    // Surface dead-store advisories (CWE-563) collected by the pass above.
+    // Advisory only: note-level, and it never changes the verification verdict.
+    if (!dead_store_advisories.empty())
+      for (const auto &adv : dead_store_advisories)
+        log_status(
+          "{}:{}: {}\n  CWE: {}",
+          adv.file,
+          adv.line,
+          adv.comment,
+          format_cwe_list(cwe_for(adv.comment)));
 
     // Lower throw/catch to symbolic guarded control flow (#5075). Run before
     // inlining so per-call-site exception propagation is still explicit. This

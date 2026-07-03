@@ -1,0 +1,6 @@
+CORE
+main.c
+--dead-store-check
+^VERIFICATION SUCCESSFUL$
+dead store: assignment to x never read
+^  CWE: CWE-563$

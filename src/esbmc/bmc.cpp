@@ -121,6 +121,14 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 
   if (witness_yaml_output != "")
     correctness_yaml_goto_trace(options, ns, goto_trace);
+
+  // On a successful verification there is no error trace, but dead-store
+  // advisories (CWE-563) are still valid and must reach SARIF. Emit an
+  // advisory-only document; guarded so flag-off runs write nothing new.
+  if (
+    !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -150,7 +158,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_yaml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("sarif-output").empty())
-    sarif_goto_trace(options, ns, goto_trace);
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
 
   if (options.get_bool_option("generate-testcase"))
   {

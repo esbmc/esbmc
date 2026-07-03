@@ -638,6 +638,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unchecked-return-value-check",
      NULL,
      "Enable check for unchecked return values of fallible calls (CWE-252)"},
+    {"dead-store-check",
+     NULL,
+     "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(

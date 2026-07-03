@@ -133,6 +133,10 @@ protected:
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;
 
+  // Dead-store advisories (CWE-563) collected by --dead-store-check during
+  // goto preprocessing; surfaced textually and (via bmct) in SARIF.
+  std::vector<dead_store_advisoryt> dead_store_advisories;
+
   // coverage mode
   bool is_coverage;
 

@@ -9,10 +9,11 @@ Weakness Enumeration (CWE) identifiers. The mapping is pinned to **MITRE CWE
 retains ids whose Vulnerability Mapping Usage is `ALLOWED` or
 `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **31 unique CWE identifiers** across **26
+ESBMC currently distinguishes **32 unique CWE identifiers** across **27
 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193, 252, 362, 366,
-369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 681, 761, 787, 822, 823, 824,
-825, 833, 908, 1335.
+369, 401, 415, 416, 457, 469, 476, 562, 563, 590, 617, 681, 761, 787, 822, 823,
+824, 825, 833, 908, 1335. One of these — CWE-563 — is an *advisory* rather than
+a property violation; see [Advisories](#advisories) below.
 
 The CWE ids appear in:
 
@@ -23,7 +24,8 @@ The CWE ids appear in:
   node;
 - the SARIF report (`--sarif-output <path|->`), as `result.taxa[]` references
   into a `runs[].taxonomies` block whose `name` is `CWE` and `version` is
-  `4.20`.
+  `4.20`. Violations are emitted at `result.level = "error"`; advisories at
+  `result.level = "note"`.
 
 ## Mapping table
 
@@ -57,7 +59,41 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
+| `dead store` _(advisory; `--dead-store-check`)_              | 563                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+## Advisories
+
+Some CWEs describe code-quality signals rather than property violations. ESBMC
+surfaces these as **advisories**: they are opt-in, note-level, and never change
+the verification verdict.
+
+### CWE-563 — Assignment to Variable without Use (`--dead-store-check`)
+
+With `--dead-store-check`, ESBMC runs an intra-procedural backward
+live-variable analysis over each function's GOTO control-flow graph and reports
+every plain assignment to a scalar local whose written value is never read on
+any subsequent path — a *dead store*. For example, in
+
+```c
+int x = 5;
+x = 6;
+return x;
+```
+
+the `x = 5` store is dead. ESBMC emits:
+
+```
+file.c:1: dead store: assignment to x never read
+  CWE: CWE-563
+```
+
+Only automatic-storage, non-`extern`, non-address-taken scalar locals are
+considered; excluding address-taken variables keeps the analysis sound without
+an alias analysis. Advisories are additive: the verdict, existing regressions,
+and the SV-COMP wrapper are unaffected when the flag is off. In SARIF the dead
+store appears as a `result.level = "note"` under rule id `dead-store`, with
+CWE-563 in `taxa`. Inter-procedural dead-store detection is a future extension.
 
 ## Ids dropped vs. published mappings
 

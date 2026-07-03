@@ -1,6 +1,7 @@
 #ifndef CPROVER_CBMC_BMC_H
 #define CPROVER_CBMC_BMC_H
 
+#include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
@@ -24,6 +25,11 @@ public:
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
+
+  // Dead-store advisories (CWE-563) computed during goto preprocessing. Set by
+  // the driver before verification; surfaced in SARIF as note-level results
+  // on both the success and failure paths.
+  std::vector<dead_store_advisoryt> dead_store_advisories;
   enum ltl_res
   {
     ltl_res_good,
