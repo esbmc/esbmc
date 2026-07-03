@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.cpp
 --std c++20 --overflow-check --incremental-bmc
 ^VERIFICATION SUCCESSFUL$

@@ -210,6 +210,168 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   return context.find_symbol(vt_name);
 }
 
+// Does this class type already contain a polymorphic base subobject at
+// offset 0 (a #is_base_subobject component whose base class carries a vtable
+// pointer)? Under the Itanium ABI such a class shares that primary base's
+// vtable pointer instead of allocating its own at offset 0.
+bool clang_cpp_convertert::has_primary_base_vptr(const struct_typet &type)
+{
+  for (const auto &c : type.components())
+  {
+    if (!c.get_bool("#is_base_subobject"))
+      continue;
+    // Only a base laid out at offset 0 can be the primary base. Bases are
+    // emitted in ascending offset order, with at most a leading $pad before
+    // the first; the primary base, if any, is the first base component.
+    const symbolt *base_symb = context.find_symbol(c.type().identifier());
+    if (!base_symb)
+      return false;
+    const struct_typet &bt = to_struct_type(base_symb->get_type());
+    for (const auto &bc : bt.components())
+      if (bc.get_bool("is_vtptr"))
+        return true;
+    return false; // first base subobject is non-polymorphic
+  }
+  return false;
+}
+
+// Primary base (first polymorphic base subobject) class id, or empty.
+irep_idt clang_cpp_convertert::primary_base_id(const struct_typet &type)
+{
+  if (!has_primary_base_vptr(type))
+    return irep_idt();
+  for (const auto &c : type.components())
+    if (c.get_bool("#is_base_subobject"))
+      return c.type().identifier();
+  return irep_idt();
+}
+
+// Itanium primary-base sharing: the single vtable pointer shared at offset 0
+// (physically the primary base subobject's) must resolve every virtual method
+// the most-derived class D can dispatch — inherited (primary base view) AND
+// D's own. ESBMC builds a separate vtable type/variable per view, so here we
+// make vtable_type::D EXTEND the primary view: D's table = (primary view slots,
+// verbatim names/order, as a prefix) ++ (D's own new slots). Prefix-compatible
+// extension means a Base*-typed dispatch reading the shared slot as
+// vtable_type::Primary still hits the right entries, and a D-typed dispatch
+// finds D's own. Type and variable are rebuilt together to stay in lock step.
+// The shared vptr is then retargeted (vptr init) to vtable_D@D. Done even when
+// D adds no new methods, so vtable_D@D is never an empty table the shared vptr
+// could point at.
+void clang_cpp_convertert::merge_primary_base_vtable(const struct_typet &type)
+{
+  irep_idt prim = primary_base_id(type);
+  if (prim.empty())
+    return;
+  const symbolt *prim_symb = context.find_symbol(prim);
+  if (!prim_symb)
+    return;
+
+  const std::string d_tag = tag_prefix + type.tag().as_string();
+  const std::string prim_tag =
+    tag_prefix + to_struct_type(prim_symb->get_type()).tag().as_string();
+  const std::string d_vt_type_id = vtable_type_prefix + d_tag;
+  const std::string prim_vt_type_id = vtable_type_prefix + prim_tag;
+
+  symbolt *d_vt_type = context.find_symbol(d_vt_type_id);
+  const symbolt *prim_vt_type = context.find_symbol(prim_vt_type_id);
+  symbolt *d_var = context.find_symbol(d_vt_type_id + "@" + d_tag);
+  const symbolt *prim_var = context.find_symbol(prim_vt_type_id + "@" + d_tag);
+  if (!d_vt_type || !prim_vt_type || !d_var || !prim_var)
+    return;
+
+  typet d_tt = d_vt_type->get_type();
+  struct_typet &d_ts = to_struct_type(d_tt);
+  const struct_typet &prim_ts = to_struct_type(prim_vt_type->get_type());
+  const exprt prim_vals = prim_var->get_value();
+  const exprt d_vals = d_var->get_value();
+
+  // Map D's own slots by virtual_name → its slot index, so we can substitute
+  // an override into the inherited slot's POSITION (prefix order must match the
+  // primary base's vtable type exactly for a Base*-typed read to be valid).
+  std::map<irep_idt, std::size_t> d_own;
+  for (std::size_t i = 0; i < d_ts.components().size(); ++i)
+    d_own[d_ts.components()[i].get("virtual_name")] = i;
+
+  struct_typet::componentst merged_comps;
+  exprt::operandst merged_vals;
+  std::set<irep_idt> placed;
+
+  // 1. Primary view slots, in the primary base's order (the required prefix).
+  //    If D overrides a slot, keep the primary slot's name/position but use D's
+  //    override value so dispatch through the shared vptr sees the override.
+  for (std::size_t i = 0; i < prim_ts.components().size(); ++i)
+  {
+    const auto &c = prim_ts.components()[i];
+    const irep_idt vn = c.get("virtual_name");
+    auto it = d_own.find(vn);
+    if (it != d_own.end() && it->second < d_vals.operands().size())
+    {
+      merged_comps.push_back(d_ts.components()[it->second]);
+      merged_vals.push_back(d_vals.operands()[it->second]);
+    }
+    else if (i < prim_vals.operands().size())
+    {
+      merged_comps.push_back(c);
+      merged_vals.push_back(prim_vals.operands()[i]);
+    }
+    else
+      return; // source view desynced; bail safely
+    placed.insert(vn);
+  }
+  // 2. D's genuinely-new slots (not in the primary view), appended after.
+  for (std::size_t i = 0; i < d_ts.components().size(); ++i)
+  {
+    const irep_idt vn = d_ts.components()[i].get("virtual_name");
+    if (placed.count(vn))
+      continue;
+    merged_comps.push_back(d_ts.components()[i]);
+    if (i < d_vals.operands().size())
+      merged_vals.push_back(d_vals.operands()[i]);
+  }
+
+  // Publish the merged table under SEPARATE symbols, never mutating the
+  // canonical vtable_type::D / vtable_D@D — those are referenced by the
+  // variable construction of classes that derive from D (e.g. a deeper class
+  // iterating vtable_type::D's components), and mutating them in place would
+  // desync that construction. The shared vptr (vptr init) and dynamic_cast
+  // target these merged symbols instead.
+  //   type: virtual_table::tag-D::merged
+  //   var:  virtual_table::tag-D::merged@tag-D
+  const std::string merged_type_id = d_vt_type_id + "::merged";
+  if (context.find_symbol(merged_type_id) != nullptr)
+    return; // already built
+
+  struct_typet merged_ts;
+  merged_ts.set("name", merged_type_id);
+  merged_ts.components() = merged_comps;
+
+  symbolt merged_type_symb;
+  merged_type_symb.id = merged_type_id;
+  merged_type_symb.name = merged_type_id;
+  merged_type_symb.mode = d_vt_type->mode;
+  merged_type_symb.module = d_vt_type->module;
+  merged_type_symb.location = d_vt_type->location;
+  merged_type_symb.is_type = true;
+  merged_type_symb.set_type(merged_ts);
+  context.move_symbol_to_context(merged_type_symb);
+
+  exprt merged_value("struct", symbol_typet(merged_type_id));
+  merged_value.operands() = merged_vals;
+
+  symbolt merged_var;
+  merged_var.id = merged_type_id + "@" + d_tag;
+  merged_var.name = merged_var.id;
+  merged_var.mode = d_var->mode;
+  merged_var.module = d_var->module;
+  merged_var.location = d_var->location;
+  merged_var.lvalue = true;
+  merged_var.static_lifetime = true;
+  merged_var.set_type(symbol_typet(merged_type_id));
+  merged_var.set_value(merged_value);
+  context.move_symbol_to_context(merged_var);
+}
+
 void clang_cpp_convertert::add_vptr(struct_typet &type)
 {
   /*
@@ -218,6 +380,16 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
    *
    * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
    */
+
+  // Itanium primary-base sharing: if a polymorphic base already provides a
+  // vtable pointer at offset 0, the derived class reuses it rather than adding
+  // its own. Adding a second vptr would push every base subobject past the
+  // offset Clang reports (getBaseClassOffset), corrupting MI layout.
+  if (has_primary_base_vptr(type))
+  {
+    has_vptr_component = true;
+    return;
+  }
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
   // add a virtual-table pointer
@@ -229,8 +401,12 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.pretty_name(type.tag().as_string() + vtable_ptr_suffix);
   component.set("is_vtptr", true);
   component.set("access", "public");
-  // add to the class' type
-  type.components().push_back(component);
+  // The Itanium ABI places the vtable pointer at offset 0 of the object, so
+  // insert it as the first component rather than appending it. This keeps
+  // ESBMC's byte layout consistent with the offsets Clang reports (e.g.
+  // getBaseClassOffset), which the multiple-inheritance base-subobject layout
+  // relies on.
+  type.components().insert(type.components().begin(), component);
 
   has_vptr_component = true;
 }
@@ -589,6 +765,10 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
   build_vtable_map(type, vtable_value_map);
 
   add_vtable_variable_symbols(cxxrd, type, vtable_value_map);
+
+  // Itanium primary-base sharing: make D's own vtable extend its primary
+  // base's view so the single shared vptr resolves inherited + own methods.
+  merge_primary_base_vtable(type);
 }
 
 void clang_cpp_convertert::build_vtable_map(
@@ -953,8 +1133,27 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
       std::string D_id, D_name;
       get_decl_name(*D, D_name, D_id);
-      const std::string vt_var_id =
-        vtable_type_prefix + vptr_class_id + "@" + D_id;
+      // The runtime vtable pointer of a D object equals what the ctor stored:
+      // we read the vptr of vptr_class_id, the class on S's primary chain that
+      // owns the vptr. For a D that shares its primary base's vptr (Itanium),
+      // the offset-0 vptr — and ONLY that one — holds the MERGED vtable
+      // virtual_table::D::merged@D (a prefix-compatible superset of the base
+      // view). The merged table is stored only in D's primary (offset-0) base
+      // vptr, so substitute it only when vptr_class_id IS D's primary base;
+      // any non-primary base's vptr still holds its own thunk table
+      // virtual_table::<vptr_class_id>@D. Compare against the address actually
+      // stored so the runtime-type test matches.
+      std::string vt_var_id = vtable_type_prefix + vptr_class_id + "@" + D_id;
+      const symbolt *d_symb = context.find_symbol(D_id);
+      if (
+        d_symb && d_symb->get_type().id() == "struct" &&
+        primary_base_id(to_struct_type(d_symb->get_type())) == vptr_class_id)
+      {
+        const std::string merged_id =
+          vtable_type_prefix + D_id + "::merged@" + D_id;
+        if (context.find_symbol(merged_id))
+          vt_var_id = merged_id;
+      }
       exprt vt_addr =
         address_of_exprt(symbol_exprt(vt_var_id, vptr_type.subtype()));
 
@@ -979,12 +1178,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
       else
       {
         // For T* the result must point to the T sub-object inside D:
-        //   result = src + (off(T inside D) - off(S inside D))
-        // When both offsets are zero (single inheritance with S and T
-        // at the start of D) the structural typecast is exact.
-        // Otherwise a per-D byte adjustment is required, which we
-        // don't compute yet — refuse the cast instead of silently
-        // emitting a pointer into the wrong sub-object.
+        //   result = (char*)src - off(S inside D) + off(T inside D)
+        // i.e. step from the S sub-object back to the complete D object,
+        // then forward to the T sub-object. Both offsets are static within
+        // the runtime type D. Virtual bases (no static offset) are refused.
         auto off_S = offset_of_subobject(*ASTContext, D, S);
         auto off_T = offset_of_subobject(*ASTContext, D, T);
         if (!off_S || !off_T)
@@ -995,15 +1192,16 @@ bool clang_cpp_convertert::build_dynamic_cast(
             D->getNameAsString());
           abort();
         }
-        if (*off_S != 0 || *off_T != 0)
-        {
-          log_error(
-            "dynamic_cast: multiple inheritance with non-zero base "
-            "offset in `{}` is not supported",
-            D->getNameAsString());
-          abort();
-        }
+        typet char_ptr = pointer_typet(char_type());
         exprt adj = src_pointer;
+        gen_typecast(ns, adj, char_ptr);
+        const int64_t delta =
+          static_cast<int64_t>(*off_T) - static_cast<int64_t>(*off_S);
+        if (delta != 0)
+        {
+          adj = plus_exprt(adj, from_integer(delta, index_type()));
+          adj.type() = char_ptr;
+        }
         gen_typecast(ns, adj, target_type);
         result = adj;
       }
