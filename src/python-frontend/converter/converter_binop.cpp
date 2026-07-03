@@ -467,13 +467,34 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   if (logical_expr.operands().size() == 1)
     return logical_expr.operands().front();
 
+  // V.3: build the boolean `and`/`or` as the left-nested IREP2 and2t/or2t
+  // chain that migrate splices the legacy n-ary node into (cf.
+  // handle_chained_comparisons_logic), then back-migrate once. goto_convert's
+  // mandatory IREP2 body round-trip normalises both forms identically, so
+  // this is byte-identical. Operands are >= 2 here (the size()==1 degenerate
+  // case returned above), so the loop always yields a binary node.
+  auto build_boolean_chain = [](const exprt &e) -> exprt {
+    expr2tc acc;
+    migrate_expr(e.operands().front(), acc);
+    for (std::size_t i = 1; i < e.operands().size(); ++i)
+    {
+      expr2tc op2;
+      migrate_expr(e.operands()[i], op2);
+      if (e.is_and())
+        acc = and2tc(acc, op2);
+      else
+        acc = or2tc(acc, op2);
+    }
+    return migrate_expr_back(acc);
+  };
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
     typet t = extract_type_from_boolean_op(logical_expr).type();
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
-      return logical_expr;
+      return build_boolean_chain(logical_expr);
     // Result expression starts from last operand as default else branch.
     const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
@@ -511,7 +532,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     }
     return result_expr;
   }
-  return logical_expr;
+  return build_boolean_chain(logical_expr);
 }
 inline bool is_ieee_op(const exprt &expr)
 {
