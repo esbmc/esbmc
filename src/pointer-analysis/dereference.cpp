@@ -2366,6 +2366,24 @@ void dereferencet::valid_check(
   }
 }
 
+// True when `obj`'s base object is a heap allocation (malloc/calloc/realloc).
+// symex names such objects "symex_dynamic::dynamic_N_{array,value}"; alloca,
+// which lives on the stack, gets the extra "alloca::" infix (see symex_mem()
+// in goto-symex/builtin_functions/memory_alloc.cpp). Only heap overflows map
+// to CWE-122 Heap-based Buffer Overflow.
+static bool is_heap_object(const expr2tc &obj, const namespacet &ns)
+{
+  const expr2tc &base = get_base_object(obj);
+  if (!is_symbol2t(base))
+    return false;
+  const symbolt *sym = ns.lookup(to_symbol2t(base).thename);
+  if (!sym)
+    return false;
+  const std::string id = sym->id.as_string();
+  return has_prefix(id, "symex_dynamic::") &&
+         !has_prefix(id, "symex_dynamic::alloca::");
+}
+
 void dereferencet::bounds_check(
   const expr2tc &expr,
   const expr2tc &offset,
@@ -2507,7 +2525,11 @@ void dereferencet::bounds_check(
 
   guard2tc tmp_guard1(guard);
   tmp_guard1.add(is_in_bounds);
-  dereference_failure("array bounds", "array bounds violated", tmp_guard1);
+  dereference_failure(
+    "array bounds",
+    is_heap_object(expr, ns) ? "array bounds violated: heap object"
+                             : "array bounds violated",
+    tmp_guard1);
 }
 
 bool dereferencet::check_code_access(
@@ -2582,7 +2604,10 @@ void dereferencet::check_data_obj_access(
     guard2tc tmp_guard = guard;
     tmp_guard.add(gt);
     dereference_failure(
-      "pointer dereference", "Access to object out of bounds", tmp_guard);
+      "pointer dereference",
+      is_heap_object(value, ns) ? "Access to object out of bounds: heap object"
+                                : "Access to object out of bounds",
+      tmp_guard);
   }
 
   /* Also, if if it's a scalar and the access is not performed in an unaligned

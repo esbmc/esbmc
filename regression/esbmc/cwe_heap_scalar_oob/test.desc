@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc
+^VERIFICATION FAILED$
+dereference failure: Access to object out of bounds: heap object
+^  CWE: CWE-122, CWE-125, CWE-787, CWE-823$

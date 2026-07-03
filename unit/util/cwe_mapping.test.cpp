@@ -19,6 +19,32 @@ TEST_CASE("cwe_for matches array bounds violated", "[util][cwe_mapping]")
     std::vector<unsigned>{121, 125, 129, 131, 193, 787});
 }
 
+TEST_CASE("cwe_for distinguishes heap OOB (CWE-122)", "[util][cwe_mapping]")
+{
+  // Heap variants swap CWE-121 (stack) for CWE-122 (heap) and must win the
+  // substring match over the generic comment they contain.
+  REQUIRE(
+    cwe_for("array bounds violated: heap object") ==
+    std::vector<unsigned>{122, 125, 129, 131, 193, 787});
+  REQUIRE(
+    std::string(cwe_rule_for("array bounds violated: heap object").sarif_id) ==
+    "heap-array-bounds-violated");
+
+  REQUIRE(
+    cwe_for("Access to object out of bounds: heap object") ==
+    std::vector<unsigned>{122, 125, 787, 823});
+  REQUIRE(
+    std::string(
+      cwe_rule_for("Access to object out of bounds: heap object").sarif_id) ==
+    "heap-object-out-of-bounds");
+
+  // The freeform prefix ESBMC prepends to dereference-failure comments must
+  // not change the match.
+  REQUIRE(
+    cwe_for("dereference failure: array bounds violated: heap object") ==
+    std::vector<unsigned>{122, 125, 129, 131, 193, 787});
+}
+
 TEST_CASE("cwe_for matches arithmetic overflow", "[util][cwe_mapping]")
 {
   REQUIRE(
@@ -117,6 +143,7 @@ TEST_CASE("format_cwe_list formats correctly", "[util][cwe_mapping]")
 TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_name(476) == "NULL Pointer Dereference");
+  REQUIRE(cwe_name(122) == "Heap-based Buffer Overflow");
   REQUIRE(cwe_name(190) == "Integer Overflow or Wraparound");
   REQUIRE(cwe_name(369) == "Divide By Zero");
   REQUIRE(cwe_name(617) == "Reachable Assertion");
@@ -173,7 +200,9 @@ TEST_CASE(
         "Operand of free must have zero pointer offset",
         "dereference failure: forgotten memory",
         "array bounds violated",
+        "array bounds violated: heap object",
         "Access to object out of bounds",
+        "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "dereference failure on memcpy: reading memory segment of size 4",
         "Same object violation",
@@ -214,6 +243,7 @@ TEST_CASE(
        {"dereference failure: NULL pointer",
         "dereference failure: invalid pointer freed",
         "array bounds violated",
+        "array bounds violated: heap object",
         "arithmetic overflow",
         "division by zero",
         "atomicity violation",
@@ -222,6 +252,7 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "Access to object out of bounds",
+        "Access to object out of bounds: heap object",
         "dereference failure: memset of memory segment of size 4",
         "undefined behavior on shift operation"})
   {

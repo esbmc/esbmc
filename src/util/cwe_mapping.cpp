@@ -68,11 +68,23 @@ const std::vector<entry_t> &rules_table()
        {"free-non-zero-offset",
         "free() with non-zero pointer offset",
         {590, 761}}},
-      // Bounds.
+      // Bounds. The "heap object" variants are emitted when the overflowed
+      // object is a malloc/calloc/realloc allocation, so CWE-122 (Heap-based
+      // Buffer Overflow) replaces CWE-121 (Stack-based). They are strict
+      // superstrings of the generic comments, so the longest-first sort below
+      // makes them win the substring match for heap accesses.
+      {"array bounds violated: heap object",
+       {"heap-array-bounds-violated",
+        "Array bounds violated on heap object",
+        {122, 125, 129, 131, 193, 787}}},
       {"array bounds violated",
        {"array-bounds-violated",
         "Array bounds violated",
         {121, 125, 129, 131, 193, 787}}},
+      {"Access to object out of bounds: heap object",
+       {"heap-object-out-of-bounds",
+        "Access to heap object out of bounds",
+        {122, 125, 787, 823}}},
       {"Access to object out of bounds",
        {"object-out-of-bounds",
         "Access to object out of bounds",
@@ -127,6 +139,7 @@ const std::map<unsigned, std::string_view> &names_map()
   static const std::map<unsigned, std::string_view> m = {
     {120, "Buffer Copy without Checking Size of Input"},
     {121, "Stack-based Buffer Overflow"},
+    {122, "Heap-based Buffer Overflow"},
     {125, "Out-of-bounds Read"},
     {129, "Improper Validation of Array Index"},
     {131, "Incorrect Calculation of Buffer Size"},
