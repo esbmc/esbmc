@@ -143,6 +143,28 @@ int esbmc_parseoptionst::doit()
     return 1;
   }
 
+  // --dead-code-check is a standalone base-case advisory analysis: it reuses
+  // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
+  // k-induction / incremental strategies and early-stopping fail-fast drive
+  // paths it neither exercises nor can report soundly (a stopped fail-fast
+  // run leaves unsolved probes that would be misreported as dead), so reject
+  // those combinations up front (issue #4495).
+  if (cmdline.isset("dead-code-check"))
+    for (const char *incompatible :
+         {"k-induction",
+          "k-induction-parallel",
+          "incremental-bmc",
+          "falsification",
+          "termination",
+          "loop-invariant",
+          "multi-fail-fast"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--dead-code-check cannot be combined with --{}", incompatible);
+        return 1;
+      }
+
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
   if (cmdline.isset("preprocess"))
@@ -313,7 +335,13 @@ int esbmc_parseoptionst::doit()
   // If no strategy is chosen, just rely on the simplifier
   // and the flags set through CMD
   bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
+  int bmc_result = do_bmc(bmc);
+  // Dead-code analysis is advisory: its probes are SAT for every live branch,
+  // which would otherwise surface as a non-zero (FAILED) exit code. The
+  // findings are reported separately, so always exit 0 (issue #4495).
+  if (options.get_bool_option("dead-code-check"))
+    return 0;
+  return bmc_result;
 }
 
 bool esbmc_parseoptionst::resolve_color_option() const

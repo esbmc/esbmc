@@ -109,7 +109,8 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-function-coverage") ||
                   cmdline.isset("branch-function-coverage-claims") ||
                   cmdline.isset("k-path-coverage") ||
-                  cmdline.isset("k-path-coverage-claims");
+                  cmdline.isset("k-path-coverage-claims") ||
+                  cmdline.isset("dead-code-check");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -573,6 +574,31 @@ bool esbmc_parseoptionst::process_goto_program(
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      tmp.branch_coverage();
+    }
+
+    // Dead-code detection (CWE-561, advisory). Reuses the branch-coverage
+    // instrumentation: each conditional branch gets `assert(guard)` and
+    // `assert(!guard)` reachability probes. A probe that is never violated
+    // (proven UNSAT) means that branch direction is unreachable under all
+    // inputs — i.e. dead code. report_dead_code() reports those as note-level
+    // advisories without flipping the verdict (see bmc.cpp).
+    if (cmdline.isset("dead-code-check"))
+    {
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");

@@ -94,6 +94,24 @@ TEST_CASE("cwe_for matches reachability violation", "[util][cwe_mapping]")
   REQUIRE(cwe_for("unreachable code reached") == std::vector<unsigned>{617});
 }
 
+TEST_CASE("cwe_for matches dead code (advisory)", "[util][cwe_mapping]")
+{
+  REQUIRE(cwe_for("dead code reached: never") == std::vector<unsigned>{561});
+  REQUIRE(
+    cwe_for("dead code: unreachable branch [guard: x > 0]") ==
+    std::vector<unsigned>{561});
+  REQUIRE(
+    std::string(cwe_rule_for("dead code reached: never").sarif_id) ==
+    "dead-code");
+  REQUIRE(
+    std::string(cwe_rule_for("dead code reached: never").short_description) ==
+    "Dead code");
+  // Dead code and the CWE-617 reachability check are distinct rules.
+  REQUIRE(
+    std::string(cwe_rule_for("dead code reached: never").sarif_id) !=
+    std::string(cwe_rule_for("unreachable code reached").sarif_id));
+}
+
 TEST_CASE("cwe_for matches data race", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("data race on x") == std::vector<unsigned>{362, 366});
@@ -194,6 +212,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   REQUIRE(
     cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
+  REQUIRE(cwe_name(561) == "Dead Code");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -264,6 +283,7 @@ TEST_CASE(
         "unreachable code reached",
         "Recurrent set shows a non-terminating execution",
         "dead store: assignment to x never read",
+        "dead code reached: never",
         ""})
   {
     const cwe_rule_t &rule = cwe_rule_for(comment);
