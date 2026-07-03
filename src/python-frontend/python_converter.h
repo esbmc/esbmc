@@ -448,6 +448,15 @@ private:
     const typet &symbol_type,
     const exprt &symbol_value);
 
+  /// Same as above, but for callers that already have a resolved
+  /// `locationt` (e.g. string_handler's nondet-fallback materialisation)
+  /// rather than an AST node to derive one from.
+  symbolt &create_tmp_symbol(
+    const locationt &location,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);

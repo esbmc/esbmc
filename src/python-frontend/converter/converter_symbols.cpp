@@ -374,7 +374,16 @@ symbolt &python_converter::create_tmp_symbol(
   const typet &symbol_type,
   const exprt &symbol_value)
 {
-  locationt location = get_location_from_decl(element);
+  return create_tmp_symbol(
+    get_location_from_decl(element), var_name, symbol_type, symbol_value);
+}
+
+symbolt &python_converter::create_tmp_symbol(
+  const locationt &location,
+  const std::string var_name,
+  const typet &symbol_type,
+  const exprt &symbol_value)
+{
   std::string path = location.file().as_string();
   std::string name_prefix =
     path + ":" + location.get_line().as_string() + var_name;
