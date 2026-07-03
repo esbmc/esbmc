@@ -734,7 +734,8 @@ const struct group_opt_templ all_cmd_options[] = {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},
      {"assertion-coverage-claims",
       NULL,
-      "Enable assertion-coverage and shows all reached claims"},
+      "Enable assertion-coverage and show all claims, "
+      "both reached and unreached"},
      {"condition-coverage",
       NULL,
       "This activates --multi-property, "
