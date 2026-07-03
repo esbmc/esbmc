@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <cassert>
+#include <map>
+#include <unordered_set>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
@@ -28,6 +30,79 @@ bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
       return false;
   return true;
 }
+
+namespace
+{
+// A recursive function has a *reachable base case* iff some path from its
+// entry reaches END_FUNCTION without going through a direct recursive
+// self-call. If no such path exists, the function can never return without
+// first recursing again — the recursion is genuinely unbounded (CWE-674
+// "Uncontrolled Recursion") rather than merely deep.
+//
+// The analysis is deliberately structural: it walks the CFG treating a
+// direct self-call as an impassable edge and otherwise following
+// get_successors(). It is sound but incomplete — it never reports a
+// recursion that has *any* non-recursive return path, so terminating
+// recursion that only exhausts the unwinding bound keeps the existing
+// "recursion unwinding assertion" comment. Callers consult this solely to
+// relabel a recursion-unwinding claim that has already fired (the recursion
+// really did reach the bound on a feasible path), so the combination is a
+// sound witness of non-termination.
+bool recursion_has_no_base_case(
+  const goto_functiont &goto_function,
+  const irep_idt &identifier)
+{
+  // Keyed on the mangled identifier alone: sound because symex is
+  // single-threaded and there is exactly one body per identifier per process
+  // (k-induction phases reuse the same function_map; --k-induction-parallel
+  // forks). The structural base-case property is invariant to the unwind
+  // bound and phase, so a cached result never goes stale.
+  static std::map<irep_idt, bool> cache;
+  auto cached = cache.find(identifier);
+  if (cached != cache.end())
+    return cached->second;
+
+  const goto_programt &body = goto_function.body;
+  bool no_base_case = false;
+  if (!body.instructions.empty())
+  {
+    std::unordered_set<const goto_programt::instructiont *> visited;
+    std::vector<goto_programt::const_targett> work{body.instructions.begin()};
+    bool reached_end = false;
+    while (!work.empty())
+    {
+      goto_programt::const_targett cur = work.back();
+      work.pop_back();
+      if (!visited.insert(&*cur).second)
+        continue;
+      if (cur->is_end_function())
+      {
+        reached_end = true;
+        break;
+      }
+      // A direct recursive self-call is an impassable sink: reaching
+      // END_FUNCTION through it requires the recursion to bottom out first.
+      if (cur->is_function_call())
+      {
+        const code_function_call2t &c = to_code_function_call2t(cur->code);
+        if (
+          is_symbol2t(c.function) &&
+          to_symbol2t(c.function).thename == identifier)
+          continue;
+      }
+      goto_programt::const_targetst succs;
+      body.get_successors(cur, succs);
+      for (const auto &s : succs)
+        if (s != body.instructions.end())
+          work.push_back(s);
+    }
+    no_base_case = !reached_end;
+  }
+
+  cache.emplace(identifier, no_base_case);
+  return no_base_case;
+}
+} // namespace
 
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
@@ -407,7 +482,17 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   {
     if (!no_unwinding_assertions)
     {
-      claim(gen_false_expr(), "recursion unwinding assertion");
+      // Distinguish a genuine weakness (a recursive function with no
+      // reachable base case — CWE-674) from a merely-exhausted k-bound. Only
+      // the former gets the "uncontrolled recursion" comment that the CWE
+      // mapping recognises; the latter stays intentionally unmapped.
+      if (recursion_has_no_base_case(goto_function, identifier))
+        claim(
+          gen_false_expr(),
+          "uncontrolled recursion in " +
+            get_pretty_name(identifier.as_string()));
+      else
+        claim(gen_false_expr(), "recursion unwinding assertion");
     }
     else
     {
