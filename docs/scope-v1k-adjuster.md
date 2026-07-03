@@ -3,8 +3,10 @@
 **Program:** Part V of `docs/irep2-migration.md` (IREP2-native frontend→goto, #4715).
 **Question this scopes:** is the whole-body "resolve-then-build" adjuster the right
 next step to close the V.3 residue, and if so, what exactly does it own?
-**Status:** proposed. **Owner:** TBD. **Refs:** #4715, #5055; sibling doc
-`docs/spike-v1k-w1loc.md` (the *other*, larger keystone — see §6).
+**Status:** Spike-1 executed 2026-07-03 — **adjuster ruled unnecessary** (§5.1);
+converter-construction 100% is a small inline task. **Owner:** TBD. **Refs:**
+#4715, #5055; sibling doc `docs/spike-v1k-w1loc.md` (the *other*, larger
+keystone — see §6).
 
 ---
 
@@ -121,7 +123,45 @@ test inline-drainability.
 `inline-drained` / `needs-whole-body`, with the A/B result. That table decides the
 project.
 
-### 5a. Contingency — if the adjuster is justified
+### 5.1 Spike-1 result (executed 2026-07-03) — the adjuster is unnecessary
+
+Spike-1 was run. **Verdict: every residual site drains inline; the whole-body
+adjuster is not needed; retire the dead `python_adjust` pass.**
+
+*Method.* An F-P11 / width-hazard violation aborts at **GOTO-build time**, not
+solve time, so a `DebugOpt` (asserts-on) build run with `--goto-functions-only`
+over the corpus surfaces every abort without solving. Baseline (unmodified,
+asserts-on) over 859 and/or+isinstance+isNone test sources: 843 OK; the only 6
+aborts are the pre-existing `--irep2-bodies` / `--python-irep2-adjust` flag tests
+run without their flags (a harness artifact) — excluded as the clean reference.
+
+*Experiments (each a throwaway flip of the enclosing node to the IREP2 drain,
+`migrate_expr` operands → build the `2t` node → `migrate_expr_back`, with a stderr
+marker to prove the path was exercised):*
+
+| Exp | Site flipped | Tests | New aborts vs baseline | Drain fired |
+|---|---|---|---|---|
+| E1 | pure-boolean `and`/`or` (`converter_binop.cpp:530`) → `and2tc`/`or2tc` | 622 | **0** | yes, 7–14×/test |
+| E2 | `isnone` (`converter_compare.cpp:522`) → `isnone2tc` | 264 | **0** | yes, 5–8×/test |
+| E3 | `isinstance` (`builtins.cpp:444`) → `isinstance2tc` | 264 | **0** | yes, 1–2×/test |
+
+E1 is the doc's own "known-hard" site — the 2026-06-22 status recorded a prior
+attempt "reproducing an `index2t` abort even on pure-boolean `(a>0) and (b>0)`". It
+**does not reproduce** on current master, including on the 64 tests with and/or over
+`self.attr` / `[subscript]` operands (the exact F-P11 risk shape). #5710's inline
+member/index resolution means the operands arriving at these enclosing nodes are
+already resolved, so `migrate_expr` no longer hits the source assert. The arith
+residue (§3.2) is synthetic/concrete-operand or the proven width-reconcile pattern,
+so it is inline-drainable by construction. **The F-P11 general-operand wall, as a
+live blocker, is gone.**
+
+*Remaining work to converter-construction 100% (Goal A) — all inline, no adjuster:*
+finish the drains E1–E3 exercised plus the 4 arith sites (§3.2), each its own
+byte-identical-GOTO-gated one-site PR (the same idiom as the struct-literal drains).
+Then **retire `python_adjust.{h,cpp}` and the `--python-irep2-adjust` flag** as dead
+infra (or leave them documented-dead). Goal B (W1-loc) is unaffected and still open.
+
+### 5a. Contingency — if the adjuster is justified (NOT taken — see §5.1)
 
 Only the `needs-whole-body` set matters; scope the pass to it. Then the doc's
 B.3–B.5 stand, tightened:
@@ -151,6 +191,7 @@ B.3–B.5 stand, tightened:
 ## 7. One-line summary
 
 The residue is two mechanisms (member/index following, width reconciliation), both
-already drained inline site-by-site with no whole-body pass; scope the adjuster
-*after* a bounded spike proves some site genuinely resists inline resolution —
-otherwise finish inline and retire the dead pass.
+already drained inline site-by-site with no whole-body pass; Spike-1 (§5.1) confirmed
+every remaining site — including the doc's "known-hard" and/or node — drains inline
+with zero asserts-on aborts, so **the adjuster is unnecessary: finish inline and
+retire the dead pass.**
