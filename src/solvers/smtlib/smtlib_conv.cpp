@@ -14,6 +14,7 @@
 #ifndef _WIN32
 #  include <unistd.h>
 #  include <signal.h>
+#  include <sys/wait.h>
 #endif
 
 // clang-format off
@@ -199,7 +200,10 @@ smtlib_convt::file_emitter::~file_emitter() noexcept
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
-  : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
+  : out_stream(nullptr),
+    in_stream(nullptr),
+    org_sigpipe_handler(nullptr),
+    solver_proc_pid(-1)
 {
   if (cmd == "")
     return;
@@ -226,8 +230,8 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     abort();
   }
 
-  pid_t solver_proc_pid = fork();
-  if (solver_proc_pid == 0)
+  pid_t pid = fork();
+  if (pid == 0)
   {
     close(outpipe[1]);
     close(inpipe[0]);
@@ -253,6 +257,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   }
   else
   {
+    solver_proc_pid = pid;
     close(outpipe[0]);
     close(inpipe[1]);
     out_stream = fdopen(outpipe[1], "w");
@@ -340,13 +345,36 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
 
 smtlib_convt::process_emitter::~process_emitter() noexcept
 {
-  if (out_stream)
-    fclose(out_stream);
-  if (in_stream)
-    fclose(in_stream);
+  terminate();
 #ifndef _WIN32
   if (org_sigpipe_handler)
     signal(SIGPIPE, reinterpret_cast<void (*)(int)>(org_sigpipe_handler));
+#endif
+}
+
+void smtlib_convt::process_emitter::terminate() noexcept
+{
+  if (out_stream)
+  {
+    fclose(out_stream);
+    out_stream = nullptr;
+  }
+  if (in_stream)
+  {
+    fclose(in_stream);
+    in_stream = nullptr;
+  }
+#ifndef _WIN32
+  /* Closing the pipes gives the solver EOF on stdin, but a solver mid-solve
+   * on a large formula may not exit promptly; signal it and reap the zombie
+   * so a discarded solve does not linger. */
+  if (solver_proc_pid > 0)
+  {
+    kill(static_cast<pid_t>(solver_proc_pid), SIGKILL);
+    int status;
+    waitpid(static_cast<pid_t>(solver_proc_pid), &status, 0);
+    solver_proc_pid = -1;
+  }
 #endif
 }
 

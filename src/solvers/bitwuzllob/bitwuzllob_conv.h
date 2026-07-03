@@ -23,6 +23,7 @@ public:
 
   smt_resultt dec_solve() override;
   const std::string solver_text() override;
+  std::string dump_smt() override;
 
 private:
   bitwuzllob_convt(
@@ -35,9 +36,6 @@ private:
   smt_resultt run_bitwuzllob();
 
   std::string formula_path;
-  /** Whether formula_path is a temporary we created (as opposed to a
-   *  user-supplied --output path) and must remove on destruction. */
-  bool formula_is_temp;
   bool solved = false;
 };
 

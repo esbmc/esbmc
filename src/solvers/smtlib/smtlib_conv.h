@@ -320,6 +320,9 @@ public:
     FILE *out_stream;
     FILE *in_stream;
     void *org_sigpipe_handler; /* TODO: static */
+    /* pid_t of the solver process; stored as long to keep this header
+     * POSIX-free. -1 when no process is running. */
+    long solver_proc_pid;
 
     std::string solver_name;
     std::string solver_version;
@@ -334,6 +337,11 @@ public:
     template <typename... Ts>
     void emit(const char *fmt, Ts &&...) const;
     void flush() const;
+
+    /* Stop the solver process before its answer is needed (e.g. the
+     * verdict came from elsewhere and no model will be read). Idempotent;
+     * afterwards operator bool() is false. */
+    void terminate() noexcept;
 
     explicit operator bool() const noexcept;
   } emit_proc;

@@ -118,6 +118,9 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
+  // Kill any external solver process groups first: they are in their own
+  // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
+  file_operations::kill_registered_pgroups();
   file_operations::cleanup_registered_tmps();
   // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);

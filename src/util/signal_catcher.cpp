@@ -30,6 +30,9 @@ void signal_catcher(int sig)
 #else
   // kill any children by killing group
   killpg(0, sig);
+  // External solvers spawned into their own process groups are not in our
+  // group, so kill them explicitly.
+  file_operations::kill_registered_pgroups();
 
   file_operations::cleanup_registered_tmps();
   exit(sig);

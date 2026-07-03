@@ -11,6 +11,7 @@
 
 #ifndef _WIN32
 #  include <sys/wait.h>
+#  include <unistd.h>
 #endif
 
 static std::string prog_command(const optionst &options)
@@ -99,24 +100,49 @@ bitwuzllob_convt::bitwuzllob_convt(
 {
 }
 
+/* With --result-only no counterexample is ever built (bmc.cpp skips trace
+ * construction), so feeding the formula to a local model solver would only
+ * start a full parallel solve whose answer is never read. */
+static std::string model_prog(const optionst &options)
+{
+  std::string prog = options.get_option("bitwuzllob-model-prog");
+  if (!prog.empty() && options.get_bool_option("result-only"))
+  {
+    log_warning(
+      "bitwuzllob: ignoring --bitwuzllob-model-prog: --result-only never "
+      "builds a counterexample, so no model solver is needed");
+    return "";
+  }
+  return prog;
+}
+
 bitwuzllob_convt::bitwuzllob_convt(
   const namespacet &ns,
   const optionst &options,
   const std::string &_formula_path)
-  : smtlib_convt(
-      ns,
-      options,
-      options.get_option("bitwuzllob-model-prog"),
-      _formula_path),
-    formula_path(_formula_path),
-    formula_is_temp(uses_temp_formula(options))
+  : smtlib_convt(ns, options, model_prog(options), _formula_path),
+    formula_path(_formula_path)
 {
 }
 
 bitwuzllob_convt::~bitwuzllob_convt()
 {
-  if (formula_is_temp)
+  if (uses_temp_formula(options))
     remove(formula_path.c_str());
+}
+
+std::string bitwuzllob_convt::dump_smt()
+{
+  /* Under --smt-formula-only no solve follows; complete the dump with the
+   * (check-sat) like the base class. Under --smt-formula-too our dec_solve()
+   * emits the (check-sat) itself: appending one here as well would hand
+   * Mallob a formula containing two. The base implementation also reports
+   * the destination from the --output option, which this backend redirects
+   * to the formula file. */
+  if (options.get_bool_option("smt-formula-only"))
+    return smtlib_convt::dump_smt();
+  log_status("SMT formula written to {}", formula_path);
+  return "SMT formula dumped successfully";
 }
 
 smt_resultt bitwuzllob_convt::dec_solve()
@@ -139,7 +165,12 @@ smt_resultt bitwuzllob_convt::dec_solve()
 
   smt_resultt res = run_bitwuzllob();
   if (res != P_SATISFIABLE)
+  {
+    /* No model will be read; stop the local solver we fed in parallel rather
+     * than let it keep solving until this object is destroyed. */
+    emit_proc.terminate();
     return res;
+  }
 
   if (!emit_proc)
   {
@@ -214,12 +245,57 @@ smt_resultt bitwuzllob_convt::run_bitwuzllob()
 
   log_status("Running Bitwuzllob: {}", cmd);
 
+#ifdef _WIN32
   FILE *out = popen(cmd.c_str(), "r");
   if (!out)
   {
     log_error("bitwuzllob: failed to run \"{}\": {}", cmd, strerror(errno));
     abort();
   }
+#else
+  /* Spawn the solver in its own process group so that, on an ESBMC timeout
+   * or fatal signal, the exit handlers can kill the whole subtree (a wrapper
+   * shell and any mpirun ranks) in one killpg — plain popen() leaves the
+   * child in ESBMC's own group, which the timeout handler cannot target
+   * without killing itself. */
+  int fds[2];
+  if (pipe(fds) != 0)
+  {
+    log_error("bitwuzllob: pipe() failed: {}", strerror(errno));
+    abort();
+  }
+  pid_t pid = fork();
+  if (pid < 0)
+  {
+    log_error("bitwuzllob: fork() failed: {}", strerror(errno));
+    abort();
+  }
+  if (pid == 0)
+  {
+    setpgid(0, 0); // become leader of a new group; pgid == pid
+    close(fds[0]);
+    if (fds[1] != STDOUT_FILENO)
+    {
+      dup2(fds[1], STDOUT_FILENO);
+      close(fds[1]);
+    }
+    const char *shell = getenv("SHELL");
+    if (!shell || !*shell)
+      shell = "sh";
+    execlp(shell, shell, "-c", cmd.c_str(), static_cast<char *>(nullptr));
+    _exit(127);
+  }
+  setpgid(pid, pid); // also set from the parent to close the fork/exec race
+  close(fds[1]);
+  const long child_pgid = pid;
+  file_operations::register_pgroup_for_cleanup(child_pgid);
+  FILE *out = fdopen(fds[0], "r");
+  if (!out)
+  {
+    log_error("bitwuzllob: fdopen() failed: {}", strerror(errno));
+    abort();
+  }
+#endif
 
   /* Scan the output for verdict lines; the last one wins. Keep a small tail
    * of the output for diagnostics. */
@@ -242,7 +318,31 @@ smt_resultt bitwuzllob_convt::run_bitwuzllob()
     if (tail.size() > 20)
       tail.pop_front();
   }
+
+#ifdef _WIN32
   int status = pclose(out);
+#else
+  fclose(out);
+  int status = 0;
+  waitpid(pid, &status, 0);
+  file_operations::unregister_pgroup(child_pgid);
+#endif
+
+#ifndef _WIN32
+  /* A verdict from a solver that died on a signal (crash, OOM kill, an
+   * mpirun rank failure tearing the job down) cannot be trusted: discard it
+   * rather than turn a truncated run into a verification verdict. Non-zero
+   * *exit codes* stay accepted — SAT-competition style solvers exit 10/20. */
+  if (verdict && WIFSIGNALED(status))
+  {
+    log_error(
+      "bitwuzllob: solver command \"{}\" died with {}; discarding its "
+      "verdict",
+      cmd,
+      describe_exit_status(status));
+    return P_ERROR;
+  }
+#endif
 
   if (!verdict)
   {
