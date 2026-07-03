@@ -713,8 +713,8 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
   std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
-  get_expr_globals(ns, assign.target, global_writes);
-  get_expr_globals(ns, assign.source, global_reads);
+  get_expr_globals(ns, assign.target, global_writes, access_kindt::WRITE);
+  get_expr_globals(ns, assign.source, global_reads, access_kindt::READ);
 
   if (global_reads.size() > 0 || global_writes.size() > 0)
   {
@@ -732,7 +732,7 @@ void execution_statet::analyze_read(const expr2tc &code)
     return;
 
   std::set<expr2tc> global_reads;
-  get_expr_globals(ns, code, global_reads);
+  get_expr_globals(ns, code, global_reads, access_kindt::READ);
 
   if (global_reads.size() > 0)
   {
@@ -751,7 +751,8 @@ void execution_statet::analyze_args(const expr2tc &expr)
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
-  std::set<expr2tc> &globals_list)
+  std::set<expr2tc> &globals_list,
+  access_kindt kind)
 {
   if (options.get_bool_option("data-races-check-only"))
     return;
@@ -778,14 +779,6 @@ void execution_statet::get_expr_globals(
     const symbolt *symbol = ns.lookup(name);
     if (!symbol)
       return;
-
-    auto is_internal_name = [](const std::string &n) {
-      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
-             n == "c:@__ESBMC_is_dynamic" ||
-             n == "c:@__ESBMC_blocked_threads_count" ||
-             n.find("c:pthread_lib") != std::string::npos ||
-             n == "c:@__ESBMC_rounding_mode";
-    };
 
     // Resolve pointer parameters/locals BEFORE applying the internal-name
     // filter. The pointer variable itself may live in pthread_lib (e.g. the
@@ -817,7 +810,7 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
-          if (is_internal_name(n))
+          if (is_esbmc_internal_symbol(n))
             continue;
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
@@ -831,7 +824,7 @@ void execution_statet::get_expr_globals(
 
     // Drop the pointer symbol itself if it is an internal pthread_lib name,
     // unless we've resolved it to a user global above.
-    if (is_internal_name(name) && !point_to_global)
+    if (is_esbmc_internal_symbol(name) && !point_to_global)
       return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
@@ -851,6 +844,23 @@ void execution_statet::get_expr_globals(
       symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
       point_to_global || python_global)
     {
+      // Read-only-global filter: a READ of a global that is never written
+      // anywhere in the program cannot participate in a data race, so it
+      // must not trigger a cswitch. WRITE accesses are never filtered —
+      // a write on its own establishes the "may be written" fact for the
+      // other side of any future read/write conflict.
+      if (art1->readonly_global_opt && kind == access_kindt::READ)
+      {
+        expr2tc orig = p;
+        get_active_state().get_original_name(orig);
+        if (is_symbol2t(orig))
+        {
+          const irep_idt &resolved_name = to_symbol2t(orig).thename;
+          if (!art1->may_be_written(resolved_name))
+            return;
+        }
+      }
+
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(p);
 
@@ -908,8 +918,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
+  expr->foreach_operand([this, &globals_list, &ns, kind](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list, kind);
   });
 }
 

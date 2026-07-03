@@ -1169,6 +1169,22 @@ protected:
     const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Recover the variadic arguments hidden behind a va_list operand of a
+   *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
+   *  Succeeds only under conservative conditions guaranteeing the mapping is
+   *  exact: the call must sit in the variadic function's own frame, the
+   *  va_list operand must be one of that function's own non-parameter
+   *  locals, and no va_arg may have been consumed in the activation yet. On
+   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  declaration order) and returns true; otherwise returns false and the
+   *  caller must keep treating the arguments as unreliable (sound fallback).
+   *  @param call The original (unrenamed) printf side effect.
+   *  @param fmt_idx Index of the format-string operand within `call`.
+   *  @param out Receives the recovered argument expressions on success. */
+  bool recover_va_list_args(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
