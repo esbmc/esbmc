@@ -1920,6 +1920,92 @@ exprt python_converter::handle_tuple_operations(
     return result;
   }
 
+  // Equality, lowered element-wise so string members compare by content
+  // (strcmp): tuples store their strings as char* (#5571), and the native
+  // struct equality the comparison would otherwise fall through to compares
+  // those members by pointer identity. Members of unrelated types make the
+  // pair unequal, as in Python; differing arity likewise.
+  if (lhs_is_tuple && rhs_is_tuple && (op == "Eq" || op == "NotEq"))
+  {
+    const struct_typet &lt = to_struct_type(lhs.type());
+    const struct_typet &rt = to_struct_type(rhs.type());
+    const bool negate = op == "NotEq";
+
+    auto constant_bool = [&](bool holds) -> exprt {
+      exprt result =
+        migrate_expr_back(holds != negate ? gen_true_expr() : gen_false_expr());
+      result.location() = get_location_from_decl(element);
+      return result;
+    };
+
+    if (lt.components().size() != rt.components().size())
+      return constant_bool(false);
+
+    auto is_num = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+             t == bool_type();
+    };
+
+    expr2tc result2 = gen_true_expr();
+    for (size_t i = 0; i < lt.components().size(); i++)
+    {
+      exprt li = tuple_handler_->get_tuple_element(lhs, lt, i);
+      exprt ri = tuple_handler_->get_tuple_element(rhs, rt, i);
+
+      expr2tc eq2;
+      if (
+        type_utils::is_string_type(li.type()) &&
+        type_utils::is_string_type(ri.type()))
+      {
+        // String content equality via the shared comparison machinery, which
+        // either folds to a boolean or sets up a strcmp(...) == 0 expression
+        // (signalled by a nil return — assemble it like the binop caller does).
+        exprt equality = handle_string_comparison("Eq", li, ri, element);
+        if (equality.is_nil())
+        {
+          expr2tc l2, r2;
+          migrate_expr(li, l2);
+          migrate_expr(ri, r2);
+          eq2 = equality2tc(l2, r2);
+        }
+        else
+          migrate_expr(equality, eq2);
+      }
+      else if (is_num(li.type()) && is_num(ri.type()))
+      {
+        // Promote a mixed int/float pair to double (Python int->float).
+        // Ints >= 2^53 conflate with nearby floats under this promotion —
+        // the same documented limitation as __ESBMC_list_eq (PR #5207).
+        if (li.type() != ri.type())
+        {
+          li = typecast_exprt(li, double_type());
+          ri = typecast_exprt(ri, double_type());
+        }
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else if (li.type() == ri.type())
+      {
+        expr2tc l2, r2;
+        migrate_expr(li, l2);
+        migrate_expr(ri, r2);
+        eq2 = equality2tc(l2, r2);
+      }
+      else
+        return constant_bool(false);
+
+      result2 = and2tc(result2, eq2);
+    }
+
+    if (negate)
+      result2 = not2tc(result2);
+    exprt result = migrate_expr_back(result2);
+    result.location() = get_location_from_decl(element);
+    return result;
+  }
+
   return nil_exprt();
 }
 
