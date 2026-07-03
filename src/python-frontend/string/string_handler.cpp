@@ -534,14 +534,62 @@ bool string_handler::try_extract_const_string_expr(
 
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
-  // Bare nondet `char *`. Used as a sound over-approximation when a
-  // str.*() handler cannot extract a compile-time constant receiver.
-  // Subsequent string ops over this value see arbitrary content, which
-  // preserves soundness for safety properties (we cannot conclude a
-  // specific functional result, but we cannot wrongly conclude SAFE).
-  side_effect_expr_nondett nondet(gen_pointer_type(char_type()));
+  // Sound over-approximation when a str.*() handler cannot extract a
+  // compile-time constant receiver. Subsequent string ops over this value
+  // see arbitrary content, which preserves soundness for safety properties
+  // (we cannot conclude a specific functional result, but we cannot
+  // wrongly conclude SAFE).
+  //
+  // Materialised into a declared temporary (decl + assign) rather than
+  // returned as a raw `side_effect_expr_nondett`: callers may embed the
+  // result directly in a comparison (e.g. `f"{w:e}" == "x"`), and
+  // handle_string_comparison's has_unsupported_side_effects_internal()
+  // rejects any bare `sideeffect` operand whose statement isn't
+  // "function_call" (#5767 — this used to abort GOTO conversion with
+  // "Cannot compare non-function side effects" instead of yielding a
+  // sound verdict). Routing the nondet value through a temp symbol first
+  // matches the materialisation pattern used elsewhere in the frontend
+  // (e.g. the dict-truthiness $dict_size$ temp in
+  // get_unary_operator_expr), and keeps the fallback usable in any
+  // expression position.
+  //
+  // Known under-approximation: in a `while <fallback-compare>:` TEST the
+  // decl+assign land in the enclosing block (the per-iteration
+  // materialisation path only fires for Call tests), so the nondet is
+  // fixed across iterations where Python re-evaluates the f-string each
+  // time. Still strictly better than the pre-#5767 conversion abort for
+  // comparisons; route while-tests through the loop-body materialisation
+  // machinery if per-iteration freshness is ever needed there.
+  typet ptr_type = gen_pointer_type(char_type());
+
+  if (!converter_.current_block)
+  {
+    // No statement context to hang a decl+assign on. Not expected on the
+    // module/function statement spine (get_block always installs a
+    // current_block there); kept as a defensive fallback to the previous
+    // raw-sideeffect behaviour rather than dereferencing a null block.
+    side_effect_expr_nondett nondet(ptr_type);
+    nondet.location() = location;
+    return nondet;
+  }
+
+  symbolt &tmp =
+    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
+
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  side_effect_expr_nondett nondet(ptr_type);
   nondet.location() = location;
-  return nondet;
+
+  code_assignt assign(symbol_expr(tmp), nondet);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt result = symbol_expr(tmp);
+  result.location() = location;
+  return result;
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
