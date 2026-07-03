@@ -388,10 +388,24 @@ class ModuleRewriteMixin:
         for n in self._walk_scope(stmts):
             if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
                 continue
+            # A *splat shifts every later argument's runtime position by
+            # len(iterable), unknowable statically -- recording syntactic
+            # indices would let _recover_param_dict_annotation size the
+            # WRONG parameter. Refuse the whole call (None at every index).
+            if any(isinstance(a, ast.Starred) for a in n.args):
+                self._dict_param_call_shapes.setdefault(n.func.id, []).append(
+                    [None] * len(n.args))
+                continue
             shapes = []
             for arg in n.args:
                 if isinstance(arg, ast.Dict):
                     shapes.append(self._build_dict_annotation_from_literal(arg))
+                elif isinstance(arg, ast.List):
+                    # list-of-tuple-literals: shape evidence for sizing the
+                    # str components of a list[tuple[...]] parameter
+                    # annotation (#5571), same table, same all-sites-agree
+                    # consumers.
+                    shapes.append(self._build_list_annotation_from_literal(arg))
                 elif isinstance(arg, ast.Name):
                     if arg.id in local_names:
                         shapes.append(local_binds.get(arg.id))

@@ -973,9 +973,46 @@ class CoreVisitorsMixin:
                 continue
             if arg.annotation is None and name not in self.variable_annotations:
                 recovered = self._recover_param_dict_annotation(node.name, idx)
-                if recovered is not None:
+                # The shape table also records list-literal shapes (#5571);
+                # only a dict-based shape may stamp the dict kind here.
+                if (recovered is not None
+                        and self._get_base_type_name(recovered) in ("dict", "Dict")):
                     self.known_variable_types[name] = "dict"
                     self.variable_annotations[name] = recovered
+            elif (arg.annotation is not None
+                  and self._get_base_type_name(arg.annotation) == "list"):
+                # An ANNOTATED list[tuple[..., str, ...]] parameter carries no
+                # component sizes; when every call site passes an agreeing
+                # list-of-tuple-literals, the sized shape (str components
+                # embedded as literals, #5571) replaces the bare annotation.
+                # _recover_param_dict_annotation's all-sites-agree refusal
+                # applies unchanged; compatibility with the user's annotation
+                # is checked structurally so a wrong-shaped call site can
+                # never widen or narrow the declared type.
+                #
+                # The sized shape is stamped onto arg.annotation itself, not
+                # just the preprocessor-local variable_annotations table: the
+                # C++ frontend re-derives the element type of a `pairs[i]`
+                # subscript straight from the parameter's own JSON decl node
+                # (get_elem_type_from_annotation in list_access.cpp), which
+                # variable_annotations never reaches. Stamping the arg node is
+                # sound here specifically because _recover_param_dict_annotation
+                # requires byte-identical ast.dump() of the recovered
+                # ANNOTATION across every call site -- agreement is on the
+                # shape and per-component byte lengths (the only facts the
+                # C++ consumer reads: value.size() + 1), never on element
+                # values, which may differ between a list's entries (#5571).
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if (recovered is not None
+                        and self._sized_matches_declared(recovered, arg.annotation)):
+                    # Deep-copy per store: the recovered node is the shape
+                    # table's own object, shared across call records; a
+                    # future in-place pass must not propagate cross-function.
+                    self.variable_annotations[name] = copy.deepcopy(recovered)
+                    stamped = copy.deepcopy(recovered)
+                    ast.copy_location(stamped, arg.annotation)
+                    ast.fix_missing_locations(stamped)
+                    arg.annotation = stamped
 
     def _recover_param_dict_annotation(self, func_name, param_index):
         """Recover a parameter dict's dict[K, V] annotation from its call sites.
@@ -1028,11 +1065,67 @@ class CoreVisitorsMixin:
             ctx=ast.Load(),
         )
 
-    def _size_tuple_str_components(self, key_ann, keys):
+    def _build_list_annotation_from_literal(self, list_node):
+        """Build a list[tuple[...]] annotation from a list-of-tuple-literals,
+        with tuple str components sized via _size_tuple_str_components.
+
+        Returns None unless every element is a tuple literal and every
+        element's inferred annotation agrees with the first's — the same
+        sound refusal discipline as _build_dict_annotation_from_literal
+        (#5571).
+        """
+        if not list_node.elts:
+            return None
+        if not all(isinstance(e, ast.Tuple) for e in list_node.elts):
+            return None
+        elem_ann = self._infer_dict_key_annotation(list_node.elts[0])
+        if elem_ann is None:
+            return None
+        for e in list_node.elts[1:]:
+            other = self._infer_dict_key_annotation(e)
+            if other is None or ast.dump(other) != ast.dump(elem_ann):
+                return None
+        elem_ann = self._size_tuple_str_components(elem_ann, list_node.elts)
+        return ast.Subscript(
+            value=ast.Name(id="list", ctx=ast.Load()),
+            slice=elem_ann,
+            ctx=ast.Load(),
+        )
+
+    def _sized_matches_declared(self, sized, declared):
+        """True when `sized` is the call-site-recovered annotation for the
+        user-`declared` one, differing only by str components carrying an
+        embedded string literal where the declaration says bare 'str'.
+
+        Any other structural difference (base type, arity, non-str member
+        types) means the call sites disagree with the declaration, and the
+        declaration must win untouched.
+        """
+        if isinstance(declared, ast.Name):
+            if declared.id == "str":
+                return (isinstance(sized, ast.Constant)
+                        and isinstance(sized.value, str)) or (isinstance(
+                            sized, ast.Name) and sized.id == "str")
+            return isinstance(sized, ast.Name) and sized.id == declared.id
+        if isinstance(declared, ast.Subscript) and isinstance(sized, ast.Subscript):
+            if ast.dump(declared.value) != ast.dump(sized.value):
+                return False
+            d_slice, s_slice = declared.slice, sized.slice
+            if isinstance(d_slice, ast.Tuple) and isinstance(s_slice, ast.Tuple):
+                return (len(d_slice.elts) == len(s_slice.elts) and all(
+                    self._sized_matches_declared(s, d)
+                    for s, d in zip(s_slice.elts, d_slice.elts)))
+            if isinstance(d_slice, ast.Tuple) != isinstance(s_slice, ast.Tuple):
+                return False
+            return self._sized_matches_declared(s_slice, d_slice)
+        return ast.dump(sized) == ast.dump(declared)
+
+    def _size_tuple_str_components(self, key_ann, tuples):
         """Embed a concrete byte length for each str component of a
-        tuple[str, ...] key annotation, when every key in this SAME dict
-        literal agrees on that component's exact UTF-8 byte length (the
-        quantity the C++ layers size structs with).
+        tuple[str, ...] annotation, when every tuple literal in the SAME
+        container literal (dict keys, or list elements -- #5571) agrees on
+        that component's exact UTF-8 byte length (the quantity the C++
+        layers size structs with).
 
         A bare 'str' component carries no size, so the C++ struct built for
         the recovered tuple key ends up with a 0-byte placeholder for it --
@@ -1054,7 +1147,7 @@ class CoreVisitorsMixin:
                 continue
             sample = None
             homogeneous = True
-            for k in keys:
+            for k in tuples:
                 if not (isinstance(k, ast.Tuple) and i < len(k.elts)):
                     homogeneous = False
                     break
