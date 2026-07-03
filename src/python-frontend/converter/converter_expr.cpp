@@ -98,6 +98,20 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
+// Used to recognize the two 2-D slicing patterns this frontend supports,
+// `a[:, j]` and `a[i, :]`; any other slice (bounded or stepped) inside a
+// tuple subscript is still rejected by throw_numpy_multidim_index_error.
+static bool is_full_slice_node(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Slice"))
+    return false;
+  auto is_absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return is_absent("lower") && is_absent("upper") && is_absent("step");
+}
+
 static void throw_numpy_too_many_indices_error(
   python_converter &converter,
   const nlohmann::json &element,
@@ -1490,7 +1504,30 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           idx_nodes.push_back(idx);
         }
         if (has_slice_dim)
+        {
+          // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
+          // equivalent to chained a[i][:]). Any other slice/index tuple
+          // combination (partial bounds, both dims sliced, 3+ dims, ...)
+          // stays unsupported.
+          if (
+            idx_nodes.size() == 2 && is_full_slice_node(idx_nodes[0]) !=
+                                       is_full_slice_node(idx_nodes[1]))
+          {
+            python_list list(*this, element);
+            if (is_full_slice_node(idx_nodes[0]))
+              expr = list.build_column_select(array, idx_nodes[1], element);
+            else
+            {
+              exprt current = list.index(array, idx_nodes[0]);
+              if (!contains_cpp_throw(current))
+                current = list.index(current, idx_nodes[1]);
+              expr = current;
+            }
+            break;
+          }
+
           throw_numpy_multidim_index_error(*this, element);
+        }
 
         python_list list(*this, element);
         exprt current = array;
@@ -1519,6 +1556,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       throw_numpy_multidim_index_error(*this, element);
     }
 
+    // Fancy/integer-array indexing ``a[[0, 2]]``: a literal index list
+    // selects elements by position, resolved and bounds-checked at
+    // conversion time (see python_list::build_fancy_index).
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "List" && slice.contains("elts") &&
+      slice["elts"].is_array())
+    {
+      std::vector<nlohmann::json> idx_elts(
+        slice["elts"].begin(), slice["elts"].end());
+      python_list list(*this, element);
+      expr = list.build_fancy_index(array, idx_elts, element);
+      break;
+    }
+
     // Boolean-mask indexing ``a[mask]``: when the index is a bare variable
     // reference whose static type is a bool array, filter `array` at
     // runtime to the elements where `mask` is True (NumPy fancy indexing).
@@ -1541,14 +1593,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
 
-          // Fancy/integer-array indexing (a[[0, 2]]) is not modelled yet;
-          // give an explicit error instead of falling through to the
-          // generic scalar-index path below, whose "not str" message is
-          // written for a different mistake (string indices) and would be
+          // Fancy/integer-array indexing through a variable (as opposed to
+          // a literal index list, a[[0, 2]]) is not modelled yet; give an
+          // explicit error instead of falling through to the generic
+          // scalar-index path below, whose "not str" message is written
+          // for a different mistake (string indices) and would be
           // confusing here.
           std::ostringstream msg;
           msg << "TypeError: fancy indexing with a non-boolean array is "
-                 "not supported; only boolean-mask indexing (a[mask]) is "
+                 "not supported; only boolean-mask indexing (a[mask]) and "
+                 "literal integer-list indexing (a[[i, j, ...]]) are "
                  "supported for array indices";
           const locationt loc = get_location_from_decl(element);
           if (!loc.is_nil())
