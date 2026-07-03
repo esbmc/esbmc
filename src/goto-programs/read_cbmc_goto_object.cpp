@@ -2,6 +2,8 @@
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_irep.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 #include <util/migrate.h>
 #include <util/message.h>
 #include <util/symbol.h>
@@ -270,6 +272,31 @@ bool read_cbmc_goto_object(
     }
 
     context.add(symbol);
+  }
+
+  // cbmc_adapter.cpp's fix_expression promotes CBMC's type-blind float
+  // arithmetic to ieee_add/sub/mul/div, whose migrate_expr handlers
+  // reference c:@__ESBMC_rounding_mode when no explicit rounding_mode
+  // operand is present. That symbol isn't part of the CBMC binary itself;
+  // normally esbmc_parseoptions.cpp's synthesize_cprover_additions defines
+  // it via the C frontend before this function runs, but define it here too
+  // so correctness doesn't depend on that unrelated driver step always
+  // running first (mirrors ld_converter.cpp's identical fix for the LD
+  // frontend).
+  if (!context.find_symbol("c:@__ESBMC_rounding_mode"))
+  {
+    symbolt rounding_mode;
+    rounding_mode.id = "c:@__ESBMC_rounding_mode";
+    rounding_mode.name = "__ESBMC_rounding_mode";
+    rounding_mode.module = "cbmc";
+    rounding_mode.mode = "C";
+    rounding_mode.lvalue = true;
+    rounding_mode.static_lifetime = true;
+    rounding_mode.file_local = false;
+    rounding_mode.is_extern = false;
+    rounding_mode.set_type(int_type());
+    rounding_mode.set_value(gen_zero(int_type()));
+    context.add(rounding_mode);
   }
 
   assert(migrate_namespace_lookup);
