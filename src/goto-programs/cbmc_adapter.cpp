@@ -331,14 +331,19 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   }
 }
 
-// Builds the malloc side_effect_exprt (irep shape) do_mem would have built,
-// falling back to element type char -- do_mem's own fallback whenever the
-// size argument isn't a recognisable sizeof(T) pattern, which a CBMC
+// Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
+// built, falling back to element type char -- do_mem's own fallback whenever
+// the size argument isn't a recognisable sizeof(T) pattern, which a CBMC
 // binary's argument never is (sizeof is constant-folded away by goto-cc
 // well before the .goto file exists). A byte-granularity allocation is a
-// sound, if less precise, model of any malloc(n) call regardless of the
-// pointer type it's later cast to.
-irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
+// sound, if less precise, model of any malloc(n)/alloca(n) call regardless of
+// the pointer type it's later cast to. `statement` selects "malloc" (dynamic
+// object) or "alloca" (automatic, freed on function return) -- migrate_expr
+// maps them to sideeffect2t allockind malloc/alloca respectively.
+irept build_mem_rhs(
+  const irept &lhs,
+  const irept::subt &args,
+  const char *statement)
 {
   if (args.size() != 1)
     return get_nil_irep();
@@ -357,7 +362,7 @@ irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
 
   irept sideeffect(irep_idt("sideeffect"));
   sideeffect.add("type") = lhs.find("type");
-  sideeffect.add("statement") = mk("malloc");
+  sideeffect.add("statement") = mk(statement);
   sideeffect.get_sub().push_back(args[0]);
   sideeffect.add("#size") = size_arg;
   sideeffect.add("#type") = static_cast<const irept &>(char_type());
@@ -417,7 +422,9 @@ bool fix_builtin_call(irept &code)
 
   irept rhs;
   if (callee == "malloc")
-    rhs = build_malloc_rhs(lhs, args);
+    rhs = build_mem_rhs(lhs, args, "malloc");
+  else if (callee == "alloca" || callee == "__builtin_alloca")
+    rhs = build_mem_rhs(lhs, args, "alloca");
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
     rhs = build_sqrt_rhs(lhs, args);
   else
