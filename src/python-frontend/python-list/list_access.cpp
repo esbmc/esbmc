@@ -1121,15 +1121,23 @@ exprt python_list::handle_range_slice(
   // for the common step==1 case.
   const typet signed_t = signed_size_type();
   const typet counter_type = negative_step ? signed_t : size_type();
+  // V.3: build the slice-bound arithmetic natively in IREP2. Every call site
+  // passes operands uniformly at signed_t (size_signed/val_signed via
+  // build_typecast, one_s via from_integer), so add2t/sub2t with an explicit
+  // signed_t2 result is the exact round-trip of the legacy plus/minus whose
+  // result type was overridden to signed_t.
+  const type2tc signed_t2 = migrate_type(signed_t);
   auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    plus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(add2tc(signed_t2, lhs2, rhs2));
   };
   auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    minus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(sub2tc(signed_t2, lhs2, rhs2));
   };
 
   // Resolve a slice bound following CPython's slice.indices(len) semantics.
@@ -1140,7 +1148,6 @@ exprt python_list::handle_range_slice(
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
-    const type2tc signed_t2 = migrate_type(signed_t); // V.3: for IREP2 selects
 
     // Step 1: produce a signed `resolved` value.
     //   - missing bound → step-direction default
