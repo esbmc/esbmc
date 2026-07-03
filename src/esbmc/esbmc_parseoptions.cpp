@@ -19,6 +19,9 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/sarif.h>
+#include <util/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
@@ -1527,6 +1530,90 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
+// Emit CWE-835 (non-termination / infinite loop) into the structured
+// outputs when --termination refutes the termination property.
+//
+// A non-termination verdict is proven by UNSAT at a loop exit marker, so
+// unlike a normal property violation it has no counterexample trace to
+// drive the structured emitters. We synthesise a single-step trace
+// anchored to a real termination-marker ASSERT instruction: that gives a
+// valid `pc` and a source location, and lets the existing emitters reuse
+// the util/cwe_mapping single source of truth (@p comment matches the
+// "non-terminating execution" rule -> CWE-835).
+//
+// CWE-835 is a loop weakness, so a per-loop marker is preferred as the
+// anchor; an abort-call marker is only a fallback. The inductive-step
+// verdict is a whole-program property, so with several loops present the
+// chosen marker is a best-effort representative location — only the CWE
+// id (835) is guaranteed, not that it is the specific non-terminating
+// loop.
+static void report_non_termination_cwe(
+  optionst &options,
+  const namespacet &ns,
+  const goto_functionst &goto_functions,
+  const std::string &comment)
+{
+  // The YAML (SV-COMP 2.0) witness format has no CWE field — CWE support is
+  // GraphML-only — so it is deliberately not emitted here.
+  const bool want_sarif = !options.get_option("sarif-output").empty();
+  const bool want_graphml =
+    !options.get_option("witness-output-graphml").empty();
+  const bool want_json = options.get_bool_option("generate-json-report");
+  if (!(want_sarif || want_graphml || want_json))
+    return;
+
+  goto_programt::const_targett marker, fallback;
+  bool found = false, have_fallback = false;
+  for (const auto &fn : goto_functions.function_map)
+  {
+    if (!fn.second.body_available)
+      continue;
+    for (auto it = fn.second.body.instructions.begin();
+         !found && it != fn.second.body.instructions.end();
+         ++it)
+    {
+      if (!it->is_assert())
+        continue;
+      const std::string mc = it->location.comment().as_string();
+      if (mc == "termination per-loop marker")
+      {
+        marker = it;
+        found = true;
+      }
+      else if (!have_fallback && mc == "termination abort-call marker")
+      {
+        fallback = it;
+        have_fallback = true;
+      }
+    }
+    if (found)
+      break;
+  }
+  if (!found)
+  {
+    if (!have_fallback)
+      return;
+    marker = fallback;
+  }
+
+  goto_tracet trace;
+  goto_trace_stept step;
+  step.step_nr = 1;
+  step.thread_nr = 0;
+  step.type = goto_trace_stept::ASSERT;
+  step.guard = false; // a violated assert
+  step.pc = marker;
+  step.comment = comment;
+  trace.steps.push_back(step);
+
+  if (want_graphml)
+    violation_graphml_goto_trace(options, ns, trace);
+  if (want_json)
+    generate_json_report("1", ns, trace);
+  if (want_sarif)
+    sarif_goto_trace(options, ns, trace);
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -1700,9 +1787,16 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // The loop is non-terminating; report FAILED without unwinding.
       if (options.get_bool_option("termination-non-termination-proved"))
       {
-        log_fail(
-          "\nRecurrent set shows a non-terminating execution\n"
-          "VERIFICATION FAILED");
+        const std::string comment =
+          "Recurrent set shows a non-terminating execution";
+        const namespacet ns(context);
+        report_non_termination_cwe(options, ns, goto_functions, comment);
+        const std::string cwes = format_cwe_list(cwe_for(comment));
+        std::string msg = "\n" + comment + "\n";
+        if (!cwes.empty())
+          msg += "CWE: " + cwes + "\n";
+        msg += "VERIFICATION FAILED";
+        log_fail("{}", msg);
         return 0;
       }
 
@@ -1738,10 +1832,16 @@ int esbmc_parseoptionst::do_bmc_strategy(
           is_res.is_false() &&
           !options.get_bool_option("disable-inductive-step"))
         {
-          log_result(
-            "\nInductive step shows a non-terminating execution "
-            "(k = {:d})",
+          const std::string comment = fmt::format(
+            "Inductive step shows a non-terminating execution (k = {})",
             k_step);
+          const namespacet ns(context);
+          report_non_termination_cwe(options, ns, goto_functions, comment);
+          const std::string cwes = format_cwe_list(cwe_for(comment));
+          std::string msg = "\n" + comment;
+          if (!cwes.empty())
+            msg += "\nCWE: " + cwes;
+          log_result("{}", msg);
           return 1;
         }
         // IS SAT or UNKNOWN — inconclusive, try larger k.

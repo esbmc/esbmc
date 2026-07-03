@@ -98,6 +98,20 @@ TEST_CASE("cwe_for matches unchecked return value", "[util][cwe_mapping]")
     "unchecked-return-value");
 }
 
+TEST_CASE("cwe_for matches non-termination verdict", "[util][cwe_mapping]")
+{
+  // Both --termination verdict messages contain "non-terminating execution".
+  REQUIRE(
+    cwe_for("Recurrent set shows a non-terminating execution") ==
+    std::vector<unsigned>{835});
+  REQUIRE(
+    cwe_for("Inductive step shows a non-terminating execution (k = 3)") ==
+    std::vector<unsigned>{835});
+  REQUIRE(
+    std::string(cwe_rule_for("Recurrent set shows a non-terminating execution")
+                  .sarif_id) == "infinite-loop");
+}
+
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("").empty());
@@ -123,6 +137,8 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(833) == "Deadlock");
   REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
   REQUIRE(cwe_name(252) == "Unchecked Return Value");
+  REQUIRE(
+    cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -188,6 +204,7 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "unreachable code reached",
+        "Recurrent set shows a non-terminating execution",
         ""})
   {
     const cwe_rule_t &rule = cwe_rule_for(comment);
@@ -223,7 +240,8 @@ TEST_CASE(
         "unchecked return value of fopen: f",
         "Access to object out of bounds",
         "dereference failure: memset of memory segment of size 4",
-        "undefined behavior on shift operation"})
+        "undefined behavior on shift operation",
+        "Recurrent set shows a non-terminating execution"})
   {
     for (unsigned id : cwe_for(comment))
       REQUIRE_FALSE(cwe_name(id).empty());

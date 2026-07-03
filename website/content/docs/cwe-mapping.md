@@ -9,10 +9,10 @@ Weakness Enumeration (CWE) identifiers. The mapping is pinned to **MITRE CWE
 retains ids whose Vulnerability Mapping Usage is `ALLOWED` or
 `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **31 unique CWE identifiers** across **26
+ESBMC currently distinguishes **32 unique CWE identifiers** across **27
 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193, 252, 362, 366,
 369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 681, 761, 787, 822, 823, 824,
-825, 833, 908, 1335.
+825, 833, 835, 908, 1335.
 
 The CWE ids appear in:
 
@@ -57,7 +57,23 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
+| `non-terminating execution`                                  | 835                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+### Non-termination (CWE-835)
+
+The `--termination` strategy refutes the termination property by proving a
+loop's exit condition unreachable (via k-induction or a recurrent set). This
+is [CWE-835](https://cwe.mitre.org/data/definitions/835.html), "Loop with
+Unreachable Exit Condition ('Infinite Loop')". Unlike the property violations
+above, a non-termination verdict is proven by UNSAT and therefore has **no
+counterexample trace**, so ESBMC anchors the CWE annotation to the loop's exit
+marker. The annotation still reaches the text output (the `CWE: CWE-835` line
+follows the `... non-terminating execution` verdict) and the SARIF, JSON and
+GraphML outputs, exactly as it does for any other violation kind. (The YAML
+witness format has no CWE field, so it is unaffected.) Unwinding-assertion
+failures remain intentionally unmapped — they signal an insufficient k-bound,
+not a weakness.
 
 ## Ids dropped vs. published mappings
 

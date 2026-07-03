@@ -1,0 +1,6 @@
+CORE
+main.c
+--termination --k-step 2 --max-k-step 6 --max-inductive-step 3 --generate-json-report
+^VERIFICATION FAILED$
+CHECK_JSON report.json $[0].status == "violation"
+CHECK_JSON report.json $[0].steps[0].assertion.cwe[0] == 835

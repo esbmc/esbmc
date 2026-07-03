@@ -105,6 +105,12 @@ const std::vector<entry_t> &rules_table()
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
+      // Non-termination (--termination). Proven via k-induction / recurrent
+      // set; the verdict has no counterexample trace, so this substring is
+      // matched against the verdict comment itself ("... non-terminating
+      // execution ...") rather than against a violated-property comment.
+      {"non-terminating execution",
+       {"infinite-loop", "Loop with unreachable exit condition", {835}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -156,6 +162,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {824, "Access of Uninitialized Pointer"},
     {825, "Expired Pointer Dereference"},
     {833, "Deadlock"},
+    {835, "Loop with Unreachable Exit Condition ('Infinite Loop')"},
     {908, "Use of Uninitialized Resource"},
     {1335, "Incorrect Bitwise Shift of Integer"},
   };
