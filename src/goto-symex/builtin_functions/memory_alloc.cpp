@@ -528,6 +528,17 @@ expr2tc goto_symext::symex_mem(
                          to_constant_int2t(inner).value.is_negative();
     }
 
+    // Assign NULL to the malloc'd lvalue and return it. The caller discards
+    // symex_mem's return value (see symex_assign.cpp), so the assignment must
+    // happen here or the lvalue keeps its pre-malloc (invalid) value.
+    auto return_null_ptr = [&]() -> expr2tc {
+      expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
+      if (null_sym->type != lhs->type)
+        null_sym = typecast2tc(lhs->type, null_sym);
+      symex_assign(code_assign2tc(lhs, null_sym), true, guard);
+      return null_sym;
+    };
+
     do_simplify(size);
     if (is_constant_int2t(size))
     {
@@ -536,20 +547,14 @@ expr2tc goto_symext::symex_mem(
       // discards the sign, so malloc(-1) would otherwise be mistaken for
       // a 1-byte allocation.
       if (is_malloc && (is_negative_size || val.is_negative()))
-      {
         // Negative size cast to size_t: return NULL even under
         // --force-malloc-success, matching real OS behaviour.
-        expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
-        if (null_sym->type != lhs->type)
-          null_sym = typecast2tc(lhs->type, null_sym);
-        symex_assign(code_assign2tc(lhs, null_sym), true, guard);
-        return null_sym;
-      }
+        return return_null_ptr();
       uint64_t v = val.to_uint64();
       if (v == 1)
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
+        return return_null_ptr();
     }
   }
 
