@@ -1758,17 +1758,25 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the concatenated tuple value in IREP2. Each component is the
+    // exact round-trip of a member_exprt over the migrated operand; the struct
+    // literal is assembled via constant_struct2tc and back-migrated once, then
+    // the full struct type is re-attached -- migrate_type drops the frontend-only
+    // aggregate-kind marker the `in`/membership/subscript dispatch reads with no
+    // tag fallback (mirrors tuple_handler::get_tuple_expr).
     expr2tc lhs2, rhs2;
     migrate_expr(lhs, lhs2);
     migrate_expr(rhs, rhs2);
+    std::vector<expr2tc> members;
+    members.reserve(lhs_components.size() + rhs_components.size());
     for (const auto &c : lhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), lhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
     for (const auto &c : rhs_components)
-      result.copy_to_operands(migrate_expr_back(
-        member2tc(migrate_type(c.type()), rhs2, c.get_name())));
+      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
@@ -1804,14 +1812,19 @@ exprt python_converter::handle_tuple_operations(
     struct_typet new_type =
       tuple_handler_->create_tuple_struct_type(element_types);
 
-    struct_exprt result(new_type);
-    // V.3: IREP2 tuple-component access (exact round-trip of member_exprt).
+    // V.3: build the repeated tuple value in IREP2 (see the concat path above).
     expr2tc tuple2;
     migrate_expr(tuple, tuple2);
+    std::vector<expr2tc> members;
+    members.reserve(components.size() * n);
     for (size_t i = 0; i < n; ++i)
       for (const auto &c : components)
-        result.copy_to_operands(migrate_expr_back(
-          member2tc(migrate_type(c.type()), tuple2, c.get_name())));
+        members.push_back(
+          member2tc(migrate_type(c.type()), tuple2, c.get_name()));
+
+    exprt result =
+      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+    result.type() = new_type;
 
     if (element.contains("lineno"))
       result.location() = get_location_from_decl(element);
