@@ -63,6 +63,7 @@ extern "C"
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
+#include <goto-programs/goto_check_excessive_alloc.h>
 #include <goto-programs/dead_store_analysis.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
@@ -178,6 +179,21 @@ int esbmc_parseoptionst::doit()
     if (cmdline.isset("unchecked-return-value-check"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<goto_check_unchecked_return>(context));
+
+    // Excessive-allocation-size check (CWE-789). The bound K is the byte
+    // limit above which an allocation size is flagged; a bare flag uses the
+    // implicit 1 MiB default (see options.cpp).
+    if (cmdline.isset("excessive-alloc-check"))
+    {
+      int k = atoi(cmdline.getval("excessive-alloc-check"));
+      if (k <= 0)
+      {
+        log_error("--excessive-alloc-check=K requires K >= 1 (got {})", k);
+        return 1;
+      }
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_excessive_alloc>(context, BigInt(k)));
+    }
 
     // Dead-store advisory (CWE-563). Must also run before mark_decl_as_non_det,
     // which rewrites uninitialised DECLs into `DECL; ASSIGN x = nondet` — that

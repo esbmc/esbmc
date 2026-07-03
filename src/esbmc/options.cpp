@@ -701,6 +701,17 @@ const struct group_opt_templ all_cmd_options[] = {
     {"dead-store-check",
      NULL,
      "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
+    {"excessive-alloc-check",
+     // Optional bound: bare flag uses the implicit 1 MiB (1048576-byte)
+     // default; --excessive-alloc-check=K sets the byte bound to K. `int`
+     // (not a wider type) because cmdlinet only stringifies int / string /
+     // vector<int> values; the 2 GiB ceiling is far past any meaningful
+     // "excessive" threshold.
+     boost::program_options::value<int>()->implicit_value(1048576)->value_name(
+       "bytes"),
+     "Enable check for allocations (malloc/calloc/realloc/new[]) whose size "
+     "can exceed K bytes; give the bound attached as --excessive-alloc-check=K "
+     "(default 1 MiB) (CWE-789)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
