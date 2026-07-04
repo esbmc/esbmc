@@ -909,6 +909,54 @@ exprt string_handler::apply_format_specification(
   if (format == "d" || format == "i" || format == "s")
     return convert_to_string(expr);
 
+  // Integer base presentations: 'x'/'X' (hex), 'o' (octal), 'b' (binary), for a
+  // constant integer value (resolving a symbol's constant value and a negative
+  // unary- literal). A non-constant value falls through to the handling below.
+  if (
+    (format == "x" || format == "X" || format == "o" || format == "b") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      BigInt mag = neg ? -n : n;
+      const unsigned base = (format == "o") ? 8 : (format == "b") ? 2 : 16;
+      const char *alpha =
+        (format == "X") ? "0123456789ABCDEF" : "0123456789abcdef";
+      std::string digits;
+      if (mag == 0)
+        digits = "0";
+      while (mag != 0)
+      {
+        digits.insert(digits.begin(), alpha[(mag % base).to_uint64()]);
+        mag /= base;
+      }
+      const std::string out = (neg ? "-" : "") + digits;
+      std::vector<unsigned char> chars(out.begin(), out.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), out.size() + 1));
+    }
+    // A non-constant integer falls through: `format` is a base type, never a
+    // float spec, so the `else if` float branch below is correctly skipped and
+    // the tail nondet fallback handles it.
+  }
+
   // Handle float formatting with precision
   else if (format.find(".") != std::string::npos && format.back() == 'f')
   {
