@@ -271,7 +271,9 @@ exprt python_dict_handler::handle_dict_subscript(
                                   : std::string();
     const std::string vals_id =
       dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
-    if (!vals_id.empty() && python_list::has_mixed_numeric_types(vals_id))
+    if (
+      !vals_id.empty() &&
+      python_list::has_mixed_numeric_types(dict_value_types_key(vals_id)))
     {
       const size_t float_type_id =
         std::hash<std::string>{}(type_handler_.type_to_string(
@@ -415,7 +417,8 @@ void python_dict_handler::handle_dict_subscript_assign(
     const std::string vals_id =
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
-      list_handler.add_type_info(vals_id, std::string(), value.type());
+      list_handler.add_type_info(
+        dict_value_types_key(vals_id), std::string(), value.type());
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(

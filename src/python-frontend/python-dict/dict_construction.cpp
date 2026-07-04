@@ -609,11 +609,17 @@ exprt python_dict_handler::create_dict_from_literal(
       exprt push_value = list_handler.build_push_list_call(
         values_list, element, value_expr, all_values_float);
       converter_.add_instruction(push_value);
-      // Record the value's type so has_mixed_numeric_types() can detect a
-      // heterogeneous int/float dict at the subscript read site (where a
-      // single static value type otherwise misreads the other type's bits).
+      // Record the value's type under a dedicated key so
+      // has_mixed_numeric_types() can detect a heterogeneous int/float dict at
+      // the subscript read site (where a single static value type otherwise
+      // misreads the other type's bits). It must NOT be recorded under the
+      // values-list's own id: that would flip the .values()/.items() list read
+      // onto the generic mixed-list path, which reads dict value storage
+      // incorrectly (github_3719_4).
       list_handler.add_type_info(
-        values_list.id.as_string(), std::string(), value_expr.type());
+        dict_value_types_key(values_list.id.as_string()),
+        std::string(),
+        value_expr.type());
     }
   }
 
