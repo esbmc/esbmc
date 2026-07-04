@@ -81,6 +81,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `alloca`/`__builtin_alloca` FUNCTION_CALLs → `side_effect("alloca")` (§4.8, Phase 2) | ✅ (PR #5793) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `free` FUNCTION_CALLs → OTHER `free` codet (deallocation, use-after-free/double-free detection) (§4.8, Phase 2) | ✅ (PR #5792) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -338,6 +339,22 @@ additive), but weren't attempted here to keep this change reviewable. Note that
 `ceilf`/`floorf`/`truncf`/`roundf` differ from `fabs`/`sqrt`: ESBMC has no native
 expression form for them, so they go through the libm C operational model as bodied
 functions rather than an `fix_builtin_call` expr rewrite — a distinct mechanism.
+
+**`ceil`/`floor`/`trunc`/`round` (+`f`/`l`) — ✅ landed (PR #5814), via that distinct
+mechanism.** CBMC emits them as bodyless `FUNCTION_CALL` externals under their plain names
+(`ceil`); ESBMC's operational-model bodies (`libm/{ceil,floor,round,trunc}.c`) exist but are
+linked by `add_cprover_library` under the C-frontend-mangled id (`c:@F@ceil`), and the
+additions boilerplate referenced nothing so they weren't linked at all — so ESBMC returned
+nondet and a valid `ceil(2.3)==3.0` reported `FAILED` where CBMC says `SUCCESSFUL`. Fixed in
+`esbmc_parseoptions.cpp`: the additions boilerplate now takes the addresses of the twelve
+functions (forcing `add_cprover_library` to link their bodies), and `link_cbmc_libm_bodies`
+copies each bodied `c:@F@name`'s body **and type** onto the bodyless plain-named declaration
+after the binary loads — `argument_assignments` binds actual args via the copied type's
+parameter names, which match the copied body (`goto-symex/symex_function.cpp`). Verdict parity
+tested both directions (`cbmc_ceil`/`cbmc_ceil_fail`, `cbmc_round`/`cbmc_round_fail`); the
+failing cases confirm the body is really computed (e.g. `round(2.5)==3.0`), not nondet. This
+is the reusable path for any bodyless libm/libc external CBMC references; extend the name list
+as the corpus grows.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`

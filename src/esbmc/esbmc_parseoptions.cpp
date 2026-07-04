@@ -2153,6 +2153,8 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 //
 // \param options - options to be passed through,
 // \param goto_functions - this is where the created GOTO program is stored.
+static void link_cbmc_libm_bodies(goto_functionst &goto_functions);
+
 bool esbmc_parseoptionst::create_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -2190,6 +2192,12 @@ bool esbmc_parseoptionst::create_goto_program(
 
       if (read_goto_binary(goto_functions))
         return true;
+
+      // Resolve CBMC's bodyless libm externals (ceil/floor/trunc/round, ...) to
+      // the operational-model bodies the additions linked, before symex sees a
+      // bodyless call returning nondet.
+      if (cbmc_additions)
+        link_cbmc_libm_bodies(goto_functions);
 
       // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
       // c:@F@main, onto the program's real entry. An explicit --function wins;
@@ -2277,6 +2285,51 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   return false;
 }
 
+// Bridge CBMC's plain-named bodyless libm externals (e.g. `ceil`) to the
+// operational-model bodies the additions link under the C-frontend-mangled id
+// (`c:@F@ceil`). CBMC emits ceil/floor/trunc/round (and float/long-double
+// variants) as bodyless FUNCTION_CALL externals; unlike sqrt/fabs -- rewritten
+// to expressions in cbmc_adapter -- they have no ESBMC expression form and must
+// run the library body. Copying the bodied function's body and type onto the
+// bodyless declaration lets symex resolve the call: argument_assignments binds
+// actual args using the copied type's parameter names, which match the copied
+// body (goto-symex/symex_function.cpp).
+static void link_cbmc_libm_bodies(goto_functionst &goto_functions)
+{
+  static const char *const libm[] = {
+    "ceilf",
+    "ceil",
+    "ceill",
+    "floorf",
+    "floor",
+    "floorl",
+    "truncf",
+    "trunc",
+    "truncl",
+    "roundf",
+    "round",
+    "roundl"};
+
+  for (const char *name : libm)
+  {
+    auto bodyless = goto_functions.function_map.find(name);
+    if (
+      bodyless == goto_functions.function_map.end() ||
+      bodyless->second.body_available)
+      continue;
+
+    auto bodied = goto_functions.function_map.find(std::string("c:@F@") + name);
+    if (
+      bodied == goto_functions.function_map.end() ||
+      !bodied->second.body_available)
+      continue;
+
+    bodyless->second.body = bodied->second.body; // operator= fixes up targets
+    bodyless->second.type = bodied->second.type;
+    bodyless->second.body_available = true;
+  }
+}
+
 // Compile a boilerplate translation unit through the normal C-frontend pipeline
 // to obtain ESBMC's "additions": typecheck() pulls in the C library via
 // add_cprover_library, final() builds the __ESBMC_main entry wrapper, and
@@ -2289,8 +2342,20 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
 {
   file_operations::tmp_file tf =
     file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
+  // Taking the addresses of the bodied libm functions marks them referenced, so
+  // add_cprover_library links their operational-model bodies into the additions;
+  // link_cbmc_libm_bodies then bridges the CBMC binary's plain-named bodyless
+  // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
+  // these have no ESBMC expression form and must run the C library body.
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
+    "#include <math.h>\n"
+    "void *const __esbmc_cbmc_libm_refs[] = {\n"
+    "  (void *)ceilf,  (void *)ceil,  (void *)ceill,\n"
+    "  (void *)floorf, (void *)floor, (void *)floorl,\n"
+    "  (void *)truncf, (void *)trunc, (void *)truncl,\n"
+    "  (void *)roundf, (void *)round, (void *)roundl,\n"
+    "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
   {
