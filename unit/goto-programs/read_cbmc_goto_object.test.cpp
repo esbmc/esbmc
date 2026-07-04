@@ -160,6 +160,27 @@ TEST_CASE("reads no-op after the reader has failed", "[cbmc-reader]")
   REQUIRE(reader.failed());
 }
 
+TEST_CASE(
+  "rejects a table count larger than the input instead of over-reserving",
+  "[cbmc-reader]")
+{
+  // Magic + version + a symbol count of ~4 billion with nothing following: the
+  // count dwarfs the remaining bytes, so the reader must reject it rather than
+  // reserve() gigabytes for a table that cannot possibly be there.
+  std::string bytes;
+  bytes += '\x7f';
+  bytes += 'G';
+  bytes += 'B';
+  bytes += 'F';
+  bytes += encode_varint(6);           // version
+  bytes += encode_varint(0xffffffffu); // absurd symbol count
+
+  std::istringstream in(bytes, std::ios::binary);
+  cbmc_parse_resultt result;
+  REQUIRE(parse_cbmc_goto(in, "huge-count.goto", result) == true);
+  REQUIRE(result.symbols.empty());
+}
+
 TEST_CASE("parses a real CBMC v6 goto-binary", "[cbmc-reader]")
 {
   const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";

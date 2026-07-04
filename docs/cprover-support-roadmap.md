@@ -256,9 +256,11 @@ unterminated irep now set a `cbmc_irep_readert::failed()` flag that short-circui
 the parse (subsequent reads no-op, the S/N/C child loops stop) and surfaces through
 `parse_cbmc_goto`'s bool return as a recoverable error rather than crashing the whole process
 (PR #5811). Pinned by unit tests for each malformed shape plus a truncated-binary parse.
-**Still open:** multi-version tolerance (accept/adapt versions other than 6), and bounding the
-symbol/function/instruction counts so a corrupt-but-in-range count can't trigger a huge
-`reserve()` before the first element is read.
+The symbol/function/instruction table counts are also bounded against the bytes left in the
+stream before `reserve()` runs — each element is ≥1 byte, so a count larger than the remaining
+input is corrupt and rejected rather than driving a multi-gigabyte allocation or a
+multi-billion-iteration spin (PR #5812). **Still open:** multi-version tolerance (accept/adapt
+versions other than 6).
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca` landed, family audit still open
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`free` landed, family audit still open
