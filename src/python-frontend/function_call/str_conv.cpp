@@ -469,6 +469,15 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
   if (str_val.back() == '.')
     str_val.pop_back();
 
+  // CPython's str()/repr() of a whole-number float keeps a ".0" suffix
+  // (str(1.0) == "1.0", not "1"); re-append it when the strip above removed the
+  // fractional part entirely. Guard on a trailing digit so non-numeric spellings
+  // (inf/nan) are left untouched.
+  if (
+    str_val.find('.') == std::string::npos && !str_val.empty() &&
+    std::isdigit(static_cast<unsigned char>(str_val.back())))
+    str_val += ".0";
+
   typet t = type_handler_.get_typet("str", str_val.size() + 1);
   return converter_.make_char_array_expr(
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
