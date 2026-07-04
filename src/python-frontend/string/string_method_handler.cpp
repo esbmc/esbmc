@@ -221,8 +221,9 @@ std::string apply_format_spec(
   int width = 0;
   while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
     width = width * 10 + (spec[p++] - '0');
+  char grouping = '\0';
   if (p < spec.size() && (spec[p] == ',' || spec[p] == '_'))
-    throw std::runtime_error("unsupported grouping in format spec");
+    grouping = spec[p++];
   int prec = -1;
   if (p < spec.size() && spec[p] == '.')
   {
@@ -235,6 +236,19 @@ std::string apply_format_spec(
   if (p != spec.size())
     throw std::runtime_error("invalid format spec");
   (void)converter;
+
+  // Only plain decimal-integer ',' grouping is folded exactly. '_', grouping on
+  // a non-decimal base, and float/str grouping are unsupported; so is grouping
+  // combined with '0'-fill width, where CPython also groups the pad zeros
+  // ("{:08,}".format(1000) == "0,001,000") — a different composition than
+  // group-then-pad. All of these fall to the nondet fallback so no wrong value
+  // is produced.
+  if (
+    grouping != '\0' &&
+    (!(grouping == ',' && kind == KIND_INT && (type == '\0' || type == 'd') &&
+       prec < 0) ||
+     (width > 0 && fill == '0')))
+    throw std::runtime_error("unsupported grouping in format spec");
 
   // Build the value body (without field padding) and a default alignment.
   std::string body;
@@ -267,6 +281,22 @@ std::string apply_format_spec(
         digits = "0";
       for (; mag != 0; mag /= base)
         digits.insert(digits.begin(), alpha[mag % base]);
+    }
+    // Insert thousands separators into the decimal magnitude (before the
+    // sign), guaranteed decimal here by the grouping guard above.
+    if (grouping == ',')
+    {
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      digits = grouped;
     }
     const std::string sgn =
       neg ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
