@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzllob --smt-formula-only
+\(check-sat\)
+SMT formula dumped successfully

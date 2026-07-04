@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog mute-mallob.sh --result-only
+no sat/unsat verdict
+SMT solver failed
