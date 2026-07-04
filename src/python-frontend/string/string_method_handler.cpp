@@ -838,7 +838,11 @@ static bool is_none_literal_json(const nlohmann::json &node)
     node["id"].is_string() && node["id"] == "None");
 }
 
-static bool is_utf8_literal_json(const nlohmann::json &node)
+// True for an encoding literal whose byte representation of ASCII text is the
+// same as UTF-8: utf-8 and the pure-ASCII encodings. The encode/decode folds
+// only proceed for ASCII content (bytes < 0x80), for which these encodings are
+// byte-identical, so accepting them is sound.
+static bool is_ascii_compatible_encoding_json(const nlohmann::json &node)
 {
   if (!(node.contains("_type") && node["_type"] == "Constant" &&
         node.contains("value") && node["value"].is_string()))
@@ -847,7 +851,26 @@ static bool is_utf8_literal_json(const nlohmann::json &node)
   }
 
   const std::string encoding = node["value"].get<std::string>();
-  return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8");
+  return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8") ||
+         boost::iequals(encoding, "ascii") ||
+         boost::iequals(encoding, "us-ascii");
+}
+
+// True for a strict ASCII encoding literal ("ascii"/"us-ascii"), which — unlike
+// utf-8 — cannot encode a non-ASCII character (CPython raises
+// UnicodeEncodeError). Callers that fold an encode round-trip must require ASCII
+// content when this holds.
+static bool is_strict_ascii_encoding_json(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_string()))
+  {
+    return false;
+  }
+
+  const std::string encoding = node["value"].get<std::string>();
+  return boost::iequals(encoding, "ascii") ||
+         boost::iequals(encoding, "us-ascii");
 }
 
 std::optional<exprt> dispatch_decode_join_method(
@@ -868,12 +891,12 @@ std::optional<exprt> dispatch_decode_join_method(
 
     bool decode_utf8 = args.empty();
     if (args.size() == 1)
-      decode_utf8 = is_utf8_literal_json(args[0]);
+      decode_utf8 = is_ascii_compatible_encoding_json(args[0]);
 
     if (
       const nlohmann::json *encoding_kw =
         find_keyword_value(keyword_values, "encoding"))
-      decode_utf8 = is_utf8_literal_json(*encoding_kw);
+      decode_utf8 = is_ascii_compatible_encoding_json(*encoding_kw);
 
     if (
       decode_utf8 && receiver_json.contains("_type") &&
@@ -889,7 +912,7 @@ std::optional<exprt> dispatch_decode_join_method(
         receiver_json.contains("args") && receiver_json["args"].is_array() &&
         receiver_json["args"].size() == 1)
       {
-        encode_utf8 = is_utf8_literal_json(receiver_json["args"][0]);
+        encode_utf8 = is_ascii_compatible_encoding_json(receiver_json["args"][0]);
       }
 
       if (
@@ -902,16 +925,45 @@ std::optional<exprt> dispatch_decode_join_method(
             kw.contains("arg") && kw["arg"].is_string() &&
             kw["arg"] == "encoding" && kw.contains("value"))
           {
-            encode_utf8 = is_utf8_literal_json(kw["value"]);
+            encode_utf8 = is_ascii_compatible_encoding_json(kw["value"]);
             break;
           }
         }
       }
 
+      // A strict-ASCII encode ("café".encode("ascii")) raises
+      // UnicodeEncodeError on non-ASCII source, so only fold the round-trip
+      // when the source is ASCII. utf-8 round-trips any content unrestricted.
+      bool encode_strict_ascii = false;
+      if (
+        receiver_json.contains("args") && receiver_json["args"].is_array() &&
+        receiver_json["args"].size() == 1)
+        encode_strict_ascii =
+          is_strict_ascii_encoding_json(receiver_json["args"][0]);
+      if (
+        receiver_json.contains("keywords") &&
+        receiver_json["keywords"].is_array())
+        for (const auto &kw : receiver_json["keywords"])
+          if (
+            kw.contains("arg") && kw["arg"].is_string() &&
+            kw["arg"] == "encoding" && kw.contains("value"))
+            encode_strict_ascii = is_strict_ascii_encoding_json(kw["value"]);
+
       if (
         encode_utf8 && receiver_json["func"].contains("value") &&
         !receiver_json["func"]["value"].is_null())
       {
+        if (encode_strict_ascii)
+        {
+          std::string inner;
+          if (
+            !string_handler::extract_constant_string(
+              receiver_json["func"]["value"], converter, inner) ||
+            !std::all_of(inner.begin(), inner.end(), [](char c) {
+              return static_cast<unsigned char>(c) < 0x80;
+            }))
+            return nil_exprt();
+        }
         return converter.get_expr(receiver_json["func"]["value"]);
       }
     }
@@ -938,11 +990,11 @@ std::optional<exprt> dispatch_decode_join_method(
 
     bool encode_utf8 = args.empty();
     if (args.size() == 1)
-      encode_utf8 = is_utf8_literal_json(args[0]);
+      encode_utf8 = is_ascii_compatible_encoding_json(args[0]);
     if (
       const nlohmann::json *encoding_kw =
         find_keyword_value(keyword_values, "encoding"))
-      encode_utf8 = is_utf8_literal_json(*encoding_kw);
+      encode_utf8 = is_ascii_compatible_encoding_json(*encoding_kw);
 
     // Standalone "...".encode(): a constant str encodes to its bytes. The
     // UTF-8 encoding of an ASCII string is the identical byte sequence; a
