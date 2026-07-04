@@ -2435,6 +2435,12 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
+
+  // Mark this as a base-subobject constructor call so gen_vptr_initializations
+  // can insert the vptr assignments *after* all base ctors run but *before*
+  // the derived class's own member initializers and constructor body
+  // (Itanium ABI / C++ [class.cdtor]).
+  call.set("#is_base_ctor_call", true);
 }
 
 bool clang_cpp_convertert::need_new_object(

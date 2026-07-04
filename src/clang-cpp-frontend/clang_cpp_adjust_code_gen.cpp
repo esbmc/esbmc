@@ -34,11 +34,15 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   /*
-   *  vptr initializations shall be done in ctor
-   *  TODO: For the time being, we just add vptr init code in ctors.
-   *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
+   *  vptr initializations are needed in both constructors and destructors:
+   *  each sets the vptr to its own class's vtable at entry (after base ctors
+   *  for a ctor, before the body for a dtor) so that virtual calls made during
+   *  construction or destruction resolve to that class's overrides rather than
+   *  a more-derived one (C++ [class.cdtor]/4).
    */
-  if (ctor_type.return_type().id() != "constructor")
+  const irep_idt &rtn_id = ctor_type.return_type().id();
+  const bool is_dtor = rtn_id == "destructor";
+  if (rtn_id != "constructor" && !is_dtor)
     return;
 
   // get the class' type where this ctor is declared
@@ -53,6 +57,18 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   exprt value = symbol.get_value();
   code_blockt &ctor_body = to_code_block(to_code(value));
 
+  // Find where to insert the vptr assignments.  A destructor sets the vptr at
+  // the very start of its body.  A constructor sets it after the leading
+  // base-subobject constructor calls (tagged `#is_base_ctor_call`) but before
+  // its own member initializers and body — appending at the end would let the
+  // body run with the still-derived vptr.
+  exprt::operandst &body_ops = ctor_body.operands();
+  std::size_t insert_at = 0;
+  while (!is_dtor && insert_at < body_ops.size() &&
+         body_ops[insert_at].has_operands() &&
+         body_ops[insert_at].op0().get_bool("#is_base_ctor_call"))
+    ++insert_at;
+
   // iterate over the `components` and initialize each virtual pointers
   for (const auto &comp : components)
   {
@@ -63,7 +79,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     gen_vptr_init_code(comp, new_code, ctor_type);
     codet code_expr("expression");
     code_expr.move_to_operands(new_code);
-    ctor_body.operands().push_back(code_expr);
+    body_ops.insert(body_ops.begin() + insert_at, code_expr);
+    ++insert_at;
   }
 
   value.need_vptr_init(false);
