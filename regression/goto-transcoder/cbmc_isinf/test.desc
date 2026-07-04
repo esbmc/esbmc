@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 cbmc_isinf.goto
 --binary
 ^VERIFICATION SUCCESSFUL$

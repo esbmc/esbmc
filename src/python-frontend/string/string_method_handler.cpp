@@ -775,8 +775,8 @@ std::optional<exprt> dispatch_search_string_methods(
   python_converter &converter)
 {
   if (
-    method_name != "find" && method_name != "index" &&
-    method_name != "rfind" && method_name != "rindex")
+    method_name != "find" && method_name != "index" && method_name != "rfind" &&
+    method_name != "rindex")
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
@@ -1188,12 +1188,57 @@ exprt string_handler::build_affix_tuple_match(
       std::string(is_suffix ? "endswith" : "startswith") +
       "() with a tuple argument is only supported for tuple literals");
 
+  // Tight constant content of a (possibly symbol-backed) char-array value.
+  // Unlike try_extract_const_string_expr this REJECTS values with any
+  // non-constant operand: a padded member snapshotting a runtime string has
+  // the shape { s[0], s[1], 0, ... }, and skipping the variable operands
+  // would silently yield "" — turning the affix test constant-true (#5571).
+  auto tight_const_content = [this](const exprt &e, std::string &out) -> bool {
+    exprt v = e;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (!sym || sym->get_value().is_nil())
+        return false;
+      v = sym->get_value();
+    }
+    if (
+      !v.is_constant() || !v.type().is_array() ||
+      v.type().subtype() != char_type())
+      return false;
+    out.clear();
+    forall_operands (it, v)
+    {
+      if (!it->is_constant())
+        return false;
+      BigInt val =
+        binary2integer(it->value().as_string(), it->type().is_signedbv());
+      if (val == 0)
+        return true;
+      out += static_cast<char>(val.to_uint64());
+    }
+    return true;
+  };
+
   exprt result = gen_boolean(false);
   for (const exprt &elem : affix_tuple.operands())
   {
+    // Tuple string members are NUL-padded to a fixed width (#5571), while
+    // the single-affix handlers below take an array affix's length from its
+    // dimension — which would include the padding. Rebuild a tight literal
+    // from fully-constant content; otherwise decay the member to char* so
+    // the pointer path measures the affix with strlen() at runtime.
+    exprt affix = elem;
+    std::string content;
+    if (tight_const_content(affix, content))
+      affix = string_builder_->build_string_literal(content);
+    else if (affix.type().is_array())
+      affix = get_array_base_address(affix);
+
     exprt one = is_suffix
-                  ? handle_string_endswith(string_obj, elem, location)
-                  : handle_string_startswith(string_obj, elem, location);
+                  ? handle_string_endswith(string_obj, affix, location)
+                  : handle_string_startswith(string_obj, affix, location);
     // result and one are synthetic bools (constant / startswith-endswith
     // results), so build the disjunction in IREP2 (V.3).
     result = build_or(result, one);

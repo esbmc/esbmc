@@ -423,6 +423,9 @@ def test_iterable_for_tuple_unpack_inserts_target_assignments():
     while_node = next((s for s in transformed.body if isinstance(s, ast.While)), None)
     assert while_node is not None, "Expected transformed while-loop"
 
+    # The loop lowering may bind the unpacked names either as per-index
+    # assignments (a = t[0]) or as a single tuple-target assignment
+    # (a, b = t) -- both define the names; collect through Tuple targets.
     assigned_names = []
     for stmt in while_node.body:
         assigned_names.extend(_names_bound_by(stmt))

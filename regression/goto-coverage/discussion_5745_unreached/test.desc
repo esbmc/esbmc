@@ -1,0 +1,11 @@
+CORE
+main.c
+--assertion-coverage-claims
+Reached Assertion Instances: 3
+Unreached Asserts: 4
+dead concrete else A.*main.c line 15.* : UNREACHED
+dead concrete else B.*main.c line 16.* : UNREACHED
+dead symbolic then A.*main.c line 26.* : UNREACHED
+dead symbolic then B.*main.c line 27.* : UNREACHED
+Assertion Instances Coverage: 42.8
+^VERIFICATION FAILED$
