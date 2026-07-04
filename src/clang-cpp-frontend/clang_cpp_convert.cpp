@@ -1116,6 +1116,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
     std::string type_name;
+    // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
+    // to be evaluated (the dynamic type is read from the object's vtable). We
+    // model that by reading the operand's vtable pointer, so a typeid applied
+    // to `*p` with a null `p` faults on the dereference — the standard mandates
+    // std::bad_typeid there. `vtable_read` holds that read when applicable.
+    exprt vtable_read = nil_exprt();
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
@@ -1124,9 +1130,34 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
-        log_warning("Typeid for polymorphism is not implemented");
       type_name = qtype.getAsString();
+
+      const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
+      // [expr.typeid]/2 singles out the case where the operand is obtained by
+      // dereferencing a pointer: a null pointer there yields std::bad_typeid.
+      // Detect that `*p` form at the AST level so a plain lvalue operand (which
+      // cannot be null) keeps its existing handling untouched.
+      const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(
+        cxxtid.getExprOperand()->IgnoreParenImpCasts());
+      const bool is_deref_operand =
+        unary && unary->getOpcode() == clang::UO_Deref;
+      if (
+        !cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic() &&
+        is_deref_operand)
+      {
+        exprt operand;
+        if (get_expr(*cxxtid.getExprOperand(), operand))
+          return true;
+
+        const typet &op_type = ns.follow(operand.type());
+        if (operand.id() == "dereference" && op_type.is_struct())
+          for (const auto &comp : to_struct_type(op_type).components())
+            if (comp.get_bool("is_vtptr"))
+            {
+              vtable_read = member_exprt(operand, comp.name(), comp.type());
+              break;
+            }
+      }
     }
 
     exprt size = constant_exprt(
@@ -1148,7 +1179,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Front end can't account for polymorphism
     exprt sym("struct", t);
     sym.copy_to_operands(address_of_exprt(string_name));
-    sym.copy_to_operands(gen_zero(pointer_type()));
+    if (vtable_read.is_not_nil())
+    {
+      // Reading the vtable pointer dereferences the operand, so a null operand
+      // faults here (modelling std::bad_typeid). Cast to the field type.
+      gen_typecast(ns, vtable_read, pointer_type());
+      sym.copy_to_operands(vtable_read);
+    }
+    else
+      sym.copy_to_operands(gen_zero(pointer_type()));
     make_temporary(sym);
 
     new_expr = sym;
