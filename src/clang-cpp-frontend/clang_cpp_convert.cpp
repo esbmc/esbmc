@@ -2316,12 +2316,33 @@ bool clang_cpp_convertert::annotate_class_method(
     {
       fd_symb->set_type(component_type);
       /*
-       * we indicate the need for vptr initializations in contructor.
-       * vptr initializations will be added in the adjuster.
+       * We indicate the need for vptr initializations in the ctor/dtor;
+       * they are added in the adjuster.
+       *
+       * `has_vptr_component` is only set while the enclosing class is being
+       * converted, so it is stale (false) when a ctor/dtor body is converted
+       * in a different translation unit than the one that first set up the
+       * class' vtable — the vptr init would then be dropped and virtual calls
+       * during construction/destruction would find no target (multi-TU
+       * polymorphic classes). Fall back to inspecting the already-built class
+       * symbol for a vtable-pointer component, exactly as the adjuster does.
        */
+      bool needs_vptr_init = has_vptr_component;
+      if (!needs_vptr_init)
+      {
+        const symbolt *class_symb = context.find_symbol(parent_class_id);
+        if (class_symb && class_symb->get_type().is_struct())
+          for (const auto &c :
+               to_struct_type(class_symb->get_type()).components())
+            if (c.get_bool("is_vtptr"))
+            {
+              needs_vptr_init = true;
+              break;
+            }
+      }
       {
         exprt v = fd_symb->get_value();
-        v.need_vptr_init(has_vptr_component);
+        v.need_vptr_init(needs_vptr_init);
         fd_symb->set_value(std::move(v));
       }
     }

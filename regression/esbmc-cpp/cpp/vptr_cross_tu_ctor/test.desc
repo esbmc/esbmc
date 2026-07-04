@@ -1,0 +1,5 @@
+CORE
+main.cpp
+shape.cpp --unwind 2
+
+^VERIFICATION SUCCESSFUL$
