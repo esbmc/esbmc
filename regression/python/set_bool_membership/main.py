@@ -1,8 +1,8 @@
-# KNOWNBUG: membership of a boolean element in a set is mis-resolved. Sets
-# share the list-OM key type-tagging path with dict keys; a bool element is
-# stored/matched with a type_id/size that does not line up, so `True in s`
-# fails even though CPython holds. Bool in a *list* works; only the set/dict
-# key path is affected.
+# Boolean membership in a set now resolves correctly. Sets share the list-OM
+# key type-tagging path with dict keys; the bool element was stored widened
+# to a long while lookups queried at bool's 1-byte size.
 s = {True, False}
 assert True in s
 assert False in s
+t = set([True])
+assert True in t

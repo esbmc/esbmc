@@ -220,6 +220,37 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
     elem_size = from_integer(BigInt(elem_size_bytes), size_type());
   }
 
+  // A bool element is stored via its address and compared byte-wise by the
+  // OM, so it must be widened to a long (8 bytes). Doing this only in the push
+  // path left every lookup query at bool's native 1-byte size while the stored
+  // element was 8 bytes, so __ESBMC_values_equal's size check never matched —
+  // bool dict keys, set elements, and list membership/count/dict.get all
+  // failed. Normalizing here, the single point every storage and lookup path
+  // funnels through, keeps the two sides consistent. The type hash stays the
+  // bool hash computed above, so only the stored representation/size widens.
+  if (elem.type() == bool_type())
+  {
+    symbolt &bool_as_long = converter_.create_tmp_symbol(
+      op,
+      "$bool_as_long$",
+      signedbv_typet(config.ansi_c.long_int_width),
+      exprt());
+    code_declt bool_long_decl(build_symbol(bool_as_long));
+    bool_long_decl.copy_to_operands(build_typecast(
+      build_symbol(elem_symbol),
+      signedbv_typet(config.ansi_c.long_int_width)));
+    bool_long_decl.location() = location;
+    converter_.add_instruction(bool_long_decl);
+
+    list_elem_info bool_info;
+    bool_info.elem_type_sym = &elem_type_sym;
+    bool_info.elem_symbol = &bool_as_long;
+    bool_info.elem_size =
+      from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
+    bool_info.location = location;
+    return bool_info;
+  }
+
   // Build and return the push function call
   list_elem_info elem_info;
   elem_info.elem_type_sym = &elem_type_sym;
@@ -297,36 +328,11 @@ exprt python_list::build_push_list_call(
   }
   else
   {
-    // For bool types, cast to signed long int before taking address
-    // This ensures proper storage and retrieval
-    if (elem_info.elem_symbol->get_type() == bool_type())
-    {
-      symbolt &bool_as_long = converter_.create_tmp_symbol(
-        op,
-        "$bool_as_long$",
-        signedbv_typet(config.ansi_c.long_int_width),
-        exprt());
-
-      exprt bool_cast = build_typecast(
-        build_symbol(*elem_info.elem_symbol),
-        signedbv_typet(config.ansi_c.long_int_width));
-
-      code_declt bool_long_decl(build_symbol(bool_as_long));
-      bool_long_decl.copy_to_operands(bool_cast);
-      bool_long_decl.location() = elem_info.location;
-      converter_.add_instruction(bool_long_decl);
-
-      element_arg = build_address_of(build_symbol(bool_as_long));
-
-      // Update elem_size to match
-      elem_info.elem_size =
-        from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
-    }
-    else
-    {
-      // For all other types, we must pass address of the value
-      element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
-    }
+    // For all other types, pass the address of the value. A bool element is
+    // already widened to a long by get_list_element_info (so storage and every
+    // lookup path agree on its 8-byte size), so no bool special-case is needed
+    // here.
+    element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
   }
 
   push_func_call.arguments().push_back(element_arg); // element or &element

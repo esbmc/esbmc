@@ -33,12 +33,15 @@ exprt python_list::build_set_membership_call(
   call.location() = elem_info.location;
 
   // Track the new element's compile-time type info so subsequent ops
-  // (`elem in set`, set comparisons) recognise it.
+  // (`elem in set`, set comparisons) recognise it. Record the element's
+  // original type (`elem.type()`) rather than the storage symbol's: a bool is
+  // widened to a long by get_list_element_info, but the type map must keep the
+  // logical bool type so bool-specific inference (e.g. isinstance) stays right.
   if (method_name == "add")
     add_type_info(
       set.id.as_string(),
       elem_info.elem_symbol->id.as_string(),
-      elem_info.elem_symbol->get_type());
+      elem.type());
 
   return converter_.convert_expression_to_code(call);
 }
