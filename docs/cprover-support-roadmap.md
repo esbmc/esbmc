@@ -82,6 +82,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `free` FUNCTION_CALLs → OTHER `free` codet (deallocation, use-after-free/double-free detection) (§4.8, Phase 2) | ✅ (PR #5792) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -355,6 +356,12 @@ tested both directions (`cbmc_ceil`/`cbmc_ceil_fail`, `cbmc_round`/`cbmc_round_f
 failing cases confirm the body is really computed (e.g. `round(2.5)==3.0`), not nondet. This
 is the reusable path for any bodyless libm/libc external CBMC references; extend the name list
 as the corpus grows.
+
+**Extended (PR #5815) to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`)** — the other *exact-result*
+libm functions whose operational-model bodies match CBMC's verdict. Deliberately excludes
+transcendentals (`sin`/`cos`/`exp`/`log`/`pow`, ...), whose approximations differ between the two
+tools, and `fmod`, whose CBMC model is itself nondet (a precise ESBMC body would diverge in the
+over-approximation direction). Tests `cbmc_copysign`/`_fail`, `cbmc_fmax`/`_fail`.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
