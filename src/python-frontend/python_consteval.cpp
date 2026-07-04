@@ -1118,8 +1118,15 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       node["func"]["attr"] == "index" && node["func"].contains("value"))
     {
       auto recv = eval_expr(node["func"]["value"], env);
+      // Both LIST and TUPLE store their elements in tuple_val; a list literal
+      // receiver folds the same way a tuple one does. Without covering LIST,
+      // `[...].index(x)` fell through to the OM, whose value matching returns
+      // a wrong index for a literal receiver.
       if (
-        !recv || recv->kind != PyConstValue::TUPLE || node["args"].size() != 1)
+        !recv ||
+        (recv->kind != PyConstValue::TUPLE &&
+         recv->kind != PyConstValue::LIST) ||
+        node["args"].size() != 1)
         return std::nullopt;
 
       auto needle = eval_expr(node["args"][0], env);
@@ -1132,6 +1139,34 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           return PyConstValue::make_int(static_cast<long long>(i));
       }
       return std::nullopt;
+    }
+
+    // list/tuple .count(x) on a constant receiver folds at conversion time.
+    // The literal-receiver OM path returns 0 for a present element, so fold
+    // it here. String .count is handled by the string-method block below, so
+    // only act on a LIST/TUPLE receiver and otherwise fall through.
+    if (
+      node["func"]["_type"] == "Attribute" &&
+      node["func"].value("attr", std::string()) == "count" &&
+      node["func"].contains("value"))
+    {
+      auto recv = eval_expr(node["func"]["value"], env);
+      if (
+        recv &&
+        (recv->kind == PyConstValue::TUPLE ||
+         recv->kind == PyConstValue::LIST) &&
+        node["args"].size() == 1)
+      {
+        auto needle = eval_expr(node["args"][0], env);
+        if (needle)
+        {
+          long long c = 0;
+          for (const auto &e : recv->tuple_val)
+            if (pyconst_equal(e, *needle))
+              ++c;
+          return PyConstValue::make_int(c);
+        }
+      }
     }
 
     // String methods on a STRING receiver: fold pure, ASCII-only operations

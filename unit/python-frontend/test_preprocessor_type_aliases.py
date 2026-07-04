@@ -384,6 +384,28 @@ def test_dataclass_init_inserted_at_index_0_without_docstring():
 # 7. for-loop tuple unpacking in iterable lowering
 # ---------------------------------------------------------------------------
 
+def _names_bound_by(stmt):
+    """Names bound by an assignment, descending into tuple/list unpack targets.
+
+    A tuple-unpacking target lowers either to per-index scalar assignments
+    (``a = ESBMC_loop_var[0]``) or, for a concrete list[tuple[...]] iterable,
+    to a single tuple-target assignment (``a, b = ESBMC_loop_var``); both bind
+    the same names, so collect Name ids from either shape.
+    """
+    names = []
+    if isinstance(stmt, ast.AnnAssign):
+        targets = [stmt.target]
+    elif isinstance(stmt, ast.Assign):
+        targets = stmt.targets
+    else:
+        return names
+    for tgt in targets:
+        for node in ast.walk(tgt):
+            if isinstance(node, ast.Name):
+                names.append(node.id)
+    return names
+
+
 def test_iterable_for_tuple_unpack_inserts_target_assignments():
     """for a, b in xs must define a and b in transformed loop body."""
     src = (
@@ -406,15 +428,7 @@ def test_iterable_for_tuple_unpack_inserts_target_assignments():
     # (a, b = t) -- both define the names; collect through Tuple targets.
     assigned_names = []
     for stmt in while_node.body:
-        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-            assigned_names.append(stmt.target.id)
-        elif isinstance(stmt, ast.Assign):
-            for tgt in stmt.targets:
-                if isinstance(tgt, ast.Name):
-                    assigned_names.append(tgt.id)
-                elif isinstance(tgt, ast.Tuple):
-                    assigned_names.extend(
-                        e.id for e in tgt.elts if isinstance(e, ast.Name))
+        assigned_names.extend(_names_bound_by(stmt))
 
     assert "a" in assigned_names, "Tuple-unpacked variable 'a' must be assigned"
     assert "b" in assigned_names, "Tuple-unpacked variable 'b' must be assigned"
@@ -450,21 +464,7 @@ def test_iterable_for_tuple_unpack_before_body_use():
     assert first_time_use_idx is not None, "Expected a statement using 'time'"
 
     has_prior_time_assign = any(
-        (
-            isinstance(stmt, ast.AnnAssign)
-            and isinstance(stmt.target, ast.Name)
-            and stmt.target.id == "time"
-        )
-        or (
-            isinstance(stmt, ast.Assign)
-            and any(
-                (isinstance(tgt, ast.Name) and tgt.id == "time")
-                or (isinstance(tgt, ast.Tuple) and any(
-                    isinstance(e, ast.Name) and e.id == "time" for e in tgt.elts))
-                for tgt in stmt.targets)
-        )
-        for stmt in while_node.body[:first_time_use_idx]
-    )
+        "time" in _names_bound_by(stmt) for stmt in while_node.body[:first_time_use_idx])
     assert has_prior_time_assign, "'time' must be assigned before first use"
 
 
