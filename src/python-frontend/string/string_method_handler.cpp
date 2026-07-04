@@ -236,6 +236,19 @@ std::string apply_format_spec(
     throw std::runtime_error("invalid format spec");
   (void)converter;
 
+  // An integer value with a float presentation type (f/F/e/E/g/G) is formatted
+  // as a float, matching CPython ("{:.2f}".format(5) == "5.00"). CPython
+  // converts the int to a float first, so the (double) cast reproduces its
+  // rounding exactly for every value in range (both round to nearest-even).
+  if (
+    kind == KIND_INT &&
+    (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' ||
+     type == 'G'))
+  {
+    dval = static_cast<double>(ival);
+    kind = KIND_FLOAT;
+  }
+
   // Build the value body (without field padding) and a default alignment.
   std::string body;
   char default_align;
