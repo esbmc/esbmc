@@ -39,9 +39,7 @@ exprt python_list::build_set_membership_call(
   // logical bool type so bool-specific inference (e.g. isinstance) stays right.
   if (method_name == "add")
     add_type_info(
-      set.id.as_string(),
-      elem_info.elem_symbol->id.as_string(),
-      elem.type());
+      set.id.as_string(), elem_info.elem_symbol->id.as_string(), elem.type());
 
   return converter_.convert_expression_to_code(call);
 }

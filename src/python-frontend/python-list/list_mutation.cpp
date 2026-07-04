@@ -237,8 +237,7 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       exprt());
     code_declt bool_long_decl(build_symbol(bool_as_long));
     bool_long_decl.copy_to_operands(build_typecast(
-      build_symbol(elem_symbol),
-      signedbv_typet(config.ansi_c.long_int_width)));
+      build_symbol(elem_symbol), signedbv_typet(config.ansi_c.long_int_width)));
     bool_long_decl.location() = location;
     converter_.add_instruction(bool_long_decl);
 
