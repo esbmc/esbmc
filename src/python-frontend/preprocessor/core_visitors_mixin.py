@@ -989,16 +989,29 @@ class CoreVisitorsMixin:
                     and n.func.value.id in candidates):
                 self.known_variable_types[n.func.value.id] = "dict"
 
-        # Recover the concrete key/value types of each structurally-inferred
-        # parameter dict from its call sites, so iteration/comprehension over it
-        # resolves tuple/scalar element types instead of erasing them (#5444).
+        # Recover the concrete key/value types of parameter dicts from their
+        # call sites, so iteration/comprehension over them resolves
+        # tuple/scalar element types instead of erasing them (#5444). This
+        # also *establishes* the dict kind for parameters the method scan
+        # above could not mark (a body that only iterates the dict, e.g.
+        # `{v: 0 for u, v in g}`, calls no dict method):
+        # _recover_param_dict_annotation returns a shape only when every
+        # direct call site passes an agreeing dict, so the kind comes from
+        # the actual arguments, never from body-usage guessing.
         positional = list(node.args.posonlyargs) + list(node.args.args)
         for idx, arg in enumerate(positional):
             name = arg.arg
-            if (arg.annotation is None and name not in self.variable_annotations
-                    and self.known_variable_types.get(name) == "dict"):
+            # The call-shape table is keyed by bare function name, and method
+            # calls (obj.f(...)) are never recorded in it -- so a method's
+            # lookup can only ever hit an unrelated same-named function's
+            # evidence. Skip the conventional receiver outright; it is never
+            # a dict passed positionally.
+            if idx == 0 and name in ("self", "cls"):
+                continue
+            if arg.annotation is None and name not in self.variable_annotations:
                 recovered = self._recover_param_dict_annotation(node.name, idx)
                 if recovered is not None:
+                    self.known_variable_types[name] = "dict"
                     self.variable_annotations[name] = recovered
 
     def _recover_param_dict_annotation(self, func_name, param_index):
@@ -1025,12 +1038,24 @@ class CoreVisitorsMixin:
     def _build_dict_annotation_from_literal(self, dict_node):
         """Build a concrete dict[K, V] annotation node from a dict literal.
 
-        Returns None when either the key or value type cannot be inferred from
-        the literal's first entry, so callers treat the shape as unknown.
+        Returns None when the literal contains a ** spread (a None key --
+        its contribution is unknowable statically), when any entry's key
+        annotation disagrees with the first entry's, or when the key or value
+        type cannot be inferred, so callers treat the shape as unknown.
         """
-        if not dict_node.keys or not dict_node.values or dict_node.keys[0] is None:
+        if not dict_node.keys or not dict_node.values or None in dict_node.keys:
             return None
         key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        if key_ann is None:
+            return None
+        # Every entry must agree with the first on the key annotation --
+        # trusting entry 0 alone would stamp {('A','B'): 1, 7: 2} as
+        # dict[tuple[str, str], int].
+        for k in dict_node.keys[1:]:
+            other = self._infer_dict_key_annotation(k)
+            if other is None or ast.dump(other) != ast.dump(key_ann):
+                return None
+        key_ann = self._size_tuple_str_components(key_ann, dict_node.keys)
         val_ann = self._infer_dict_value_annotation(dict_node.values[0])
         if key_ann is None or val_ann is None:
             return None
@@ -1039,6 +1064,55 @@ class CoreVisitorsMixin:
             slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
             ctx=ast.Load(),
         )
+
+    def _size_tuple_str_components(self, key_ann, keys):
+        """Embed a concrete byte length for each str component of a
+        tuple[str, ...] key annotation, when every key in this SAME dict
+        literal agrees on that component's exact UTF-8 byte length (the
+        quantity the C++ layers size structs with).
+
+        A bare 'str' component carries no size, so the C++ struct built for
+        the recovered tuple key ends up with a 0-byte placeholder for it --
+        unusable for anything beyond existence (any read is an out-of-bounds
+        access on a genuinely 0-byte object, #5444). Every key in a dict
+        literal is caller-stamped (not a body-usage guess), so when they all
+        agree on a component's length, that length is sound to encode; a
+        str-typed component whose keys disagree, or aren't all literal
+        strings, is left as bare 'str' -- the pre-existing (safe) refusal
+        path for that component.
+        """
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
+                and isinstance(key_ann.slice, ast.Tuple)):
+            return key_ann
+        elts = key_ann.slice.elts
+        for i, elt in enumerate(elts):
+            if not (isinstance(elt, ast.Name) and elt.id == "str"):
+                continue
+            sample = None
+            homogeneous = True
+            for k in keys:
+                if not (isinstance(k, ast.Tuple) and i < len(k.elts)):
+                    homogeneous = False
+                    break
+                comp = k.elts[i]
+                if not (isinstance(comp, ast.Constant) and isinstance(comp.value, str)):
+                    homogeneous = False
+                    break
+                # Agreement is on UTF-8 BYTE length -- the quantity the C++
+                # side sizes structs with (tuple_handler sizes as
+                # value.size()+1 on the UTF-8 encoded string, matching
+                # string_builder::build_string_literal). len() counts
+                # characters, which diverges for non-ASCII ('é' is 1 char, 2
+                # bytes) and would size the struct from one key while other
+                # keys occupy a different byte width.
+                if sample is None:
+                    sample = comp.value
+                elif len(comp.value.encode("utf-8")) != len(sample.encode("utf-8")):
+                    homogeneous = False
+                    break
+            if homogeneous and sample is not None:
+                elts[i] = ast.Constant(value=sample)
+        return key_ann
 
     def _infer_dict_key_annotation(self, key_node):
         """Build a full key-type annotation node (preserving tuple element types).
