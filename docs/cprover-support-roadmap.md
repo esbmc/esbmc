@@ -83,6 +83,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
+| Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -250,13 +251,19 @@ The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`
 whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`); the work is
 to bridge CBMC's encoding onto it rather than re-implement.
 
-### 4.7 Versioning & robustness (Phase 5)
-Only CBMC binary **version 6** is accepted. No graceful handling of other versions, and the
-reader `abort()`s on malformed input rather than returning a recoverable error.
+### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
+Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
+already a clean `log_error` + `return true`). The low-level reader no longer `abort()`s on
+malformed input: an over-wide varint (>32 bits), an over-long varint (>64 shift bits), and an
+unterminated irep now set a `cbmc_irep_readert::failed()` flag that short-circuits the rest of
+the parse (subsequent reads no-op, the S/N/C child loops stop) and surfaces through
+`parse_cbmc_goto`'s bool return as a recoverable error rather than crashing the whole process
+(PR #5811). Pinned by unit tests for each malformed shape plus a truncated-binary parse.
+**Still open:** multi-version tolerance (accept/adapt versions other than 6), and bounding the
+symbol/function/instruction counts so a corrupt-but-in-range count can't trigger a huge
+`reserve()` before the first element is read.
 
-### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca` landed, family audit still open
-### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`free` landed, family audit still open
-### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`fabsf` landed, family audit still open
+### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level
 FUNCTION_CALL targets**, not expression ireps. ESBMC's own C frontend never emits a real
 `malloc`/`sqrtf` function call at all — it recognises these calls **syntactically** and
@@ -305,13 +312,6 @@ statement)` and shared; `fix_builtin_call` rewrites `alloca`/`__builtin_alloca` 
 `sideeffect2t` allockind `alloca` → `symex_alloca`, automatic storage freed on function
 return). Tests `cbmc_alloca` (valid, SUCCESSFUL) / `cbmc_alloca_fail` (out-of-bounds, FAILED).
 
-**Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, and `alloca`/`__builtin_alloca` are
-recognised. `fabsf`/`ceilf`/`floorf`/`truncf`/`roundf` (§4.4/§4.8's original finding),
-`free`/`realloc`, and `printf`-family `goto_convertt::do_*` special-cases are the same class
-of gap and share the fix's shape (`fix_builtin_call` already dispatches on callee name —
-extending it is additive), but weren't attempted here to keep this change reviewable.
-`realloc` needs the `(ptr==NULL) ? malloc(size) : realloc(ptr,size)` conditional
-`do_realloc` builds.
 **`free` — ✅ landed (PR #5792).** Unlike the value-returning builtins, CBMC emits `free`
 as a *bodyless* `FUNCTION_CALL` external (it inlines its own `<builtin-library-free>` model,
 but the callee reaches the adapter as an undefined `free` symbol), so ESBMC returned nondet
@@ -324,22 +324,27 @@ before the nil-lhs guard and the caller derives the instruction type from the re
 statement. Tests `cbmc_free` (clean, SUCCESSFUL) / `cbmc_free_fail` (use-after-free, FAILED);
 double-free also verified against CBMC.
 
-**Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, and `free` are recognised. `fabsf`/`ceilf`/
-`floorf`/`truncf`/`roundf` (§4.4/§4.8's original finding), `alloca`/`realloc`, and
-`printf`-family `goto_convertt::do_*` special-cases are the same class of gap and share
-the fix's shape (`fix_builtin_call` already dispatches on callee name — extending it is
-additive), but weren't attempted here to keep this change reviewable. `alloca` mirrors
-`malloc` (`do_mem(false, ...)`, a `side_effect("alloca")` assign); `realloc` needs the
-`(ptr==NULL) ? malloc(size) : realloc(ptr,size)` conditional `do_realloc` builds.
-**Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, and `fabsf`/`fabs`/`fabsl` (the last
-rewritten to ESBMC's native `abs` expr, PR #5789) are recognised. `ceilf`/`floorf`/
-`truncf`/`roundf` (§4.4/§4.8's original finding), `free`/`alloca`/`realloc`, and
-`printf`-family `goto_convertt::do_*` special-cases are the same class of gap and share
-the fix's shape (`fix_builtin_call` already dispatches on callee name — extending it is
-additive), but weren't attempted here to keep this change reviewable. Note that
-`ceilf`/`floorf`/`truncf`/`roundf` differ from `fabs`/`sqrt`: ESBMC has no native
-expression form for them, so they go through the libm C operational model as bodied
-functions rather than an `fix_builtin_call` expr rewrite — a distinct mechanism.
+**`fabsf` — ✅ landed (PR #5789).** `fabsf`/`fabs`/`fabsl` are rewritten to ESBMC's native
+`abs` expr — the same shape `clang_c_adjust_expr.cpp` builds for a syntactically-recognised
+call; `migrate_expr`'s abs handler reads `op0()`, so `abs` is added to `fix_expression`'s
+operand-wrap set for the argument to reach it.
+
+**`nearbyint` / `fma` — ✅ landed (PR #5796).** Both are emitted by CBMC as bodyless
+`FUNCTION_CALL` externals but — unlike `ceilf`/`floorf`/`truncf`/`roundf` — have native expr
+forms `migrate_expr` computes concretely: `nearbyint`/`nearbyintf`/`nearbyintl` → the
+`nearbyint` expr, `fma`/`fmaf`/`fmal` → `ieee_fma`. Both default the rounding mode to
+`c:@__ESBMC_rounding_mode` like `ieee_sqrt`. `build_sqrt_rhs` was generalised to
+`build_unary_fp_rhs(lhs, args, id)` (shared by sqrt, nearbyint, and abs) and `ieee_fma` added
+to the operand-wrap set. Tests `cbmc_nearbyint`/`cbmc_fma` (+ `_fail`), all dyadic values.
+
+**Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, `alloca`/`__builtin_alloca`, `free`,
+`fabsf`/`fabs`/`fabsl`, `nearbyint`, and `fma` are recognised. `realloc` and `printf`-family
+`goto_convertt::do_*` special-cases are the same class of gap and share the fix's shape
+(`fix_builtin_call` already dispatches on callee name — extending it is additive), but
+weren't attempted here to keep each change reviewable. `realloc` needs the `(ptr==NULL) ?
+malloc(size) : realloc(ptr,size)` conditional `do_realloc` builds. `ceilf`/`floorf`/`truncf`/
+`roundf` are **out of shape** — they have no native expr form and route through the libm C
+operational model as bodied functions, a distinct mechanism.
 
 **`ceil`/`floor`/`trunc`/`round` (+`f`/`l`) — ✅ landed (PR #5814), via that distinct
 mechanism.** CBMC emits them as bodyless `FUNCTION_CALL` externals under their plain names
@@ -386,14 +391,8 @@ Each phase is independently shippable and gated by a concrete acceptance test.
 - Enumerate CBMC's expression/intrinsic vocabulary; add a tested mapping table; extend the
   intrinsic-call bodies (the synthesised additions) to cover them (§4.4, §4.5).
 - Recognise known builtin `FUNCTION_CALL` targets (`malloc` ✅, `sqrtf` ✅, `alloca` ✅,
-  `free`/`realloc`/other libm still open) and rewrite them to their native-pipeline
-  equivalents,
-- Recognise known builtin `FUNCTION_CALL` targets (`malloc` ✅, `sqrtf` ✅, `free` ✅,
-  `alloca`/`realloc`/other libm still open) and rewrite them to their native-pipeline
-  equivalents,
-- Recognise known builtin `FUNCTION_CALL` targets (`malloc` ✅, `sqrtf` ✅, `fabsf` ✅,
-  `free`/`alloca`/`realloc`/other libm still open) and rewrite them to their
-  native-pipeline equivalents,
+  `free` ✅, `fabsf` ✅, `nearbyint` ✅, `fma` ✅, `realloc`/other libm still open) and
+  rewrite them to their native-pipeline equivalents,
   the instruction-level counterpart to §4.4's expression-level rewriting (§4.8).
 - **Acceptance:** a curated suite of single-feature CBMC binaries (pointer predicates,
   overflow, byte ops, FP rounding, builtin calls) all verify to the CBMC verdict.

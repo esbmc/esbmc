@@ -3843,6 +3843,18 @@ originally scoped. Two findings from that work, folded into the plan:
   cannot lower from a legacy source — not migratable without a
   `migrate_expr` extension, out of scope for this task.
 
+  > **Correction (2026-07-04) — this boundary was never real; it is now drained.**
+  > `isinstance2t` and `isnone2t` have carried **both** `migrate_expr` arms
+  > (forward + back) since #3289 — forward at `migrate.cpp:600` / `:1839`, back at
+  > `:3661` / `:3677`. No extension was needed: the drain builds the custom node
+  > natively (`isinstance2tc` / `isnone2tc`) and back-migrates once, the exact
+  > standard idiom used everywhere else in V.3, not a forward-migration of a
+  > legacy `exprt("isinstance")`/`exprt("isnone")` source. Landed in
+  > #5790 (isinstance — `handle_isinstance`/`build_isinstance_check`) and #5791
+  > (isnone — `handle_none_comparison`), both `--goto-functions-only`
+  > byte-identical. The "out of scope, needs a `migrate_expr` extension" framing
+  > above was over-pessimistic and is superseded.
+
 **Follow-up (2026-07-01, same day):** the remaining documented residue —
 `python_math.cpp`'s floor-division/modulo sign-correction trees (`mod`, the
 bool `xor`/`and` from #4548, and the mismatched-branch `if`) — was migrated on
@@ -3901,7 +3913,10 @@ astgen-tempdir / unpack-temp non-determinism) across 9 representative
 numpy+python complex tests; 164 complex + 415/415 `regression/numpy` green. The
 only V.3 residual now is the `isinstance`/`isnone` custom-node retain boundary
 (needs a `migrate_expr` extension, out of scope), plus the V.1k keystone and
-what it unblocks (V.2/V.4/V.5/V.6).
+what it unblocks (V.2/V.4/V.5/V.6). *(Superseded 2026-07-04: the isinstance/
+isnone boundary was drained in #5790/#5791 — both `migrate_expr` arms existed
+since #3289, no extension needed. See the V.3 close-out entry below; the sole
+converter residual is now the F-P11 general-operand wall, blocked on V.1k.)*
 
 **Follow-up (2026-07-02) — the tuple-struct literal drain, now including the
 string-partition site.** The `struct_exprt` tuple-value construction was drained
@@ -3933,6 +3948,58 @@ shape tuple prints `ASSIGN s={ .element_0=2, .element_1=2 }` unchanged), the onl
 residual diff being the astgen-tempdir hash in `__file__` and GOTO timing; 36
 shape tests green (`tuple-from-list` is a pre-existing 70 s solver test that only
 timed out under `-j4`, not on the `.shape` path).
+
+#### V.3 close-out (2026-07-04) — the last named residuals drained; the clean converter surface is now fully drained
+
+The four remaining items the earlier status entries named as V.3 residual all
+landed on 2026-07-04, each a single-site drain via the standard
+build-native-then-back-migrate idiom, each `--goto-functions-only`
+byte-identical under the mandatory `--irep2-bodies` round-trip:
+
+- **#5790 — isinstance.** `handle_isinstance` / `build_isinstance_check`
+  (`builtins.cpp`, `python_typechecking.cpp`) now build `isinstance2tc`.
+- **#5791 — isnone.** `handle_none_comparison` (`converter_compare.cpp`) now
+  builds `isnone2tc`. Together with #5790 this **retires the "custom Python
+  node retain boundary"** the 2026-07-01 keystone entry flagged as needing a
+  `migrate_expr` extension — see the correction under that entry: both arms
+  existed since #3289, so no extension was needed.
+- **#5795 — boolean and/or.** The two *pure-boolean* return sites of the
+  `BoolOp` handler (`handle_logical_operator`, `converter_binop.cpp`) now emit
+  a left-nested `and2tc`/`or2tc` chain, matching
+  `handle_chained_comparisons_logic`.
+- **#5800 — last legacy arithmetic.** The slice-bound `signed_add`/`signed_sub`
+  (`list_access.cpp`) and the numpy conj `0.0 - imag` negation
+  (`numpy_call_expr.cpp`) now build `add2tc`/`sub2tc`. The `char_at_index`
+  pointer-deref path (`converter_compare.cpp`) is documented in-commit as
+  **un-gateable** (its dereference deliberately keeps the pointee's nil subtype
+  as the result type), so it is left legacy by design, not by omission.
+
+**The clean, behaviour-preserving V.3 converter surface is now fully drained.**
+A read-only sweep on 2026-07-04 confirms `src/python-frontend/converter/*.cpp`
+carries **zero** legacy relational/arith/logical/unary *result* constructors
+(`converter_unop.cpp` builds `not2t`/`neg2t`/`bitnot2t`; `converter_compare.cpp`
+builds `isnone2t`/`equality2t`/`not2t`; `converter_binop.cpp`'s chained-compare
+fold builds `and2t`). What remains is **exactly** the F-P11 general-operand
+wall, and it is blocked on V.1k by the plan's own RV2 gate — do not force it:
+
+- `build_binary_expression` (`converter_binop.cpp:~2360`) — the central binop
+  factory over **arbitrary user operands** whose member/index sources are
+  resolved only by the body-wide `clang_cpp_adjust` pass; building `<`/`+`/`==`
+  natively here would assert on unresolved / mismatched-width operands
+  (F-P11 + width-hazard).
+- the per-pair relational nodes inside `handle_chained_comparisons_logic`
+  (`:689`,`:700`) and the truthiness-coerced general `BoolOp` accumulator
+  (`:398`) — same wall; only the surrounding `and`/`or` *fold* was migratable,
+  not the per-pair relational *construction*.
+- the float-vs-string comparison node (`:2172`) — folded to a boolean constant
+  by `handle_float_vs_string`, so migrating it is zero-value and entangled.
+
+**Next task = the V.1k keystone** (the whole-body IREP2-native adjuster / the
+resolve-then-build service settled toward *materialise + replace* by the
+2026-06-30 spike). Every one-PR-per-site drain that could land ahead of it has
+now landed; the general-operand surface above cannot proceed until RV2 is
+discharged. See the ordered task list under *V.3 residual → the remaining tasks
+to reach 100 % IREP2* — task 1 is now the only open converter-side work.
 
 ### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
 Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
