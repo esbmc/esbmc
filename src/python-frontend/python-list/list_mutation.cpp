@@ -203,6 +203,15 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       elem_size_bytes = DEFAULT_SIZE;
     }
 
+    // A char array with statically-unknown length -- e.g. a string component
+    // recovered from a bare tuple[str, ...] annotation with no literal to
+    // size it from (#5444) -- is declared with 0 bytes of storage. Reading a
+    // real string out of it (e.g. via a runtime strlen) is not just
+    // unsizeable, it is a genuine out-of-bounds access on a 0-byte object:
+    // ESBMC's pointer-safety model has no bytes to dereference there, so a
+    // "recovered" size would report a spurious CWE-125 violation on
+    // perfectly valid Python instead of the real property. Refuse cleanly
+    // rather than fabricate an unsound size (issue #5444, deferred item 1).
     if (elem_size_bytes == 0)
     {
       throw std::runtime_error("Element size cannot be zero");

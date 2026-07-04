@@ -198,10 +198,13 @@ exprt python_typechecking::build_isinstance_check(
   else
     type_operand = gen_zero(effective_type);
 
-  exprt isinstance_expr("isinstance", typet("bool"));
-  isinstance_expr.copy_to_operands(value_expr);
-  isinstance_expr.move_to_operands(type_operand);
-  return isinstance_expr;
+  // V.3: build the isinstance node in IREP2. isinstance2t is a 2-operand
+  // custom kind with forward/back migrate arms (since #3289), so this is the
+  // exact round-trip of the legacy node.
+  expr2tc value2, type2;
+  migrate_expr(value_expr, value2);
+  migrate_expr(type_operand, type2);
+  return migrate_expr_back(isinstance2tc(value2, type2));
 }
 
 exprt python_typechecking::build_none_check(const exprt &value_expr) const

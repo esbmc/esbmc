@@ -198,7 +198,8 @@ void fix_expression(irept &irep)
     "isfinite",
     "nearbyint",
     "signbit",
-    "ieee_sqrt"};
+    "ieee_sqrt",
+    "abs"};
 
   const std::string cur = irep.id_string();
 
@@ -386,6 +387,22 @@ irept build_sqrt_rhs(const irept &lhs, const irept::subt &args)
   return result;
 }
 
+// Builds an "abs" exprt (irep shape), mirroring what
+// clang_c_adjust_expr.cpp builds for a syntactically-recognised
+// fabs/fabsf/fabsl call. Same unary shape as build_sqrt_rhs; migrate_expr's
+// abs handler reads op0(), so "abs" must be in fix_expression's operand-wrap
+// set for the argument to reach it.
+irept build_abs_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 1)
+    return get_nil_irep();
+
+  irept result(irep_idt("abs"));
+  result.add("type") = lhs.find("type");
+  result.get_sub().push_back(args[0]);
+  return result;
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -438,6 +455,8 @@ bool fix_builtin_call(irept &code)
     rhs = build_malloc_rhs(lhs, args);
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
     rhs = build_sqrt_rhs(lhs, args);
+  else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
+    rhs = build_abs_rhs(lhs, args);
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
 
