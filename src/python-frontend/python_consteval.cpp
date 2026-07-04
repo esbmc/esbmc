@@ -1553,9 +1553,42 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return PyConstValue::make_float(rounded);
     }
 
-    // Built-in: min(), max() for two int arguments
+    // Built-in: min(), max()
     if (func_name == "min" || func_name == "max")
     {
+      const bool want_min = (func_name == "min");
+
+      // A key=/default= keyword changes the result (min(s, key=...) compares
+      // key(x), not x), which this fold does not apply; defer such calls to the
+      // runtime model rather than fold a wrong value.
+      if (node.contains("keywords") && !node["keywords"].empty())
+        return std::nullopt;
+
+      // Single string argument: min/max over the characters, returning the
+      // extreme character as a one-character string (min("cba") == "a"). Other
+      // single-iterable kinds (lists, tuples) are left to the runtime model.
+      // Fold only over ASCII: a non-ASCII str is multi-byte UTF-8 in
+      // string_val, where a per-byte comparison does not match CPython's
+      // per-code-point ordering, so defer those to the runtime model. Compare
+      // as unsigned char so the ordering is by byte value.
+      if (node["args"].size() == 1)
+      {
+        auto it = eval_expr(node["args"][0], env);
+        if (!it || it->kind != PyConstValue::STRING || it->string_val.empty())
+          return std::nullopt;
+        unsigned char best = static_cast<unsigned char>(it->string_val[0]);
+        for (char c : it->string_val)
+        {
+          const unsigned char uc = static_cast<unsigned char>(c);
+          if (uc >= 0x80)
+            return std::nullopt;
+          if (want_min ? (uc < best) : (uc > best))
+            best = uc;
+        }
+        return PyConstValue::make_string(std::string(1, static_cast<char>(best)));
+      }
+
+      // Two int arguments: min(a, b) / max(a, b).
       if (node["args"].size() != 2)
         return std::nullopt;
       auto a = eval_expr(node["args"][0], env);
@@ -1564,7 +1597,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         !a || !b || a->kind != PyConstValue::INT ||
         b->kind != PyConstValue::INT)
         return std::nullopt;
-      if (func_name == "min")
+      if (want_min)
         return PyConstValue::make_int(std::min(a->int_val, b->int_val));
       return PyConstValue::make_int(std::max(a->int_val, b->int_val));
     }
