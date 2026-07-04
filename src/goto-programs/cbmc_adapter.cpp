@@ -239,7 +239,7 @@ void expand_anon_struct(const irept &self)
   const std::string ident = self.find("identifier").id_string();
   if (ident.size() < 11 || ident.compare(0, 10, "tag-#anon#") != 0)
     return;
-  log_error("CBMC adapter: unsupported anonymous struct {}", ident);
+  log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
   abort();
 }
 
@@ -296,7 +296,10 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
         fix_expression(p.second);
   }
 
-  if (self.id() != "struct_tag")
+  // struct_tag and union_tag are the two aggregate references CBMC emits; both
+  // resolve out of the same tag cache into their concrete definition.
+  const bool is_tag = self.id() == "struct_tag" || self.id() == "union_tag";
+  if (!is_tag)
   {
     for (auto &v : self.get_sub())
       fix_type(v, cache);
@@ -320,8 +323,8 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 
   self = it->second;
 
-  // The resolved struct may itself contain struct tags; redo the cache walk.
-  if (irep_contains(self, "struct_tag"))
+  // The resolved aggregate may itself contain tags; redo the cache walk.
+  if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
       fix_type(v, cache);
@@ -690,7 +693,8 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
 
   for (auto &sym : parsed.symbols)
   {
-    if (sym.is_type && sym.stype.id() == "struct")
+    if (
+      sym.is_type && (sym.stype.id() == "struct" || sym.stype.id() == "union"))
     {
       const std::string tagname = "tag-" + sym.base_name;
       fix_type(sym.stype, type_cache);
@@ -703,9 +707,10 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
   for (auto &symbol : out.symbols)
   {
     fix_type(symbol, type_cache);
-    if (irep_contains(symbol, "struct_tag"))
+    if (
+      irep_contains(symbol, "struct_tag") || irep_contains(symbol, "union_tag"))
     {
-      log_error("CBMC adapter: struct_tag should have been resolved");
+      log_error("CBMC adapter: struct_tag/union_tag should have been resolved");
       abort();
     }
     if (symbol.find("type").id() == "c_bool")
