@@ -1,0 +1,5 @@
+CORE
+main.cpp
+a.cpp b.cpp --unwind 2
+
+^VERIFICATION FAILED$
