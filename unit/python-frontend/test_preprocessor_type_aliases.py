@@ -401,6 +401,9 @@ def test_iterable_for_tuple_unpack_inserts_target_assignments():
     while_node = next((s for s in transformed.body if isinstance(s, ast.While)), None)
     assert while_node is not None, "Expected transformed while-loop"
 
+    # The loop lowering may bind the unpacked names either as per-index
+    # assignments (a = t[0]) or as a single tuple-target assignment
+    # (a, b = t) -- both define the names; collect through Tuple targets.
     assigned_names = []
     for stmt in while_node.body:
         if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
@@ -409,6 +412,9 @@ def test_iterable_for_tuple_unpack_inserts_target_assignments():
             for tgt in stmt.targets:
                 if isinstance(tgt, ast.Name):
                     assigned_names.append(tgt.id)
+                elif isinstance(tgt, ast.Tuple):
+                    assigned_names.extend(
+                        e.id for e in tgt.elts if isinstance(e, ast.Name))
 
     assert "a" in assigned_names, "Tuple-unpacked variable 'a' must be assigned"
     assert "b" in assigned_names, "Tuple-unpacked variable 'b' must be assigned"
@@ -451,7 +457,11 @@ def test_iterable_for_tuple_unpack_before_body_use():
         )
         or (
             isinstance(stmt, ast.Assign)
-            and any(isinstance(tgt, ast.Name) and tgt.id == "time" for tgt in stmt.targets)
+            and any(
+                (isinstance(tgt, ast.Name) and tgt.id == "time")
+                or (isinstance(tgt, ast.Tuple) and any(
+                    isinstance(e, ast.Name) and e.id == "time" for e in tgt.elts))
+                for tgt in stmt.targets)
         )
         for stmt in while_node.body[:first_time_use_idx]
     )

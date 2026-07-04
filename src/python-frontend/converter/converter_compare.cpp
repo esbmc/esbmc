@@ -518,10 +518,15 @@ exprt python_converter::handle_none_comparison(
     }
   }
 
-  // Create isnone expression with unwrapped operands
-  exprt isnone_expr("isnone", typet("bool"));
-  isnone_expr.copy_to_operands(lhs);
-  isnone_expr.copy_to_operands(rhs);
+  // Create isnone expression with unwrapped operands.
+  // V.3: build the isnone node in IREP2. isnone2t is a 2-operand custom kind
+  // with forward/back migrate arms (since #3289), so migrating the operands,
+  // building, and back-migrating once is the exact round-trip of the legacy
+  // node. Spike-1 confirmed the operands are already resolved at this site.
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  exprt isnone_expr = migrate_expr_back(isnone2tc(lhs2, rhs2));
 
   // If checking inequality, wrap with not
   if (!is_eq)

@@ -199,7 +199,8 @@ void fix_expression(irept &irep)
     "nearbyint",
     "signbit",
     "ieee_sqrt",
-    "ieee_fma"};
+    "ieee_fma",
+    "abs"};
 
   const std::string cur = irep.id_string();
 
@@ -332,14 +333,19 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   }
 }
 
-// Builds the malloc side_effect_exprt (irep shape) do_mem would have built,
-// falling back to element type char -- do_mem's own fallback whenever the
-// size argument isn't a recognisable sizeof(T) pattern, which a CBMC
+// Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
+// built, falling back to element type char -- do_mem's own fallback whenever
+// the size argument isn't a recognisable sizeof(T) pattern, which a CBMC
 // binary's argument never is (sizeof is constant-folded away by goto-cc
 // well before the .goto file exists). A byte-granularity allocation is a
-// sound, if less precise, model of any malloc(n) call regardless of the
-// pointer type it's later cast to.
-irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
+// sound, if less precise, model of any malloc(n)/alloca(n) call regardless of
+// the pointer type it's later cast to. `statement` selects "malloc" (dynamic
+// object) or "alloca" (automatic, freed on function return) -- migrate_expr
+// maps them to sideeffect2t allockind malloc/alloca respectively.
+irept build_mem_rhs(
+  const irept &lhs,
+  const irept::subt &args,
+  const char *statement)
 {
   if (args.size() != 1)
     return get_nil_irep();
@@ -358,7 +364,7 @@ irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
 
   irept sideeffect(irep_idt("sideeffect"));
   sideeffect.add("type") = lhs.find("type");
-  sideeffect.add("statement") = mk("malloc");
+  sideeffect.add("statement") = mk(statement);
   sideeffect.get_sub().push_back(args[0]);
   sideeffect.add("#size") = size_arg;
   sideeffect.add("#type") = static_cast<const irept &>(char_type());
@@ -425,19 +431,39 @@ bool fix_builtin_call(irept &code)
   if (sub.size() != 3 || sub[1].id() != "symbol")
     return false;
 
-  if (sub[0].is_nil())
-    return false; // do_mem/the AST rewrite are themselves no-ops here
-
   const std::string callee = sub[1].find("identifier").id_string();
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
-  const irept lhs = sub[0];
   const irept::subt args = sub[2].get_sub();
+
+  // free(ptr) returns void, so unlike the value-returning builtins below it has
+  // a nil lhs and lowers to an OTHER instruction carrying a "free" codet (the
+  // shape goto_convertt::do_free produces), not an assign. migrate_expr maps
+  // that to code_free2t -> symex_free, which actually deallocates and so lets
+  // ESBMC detect use-after-free on CBMC binaries (otherwise free is a bodyless
+  // external returning nondet and the deallocation is silently dropped).
+  if (callee == "free")
+  {
+    if (args.size() != 1)
+      return false;
+    const irept ptr = args[0];
+    code.set("statement", "free");
+    code.get_sub().clear();
+    code.get_sub().push_back(ptr);
+    return true;
+  }
+
+  if (sub[0].is_nil())
+    return false; // do_mem/the AST rewrite are themselves no-ops here
+
+  const irept lhs = sub[0];
 
   irept rhs;
   if (callee == "malloc")
-    rhs = build_malloc_rhs(lhs, args);
+    rhs = build_mem_rhs(lhs, args, "malloc");
+  else if (callee == "alloca" || callee == "__builtin_alloca")
+    rhs = build_mem_rhs(lhs, args, "alloca");
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
     rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
   else if (
@@ -445,6 +471,11 @@ bool fix_builtin_call(irept &code)
     rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
   else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
     rhs = build_fma_rhs(lhs, args);
+  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
+  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
+  // must be in fix_expression's operand-wrap set for the argument to reach it.
+  else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
+    rhs = build_unary_fp_rhs(lhs, args, "abs");
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
 
@@ -525,13 +556,13 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN; the instruction
-  // kind must agree with the rewritten code, not CBMC's original raw type.
-  // 13 is goto_program_instruction_typet::ASSIGN (shared numbering, see
-  // map_cbmc_instruction_type).
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...) or
+  // an OTHER "free" codet; the instruction kind must agree with the rewritten
+  // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
+  // numbering, see map_cbmc_instruction_type).
   result.add("typeid") = mk(
     rewrote_builtin_call
-      ? "13"
+      ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
 
