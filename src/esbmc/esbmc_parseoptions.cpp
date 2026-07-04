@@ -2297,18 +2297,10 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libm_bodies(goto_functionst &goto_functions)
 {
   static const char *const libm[] = {
-    "ceilf",
-    "ceil",
-    "ceill",
-    "floorf",
-    "floor",
-    "floorl",
-    "truncf",
-    "trunc",
-    "truncl",
-    "roundf",
-    "round",
-    "roundl"};
+    "ceilf",     "ceil",     "ceill",     "floorf", "floor", "floorl",
+    "truncf",    "trunc",    "truncl",    "roundf", "round", "roundl",
+    "copysignf", "copysign", "copysignl", "fminf",  "fmin",  "fminl",
+    "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",  "fdiml"};
 
   for (const char *name : libm)
   {
@@ -2351,10 +2343,14 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
     "void *const __esbmc_cbmc_libm_refs[] = {\n"
-    "  (void *)ceilf,  (void *)ceil,  (void *)ceill,\n"
-    "  (void *)floorf, (void *)floor, (void *)floorl,\n"
-    "  (void *)truncf, (void *)trunc, (void *)truncl,\n"
-    "  (void *)roundf, (void *)round, (void *)roundl,\n"
+    "  (void *)ceilf,     (void *)ceil,     (void *)ceill,\n"
+    "  (void *)floorf,    (void *)floor,    (void *)floorl,\n"
+    "  (void *)truncf,    (void *)trunc,    (void *)truncl,\n"
+    "  (void *)roundf,    (void *)round,    (void *)roundl,\n"
+    "  (void *)copysignf, (void *)copysign, (void *)copysignl,\n"
+    "  (void *)fminf,     (void *)fmin,     (void *)fminl,\n"
+    "  (void *)fmaxf,     (void *)fmax,     (void *)fmaxl,\n"
+    "  (void *)fdimf,     (void *)fdim,     (void *)fdiml,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
