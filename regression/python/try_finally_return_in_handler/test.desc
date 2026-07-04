@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 1
-^ERROR: try/finally with return/break/continue in the try, except, or finally body is not supported$
+^ERROR: try/finally with return/break/continue in the try, except, else, or finally body is not supported$
