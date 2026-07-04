@@ -205,10 +205,17 @@ $ esbmc example.c --k-induction --assertion-coverage
 [Coverage]
 
 Total Asserts: 2
+Unreached Asserts: 1
 Total Assertion Instances: 2
 Reached Assertion Instances: 1
 Assertion Instances Coverage: 50%
 ```
+
+The **`Unreached Asserts`** line counts the static assertions never observed
+during symbolic execution — either their branch was pruned by a constant guard
+or their path guard is unsatisfiable (so the claim is vacuously valid). Here the
+first assertion (`n < 100`) is never reached because `process(5)` only exercises
+the `else` branch.
 
 **Full coverage example:**
 
@@ -226,13 +233,18 @@ $ esbmc example.c --k-induction --assertion-coverage
 [Coverage]
 
 Total Asserts: 2
+Unreached Asserts: 0
 Total Assertion Instances: 2
 Reached Assertion Instances: 2
 Assertion Instances Coverage: 100%
 ```
 
-**Listing reached assertions.** Add `--assertion-coverage-claims` to print each
-reached assertion guard with its source location.
+**Listing reached and unreached assertions.** Add `--assertion-coverage-claims`
+to print every assertion claim with its source location, each tagged `REACHED`
+or `UNREACHED` — so assertions in dead or unsatisfiable-guard code are surfaced
+rather than silently dropped. The claim text preserves the assertion's message
+(e.g. `assert(x, "a stays even")` is listed as `'a stays even'`), making each
+claim identifiable in the output.
 
 ### Branch + Function Entry Coverage
 

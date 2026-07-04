@@ -441,10 +441,12 @@ exprt function_call_expr::handle_isinstance() const
     else
       t = gen_zero(expected_type);
 
-    exprt isinstance("isinstance", typet("bool"));
-    isinstance.copy_to_operands(obj_expr);
-    isinstance.move_to_operands(t);
-    return isinstance;
+    // V.3: build the isinstance node in IREP2 (isinstance2t is a 2-operand
+    // custom kind with forward/back migrate arms since #3289).
+    expr2tc obj2, t2;
+    migrate_expr(obj_expr, obj2);
+    migrate_expr(t, t2);
+    return migrate_expr_back(isinstance2tc(obj2, t2));
   };
 
   // Handle tuple of types: isinstance(v, (int, str, type(None)))
