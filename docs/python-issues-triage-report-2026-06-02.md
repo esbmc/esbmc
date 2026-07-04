@@ -3814,3 +3814,45 @@ The rest of the battery (`ljust`/`rjust`/`zfill`/`expandtabs`/`bit_length`/3-arg
 ### 77b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+## 81. 2026-07-04 re-validation (seventy-first sweep) & format() numeric mini-spec
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. The §80 sweep's
+battery flagged the `format()` builtin as a feature gap (it rejected every spec beyond a bare
+presentation type); this sweep closes it. Unlike the wrong-value sweeps this is a
+restore-working-behaviour feature, implemented **fail-closed** so it cannot introduce a false
+`SUCCESSFUL`.
+
+### 81a. Feature restored: the format-spec mini-language for numeric values
+**`format(value, spec)` folded only a bare base/type char; any width/alignment/precision/grouping
+spec (`format(5, "03d")`, `format(3.14, ".2f")`, `format(1000000, ",")`) errored "not supported"**,
+even though the `%`-operator already renders the equivalent forms.
+
+`handle_format` (`src/python-frontend/function_call/str_conv.cpp`) now parses the CPython
+format-spec grammar `[[fill]align][sign][#][0][width][grouping][.precision][type]` for a constant
+numeric value and renders the modelled subset: integer types `d`/`x`/`X`/`o`/`b` with
+width/zero-pad/alignment/fill/sign, `#` alternate-form prefixes, and `,`/`_` grouping; float types
+`f`/`F`/`e`/`E`/`g`/`G`/`%` with precision, sign, width, zero-pad and alignment (float rendering
+reuses the same `round_to_nearest_guard` + two-pass `snprintf` approach as the `%`-operator fold, so
+it matches CPython's round-half-to-even).
+
+**Fail-closed discipline.** The renderer returns `std::nullopt` for any feature or combination it
+does not fully model — the repr-like default float format, `c`/`n` types, `#`/grouping on floats,
+and grouping combined with zero/`=` padding (which needs the fill to participate in the grouping,
+`format(1234, "08,") == "0,001,234"`). The caller then rejects the spec with a clean error, exactly
+as before, so an unmodelled spec can never mis-fold into a false `SUCCESSFUL`. This preserves the
+report's "unsound fix is worse than an honest error" policy.
+
+**Validation.** A CPython differential harness enumerated **660 (value, spec) combinations** (12
+ints × 37 int specs + 10 floats × 24 float specs) and confirmed every folded result is **bit-for-bit
+identical to CPython** — zero mismatches. The deliberately-excluded specs were separately confirmed
+to reject with a clean error (never a false `SUCCESSFUL`, including against the correct CPython
+value). New regression pair `regression/python/builtin_format_numeric_spec{,_fail}` (CORE): the
+positive covers width/zero-pad/sign/base/alternate-form/grouping/alignment/fill for ints and
+precision/sign/width/zero-pad/`%`/exponent types for floats; the `_fail` pins the now-active
+`format(5, "03d") == "5"` as a real `FAILED`. All 14 existing `format`/`fstring`/`percent`
+regression tests pass unchanged (incl. the `github_4642` bignum trap and the `github_4807` nondet
+fallbacks); dual-solver Bitwuzla + Z3 agree; CPython sanity passes.
+
+### 81b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.

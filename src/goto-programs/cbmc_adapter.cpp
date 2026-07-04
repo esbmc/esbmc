@@ -199,6 +199,7 @@ void fix_expression(irept &irep)
     "nearbyint",
     "signbit",
     "ieee_sqrt",
+    "ieee_fma",
     "abs"};
 
   const std::string cur = irep.id_string();
@@ -370,23 +371,27 @@ irept build_mem_rhs(
   return sideeffect;
 }
 
-// Builds an ieee_sqrt exprt (irep shape), mirroring what
-// clang_c_adjust_expr.cpp builds for a syntactically-recognised sqrt/sqrtf/
-// sqrtl call. No explicit rounding_mode operand -- migrate_expr's ieee_sqrt
-// handler defaults to the standard c:@__ESBMC_rounding_mode symbol when one
-// isn't present, same as it does for the ieee_add/sub/mul/div family. That
-// default symbol is defined by esbmc_parseoptions.cpp's
-// synthesize_cprover_additions, which runs before read_cbmc_goto_object in
-// every *normal* --binary invocation, but not under --no-cprover-additions
-// -- currently masked there by an unrelated, pre-existing entry-point
-// resolution gap, not a live bug today, but not this function's to assume
-// away either.
-irept build_sqrt_rhs(const irept &lhs, const irept::subt &args)
+// Builds a unary floating-point exprt (irep shape) with the given id, mirroring
+// what clang_c_adjust_expr.cpp builds for a syntactically-recognised libm call
+// (sqrt/sqrtf/sqrtl -> ieee_sqrt, nearbyint/nearbyintf/nearbyintl ->
+// nearbyint). No explicit rounding_mode operand -- migrate_expr's ieee_sqrt /
+// nearbyint handlers default to the standard c:@__ESBMC_rounding_mode symbol
+// when one isn't present, same as the ieee_add/sub/mul/div family. That default
+// symbol is defined by esbmc_parseoptions.cpp's synthesize_cprover_additions,
+// which runs before read_cbmc_goto_object in every *normal* --binary
+// invocation, but not under --no-cprover-additions -- currently masked there by
+// an unrelated, pre-existing entry-point resolution gap, not a live bug today,
+// but not this function's to assume away either.
+irept build_unary_fp_rhs(
+  const irept &lhs,
+  const irept::subt &args,
+  const char *id)
 {
   if (args.size() != 1)
     return get_nil_irep();
 
-  irept result(irep_idt("ieee_sqrt"));
+  const irep_idt expr_id(id);
+  irept result(expr_id);
   result.add("type") = lhs.find("type");
   result.get_sub().push_back(args[0]);
   return result;
@@ -449,19 +454,18 @@ irept build_realloc_rhs(const irept &lhs, const irept::subt &args)
   return if_expr;
 }
 
-// Builds an "abs" exprt (irep shape), mirroring what
-// clang_c_adjust_expr.cpp builds for a syntactically-recognised
-// fabs/fabsf/fabsl call. Same unary shape as build_sqrt_rhs; migrate_expr's
-// abs handler reads op0(), so "abs" must be in fix_expression's operand-wrap
-// set for the argument to reach it.
-irept build_abs_rhs(const irept &lhs, const irept::subt &args)
+// Builds an ieee_fma exprt for fma(a, b, c) = a*b + c (single-rounding fused
+// multiply-add). migrate_expr reads op0/op1/op2 and defaults the rounding mode
+// like the rest of the ieee_* family (see build_unary_fp_rhs).
+irept build_fma_rhs(const irept &lhs, const irept::subt &args)
 {
-  if (args.size() != 1)
+  if (args.size() != 3)
     return get_nil_irep();
 
-  irept result(irep_idt("abs"));
+  irept result(irep_idt("ieee_fma"));
   result.add("type") = lhs.find("type");
-  result.get_sub().push_back(args[0]);
+  for (const irept &a : args)
+    result.get_sub().push_back(a);
   return result;
 }
 
@@ -520,9 +524,17 @@ bool fix_builtin_call(irept &code)
   else if (callee == "realloc")
     rhs = build_realloc_rhs(lhs, args);
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
-    rhs = build_sqrt_rhs(lhs, args);
+    rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
+  else if (
+    callee == "nearbyint" || callee == "nearbyintf" || callee == "nearbyintl")
+    rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
+  else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
+    rhs = build_fma_rhs(lhs, args);
+  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
+  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
+  // must be in fix_expression's operand-wrap set for the argument to reach it.
   else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
-    rhs = build_abs_rhs(lhs, args);
+    rhs = build_unary_fp_rhs(lhs, args, "abs");
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
 
