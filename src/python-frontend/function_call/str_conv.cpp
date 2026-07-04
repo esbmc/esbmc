@@ -5,6 +5,7 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -461,6 +462,10 @@ exprt function_call_expr::handle_int_to_bytes() const
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
+  // std::to_string uses %f, which honours the host rounding mode; an earlier
+  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
+  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
+  const round_to_nearest_guard rounding_guard;
   std::string str_val = std::to_string(arg["value"].get<double>());
 
   // Remove unnecessary trailing zeros and dot if needed (to match Python str behavior)
