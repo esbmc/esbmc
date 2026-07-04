@@ -37,10 +37,20 @@ public:
   /// Reads a word-tagged, cached irep reference (with S/N/C children).
   void read_reference(irept &dest);
 
+  /// True once a malformed encoding was hit. The reader then abandons the rest
+  /// of the parse cleanly (subsequent reads no-op) instead of aborting the
+  /// process, so a corrupt CBMC binary is a recoverable error rather than a
+  /// crash (roadmap §4.7). parse_cbmc_goto surfaces this as its bool return.
+  bool failed() const
+  {
+    return failed_;
+  }
+
 private:
   void read_irep(irept &dest);
 
   std::istream &in;
+  bool failed_ = false;
   std::map<unsigned, irept> irep_cache;
   std::map<unsigned, irep_idt> string_cache;
 };
