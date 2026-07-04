@@ -479,6 +479,15 @@ void clang_cpp_adjust::convert_exception_id(
   std::string cpp_type = type.get("#cpp_type").as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+
+  // Fallback: an unusual catch parameter type (e.g. a function type, as in the
+  // ill-formed `catch (exception())`) matches none of the cases above and would
+  // leave `ids` empty, which callers such as adjust_catch dereference via
+  // `ids.front()`. Emit the type's own id so the result is never empty; such a
+  // synthetic id simply never matches a real throw, which is the intended
+  // behaviour for a catch clause that cannot name a throwable type.
+  if (ids.empty())
+    ids.emplace_back(id2string(type.id()) + suffix);
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(
