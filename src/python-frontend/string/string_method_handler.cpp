@@ -273,6 +273,18 @@ std::string apply_format_spec(
     body = sgn + digits;
     default_align = '>';
   }
+  else if (kind == KIND_INT && type == 'c')
+  {
+    // {:c} formats an integer as the character with that code point. Fold only
+    // 1-127: code point 0 embeds a NUL, which the null-terminated string model
+    // represents unreliably (comparisons can truncate at it), and code points
+    // > 127 are multi-byte UTF-8 the single-byte string model cannot represent.
+    // Both degrade to the sound nondet fallback.
+    if (ival < 1 || ival > 127)
+      throw std::runtime_error("code point out of foldable range for {:c}");
+    body = std::string(1, static_cast<char>(ival));
+    default_align = '>';
+  }
   else if (
     kind == KIND_FLOAT && (type == 'f' || type == 'F' || type == 'e' ||
                            type == 'E' || type == 'g' || type == 'G'))
@@ -311,6 +323,28 @@ std::string apply_format_spec(
         num = " " + num;
     }
     body = num;
+    default_align = '>';
+  }
+  else if (kind == KIND_FLOAT && type == '%')
+  {
+    // {:%} multiplies by 100, formats like 'f' (default precision 6), and
+    // appends a literal '%'.
+    const round_to_nearest_guard rounding_guard;
+    const int pr = prec >= 0 ? prec : 6;
+    const double pct = dval * 100.0;
+    int n = std::snprintf(nullptr, 0, "%.*f", pr, pct);
+    if (n < 0)
+      throw std::runtime_error("format spec percent error");
+    std::string num(static_cast<size_t>(n), '\0');
+    std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*f", pr, pct);
+    if (!num.empty() && num[0] != '-')
+    {
+      if (sign == '+')
+        num = "+" + num;
+      else if (sign == ' ')
+        num = " " + num;
+    }
+    body = num + "%";
     default_align = '>';
   }
   else
