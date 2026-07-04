@@ -930,6 +930,13 @@ exprt function_call_expr::build_constant_from_arg() const
     if (value_expr.statement() == "cpp-throw")
       return value_expr;
 
+    // A custom object defining __bool__ decides its own truthiness; otherwise
+    // the value's own type (numeric/pointer) is cast to bool below.
+    exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+      "bool", value_expr, converter_.get_location_from_decl(call_));
+    if (!dunder_result.is_nil())
+      return dunder_result;
+
     if (is_complex_type(value_expr.type()))
       return complex_to_bool_expr(value_expr);
 
