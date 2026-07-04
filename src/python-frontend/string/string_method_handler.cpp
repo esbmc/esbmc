@@ -129,8 +129,23 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
     {
+      const double d = arg["value"].get<double>();
+      // A whole-number float below 1e16 renders in CPython's str() as its
+      // integer digits plus ".0" (str(1.0) == "1.0", str(1000000.0) ==
+      // "1000000.0"). The default ostream format got this wrong: it dropped the
+      // ".0" and switched to exponential at 1e6. Fold that case exactly. Every
+      // other float keeps the prior ostream behaviour, which already matches
+      // CPython's exponential form for |x| >= 1e16 and |x| < 1e-4; a fixed "%f"
+      // would only trade one divergence range for another.
+      if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
+      {
+        std::string s = std::to_string(static_cast<long long>(d));
+        if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
+          s.insert(s.begin(), '-');
+        return s + ".0";
+      }
       std::ostringstream oss;
-      oss << arg["value"].get<double>();
+      oss << d;
       return oss.str();
     }
     throw std::runtime_error("format() unsupported constant type");
