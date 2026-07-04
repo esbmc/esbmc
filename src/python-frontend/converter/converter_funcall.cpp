@@ -864,6 +864,21 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
+  // len(obj) where obj's class defines __len__: dispatch to obj.__len__().
+  // The builtin len path only recognises the model container types (list,
+  // tuple, dict, str/bytes), so a user-defined __len__ is otherwise ignored
+  // and len falls through to strlen over the struct — a wrong length.
+  if (
+    element.contains("func") && element["func"].is_object() &&
+    element["func"].value("_type", "") == "Name" &&
+    element["func"].value("id", "") == "len" && element.contains("args") &&
+    element["args"].is_array() && element["args"].size() == 1 &&
+    has_dunder_method(element["args"][0], "__len__"))
+  {
+    return get_expr(build_dunder_call(
+      element["args"][0], "__len__", nlohmann::json::array(), element));
+  }
+
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
 
