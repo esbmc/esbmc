@@ -909,6 +909,32 @@ exprt string_handler::apply_format_specification(
   if (format == "d" || format == "i" || format == "s")
     return convert_to_string(expr);
 
+  // The 'c' type renders an integer as the character with that code point.
+  // Fold only 1-127 (printable-through-DEL ASCII) for a constant integer:
+  // code point 0 embeds a NUL (unreliable in the null-terminated string model)
+  // and > 127 is multi-byte UTF-8, so those fall through to the nondet handling.
+  if (
+    format == "c" &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n) && n >= 1 && n <= 127)
+    {
+      std::vector<unsigned char> chars{
+        static_cast<unsigned char>(n.to_uint64()), '\0'};
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), 2));
+    }
+  }
+
   // Handle float formatting with precision
   else if (format.find(".") != std::string::npos && format.back() == 'f')
   {
