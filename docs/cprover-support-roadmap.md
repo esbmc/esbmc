@@ -111,9 +111,17 @@ empty program and could report a spurious SUCCESSFUL. Resolved by
 otherwise a CBMC binary dispatches into `__CPROVER__start`. Regression-tested with real
 CBMC 6.8.0 binaries (`cbmc_entry_bridge`, `cbmc_entry_bridge_fail`) — the failing-assert
 case is the load-bearing guard, since without bridging it would spuriously report
-SUCCESSFUL. **Open follow-up:** selecting a CBMC harness via `--function` still needs
-work — today it is consumed by the boilerplate-additions synthesis rather than reaching
-the retarget logic; the default `__CPROVER__start` bridge (the common case) is fixed.
+SUCCESSFUL. **`--function` harness selection — ✅ fixed (PR #5816).** Previously
+`--function myharness` aborted with `main symbol 'myharness' not found`: the harness names a
+function in the loaded CBMC binary, but `synthesize_cprover_additions` left `config.main` (set
+from `--function` by `config.cpp`) in place while compiling the boilerplate TU, so the
+boilerplate's own entry-point synthesis (`clang_c_main`) looked for the harness *there* and
+failed. Fixed by neutralising `config.main` for the boilerplate compile (mirroring the existing
+`cmdline.args` save/restore); the `create_goto_program` retarget then applies `--function` to
+the loaded binary. Verdict parity with CBMC tested both ways (`cbmc_harness`,
+`cbmc_harness_fail`) — the passing-harness case has a `main` with `assert(0)` to prove the
+harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow, which selects
+proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
 `cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming

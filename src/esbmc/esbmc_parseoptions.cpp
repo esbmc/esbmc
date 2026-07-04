@@ -2299,11 +2299,19 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   }
 
   // Point the command line at the boilerplate for this one compile, then
-  // restore it for the subsequent binary read.
+  // restore it for the subsequent binary read. The user's --function names a
+  // harness in the CBMC binary, not in this boilerplate, so also neutralise
+  // config.main (which config.cpp sets from --function) for the compile --
+  // otherwise the boilerplate's entry-point synthesis (clang_c_main) looks for
+  // that harness here and aborts with "main symbol not found". The retarget in
+  // create_goto_program applies --function to the loaded binary afterwards.
   cmdlinet::argst saved_args = cmdline.args;
+  const std::string saved_main = config.main;
   cmdline.args = {tf.path()};
+  config.main = "";
   bool failed = parse_goto_program(options, goto_functions);
   cmdline.args = saved_args;
+  config.main = saved_main;
 
   if (failed)
     log_error("failed to synthesize ESBMC additions for CBMC goto-binary");
