@@ -4,6 +4,7 @@
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/type_utils.h>
@@ -15,6 +16,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <optional>
@@ -775,56 +778,170 @@ exprt function_call_expr::handle_ascii() const
     "TypeError", "ascii() argument type not supported");
 }
 
-exprt function_call_expr::handle_format() const
+namespace
 {
-  const auto &args = call_["args"];
-  if (args.empty() || args.size() > 2)
-    throw std::runtime_error("format() takes one or two arguments");
-
-  // The format spec (default "") must be a constant string. Only a bare
-  // presentation-type spec is folded; any width/alignment/precision spec
-  // (e.g. "08x", ">10") is left unsupported rather than mis-folded.
-  std::string spec;
-  if (args.size() == 2)
+// Extract a constant double from a Constant or a unary +/-(Constant) node.
+bool const_double_from_json(const nlohmann::json &node, double &out)
+{
+  if (node.value("_type", std::string()) == "UnaryOp")
   {
-    if (!args[1].contains("value") || !args[1]["value"].is_string())
-      throw std::runtime_error(
-        "format() currently requires a constant string spec");
-    spec = args[1]["value"].get<std::string>();
+    double v;
+    if (node.contains("operand") && const_double_from_json(node["operand"], v))
+    {
+      const std::string k = node["op"].value("_type", std::string());
+      if (k == "USub")
+      {
+        out = -v;
+        return true;
+      }
+      if (k == "UAdd")
+      {
+        out = v;
+        return true;
+      }
+    }
+    return false;
   }
-  if (spec.size() > 1)
-    throw std::runtime_error("format() spec '" + spec + "' is not supported");
-  const char type = spec.empty() ? '\0' : spec[0];
-
-  // Integer value with a base spec ('d'/''/'x'/'X'/'o'/'b'). A bool is an int
-  // subclass in Python, but a JSON bool is not is_number_integer, so True/False
-  // fall through to the unsupported path below (rare for format()).
-  //
-  // Only a genuine literal value is folded — a Constant or a unary +/- over one.
-  // extract_constant_integer would also resolve a Name to its bound constant,
-  // but that value can be stale after a reassignment (`x = 255; x = 10`), which
-  // would mis-fold; a variable argument is left unsupported instead.
-  const std::string value_node_type = args[0].value("_type", std::string());
-  const bool is_literal_value =
-    value_node_type == "Constant" || value_node_type == "UnaryOp";
-  long long v = 0;
-  const bool is_int = is_literal_value && json_utils::extract_constant_integer(
-                                            args[0],
-                                            converter_.get_current_func_name(),
-                                            converter_.get_ast_json(),
-                                            v);
-  if (
-    is_int && (type == '\0' || type == 'd' || type == 'x' || type == 'X' ||
-               type == 'o' || type == 'b'))
+  if (node.contains("value") && node["value"].is_number())
   {
-    const bool negative = v < 0;
+    out = node["value"].get<double>();
+    return true;
+  }
+  return false;
+}
+
+bool is_align_char(char c)
+{
+  return c == '<' || c == '>' || c == '^' || c == '=';
+}
+
+// Insert `sep` into a magnitude digit string every `group` digits from the
+// right (the ',' / '_' thousands-separator options).
+std::string group_digits(const std::string &digits, char sep, int group)
+{
+  std::string out;
+  int cnt = 0;
+  for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+  {
+    if (cnt != 0 && cnt % group == 0)
+      out.push_back(sep);
+    out.push_back(*it);
+    ++cnt;
+  }
+  std::reverse(out.begin(), out.end());
+  return out;
+}
+
+// Constant-fold Python's format(value, spec) for a numeric value, matching
+// CPython for the modelled subset of the format-spec mini-language:
+//   [[fill]align][sign][#][0][width][grouping][.precision][type]
+// Returns std::nullopt for any feature or combination not fully modelled, so
+// the caller rejects the spec with a clean error rather than risk a wrong fold
+// (which could verify a false assertion as SUCCESSFUL).
+std::optional<std::string>
+py_format_number(bool is_int, long long ival, double dval, const std::string &s)
+{
+  size_t i = 0;
+  char fill = ' ';
+  char align = 0;
+  bool fill_specified = false;
+  // [[fill]align]: a fill char is present only when an align char follows it.
+  if (s.size() >= 2 && is_align_char(s[1]))
+  {
+    fill = s[0];
+    align = s[1];
+    fill_specified = true;
+    i = 2;
+  }
+  else if (!s.empty() && is_align_char(s[0]))
+  {
+    align = s[0];
+    i = 1;
+  }
+
+  char sign = '-';
+  if (i < s.size() && (s[i] == '+' || s[i] == '-' || s[i] == ' '))
+    sign = s[i++];
+
+  bool alt = false;
+  if (i < s.size() && s[i] == '#')
+  {
+    alt = true;
+    ++i;
+  }
+
+  bool zeropad = false;
+  if (i < s.size() && s[i] == '0')
+  {
+    zeropad = true;
+    ++i;
+    // CPython's '0' flag sets a '0' fill unless a fill char was explicit, and
+    // derives '=' alignment only when no alignment was given — the two effects
+    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill -> "00005").
+    if (!fill_specified)
+      fill = '0';
+    if (align == 0)
+      align = '=';
+  }
+
+  int width = 0;
+  while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i])))
+  {
+    width = width * 10 + (s[i++] - '0');
+    if (width > 1000000)
+      return std::nullopt;
+  }
+
+  char grouping = 0;
+  if (i < s.size() && (s[i] == ',' || s[i] == '_'))
+    grouping = s[i++];
+
+  int prec = -1;
+  if (i < s.size() && s[i] == '.')
+  {
+    ++i;
+    prec = 0;
+    while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i])))
+    {
+      prec = prec * 10 + (s[i++] - '0');
+      if (prec > 1000000)
+        return std::nullopt;
+    }
+  }
+
+  char type = 0;
+  if (i < s.size())
+    type = s[i++];
+
+  if (i != s.size())
+    return std::nullopt; // unparsed trailing characters
+
+  // Grouping combined with zero/'=' padding needs the fill to participate in
+  // the grouping (format(1234, "08,") == "0,001,234"); not modelled -> reject.
+  if (grouping != 0 && (zeropad || align == '='))
+    return std::nullopt;
+
+  bool negative = false;
+  std::string digits; // magnitude only (no sign)
+  std::string prefix; // 0x / 0o / 0b for '#'
+
+  if (is_int)
+  {
+    if (prec >= 0)
+      return std::nullopt; // precision is invalid for integer types
+    if (type == 0)
+      type = 'd';
+    if (type != 'd' && type != 'x' && type != 'X' && type != 'o' && type != 'b')
+      return std::nullopt; // 'c'/'n' and float types on an int: not modelled
+    if (grouping == ',' && type != 'd')
+      return std::nullopt; // ',' groups decimals only
+
+    negative = ival < 0;
     // Magnitude in the unsigned domain so LLONG_MIN does not overflow.
     unsigned long long mag = negative
-                               ? 0ULL - static_cast<unsigned long long>(v)
-                               : static_cast<unsigned long long>(v);
-
-    std::string digits;
-    if (type == '\0' || type == 'd')
+                               ? 0ULL - static_cast<unsigned long long>(ival)
+                               : static_cast<unsigned long long>(ival);
+    if (type == 'd')
       digits = std::to_string(mag);
     else
     {
@@ -836,20 +953,126 @@ exprt function_call_expr::handle_format() const
       for (; mag != 0; mag /= base)
         digits.insert(digits.begin(), alphabet[mag % base]);
     }
-    if (negative)
-      digits.insert(digits.begin(), '-');
-    return converter_.get_string_builder().build_string_literal(digits);
+    if (grouping != 0)
+      digits = group_digits(digits, grouping, (type == 'd') ? 3 : 4);
+    if (alt && type != 'd')
+      prefix = std::string("0") + ((type == 'X') ? 'X' : type);
+  }
+  else
+  {
+    // Float value: require an explicit float presentation type. The default
+    // (repr-like) float format, grouping and '#' are not modelled.
+    if (
+      type != 'f' && type != 'F' && type != 'e' && type != 'E' && type != 'g' &&
+      type != 'G' && type != '%')
+      return std::nullopt;
+    if (grouping != 0 || alt)
+      return std::nullopt;
+
+    double d = dval;
+    const bool percent = (type == '%');
+    if (percent)
+      d *= 100.0;
+    negative = std::signbit(d) && !std::isnan(d);
+    const double ad = negative ? -d : d;
+    const int p = prec >= 0 ? prec : 6;
+
+    const char conv =
+      percent
+        ? 'f'
+        : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
+    const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+    {
+      const round_to_nearest_guard guard;
+      const int n = std::snprintf(nullptr, 0, f, p, ad);
+      if (n < 0)
+        return std::nullopt;
+      digits.resize(static_cast<size_t>(n));
+      std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+    }
+    if (type == 'F' || type == 'E' || type == 'G')
+      for (char &ch : digits)
+        ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    if (percent)
+      digits.push_back('%');
+  }
+
+  const std::string sign_str =
+    negative ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
+
+  const std::string core = sign_str + prefix + digits;
+  const int core_len = static_cast<int>(core.size());
+  if (core_len >= width)
+    return core;
+
+  const int pad = width - core_len;
+  if (align == '=')
+    // Pad between the sign/prefix and the digits (fill is '0' for zero-pad).
+    return sign_str + prefix + std::string(pad, fill) + digits;
+  if (align == '<')
+    return core + std::string(pad, fill);
+  if (align == '^')
+  {
+    const int l = pad / 2; // extra fill goes on the right (CPython)
+    return std::string(l, fill) + core + std::string(pad - l, fill);
+  }
+  // Default and '>' : right-justify (numbers default to right alignment).
+  return std::string(pad, fill) + core;
+}
+} // namespace
+
+exprt function_call_expr::handle_format() const
+{
+  const auto &args = call_["args"];
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("format() takes one or two arguments");
+
+  // The format spec (default "") must be a constant string.
+  std::string spec;
+  if (args.size() == 2)
+  {
+    if (!args[1].contains("value") || !args[1]["value"].is_string())
+      throw std::runtime_error(
+        "format() currently requires a constant string spec");
+    spec = args[1]["value"].get<std::string>();
+  }
+
+  // Only a genuine literal value is folded — a Constant or a unary +/- over one.
+  // extract_constant_integer would also resolve a Name to its bound constant,
+  // but that value can be stale after a reassignment (`x = 255; x = 10`), which
+  // would mis-fold; a variable argument is left unsupported instead.
+  const std::string value_node_type = args[0].value("_type", std::string());
+  const bool is_literal_value =
+    value_node_type == "Constant" || value_node_type == "UnaryOp";
+
+  long long ival = 0;
+  const bool is_int = is_literal_value && json_utils::extract_constant_integer(
+                                            args[0],
+                                            converter_.get_current_func_name(),
+                                            converter_.get_ast_json(),
+                                            ival);
+  double dval = 0.0;
+  const bool is_float =
+    !is_int && is_literal_value && const_double_from_json(args[0], dval);
+
+  // Numeric value: fold the format-spec mini-language for the modelled subset.
+  // An unmodelled spec returns nullopt and falls through to the reject below.
+  if (is_int || is_float)
+  {
+    std::optional<std::string> folded =
+      py_format_number(is_int, ival, dval, spec);
+    if (folded)
+      return converter_.get_string_builder().build_string_literal(*folded);
   }
 
   // format(value) / format(value, "") on a constant string is the string
   // itself (the default str.__format__ with an empty spec).
-  if (type == '\0' && args[0].contains("value") && args[0]["value"].is_string())
+  if (spec.empty() && args[0].contains("value") && args[0]["value"].is_string())
     return converter_.get_string_builder().build_string_literal(
       args[0]["value"].get<std::string>());
 
   throw std::runtime_error(
-    "format() currently supports a constant int (with a base spec) or a "
-    "constant str");
+    "format() spec '" + spec + "' is not supported for this value");
 }
 
 exprt function_call_expr::handle_bin(nlohmann::json &arg) const
