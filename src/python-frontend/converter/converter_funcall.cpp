@@ -257,6 +257,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  // A callable instance: `c(args)` where c is an object whose class defines
+  // __call__. Calling the instance directly treats it as a function and aborts
+  // in to_code_type (the receiver's type is a class struct, not code). Rewrite
+  // it to `c.__call__(args)`, which dispatches as an ordinary instance method.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    !is_class(element["func"]["id"].get<std::string>(), *ast_json) &&
+    has_dunder_method(element["func"], "__call__"))
+  {
+    // Copy the whole Call node and replace only `func`, preserving `args` and
+    // `keywords` — a callable may be invoked with keyword arguments. (This is
+    // why build_dunder_call is not reused here: it drops keyword arguments.)
+    nlohmann::json call_node = element;
+    nlohmann::json attr;
+    attr["_type"] = "Attribute";
+    attr["value"] = element["func"];
+    attr["attr"] = "__call__";
+    for (const char *f : {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element["func"].contains(f))
+        attr[f] = element["func"][f];
+    call_node["func"] = attr;
+    return get_function_call(call_node);
+  }
+
   // Handle direct range(...) calls by converting to list
   if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
   {
