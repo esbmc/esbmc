@@ -1139,6 +1139,9 @@ std::size_t execution_statet::generate_hash() const
   for (const auto &it : threads_state)
     esbmct::hash_combine(h, it.source.pc->location_number);
 
+  esbmct::hash_combine(h, static_cast<std::size_t>(CS_number));
+  esbmct::hash_combine(h, static_cast<std::size_t>(active_thread));
+
   return h;
 }
 
