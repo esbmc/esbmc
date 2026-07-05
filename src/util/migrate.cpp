@@ -244,7 +244,8 @@ static type2tc migrate_type0(const typet &type)
     }
 
     irep_idt name = type.get("tag");
-    assert(name.as_string() != "");
+    if (name.as_string() == "")
+      name = type.get("name"); // CBMC serializes the aggregate tag under "name"
     return union_type2tc(members, names, pretty_names, name);
   }
 
