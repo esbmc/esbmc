@@ -818,6 +818,56 @@ exprt string_handler::apply_format_specification(
   if (format.empty())
     return convert_to_string(expr);
 
+  // Thousands grouping for an integer: "{:,}" / "{:,d}". Computed exactly for
+  // a constant integer value here; grouping combined with a width, sign
+  // option, or float presentation falls through to the existing handling
+  // (which uses a sound nondet fallback), so this never introduces a wrong
+  // value. Without this the ',' is not consumed and the whole format is a
+  // nondet string.
+  if (
+    (format == "," || format == ",d") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    // A negative literal is stored as unary- over a constant; fold it so
+    // grouping sees the concrete value.
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      std::string digits = integer2string(neg ? -n : n);
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      if (neg)
+        grouped = "-" + grouped;
+      std::vector<unsigned char> chars(grouped.begin(), grouped.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), grouped.size() + 1));
+    }
+  }
+
   // Pad/align prefix ([[fill]align][width]). Default-align right for
   // numerics and left for strings, matching CPython.
   char fill, align;
@@ -932,6 +982,54 @@ exprt string_handler::apply_format_specification(
       return make_char_array_expr(
         chars, type_handler_.build_array(char_type(), 2));
     }
+  }
+
+  // Integer base presentations: 'x'/'X' (hex), 'o' (octal), 'b' (binary), for a
+  // constant integer value (resolving a symbol's constant value and a negative
+  // unary- literal). A non-constant value falls through to the handling below.
+  if (
+    (format == "x" || format == "X" || format == "o" || format == "b") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      BigInt mag = neg ? -n : n;
+      const unsigned base = (format == "o") ? 8 : (format == "b") ? 2 : 16;
+      const char *alpha =
+        (format == "X") ? "0123456789ABCDEF" : "0123456789abcdef";
+      std::string digits;
+      if (mag == 0)
+        digits = "0";
+      while (mag != 0)
+      {
+        digits.insert(digits.begin(), alpha[(mag % base).to_uint64()]);
+        mag /= base;
+      }
+      const std::string out = (neg ? "-" : "") + digits;
+      std::vector<unsigned char> chars(out.begin(), out.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), out.size() + 1));
+    }
+    // A non-constant integer falls through: `format` is a base type, never a
+    // float spec, so the `else if` float branch below is correctly skipped and
+    // the tail nondet fallback handles it.
   }
 
   // Handle float formatting with precision
