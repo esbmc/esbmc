@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 #define VIAGEM_MSG "Distance traveled: "
