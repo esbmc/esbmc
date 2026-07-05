@@ -1585,7 +1585,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           if (want_min ? (uc < best) : (uc > best))
             best = uc;
         }
-        return PyConstValue::make_string(std::string(1, static_cast<char>(best)));
+        return PyConstValue::make_string(
+          std::string(1, static_cast<char>(best)));
       }
 
       // Two int arguments: min(a, b) / max(a, b).
