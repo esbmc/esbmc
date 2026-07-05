@@ -188,7 +188,7 @@ print(len(d.get('properties',[])))
     # ------------------------------------------------------------------
     esbmc_log="$RESULTS_DIR/${label}_esbmc.log"
     echo -n "  [ESBMC] Running ... "
-    read -r esbmc_time esbmc_rc <<< "$(run_timed "$esbmc_log" \
+    read -r esbmc_time _ <<< "$(run_timed "$esbmc_log" \
         "$ESBMC" "$ld_file" --ld-props "$props_file" \
         --k-induction --z3 --no-div-by-zero-check 2>&1 || true)"
     ESBMC_VERDICT=$(esbmc_verdict "$esbmc_log")
