@@ -914,8 +914,7 @@ exprt string_handler::apply_format_specification(
   // code point 0 embeds a NUL (unreliable in the null-terminated string model)
   // and > 127 is multi-byte UTF-8, so those fall through to the nondet handling.
   if (
-    format == "c" &&
-    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+    format == "c" && (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
   {
     exprt v = expr;
     if (v.is_symbol())
