@@ -5227,12 +5227,19 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       }
       else if (arg.is_constant())
       {
-        // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+        // Constant array (e.g. a folded string concat or a str-method result
+        // like "{}".format(x)) must be materialized before address_of_exprt.
+        // The DECL alone leaves the temp uninitialised, so strlen/get_object_size
+        // over it reads nondet bytes and runs past the array bounds; emit an
+        // explicit assignment of the constant value (mirrors the list path).
         symbolt &tmp = converter_.create_tmp_symbol(
-          call_, "$const_str_arg$", arg.type(), arg);
+          call_, "$const_str_arg$", arg.type(), exprt());
         code_declt tmp_decl(build_symbol(tmp));
         tmp_decl.location() = location;
         converter_.current_block->copy_to_operands(tmp_decl);
+        code_assignt tmp_assign(build_symbol(tmp), arg);
+        tmp_assign.location() = location;
+        converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
       call.arguments().push_back(build_address_of(arg));
