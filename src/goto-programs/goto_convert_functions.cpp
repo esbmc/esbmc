@@ -141,6 +141,22 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   }
 }
 
+bool goto_convert_functionst::try_convert_body_native(
+  const expr2tc &body2 [[maybe_unused]],
+  goto_programt &dest [[maybe_unused]])
+{
+  // W1-loc spike Phase C (esbmc/esbmc#4715) — incremental IREP2-native body
+  // consumption. No statement kind is handled natively yet, so this reports
+  // "unsupported" for every body and the caller falls back to the legacy
+  // round-trip (flag-on == flag-off, byte-for-byte). The dispatcher will grow
+  // one kind at a time — first the location-free structural leaves
+  // (skip/goto/label/break/continue), then the value statements whose operands
+  // inherit the enclosing code_*2t::location (assign/expression/return/…) —
+  // each addition gated on byte-identical GOTO. `dest` is left untouched on the
+  // unsupported path so a partial walk can never corrupt the fallback body.
+  return false;
+}
+
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.id;
@@ -213,7 +229,17 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets.has_return_value =
     to_code_type(f.type).ret_type->type_id != type2t::empty_id;
 
-  goto_convert_rec(code, f.body);
+  // W1-loc spike Phase C (esbmc/esbmc#4715): --irep2-native-body routes the
+  // body through the IREP2-native dispatcher, which consumes code_*2t directly
+  // (no whole-body legacy round-trip) and inherits statement locations onto
+  // value operands. Until every kind in this body is supported it returns
+  // false and we fall back to goto_convert_rec on the round-tripped `code`, so
+  // flag-on is byte-identical to flag-off. `code`/`end_location` above are
+  // still computed from the round-trip; the native path only replaces the
+  // body-instruction dispatch.
+  if (!(options.get_bool_option("irep2-native-body") &&
+        try_convert_body_native(symbol.get_value2(), f.body)))
+    goto_convert_rec(code, f.body);
 
   // add non-det return value, if needed
   if (targets.has_return_value)
