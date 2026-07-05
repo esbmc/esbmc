@@ -226,25 +226,53 @@ std::string python_annotation<Json>::resolve_subscript_type(
   // List subscript
   if (base_type == "list")
   {
-    const bool is_slice =
+    // A Name slice referencing a *list*-typed variable is fancy indexing
+    // through a variable (`idx = [0, 2]; a[idx]`); unlike a Name slice
+    // referencing a scalar variable (plain `a[i]`), it selects multiple
+    // elements and stays list-typed, same as a literal index list.
+    bool slice_is_list_var = false;
+    if (
       subscript_node.contains("slice") &&
       subscript_node["slice"].contains("_type") &&
-      subscript_node["slice"]["_type"] == "Slice";
+      subscript_node["slice"]["_type"] == "Name" &&
+      subscript_node["slice"].contains("id"))
+    {
+      const std::string idx_name = subscript_node["slice"]["id"];
+      Json idx_node =
+        json_utils::find_var_decl(idx_name, get_current_func_name(), ast_);
+      std::string idx_base_type, idx_element_type;
+      if (
+        !idx_node.empty() && idx_node.contains("annotation") &&
+        !idx_node["annotation"].is_null() &&
+        extract_type_info(idx_node["annotation"], idx_base_type, idx_element_type) &&
+        idx_base_type == "list")
+        slice_is_list_var = true;
+    }
+
+    // A `Slice` (`a[1:3]`) or a literal index list (`a[[0, 2]]`, NumPy fancy
+    // indexing) both select multiple elements and stay list-typed; only a
+    // single Name/Constant/UnaryOp index narrows to the element type.
+    const bool is_multi_result =
+      (subscript_node.contains("slice") &&
+       subscript_node["slice"].contains("_type") &&
+       (subscript_node["slice"]["_type"] == "Slice" ||
+        subscript_node["slice"]["_type"] == "List")) ||
+      slice_is_list_var;
 
     // First try to use the element_type from annotation (e.g., list[int])
     if (!element_type.empty())
-      return is_slice ? "list[" + element_type + "]" : element_type;
+      return is_multi_result ? "list[" + element_type + "]" : element_type;
 
     // Try to infer from initialization if available
     if (var_node.contains("value") && !var_node["value"].is_null())
     {
       std::string inferred = get_list_subtype(var_node["value"]);
       if (!inferred.empty())
-        return is_slice ? "list[" + inferred + "]" : inferred;
+        return is_multi_result ? "list[" + inferred + "]" : inferred;
     }
 
     // Last resort: return Any for unknown list element types
-    return is_slice ? "list" : "Any";
+    return is_multi_result ? "list" : "Any";
   }
 
   // String subscript: str[index] returns str
