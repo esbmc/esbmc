@@ -283,6 +283,39 @@ void python_lambda::process_lambda_parameters(
 
     context_.add(param_symbol);
   }
+
+  // Trailing positional parameters may carry default values
+  // (lambda x, y=2: ...). Record them on the argument slots so the call site
+  // fills omitted arguments, matching process_function_arguments for defs;
+  // without this the omitted parameter is left nondet.
+  if (
+    args_node.contains("defaults") && args_node["defaults"].is_array() &&
+    !args_node["defaults"].empty())
+  {
+    const auto &defaults = args_node["defaults"];
+    const size_t n_args = lambda_type.arguments().size();
+    const size_t defaults_count = defaults.size();
+    if (defaults_count <= n_args)
+    {
+      for (size_t i = 0; i < defaults_count; ++i)
+      {
+        if (defaults[i].is_null())
+          continue;
+        auto &arg = lambda_type.arguments()[n_args - defaults_count + i];
+        exprt default_expr = converter_.get_expr(defaults[i]);
+        // String/aggregate defaults need the string_constantt + address-of
+        // conversion that finalize_call applies to def parameters, which is not
+        // yet wired through the lambda indirect-call path. Record only scalar
+        // defaults; a string default is left as the existing nondet rather than
+        // a mis-cast pointer.
+        if (default_expr.type().is_array() || arg.type().is_pointer())
+          continue;
+        if (default_expr.type() != arg.type())
+          default_expr = typecast_exprt(default_expr, arg.type());
+        arg.default_value() = default_expr;
+      }
+    }
+  }
 }
 
 exprt python_lambda::process_lambda_body(
