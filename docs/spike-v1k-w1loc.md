@@ -2,7 +2,9 @@
 
 **Program:** repo-wide "IREP2-native frontend→goto pipeline" (the Part V umbrella, #4715).
 **This issue:** the mandatory first spike. Read-only investigation + one throw-away prototype.
-**Owner:** TBD. **Status:** proposed. **Refs:** #4715, Part V of `docs/irep2-migration.md`.
+**Owner:** TBD. **Status:** Phase A executed (2026-07-05) — census complete, **D3
+provisionally selected, D1 ruled out**; Phase B corpus measurement pending. See
+Appendix A. **Refs:** #4715, Part V of `docs/irep2-migration.md`.
 
 ---
 
@@ -177,3 +179,55 @@ it unblocks (native goto-convert across all frontends, then per-frontend flips)
 remains multi-quarter / multi-engineer / dozens of PRs (RV1) — but this spike is
 the cheap, decisive experiment that says whether literal 100% is reachable at
 acceptable cost, or whether W1-loc stays a documented boundary.
+
+---
+
+## Appendix A — Phase A census result (executed 2026-07-05)
+
+Deliverable (1). Read-only enumeration of **every site that reads a location off a
+value operand** during goto-conversion / side-effect removal, over
+`src/goto-programs/goto_convert*.cpp`, `goto_convert_side_effect.cpp`,
+`goto_sideeffects.cpp`, `remove_*.cpp`. The set is far smaller than "every value
+node", which is the first favourable signal.
+
+**The complete operand-location-read set.**
+
+| # | Site | What it reads | Distinct-per-operand, or statement-inherited? |
+|---|---|---|---|
+| 1 | `goto_sideeffects.cpp:213` (`&&`/`||` short-circuit lowering; the doc's cited `:242` consumer) | `op.location() = expr.location();` then the generated `IF`/`if_exprt` reads `op.location()` at `:225/:227/:234/:236` | **Inherited by construction** — the operand's own location is *overwritten* with the enclosing expr's before it is ever read. Self-labelled "This is a hack for now." Q-LOC holds trivially here. |
+| 2 | `goto_convert.cpp:1255` (`convert_dowhile`) | `code.op0().find_location()` — the do-while **condition** operand | The **only** genuinely per-operand read. But post-round-trip the condition's location is whatever `restore_value_locations` stamped = the inherited statement location; so today's bytes already come from inheritance. |
+| — | `goto_sideeffects.cpp:122` | `expr.find_location()` — the **enclosing** side-effect expr (stamps the generated decl/assignment at `:128/:134`) | Statement-level, not a per-operand read. |
+| — | `goto_sideeffects.cpp:108` | quantifier expr location | Statement-level (the quantifier node itself). |
+
+Writes that stamp *generated* instructions all copy the **enclosing** expr's
+location (`goto_convert.cpp:514/516` `then/else_case().location() = expr.location()`;
+the `.location() = expr.location()` family throughout `goto_sideeffects.cpp`) —
+i.e. inheritance, never a distinct operand location.
+
+**The decisive mechanism.** `restore_value_locations` / `stamp_value_locations`
+(`goto_convert_functions.cpp:99-140`), the pass that supplies operand locations
+after the body round-trip, is **pure inheritance**: it pushes each statement's own
+`#location` down onto every location-less value operand (`stamp_value_locations`
+takes a single `loc` and recurses; `restore_value_locations` lets each nested
+statement govern its subtree). So the pipeline *already* sources operand locations
+by inheritance, not by preserving distinct per-node locations.
+
+**Q-LOC verdict (in-code, within the goto-convert scope W1-loc touches).** Every
+operand location the pipeline consumes to generate an instruction is the enclosing
+statement's location — forced (`:213`), inherited (`restore_value_locations`), or
+(the one distinct read, `:1255`) resolved to the inherited value post-round-trip.
+**Consequence: D3 (inherit at consumption time, no per-node storage) reproduces
+today's bytes by construction; D1 (per-node `location` on `expr2t`) is
+unnecessary; D2's located-operand set reduces to ≈{do-while condition}, itself
+inheritance-satisfiable.** This does not by itself discharge the whole spike —
+**Phase B** must still confirm empirically over the corpus that no frontend places
+a genuinely-distinct operand location that some read *outside* this census
+consumes — but it removes the largest cost driver the V.4 outcome cited (per-node
+location carriage) from the table before any prototype is written.
+
+**Next (Phase B).** Instrument `restore_value_locations` to log, per operand, the
+pre-round-trip operand location vs. the inherited statement location it re-stamps,
+over `regression/{esbmc,python,cbmc}`; tabulate the equality rate and characterise
+every inequality (multi-line expr / macro / generated temp). A ~100 % equality
+rate promotes D3 from "provisional" to "selected" and unblocks the Phase C
+Python-only `--irep2-native-body` prototype.
