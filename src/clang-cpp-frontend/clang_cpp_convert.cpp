@@ -26,6 +26,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/exception_specification.h>
 #include <util/string_constant.h>
@@ -1853,10 +1854,81 @@ bool clang_cpp_convertert::get_function_body(
           new_member.op0() = init_sym;
 
           /* 1. array_init$.member = rhs; */
-          initializer = side_effect_exprt("assign", new_member.type());
-          initializer.move_to_operands(new_member, rhs);
-          initializer.location() = new_expr.location();
-          initializers.push_back(initializer);
+          const bool is_ctor_call = rhs.id() == "sideeffect" &&
+                                    rhs.statement() == "function_call" &&
+                                    rhs.get_bool("constructor");
+
+          /* Bound the per-element construction: unrolling one constructor call
+           * per leaf element is only viable for modestly-sized fixed arrays.
+           * Large arrays -- e.g. the ~1024-element internal buffers of STL
+           * container operational models -- would otherwise explode the VCC
+           * count. Above the bound we keep constructing just the representative
+           * element 0 (the behaviour prior to this change), so those cases are
+           * unchanged. (The static/global path in clang_cpp_main.cpp unrolls
+           * without this bound; proper bounded-loop construction is future
+           * work for both.) */
+          const bool is_fixed_array = ns.follow(new_member.type()).is_array();
+          const BigInt max_unroll = 64;
+          BigInt total_elements = 1;
+          for (typet t = ns.follow(new_member.type()); t.is_array();
+               t = ns.follow(to_array_type(t).subtype()))
+          {
+            BigInt dim;
+            if (to_integer(to_array_type(t).size(), dim))
+            {
+              /* unknown size: treat as large */
+              total_elements = max_unroll + 1;
+              break;
+            }
+            total_elements *= dim;
+          }
+
+          if (is_ctor_call && is_fixed_array && total_elements <= max_unroll)
+          {
+            /* A single CXXConstructExpr for an array member stands for
+             * constructing *every* element (e.g. `B b_array[2];` runs B's
+             * default ctor twice).  adjust_side_effect_assign lowers an
+             * `array = ctor()` assign to a single `ctor(&array)` call, which
+             * only constructs element 0.  Emit one per-element assign instead
+             * so every leaf element is constructed, recursing into nested
+             * arrays.  Mirrors the static/local path in clang_cpp_main.cpp. */
+            std::function<void(const exprt &)> construct_elements =
+              [&](const exprt &arr) {
+                const array_typet &arr_type =
+                  to_array_type(ns.follow(arr.type()));
+                BigInt count;
+                if (to_integer(arr_type.size(), count))
+                {
+                  log_error(
+                    "cannot determine array size for member ctor init");
+                  abort();
+                }
+
+                const typet &elem_type = arr_type.subtype();
+                for (BigInt idx = 0; idx < count; ++idx)
+                {
+                  index_exprt element(
+                    arr, from_integer(idx, index_type()), elem_type);
+                  if (ns.follow(elem_type).is_array())
+                  {
+                    construct_elements(element);
+                    continue;
+                  }
+                  side_effect_exprt elem_init("assign", elem_type);
+                  elem_init.copy_to_operands(element, rhs);
+                  elem_init.location() = new_expr.location();
+                  initializers.push_back(elem_init);
+                }
+              };
+            construct_elements(new_member);
+          }
+          else
+          {
+            initializer = side_effect_exprt("assign", new_member.type());
+            initializer.move_to_operands(new_member, rhs);
+            initializer.location() = new_expr.location();
+            initializers.push_back(initializer);
+          }
 
           /* 2. *this = array_init$; */
           initializer = side_effect_exprt("assign", this_sym.type());
