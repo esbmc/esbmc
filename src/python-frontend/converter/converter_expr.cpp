@@ -810,6 +810,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           "Cannot resolve attribute '{}' on subscript result", attr_name);
         abort();
       }
+      else if (element["value"]["_type"] == "Call")
+      {
+        // Attribute access on an inline call result, e.g. `C().attr`. Convert
+        // the call to its (materialised) instance and resolve the member on
+        // it, the same way `d[k].attr` is handled above. A named instance
+        // (`c = C(); c.attr`) already works; this covers the unnamed case.
+        exprt base_expr = get_expr(element["value"]);
+        const std::string &attr_name = element["attr"].get<std::string>();
+
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
+        {
+          expr = resolved;
+          break;
+        }
+
+        log_error("Cannot resolve attribute '{}' on call result", attr_name);
+        abort();
+      }
       else
       {
         log_error(
