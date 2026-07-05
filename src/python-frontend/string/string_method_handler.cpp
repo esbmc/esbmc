@@ -851,7 +851,8 @@ static bool is_ascii_compatible_encoding_json(const nlohmann::json &node)
   }
 
   const std::string encoding = node["value"].get<std::string>();
-  return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8") ||
+  return boost::iequals(encoding, "utf-8") ||
+         boost::iequals(encoding, "utf8") ||
          boost::iequals(encoding, "ascii") ||
          boost::iequals(encoding, "us-ascii");
 }
@@ -912,7 +913,8 @@ std::optional<exprt> dispatch_decode_join_method(
         receiver_json.contains("args") && receiver_json["args"].is_array() &&
         receiver_json["args"].size() == 1)
       {
-        encode_utf8 = is_ascii_compatible_encoding_json(receiver_json["args"][0]);
+        encode_utf8 =
+          is_ascii_compatible_encoding_json(receiver_json["args"][0]);
       }
 
       if (
