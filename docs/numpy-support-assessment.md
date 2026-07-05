@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-07-02.
+**Updated:** 2026-07-05.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
@@ -9,6 +9,54 @@ module. Completed items are in the git history and `regression/numpy/`.
 
 ## Recently completed
 
+- **Array type preservation for `Any`-annotated subscript assignment**
+  (`row = a[i]`, `col = a[:,j]`, `sel = a[[0,2]]`, `sel = a[mask]`) — the
+  Python-side static annotator has no visibility into a numpy array's
+  runtime shape, so a bare-variable assignment of a subscript result used
+  to fall back to the uninformative `Any` type, storing the value
+  generically (`void*`) instead of preserving the array type; a later
+  `row[0]` either read a `NONDET` value or, for a 2-D result (e.g.
+  `a[mask]` row selection), crashed the irep2 index constructor.  Fixed by
+  `python_converter::resolve_any_subscript_array_type`
+  (`converter_stmt.cpp`), which probes the RHS's real type when the
+  annotation resolves to `Any` and the RHS is a `Subscript`, adopting the
+  array type when the *source* array is at most 2-D (rejecting a 3-D+
+  source explicitly — the resulting slice's nesting depth alone can't
+  distinguish a legitimate 2-D row/column/fancy/mask selection from a
+  3-D-derived one, so the check looks at the source instead). A
+  fancy/mask/column-select result is already a materialized temp symbol
+  and copies via a normal whole-array assignment; a plain `a[i]` chain is
+  a raw index expression instead, which the backend cannot assign
+  whole-array-to-whole-array (Z3 sort mismatch, same class of issue as the
+  "whole-array assignment is not backend-safe" note below) — the final
+  store copies it element by element instead
+  (`any_subscript_array_needs_copy_`). A companion annotator fix
+  (`python_annotation::resolve_subscript_type`,
+  `annotation_conversion.inl`) was needed alongside: a literal index list
+  (`a[[0, 2]]`) or a `Name` slice referencing a *list*-typed variable
+  (`idx = [0, 2]; a[idx]`) was misclassified as a single-element scalar
+  index (same code path as plain `a[i]`), annotating the result as a bare
+  scalar instead of `Any`/list-typed and producing a confusing `'int'
+  object is not subscriptable` error one level up.
+- **Fancy indexing through a variable index list** (`idx = [0, 2];
+  a[idx]`) — `idx` must resolve to a single, unambiguous literal
+  assignment of concrete integers (mirroring the mask-reassignment guard
+  below); resolved via `json_utils::find_var_decl` /
+  `has_multiple_assignments_in_scope` and dispatched to the existing
+  `python_list::build_fancy_index`, so all of its literal validation
+  (integer-only, bounds-checked) and 2-D row-selection support apply
+  unchanged (`converter_expr.cpp`).
+- **`np.linalg.det`** — already fully implemented and tested (2×2, 3×3,
+  negative values, non-square/ragged/complex/non-numeric rejection, near-
+  singular, negative-zero, row-swap-sign) prior to this PR; the
+  `docs/numpy-support-assessment.md` snapshot describing it as missing was
+  stale (last touched in an earlier PR that didn't update this file). The
+  only real gap found was the operational-model stub's signature
+  (`models/numpy/linalg.py`), which declared `det(a: float, b: float)` —
+  wrong shape for an API that takes one matrix-like argument; the stub's
+  body is never executed (`det` dispatches entirely through
+  `numpy_call_expr.cpp` before the model's Python body would run), so this
+  was a documentation/API-surface fix only, not a behavioural one.
 - **2-D slicing `a[:,j]` and `a[i,:]`** — column selection copies `row[j]`
   across every row of a fixed-shape 2-D array into a fresh 1-D array
   (`python_list::build_column_select`); row selection reuses the existing
@@ -84,23 +132,14 @@ instead. Any future n-D indexing work that selects whole sub-arrays should
 follow the same column-by-column pattern rather than a single array-level
 assignment.
 
-### Implementation note: pre-existing gap surfaced by this work
+### Implementation note: whole-array assignment applies to plain subscript chains too
 
-Assigning *any* subscript result whose static type is a fixed-size array
-(not just the new 2-D slicing/fancy/mask results — also the pre-existing
-`row = a[i]` chained-index case) to a **bare, unannotated variable**
-produces `NONDET` assertions (or, for nested 2-D results, an internal
-assertion failure) instead of a sound value. Root cause: the Python-side
-static annotator has no visibility into a numpy array's runtime shape, so
-it falls back to the uninformative `Any` type for such assignments, and
-`get_var_assign`'s `Any`-annotated path stores the value generically
-(effectively `void*`) rather than preserving the array type. This is
-**pre-existing and independent of this PR's features** (reproduces with
-plain `row = a[i]` on master before this change); all regression tests
-added by this PR avoid it by chaining the subscript inline (e.g.
-`a[i, :][0]` instead of `row = a[i, :]; row[0]`) rather than fixing the
-underlying type-inference gap, which is a separate, larger change. See
-"Prioritised next steps" below.
+The Any-fix above hit the same backend limitation described in the note
+above it: `row = a[i]` produces a raw index expression (not a
+materialized temp symbol like the fancy/mask/column helpers already use),
+so the final store cannot use a single whole-array-to-whole-array
+`code_assignt` and instead copies element by element
+(`any_subscript_array_needs_copy_` in `converter_stmt.cpp`).
 
 ---
 
@@ -108,10 +147,9 @@ underlying type-inference gap, which is a separate, larger change. See
 
 | Feature | Status | Notes |
 |---|---|---|
-| Assigning an array-typed subscript result to a bare variable | Missing | `row = a[i]` / `row = a[i, :]` / `row = a[[0,2]]` / `row = a[mask]` all lose their type via the `Any`-annotation fallback; works only when the subscript is used inline. See implementation note above. |
-| Fancy indexing through a variable (`idx = [0, 2]; a[idx]`) | Missing | Only a literal index list at the subscript site (`a[[0, 2]]`) is resolved; a `Name` holding an int array still raises the explicit "fancy indexing with a non-boolean array" error. |
 | Symbolic/non-literal boolean-mask row selection | Missing | `build_bool_mask_row_select` requires the mask to be a concrete literal (`np.array([True, False])`) resolved from its AST declaration; a mask built from nondet/computed values is rejected explicitly (no unsound fallback). |
 | Strided slicing `a[::2]` | Untested | List slice model supports step but not tested for NumPy arrays |
+| `a[i, j, k]` and n-D tuple indexing | Missing | Only up to 2-D indexing (single axis, or one axis sliced) is modelled; 3-D+ tuple indices are rejected explicitly. |
 
 ---
 
@@ -122,7 +160,7 @@ underlying type-inference gap, which is a separate, larger change. See
 | Array creation | `empty` |
 | Sorting / searching | `sort`, `argsort`, `searchsorted`, `unique` |
 | Statistics | `std`, `var`, `median`, `percentile` |
-| Linear algebra | `det`; `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
+| Linear algebra | `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
 | Random | `np.random.*` (all) |
 | Structured arrays | Record dtypes |
 | Views / strides | No aliasing model — all ops copy |
@@ -141,9 +179,6 @@ underlying type-inference gap, which is a separate, larger change. See
 3. **Scalability wall** (#5121): every array is a fully-unrolled value list.
    Large arrays explode. Symbolic shapes mitigate this via `--unwind` but do
    not eliminate the underlying state-explosion for large bounds.
-4. **Bare-variable assignment of array-typed subscript results** loses type
-   information (see implementation note above) — a real but pre-existing
-   soundness/usability gap, not introduced by this PR.
 
 ---
 
@@ -156,24 +191,13 @@ Either model correctly or downgrade to explicit "unsupported".
 
 ## Prioritised next steps
 
-1. **Fix the `Any`-annotation fallback for array-typed subscript results**
-   (see implementation note above) — `get_var_assign`'s reconciliation for
-   `current_element_type == any_type()` already special-cases a `char*`
-   RHS; extending it to array/pointer-to-array RHS is the natural fix, but
-   the *declared* type must land as a plain array (not a decayed
-   pointer-to-array) for downstream subscripting to resolve correctly —
-   the naive version of this fix was reverted during this PR after it
-   produced a `pointer(array)`-typed symbol that broke subscript dispatch.
-   This unblocks `row = a[i, :]` / `row = a[[0,2]]` / `row = a[mask]` style
-   code, which today only works when the subscript is inlined.
-2. **Fancy indexing through a variable index list** (`idx = [0, 2];
-   a[idx]`) — extend `build_fancy_index`'s literal-list requirement to also
-   accept a `Name` reference whose declaration is a literal int list,
-   mirroring how `build_bool_mask_row_select` reads a mask's declaration.
-3. **`linalg.det`** — 2×2 = `ad-bc`, 3×3 = cofactor expansion; same pattern
-   as `linalg.inv`. 3 regression tests.
-4. **`np.std` and `np.var`** — bounded loops using `build_list_at_call` +
+1. **`np.std` and `np.var`** — bounded loops using `build_list_at_call` +
    arithmetic expression builder; `np.mean` already exists. 4 tests each.
+2. **Symbolic/non-literal boolean-mask row selection** — needs a design
+   decision (see "Out of scope" below) before implementation.
+3. **`a[i, j, k]` and n-D tuple indexing** — a larger frontend change; only
+   worth picking up once the 2-D indexing surface above is exercised more
+   in the field.
 
 ### Out of scope
 - `np.random.*` — nondeterminism model requires a separate design decision.
