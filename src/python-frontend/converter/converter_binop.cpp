@@ -780,12 +780,12 @@ exprt python_converter::handle_membership_operator(
       if (s && s->get_type().is_struct())
         struct_t = s->get_type();
     }
-    symbolt *method =
-      struct_t.is_struct()
-        ? find_dunder_method(
-            extract_class_name_from_tag(to_struct_type(struct_t).tag().as_string()),
-            "__contains__")
-        : nullptr;
+    symbolt *method = struct_t.is_struct()
+                        ? find_dunder_method(
+                            extract_class_name_from_tag(
+                              to_struct_type(struct_t).tag().as_string()),
+                            "__contains__")
+                        : nullptr;
     if (method)
     {
       const code_typet &method_type = to_code_type(method->get_type());
