@@ -966,6 +966,27 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to an array literal.
+   *
+   *  Mirrors symex_assign_structure for a constant_array lhs: project each
+   *  element out and recurse, so a reconstituted array (e.g. an array-typed
+   *  struct member surfaced by symex_assign_structure) is assigned
+   *  element-wise instead of hitting the unhandled-lhs abort.
+   *
+   *  @param lhs Array literal to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to the array
+   *  @param guard Guard of the current assignment
+   */
+  void symex_assign_array_structure(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to a union.
    *
    *  @param lhs Symbol to assign to
