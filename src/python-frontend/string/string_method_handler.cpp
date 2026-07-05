@@ -241,9 +241,8 @@ std::string apply_format_spec(
   // converts the int to a float first, so the (double) cast reproduces its
   // rounding exactly for every value in range (both round to nearest-even).
   if (
-    kind == KIND_INT &&
-    (type == 'f' || type == 'F' || type == 'e' || type == 'E' || type == 'g' ||
-     type == 'G'))
+    kind == KIND_INT && (type == 'f' || type == 'F' || type == 'e' ||
+                         type == 'E' || type == 'g' || type == 'G'))
   {
     dval = static_cast<double>(ival);
     kind = KIND_FLOAT;
