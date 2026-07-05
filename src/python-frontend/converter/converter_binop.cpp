@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
 #include <python-frontend/round_to_nearest_guard.h>
@@ -753,6 +754,52 @@ exprt python_converter::handle_membership_operator(
       // `x in (a, b, c)` is element-wise equality, with string elements
       // compared by content. handle_tuple_membership builds the OR chain.
       return tuple_handler_->handle_tuple_membership(lhs, rhs, invert, element);
+    }
+  }
+
+  // A user class defining __contains__: `x in obj` dispatches to
+  // obj.__contains__(x). Under the object model an instance is a Class*
+  // pointer, so check the pointee struct as well as a by-value struct.
+  // Without this a class instance falls through to the string-membership path
+  // below (a pointer) and yields a wrong result.
+  if (
+    is_user_class_pointer(rhs_resolved_type) ||
+    is_user_class_struct_type(rhs_resolved_type))
+  {
+    typet struct_t = rhs_resolved_type.is_pointer()
+                       ? rhs_resolved_type.subtype()
+                       : rhs_resolved_type;
+    // is_user_class_* accepts an as-yet-unbuilt tag-<Class> symbol (and even an
+    // imported-module class), so resolve the struct non-fatally rather than via
+    // the asserting ns.follow. If the struct is not registered in this TU, fall
+    // through to the native list/string paths below instead of aborting.
+    if (struct_t.id() == "symbol")
+    {
+      const symbolt *s =
+        symbol_table_.find_symbol(to_symbol_type(struct_t).get_identifier());
+      if (s && s->get_type().is_struct())
+        struct_t = s->get_type();
+    }
+    symbolt *method =
+      struct_t.is_struct()
+        ? find_dunder_method(
+            extract_class_name_from_tag(to_struct_type(struct_t).tag().as_string()),
+            "__contains__")
+        : nullptr;
+    if (method)
+    {
+      const code_typet &method_type = to_code_type(method->get_type());
+      // A migrated instance is already a Class* self argument (pass it
+      // through); a by-value struct operand needs its address taken.
+      exprt self_arg = rhs.type().is_pointer() ? rhs : gen_address_of(rhs);
+      exprt call = python_expr::build_call_expr(
+        *method, method_type.return_type(), {self_arg, lhs});
+      call.location() = get_location_from_decl(element);
+      if (!invert)
+        return call;
+      expr2tc c2;
+      migrate_expr(call, c2);
+      return migrate_expr_back(not2tc(c2));
     }
   }
 
