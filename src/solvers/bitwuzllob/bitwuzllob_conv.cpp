@@ -160,8 +160,24 @@ smt_resultt bitwuzllob_convt::dec_solve()
 
   /* The (check-sat) goes to both sinks: the formula file for Mallob, and the
    * local model solver's pipe (if configured), which starts solving in
-   * parallel and only gets waited for when a model is actually needed. */
-  emit_check_sat();
+   * parallel and only gets waited for when a model is actually needed. The
+   * model solver only produces counterexamples, so if it has died (e.g. it
+   * failed to start), disable it and let Mallob decide: an unsat proof needs
+   * no model, and a sat result reports the missing-model error below rather
+   * than crashing on an uncaught exception. */
+  try
+  {
+    emit_check_sat();
+  }
+  catch (const external_process_died &)
+  {
+    log_warning(
+      "bitwuzllob: the local model solver '{}' terminated unexpectedly (e.g. "
+      "it failed to start); continuing without counterexample support",
+      options.get_option("bitwuzllob-model-prog"));
+    emit_proc.terminate();
+    flush(); // complete the formula file for Mallob now that the pipe is gone
+  }
 
   smt_resultt res = run_bitwuzllob();
   if (res != P_SATISFIABLE)
@@ -172,18 +188,38 @@ smt_resultt bitwuzllob_convt::dec_solve()
     return res;
   }
 
+  /* A satisfiable formula needs a live model solver to turn into a
+   * counterexample. It is absent either because the model solver died above
+   * (a command was given) or was never configured; the message distinguishes
+   * the two, but neither is a reason to crash. */
   if (!emit_proc)
   {
     if (options.get_bool_option("result-only"))
       return P_SATISFIABLE;
-    log_error(
-      "bitwuzllob: formula is satisfiable, but building the counterexample "
-      "requires a local interactive SMT-LIB2 solver; re-run with "
-      "--bitwuzllob-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only");
-    abort();
+    if (options.get_option("bitwuzllob-model-prog").empty())
+      log_error(
+        "bitwuzllob: formula is satisfiable, but building the counterexample "
+        "requires a local interactive SMT-LIB2 solver; re-run with "
+        "--bitwuzllob-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only");
+    else
+      log_error(
+        "bitwuzllob: the local model solver is unavailable; cannot build a "
+        "counterexample");
+    return P_ERROR;
   }
 
-  smt_resultt model_res = read_check_sat_response();
+  smt_resultt model_res;
+  try
+  {
+    model_res = read_check_sat_response();
+  }
+  catch (const external_process_died &)
+  {
+    log_error(
+      "bitwuzllob: the local model solver is unavailable; cannot build a "
+      "counterexample");
+    return P_ERROR;
+  }
   if (model_res != P_SATISFIABLE)
   {
     log_error(

@@ -804,18 +804,23 @@ static std::string read_all(FILE *in)
 template <typename... Ts>
 void smtlib_convt::emit(const Ts &...ts) const
 {
-  if (emit_proc)
-    emit_proc.emit(ts...);
+  /* Write the formula file first: its writes never fail, and (for the
+   * bitwuzllob backend) it is the mono solver's source of truth. Only then
+   * feed the interactive model-solver pipe, whose write throws
+   * external_process_died if the solver has died — leaving the file complete
+   * so the caller can still recover. */
   if (emit_opt_output)
     emit_opt_output.emit(ts...);
+  if (emit_proc)
+    emit_proc.emit(ts...);
 }
 
 void smtlib_convt::flush() const
 {
-  if (emit_proc)
-    emit_proc.flush();
   if (emit_opt_output)
     emit_opt_output.flush();
+  if (emit_proc)
+    emit_proc.flush();
 }
 
 smtlib_convt::process_emitter::operator bool() const noexcept
@@ -1092,8 +1097,15 @@ smt_astt smtlib_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 
 int smtliberror(int startsym [[maybe_unused]], const std::string &error)
 {
+  /* Throw rather than abort: an unparseable response means the external solver
+   * gave us nothing usable (typically because it died and the read hit EOF).
+   * A backend that can recover — e.g. bitwuzllob, whose model solver only
+   * builds counterexamples — catches this; otherwise do_bmc() turns it into a
+   * clean P_ERROR. Unwinding out of the generated parser skips its stack
+   * cleanup, so the parser/lexer must not be re-entered after this throw; no
+   * caller does — each abandons the solver on failure. */
   log_error("SMTLIB response parsing: \"{}\"", error);
-  abort();
+  throw smtlib_convt::external_process_died(error);
 }
 
 void smtlib_convt::push_ctx()

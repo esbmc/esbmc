@@ -395,6 +395,9 @@ public:
 
   static const std::string temp_prefix;
 
+  /** Thrown when the external solver process can no longer provide a usable
+   *  answer: a write hit EPIPE (the process died) or its response could not be
+   *  parsed (typically EOF from a dead process). */
   struct external_process_died : std::runtime_error
   {
     using std::runtime_error::runtime_error;
