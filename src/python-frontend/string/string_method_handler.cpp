@@ -478,14 +478,21 @@ std::optional<exprt> dispatch_splitlines_method(
 
   const nlohmann::json *keepends_node = resolve_positional_or_keyword_arg(
     method_name, args, keyword_values, "keepends", 0, false);
-  if (keepends_node != nullptr && !is_falsey_constant(*keepends_node))
+  bool keepends = false;
+  if (keepends_node != nullptr)
   {
-    throw std::runtime_error(
-      "splitlines() with keepends=True is not supported");
+    // The split is folded at conversion time, so keepends must be a compile-
+    // time constant; a non-constant flag falls back to the unsupported error.
+    if (
+      !keepends_node->contains("_type") ||
+      (*keepends_node)["_type"] != "Constant")
+      throw std::runtime_error(
+        "splitlines() with a non-constant keepends is not supported");
+    keepends = !is_falsey_constant(*keepends_node);
   }
 
   return self.handle_string_splitlines(
-    call_json, get_receiver_expr(), get_location());
+    call_json, get_receiver_expr(), get_location(), keepends);
 }
 
 struct split_method_argst
@@ -2791,7 +2798,8 @@ exprt string_handler::handle_string_removesuffix(
 exprt string_handler::handle_string_splitlines(
   const nlohmann::json &call,
   const exprt &string_obj,
-  const locationt &location)
+  const locationt &location,
+  bool keepends)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
@@ -2822,9 +2830,13 @@ exprt string_handler::handle_string_splitlines(
   {
     if (input[i] == '\n' || input[i] == '\r')
     {
-      parts.push_back(input.substr(start, i - start));
+      size_t term_len = 1;
       if (input[i] == '\r' && (i + 1) < input.size() && input[i + 1] == '\n')
-        ++i;
+        term_len = 2;
+      // keepends retains the line terminator(s) in the line; otherwise the
+      // line is the content before them.
+      parts.push_back(input.substr(start, (i - start) + (keepends ? term_len : 0)));
+      i += term_len - 1;
       start = i + 1;
     }
   }
