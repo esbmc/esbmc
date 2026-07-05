@@ -274,7 +274,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     attr["_type"] = "Attribute";
     attr["value"] = element["func"];
     attr["attr"] = "__call__";
-    for (const char *f : {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    for (const char *f :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
       if (element["func"].contains(f))
         attr[f] = element["func"][f];
     call_node["func"] = attr;
