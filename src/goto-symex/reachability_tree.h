@@ -342,8 +342,20 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Set of state hashes we've discovered */
-  std::set<std::size_t> hit_hashes;
+  /** State hashes we've discovered, mapped to the fewest context switches
+   *  (CS_number) any already-explored node with that hash was reached with --
+   *  i.e. the deepest, most-remaining-budget exploration of that state. A
+   *  revisit is pruned only when it has spent at least that many switches: with
+   *  a finite --context-bound the set of states reachable from a node depends
+   *  not just on (variable values, thread PCs) -- which is all generate_hash()
+   *  captures -- but also on how many switches remain, so a node reached with
+   *  fewer switches can reach interleavings an earlier deeper visit was cut off
+   *  from. Keying only on the hash (the pre-fix behaviour) prunes the
+   *  richer-budget node and can drop the very interleavings that expose a bug
+   *  (e.g. a data race first reachable at the extra switch). With no bound the
+   *  first visit explores the whole subtree, so check_for_hash_collision()
+   *  prunes any repeat regardless of the stored count. */
+  std::unordered_map<std::size_t, int> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

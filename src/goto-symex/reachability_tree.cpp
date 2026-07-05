@@ -406,10 +406,21 @@ bool reachability_treet::check_for_hash_collision() const
   const execution_statet &ex_state = get_cur_state();
 
   std::size_t hash = ex_state.generate_hash();
-  if (hit_hashes.find(hash) != hit_hashes.end())
-    return true;
+  auto it = hit_hashes.find(hash);
+  if (it == hit_hashes.end())
+    return false;
 
-  return false;
+  // With no --context-bound the first visit to a state explores its whole
+  // subtree, so any later repeat is redundant. With a bound, the reachable
+  // subtree also depends on the remaining switch budget (CS_bound - CS_number),
+  // which generate_hash() does not capture: a visit that has used *fewer*
+  // switches keeps more budget and can reach interleavings an earlier deeper
+  // visit was cut off from. So prune only when this visit has spent at least as
+  // many switches as the fewest-switch prior visit -- it then has no more
+  // budget and can reach nothing new. See hit_hashes.
+  if (CS_bound < 0)
+    return true;
+  return ex_state.get_context_switch() >= it->second;
 }
 
 void reachability_treet::post_hash_collision_cleanup()
@@ -423,7 +434,14 @@ void reachability_treet::update_hash_collision_set()
   execution_statet &ex_state = get_cur_state();
 
   std::size_t hash = ex_state.generate_hash();
-  hit_hashes.insert(hash);
+  int used = ex_state.get_context_switch();
+  auto it = hit_hashes.find(hash);
+  if (it == hit_hashes.end())
+    hit_hashes.emplace(hash, used);
+  else if (used < it->second)
+    // Remember the deepest (fewest-switch, most-budget) exploration of this
+    // state; a later visit is redundant only if it spends at least this many.
+    it->second = used;
 }
 
 void reachability_treet::remove_hash_collision_entry()
