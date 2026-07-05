@@ -2835,7 +2835,8 @@ exprt string_handler::handle_string_splitlines(
         term_len = 2;
       // keepends retains the line terminator(s) in the line; otherwise the
       // line is the content before them.
-      parts.push_back(input.substr(start, (i - start) + (keepends ? term_len : 0)));
+      parts.push_back(
+        input.substr(start, (i - start) + (keepends ? term_len : 0)));
       i += term_len - 1;
       start = i + 1;
     }
