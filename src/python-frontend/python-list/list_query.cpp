@@ -854,17 +854,46 @@ exprt python_list::build_index_range_list_call(
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
 
   // Args: (list, &value-or-ptr, type_id, size, start, end). The start/end
-  // Python ints are cast to the model's int64_t parameters by the call.
-  exprt call = build_call_expr(
-    *func,
-    size_type(),
-    {build_symbol(list),
-     element_arg,
-     build_symbol(*elem_info.elem_type_sym),
-     elem_info.elem_size,
-     start,
-     end});
-  call.location() = elem_info.location;
+  // Python ints are cast to the model's int64_t parameters by the call. The
+  // model returns SIZE_MAX when the element is absent in l[start:end]; raise a
+  // ValueError from the frontend on that path so try/except ValueError can
+  // catch it, mirroring the dict KeyError and list.remove ValueError lowerings.
+  symbolt &idx = converter_.create_tmp_symbol(
+    op, "index_range_ret", size_type(), exprt());
+  code_declt idx_decl(build_symbol(idx));
+  idx_decl.location() = elem_info.location;
+  converter_.add_instruction(idx_decl);
 
-  return call;
+  code_function_callt find_call;
+  find_call.function() = build_symbol(*func);
+  find_call.lhs() = build_symbol(idx);
+  find_call.arguments().push_back(build_symbol(list));
+  find_call.arguments().push_back(element_arg);
+  find_call.arguments().push_back(build_symbol(*elem_info.elem_type_sym));
+  find_call.arguments().push_back(elem_info.elem_size);
+  find_call.arguments().push_back(start);
+  find_call.arguments().push_back(end);
+  find_call.type() = size_type();
+  find_call.location() = elem_info.location;
+  converter_.add_instruction(find_call);
+
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  const constant_exprt size_max(size_max_val, size_type());
+  expr2tc idx2, max2;
+  migrate_expr(build_symbol(idx), idx2);
+  migrate_expr(size_max, max2);
+  exprt not_found = migrate_expr_back(equality2tc(idx2, max2));
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.index(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = not_found;
+  guard.then_case() = throw_code;
+  guard.location() = elem_info.location;
+  converter_.add_instruction(guard);
+
+  return build_symbol(idx);
 }
