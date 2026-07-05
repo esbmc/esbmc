@@ -1121,24 +1121,56 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       // Both LIST and TUPLE store their elements in tuple_val; a list literal
       // receiver folds the same way a tuple one does. Without covering LIST,
       // `[...].index(x)` fell through to the OM, whose value matching returns
-      // a wrong index for a literal receiver.
+      // a wrong index for a literal receiver. The optional start/end arguments
+      // (list.index(x, start[, end])) restrict the search to l[start:end] but
+      // return the index in the original sequence.
       if (
         !recv ||
         (recv->kind != PyConstValue::TUPLE &&
          recv->kind != PyConstValue::LIST) ||
-        node["args"].size() != 1)
+        node["args"].empty() || node["args"].size() > 3)
         return std::nullopt;
 
       auto needle = eval_expr(node["args"][0], env);
       if (!needle)
         return std::nullopt;
 
-      for (size_t i = 0; i < recv->tuple_val.size(); ++i)
+      const long long n = static_cast<long long>(recv->tuple_val.size());
+      long long start = 0;
+      long long stop = n;
+      if (node["args"].size() >= 2)
       {
-        if (pyconst_equal(recv->tuple_val[i], *needle))
-          return PyConstValue::make_int(static_cast<long long>(i));
+        auto s = eval_expr(node["args"][1], env);
+        if (!s || s->kind != PyConstValue::INT)
+          return std::nullopt;
+        start = s->int_val;
+        if (start < 0)
+          start += n;
+        if (start < 0)
+          start = 0;
+        if (start > n)
+          start = n;
       }
-      return std::nullopt;
+      if (node["args"].size() == 3)
+      {
+        auto e = eval_expr(node["args"][2], env);
+        if (!e || e->kind != PyConstValue::INT)
+          return std::nullopt;
+        stop = e->int_val;
+        if (stop < 0)
+          stop += n;
+        if (stop < 0)
+          stop = 0;
+        if (stop > n)
+          stop = n;
+      }
+
+      for (long long i = start; i < stop; ++i)
+      {
+        if (pyconst_equal(recv->tuple_val[static_cast<size_t>(i)], *needle))
+          return PyConstValue::make_int(i);
+      }
+      return std::nullopt; // not found: let the OM raise ValueError
     }
 
     // list/tuple .count(x) on a constant receiver folds at conversion time.

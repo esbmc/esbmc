@@ -96,6 +96,70 @@ TEST_CASE("rejects a non-CBMC header", "[cbmc-reader]")
   REQUIRE(parse_cbmc_goto(in, "fake.goto", result) == true);
 }
 
+TEST_CASE(
+  "read_word flags a >32-bit varint instead of aborting",
+  "[cbmc-reader]")
+{
+  // 0x80 0x80 0x80 0x80 0x10 decodes to 0x10 << 28 == 2^32, one past UINT32_MAX.
+  std::istringstream in(
+    std::string("\x80\x80\x80\x80\x10", 5), std::ios::binary);
+  cbmc_irep_readert reader(in);
+
+  reader.read_word();
+  REQUIRE(reader.failed());
+}
+
+TEST_CASE(
+  "read_word flags an over-long varint instead of aborting",
+  "[cbmc-reader]")
+{
+  // Eleven continuation bytes (all value bits zero) push the shift past 64 bits
+  // without ever exceeding UINT32_MAX, so this exercises the length guard.
+  std::istringstream in(std::string(11, '\x80'), std::ios::binary);
+  cbmc_irep_readert reader(in);
+
+  reader.read_word();
+  REQUIRE(reader.failed());
+}
+
+TEST_CASE(
+  "recovers from a truncated binary instead of aborting",
+  "[cbmc-reader]")
+{
+  // Valid magic + version + a symbol count of one, then the stream ends
+  // mid-symbol: the reader must report a recoverable error, not abort().
+  std::string bytes;
+  bytes += '\x7f';
+  bytes += 'G';
+  bytes += 'B';
+  bytes += 'F';
+  bytes += encode_varint(6); // version
+  bytes += encode_varint(1); // one symbol announced...
+  // ...but no symbol body follows.
+
+  std::istringstream in(bytes, std::ios::binary);
+  cbmc_parse_resultt result;
+  REQUIRE(parse_cbmc_goto(in, "truncated.goto", result) == true);
+}
+
+TEST_CASE("reads no-op after the reader has failed", "[cbmc-reader]")
+{
+  // Trip the failure with an over-wide varint, then confirm the higher-level
+  // readers short-circuit cleanly (no consuming, no throw) instead of acting on
+  // the corrupt stream.
+  std::istringstream in(
+    std::string("\x80\x80\x80\x80\x10", 5), std::ios::binary);
+  cbmc_irep_readert reader(in);
+
+  REQUIRE(reader.read_word() == 0);
+  REQUIRE(reader.failed());
+
+  REQUIRE(reader.read_string_ref() == irep_idt());
+  irept dummy;
+  reader.read_reference(dummy);
+  REQUIRE(reader.failed());
+}
+
 TEST_CASE("parses a real CBMC v6 goto-binary", "[cbmc-reader]")
 {
   const std::string path = std::string(CBMC_TEST_DATA_DIR) + "/cbmc_hello.goto";

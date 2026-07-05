@@ -20,6 +20,9 @@ bool is_cbmc_goto_magic(const unsigned char header[4])
 
 unsigned cbmc_irep_readert::read_word()
 {
+  if (failed_)
+    return 0;
+
   unsigned shift_distance = 0;
   // Accumulate in 64 bits so that bits shifted past bit 31 stay visible and an
   // over-wide varint is detectable rather than silently truncated.
@@ -30,7 +33,8 @@ unsigned cbmc_irep_readert::read_word()
     if (shift_distance >= 64)
     {
       log_error("CBMC goto-binary: malformed varint (too many bytes)");
-      abort();
+      failed_ = true;
+      return 0;
     }
 
     unsigned byte = static_cast<unsigned char>(in.get());
@@ -40,7 +44,8 @@ unsigned cbmc_irep_readert::read_word()
     if (res > UINT32_MAX)
     {
       log_error("CBMC goto-binary: input number {} exceeds 32 bits", res);
-      abort();
+      failed_ = true;
+      return 0;
     }
 
     if ((byte & 0x80) == 0)
@@ -52,6 +57,9 @@ unsigned cbmc_irep_readert::read_word()
 
 std::string cbmc_irep_readert::read_string()
 {
+  if (failed_)
+    return {};
+
   std::string result;
 
   while (in.good())
@@ -76,6 +84,8 @@ std::string cbmc_irep_readert::read_string()
 irep_idt cbmc_irep_readert::read_string_ref()
 {
   unsigned id = read_word();
+  if (failed_)
+    return irep_idt();
 
   auto it = string_cache.find(id);
   if (it != string_cache.end())
@@ -89,6 +99,8 @@ irep_idt cbmc_irep_readert::read_string_ref()
 void cbmc_irep_readert::read_reference(irept &irep)
 {
   unsigned id = read_word();
+  if (failed_)
+    return;
 
   auto it = irep_cache.find(id);
   if (it != irep_cache.end())
@@ -105,31 +117,36 @@ void cbmc_irep_readert::read_irep(irept &irep)
 {
   irep.id(read_string_ref());
 
-  while (in.peek() == 'S')
+  // Guard each loop on failed_ so a malformed child (which sets the flag deep
+  // in read_reference) stops the walk instead of spinning on garbage bytes.
+  while (!failed_ && in.peek() == 'S')
   {
     in.get();
     irep.get_sub().emplace_back();
     read_reference(irep.get_sub().back());
   }
 
-  while (in.peek() == 'N')
+  while (!failed_ && in.peek() == 'N')
   {
     in.get();
     irep_idt name = read_string_ref();
     read_reference(irep.add(name));
   }
 
-  while (in.peek() == 'C')
+  while (!failed_ && in.peek() == 'C')
   {
     in.get();
     irep_idt name = read_string_ref();
     read_reference(irep.add(name));
   }
+
+  if (failed_)
+    return;
 
   if (in.get() != 0)
   {
     log_error("CBMC goto-binary: irep not terminated");
-    abort();
+    failed_ = true;
   }
 }
 
@@ -164,6 +181,9 @@ bool parse_cbmc_goto(
   result.symbols.reserve(number_of_symbols);
   for (unsigned i = 0; i < number_of_symbols; i++)
   {
+    if (reader.failed())
+      return true;
+
     cbmc_symbolt sym;
     reader.read_reference(sym.stype);
     reader.read_reference(sym.value);
@@ -209,6 +229,9 @@ bool parse_cbmc_goto(
   result.functions.reserve(number_of_functions);
   for (unsigned i = 0; i < number_of_functions; i++)
   {
+    if (reader.failed())
+      return true;
+
     cbmc_functiont function;
     function.name = reader.read_string(); // raw string, not a string ref
     unsigned number_of_instructions = reader.read_word();
@@ -216,6 +239,9 @@ bool parse_cbmc_goto(
 
     for (unsigned j = 0; j < number_of_instructions; j++)
     {
+      if (reader.failed())
+        return true;
+
       cbmc_instructiont instruction;
       reader.read_reference(instruction.code);
       reader.read_reference(instruction.source_location);
@@ -238,6 +264,11 @@ bool parse_cbmc_goto(
 
     result.functions.push_back(std::move(function));
   }
+
+  // A malformed encoding anywhere above leaves the reader in a failed state
+  // with a partial parse; report it as a recoverable error, not a success.
+  if (reader.failed())
+    return true;
 
   return false;
 }
