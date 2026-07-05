@@ -1,3 +1,4 @@
 import numpy as np
 
-np.array([[[1], [2]], [[3], [4]]])
+# 9D array — beyond ESBMC's 8D limit
+np.array([[[[[[[[[1]]]]]]]]])

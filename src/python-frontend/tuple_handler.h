@@ -20,6 +20,15 @@ class tuple_handler
 {
 public:
   /**
+   * @brief Fixed byte width of string tuple members (content + NUL padding)
+   *
+   * Tuple types built from annotations (tuple[str, ...]) cannot know each
+   * string's length, so construction and annotation agree on one static
+   * char-array width; strings needing more bytes are a conversion error.
+   */
+  static constexpr size_t tuple_str_member_size = 16;
+
+  /**
    * @brief Construct a new tuple handler
    * @param converter Reference to the parent python_converter
    * @param type_handler Reference to the type_handler for type operations
@@ -89,10 +98,14 @@ public:
    * @param lhs The element to search for
    * @param rhs The tuple to search in
    * @param invert Whether this is "not in" operation
+   * @param element The original AST node (for location and string comparison)
    * @return exprt Boolean expression representing membership test
    */
-  exprt handle_tuple_membership(const exprt &lhs, const exprt &rhs, bool invert)
-    const;
+  exprt handle_tuple_membership(
+    const exprt &lhs,
+    const exprt &rhs,
+    bool invert,
+    const nlohmann::json &element);
 
   /**
    * @brief Create a tuple struct type from element types
@@ -102,6 +115,25 @@ public:
   struct_typet
   create_tuple_struct_type(const std::vector<typet> &element_types) const;
 
+  /**
+   * @brief Obtain an addressable expression for tuple element @p idx
+   *
+   * For an inline tuple literal (a struct_exprt whose operands are
+   * already-materialised temp symbols) a member access into the constant
+   * struct rvalue is not addressable, so any downstream address_of (e.g. a
+   * strcmp on a string element) aborts SMT encoding (#5185). In that case the
+   * operand symbol is returned directly; for a named tuple variable a member
+   * access is a proper lvalue.
+   * @param array The tuple expression (literal or named variable)
+   * @param tuple_type The tuple struct type
+   * @param idx The element index
+   * @return exprt An addressable expression denoting element @p idx
+   */
+  exprt get_tuple_element(
+    const exprt &array,
+    const struct_typet &tuple_type,
+    size_t idx) const;
+
 private:
   /**
    * @brief Build a unique tag name for a tuple based on element types
@@ -109,6 +141,17 @@ private:
    * @return std::string The tag name (e.g., "tag-tuple_int_str")
    */
   std::string build_tuple_tag(const std::vector<typet> &element_types) const;
+
+  /**
+   * @brief Widen a string element to char[tuple_str_member_size], NUL-padded
+   *
+   * Annotation-built tuple types cannot know each string's length, so
+   * construction and annotation agree on one static member width (#5571).
+   * Longer strings are rejected with a conversion error.
+   * @param elem The string element (char array or bare char)
+   * @return exprt The element as a char[tuple_str_member_size] value
+   */
+  exprt pad_string_element(const exprt &elem) const;
 
   python_converter &converter_;
   type_handler &type_handler_;

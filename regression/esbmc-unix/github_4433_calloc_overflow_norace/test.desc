@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-div-by-zero-check --force-malloc-success --no-align-check --no-vla-size-check --32 --enable-unreachability-intrinsic --no-pointer-check --no-bounds-check
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --malloc-zero-is-null --incremental-bmc --unwind 3
+^VERIFICATION FAILED$

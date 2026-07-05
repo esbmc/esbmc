@@ -4,7 +4,6 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/message.h>
 #include <util/migrate.h>
@@ -105,54 +104,42 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  if (has_prefix(symname, "c:@F@__builtin_clzll"))
+  // __builtin_clz / __builtin_clzl / __builtin_clzll: count leading zero bits.
+  // One handler covers all widths — the operand type fixes the bit width. clz of
+  // zero is undefined; the optional UB assertion is added in goto-check
+  // (--clz-zero-check), with the other UB checks. Match the three names exactly:
+  // a loose "__builtin_clz" prefix would also capture the two-argument
+  // __builtin_clzg, tripping the one-argument assertion. See #4606.
+  if (
+    symname == "c:@F@__builtin_clz" || symname == "c:@F@__builtin_clzl" ||
+    symname == "c:@F@__builtin_clzll")
   {
     assert(
       func_call.operands.size() == 1 &&
-      "__builtin_clzll must have one argument");
+      "__builtin_clz* must have one argument");
 
     expr2tc arg = func_call.operands[0];
     expr2tc ret = func_call.ret;
 
-    expr2tc zero = constant_int2tc(get_uint64_type(), 0);
-    expr2tc one = constant_int2tc(get_uint64_type(), 1);
-    expr2tc upper = constant_int2tc(get_uint64_type(), 63);
+    const type2tc &t = arg->type;
+    const unsigned width = t->get_width();
 
-    claim(notequal2tc(arg, zero), "__builtin_clzll: UB for x equal to 0");
+    // clz(x) = width - popcount(x with every bit below the most-significant set
+    // bit smeared down). Reusing the popcount irep means a constant argument
+    // folds to a constant (popcount has a simplifier), while a symbolic argument
+    // is handled exactly by the backend's popcount encoding.
+    expr2tc smeared = arg;
+    for (unsigned shift = 1; shift < width; shift <<= 1)
+      smeared =
+        bitor2tc(t, smeared, lshr2tc(t, smeared, constant_int2tc(t, shift)));
 
-    // Introduce a nondet symbolic variable clz_sym to stand for the number of leading zeros
-    unsigned int &nondet_count = get_nondet_counter();
-    expr2tc clz_sym =
-      symbol2tc(get_uint64_type(), "nondet$symex::" + i2string(nondet_count++));
-
-    // Constrain the range 0 <= clz_sym <= 63
-    expr2tc ge = greaterthanequal2tc(clz_sym, zero);
-    expr2tc le = lessthanequal2tc(clz_sym, upper);
-    expr2tc in_range = and2tc(ge, le);
-    assume(in_range);
-
-    // This idx is the bit‐position where the first 1 should occur.
-    // 63 - clz_sym
-    expr2tc idx = sub2tc(get_uint64_type(), upper, clz_sym);
-
-    // Shifting arg right by idx
-    // Masking with & 1 to extract single bit
-    // ((x >> idx) & 1) != 0
-    expr2tc shift = lshr2tc(get_uint64_type(), arg, idx);
-    expr2tc bit1 = bitand2tc(get_uint64_type(), shift, one);
-    expr2tc is_one = notequal2tc(bit1, zero);
-    assume(is_one);
-
-    // Requiring (x >> (idx + 1)) == 0 forces every bit from idx + 1 up
-    // to bit 63 to be zero, All bits above index idx must be 0
-    // (x >> (idx+1)) == 0
-    expr2tc next = add2tc(get_uint64_type(), idx, one);
-    expr2tc shift2 = lshr2tc(get_uint64_type(), arg, next);
-    expr2tc above_zero = equality2tc(shift2, zero);
-    assume(above_zero);
+    expr2tc count = sub2tc(
+      get_int32_type(),
+      constant_int2tc(get_int32_type(), width),
+      popcount2tc(smeared));
 
     if (!is_nil_expr(ret))
-      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, clz_sym)));
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, count)));
 
     return true;
   }

@@ -1,0 +1,4 @@
+CORE
+cbmc_nearbyint_fail.goto
+--binary
+^VERIFICATION FAILED$

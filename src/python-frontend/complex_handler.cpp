@@ -4,13 +4,42 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/type_handler.h>
 
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
 #include <limits>
+
+namespace
+{
+// V.3: build a complex `.real`/`.imag` member access in IREP2 (exact
+// round-trip of member_exprt; behaviour-preserving). The source is
+// complex-typed -- either the `complex` struct or the transient `tag-complex`
+// symbol type, both permitted member2t sources -- so the member2t precondition
+// holds; the one pointer-source path (handle_attribute_access) dereferences
+// before reaching here.
+exprt complex_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
+
+// V.3: IREP2 typecast (exact round-trip of typecast_exprt). The source is a
+// concrete numeric value (floatbv/signedbv/unsignedbv/bool) and the target is
+// the plain double type, which carries no #cpp_type, so no type-restore is
+// needed -- mirrors python_math's math_typecast.
+exprt complex_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
+} // namespace
 
 // -----------------------------------------------------------------------
 // Construction
@@ -61,19 +90,36 @@ exprt complex_handler::ieee_binop(
 
 exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
 {
-  const typet &dt = cached_double_type();
-  exprt xr = member_exprt(x, "real", dt);
-  exprt xi = member_exprt(x, "imag", dt);
-  exprt yr = member_exprt(y, "real", dt);
-  exprt yi = member_exprt(y, "imag", dt);
+  // V.3: build the whole complex product in IREP2, back-migrating once. Members
+  // are double-typed (member2t over the complex struct source, like
+  // complex_member); each IEEE op carries the default __ESBMC_rounding_mode
+  // symbol migrate_expr attaches to a legacy ieee_* node; the double-typed
+  // result needs no typecast -- so this back-migrates to the same struct the
+  // legacy make_complex(ieee_binop...) path produced (goto byte-identical,
+  // verified via --goto-functions-only diff on the complex-power tests).
+  // Mirrors complex_member / complex_typecast.
+  const type2tc dt2 = migrate_type(cached_double_type());
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc x2, y2;
+  migrate_expr(x, x2);
+  migrate_expr(y, y2);
 
-  exprt ac = ieee_binop("ieee_mul", xr, yr);
-  exprt bd = ieee_binop("ieee_mul", xi, yi);
-  exprt ad = ieee_binop("ieee_mul", xr, yi);
-  exprt bc = ieee_binop("ieee_mul", xi, yr);
+  auto mem = [&](const expr2tc &b, const irep_idt &n) {
+    return member2tc(dt2, b, n);
+  };
+  expr2tc xr = mem(x2, "real"), xi = mem(x2, "imag");
+  expr2tc yr = mem(y2, "real"), yi = mem(y2, "imag");
 
-  return make_complex(
-    ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
+  expr2tc ac = ieee_mul2tc(dt2, xr, yr, rm);
+  expr2tc bd = ieee_mul2tc(dt2, xi, yi, rm);
+  expr2tc ad = ieee_mul2tc(dt2, xr, yi, rm);
+  expr2tc bc = ieee_mul2tc(dt2, xi, yr, rm);
+  expr2tc re = ieee_sub2tc(dt2, ac, bd, rm);
+  expr2tc im = ieee_add2tc(dt2, ad, bc, rm);
+
+  std::vector<expr2tc> members{re, im};
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 }
 
 exprt complex_handler::complex_div(
@@ -81,32 +127,46 @@ exprt complex_handler::complex_div(
   const exprt &y,
   const nlohmann::json &loc_source) const
 {
-  const typet &dt = cached_double_type();
-  exprt xr = member_exprt(x, "real", dt);
-  exprt xi = member_exprt(x, "imag", dt);
-  exprt yr = member_exprt(y, "real", dt);
-  exprt yi = member_exprt(y, "imag", dt);
-  exprt zero = from_double(0.0, dt);
+  // V.3: build the whole quotient in IREP2, back-migrating once. Operands are
+  // the double-typed .real/.imag members (member2t over the complex struct, as
+  // complex_member does) and each IEEE op carries the default
+  // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node
+  // -- so the back-migrated struct matches the legacy make_complex(ieee_binop)
+  // path (goto byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(cached_double_type());
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc x2, y2, zero;
+  migrate_expr(x, x2);
+  migrate_expr(y, y2);
+  migrate_expr(from_double(0.0, cached_double_type()), zero);
+  const expr2tc xr = member2tc(dt2, x2, "real");
+  const expr2tc xi = member2tc(dt2, x2, "imag");
+  const expr2tc yr = member2tc(dt2, y2, "real");
+  const expr2tc yi = member2tc(dt2, y2, "imag");
 
-  exprt ac = ieee_binop("ieee_mul", xr, yr);
-  exprt bd = ieee_binop("ieee_mul", xi, yi);
-  exprt bc = ieee_binop("ieee_mul", xi, yr);
-  exprt ad = ieee_binop("ieee_mul", xr, yi);
-  exprt c2 = ieee_binop("ieee_mul", yr, yr);
-  exprt d2 = ieee_binop("ieee_mul", yi, yi);
+  auto ieee_mul = [&](const expr2tc &a, const expr2tc &b) {
+    return ieee_mul2tc(dt2, a, b, rm);
+  };
+  const expr2tc ac = ieee_mul(xr, yr);
+  const expr2tc bd = ieee_mul(xi, yi);
+  const expr2tc bc = ieee_mul(xi, yr);
+  const expr2tc ad = ieee_mul(xr, yi);
+  const expr2tc c2 = ieee_mul(yr, yr);
+  const expr2tc d2 = ieee_mul(yi, yi);
 
-  exprt numer_real = ieee_binop("ieee_add", ac, bd);
-  exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
-  exprt denom = ieee_binop("ieee_add", c2, d2);
+  const expr2tc numer_real = ieee_add2tc(dt2, ac, bd, rm);
+  const expr2tc numer_imag = ieee_sub2tc(dt2, bc, ad, rm);
+  const expr2tc denom = ieee_add2tc(dt2, c2, d2, rm);
 
-  exprt normal_result = make_complex(
-    ieee_binop("ieee_div", numer_real, denom),
-    ieee_binop("ieee_div", numer_imag, denom));
+  std::vector<expr2tc> members{
+    ieee_div2tc(dt2, numer_real, denom, rm),
+    ieee_div2tc(dt2, numer_imag, denom, rm)};
+  exprt normal_result = migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 
   // Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
-  exprt yr_zero = equality_exprt(yr, zero);
-  exprt yi_zero = equality_exprt(yi, zero);
-  exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
+  exprt denom_is_zero =
+    migrate_expr_back(and2tc(equality2tc(yr, zero), equality2tc(yi, zero)));
 
   exprt raise_zdiv = converter_.get_exception_handler().gen_exception_raise(
     "ZeroDivisionError", "complex division by zero");
@@ -132,14 +192,25 @@ exprt complex_handler::complex_log(
   const nlohmann::json &loc_source) const
 {
   const typet &dt = cached_double_type();
-  exprt zr = member_exprt(z, "real", dt);
-  exprt zi = member_exprt(z, "imag", dt);
+  exprt zr = complex_member(z, "real", dt);
+  exprt zi = complex_member(z, "imag", dt);
 
-  exprt zr2 = ieee_binop("ieee_mul", zr, zr);
-  exprt zi2 = ieee_binop("ieee_mul", zi, zi);
-  exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
+  // V.3: build |z|^2 = zr*zr + zi*zi in IREP2, back-migrating once for the
+  // legacy handle_sqrt consumer. The IEEE ops carry the default
+  // __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy ieee_* node,
+  // so the back-migrated node matches the legacy ieee_binop tree (goto
+  // byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(dt);
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc zr_2, zi_2;
+  migrate_expr(zr, zr_2);
+  migrate_expr(zi, zi_2);
+  const expr2tc zr_sq = ieee_mul2tc(dt2, zr_2, zr_2, rm);
+  const expr2tc zi_sq = ieee_mul2tc(dt2, zi_2, zi_2, rm);
+  const expr2tc abs2_2 = ieee_add2tc(dt2, zr_sq, zi_sq, rm);
 
-  exprt abs_z = converter_.get_math_handler().handle_sqrt(abs2, loc_source);
+  exprt abs_z = converter_.get_math_handler().handle_sqrt(
+    migrate_expr_back(abs2_2), loc_source);
   if (abs_z.statement() == "cpp-throw")
     return abs_z;
 
@@ -159,8 +230,8 @@ exprt complex_handler::complex_exp(
   const nlohmann::json &loc_source) const
 {
   const typet &dt = cached_double_type();
-  exprt zr = member_exprt(z, "real", dt);
-  exprt zi = member_exprt(z, "imag", dt);
+  exprt zr = complex_member(z, "real", dt);
+  exprt zi = complex_member(z, "imag", dt);
 
   exprt exp_real = converter_.get_math_handler().handle_exp(zr, loc_source);
   if (exp_real.statement() == "cpp-throw")
@@ -174,8 +245,17 @@ exprt complex_handler::complex_exp(
   if (sin_imag.statement() == "cpp-throw")
     return sin_imag;
 
-  exprt real = ieee_binop("ieee_mul", exp_real, cos_imag);
-  exprt imag = ieee_binop("ieee_mul", exp_real, sin_imag);
+  // V.3: e^zr * cos(zi) and e^zr * sin(zi) built in IREP2, back-migrated for
+  // the legacy make_complex consumer (default __ESBMC_rounding_mode; goto
+  // byte-identical). Like complex_mul.
+  const type2tc dt2 = migrate_type(dt);
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc er, ci, si;
+  migrate_expr(exp_real, er);
+  migrate_expr(cos_imag, ci);
+  migrate_expr(sin_imag, si);
+  exprt real = migrate_expr_back(ieee_mul2tc(dt2, er, ci, rm));
+  exprt imag = migrate_expr_back(ieee_mul2tc(dt2, er, si, rm));
   return make_complex(real, imag);
 }
 
@@ -188,7 +268,7 @@ exprt complex_handler::promote_int_arith_to_double(
   std::size_t depth) const
 {
   if (depth > 64)
-    return typecast_exprt(input_expr, cached_double_type());
+    return complex_typecast(input_expr, cached_double_type());
 
   if (input_expr.statement() == "cpp-throw")
     return input_expr;
@@ -230,7 +310,7 @@ exprt complex_handler::promote_int_arith_to_double(
   if (!numeric_like)
     return input_expr;
 
-  return typecast_exprt(input_expr, dt);
+  return complex_typecast(input_expr, dt);
 }
 
 exprt complex_handler::normalize_numeric_expr(const exprt &value) const
@@ -487,34 +567,51 @@ exprt complex_handler::handle_binary_op(
     if (rhs_complex.statement() == "cpp-throw")
       return rhs_complex;
 
-    const typet &dt = cached_double_type();
-    const exprt a = member_exprt(lhs_complex, "real", dt);
-    const exprt b = member_exprt(lhs_complex, "imag", dt);
-    const exprt c = member_exprt(rhs_complex, "real", dt);
-    const exprt d = member_exprt(rhs_complex, "imag", dt);
+    // V.3: build the whole operator result in IREP2, back-migrating once. The
+    // operands are the double-typed .real/.imag members (member2t over the
+    // complex struct, as complex_member does) and each IEEE op carries the
+    // default __ESBMC_rounding_mode symbol migrate_expr attaches to a legacy
+    // ieee_* node -- so the back-migrated struct matches the legacy
+    // make_complex(ieee_binop...) path (goto byte-identical). Like complex_mul.
+    const type2tc dt2 = migrate_type(cached_double_type());
+    const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs_complex, lhs2);
+    migrate_expr(rhs_complex, rhs2);
+    const expr2tc a = member2tc(dt2, lhs2, "real");
+    const expr2tc b = member2tc(dt2, lhs2, "imag");
+    const expr2tc c = member2tc(dt2, rhs2, "real");
+    const expr2tc d = member2tc(dt2, rhs2, "imag");
 
-    if (op == "Eq")
-      return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
-    if (op == "NotEq")
-      return or_exprt(
-        not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
+    if (op == "Eq" || op == "NotEq")
+    {
+      // Eq: (a == c) && (b == d);  NotEq: (a != c) || (b != d)
+      const expr2tc re_eq = equality2tc(a, c);
+      const expr2tc im_eq = equality2tc(b, d);
+      if (op == "Eq")
+        return migrate_expr_back(and2tc(re_eq, im_eq));
+      return migrate_expr_back(or2tc(not2tc(re_eq), not2tc(im_eq)));
+    }
+
+    auto mk = [&](const expr2tc &re, const expr2tc &im) {
+      std::vector<expr2tc> members{re, im};
+      return migrate_expr_back(
+        constant_struct2tc(migrate_type(get_complex_struct_type()), members));
+    };
 
     if (op == "Add")
-      return make_complex(
-        ieee_binop("ieee_add", a, c), ieee_binop("ieee_add", b, d));
+      return mk(ieee_add2tc(dt2, a, c, rm), ieee_add2tc(dt2, b, d, rm));
 
     if (op == "Sub")
-      return make_complex(
-        ieee_binop("ieee_sub", a, c), ieee_binop("ieee_sub", b, d));
+      return mk(ieee_sub2tc(dt2, a, c, rm), ieee_sub2tc(dt2, b, d, rm));
 
     if (op == "Mult")
     {
-      exprt ac = ieee_binop("ieee_mul", a, c);
-      exprt bd = ieee_binop("ieee_mul", b, d);
-      exprt ad = ieee_binop("ieee_mul", a, d);
-      exprt bc = ieee_binop("ieee_mul", b, c);
-      return make_complex(
-        ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
+      const expr2tc ac = ieee_mul2tc(dt2, a, c, rm);
+      const expr2tc bd = ieee_mul2tc(dt2, b, d, rm);
+      const expr2tc ad = ieee_mul2tc(dt2, a, d, rm);
+      const expr2tc bc = ieee_mul2tc(dt2, b, c, rm);
+      return mk(ieee_sub2tc(dt2, ac, bd, rm), ieee_add2tc(dt2, ad, bc, rm));
     }
 
     // Div — delegate to complex_div which includes ZeroDivisionError guard.
@@ -535,18 +632,23 @@ exprt complex_handler::handle_unary_op(
 
   assert(op == "USub" && "handle_unary_op: unexpected operator");
 
-  // USub: negate both components.
-  const typet &dt = cached_double_type();
-  exprt real = member_exprt(operand, "real", dt);
-  exprt imag = member_exprt(operand, "imag", dt);
-  exprt zero = from_double(0.0, dt);
+  // USub: negate both components. V.3: built in IREP2, back-migrated once (the
+  // 0.0 - x IEEE subtractions carry the default __ESBMC_rounding_mode symbol
+  // migrate_expr attaches to a legacy ieee_sub node). Mirrors complex_mul.
+  const type2tc dt2 = migrate_type(cached_double_type());
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  expr2tc operand2, zero;
+  migrate_expr(operand, operand2);
+  migrate_expr(from_double(0.0, cached_double_type()), zero);
+  const expr2tc real = member2tc(dt2, operand2, "real");
+  const expr2tc imag = member2tc(dt2, operand2, "imag");
 
-  exprt neg_real("ieee_sub", dt);
-  neg_real.copy_to_operands(zero, real);
-  exprt neg_imag("ieee_sub", dt);
-  neg_imag.copy_to_operands(zero, imag);
+  const expr2tc neg_real = ieee_sub2tc(dt2, zero, real, rm);
+  const expr2tc neg_imag = ieee_sub2tc(dt2, zero, imag, rm);
 
-  return make_complex(neg_real, neg_imag);
+  std::vector<expr2tc> members{neg_real, neg_imag};
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 }
 
 // -----------------------------------------------------------------------
@@ -577,8 +679,8 @@ exprt complex_handler::handle_attribute(const nlohmann::json &element) const
     return nil_exprt();
 
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(obj_expr, "real", dt);
-  exprt imag = member_exprt(obj_expr, "imag", dt);
+  exprt real = complex_member(obj_expr, "real", dt);
+  exprt imag = complex_member(obj_expr, "imag", dt);
   exprt zero = from_double(0.0, dt);
 
   exprt neg_imag("ieee_sub", dt);
@@ -606,7 +708,7 @@ exprt complex_handler::handle_attribute_access(
     base = std::move(deref);
   }
 
-  return member_exprt(base, attr, cached_double_type());
+  return complex_member(base, attr, cached_double_type());
 }
 
 // -----------------------------------------------------------------------
@@ -614,8 +716,8 @@ exprt complex_handler::handle_attribute_access(
 exprt complex_handler::handle_abs(const exprt &z) const
 {
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(z, "real", dt);
-  exprt imag = member_exprt(z, "imag", dt);
+  exprt real = complex_member(z, "real", dt);
+  exprt imag = complex_member(z, "imag", dt);
 
   exprt real_sq("ieee_mul", dt);
   real_sq.copy_to_operands(real, real);

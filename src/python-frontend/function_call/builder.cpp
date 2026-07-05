@@ -10,9 +10,27 @@
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/std_expr.h>
+#include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+
+using namespace python_expr;
+
+// True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
+// Mirrors converter_expr.cpp's helper of the same name: used here to tell
+// whether a Tuple-sliced Subscript (`a[i, j]`) is one of the two supported
+// 2-D slicing patterns (which produce an array) or a fully scalar multi-index
+// (which does not), so len() dispatch doesn't misroute the latter.
+static bool is_full_slice_node(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Slice"))
+    return false;
+  auto is_absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return is_absent("lower") && is_absent("upper") && is_absent("step");
+}
 
 static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
 {
@@ -75,7 +93,10 @@ bool function_call_builder::is_cover_call(const symbol_id &function_id) const
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
-  if (type_utils::is_builtin_type(function_id.get_function()))
+  const std::string &function = function_id.get_function();
+  if (
+    type_utils::is_builtin_type(function) || function == "isinstance" ||
+    function == "hasattr")
     return false;
 
   const std::string &filename = function_id.get_filename();
@@ -382,9 +403,61 @@ symbol_id function_call_builder::build_function_id() const
         function_id.set_function(func_name);
         return function_id;
       }
+      else if (
+        arg.contains("func") && arg["func"].is_object() &&
+        arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"].value("attr", "") == "encode")
+        // len(s.encode()): the encoded bytes are a wide-int array whose zero
+        // high bytes make strlen stop at the first element, so size by element
+        // count instead (matches the bytes variable and bytes-slice paths).
+        func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Slice" &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) == "bytes")
+    {
+      // Inline len(b[a:b]) where b is bytes: the slice is a wide-int array, so
+      // count elements rather than running strlen over the byte representation
+      // (which stops at the first element's zero high bytes). String slices
+      // keep the strlen path (their result is a null-terminated char array).
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "List" &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[[0, 2]]): fancy indexing always selects multiple elements into
+      // a fresh numeric array, never a null-terminated string; count elements
+      // instead of running strlen.
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Tuple" &&
+      arg["slice"].contains("elts") && arg["slice"]["elts"].is_array() &&
+      arg["slice"]["elts"].size() == 2 &&
+      is_full_slice_node(arg["slice"]["elts"][0]) !=
+        is_full_slice_node(arg["slice"]["elts"][1]) &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[i, :]) / len(a[:, j]): 2-D slicing on a numpy array produces a
+      // fresh numeric array, not a null-terminated string; count elements
+      // instead of running strlen. Only the two supported 2-D slicing
+      // patterns (exactly one axis fully sliced) reach this branch -- a
+      // fully scalar multi-index like `a[0, 1]` produces a scalar and must
+      // keep falling through to normal scalar handling below.
+      func_name = kGetObjectSize;
+    }
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
@@ -398,6 +471,16 @@ symbol_id function_call_builder::build_function_id() const
       };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
+
+      // A dict-typed symbol may carry no "dict" frontend annotation: a dict
+      // comprehension ({k: v for ...}) or a dict-returning call assigns the
+      // __python_dict__ struct directly without recording the type in the
+      // annotation map. Detect the struct type on the symbol so len() routes
+      // to the dict-size handler rather than falling through to strlen, which
+      // would read the struct's bytes as a C string and yield a wrong size.
+      const bool var_symbol_is_dict =
+        var_symbol && converter_.get_dict_handler()->is_dict_type(
+                        converter_.ns.follow(var_symbol->get_type()));
 
       auto is_list_slice_assignment = [&]() -> bool {
         nlohmann::json var_value = json_utils::get_var_value(
@@ -462,7 +545,7 @@ symbol_id function_call_builder::build_function_id() const
           }
         }
       }
-      if (var_type == "dict")
+      if (var_type == "dict" || var_symbol_is_dict)
       {
         // Mark this as a dict len() call
         func_name = "__ESBMC_len_dict";
@@ -488,6 +571,16 @@ symbol_id function_call_builder::build_function_id() const
         // Use list size semantics for len(sub) where sub = lst[a:b].
         func_name = kGetObjectSize;
       }
+      else if (
+        var_symbol && converter_.ns.follow(var_symbol->get_type()).is_array() &&
+        converter_.ns.follow(var_symbol->get_type()).subtype() != char_type())
+      {
+        // A non-char array reaching here unannotated — e.g. a bytes slice
+        // (s = b[a:b]), which loses its "bytes" frontend type — must be sized
+        // by element count, not strlen: bytes elements are wide ints whose zero
+        // high bytes make strlen stop at the first element.
+        func_name = kGetObjectSize;
+      }
     }
     function_id.clear();
     function_id.set_prefix("c:");
@@ -511,7 +604,19 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (th.is_constructor_call(call_))
   {
-    class_name = func_name;
+    // An explicit `Base.__init__(self, ...)` call names the receiver class and
+    // passes self explicitly. is_constructor_call() flags any `.__init__`, but
+    // here the constructor is the named class's own, stored under the class
+    // name (@C@Base@F@Base), not the literal "__init__". Resolve both the class
+    // and the (renamed) function to the receiver so the symbol is found; a
+    // direct `Base()` call keeps func_name as the class name already.
+    if (func_name == "__init__" && json_utils::is_class(obj_name, ast))
+    {
+      class_name = obj_name;
+      func_name = obj_name;
+    }
+    else
+      class_name = func_name;
   }
   else if (is_member_function_call)
   {
@@ -611,7 +716,6 @@ exprt function_call_builder::build() const
   }
 
   symbol_id function_id = build_function_id();
-
   if (is_len_call(function_id) && !call_["args"].empty())
   {
     exprt arg_expr = converter_.get_expr(call_["args"][0]);
@@ -637,19 +741,28 @@ exprt function_call_builder::build() const
 
           symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-          side_effect_expr_function_callt call_expr(size_type());
-          call_expr.function() = list_size_func;
-          if (arg_expr.type().is_pointer())
-            call_expr.arguments().push_back(arg_expr);
-          else
-            call_expr.arguments().push_back(address_of_exprt(arg_expr));
-          return call_expr;
+          return build_call(
+            list_size_func,
+            size_type(),
+            {arg_expr.type().is_pointer() ? arg_expr
+                                          : build_address_of(arg_expr)});
         }
       }
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
       return from_integer(1, long_long_int_type());
+
+    // len() of a tuple-typed expression (e.g. an inline str.partition() result
+    // that is not bound to a Name, so the __ESBMC_len_tuple routing above never
+    // fires) is the number of components. Without this the call falls through to
+    // strlen() and reports the wrong length (#5114).
+    if (arg_expr.type().id() == "struct")
+    {
+      const struct_typet &struct_type = to_struct_type(arg_expr.type());
+      if (struct_type.tag().as_string().find("tag-tuple") == 0)
+        return from_integer(struct_type.components().size(), size_type());
+    }
 
     exprt len_string_fast_path =
       converter_.get_string_handler().try_handle_len_string_fast_path(
@@ -694,16 +807,12 @@ exprt function_call_builder::build() const
 
       symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
 
-      side_effect_expr_function_callt call_expr(size_type());
-      call_expr.function() = list_size_func;
-      call_expr.arguments().push_back(obj_expr);
-
-      return call_expr;
+      return build_call(list_size_func, size_type(), {obj_expr});
     }
 
     // It's genuinely a dict: get the keys member
     typet keys_type = pointer_typet(struct_typet());
-    member_exprt keys_member(obj_expr, "keys", keys_type);
+    exprt keys_member = build_member(obj_expr, "keys", keys_type);
 
     // Create the list_get_size function symbol
     code_typet list_get_size_type;
@@ -716,11 +825,7 @@ exprt function_call_builder::build() const
       "c:@F@__ESBMC_list_size", list_get_size_type);
 
     // Create the function call
-    side_effect_expr_function_callt call_expr(size_type());
-    call_expr.function() = list_get_size_func;
-    call_expr.arguments().push_back(keys_member);
-
-    return call_expr;
+    return build_call(list_get_size_func, size_type(), {keys_member});
   }
 
   // Special handling for assume calls: convert to code_assume instead of function call
@@ -731,7 +836,7 @@ exprt function_call_builder::build() const
 
     exprt condition = converter_.get_expr(call_["args"][0]);
     if (!condition.type().is_bool())
-      condition = typecast_exprt(condition, bool_type());
+      condition = build_typecast(condition, bool_type());
 
     // Create code_assume statement
     codet assume_code("assume");
@@ -752,7 +857,7 @@ exprt function_call_builder::build() const
 
     exprt condition = converter_.get_expr(args[0]);
     if (!condition.type().is_bool())
-      condition = typecast_exprt(condition, bool_type());
+      condition = build_typecast(condition, bool_type());
 
     code_assertt assert_code(condition);
     assert_code.location() = converter_.get_location_from_decl(call_);
@@ -886,9 +991,9 @@ exprt function_call_builder::build() const
         throw std::runtime_error(func_name + " takes exactly one argument");
       exprt arg = converter_.get_expr(call_["args"][0]);
       if (arg.type().is_code())
-        arg = address_of_exprt(arg);
+        arg = build_address_of(arg);
       if (arg.type() != param_type)
-        arg = typecast_exprt(arg, param_type);
+        arg = build_typecast(arg, param_type);
 
       code_function_callt call;
       call.function() = symbol_exprt(symbol_id, fn_type);
@@ -942,7 +1047,7 @@ exprt function_call_builder::build() const
           throw std::runtime_error(func_name + " takes exactly one argument");
         exprt arg = converter_.get_expr(call_["args"][0]);
         if (arg.type() != uint_type())
-          arg = typecast_exprt(arg, uint_type());
+          arg = build_typecast(arg, uint_type());
         call.arguments().push_back(arg);
       }
       else if (!call_["args"].empty())

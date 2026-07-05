@@ -21,6 +21,10 @@ if(ENABLE_PYTHON_FRONTEND)
   add_subdirectory(python-frontend)
 endif()
 
+if(ENABLE_LD_FRONTEND)
+  add_subdirectory(ld-frontend)
+endif()
+
 add_subdirectory(clang-c-frontend)
 add_subdirectory(pointer-analysis)
 add_subdirectory(langapi)

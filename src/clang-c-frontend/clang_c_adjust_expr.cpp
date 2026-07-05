@@ -655,36 +655,32 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
 
 void clang_c_adjust::adjust_sizeof(exprt &expr)
 {
-  typet type;
-  if (expr.operands().size() == 0)
+  // op0 is a type_exprt carrying the measured type T; op1, when present, is
+  // clang's authoritative byte-size value. Adjust T in place and, for the VLA
+  // case where clang could not evaluate the size, compute the byte-size
+  // expression here with a namespace (esbmc/esbmc#5337).
+  if (expr.operands().empty())
   {
-    type = static_cast<const typet &>(expr.c_sizeof_type());
-    adjust_type(type);
+    log_error("sizeof node is missing its type-carrying operand");
+    abort();
   }
-  else if (expr.operands().size() == 1)
+
+  typet measured = expr.op0().type();
+  adjust_type(measured);
+  expr.op0().type() = measured;
+
+  if (expr.operands().size() == 1)
   {
-    type.swap(expr.op0().type());
-    adjust_type(type);
+    exprt value = c_sizeof(measured, ns);
+    if (value.is_nil())
+    {
+      log_error("type has no size, {}", measured.name());
+      abort();
+    }
+    expr.copy_to_operands(value);
   }
   else
-  {
-    log_error(
-      "sizeof operator expects zero or one operand, "
-      "but got{}",
-      expr.operands().size());
-    abort();
-  }
-
-  exprt new_expr = c_sizeof(type, ns);
-
-  if (new_expr.is_nil())
-  {
-    log_error("type has no size, {}", type.name());
-    abort();
-  }
-
-  new_expr.swap(expr);
-  expr.c_sizeof_type(type);
+    adjust_expr(expr.op1());
 }
 
 void clang_c_adjust::adjust_type(typet &type)
@@ -1138,6 +1134,18 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();
       expr.swap(popcount_expr);
+    }
+    else if (
+      identifier == "__builtin_parity" || identifier == "__builtin_parityl" ||
+      identifier == "__builtin_parityll")
+    {
+      // parity(x) = popcount(x) & 1: number of set bits, modulo two. See #4606.
+      exprt popcount_expr("popcount", int_type());
+      popcount_expr.operands() = expr.arguments();
+
+      exprt parity_expr("bitand", int_type());
+      parity_expr.copy_to_operands(popcount_expr, from_integer(1, int_type()));
+      expr.swap(parity_expr);
     }
     else if (
       identifier == "__builtin_bswap16" || identifier == "__builtin_bswap32" ||

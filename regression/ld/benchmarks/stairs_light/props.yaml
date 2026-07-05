@@ -1,0 +1,22 @@
+properties:
+
+  # P1: Light must not be on when PIR sensor is inactive AND buttons state is off
+  # If no motion and no button active, light should be off
+  - id: P1
+    kind: invariant
+    expression: "!stairs_light || stairs_pir_sensor || lights_buttons_state"
+    description: "Light must not be on without PIR detection or button activation"
+
+  # P2: PIR sensor and light output consistency
+  # When PIR detects motion and buttons are off, TOF timer keeps light on
+  - id: P2
+    kind: invariant
+    expression: "!stairs_pir_sensor || stairs_light || lights_buttons_state"
+    description: "PIR detection must activate the light"
+
+  # P3: Button state toggle consistency — SET and RESET are mutually exclusive
+  # lights_buttons_state cannot be simultaneously set and reset in the same scan
+  - id: P3
+    kind: invariant
+    expression: "!(control_button_up && control_button_down && lights_buttons_state)"
+    description: "Both buttons pressed simultaneously must not cause undefined light state"

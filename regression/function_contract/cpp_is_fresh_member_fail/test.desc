@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--function byteAt --enforce-contract byteAt
+^VERIFICATION FAILED$
+^.*dereference failure: array bounds violated.*$

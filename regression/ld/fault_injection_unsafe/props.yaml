@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: absence
+    expression: "Hazard && Inhibit"
+    description: "Hazard output must stay off while Inhibit is asserted"

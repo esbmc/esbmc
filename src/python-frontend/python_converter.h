@@ -32,6 +32,7 @@ class python_typechecking;
 class python_class_builder;
 class python_lambda;
 class python_exception_handler;
+class get_expr_depth_guard;
 
 /**
  * @class python_converter
@@ -88,6 +89,22 @@ public:
     return *ast_json;
   }
   exprt get_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Handles tuple `+`/`*` operators and lexicographic ordering.
+   *
+   * Concatenation builds a new tuple struct; repetition with a constant int
+   * builds an n-fold repeat; `Lt`/`LtE`/`Gt`/`GtE` lower to element-wise
+   * lexicographic comparisons. Returns nil_exprt for non-tuple operands or
+   * unsupported variants. Public so the sorted()/reversed() lowering can reuse
+   * the comparator for a convert-time sorting network over tuples.
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   std::string get_op(const std::string &op, const typet &type) const;
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -125,7 +142,7 @@ public:
     return string_handler_;
   }
 
-  tuple_handler &get_tuple_handler()
+  tuple_handler &get_tuple_handler() const
   {
     return *tuple_handler_;
   }
@@ -260,6 +277,7 @@ private:
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class get_expr_depth_guard;
   friend class python_converter_test_access;
 
   template <typename Func>
@@ -277,6 +295,13 @@ private:
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
   void preregister_global_variables(const nlohmann::json &ast_body);
+
+  /// None/Optional redesign (step A/B): if `annotation` is a nullable reference
+  /// to a user class — `Optional[Class]` or `Class | None` — return the user
+  /// class name; else "". Callers form `Class*` and build the class on demand
+  /// (so its struct symbol is complete, not a null/incomplete stub) per plan
+  /// section 10.
+  std::string annotated_optional_class(const nlohmann::json &annotation) const;
 
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
@@ -319,6 +344,10 @@ private:
 
   bool is_bytes_literal(const nlohmann::json &element);
 
+  // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
+  // `is not` paths); the public wrappers back-migrate once at the legacy seam.
+  expr2tc build_is_equality(const exprt &lhs, const exprt &rhs);
+
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
 
   exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
@@ -347,6 +376,25 @@ private:
     const locationt &location,
     const std::string &func_name);
 
+  // Stage 1 object-model migration (#3067): copy a constructed class *value*
+  // onto a fresh non-expiring `__ESBMC_new_object` heap object and return the
+  // pointer to it, so a `-> Cls` function can hand back a `Cls*` reference that
+  // survives its frame. `current_func_return_type_` must be the migrated
+  // pointer type. Used by both return paths in get_return_statements.
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
+  // Same, but boxing behind an explicit pointer type instead of
+  // `current_func_return_type_` (e.g. `char (*)[N]` for a local string
+  // array whose bytes must survive the frame, #5571).
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block,
+    const typet &ptr_type);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -369,6 +417,16 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  // True iff `t` denotes a user-defined Python class struct — either the struct
+  // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to whether
+  // the struct has been built yet). Excludes the list/dict/object model structs.
+  bool is_user_class_struct_type(const typet &t);
+
+  // True iff `t` is a pointer to a user-defined class struct (a migrated
+  // `Class*` instance). Used to gate the object-model migration's
+  // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
+  bool is_user_class_pointer(const typet &t);
 
   exprt resolve_identity_function_call(
     const exprt &func_expr,
@@ -399,6 +457,15 @@ private:
     const typet &symbol_type,
     const exprt &symbol_value);
 
+  /// Same as above, but for callers that already have a resolved
+  /// `locationt` (e.g. string_handler's nondet-fallback materialisation)
+  /// rather than an AST node to derive one from.
+  symbolt &create_tmp_symbol(
+    const locationt &location,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
@@ -411,7 +478,10 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt get_block(const nlohmann::json &ast_block);
+  exprt get_block(
+    const nlohmann::json &ast_block,
+    bool is_function_body = false,
+    bool is_loop_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
@@ -874,20 +944,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
-   *
-   * Concatenation builds a new tuple struct whose components are the
-   * concatenation of the operand tuples; repetition with a constant int
-   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
-   * unsupported variants (e.g. variable repeat count).
-   */
-  exprt handle_tuple_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
-    const nlohmann::json &element);
-
-  /**
    * @brief Handles type mismatches in relational operations.
    *
    * Processes single-character comparisons and float-vs-string comparisons.
@@ -1039,6 +1095,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  std::size_t get_expr_depth_ = 0;
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
@@ -1100,13 +1157,40 @@ private:
   /// known class, or a Name already tracked in flow_class_map_. Else "".
   std::string flow_rhs_class(const nlohmann::json &rhs) const;
 
+  /// User-class name returned by a non-constructor call RHS (`y = f(...)` where
+  /// `f` is annotated `-> Cls`), so the LHS can be typed as a `Cls*` reference.
+  /// Returns "" for constructor calls, unannotated returns, or non-class types.
+  /// Scope: only a direct `Name` call to a module-level function with a `Name`
+  /// or forward-reference-string return annotation. Method calls
+  /// (`obj.method()`), `Attribute` annotations (`-> mod.Cls`), and nested or
+  /// imported callees are not resolved here — those reach `Cls*` typing via the
+  /// explicit-annotation fallback in get_var_assign instead.
+  std::string call_return_class(const nlohmann::json &rhs) const;
+
   /// Nesting depth of get_block() invocations. The module/imported-module body
   /// is depth 1; every nested body (function, if/while/for, try/except) is
-  /// deeper because those bodies are converted through get_block() too. Gates
-  /// straight-line retyping to depth 1 only: a retype inside any nested or
-  /// conditionally-executed body cannot be modelled by a single static type,
-  /// so it is left to the existing fallback instead of being renamed.
+  /// deeper because those bodies are converted through get_block() too.
   unsigned block_nesting_ = 0;
+
+  /// How many of the enclosing get_block() frames are genuine function/method
+  /// bodies (bumped only when get_block is called for a function body). The
+  /// "unconditional spine" — the module body plus the chain of function bodies
+  /// containing the current statement — is exactly the frames where straight-
+  /// line retyping (#4770/#4774) is sound: there is no control-flow join that
+  /// could leave the runtime type ambiguous. That spine is precisely
+  /// block_nesting_ == function_body_depth_ + 1 (the +1 is the module body);
+  /// any if/while/for/try body adds a block_nesting_ frame WITHOUT a
+  /// function_body_depth_ frame, so the equality fails and retyping is refused.
+  /// Fail-safe: an unrecognised block kind is treated as conditional.
+  unsigned function_body_depth_ = 0;
+
+  /// How many enclosing get_block() frames are while/for loop bodies. A loop
+  /// target variable (and any rebinding inside the body) leaks past the loop in
+  /// Python, so reverting its retype at the body's join would be wrong (it would
+  /// hide the leaked value). Dynamic retyping (#4770/#4774) is therefore refused
+  /// while loop_body_depth_ > 0 and left to the existing fallback — the
+  /// pre-#5716 behaviour — whereas if/else/try bodies do retype-with-revert.
+  unsigned loop_body_depth_ = 0;
 
   function_call_cache function_call_cache_;
 

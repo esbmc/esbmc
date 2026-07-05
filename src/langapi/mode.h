@@ -15,6 +15,7 @@ enum class language_idt : int
   SOLIDITY,
   JIMPLE,
   PYTHON,
+  LD,
 };
 
 const char *language_name(language_idt id);
@@ -41,6 +42,7 @@ languaget *new_ansi_c_language();
 languaget *new_cpp_language();
 languaget *new_solidity_language();
 languaget *new_python_language();
+languaget *new_ld_language();
 
 // List of language entries, one can put in the mode table:
 #define LANGAPI_MODE_CLANG_C                                                   \
@@ -70,6 +72,10 @@ languaget *new_python_language();
 #define LANGAPI_MODE_PYTHON                                                    \
   {                                                                            \
     language_idt::PYTHON, &new_python_language                                 \
+  }
+#define LANGAPI_MODE_LD                                                        \
+  {                                                                            \
+    language_idt::LD, &new_ld_language                                         \
   }
 
 #define LANGAPI_MODE_END                                                       \

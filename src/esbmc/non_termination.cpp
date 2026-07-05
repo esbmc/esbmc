@@ -27,7 +27,7 @@ bool is_sat(const expr2tc &formula, optionst &options, const namespacet &ns)
 {
   std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
   solver->assert_expr(formula);
-  return solver->dec_solve() == smt_convt::P_SATISFIABLE;
+  return solver->dec_solve() == P_SATISFIABLE;
 }
 
 /// True if @p e has any subexpression that we can't safely hand to the

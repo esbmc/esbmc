@@ -48,6 +48,50 @@ elseif(DEFINED ESBMC_CHERI AND NOT ESBMC_CHERI AND ESBMC_CHERI_CLANG)
   unset(ESBMC_CHERI_CLANG_MORELLO)
 endif()
 
+# Patch stale DIA SDK path embedded by LLVM prebuilt binaries on Windows.
+if(WIN32)
+  find_library(DIAGUIDS_LIB diaguids
+    PATHS
+      "$ENV{VSINSTALLDIR}/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/18/Community/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2025/Community/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Professional/DIA SDK/lib/amd64"
+      "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/lib/amd64"
+    NO_DEFAULT_PATH
+  )
+  if(DIAGUIDS_LIB)
+    message(STATUS "DIA SDK found: ${DIAGUIDS_LIB}")
+    foreach(_dia_tgt IN LISTS LLVM_AVAILABLE_LIBS CLANG_EXPORTED_TARGETS)
+      if(NOT TARGET ${_dia_tgt})
+        continue()
+      endif()
+      get_target_property(_dia_iface ${_dia_tgt} INTERFACE_LINK_LIBRARIES)
+      if(NOT _dia_iface)
+        continue()
+      endif()
+      set(_dia_fixed)
+      set(_dia_changed FALSE)
+      foreach(_dia_lib IN LISTS _dia_iface)
+        if("${_dia_lib}" MATCHES "diaguids\\.lib$" AND NOT EXISTS "${_dia_lib}")
+          list(APPEND _dia_fixed "${DIAGUIDS_LIB}")
+          set(_dia_changed TRUE)
+        else()
+          list(APPEND _dia_fixed "${_dia_lib}")
+        endif()
+      endforeach()
+      if(_dia_changed)
+        set_target_properties(${_dia_tgt} PROPERTIES
+          INTERFACE_LINK_LIBRARIES "${_dia_fixed}")
+      endif()
+    endforeach()
+  endif()
+endif()
+
 if(${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
   message(WARNING "LLVM version ${LLVM_VERSION_MAJOR} is greater than maximum "
                   "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")

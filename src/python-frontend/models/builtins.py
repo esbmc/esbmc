@@ -391,3 +391,38 @@ def sorted_str(iterable: list[str], reverse: bool = False) -> list[str]:
             i = i + 1
 
     return result
+
+
+def reversed(iterable: list[int]) -> list[int]:
+    """Return a new list with the items of iterable in reverse order.
+
+    CPython's reversed() yields a reverse iterator; modelling it as a freshly
+    built list is sound in every list-consuming context ESBMC handles (slice
+    assignment, list(), iteration), mirroring how sorted() returns a list.
+    """
+    result: list[int] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
+    return result
+
+
+def reversed_float(iterable: list[float]) -> list[float]:
+    """Return a new list with the items of iterable in reverse order."""
+    result: list[float] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
+    return result
+
+
+def reversed_str(iterable: list[str]) -> list[str]:
+    """Return a new list with the items of iterable in reverse order."""
+    result: list[str] = []
+    i: int = len(iterable) - 1
+    while i >= 0:
+        result.append(iterable[i])
+        i = i - 1
+    return result

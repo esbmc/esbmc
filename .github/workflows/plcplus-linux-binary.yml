@@ -1,0 +1,77 @@
+name: Build ESBMC-PLC+ Linux binary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/goto-programs/plcopen_xml_parser.cpp'
+      - 'src/goto-programs/plcopen_xml_parser.h'
+      - 'src/frontends/ld/**'
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout ESBMC-PLC+ fork
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential cmake ninja-build git wget curl \
+            gcc-12 g++-12 g++-multilib libc6-dev-i386 \
+            libboost-all-dev libgmp-dev libssl-dev \
+            bison flex python3
+
+      - name: Configure CMake (minimal PLC+ build)
+        run: |
+          cmake -S . -B build \
+            -GNinja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc-12 \
+            -DCMAKE_CXX_COMPILER=g++-12 \
+            -DDOWNLOAD_DEPENDENCIES=On \
+            -DENABLE_BOOLECTOR=Off \
+            -DENABLE_YICES=Off \
+            -DENABLE_BITWUZLA=Off \
+            -DENABLE_GOTO_CONTRACTOR=Off \
+            -DBUILD_TESTING=Off \
+            -DENABLE_REGRESSION=Off \
+            -DENABLE_SOLIDITY_FRONTEND=Off \
+            -DENABLE_JIMPLE_FRONTEND=Off \
+            -DENABLE_PYTHON_FRONTEND=Off \
+            -DENABLE_CSMITH=Off \
+            -DENABLE_LD_FRONTEND=On \
+            -DENABLE_Z3=On
+
+      - name: Build ESBMC
+        run: cmake --build build --target esbmc -j$(nproc)
+
+      - name: Fix RPATH and bundle Z3 library
+        run: |
+          sudo apt-get install -y patchelf
+          Z3_LIB=$(find build/Z3 -name "libz3.so" | head -1)
+          echo "Found Z3 lib: $Z3_LIB"
+          cp "$Z3_LIB" libz3.so
+          patchelf --set-rpath /usr/local/lib build/src/esbmc/esbmc
+          cp build/src/esbmc/esbmc esbmc-linux-amd64
+
+      - name: Verify binary supports --ld-props
+        run: |
+          export LD_LIBRARY_PATH="$(pwd):$LD_LIBRARY_PATH"
+          ./esbmc-linux-amd64 --version
+          ./esbmc-linux-amd64 --help 2>&1 | grep -q "ld-props" && \
+            echo "OK: --ld-props supported" || \
+            (echo "FAIL: --ld-props not found in binary" && exit 1)
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esbmc-linux-amd64
+          path: |
+            esbmc-linux-amd64
+            libz3.so
+          retention-days: 30

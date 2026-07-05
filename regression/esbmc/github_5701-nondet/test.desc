@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--multi-property --no-slice --unwind 2
+^VERIFICATION FAILED$
+^\s*rl_mode = 0$

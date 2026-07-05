@@ -25,13 +25,30 @@ add_library(pythonfrontend STATIC
             converter/converter_types.cpp
             converter/converter_unop.cpp
             converter/converter_util.cpp
+            python_adjust.cpp
             python_class.cpp
             python_class_builder.cpp
             python_consteval.cpp
-            python_dict_handler.cpp
+            python-dict/dict_core.cpp
+            python-dict/dict_nested.cpp
+            python-dict/dict_construction.cpp
+            python-dict/dict_access.cpp
+            python-dict/dict_type_resolution.cpp
+            python-dict/dict_assignment.cpp
+            python-dict/dict_methods.cpp
+            python-dict/dict_compare.cpp
+            python_expr_builder.cpp
             python_exception_handler.cpp
             python_lambda.cpp
-            python_list.cpp
+            python-list/list_type_inference.cpp
+            python-list/list_type_map.cpp
+            python-list/list_construction.cpp
+            python-list/list_mutation.cpp
+            python-list/list_access.cpp
+            python-list/list_query.cpp
+            python-list/list_string_ops.cpp
+            python-list/list_comprehension.cpp
+            python-list/list_set_ops.cpp
             python_math.cpp
             python_set.cpp
             python_typechecking.cpp

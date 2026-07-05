@@ -6,7 +6,7 @@ weight: 10
 ## Overview
 
 ESBMC works by encoding a program's safety properties as an SMT formula and
-passing it to an SMT solver. By default, solving happens internally and only the
+passing it to an SMT solver [1]. By default, solving happens internally and only the
 verification verdict is reported. You can instead ask ESBMC to write the formula
 to a file, which is useful for:
 
@@ -52,12 +52,12 @@ esbmc file.c --z3 --smt-formula-only --output formula.smt2
 # Bitwuzla native format
 esbmc file.c --bitwuzla --smt-formula-only --output formula.smt2
 
-# Similarly: --boolector, --yices, --mathsat, --cvc4
+# Similarly: --boolector, --yices, --mathsat, --cvc4, --cvc5
 ```
 
 The `--smtlib` output is the most portable option — it follows the SMT-LIB v2
-standard and is accepted by all compliant solvers, including CVC5, even though
-ESBMC does not yet have a built-in CVC5 backend.
+standard and is accepted by any compliant solver, including external tools for
+which ESBMC has no built-in backend.
 
 ## About Formula Size
 
@@ -79,3 +79,9 @@ ESBMC selects the SMT theory based on the program and the active solver backend:
 
 Use `--smtlib` to see exactly which logic declaration (`(set-logic ...)`) ESBMC
 emits for your program.
+
+## References
+
+[1] Lucas C. Cordeiro, Bernd Fischer, João Marques-Silva: *SMT-Based Bounded
+Model Checking for Embedded ANSI-C Software.* IEEE Trans. Software Eng.
+38(4):957–974, 2012. [doi:10.1109/TSE.2011.59](https://doi.org/10.1109/TSE.2011.59)

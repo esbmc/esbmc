@@ -5,7 +5,7 @@
 
 #define new_ast new_solver_ast<cvc5_smt_ast>
 
-smt_convt *create_new_cvc5_solver(
+smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -19,7 +19,7 @@ smt_convt *create_new_cvc5_solver(
 }
 
 cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(true, true),
     fp_convt(this),
     to_bv_counter(0),
@@ -30,7 +30,7 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   slv.setOption("produce-assertions", "true");
 }
 
-smt_convt::resultt cvc5_convt::dec_solve()
+smt_resultt cvc5_convt::dec_solve()
 {
   pre_solve();
 
@@ -1117,6 +1117,45 @@ smt_astt cvc5_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return ast;
 }
 
+smt_astt cvc5_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function constant so every application shares it and
+  // the solver enforces functional congruence natively.
+  auto it = uf_decls.find(name);
+  cvc5::Term fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<cvc5::Sort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<cvc5::Sort>(arg->sort)->s);
+
+    cvc5::Sort fun_sort =
+      slv.mkFunctionSort(domain, to_solver_smt_sort<cvc5::Sort>(rangesort)->s);
+    fun = slv.mkConst(fun_sort, name);
+    uf_decls.emplace(name, fun);
+  }
+
+  // APPLY_UF takes [function, arg0, arg1, ...].
+  std::vector<cvc5::Term> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<cvc5_smt_ast>(arg)->a);
+
+  return new_ast(slv.mkTerm(cvc5::Kind::APPLY_UF, apply_args), rangesort);
+}
+
 smt_astt cvc5_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
@@ -1259,7 +1298,7 @@ smt_sortt cvc5_convt::mk_fpbv_rm_sort()
 
 void cvc5_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   slv.push();
 }
 
@@ -1269,7 +1308,7 @@ void cvc5_convt::pop_ctx()
   symtab_levels.erase(ctx_level);
 
   slv.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 std::string cvc5_convt::dump_smt()

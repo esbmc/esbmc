@@ -52,6 +52,7 @@ bool goto_convert_functionst::hide(const goto_programt &goto_program)
 
 void goto_convert_functionst::add_return(
   goto_functiont &f,
+  const irep_idt &identifier,
   const locationt &location)
 {
   if (!f.body.instructions.empty() && f.body.instructions.back().is_return())
@@ -67,10 +68,22 @@ void goto_convert_functionst::add_return(
   t->make_return();
   t->location = location;
 
+  type2tc ret_type = ns.follow(to_code_type(f.type).ret_type);
+
+  // C11 §5.1.2.2.3p1: reaching the } that terminates main returns 0. Synthesize
+  // the standard-mandated implicit `return 0` instead of a nondet value so that
+  // main's return value is modelled correctly (e.g. when a contract's ensures
+  // clause refers to __ESBMC_return_value).
+  const std::string &id = id2string(identifier);
+  if (id == "c:@F@main" || has_prefix(id, "c:@F@main#"))
+  {
+    t->code = code_return2tc(gen_zero(ret_type));
+    return;
+  }
+
   // Build a nondet side-effect of the function's return type directly on
   // the irep2 side. Followed through symbol-typed aliases as the legacy
   // path did.
-  type2tc ret_type = ns.follow(to_code_type(f.type).ret_type);
   expr2tc nondet = sideeffect2tc(
     ret_type,
     expr2tc(),
@@ -79,6 +92,53 @@ void goto_convert_functionst::add_return(
     type2tc(),
     sideeffect2t::allockind::nondet);
   t->code = code_return2tc(nondet);
+}
+
+// Stamp `loc` onto every value-level sub-expression of `expr` that lacks a
+// source location (used by restore_value_locations below).
+static void stamp_value_locations(exprt &expr, const locationt &loc)
+{
+  // Read this node's OWN location (const overload, non-recursive); the mutable
+  // overload would materialise an empty #location, and find_location() would
+  // descend into operands and report a child's location for this node.
+  const locationt &own = static_cast<const exprt &>(expr).location();
+  if (own.is_nil() || own.get_file().empty())
+    expr.location() = loc;
+
+  Forall_operands (it, expr)
+    stamp_value_locations(*it, loc);
+}
+
+// IREP2 value-level expressions carry no source location (only the
+// structured-CF code kinds got the V.4.1/V.4.5 non-reflected `location` field).
+// The clang frontends stamp every sub-expression of a statement with that
+// statement's #location, but the legacy->IREP2->legacy body round-trip drops it
+// from the value operands. goto_convert then generates instructions from those
+// operands (e.g. the tmp/GOTO sequence a `&&`/`||` short-circuit lowers to,
+// whose location is read from the operand at goto_sideeffects.cpp:242) with an
+// empty location -- breaking any pass keyed on instruction location, e.g.
+// --condition-coverage skips conditions whose file is not the source file
+// (goto_coverage.cpp:947), reporting 0 conditions and a spurious SUCCESSFUL.
+// Restore the frontend invariant by pushing each statement's location down onto
+// its location-less value operands. Each nested statement governs its subtree.
+static void restore_value_locations(exprt &code, const locationt &inherited)
+{
+  // This statement's own location (non-recursive const read); falls back to the
+  // enclosing statement's when the round-trip left this node location-less.
+  const locationt &own = static_cast<const exprt &>(code).location();
+  const locationt &here =
+    (own.is_not_nil() && !own.get_file().empty()) ? own : inherited;
+
+  if (here.get_file().empty())
+    return; // no location to propagate yet
+
+  Forall_operands (it, code)
+  {
+    if (it->is_code())
+      restore_value_locations(*it, here);
+    else
+      stamp_value_locations(*it, here);
+  }
 }
 
 void goto_convert_functionst::convert_function(symbolt &symbol)
@@ -102,6 +162,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   goto_functiont &f = functions.function_map.at(identifier);
   f.type = migrate_symbol_type(symbol);
+  f.exception_spec = exception_specificationt::from_type(symbol.get_type());
   f.body_available = symbol.get_value().is_not_nil();
 
   if (!f.body_available)
@@ -113,11 +174,27 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     abort();
   }
 
-  const codet &code = to_code(symbol.get_value());
+  // V.4.4 (esbmc/esbmc#4715): the function body is always lowered through the
+  // IREP2 round-trip. get_value2() returns the IREP2 body directly when a
+  // frontend stored it (e.g. the Python frontend post-adjust), or lazily
+  // forward-migrates the legacy body for other frontends; migrate_expr_back
+  // then yields the codet goto_convert_rec consumes. The pre-V.4.4 legacy
+  // bypass (to_code(symbol.get_value())) and the --no-irep2-bodies escape hatch
+  // are gone — this is the only body path.
+  exprt roundtrip_body_storage = migrate_expr_back(symbol.get_value2());
+  // Re-attach the per-statement source locations the round-trip dropped from
+  // value operands, so goto_convert-generated instructions stay located.
+  restore_value_locations(roundtrip_body_storage, locationt());
+  const codet &code = to_code(roundtrip_body_storage);
 
+  // The closing-brace location is the END_FUNCTION instruction's location; for
+  // an empty function body it is the *only* located instruction, so losing it
+  // leaves the whole function unlocated and passes keyed on instruction
+  // location skip it (e.g. --branch-function-coverage stops counting the
+  // function entry point). code_block2t now carries #end_location through the
+  // round-trip (W1, esbmc/esbmc#4715), so read it straight off the body block.
   locationt end_location;
-
-  if (to_code(symbol.get_value()).get_statement() == "block")
+  if (code.get_statement() == "block")
     end_location =
       static_cast<const locationt &>(to_code_block(code).end_location());
   else
@@ -140,7 +217,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   // add non-det return value, if needed
   if (targets.has_return_value)
-    add_return(f, end_location);
+    add_return(f, identifier, end_location);
 
   // Wrap the body of functions name __VERIFIER_atomic_* with atomic_begin
   // and atomic_end

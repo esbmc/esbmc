@@ -3,17 +3,22 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
 #include <util/std_code.h>
@@ -35,6 +40,8 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+
+using namespace python_expr;
 
 string_handler::string_handler(
   python_converter &converter,
@@ -134,7 +141,18 @@ static std::optional<BigInt> get_constant_array_extent(const exprt &array_expr)
 static exprt
 make_binary_bool_expr(const irep_idt &id, const exprt &lhs, const exprt &rhs)
 {
-  exprt out(id, bool_type());
+  // V.3: build the boolean binop in IREP2 (the only ids used are =/and/or),
+  // back-migrated for the legacy callers.
+  expr2tc l2, r2;
+  migrate_expr(lhs, l2);
+  migrate_expr(rhs, r2);
+  if (id == "=")
+    return migrate_expr_back(equality2tc(l2, r2));
+  if (id == "and")
+    return migrate_expr_back(and2tc(l2, r2));
+  if (id == "or")
+    return migrate_expr_back(or2tc(l2, r2));
+  exprt out(id, bool_type()); // fallback for any other id
   out.copy_to_operands(lhs, rhs);
   return out;
 }
@@ -152,15 +170,17 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const BigInt extent = *extent_opt;
+  // V.3: membership constant results built in IREP2.
   if (extent <= 0)
-    return gen_boolean(needle_values.empty());
+    return migrate_expr_back(
+      needle_values.empty() ? gen_true_expr() : gen_false_expr());
 
   const BigInt haystack_content_len = extent - 1;
   const BigInt needle_len = static_cast<unsigned long>(needle_values.size());
   if (needle_len == 0)
-    return gen_boolean(true);
+    return migrate_expr_back(gen_true_expr());
   if (needle_len > haystack_content_len)
-    return gen_boolean(false);
+    return migrate_expr_back(gen_false_expr());
 
   // Keep this bounded to avoid path explosion in symbolic membership.
   if (
@@ -169,7 +189,7 @@ static std::optional<exprt> build_symbolic_membership_from_array(
     return std::nullopt;
 
   const long long max_start = (haystack_content_len - needle_len).to_int64();
-  exprt disjunction = gen_boolean(false);
+  exprt disjunction = migrate_expr_back(gen_false_expr()); // V.3
 
   for (long long start = 0; start <= max_start; ++start)
   {
@@ -265,6 +285,80 @@ static int count_name_assignments_in_node(
   }
 
   return count;
+}
+
+// Returns true if `var_name` is mutated in place anywhere within `node`: an
+// in-place list method call (append/extend/insert/remove/pop/clear/sort/
+// reverse) or a subscript store (`var_name[i] = ...`). str.join uses this to
+// decide whether the static fold of a list variable's initializer is still
+// valid: once the list is mutated, the declaration initialiser no longer
+// reflects the runtime contents (e.g. `new_lst = []; new_lst.append(w)` folds
+// to "", #5163), so the join must go through the runtime model instead.
+// Conservative by design -- a false "mutated" only costs the (correct)
+// runtime dispatch, never correctness.
+static bool
+list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+
+  if (node.is_object() && node.contains("_type"))
+  {
+    const std::string type = node["_type"].get<std::string>();
+
+    // <var_name>.<mutator>(...): in-place list mutators
+    if (type == "Call" && node.contains("func"))
+    {
+      const auto &func = node["func"];
+      if (
+        func.contains("_type") && func["_type"] == "Attribute" &&
+        func.contains("attr") && func.contains("value") &&
+        func["value"].contains("_type") && func["value"]["_type"] == "Name" &&
+        func["value"].contains("id") && func["value"]["id"] == var_name)
+      {
+        static const std::array<const char *, 8> mutators = {
+          {"append",
+           "extend",
+           "insert",
+           "remove",
+           "pop",
+           "clear",
+           "sort",
+           "reverse"}};
+        const std::string attr = func["attr"].get<std::string>();
+        for (const char *m : mutators)
+          if (attr == m)
+            return true;
+      }
+    }
+
+    // <var_name>[i] = ...: subscript store
+    if (type == "Assign" && node.contains("targets"))
+    {
+      for (const auto &tgt : node["targets"])
+        if (
+          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
+          tgt.contains("value") && tgt["value"].contains("_type") &&
+          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
+          tgt["value"]["id"] == var_name)
+          return true;
+    }
+  }
+
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (list_var_is_mutated(elem, var_name))
+        return true;
+  }
+  else if (node.is_object())
+  {
+    for (const auto &item : node.items())
+      if (list_var_is_mutated(item.value(), var_name))
+        return true;
+  }
+
+  return false;
 }
 
 } // namespace
@@ -440,14 +534,62 @@ bool string_handler::try_extract_const_string_expr(
 
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
-  // Bare nondet `char *`. Used as a sound over-approximation when a
-  // str.*() handler cannot extract a compile-time constant receiver.
-  // Subsequent string ops over this value see arbitrary content, which
-  // preserves soundness for safety properties (we cannot conclude a
-  // specific functional result, but we cannot wrongly conclude SAFE).
-  side_effect_expr_nondett nondet(gen_pointer_type(char_type()));
+  // Sound over-approximation when a str.*() handler cannot extract a
+  // compile-time constant receiver. Subsequent string ops over this value
+  // see arbitrary content, which preserves soundness for safety properties
+  // (we cannot conclude a specific functional result, but we cannot
+  // wrongly conclude SAFE).
+  //
+  // Materialised into a declared temporary (decl + assign) rather than
+  // returned as a raw `side_effect_expr_nondett`: callers may embed the
+  // result directly in a comparison (e.g. `f"{w:e}" == "x"`), and
+  // handle_string_comparison's has_unsupported_side_effects_internal()
+  // rejects any bare `sideeffect` operand whose statement isn't
+  // "function_call" (#5767 — this used to abort GOTO conversion with
+  // "Cannot compare non-function side effects" instead of yielding a
+  // sound verdict). Routing the nondet value through a temp symbol first
+  // matches the materialisation pattern used elsewhere in the frontend
+  // (e.g. the dict-truthiness $dict_size$ temp in
+  // get_unary_operator_expr), and keeps the fallback usable in any
+  // expression position.
+  //
+  // Known under-approximation: in a `while <fallback-compare>:` TEST the
+  // decl+assign land in the enclosing block (the per-iteration
+  // materialisation path only fires for Call tests), so the nondet is
+  // fixed across iterations where Python re-evaluates the f-string each
+  // time. Still strictly better than the pre-#5767 conversion abort for
+  // comparisons; route while-tests through the loop-body materialisation
+  // machinery if per-iteration freshness is ever needed there.
+  typet ptr_type = gen_pointer_type(char_type());
+
+  if (!converter_.current_block)
+  {
+    // No statement context to hang a decl+assign on. Not expected on the
+    // module/function statement spine (get_block always installs a
+    // current_block there); kept as a defensive fallback to the previous
+    // raw-sideeffect behaviour rather than dereferencing a null block.
+    side_effect_expr_nondett nondet(ptr_type);
+    nondet.location() = location;
+    return nondet;
+  }
+
+  symbolt &tmp =
+    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
+
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  side_effect_expr_nondett nondet(ptr_type);
   nondet.location() = location;
-  return nondet;
+
+  code_assignt assign(symbol_expr(tmp), nondet);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt result = symbol_expr(tmp);
+  result.location() = location;
+  return result;
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -522,6 +664,10 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
+  // std::pow/std::round and the ostream conversion below honour the host FP
+  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
+  // so the decimal fold matches CPython regardless of the host's mode.
+  const round_to_nearest_guard rounding_guard;
   double val = 0.0;
 
   if (width == 32 && float_bits.length() == 32)
@@ -560,19 +706,24 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
-// Parse the leading [[fill]align][width] portion of a Python format spec.
-// Returns true if any padding parameters were extracted; on success, *rest
-// is set to the remainder of the spec (precision/type) for further handling.
+// Parse the leading [[fill]align][0][width] portion of a Python format
+// spec. Returns true if any padding parameters were extracted; on success,
+// *rest is set to the remainder of the spec (precision/type) for further
+// handling. The '0'-before-width shorthand sets fill='0' and zero_pad; the
+// implied alignment depends on the value's type ('=' for numbers, '<' for
+// strings), which the caller resolves.
 static bool parse_format_padding(
   const std::string &format,
   char &fill,
   char &align,
   int &width,
+  bool &zero_pad,
   std::string &rest)
 {
   fill = ' ';
   align = '\0';
   width = 0;
+  zero_pad = false;
   rest = format;
 
   if (
@@ -589,6 +740,18 @@ static bool parse_format_padding(
   {
     align = format[0];
     rest = format.substr(1);
+  }
+
+  // Zero-padding shorthand: a '0' before the width sets fill='0'
+  // ("{:03d}" -> "007"); the implied alignment is type-dependent and is
+  // resolved by the caller ('=' sign-aware for numbers, '<' for strings).
+  if (
+    align == '\0' && rest.size() >= 2 && rest[0] == '0' &&
+    std::isdigit(static_cast<unsigned char>(rest[1])))
+  {
+    fill = '0';
+    zero_pad = true;
+    rest = rest.substr(1);
   }
 
   size_t i = 0;
@@ -629,8 +792,19 @@ apply_padding(const std::string &input, char fill, char align, int width)
     size_t right = pad - left;
     return std::string(left, fill) + input + std::string(right, fill);
   }
-  case '>':
   case '=':
+  {
+    // Padding goes between the sign and the digits ("-0042", not "00-42").
+    std::string sign;
+    std::string digits = input;
+    if (!digits.empty() && (digits[0] == '-' || digits[0] == '+'))
+    {
+      sign = digits.substr(0, 1);
+      digits = digits.substr(1);
+    }
+    return sign + std::string(pad, fill) + digits;
+  }
+  case '>':
   default:
     return std::string(pad, fill) + input;
   }
@@ -644,27 +818,134 @@ exprt string_handler::apply_format_specification(
   if (format.empty())
     return convert_to_string(expr);
 
+  // Thousands grouping for an integer: "{:,}" / "{:,d}". Computed exactly for
+  // a constant integer value here; grouping combined with a width, sign
+  // option, or float presentation falls through to the existing handling
+  // (which uses a sound nondet fallback), so this never introduces a wrong
+  // value. Without this the ',' is not consumed and the whole format is a
+  // nondet string.
+  if (
+    (format == "," || format == ",d") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    // A negative literal is stored as unary- over a constant; fold it so
+    // grouping sees the concrete value.
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      std::string digits = integer2string(neg ? -n : n);
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      if (neg)
+        grouped = "-" + grouped;
+      std::vector<unsigned char> chars(grouped.begin(), grouped.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), grouped.size() + 1));
+    }
+  }
+
   // Pad/align prefix ([[fill]align][width]). Default-align right for
   // numerics and left for strings, matching CPython.
   char fill, align;
   int width;
+  bool zero_pad;
   std::string rest;
-  if (parse_format_padding(format, fill, align, width, rest) && rest.empty())
+  const bool numeric_expr = expr.type().is_signedbv() ||
+                            expr.type().is_unsignedbv() ||
+                            expr.type().is_floatbv() || expr.type().is_bool();
+  // A trailing 'd'/'i' presentation type on an integer value renders the
+  // same text as str(), so padding composes with it directly.
+  auto int_presentation = [&](const std::string &type_char) {
+    return (type_char == "d" || type_char == "i") &&
+           (expr.type().is_signedbv() || expr.type().is_unsignedbv());
+  };
+  // The '0'-shorthand's implied alignment is type-dependent (CPython:
+  // sign-aware '=' for numbers, '<' for strings — format('ab', '05') is
+  // 'ab000').
+  auto resolve_zero_pad_align = [&]() {
+    if (zero_pad && align == '\0')
+      align = numeric_expr ? '=' : '<';
+  };
+  if (
+    parse_format_padding(format, fill, align, width, zero_pad, rest) &&
+    (rest.empty() || int_presentation(rest)))
   {
-    exprt body = convert_to_string(expr);
+    resolve_zero_pad_align();
+    // Resolve a variable to its compile-time constant value where possible
+    // so padding can fold: a negative int literal is stored as unary- over
+    // a constant, and convert_to_string returns string symbols unread.
+    exprt fmt_expr = expr;
+    if (fmt_expr.is_symbol())
+    {
+      const symbolt *sym = find_cached_symbol(
+        to_symbol_expr(fmt_expr).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+      {
+        const exprt &val = sym->get_value();
+        if (
+          val.id() == "unary-" && val.operands().size() == 1 &&
+          val.op0().is_constant())
+        {
+          BigInt v;
+          if (!to_integer(val.op0(), v))
+            fmt_expr = from_integer(-v, val.op0().type());
+        }
+      }
+    }
+    exprt body = convert_to_string(fmt_expr);
+    if (body.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(body).get_identifier().as_string());
+      if (
+        sym && sym->get_value().is_constant() &&
+        sym->get_value().type().is_array())
+        body = sym->get_value();
+    }
+    // When the rendered text cannot be read at conversion time, returning
+    // the unpadded body would be a wrong value whenever the width exceeds
+    // the runtime length — fall back to a sound nondet string instead.
+    auto unfoldable_padding = [&]() {
+      log_warning(
+        "f-string format spec '{}' on a value not foldable at conversion "
+        "time: using a nondet string",
+        format);
+      return build_nondet_string_fallback(expr.location());
+    };
     if (!body.type().is_array() || body.type().subtype() != char_type())
-      return body;
+      return width > 0 ? unfoldable_padding() : body;
     // Extract the literal characters; bail out if the body isn't a
     // string-constant or constant char array we can read.
     std::string content = extract_string_from_array_operands(body);
     if (
       content.empty() && !body.is_constant() && body.id() != "string-constant")
-      return body;
+      return width > 0 ? unfoldable_padding() : body;
     if (align == '\0')
-      align = (expr.type().is_signedbv() || expr.type().is_unsignedbv() ||
-               expr.type().is_floatbv() || expr.type().is_bool())
-                ? '>'
-                : '<';
+      align = numeric_expr ? '>' : '<';
     std::string padded = apply_padding(content, fill, align, width);
     typet string_type =
       type_handler_.build_array(char_type(), padded.size() + 1);
@@ -673,8 +954,9 @@ exprt string_handler::apply_format_specification(
     return make_char_array_expr(chars, string_type);
   }
 
-  // Handle integer formatting
-  if (format == "d" || format == "i")
+  // Presentation types that render the same text as str(): integer 'd'/'i'
+  // and string 's'.
+  if (format == "d" || format == "i" || format == "s")
     return convert_to_string(expr);
 
   // Handle float formatting with precision
@@ -709,6 +991,7 @@ exprt string_handler::apply_format_specification(
         if (t.is_floatbv() && (float_width == 32 || float_width == 64))
         {
           const std::string *float_bits = nullptr;
+          std::string negated_bits;
 
           // Handle constant expressions
           if (expr.is_constant())
@@ -722,12 +1005,40 @@ exprt string_handler::apply_format_specification(
 
             if (symbol && symbol->get_value().is_constant())
               float_bits = &symbol->get_value().value().as_string();
+            else if (symbol)
+            {
+              // A negative float literal is stored as unary- over a
+              // constant; IEEE negation is a sign-bit flip (MSB first).
+              const exprt &val = symbol->get_value();
+              if (
+                val.id() == "unary-" && val.operands().size() == 1 &&
+                val.op0().is_constant() && val.op0().type().is_floatbv())
+              {
+                negated_bits = val.op0().value().as_string();
+                if (negated_bits.length() == float_width)
+                {
+                  negated_bits[0] = negated_bits[0] == '0' ? '1' : '0';
+                  float_bits = &negated_bits;
+                }
+              }
+            }
           }
 
           if (float_bits && float_bits->length() == float_width)
           {
             std::string formatted_str =
               float_to_string(*float_bits, float_width, precision);
+
+            // Compose any fill/align/width prefix parsed above with the
+            // precision-formatted text ("{:07.2f}" of 1.5 -> "0001.50"),
+            // instead of silently dropping the width.
+            if (width > 0)
+            {
+              resolve_zero_pad_align();
+              if (align == '\0')
+                align = '>';
+              formatted_str = apply_padding(formatted_str, fill, align, width);
+            }
 
             typet string_type =
               type_handler_.build_array(char_type(), formatted_str.size() + 1);
@@ -742,8 +1053,12 @@ exprt string_handler::apply_format_specification(
     }
   }
 
-  // Default: just convert to string
-  return convert_to_string(expr);
+  // Any other spec (e.g. "x", ",", combined width+precision) changes the
+  // rendered text; folding to the unformatted value would be a wrong value
+  // that can satisfy a false assertion. Fall back to a sound nondet string.
+  log_warning(
+    "f-string format spec '{}' is not modelled: using a nondet string", format);
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::make_char_array_expr(
@@ -852,7 +1167,7 @@ exprt string_handler::convert_to_string(const exprt &expr)
   {
     typet char_ptr = gen_pointer_type(char_type());
     if (t != char_ptr)
-      return typecast_exprt(expr, char_ptr);
+      return build_typecast(expr, char_ptr);
     return expr;
   }
 
@@ -913,8 +1228,25 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
         // Expression to be formatted
         exprt expr = converter_.get_expr(value["value"]);
 
+        // A !r/!a conversion changes the rendered text ("{s!r}" quotes);
+        // rendering the unconverted value would be a wrong value that can
+        // satisfy a false assertion. Not modelled — use a sound nondet
+        // string. !s renders the same text as the default.
+        int conversion =
+          (value.contains("conversion") && value["conversion"].is_number())
+            ? value["conversion"].get<int>()
+            : -1;
+        if (conversion != -1 && conversion != 's')
+        {
+          log_warning(
+            "f-string conversion '!{}' is not modelled: using a nondet "
+            "string",
+            static_cast<char>(conversion));
+          part_expr = build_nondet_string_fallback(expr.location());
+        }
         // Handle format specification if present
-        if (value.contains("format_spec") && !value["format_spec"].is_null())
+        else if (
+          value.contains("format_spec") && !value["format_spec"].is_null())
         {
           std::string format = process_format_spec(value["format_spec"]);
           part_expr = apply_format_specification(expr, format);
@@ -1074,8 +1406,10 @@ exprt string_handler::get_array_base_address(const exprt &arr)
 {
   if (arr.type().is_pointer())
     return arr;
-  exprt index = index_exprt(arr, from_integer(0, index_type()));
-  return address_of_exprt(index);
+  // arr is non-pointer (array) here; index2t source ok, address_of of a
+  // non-constant/non-address_of expr is a valid address_of2t source.
+  exprt index = build_index(arr, from_integer(0, index_type()));
+  return build_address_of(index);
 }
 
 exprt string_handler::handle_string_concatenation_with_promotion(
@@ -1107,9 +1441,9 @@ exprt string_handler::handle_string_concatenation_with_promotion(
       {
         symbolt &temp = converter_.create_tmp_symbol(
           nlohmann::json(), "$char_temp$", lhs.type(), gen_zero(lhs.type()));
-        code_assignt assign(symbol_expr(temp), lhs);
+        code_assignt assign(build_symbol(temp), lhs);
         converter_.add_instruction(assign);
-        lhs_value = symbol_expr(temp);
+        lhs_value = build_symbol(temp);
       }
 
       typet string_type = type_handler_.build_array(char_type(), 2);
@@ -1191,22 +1525,24 @@ exprt string_handler::handle_string_membership(
     exprt rhs_addr = get_array_base_address(rhs_str);
 
     // lhs contains the character value (as void*), cast directly to int
-    typecast_exprt char_as_int(lhs, int_type());
+    exprt char_as_int = build_typecast(lhs, int_type());
 
     // Call strchr(string, character)
-    side_effect_expr_function_callt strchr_call;
-    strchr_call.function() = symbol_expr(*strchr_symbol);
-    strchr_call.arguments() = {rhs_addr, char_as_int};
+    exprt strchr_call = build_call_expr(
+      *strchr_symbol, gen_pointer_type(char_type()), {rhs_addr, char_as_int});
     strchr_call.location() = converter_.get_location_from_decl(element);
-    strchr_call.type() = gen_pointer_type(char_type());
 
-    // Check if result != NULL (character found)
+    // Check if result != NULL (character found). Both operands are synthetic
+    // char* values (the strchr() result and a null constant), so build the
+    // comparison in IREP2 (V.3).
     constant_exprt null_ptr(gen_pointer_type(char_type()));
     null_ptr.set_value("NULL");
 
-    exprt not_equal("notequal", bool_type());
-    not_equal.copy_to_operands(strchr_call, null_ptr);
-
+    // V.3: build `strchr(...) != NULL` in IREP2 via the shared build_notequal
+    // helper (#5576). The migrate round-trip drops the call operand's location,
+    // so re-attach it.
+    exprt not_equal = build_notequal(strchr_call, null_ptr);
+    not_equal.op0().location() = strchr_call.location();
     return not_equal;
   }
 
@@ -1292,7 +1628,11 @@ exprt string_handler::handle_string_membership(
 
   if (needle_values.has_value() && haystack_values.has_value())
   {
-    return gen_boolean(contains_subsequence(*haystack_values, *needle_values));
+    // V.3: concrete-fold membership result built in IREP2.
+    return migrate_expr_back(
+      contains_subsequence(*haystack_values, *needle_values)
+        ? gen_true_expr()
+        : gen_false_expr());
   }
 
   // C strstr() is not null-aware for embedded '\0'. When one operand is
@@ -1336,20 +1676,22 @@ exprt string_handler::handle_string_membership(
     throw std::runtime_error("strstr function not found for 'in' operator");
 
   // Call strstr(haystack, needle) - in Python "needle in haystack"
-  side_effect_expr_function_callt strstr_call;
-  strstr_call.function() = symbol_expr(*strstr_symbol);
-  strstr_call.arguments() = {
-    rhs_addr, lhs_addr}; // haystack is rhs, needle is lhs
+  // haystack is rhs, needle is lhs
+  exprt strstr_call = build_call_expr(
+    *strstr_symbol, gen_pointer_type(char_type()), {rhs_addr, lhs_addr});
   strstr_call.location() = converter_.get_location_from_decl(element);
-  strstr_call.type() = gen_pointer_type(char_type());
 
-  // Check if result != NULL (substring found)
+  // Check if result != NULL (substring found). Both operands are synthetic
+  // char* values (the strstr() result and a null constant), so build the
+  // comparison in IREP2 (V.3).
   constant_exprt null_ptr(gen_pointer_type(char_type()));
   null_ptr.set_value("NULL");
 
-  exprt not_equal("notequal", bool_type());
-  not_equal.copy_to_operands(strstr_call, null_ptr);
-
+  // V.3: build `strstr(...) != NULL` in IREP2 via the shared build_notequal
+  // helper (#5576, mirrors the strchr membership path above). The migrate
+  // round-trip drops the call operand's location, so re-attach it.
+  exprt not_equal = build_notequal(strstr_call, null_ptr);
+  not_equal.op0().location() = strstr_call.location();
   return not_equal;
 }
 
@@ -1399,38 +1741,248 @@ string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
   return find_cached_symbol(symbol_id);
 }
 
-bool string_handler::extract_constant_string(
+static bool fold_constant_string(
   const nlohmann::json &node,
   python_converter &converter,
+  std::string &out,
+  unsigned depth);
+
+// Python str.replace(old, new, count): replace up to `count` non-overlapping
+// occurrences of `old` with `new`, scanning left to right; a negative `count`
+// replaces every occurrence. Returns false for an empty `old` (Python inserts
+// `new` between every character), so the caller defers to the runtime model
+// (which still under-approximates split — see #5096).
+static bool python_str_replace(
+  const std::string &subject,
+  const std::string &old_sub,
+  const std::string &new_sub,
+  long long count,
   std::string &out)
 {
+  if (old_sub.empty())
+    return false;
+
+  out.clear();
+  std::size_t pos = 0;
+  for (long long done = 0; count < 0 || done < count; ++done)
+  {
+    std::size_t hit = subject.find(old_sub, pos);
+    if (hit == std::string::npos)
+      break;
+    out.append(subject, pos, hit - pos);
+    out += new_sub;
+    pos = hit + old_sub.size();
+  }
+  out.append(subject, pos, std::string::npos);
+  return true;
+}
+
+// Fold a constant string-valued method call: `sep.join([...])` over a literal
+// list/tuple of constant strings, or `subject.replace(old, new[, count])`.
+// Only positional, constant-foldable arguments are handled; anything else
+// returns false so the caller falls back to the runtime string model (which
+// still under-approximates split — see #5096).
+static bool fold_string_method_call(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out,
+  unsigned depth)
+{
+  const auto &func = node["func"];
   if (
-    node.contains("_type") && node["_type"] == "Constant" &&
-    node.contains("value") && node["value"].is_string())
+    !func.contains("_type") || func["_type"] != "Attribute" ||
+    !func.contains("attr") || !func.contains("value"))
+    return false;
+
+  // Keyword arguments are not folded.
+  if (node.contains("keywords") && !node["keywords"].empty())
+    return false;
+
+  const std::string method = func["attr"].get<std::string>();
+  const nlohmann::json &args = node["args"];
+
+  if (method == "join")
+  {
+    std::string sep;
+    if (
+      args.size() != 1 ||
+      !fold_constant_string(func["value"], converter, sep, depth + 1))
+      return false;
+
+    // Resolve the iterable, following a single Name binding, to a literal
+    // list/tuple of constant strings.
+    nlohmann::json seq = args[0];
+    if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
+    {
+      nlohmann::json decl = json_utils::get_var_value(
+        seq["id"].get<std::string>(),
+        converter.get_current_func_name(),
+        converter.get_ast_json());
+      if (decl.empty() || !decl.contains("value"))
+        return false;
+      seq = decl["value"];
+    }
+    if (
+      !seq.contains("_type") ||
+      (seq["_type"] != "List" && seq["_type"] != "Tuple") ||
+      !seq.contains("elts"))
+      return false;
+
+    out.clear();
+    bool first = true;
+    for (const auto &elt : seq["elts"])
+    {
+      std::string piece;
+      if (!fold_constant_string(elt, converter, piece, depth + 1))
+        return false;
+      if (!first)
+        out += sep;
+      out += piece;
+      first = false;
+    }
+    return true;
+  }
+
+  if (method == "replace")
+  {
+    std::string subject, old_sub, new_sub;
+    if (
+      args.size() < 2 || args.size() > 3 ||
+      !fold_constant_string(func["value"], converter, subject, depth + 1) ||
+      !fold_constant_string(args[0], converter, old_sub, depth + 1) ||
+      !fold_constant_string(args[1], converter, new_sub, depth + 1))
+      return false;
+
+    long long count = -1;
+    if (
+      args.size() == 3 && !json_utils::extract_constant_integer(
+                            args[2],
+                            converter.get_current_func_name(),
+                            converter.get_ast_json(),
+                            count))
+      return false;
+
+    return python_str_replace(subject, old_sub, new_sub, count, out);
+  }
+
+  return false;
+}
+
+// Recursively fold an AST node into a constant string: a string literal, a Name
+// bound to such a value, a Python "+" concatenation, a "*" repetition, or a
+// constant-foldable join()/replace() method call. Any non-constant operand
+// yields false, so callers fall back to the runtime string model. `depth`
+// bounds the recursion against degenerate ASTs.
+static bool fold_constant_string(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out,
+  unsigned depth)
+{
+  if (depth > 64 || !node.contains("_type"))
+    return false;
+
+  const auto &type = node["_type"];
+
+  // String literal.
+  if (type == "Constant" && node.contains("value") && node["value"].is_string())
   {
     out = node["value"].get<std::string>();
     return true;
   }
 
-  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  // Name reference: resolve its declaration and fold the bound value.
+  // Reassigned names are not foldable:
+  // get_var_value returns the first binding, so defer to the runtime string model.
+  if (type == "Name" && node.contains("id"))
   {
-    const std::string var_name = node["id"].get<std::string>();
-    nlohmann::json var_value = json_utils::get_var_value(
-      var_name, converter.get_current_func_name(), converter.get_ast_json());
+    const std::string id = node["id"].get<std::string>();
+    const std::string &func = converter.get_current_func_name();
+    const nlohmann::json &ast = converter.get_ast_json();
+    if (json_utils::has_multiple_assignments_in_scope(id, func, ast))
+      return false;
 
+    nlohmann::json decl = json_utils::get_var_value(id, func, ast);
+    if (!decl.empty() && decl.contains("value"))
+      return fold_constant_string(decl["value"], converter, out, depth + 1);
+    return false;
+  }
+
+  // String concatenation: "a" + "b".
+  if (
+    type == "BinOp" && node.contains("op") && node["op"].contains("_type") &&
+    node["op"]["_type"] == "Add" && node.contains("left") &&
+    node.contains("right"))
+  {
+    std::string lhs, rhs;
     if (
-      !var_value.empty() && var_value.contains("value") &&
-      var_value["value"].contains("_type") &&
-      var_value["value"]["_type"] == "Constant" &&
-      var_value["value"].contains("value") &&
-      var_value["value"]["value"].is_string())
+      fold_constant_string(node["left"], converter, lhs, depth + 1) &&
+      fold_constant_string(node["right"], converter, rhs, depth + 1))
     {
-      out = var_value["value"]["value"].get<std::string>();
+      out = lhs + rhs;
       return true;
     }
   }
 
+  // String repetition: "ab" * n  or  n * "ab".
+  if (
+    type == "BinOp" && node.contains("op") && node["op"].contains("_type") &&
+    node["op"]["_type"] == "Mult" && node.contains("left") &&
+    node.contains("right"))
+  {
+    auto fold_repeat = [&](
+                         const nlohmann::json &str_node,
+                         const nlohmann::json &count_node) -> bool {
+      std::string s;
+      long long n = 0;
+      if (
+        !fold_constant_string(str_node, converter, s, depth + 1) ||
+        !json_utils::extract_constant_integer(
+          count_node,
+          converter.get_current_func_name(),
+          converter.get_ast_json(),
+          n))
+        return false;
+      if (n <= 0)
+      {
+        out.clear();
+        return true;
+      }
+      // Bound the materialized string so a large factor cannot exhaust memory;
+      // beyond the cap, defer to the runtime model.
+      constexpr unsigned long long max_len = 1ull << 16;
+      if (
+        static_cast<unsigned long long>(s.size()) *
+          static_cast<unsigned long long>(n) >
+        max_len)
+        return false;
+      out.clear();
+      out.reserve(s.size() * static_cast<std::size_t>(n));
+      for (long long i = 0; i < n; ++i)
+        out += s;
+      return true;
+    };
+    if (
+      fold_repeat(node["left"], node["right"]) ||
+      fold_repeat(node["right"], node["left"]))
+      return true;
+  }
+
+  // Constant-foldable string method call: join()/replace().
+  if (
+    type == "Call" && node.contains("func") && node.contains("args") &&
+    node["args"].is_array())
+    return fold_string_method_call(node, converter, out, depth);
+
   return false;
+}
+
+bool string_handler::extract_constant_string(
+  const nlohmann::json &node,
+  python_converter &converter,
+  std::string &out)
+{
+  return fold_constant_string(node, converter, out, 0);
 }
 
 exprt string_handler::handle_string_to_int(
@@ -1455,7 +2007,7 @@ exprt string_handler::handle_string_to_int(
   else if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
   {
     // Cast base to int if needed
-    base_expr = typecast_exprt(base_expr, int_type());
+    base_expr = build_typecast(base_expr, int_type());
   }
 
   // Find the __python_int function symbol
@@ -1465,13 +2017,13 @@ exprt string_handler::handle_string_to_int(
     throw std::runtime_error("__python_int function not found in symbol table");
   }
 
-  // Call __python_int(str, base)
-  side_effect_expr_function_callt int_call;
-  int_call.function() = symbol_expr(*int_symbol);
-  int_call.arguments().push_back(str_addr);
-  int_call.arguments().push_back(base_expr);
+  // Call __python_int(str, base). The result is a 64-bit Python int (matching
+  // the model's `long long` return); a 32-bit result type here would make the
+  // assigned-to variable 32-bit and truncate a string pointer rebound through
+  // it, e.g. `a, b = s.split('-'); a = int(a)` (#5159).
+  exprt int_call =
+    build_call_expr(*int_symbol, long_long_int_type(), {str_addr, base_expr});
   int_call.location() = location;
-  int_call.type() = int_type();
 
   return int_call;
 }
@@ -1499,7 +2051,7 @@ exprt string_handler::handle_int_conversion(
   // If argument is a float, truncate to integer
   if (arg.type().is_floatbv())
   {
-    return typecast_exprt(arg, int_type());
+    return build_typecast(arg, int_type());
   }
 
   // If argument is a boolean, convert to 0 or 1
@@ -1527,7 +2079,7 @@ exprt string_handler::handle_int_conversion(
   }
 
   // For other types, attempt a typecast
-  return typecast_exprt(arg, int_type());
+  return build_typecast(arg, int_type());
 }
 
 exprt string_handler::handle_int_conversion_with_base(
@@ -1545,7 +2097,7 @@ exprt string_handler::handle_int_conversion_with_base(
   exprt base_expr = base;
   if (!base_expr.type().is_signedbv() && !base_expr.type().is_unsignedbv())
   {
-    base_expr = typecast_exprt(base_expr, int_type());
+    base_expr = build_typecast(base_expr, int_type());
   }
 
   return handle_string_to_int(arg, base_expr, location);
@@ -1567,11 +2119,8 @@ exprt string_handler::handle_string_to_float(
       "__python_str_to_float function not found in symbol table");
 
   // Call __python_str_to_float(str)
-  side_effect_expr_function_callt float_call;
-  float_call.function() = symbol_expr(*float_symbol);
-  float_call.arguments().push_back(str_addr);
+  exprt float_call = build_call_expr(*float_symbol, double_type(), {str_addr});
   float_call.location() = location;
-  float_call.type() = double_type();
 
   return float_call;
 }
@@ -1591,11 +2140,8 @@ exprt string_handler::handle_string_is_float(
       "__python_str_is_float function not found in symbol table");
 
   // Call __python_str_is_float(str)
-  side_effect_expr_function_callt check_call;
-  check_call.function() = symbol_expr(*check_symbol);
-  check_call.arguments().push_back(str_addr);
+  exprt check_call = build_call_expr(*check_symbol, bool_type(), {str_addr});
   check_call.location() = location;
-  check_call.type() = bool_type();
 
   return check_call;
 }
@@ -1612,7 +2158,7 @@ exprt string_handler::handle_chr_conversion(
   {
     // If it's a float, truncate to integer
     if (codepoint_expr.type().is_floatbv())
-      codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+      codepoint_expr = build_typecast(codepoint_expr, int_type());
     // If it's a boolean, convert to 0 or 1
     else if (codepoint_expr.type().is_bool())
     {
@@ -1628,7 +2174,7 @@ exprt string_handler::handle_chr_conversion(
 
   // Cast to int type if it's a different integer width
   if (codepoint_expr.type() != int_type())
-    codepoint_expr = typecast_exprt(codepoint_expr, int_type());
+    codepoint_expr = build_typecast(codepoint_expr, int_type());
 
   // Find the __python_chr function symbol
   symbolt *chr_symbol = find_cached_c_function_symbol("c:@F@__python_chr");
@@ -1636,13 +2182,34 @@ exprt string_handler::handle_chr_conversion(
     throw std::runtime_error("__python_chr function not found in symbol table");
 
   // Call __python_chr(codepoint)
-  side_effect_expr_function_callt chr_call;
-  chr_call.function() = symbol_expr(*chr_symbol);
-  chr_call.arguments().push_back(codepoint_expr);
+  exprt chr_call =
+    build_call_expr(*chr_symbol, pointer_typet(char_type()), {codepoint_expr});
   chr_call.location() = location;
-  chr_call.type() = pointer_typet(char_type());
 
   return chr_call;
+}
+
+exprt string_handler::handle_ord_conversion(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Take the base address of the (null-terminated) string.
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  // Code point of the single character: (int) *str_addr.
+  // V.3: build the dereference in IREP2, back-migrating once. dereference2t
+  // carries only (type, value) — no offset/guard — so the round-trip is
+  // byte-identical to dereference_exprt(str_addr, char) (mirrors build_index/
+  // build_dereference). Restore the exact element type migrate_type may drop.
+  expr2tc str_addr2;
+  migrate_expr(str_addr, str_addr2);
+  exprt first_char =
+    migrate_expr_back(dereference2tc(migrate_type(char_type()), str_addr2));
+  first_char.type() = char_type();
+  first_char.location() = location;
+  return build_typecast(first_char, int_type());
 }
 
 exprt string_handler::try_handle_len_string_fast_path(
@@ -1706,7 +2273,7 @@ exprt string_handler::try_handle_len_string_fast_path(
     {
       const symbolt *len_sym = converter_.find_symbol(it->second);
       if (len_sym)
-        return typecast_exprt(symbol_expr(*len_sym), size_type());
+        return build_typecast(build_symbol(*len_sym), size_type());
     }
   }
 
@@ -1851,6 +2418,16 @@ exprt string_handler::try_len_fast_path_from_name_arg(
       }
       if (part["_type"] == "FormattedValue" && part.contains("value"))
       {
+        // A format spec or !r/!a conversion changes the rendered length
+        // (e.g. "{v:>20}" pads to 20); summing the raw value length would
+        // be a wrong constant. Decline so len() stays symbolic.
+        if (part.contains("format_spec") && !part["format_spec"].is_null())
+          return std::nullopt;
+        if (
+          part.contains("conversion") && part["conversion"].is_number() &&
+          part["conversion"].get<int>() != -1 &&
+          part["conversion"].get<int>() != 's')
+          return std::nullopt;
         const auto &value = part["value"];
         if (value["_type"] == "Name" && value.contains("id"))
         {
@@ -1925,6 +2502,22 @@ exprt string_handler::handle_string_attribute_call(
       ? call_json["keywords"]
       : empty_json_array;
 
+  // Calls on an imported module (e.g. torch.split, numpy.split) are not string
+  // methods even though the attribute name overlaps with one (split, count,
+  // ...). Defer to the regular dispatch so the module's operational model runs.
+  //
+  // Use get_imported_module_path() (non-empty only for a name actually present
+  // in imported_modules) rather than is_imported_module(), which also returns
+  // true when a model .py file merely exists. The latter would misfire for a
+  // local variable that shares a module's name (e.g. a parameter named
+  // `string`), wrongly diverting `string.lower()` away from the str handler.
+  if (
+    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
+    receiver_json.contains("id") && receiver_json["id"].is_string() &&
+    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
+       .empty())
+    return nil_exprt();
+
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
@@ -1932,9 +2525,7 @@ exprt string_handler::handle_string_attribute_call(
     return *cached_receiver_expr;
   };
 
-  // Tuple and list receivers reuse method names that overlap with string
-  // methods (count, index). Defer to the regular dispatch table so the
-  // tuple-/list-aware handlers run instead of evaluating those as str methods.
+  // Defer count/index to tuple/list handlers when the receiver is one.
   if (method_name == "count" || method_name == "index")
   {
     exprt recv = get_receiver_expr();
@@ -1944,6 +2535,398 @@ exprt string_handler::handle_string_attribute_call(
       recv.type() == list_type ||
       (recv.type().is_pointer() && recv.type().subtype() == list_type))
       return nil_exprt();
+  }
+
+  // bytes.hex([sep[, bytes_per_sep]]): fold a constant bytes object to its
+  // lowercase hex string (CPython: b"\x01\xab".hex() == "01ab"). str has no
+  // .hex() method, so a "hex" attribute is unambiguously a bytes method. Bytes
+  // are modelled as an int array; a str is a char array, so the subtype check
+  // excludes strings. An optional one-character ASCII separator is inserted
+  // between byte groups: a positive bytes_per_sep groups from the right, a
+  // negative one from the left, and zero inserts none (CPython default is 1).
+  if (method_name == "hex" && args.size() <= 2)
+  {
+    exprt recv = get_receiver_expr();
+    if (recv.is_symbol())
+    {
+      const symbolt *s = converter_.find_symbol(
+        to_symbol_expr(recv).get_identifier().as_string());
+      if (s && !s->get_value().is_nil())
+        recv = s->get_value();
+    }
+    const typet &rt = recv.type();
+    if (rt.is_array() && rt.subtype() != char_type())
+    {
+      // A non-constant separator or grouping size is not folded — control
+      // falls through to the regular (unsupported) dispatch, never a wrong
+      // verdict.
+      std::string sep;
+      long long group = 1;
+      bool have_sep = false;
+      bool foldable = true;
+      if (!args.empty())
+      {
+        if (!extract_constant_string(args[0], converter_, sep))
+          foldable = false;
+        else
+        {
+          // A single non-ASCII character is multi-byte in UTF-8, so a length-1
+          // separator is necessarily ASCII; this check subsumes CPython's
+          // separate "sep must be ASCII" error.
+          if (sep.size() != 1)
+            throw std::runtime_error("bytes.hex(): sep must be length 1");
+          have_sep = true;
+          if (
+            args.size() == 2 && !json_utils::extract_constant_integer(
+                                  args[1],
+                                  converter_.get_current_func_name(),
+                                  converter_.get_ast_json(),
+                                  group))
+            foldable = false;
+        }
+      }
+      if (foldable)
+      {
+        static const char digits[] = "0123456789abcdef";
+        const std::size_t n = recv.operands().size();
+        const bool from_left = group < 0;
+        // Negate in the unsigned domain so LLONG_MIN does not overflow.
+        const unsigned long long g =
+          group < 0 ? 0ULL - static_cast<unsigned long long>(group)
+                    : static_cast<unsigned long long>(group);
+        std::string hex;
+        hex.reserve(n * 3);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+          if (have_sep && g != 0 && i > 0)
+          {
+            const bool boundary = from_left ? (i % g == 0) : ((n - i) % g == 0);
+            if (boundary)
+              hex.push_back(sep[0]);
+          }
+          BigInt v;
+          if (to_integer(recv.operands()[i], v)) // true == not constant
+            throw std::runtime_error(
+              "bytes.hex() is only supported on a constant bytes object");
+          const unsigned byte = static_cast<unsigned>(v.to_int64() & 0xff);
+          hex.push_back(digits[(byte >> 4) & 0xf]);
+          hex.push_back(digits[byte & 0xf]);
+        }
+        return string_builder_->build_string_literal(hex);
+      }
+    }
+  }
+
+  // bytes.startswith(prefix) / bytes.endswith(suffix) over *literal* bytes
+  // constructors `bytes([...])`. Both methods are otherwise routed through the
+  // str strncmp/strlen machinery, which is wrong for the int-array bytes
+  // representation (not null-terminated): endswith mis-computes its
+  // from-the-end offset and a NUL byte truncates the length. The fold inspects
+  // only the `bytes([const, ...])` AST syntax — so no symbolic, branch-merged,
+  // or partially-evaluated value can ever reach it — and compares the byte
+  // vectors directly. A str receiver, a variable/expression receiver, a tuple
+  // or position argument, and `b"..."` literals all fall through to the
+  // existing dispatch, sound and unchanged.
+  if (
+    (method_name == "startswith" || method_name == "endswith") &&
+    args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false; // out of range(0, 256): CPython raises ValueError
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    std::vector<unsigned> arg_bytes;
+    if (
+      extract_bytes_literal(receiver_json, recv_bytes) &&
+      extract_bytes_literal(args[0], arg_bytes))
+    {
+      bool result = arg_bytes.size() <= recv_bytes.size();
+      if (result)
+      {
+        const std::size_t off = (method_name == "endswith")
+                                  ? recv_bytes.size() - arg_bytes.size()
+                                  : 0;
+        for (std::size_t i = 0; i < arg_bytes.size(); ++i)
+          if (recv_bytes[off + i] != arg_bytes[i])
+          {
+            result = false;
+            break;
+          }
+      }
+      return migrate_expr_back(result ? gen_true_expr() : gen_false_expr());
+    }
+  }
+
+  // bytes.find(sub) / bytes.rfind(sub): the index of the first (find) or last
+  // (rfind) occurrence of sub in the receiver, or -1 if absent. Both methods
+  // are otherwise routed through the str strncmp/strlen machinery, which is
+  // wrong for the int-array bytes representation (a NUL byte truncates the
+  // length). Fold over *literal* operands only: the receiver must be a
+  // bytes([...]) constructor, and the argument either a bytes([...]) subsequence
+  // or a single integer byte. The match is purely syntactic (AST only), so no
+  // symbolic, branch-merged, or partially-evaluated value can reach the fold;
+  // a str receiver, a variable/expression receiver, and any other form fall
+  // through to the existing dispatch, sound and unchanged.
+  if ((method_name == "find" || method_name == "rfind") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      // bytes([i0, i1, ...]) with constant ints in range(0, 256).
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte
+      // (CPython bytes.find accepts both); any other form falls through.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          // CPython: an empty sub matches at 0 (find) / n (rfind).
+          if (method_name == "find")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rfind, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        return from_integer(result, long_long_int_type());
+      }
+    }
+  }
+
+  // bytes.index(sub) / bytes.rindex(sub): like find/rfind but raise ValueError
+  // when sub is absent (CPython). Both are otherwise routed through the str
+  // strncmp/strlen machinery, wrong for the int-array bytes representation. Fold
+  // over *literal* operands: the receiver must be a bytes([...]) constructor and
+  // the argument either a bytes([...]) subsequence or a single integer byte. The
+  // match is purely syntactic (AST only), so no symbolic, branch-merged, or
+  // partially-evaluated value can reach the fold; a str receiver, a variable
+  // receiver, and any other form fall through to the existing dispatch.
+  if ((method_name == "index" || method_name == "rindex") && args.size() == 1)
+  {
+    auto extract_bytes_literal =
+      [](const nlohmann::json &n, std::vector<unsigned> &out) -> bool {
+      if (!(n.is_object() && n.value("_type", std::string()) == "Call" &&
+            n.contains("func") &&
+            n["func"].value("_type", std::string()) == "Name" &&
+            n["func"].value("id", std::string()) == "bytes" &&
+            n.contains("args") && n["args"].is_array() &&
+            n["args"].size() == 1 &&
+            n["args"][0].value("_type", std::string()) == "List" &&
+            n["args"][0].contains("elts") && n["args"][0]["elts"].is_array()))
+        return false;
+      out.clear();
+      for (const auto &e : n["args"][0]["elts"])
+      {
+        if (!(e.is_object() && e.value("_type", std::string()) == "Constant" &&
+              e.contains("value") && e["value"].is_number_unsigned()))
+          return false;
+        const unsigned long long v = e["value"].get<unsigned long long>();
+        if (v > 255)
+          return false;
+        out.push_back(static_cast<unsigned>(v));
+      }
+      return true;
+    };
+
+    std::vector<unsigned> recv_bytes;
+    if (extract_bytes_literal(receiver_json, recv_bytes))
+    {
+      // The argument is a bytes([...]) subsequence or a single integer byte.
+      std::vector<unsigned> sub_bytes;
+      bool have_sub = extract_bytes_literal(args[0], sub_bytes);
+      if (!have_sub)
+      {
+        const nlohmann::json &a = args[0];
+        if (
+          a.is_object() && a.value("_type", std::string()) == "Constant" &&
+          a.contains("value") && a["value"].is_number_unsigned() &&
+          a["value"].get<unsigned long long>() <= 255)
+        {
+          sub_bytes.assign(
+            1, static_cast<unsigned>(a["value"].get<unsigned>()));
+          have_sub = true;
+        }
+      }
+
+      if (have_sub)
+      {
+        const std::size_t n = recv_bytes.size();
+        const std::size_t m = sub_bytes.size();
+        long long result = -1;
+        auto matches_at = [&](std::size_t pos) {
+          for (std::size_t i = 0; i < m; ++i)
+            if (recv_bytes[pos + i] != sub_bytes[i])
+              return false;
+          return true;
+        };
+        if (m <= n)
+        {
+          if (method_name == "index")
+          {
+            for (std::size_t pos = 0; pos + m <= n; ++pos)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+          else // rindex, scan from the end
+          {
+            for (std::size_t pos = n - m + 1; pos-- > 0;)
+              if (matches_at(pos))
+              {
+                result = static_cast<long long>(pos);
+                break;
+              }
+          }
+        }
+        if (result < 0)
+          return converter_.get_exception_handler().gen_exception_raise(
+            "ValueError", "subsection not found");
+        return from_integer(result, long_long_int_type());
+      }
+    }
+  }
+
+  // str.translate(str.maketrans(x, y[, z])): fold a constant string through a
+  // constant translation table. CPython maps each x[i] to y[i] and deletes the
+  // characters in z. Only the two/three-string maketrans form over constant
+  // operands is modelled; a dict table or a non-constant operand falls through
+  // to the regular (unsupported) dispatch.
+  if (method_name == "translate" && args.size() == 1)
+  {
+    const nlohmann::json &mk = args[0];
+    if (
+      mk.is_object() && mk.value("_type", std::string()) == "Call" &&
+      mk.contains("func") &&
+      mk["func"].value("_type", std::string()) == "Attribute" &&
+      mk["func"].value("attr", std::string()) == "maketrans" &&
+      mk["func"].contains("value") &&
+      mk["func"]["value"].value("_type", std::string()) == "Name" &&
+      mk["func"]["value"].value("id", std::string()) == "str" &&
+      mk.contains("args") && mk["args"].is_array())
+    {
+      const nlohmann::json &mkargs = mk["args"];
+      std::string from_chars, to_chars, del_chars, recv;
+      auto all_ascii = [](const std::string &s) {
+        for (unsigned char ch : s)
+          if (ch >= 0x80)
+            return false;
+        return true;
+      };
+      if (
+        (mkargs.size() == 2 || mkargs.size() == 3) &&
+        extract_constant_string(mkargs[0], converter_, from_chars) &&
+        extract_constant_string(mkargs[1], converter_, to_chars) &&
+        (mkargs.size() == 2 ||
+         extract_constant_string(mkargs[2], converter_, del_chars)) &&
+        extract_constant_string(receiver_json, converter_, recv) &&
+        // The fold is byte-wise; restrict it to ASCII so a multi-byte UTF-8
+        // sequence cannot be remapped/deleted one byte at a time (which would
+        // corrupt the string). Non-ASCII operands fall through to the regular
+        // (unsupported) dispatch — sound, never a wrong verdict.
+        all_ascii(from_chars) && all_ascii(to_chars) && all_ascii(del_chars) &&
+        all_ascii(recv))
+      {
+        if (from_chars.size() != to_chars.size())
+          throw std::runtime_error(
+            "str.maketrans() arguments must have equal length");
+        std::string result;
+        result.reserve(recv.size());
+        for (char c : recv)
+        {
+          if (del_chars.find(c) != std::string::npos)
+            continue;
+          const std::size_t pos = from_chars.find(c);
+          result.push_back(pos == std::string::npos ? c : to_chars[pos]);
+        }
+        return string_builder_->build_string_literal(result);
+      }
+    }
   }
 
   std::optional<locationt> cached_location;
@@ -2202,6 +3185,29 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
+    // If the list is mutated in place after initialisation (e.g.
+    // new_lst = []; new_lst.append(w)), its declaration initialiser no longer
+    // reflects the runtime contents, so the static fold below would join the
+    // stale value -- an appended-to empty list folds to "" (#5163). Dispatch
+    // to the runtime model, which reads the actual list object. Scope the scan
+    // to the variable's own function (module body when at top level), matching
+    // how find_var_decl resolved it above.
+    {
+      const std::string &scope_func = converter_.get_current_func_name();
+      const nlohmann::json &ast = converter_.get_ast_json();
+      const nlohmann::json func_node =
+        scope_func.empty() ? nlohmann::json()
+                           : json_utils::find_function(ast["body"], scope_func);
+      const nlohmann::json &scan_body =
+        func_node.contains("body") ? func_node["body"] : ast["body"];
+      if (list_var_is_mutated(scan_body, var_name))
+      {
+        exprt list_expr = converter_.get_expr(list_arg);
+        return string_builder_->build_runtime_str_join_call(
+          separator, list_expr);
+      }
+    }
+
     list_node = &var_decl["value"];
   }
   else if (list_arg.contains("_type") && list_arg["_type"] == "List")
@@ -2307,9 +3313,24 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
-  // Edge case: empty list returns empty string
+  // Edge case: empty list literal
   if (elements.empty())
   {
+    // A Name variable whose declared initialiser is an empty list may still be
+    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+    // the empty initialiser here would wrongly yield "". Dispatch to the
+    // runtime __python_str_join model, which reads the list's runtime contents
+    // (and still returns "" for a genuinely empty list).
+    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
+    {
+      log_debug(
+        "python-string",
+        "join() iterable is a runtime-built list: runtime dispatch");
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+    }
+
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());
@@ -2419,13 +3440,13 @@ exprt string_handler::handle_single_char_comparison(
   // Handle mixed cases: dereferenced pointer with valid character value
   if (lhs_to_check.id() == "dereference" && !rhs_char_value.is_nil())
   {
-    exprt lhs_as_int = typecast_exprt(lhs_to_check, rhs_char_value.type());
+    exprt lhs_as_int = build_typecast(lhs_to_check, rhs_char_value.type());
     return create_comparison(lhs_as_int, rhs_char_value);
   }
 
   if (!lhs_char_value.is_nil() && rhs_to_check.id() == "dereference")
   {
-    exprt rhs_as_int = typecast_exprt(rhs_to_check, lhs_char_value.type());
+    exprt rhs_as_int = build_typecast(rhs_to_check, lhs_char_value.type());
     return create_comparison(lhs_char_value, rhs_as_int);
   }
 

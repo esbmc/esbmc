@@ -1,16 +1,22 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/python_expr_builder.h>
+#include <util/c_typecast.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/ieee_float.h>
+#include <util/migrate.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
+#include <util/python_types.h>
 #include <util/message.h>
 
 #include <cmath>
@@ -19,6 +25,98 @@
 namespace
 {
 const BigInt kMaxConstantFoldExponent = 1024;
+
+// Reconcile `value` to exactly `target_type`'s width. `c_implicit_typecast_
+// arithmetic` (the same arithmetic promotion clang_cpp_adjust's adjust_expr_rel
+// applies) buckets operands into coarse C ranks with a minimum promotion of
+// `int` (src/util/c_typecast.cpp), so it does NOT preserve a sub-`int` target
+// (e.g. a numpy int8/uint8/int16/uint16 dtype, which -- unlike a plain C
+// integer -- keeps its declared width across `%`/`//`). Apply it for
+// correctness against `value`'s own type, then narrow/widen the result back to
+// `target_type` explicitly so the width-asserting IREP2 constructors
+// (modulus2t/sub2t/if2t's then-branch-typed result) always see exactly
+// `target_type`. Skipping the typecast when already equal keeps the common
+// (already-matching-width) case a byte-identical, idempotent no-op.
+exprt reconcile_operand(
+  const namespacet &ns,
+  const exprt &value,
+  const typet &target_type)
+{
+  exprt op0 = value;
+  exprt op1 = gen_zero(target_type);
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+  if (op0.type() == target_type)
+    return op0;
+  return python_expr::build_typecast(op0, target_type);
+}
+
+// Build the sign test `value < 0` in IREP2 (V.1k keystone, W). `value` and the
+// zero literal can have mismatched bit-widths (the operand may be narrower than
+// the division result type), so reconcile them before building lessthan2t.
+exprt build_sign_test(
+  const namespacet &ns,
+  const exprt &value,
+  const exprt &zero)
+{
+  return python_expr::build_less_than(
+    reconcile_operand(ns, value, zero.type()), zero);
+}
+
+// Build `lhs % rhs : mod_type` in IREP2 (V.1k keystone). Operands may have
+// mismatched bit-widths (same hazard as build_sign_test), so reconcile each
+// against mod_type before building modulus2t.
+exprt build_remainder(
+  const namespacet &ns,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &mod_type)
+{
+  return python_expr::build_mod(
+    reconcile_operand(ns, lhs, mod_type),
+    reconcile_operand(ns, rhs, mod_type),
+    mod_type);
+}
+
+// V.3: build an IREP2 expression-context call `func(args...)` returning
+// `return_type` (side_effect_function_call2tc + symbol_expr2tc), back-migrated
+// for the legacy adjust/goto-convert seam. Behaviour-preserving exact
+// round-trip of the side_effect_expr_function_callt the call sites hand-built.
+// Caller sets `.location()` on the result where the legacy code did.
+exprt build_c_math_call_expr(
+  const symbolt &func_sym,
+  const typet &return_type,
+  const std::vector<exprt> &args)
+{
+  std::vector<expr2tc> args2;
+  args2.reserve(args.size());
+  for (const exprt &a : args)
+  {
+    expr2tc a2;
+    migrate_expr(a, a2);
+    args2.push_back(std::move(a2));
+  }
+  return migrate_expr_back(side_effect_function_call2tc(
+    migrate_type(return_type), symbol_expr2tc(func_sym), args2));
+}
+
+// V.3: IREP2 struct-component access (exact round-trip of member_exprt). The
+// source is struct-typed (the caller reads its .components()), so the member2t
+// precondition holds.
+exprt math_member(const exprt &base, const irep_idt &name, const typet &t)
+{
+  expr2tc base2;
+  migrate_expr(base, base2);
+  return migrate_expr_back(member2tc(migrate_type(t), base2, name));
+}
+
+// V.3: IREP2 typecast (exact round-trip of typecast_exprt). The single caller
+// targets float_type, which carries no #cpp_type, so no type-restore is needed.
+exprt math_typecast(const exprt &from, const typet &t)
+{
+  expr2tc from2;
+  migrate_expr(from, from2);
+  return migrate_expr_back(typecast2tc(migrate_type(t), from2));
+}
 
 std::string make_math_dispatch_cache_key(
   const std::string &caller,
@@ -289,11 +387,10 @@ exprt python_math::build_unary_c_math_call(
   exprt operand,
   const nlohmann::json &element)
 {
-  side_effect_expr_function_callt call;
-  call.function() =
-    symbol_expr(get_c_math_symbol_cached(symbol_id, display_name));
-  call.arguments() = {promote_to_double_if_needed(std::move(operand))};
-  call.type() = double_type();
+  exprt call = build_c_math_call_expr(
+    get_c_math_symbol_cached(symbol_id, display_name),
+    double_type(),
+    {promote_to_double_if_needed(std::move(operand))});
   call.location() = converter.get_location_from_decl(element);
   return call;
 }
@@ -343,8 +440,11 @@ exprt python_math::compute_expr(const exprt &expr) const
   else
     throw std::runtime_error("Unsupported math operation: " + expr.id_string());
 
-  // Return the result as a constant expression
-  return constant_exprt(result, lhs.type());
+  // Return the result as a constant expression. V.3: build the folded
+  // integer constant in IREP2 and back-migrate once -- the operands were read
+  // as bitvector integers, so lhs.type() is always integer here and the
+  // constant_int2t round-trips exactly to the same constant_exprt.
+  return migrate_expr_back(constant_int2tc(migrate_type(lhs.type()), result));
 }
 
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
@@ -353,15 +453,12 @@ exprt python_math::handle_power_symbolic(exprt base, exprt exp)
   exprt double_base = promote_to_double_if_needed(std::move(base));
   exprt double_exp = promote_to_double_if_needed(std::move(exp));
 
-  // Create the function call
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {double_base, double_exp};
-  pow_call.type() = double_type();
-
+  // Create the function call.
   // Always return double result: Python power with float operands returns float
-  return pow_call;
+  return build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"),
+    double_type(),
+    {double_base, double_exp});
 }
 
 exprt python_math::build_power_expression(const exprt &base, const BigInt &exp)
@@ -556,11 +653,8 @@ exprt python_math::handle_modulo(
   div_expr.copy_to_operands(double_lhs, double_rhs);
 
   // Create floor(x / y)
-  side_effect_expr_function_callt floor_call;
-  floor_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-  floor_call.arguments() = {div_expr};
-  floor_call.type() = double_type();
+  exprt floor_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@floor", "floor"), double_type(), {div_expr});
   floor_call.location() = converter.get_location_from_decl(element);
 
   // Create floor(x/y) * y
@@ -593,11 +687,10 @@ exprt python_math::handle_floor_division(
     div_expr.copy_to_operands(
       promote_to_double_if_needed(lhs), promote_to_double_if_needed(rhs));
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = double_type();
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"),
+      double_type(),
+      {div_expr});
     floor_call.location() = bin_expr.location();
     return floor_call;
   }
@@ -629,39 +722,29 @@ exprt python_math::handle_floor_division(
 
   typet div_type = bin_expr.type();
 
-  // remainder = num % den;
-  exprt remainder("mod", div_type);
-  remainder.copy_to_operands(lhs, rhs);
-
-  // Get num signal
-  exprt is_num_neg("<", bool_type());
-  is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
-
-  // Get den signal
-  exprt is_den_neg("<", bool_type());
-  is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
+  // Built in IREP2 (V.1k keystone): num/den signals, remainder = num % den,
+  // and the correction term, all width-reconciled against div_type.
+  namespacet ns(symbol_table);
+  exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(div_type));
+  exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(div_type));
 
   // remainder != 0
-  exprt pos_remainder("notequal", bool_type());
-  pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
+  exprt remainder = build_remainder(ns, lhs, rhs, div_type);
+  exprt pos_remainder =
+    python_expr::build_notequal(remainder, gen_zero(div_type));
 
   // diff_signals = is_num_neg ^ is_den_neg;
   // Boolean XOR — `bitxor` over bool-typed operands is malformed and
   // crashes Bitwuzla's BV encoder ("term with unexpected sort"); GitHub #4548.
-  exprt diff_signals("xor", bool_type());
-  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+  exprt diff_signals = python_expr::build_xor(is_num_neg, is_den_neg);
 
-  exprt cond("and", bool_type());
-  cond.copy_to_operands(pos_remainder, diff_signals);
+  exprt cond = python_expr::build_and(pos_remainder, diff_signals);
 
-  exprt if_expr("if", div_type);
-  if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
+  exprt if_expr =
+    python_expr::build_if(cond, gen_one(div_type), gen_zero(div_type));
 
   // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
-  exprt floor_div("-", div_type);
-  floor_div.copy_to_operands(bin_expr, if_expr); // bin_expr contains lhs/rhs
-
-  return floor_div;
+  return python_expr::build_sub(bin_expr, if_expr, div_type);
 }
 
 exprt python_math::handle_int_modulo(
@@ -693,28 +776,25 @@ exprt python_math::handle_int_modulo(
   }
 
   // Symbolic: corrected = rem + (rhs if (rem != 0 and signs_differ) else 0),
-  // where rem is the C remainder already in bin_expr.
-  exprt is_num_neg("<", bool_type());
-  is_num_neg.copy_to_operands(lhs, gen_zero(mod_type));
+  // where rem is the C remainder already in bin_expr. Built in IREP2 (V.1k
+  // keystone); rhs is reconciled to mod_type first so the `if` branches
+  // (rhs vs. the mod_type-typed zero) share a width, per build_if's
+  // then-branch-typed result.
+  namespacet ns(symbol_table);
+  exprt is_num_neg = build_sign_test(ns, lhs, gen_zero(mod_type));
+  exprt is_den_neg = build_sign_test(ns, rhs, gen_zero(mod_type));
 
-  exprt is_den_neg("<", bool_type());
-  is_den_neg.copy_to_operands(rhs, gen_zero(mod_type));
-
-  exprt rem_nonzero("notequal", bool_type());
-  rem_nonzero.copy_to_operands(bin_expr, gen_zero(mod_type));
+  exprt rem_nonzero = python_expr::build_notequal(bin_expr, gen_zero(mod_type));
 
   // Boolean XOR (not bitxor — see handle_floor_division / GitHub #4548).
-  exprt diff_signals("xor", bool_type());
-  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+  exprt diff_signals = python_expr::build_xor(is_num_neg, is_den_neg);
 
-  exprt cond("and", bool_type());
-  cond.copy_to_operands(rem_nonzero, diff_signals);
+  exprt cond = python_expr::build_and(rem_nonzero, diff_signals);
 
-  exprt correction("if", mod_type);
-  correction.copy_to_operands(cond, rhs, gen_zero(mod_type));
+  exprt correction = python_expr::build_if(
+    cond, reconcile_operand(ns, rhs, mod_type), gen_zero(mod_type));
 
-  exprt result("+", mod_type);
-  result.copy_to_operands(bin_expr, correction);
+  exprt result = python_expr::build_add(bin_expr, correction, mod_type);
   result.location() = bin_expr.location();
 
   return result;
@@ -764,7 +844,7 @@ void python_math::handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr)
     else
     {
       // For non-constant operands (like function parameters), create explicit typecast expression
-      e = typecast_exprt(e, float_type);
+      e = math_typecast(e, float_type);
     }
   };
 
@@ -857,18 +937,13 @@ exprt python_math::handle_divmod(
       const double q = std::floor(*lhs_const / *rhs_const);
       const double r = *lhs_const - (q * *rhs_const);
 
-      struct_typet tuple_type;
-      tuple_type.tag("tag-tuple_divmod");
-
-      struct_typet::componentt comp0;
-      comp0.name("element_0");
-      comp0.type() = result_type;
-      tuple_type.components().push_back(comp0);
-
-      struct_typet::componentt comp1;
-      comp1.name("element_1");
-      comp1.type() = result_type;
-      tuple_type.components().push_back(comp1);
+      // Use the shared tuple struct type (content-based tag) so a divmod
+      // result is sort-compatible with a tuple literal of the same element
+      // types: a hard-coded "tag-tuple_divmod" tag made `x = divmod(a, b);
+      // x == (q, r)` crash on the SMT tuple-sort mismatch.
+      struct_typet tuple_type =
+        converter.get_tuple_handler().create_tuple_struct_type(
+          {result_type, result_type});
 
       exprt tuple_expr("struct", tuple_type);
       tuple_expr.copy_to_operands(
@@ -904,18 +979,9 @@ exprt python_math::handle_divmod(
           r += rhs_val;
         }
 
-        struct_typet tuple_type;
-        tuple_type.tag("tag-tuple_divmod");
-
-        struct_typet::componentt comp0;
-        comp0.name("element_0");
-        comp0.type() = result_type;
-        tuple_type.components().push_back(comp0);
-
-        struct_typet::componentt comp1;
-        comp1.name("element_1");
-        comp1.type() = result_type;
-        tuple_type.components().push_back(comp1);
+        struct_typet tuple_type =
+          converter.get_tuple_handler().create_tuple_struct_type(
+            {result_type, result_type});
 
         exprt tuple_expr("struct", tuple_type);
         tuple_expr.copy_to_operands(
@@ -933,11 +999,8 @@ exprt python_math::handle_divmod(
     exprt div_expr("ieee_div", result_type);
     div_expr.copy_to_operands(dividend, divisor);
 
-    side_effect_expr_function_callt floor_call;
-    floor_call.function() =
-      symbol_expr(get_c_math_symbol_cached("c:@F@floor", "floor"));
-    floor_call.arguments() = {div_expr};
-    floor_call.type() = result_type;
+    exprt floor_call = build_c_math_call_expr(
+      get_c_math_symbol_cached("c:@F@floor", "floor"), result_type, {div_expr});
     floor_call.location() = converter.get_location_from_decl(element);
     quotient = floor_call;
   }
@@ -969,18 +1032,9 @@ exprt python_math::handle_divmod(
   }
 
   // Create a tuple struct to hold both values
-  struct_typet tuple_type;
-  tuple_type.tag("tag-tuple_divmod");
-
-  struct_typet::componentt comp0;
-  comp0.name("element_0");
-  comp0.type() = result_type;
-  tuple_type.components().push_back(comp0);
-
-  struct_typet::componentt comp1;
-  comp1.name("element_1");
-  comp1.type() = result_type;
-  tuple_type.components().push_back(comp1);
+  struct_typet tuple_type =
+    converter.get_tuple_handler().create_tuple_struct_type(
+      {result_type, result_type});
 
   // Build the tuple expression
   exprt tuple_expr("struct", tuple_type);
@@ -1065,11 +1119,10 @@ exprt python_math::handle_atan2(
   x_operand = promote_to_double_if_needed(std::move(x_operand));
 
   // Create the function call expression
-  side_effect_expr_function_callt atan2_call;
-  atan2_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@atan2", "atan2"));
-  atan2_call.arguments() = {y_operand, x_operand};
-  atan2_call.type() = double_type();
+  exprt atan2_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@atan2", "atan2"),
+    double_type(),
+    {y_operand, x_operand});
   atan2_call.location() = converter.get_location_from_decl(element);
 
   return atan2_call;
@@ -1109,11 +1162,8 @@ exprt python_math::handle_pow(
   exp = promote_to_double_if_needed(std::move(exp));
 
   // Create the function call expression
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@pow", "pow"));
-  pow_call.arguments() = {base, exp};
-  pow_call.type() = double_type();
+  exprt pow_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@pow", "pow"), double_type(), {base, exp});
   pow_call.location() = converter.get_location_from_decl(element);
 
   return pow_call;
@@ -1166,11 +1216,8 @@ exprt python_math::handle_fmod(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt fmod_call;
-  fmod_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@fmod", "fmod"));
-  fmod_call.arguments() = {lhs, rhs};
-  fmod_call.type() = double_type();
+  exprt fmod_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@fmod", "fmod"), double_type(), {lhs, rhs});
   fmod_call.location() = converter.get_location_from_decl(element);
 
   return fmod_call;
@@ -1192,11 +1239,10 @@ exprt python_math::handle_copysign(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt copysign_call;
-  copysign_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@copysign", "copysign"));
-  copysign_call.arguments() = {lhs, rhs};
-  copysign_call.type() = double_type();
+  exprt copysign_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@copysign", "copysign"),
+    double_type(),
+    {lhs, rhs});
   copysign_call.location() = converter.get_location_from_decl(element);
 
   return copysign_call;
@@ -1338,11 +1384,8 @@ exprt python_math::handle_hypot(
   rhs = promote_to_double_if_needed(std::move(rhs));
 
   // Create the function call expression
-  side_effect_expr_function_callt hypot_call;
-  hypot_call.function() =
-    symbol_expr(get_c_math_symbol_cached("c:@F@hypot", "hypot"));
-  hypot_call.arguments() = {lhs, rhs};
-  hypot_call.type() = double_type();
+  exprt hypot_call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@hypot", "hypot"), double_type(), {lhs, rhs});
   hypot_call.location() = converter.get_location_from_decl(element);
 
   return hypot_call;
@@ -1412,8 +1455,8 @@ exprt python_math::handle_dist(exprt p, exprt q, const nlohmann::json &element)
     std::string member_name = "element_" + std::to_string(i);
     const typet &comp_type = p_type.components()[i].type();
 
-    exprt pi = member_exprt(p, member_name, comp_type);
-    exprt qi = member_exprt(q, member_name, q_type.components()[i].type());
+    exprt pi = math_member(p, member_name, comp_type);
+    exprt qi = math_member(q, member_name, q_type.components()[i].type());
 
     // Cast to double if needed
     if (!pi.type().is_floatbv())

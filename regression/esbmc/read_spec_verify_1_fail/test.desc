@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unsigned-overflow-check --no-pointer-check --unwind 1
+^VERIFICATION FAILED$

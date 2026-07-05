@@ -1003,8 +1003,6 @@ void interval_domaint::transform(
   case THROW: // TODO: try/catch intervals
   case CATCH: // TODO: try/catch intervals
   case DEAD:
-  case THROW_DECL:
-  case THROW_DECL_END:
   case LOOP_INVARIANT:
     break;
   }

@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --irep2-bodies
+^VERIFICATION SUCCESSFUL$

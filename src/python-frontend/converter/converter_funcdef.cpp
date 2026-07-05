@@ -12,15 +12,18 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/symbolic_types.h>
 
 #include <functional>
+#include <set>
 
 using namespace json_utils;
 
@@ -279,6 +282,120 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
   return flags;
 }
 
+namespace
+{
+bool is_list_literal_value(const nlohmann::json &v)
+{
+  return v.is_object() && v.contains("_type") &&
+         (v["_type"] == "List" || v["_type"] == "ListComp");
+}
+
+// Collect names bound to a list value within 'body': either assigned a list
+// literal / comprehension, or annotated `list`/`List`. The comprehension
+// desugaring runs before return-type inference, so a `return [..][1:]` reaches
+// here as `return ESBMC_listcomp_0[1:]` with `ESBMC_listcomp_0: list = [...]`
+// hoisted above it — the name must be tracked to recognise the list slice.
+void collect_list_bound_names(
+  const nlohmann::json &body,
+  std::set<std::string> &names)
+{
+  if (!body.is_array())
+    return;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string st = stmt.value("_type", std::string());
+    if (
+      st == "Assign" && stmt.contains("value") &&
+      is_list_literal_value(stmt["value"]) && stmt.contains("targets"))
+    {
+      for (const auto &tgt : stmt["targets"])
+        if (tgt.is_object() && tgt.value("_type", std::string()) == "Name")
+          names.insert(tgt.value("id", std::string()));
+    }
+    else if (st == "AnnAssign" && stmt.contains("target"))
+    {
+      const bool list_ann =
+        stmt.contains("annotation") && stmt["annotation"].is_object() &&
+        (stmt["annotation"].value("id", std::string()) == "list" ||
+         stmt["annotation"].value("id", std::string()) == "List");
+      const bool list_val =
+        stmt.contains("value") && is_list_literal_value(stmt["value"]);
+      const auto &tgt = stmt["target"];
+      if (
+        (list_ann || list_val) && tgt.is_object() &&
+        tgt.value("_type", std::string()) == "Name")
+        names.insert(tgt.value("id", std::string()));
+    }
+
+    for (const char *key : {"body", "orelse"})
+      if (stmt.contains(key))
+        collect_list_bound_names(stmt[key], names);
+  }
+}
+
+// Return true if a return expression denotes a list value: a list literal /
+// comprehension, a name bound to one, or a slice of either (a slice of a list
+// is a list, whereas an index t[i] is an element). Used to keep an unannotated,
+// list-returning function from defaulting its return type to scalar double,
+// which would retype the returned list's elements and break list equality
+// (humaneval_62).
+bool return_value_is_list(
+  const nlohmann::json &val,
+  const std::set<std::string> &list_names)
+{
+  if (!val.is_object() || !val.contains("_type"))
+    return false;
+
+  const std::string t = val["_type"].get<std::string>();
+  if (t == "List" || t == "ListComp")
+    return true;
+  if (t == "Name")
+    return list_names.count(val.value("id", std::string())) > 0;
+  if (
+    t == "Subscript" && val.contains("slice") && val["slice"].is_object() &&
+    val["slice"].value("_type", std::string()) == "Slice" &&
+    val.contains("value"))
+    return return_value_is_list(val["value"], list_names);
+
+  return false;
+}
+
+// Return true if any return statement in 'body' returns a list value. Mirrors
+// the body/orelse recursion of infer_types_from_returns so the two agree on the
+// statement set being inspected.
+bool body_returns_list_value(const nlohmann::json &body)
+{
+  std::set<std::string> list_names;
+  collect_list_bound_names(body, list_names);
+
+  std::function<bool(const nlohmann::json &)> check =
+    [&](const nlohmann::json &b) -> bool {
+    if (!b.is_array())
+      return false;
+    for (const auto &stmt : b)
+    {
+      if (!stmt.is_object())
+        continue;
+      if (
+        stmt.value("_type", std::string()) == "Return" &&
+        stmt.contains("value") && !stmt["value"].is_null() &&
+        return_value_is_list(stmt["value"], list_names))
+        return true;
+      for (const char *key : {"body", "orelse"})
+        if (stmt.contains(key) && check(stmt[key]))
+          return true;
+    }
+    return false;
+  };
+
+  return check(body);
+}
+} // namespace
+
 // Return true if 'param_name' has any attribute written (x.attr = ...)
 // anywhere in 'body' (recursive scan over nested blocks).
 static bool param_is_mutated_in_body(
@@ -524,6 +641,15 @@ size_t python_converter::register_function_argument(
   // representation regardless of how the parameter is declared.
   if (arg_type.is_array())
     arg_type = gen_pointer_type(arg_type.subtype());
+
+  // Object-model migration (#3067/#4773): a class-typed parameter receives a
+  // migrated `Class*` instance, and Python passes objects by reference. Type
+  // the formal as `Class*` (like `self`) so the call signature matches the
+  // pointer argument and mutations through the parameter are visible to the
+  // caller. A by-value struct formal would mismatch the pointer argument and
+  // produce a malformed call expression.
+  if (is_user_class_struct_type(arg_type))
+    arg_type = gen_pointer_type(arg_type);
 
   assert(arg_type != typet());
 
@@ -819,7 +945,8 @@ void python_converter::validate_return_paths(
   locationt loc = get_location_from_decl(function_node);
 
   code_assertt missing_return_assert;
-  missing_return_assert.assertion() = gen_boolean(false);
+  // V.3: build the always-fail assert condition in IREP2.
+  missing_return_assert.assertion() = migrate_expr_back(gen_false_expr());
   missing_return_assert.location() = loc;
   missing_return_assert.location().comment(
     "Missing return statement detected in function '" + current_func_name_ +
@@ -957,10 +1084,26 @@ void python_converter::get_function_definition(
     {
       // Infer type from return statements
       TypeFlags flags = infer_types_from_returns(function_node["body"]);
-      type.return_type() = type_utils::select_widest_type(flags, double_type());
 
-      if (!flags.has_float && !flags.has_int && !flags.has_bool)
-        log_warning("Default to double since no type could be inferred");
+      if (
+        !flags.has_float && !flags.has_int && !flags.has_bool &&
+        body_returns_list_value(function_node["body"]))
+      {
+        // No scalar type could be inferred but the body returns a list whose
+        // element type is unknown. Defaulting to scalar double would retype the
+        // returned list's elements and break equality against, e.g., an int
+        // list (humaneval_62). Use a generic list type, as an explicit
+        // `-> list` annotation would.
+        type.return_type() = type_handler_.get_list_type();
+      }
+      else
+      {
+        type.return_type() =
+          type_utils::select_widest_type(flags, double_type());
+
+        if (!flags.has_float && !flags.has_int && !flags.has_bool)
+          log_warning("Default to double since no type could be inferred");
+      }
     }
     else if (return_type == "Union")
     {
@@ -1070,6 +1213,37 @@ void python_converter::get_function_definition(
   // Process function arguments
   process_function_arguments(function_node, type, id, location);
 
+  // Stage 1 object-model migration (#3067): a function returning a user-defined
+  // class instance returns a *reference* (pointer) to the heap object, matching
+  // CPython and the pointer representation already used for locals, parameters
+  // and `self`. Returning by value copied the struct out of the callee frame,
+  // which (a) breaks identity/aliasing across the call (`y = f(x); y.v = 1`
+  // would not be observed through `x`) and (b) forces a pointer->value
+  // dereference on `return self`/`return param` that crashes the SMT backend
+  // with a sort mismatch. None is encoded as a NULL pointer, so such a return
+  // is already nullable and must not be re-wrapped in Optional below.
+  //
+  // Skip @overload stubs: each carries a single-class annotation (`-> Foo`),
+  // but the overload set is polymorphic — the effective return type is resolved
+  // per call site from the argument types. Migrating a stub to one Class* loses
+  // the alternatives and overrides that call-site resolution (e.g. a
+  // `Literal["bar"] -> Bar` overload would be mis-typed as `Foo*`, #3057). The
+  // real implementation (a union return) is typed `void*` and never reaches
+  // this branch. The same migration is applied below to a return type recovered
+  // by post-annotation inference (e.g. `return self`).
+  auto migrate_user_class_return = [&](typet &t) -> bool {
+    if (
+      is_user_class_struct_type(t) &&
+      !json_utils::has_overload_decorator(function_node))
+    {
+      t = gen_pointer_type(t);
+      return true;
+    }
+    return false;
+  };
+  if (migrate_user_class_return(type.return_type()))
+    current_element_type = type.return_type();
+
   // Create and register function symbol
   symbolt symbol = create_symbol(
     module_name, current_func_name_, id.to_string(), location, type);
@@ -1111,7 +1285,7 @@ void python_converter::get_function_definition(
   };
 
   bool already_optional =
-    annotation_is_optional ||
+    annotation_is_optional || is_user_class_pointer(type.return_type()) ||
     (type.return_type().is_struct() && to_struct_type(type.return_type())
                                          .tag()
                                          .as_string()
@@ -1151,6 +1325,15 @@ void python_converter::get_function_definition(
   if (type.return_type().is_empty())
   {
     typet inferred_type = infer_return_type_from_body(function_node["body"]);
+    // Stage 1 object-model migration (#3067): an unannotated function whose
+    // body returns a user class instance (e.g. `return self` in __getitem__,
+    // #4514) is inferred to the value struct here — apply the same Cls* ->
+    // reference migration as the annotated path, so the declared return type
+    // matches the pointer the body actually returns. Without this, the callee
+    // returns a `Cls*` (self/param) while its declared return type is the value
+    // struct, and the assignment binds a pointer into a struct slot, tripping
+    // value-set's make_member assertion at the field read.
+    migrate_user_class_return(inferred_type);
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
@@ -1163,8 +1346,11 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body
-  exprt function_body = get_block(function_node["body"]);
+  // Process function body. Mark it as a function body (not a conditional one)
+  // so straight-line retyping (#4770/#4774) is permitted on the function's own
+  // unconditional statements — see the retype gate in get_var_assign.
+  exprt function_body =
+    get_block(function_node["body"], /*is_function_body=*/true);
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
@@ -1186,25 +1372,53 @@ void python_converter::get_function_definition(
   // to a typed function pointer).
   if (type.return_type().is_empty())
   {
-    for (const auto &instr : function_body.operands())
-    {
-      if (!instr.is_code())
-        continue;
-      const codet &code_instr = to_code(instr);
-      if (code_instr.get_statement() == "return")
+    // First, the original top-level scan: a function with a fall-through
+    // `return` at the body's top level (e.g. an early `return -1` sentinel
+    // inside an `if`, followed by `return bin(...)` at the end) is typed from
+    // that top-level return -- the dominant exit. Picking a nested branch's
+    // type instead would narrow a heterogeneous function to the wrong branch
+    // and collapse the call-site cross-type `==` fold to constant False
+    // (GitHub #5157).
+    auto top_level_return_type = [&]() -> std::optional<typet> {
+      for (const auto &instr : function_body.operands())
       {
-        const code_returnt &ret = to_code_return(code_instr);
-        if (ret.has_return_value())
-        {
-          const typet &ret_type = ret.return_value().type();
-          if (!ret_type.is_empty())
-          {
-            type.return_type() = ret_type;
-            added_symbol->set_type(type);
-            break;
-          }
-        }
+        if (!instr.is_code() || to_code(instr).get_statement() != "return")
+          continue;
+        const code_returnt &ret = to_code_return(to_code(instr));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
       }
+      return std::nullopt;
+    };
+
+    // Fallback: when every `return` is nested inside a conditional (so the
+    // top-level scan finds nothing), recurse to find a typed RETURN. Otherwise
+    // an all-nested body (e.g. `if c: return s.split() else: return s.split()`)
+    // leaves the return type empty -> void -> the value is stripped by
+    // remove_returns and the call site reads nondet.
+    std::function<std::optional<typet>(const exprt &)> nested_return_type =
+      [&](const exprt &node) -> std::optional<typet> {
+      if (node.is_code() && to_code(node).get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(to_code(node));
+        if (ret.has_return_value() && !ret.return_value().type().is_empty())
+          return ret.return_value().type();
+      }
+      for (const auto &op : node.operands())
+      {
+        if (std::optional<typet> found = nested_return_type(op))
+          return found;
+      }
+      return std::nullopt;
+    };
+
+    std::optional<typet> ret_type = top_level_return_type();
+    if (!ret_type)
+      ret_type = nested_return_type(function_body);
+    if (ret_type)
+    {
+      type.return_type() = *ret_type;
+      added_symbol->set_type(type);
     }
   }
 

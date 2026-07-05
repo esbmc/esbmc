@@ -4,6 +4,8 @@
 #include <util/arith_tools.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
+#include <util/migrate.h>
+#include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
 
 class python_converter;
@@ -47,13 +49,23 @@ inline bool is_complex_type(const typet &type)
 
 inline exprt make_complex(const exprt &real, const exprt &imag)
 {
-  struct_exprt complex_expr(get_complex_struct_type());
+  // V.3: build the complex struct literal in IREP2, back-migrating once. Each
+  // non-double operand's int/bool/float -> double conversion is exactly the
+  // typecast2t migrate_expr builds for the legacy typecast_exprt (ieee cast,
+  // rounding mode implicit), so the back-migrated struct is byte-identical to
+  // the old struct_exprt. Mirrors complex_typecast / complex_to_bool_expr.
   const typet &dt = cached_double_type();
-  complex_expr.operands().push_back(
-    real.type() == dt ? real : typecast_exprt(real, dt));
-  complex_expr.operands().push_back(
-    imag.type() == dt ? imag : typecast_exprt(imag, dt));
-  return complex_expr;
+  const type2tc dt2 = migrate_type(dt);
+
+  auto to_double2 = [&](const exprt &v) -> expr2tc {
+    expr2tc v2;
+    migrate_expr(v, v2);
+    return v.type() == dt ? v2 : typecast2tc(dt2, v2);
+  };
+
+  std::vector<expr2tc> members{to_double2(real), to_double2(imag)};
+  return migrate_expr_back(
+    constant_struct2tc(migrate_type(get_complex_struct_type()), members));
 }
 
 inline exprt promote_to_complex(const exprt &value)
@@ -76,12 +88,22 @@ inline exprt promote_to_complex(const exprt &value)
 inline exprt complex_to_bool_expr(const exprt &complex_expr)
 {
   const typet &dt = cached_double_type();
-  exprt real = member_exprt(complex_expr, "real", dt);
-  exprt imag = member_exprt(complex_expr, "imag", dt);
-  exprt zero = from_double(0.0, dt);
-  return or_exprt(
-    not_exprt(equality_exprt(real, zero)),
-    not_exprt(equality_exprt(imag, zero)));
+  // V.3: build `z.real != 0.0 || z.imag != 0.0` in IREP2, back-migrating once.
+  // member2t over a complex source is exactly the node migrate_expr builds for
+  // the legacy member access at goto-convert (util/migrate.cpp:1580), and the
+  // not(equal) shape mirrors the legacy or_exprt(not_exprt(equality_exprt(...)))
+  // verbatim, so the back-migrated tree is byte-identical to the old one.
+  const type2tc dt2 = migrate_type(dt);
+  expr2tc complex2;
+  migrate_expr(complex_expr, complex2);
+  expr2tc zero2;
+  migrate_expr(from_double(0.0, dt), zero2);
+
+  expr2tc real_nz =
+    not2tc(equality2tc(member2tc(dt2, complex2, "real"), zero2));
+  expr2tc imag_nz =
+    not2tc(equality2tc(member2tc(dt2, complex2, "imag"), zero2));
+  return migrate_expr_back(or2tc(real_nz, imag_nz));
 }
 
 class type_handler
@@ -196,8 +218,6 @@ public:
    * @return The inferred dictionary type based on the value's structure.
    */
   typet get_dict_type(const nlohmann::json &dict_value) const;
-
-  typet get_tuple_type(const nlohmann::json &tuple_node) const;
 
   /**
    * @brief Returns the registered struct type used for Python slice objects.

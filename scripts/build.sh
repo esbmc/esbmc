@@ -194,6 +194,7 @@ prepare_platform_config() {
           "-DENABLE_GOTO_CONTRACTOR=OFF"
           "-DENABLE_CVC5=Off"
         )
+        BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
       fi
       ;;
 
@@ -413,7 +414,7 @@ install_gmp_linux() {
 
 install_python_deps_linux() {
   log "Installing Python dependencies"
-  python3 -m pip install --user meson ast2json mypy pyparsing toml tomli
+  python3 -m pip install --user meson mypy pyparsing toml tomli pytest hypothesis
   meson --version
 }
 
@@ -435,9 +436,9 @@ install_python_deps_macos() {
   export PATH="$py312_bin:$HOME/Library/Python/3.12/bin:$PATH"
 
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-    pip install meson ast2json mypy pyparsing toml tomli
+    pip install meson mypy pyparsing toml tomli pytest hypothesis
   else
-    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli
+    "$py312" -m pip install --user --break-system-packages meson mypy pyparsing toml tomli pytest hypothesis
   fi
 
   meson --version
@@ -457,7 +458,11 @@ run_fetch() {
       fetch_gmp_source
       ;;
     Darwin)
-      brew update
+      # 'brew update' refreshes formula definitions but is best-effort: a
+      # transient tap fetch failure ("Error: Failed to download") must not abort
+      # the build under 'bash -e'. Subsequent 'brew install' resolves formulae
+      # via the Homebrew API regardless, so a stale tap is harmless here.
+      brew update || log "warning: 'brew update' failed; continuing"
       ;;
     *)
       error "unsupported OS '$OS'"
@@ -600,7 +605,8 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       CLANG_VERSION="$OPTARG"
       ;;
     C)
-      BASE_ARGS+=("-DESBMC_SVCOMP=ON")
+      # SV-COMP behaviour is now a runtime flag (--sv-comp, set by the
+      # competition wrapper), so this only selects the competition solver set.
       SOLVER_FLAGS=(
         "-DENABLE_BOOLECTOR=On"
         "-DENABLE_YICES=On"

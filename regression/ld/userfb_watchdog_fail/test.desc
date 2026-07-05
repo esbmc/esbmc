@@ -1,0 +1,4 @@
+CORE
+loop.ld
+--ld-props props.yaml --ld-scan-watchdog --ld-scan-budget 4 --k-induction --unlimited-k-steps --unwind 11
+^VERIFICATION FAILED$

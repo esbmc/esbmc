@@ -39,6 +39,13 @@ set(inputs
            # Windows math headers
            corecrt_math.h
 
+           # Socket / network operational models
+           sys/socket.h
+           sys/select.h
+           netinet/in.h
+           arpa/inet.h
+           # end sockets
+
            # Linux operational models
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h
            ubuntu20.04/kernel_5.15.0-76/include/linux/spinlock.h

@@ -364,11 +364,6 @@ public:
     return find(s_labels);
   }
 
-  inline const irept &c_sizeof_type() const
-  {
-    return find(a_c_sizeof_type);
-  }
-
   inline const irept &bv() const
   {
     return find(s_bv);
@@ -793,11 +788,6 @@ public:
   inline void component(unsigned int val)
   {
     set(a_component, val);
-  }
-
-  inline void c_sizeof_type(const irept &val)
-  {
-    set(a_c_sizeof_type, val);
   }
 
   inline void dfault(bool val)
@@ -1272,7 +1262,7 @@ public:
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
-  static const irep_idt a_cmt_active, a_code, a_component, a_c_sizeof_type;
+  static const irep_idt a_cmt_active, a_code, a_component;
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;

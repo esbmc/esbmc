@@ -23,7 +23,7 @@ def check_if_last_char_is_a_letter(txt):
 # Direct assertions for ESBMC verification
 if __name__ == "__main__":
     assert check_if_last_char_is_a_letter("apple") == False
-    # assert check_if_last_char_is_a_letter("apple pi e") == True
+    assert check_if_last_char_is_a_letter("apple pi e") == True
     # assert check_if_last_char_is_a_letter("eeeee") == False
     # assert check_if_last_char_is_a_letter("A") == True
     # assert check_if_last_char_is_a_letter("Pumpkin pie ") == False

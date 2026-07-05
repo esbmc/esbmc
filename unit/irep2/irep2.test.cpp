@@ -47,6 +47,15 @@ expr2tc gen_testing_array(unsigned int count)
   return constant_array2tc(array_ty, members);
 }
 
+expr2tc gen_deep_add_chain(unsigned int depth)
+{
+  type2tc word_type = get_uint_type(config.ansi_c.word_size);
+  expr2tc acc = constant_int2tc(word_type, BigInt(0));
+  for (unsigned int i = 1; i <= depth; ++i)
+    acc = add2tc(word_type, acc, constant_int2tc(word_type, BigInt(i)));
+  return acc;
+}
+
 void test_constructed_equally(const expr2tc e1, const expr2tc e2)
 {
   // "The == operator should return true"
@@ -99,6 +108,21 @@ SCENARIO("irep2 hashing", "[core][irep2]")
     {
       for (auto &e : expressions)
         test_constructed_differently(e.first, e.second);
+    }
+  }
+}
+
+SCENARIO("CRC handles deep irep2 expression trees iteratively", "[core][irep2]")
+{
+  GIVEN("A deep left-leaning add expression")
+  {
+    config.ansi_c.word_size = 32;
+    expr2tc chain = gen_deep_add_chain(50000);
+
+    THEN("cold and warm CRC calls complete and agree")
+    {
+      const size_t cold_crc = chain->crc();
+      REQUIRE(chain->crc() == cold_crc);
     }
   }
 }

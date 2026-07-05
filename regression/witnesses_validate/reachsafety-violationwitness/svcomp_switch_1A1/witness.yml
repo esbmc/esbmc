@@ -1,0 +1,46 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: d324824d-2499-4e6f-ad1c-11ce834e29bd
+    creation_time: "2024-04-29T13:13:07+02:00"
+    producer:
+      name: "Paulina"
+      version: "thesis"
+    task:
+      input_files:
+      - "switch.c"
+      input_file_hashes:
+        switch.c: f1928d8383dacd05e0928c5a893035f4f2c7fa38018c60f967361841fa5c2aef
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: 2
+        location:
+          file_name: "switch.c"
+          line: 17
+          column: 5
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: 1
+        location:
+          file_name: "switch.c"
+          line: 21
+          column: 9
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "switch.c"
+          line: 23
+          column: 13
+

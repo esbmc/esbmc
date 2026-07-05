@@ -69,6 +69,19 @@ public:
   exprt convert_to_string(const exprt &expr);
 
   /**
+   * @brief Build a sound symbolic fallback for a `char *` string value when
+   *        a string handler cannot compile-time-fold its argument.
+   *
+   * Replaces the historical `throw "X() requires constant string"` aborts so
+   * that GOTO conversion can proceed. Returns a `side_effect_expr_nondett`
+   * of pointer-to-char type; subsequent string ops see arbitrary content,
+   * which is sound over-approximation for safety properties (we cannot
+   * conclude a specific functional result, but we cannot wrongly conclude
+   * SAFE either).
+   */
+  exprt build_nondet_string_fallback(const locationt &location);
+
+  /**
    * @brief Extract string content from array operands
    * @param array_expr Array expression containing characters
    * @return Extracted string
@@ -273,6 +286,30 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.startswith/endswith with optional start/end position
+   *        arguments: s.startswith(prefix, start[, end]) is evaluated as
+   *        s[start:end].startswith(prefix). @p is_suffix selects endswith.
+   *        Constant receiver and constant start/end only.
+   */
+  exprt handle_startswith_endswith_with_pos(
+    const exprt &string_obj,
+    const nlohmann::json &args,
+    python_converter &converter,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
+   * @brief Shared implementation for startswith()/endswith() with a tuple of
+   *        affixes: True iff the string matches any element. @p is_suffix
+   *        selects endswith (true) vs startswith (false).
+   */
+  exprt build_affix_tuple_match(
+    const exprt &string_obj,
+    const exprt &affix_tuple,
+    const locationt &location,
+    bool is_suffix);
+
+  /**
    * @brief Handle str.isdigit() method
    * @param string_obj String object
    * @param location Source location
@@ -469,6 +506,40 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.rindex() method (rfind that raises on not-found)
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param location Source location
+   * @return index of the last occurrence of the substring.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rindex() with start/end
+   * @param call Call AST node (for the temp/exception location)
+   * @param string_obj String object
+   * @param find_arg Substring to locate
+   * @param start_arg Start index
+   * @param end_arg End index (INT_MIN means default)
+   * @param location Source location
+   * @return index of the last occurrence within range.
+   * @throws ValueError if substring is not found.
+   */
+  exprt handle_string_rindex_range(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const exprt &find_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
    * @brief Handle str.replace() method
    * @param string_obj String object
    * @param old_arg Substring to replace
@@ -556,6 +627,27 @@ public:
     const exprt &string_obj,
     const exprt &sep_arg,
     const locationt &location);
+
+  /**
+   * @brief Handle str.rpartition() method (constant-only support).
+   *
+   * Like partition() but splits at the last occurrence of the separator.
+   */
+  exprt handle_string_rpartition(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location);
+
+  /**
+   * @brief Shared implementation of partition()/rpartition(): builds the
+   *        3-tuple (before, sep, after), searching from the left when
+   *        @p from_right is false and from the right when true.
+   */
+  exprt build_partition_tuple(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location,
+    bool from_right);
 
   /**
    * @brief Handle str.isalnum() method
@@ -742,6 +834,19 @@ public:
   exprt
   handle_chr_conversion(const exprt &codepoint_arg, const locationt &location);
 
+  /**
+   * Handle ord() of a runtime string whose value is not known at compile time.
+   * Returns the integer code point of the string's first character,
+   * (int) *base. A length-1 precondition is not enforced because a runtime
+   * guard cannot be short-circuited inside an and/or operand; constant strings
+   * (including multi-byte) are folded by the caller instead.
+   * @param string_obj The runtime string argument
+   * @param location Source location for error reporting
+   * @return Expression representing the integer code point
+   */
+  exprt
+  handle_ord_conversion(const exprt &string_obj, const locationt &location);
+
 private:
   python_converter &converter_;
   contextt &symbol_table_;
@@ -755,19 +860,6 @@ private:
 
   // Helper methods for internal use
   bool try_extract_const_string_expr(const exprt &expr, std::string &out);
-
-  /**
-   * @brief Build a sound symbolic fallback for a `char *` string value when
-   *        a str.*() handler cannot compile-time-fold its receiver.
-   *
-   * Replaces the historical `throw "X() requires constant string"` aborts so
-   * that GOTO conversion can proceed. Returns a `side_effect_expr_nondett`
-   * of pointer-to-char type; subsequent string ops see arbitrary content,
-   * which is sound over-approximation for safety properties (we cannot
-   * conclude a specific functional result, but we cannot wrongly conclude
-   * SAFE either).
-   */
-  exprt build_nondet_string_fallback(const locationt &location);
 
   /**
    * @brief Create a character array expression

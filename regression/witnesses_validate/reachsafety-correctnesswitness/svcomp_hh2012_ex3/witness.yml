@@ -1,0 +1,33 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2023-2025 Simmo Saan
+#
+# SPDX-License-Identifier: MIT
+
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: d834761a-d0d7-4fea-bf42-2ff2b9a19143
+    creation_time: 2022-10-12T10:59:25Z
+    producer:
+      name: Simmo Saan
+      version: n/a
+    task:
+      input_files:
+      - hh2012-ex3.i
+      input_file_hashes:
+        hh2012-ex3.i: 3c7177334f88b94ca4ee99044935e396702561856a6f48616f98f91aafc609bb
+      specification: G ! call(reach_error())
+      data_model: LP64
+      language: C
+  content:
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: hh2012-ex3.i
+        line: 17
+        column: 5
+        function: main
+      value: 0 <= i && i <= 3
+      format: c_expression

@@ -1,0 +1,98 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: bd97ee46-7b5b-48d6-8887-31716c93fe80
+    creation_time: "2024-04-29T13:13:07+02:00"
+    producer:
+      name: "Paulina"
+      version: "thesis"
+    task:
+      input_files:
+      - "while.c"
+      input_file_hashes:
+        while.c: 9c05ddedcb07da7a4eb93e244e7b0495d270511cd41cd755861ccfa605097f8b
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 10"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 16
+          column: 35
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+          column: 5
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 9"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 22
+          column: 39
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+          column: 5
+  - segment:
+    - waypoint:
+        type: "function_return"
+        action: "follow"
+        constraint:
+          value: "\\result == 3"
+          format: "acsl_expression"
+        location:
+          file_name: "while.c"
+          line: 22
+          column: 39
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "avoid"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 21
+          column: 5
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "while.c"
+          line: 28
+          column: 5
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "while.c"
+          line: 29
+          column: 9
+

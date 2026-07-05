@@ -209,6 +209,18 @@ void goto_inlinet::expand_function_call(
 
   goto_functiont &f = m_it->second;
 
+  // A function with a restrictive C++ exception specification (noexcept or a
+  // dynamic throw(...) list) must keep its own runtime frame so the
+  // specification can be enforced when an exception exits its boundary.
+  // Inlining it into the caller would erase that boundary, so leave the call
+  // in place. A later explicit exception-control-flow representation could
+  // preserve the boundary while still allowing the body to be inlined.
+  if (f.exception_spec.is_restrictive())
+  {
+    ++target;
+    return;
+  }
+
   // see if we need to inline this
   if (!full)
   {
@@ -403,15 +415,29 @@ void goto_inline(
 
   goto_inline.goto_inline(it->second.body);
 
-  // clean up: every callee has been inlined into __ESBMC_main, so the
-  // other function bodies are stale and can be released. Preserve the
-  // one symex will actually execute -- the entry point keyed by the
-  // bare name "__ESBMC_main" (NOT the user's `main`, which is keyed by
-  // its mangled symbol identifier `c:@F@main`; comparing against the
-  // literal "main" matched nothing and silently cleared every body,
-  // including the entry, leaving symex with an empty program).
+  // Functions with a restrictive exception specification are intentionally not
+  // inlined (see expand_function_call): their calls are left in place so symex
+  // creates a real frame whose boundary the specification is enforced at. Make
+  // each such function self-contained by inlining its own (non-restrictive)
+  // callees into it, so its preserved body does not depend on bodies we are
+  // about to release.
   for (auto &it : goto_functions.function_map)
-    if (it.first != "__ESBMC_main")
+    if (
+      it.first != "__ESBMC_main" && it.second.body_available &&
+      it.second.exception_spec.is_restrictive())
+      goto_inline.goto_inline(it.second.body);
+
+  // clean up: every callee has been inlined into __ESBMC_main (or into a
+  // preserved restrictive function), so the other function bodies are stale and
+  // can be released. Preserve the entry point keyed by the bare name
+  // "__ESBMC_main" (NOT the user's `main`, which is keyed by its mangled symbol
+  // identifier `c:@F@main`; comparing against the literal "main" matched
+  // nothing and silently cleared every body, including the entry, leaving symex
+  // with an empty program), together with the restrictive functions whose
+  // frames symex still executes.
+  for (auto &it : goto_functions.function_map)
+    if (
+      it.first != "__ESBMC_main" && !it.second.exception_spec.is_restrictive())
     {
       it.second.body_available = false;
       it.second.body.clear();
