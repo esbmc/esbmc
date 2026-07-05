@@ -18,6 +18,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
+#include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/python_types.h>
@@ -1476,28 +1477,37 @@ exprt function_call_expr::handle_min_max(
           exprt elem =
             build_member(arg, components[i].get_name(), components[i].type());
 
-          // result = (elem < result) ? elem : result  (> for max).
-          // V.3: build the select in IREP2 when both branches share the
-          // result type; mixed-type tuple components keep the legacy builder
-          // (if2t asserts type-id equality).
-          const typet &ut = components[i].type();
-          if (elem.type() == ut && result.type() == ut)
+          // result = (elem < result) ? elem : result  (> for max), built in
+          // IREP2. Reconcile mixed-type components to their common arithmetic
+          // type first so the wider candidate survives: the previous legacy
+          // builder set the select's type to the *current* component's type
+          // (ut), truncating a running double accumulator back to int
+          // (min((3, 2.5)) wrongly became 2, not 2.5).
+          // c_implicit_typecast_arithmetic is a no-op when the types already
+          // match, so the same-type case stays byte-identical.
+          exprt elem_r = elem, result_r = result;
+          if (elem_r.type() != result_r.type())
+            c_implicit_typecast_arithmetic(elem_r, result_r, converter_.ns);
+          if (elem_r.type() == result_r.type())
           {
-            const type2tc ut2 = migrate_type(ut);
+            const type2tc rt2 = migrate_type(elem_r.type());
             expr2tc elem2, result2;
-            migrate_expr(elem, elem2);
-            migrate_expr(result, result2);
+            migrate_expr(elem_r, elem2);
+            migrate_expr(result_r, result2);
             expr2tc cond = comparison_op == exprt::i_lt
                              ? lessthan2tc(elem2, result2)
                              : greaterthan2tc(elem2, result2);
-            result = migrate_expr_back(if2tc(ut2, cond, elem2, result2));
+            result = migrate_expr_back(if2tc(rt2, cond, elem2, result2));
           }
           else
           {
+            // Differing non-arithmetic components (an invalid Python min/max,
+            // a TypeError in CPython). Keep the legacy select rather than
+            // tripping if2t's type-id assertion.
             exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
             condition.copy_to_operands(elem, result);
             if_exprt update(condition, elem, result);
-            update.type() = ut;
+            update.type() = components[i].type();
             result = update;
           }
         }

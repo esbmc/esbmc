@@ -111,6 +111,32 @@ static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
   std::string value;
+  // A negative literal parses as UnaryOp(USub, Constant); numerically negate a
+  // constant numeric operand so str.format()/format() handle negatives
+  // (otherwise the whole call degrades to a nondet string). Fold numerically
+  // rather than string-prepending '-' so -0 renders "0" (not "-0"). A nested
+  // unary (--5), a non-numeric operand (-"a", a TypeError in CPython), and
+  // UAdd/Invert fall through to the throw below and stay on the nondet path.
+  if (
+    arg.contains("_type") && arg["_type"] == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant" &&
+    arg["operand"].contains("value"))
+  {
+    const auto &ov = arg["operand"]["value"];
+    if (ov.is_number_integer())
+      return std::to_string(-ov.get<long long>());
+    if (ov.is_boolean())
+      return ov.get<bool>() ? "-1" : "0";
+    if (ov.is_number_float())
+    {
+      std::ostringstream oss;
+      oss << -ov.get<double>();
+      return oss.str();
+    }
+  }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
     if (arg.contains("_bigint"))
@@ -153,9 +179,25 @@ std::string apply_format_spec(
 {
   // Only constant numeric/string literals are folded; anything else (a
   // variable, a computed value) throws and degrades to the nondet fallback.
-  if (arg.value("_type", std::string()) != "Constant" || !arg.contains("value"))
+  // A negative literal parses as UnaryOp(USub, Constant); unwrap it so numeric
+  // specs (including grouping) work on negatives too.
+  const nlohmann::json *cnode = &arg;
+  bool negate = false;
+  if (
+    arg.value("_type", std::string()) == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant")
+  {
+    cnode = &arg["operand"];
+    negate = true;
+  }
+  if (
+    cnode->value("_type", std::string()) != "Constant" ||
+    !cnode->contains("value"))
     throw std::runtime_error("format spec on a non-constant value");
-  const auto &val = arg["value"];
+  const auto &val = (*cnode)["value"];
 
   enum
   {
@@ -189,6 +231,17 @@ std::string apply_format_spec(
   else
     throw std::runtime_error("format spec on an unsupported constant type");
 
+  // Apply a leading unary minus to the folded numeric value.
+  if (negate)
+  {
+    if (kind == KIND_INT)
+      ival = -ival;
+    else if (kind == KIND_FLOAT)
+      dval = -dval;
+    else
+      throw std::runtime_error("unary minus on a non-numeric format value");
+  }
+
   // Parse the spec.
   size_t p = 0;
   char fill = ' ';
@@ -221,8 +274,9 @@ std::string apply_format_spec(
   int width = 0;
   while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
     width = width * 10 + (spec[p++] - '0');
+  char grouping = '\0';
   if (p < spec.size() && (spec[p] == ',' || spec[p] == '_'))
-    throw std::runtime_error("unsupported grouping in format spec");
+    grouping = spec[p++];
   int prec = -1;
   if (p < spec.size() && spec[p] == '.')
   {
@@ -235,6 +289,18 @@ std::string apply_format_spec(
   if (p != spec.size())
     throw std::runtime_error("invalid format spec");
   (void)converter;
+
+  // Only plain decimal-integer ',' grouping is folded exactly. '_', grouping on
+  // a non-decimal base, and float/str grouping are unsupported; so is grouping
+  // combined with '0'-fill width, where CPython also groups the pad zeros
+  // ("{:08,}".format(1000) == "0,001,000") — a different composition than
+  // group-then-pad. All of these fall to the nondet fallback so no wrong value
+  // is produced.
+  if (
+    grouping != '\0' && (!(grouping == ',' && kind == KIND_INT &&
+                           (type == '\0' || type == 'd') && prec < 0) ||
+                         (width > 0 && fill == '0')))
+    throw std::runtime_error("unsupported grouping in format spec");
 
   // An integer value with a float presentation type (f/F/e/E/g/G) is formatted
   // as a float, matching CPython ("{:.2f}".format(5) == "5.00"). CPython
@@ -280,9 +346,37 @@ std::string apply_format_spec(
       for (; mag != 0; mag /= base)
         digits.insert(digits.begin(), alpha[mag % base]);
     }
+    // Insert thousands separators into the decimal magnitude (before the
+    // sign), guaranteed decimal here by the grouping guard above.
+    if (grouping == ',')
+    {
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      digits = grouped;
+    }
     const std::string sgn =
       neg ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
     body = sgn + digits;
+    default_align = '>';
+  }
+  else if (kind == KIND_INT && type == 'c')
+  {
+    // {:c} formats an integer as the character with that code point. Fold only
+    // 1-127: code point 0 embeds a NUL, which the null-terminated string model
+    // represents unreliably (comparisons can truncate at it), and code points
+    // > 127 are multi-byte UTF-8 the single-byte string model cannot represent.
+    // Both degrade to the sound nondet fallback.
+    if (ival < 1 || ival > 127)
+      throw std::runtime_error("code point out of foldable range for {:c}");
+    body = std::string(1, static_cast<char>(ival));
     default_align = '>';
   }
   else if (
@@ -323,6 +417,28 @@ std::string apply_format_spec(
         num = " " + num;
     }
     body = num;
+    default_align = '>';
+  }
+  else if (kind == KIND_FLOAT && type == '%')
+  {
+    // {:%} multiplies by 100, formats like 'f' (default precision 6), and
+    // appends a literal '%'.
+    const round_to_nearest_guard rounding_guard;
+    const int pr = prec >= 0 ? prec : 6;
+    const double pct = dval * 100.0;
+    int n = std::snprintf(nullptr, 0, "%.*f", pr, pct);
+    if (n < 0)
+      throw std::runtime_error("format spec percent error");
+    std::string num(static_cast<size_t>(n), '\0');
+    std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*f", pr, pct);
+    if (!num.empty() && num[0] != '-')
+    {
+      if (sign == '+')
+        num = "+" + num;
+      else if (sign == ' ')
+        num = " " + num;
+    }
+    body = num + "%";
     default_align = '>';
   }
   else
