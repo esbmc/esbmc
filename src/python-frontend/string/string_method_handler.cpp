@@ -244,10 +244,9 @@ std::string apply_format_spec(
   // group-then-pad. All of these fall to the nondet fallback so no wrong value
   // is produced.
   if (
-    grouping != '\0' &&
-    (!(grouping == ',' && kind == KIND_INT && (type == '\0' || type == 'd') &&
-       prec < 0) ||
-     (width > 0 && fill == '0')))
+    grouping != '\0' && (!(grouping == ',' && kind == KIND_INT &&
+                           (type == '\0' || type == 'd') && prec < 0) ||
+                         (width > 0 && fill == '0')))
     throw std::runtime_error("unsupported grouping in format spec");
 
   // Build the value body (without field padding) and a default alignment.
