@@ -112,9 +112,17 @@ empty program and could report a spurious SUCCESSFUL. Resolved by
 otherwise a CBMC binary dispatches into `__CPROVER__start`. Regression-tested with real
 CBMC 6.8.0 binaries (`cbmc_entry_bridge`, `cbmc_entry_bridge_fail`) — the failing-assert
 case is the load-bearing guard, since without bridging it would spuriously report
-SUCCESSFUL. **Open follow-up:** selecting a CBMC harness via `--function` still needs
-work — today it is consumed by the boilerplate-additions synthesis rather than reaching
-the retarget logic; the default `__CPROVER__start` bridge (the common case) is fixed.
+SUCCESSFUL. **`--function` harness selection — ✅ fixed (PR #5816).** Previously
+`--function myharness` aborted with `main symbol 'myharness' not found`: the harness names a
+function in the loaded CBMC binary, but `synthesize_cprover_additions` left `config.main` (set
+from `--function` by `config.cpp`) in place while compiling the boilerplate TU, so the
+boilerplate's own entry-point synthesis (`clang_c_main`) looked for the harness *there* and
+failed. Fixed by neutralising `config.main` for the boilerplate compile (mirroring the existing
+`cmdline.args` save/restore); the `create_goto_program` retarget then applies `--function` to
+the loaded binary. Verdict parity with CBMC tested both ways (`cbmc_harness`,
+`cbmc_harness_fail`) — the passing-harness case has a `main` with `assert(0)` to prove the
+harness, not `main`, is the entry. This unblocks the `verify-rust-std`/Kani flow, which selects
+proof harnesses by name.
 
 ### 4.3 Type system: anonymous structs and wide constants (Phase 3)
 `cbmc_adapter.cpp::expand_anon_struct` aborts on CBMC's anonymous-aggregate naming
@@ -249,9 +257,17 @@ The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`
 whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`); the work is
 to bridge CBMC's encoding onto it rather than re-implement.
 
-### 4.7 Versioning & robustness (Phase 5)
-Only CBMC binary **version 6** is accepted. No graceful handling of other versions, and the
-reader `abort()`s on malformed input rather than returning a recoverable error.
+### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
+Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
+already a clean `log_error` + `return true`). The low-level reader no longer `abort()`s on
+malformed input: an over-wide varint (>32 bits), an over-long varint (>64 shift bits), and an
+unterminated irep now set a `cbmc_irep_readert::failed()` flag that short-circuits the rest of
+the parse (subsequent reads no-op, the S/N/C child loops stop) and surfaces through
+`parse_cbmc_goto`'s bool return as a recoverable error rather than crashing the whole process
+(PR #5811). Pinned by unit tests for each malformed shape plus a truncated-binary parse.
+**Still open:** multi-version tolerance (accept/adapt versions other than 6), and bounding the
+symbol/function/instruction counts so a corrupt-but-in-range count can't trigger a huge
+`reserve()` before the first element is read.
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level

@@ -610,6 +610,22 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
+    // An array of a class type with a non-trivial constructor is an aggregate,
+    // but its CXXConstructExpr is not a no-op: every element must be
+    // constructed.  Keep the constructor call so static_lifetime_init (via
+    // clang_cpp_maint::adjust_init) can expand it into per-element calls;
+    // otherwise the element constructors are silently dropped and any side
+    // effect (e.g. a global counter bumped by the ctor) never happens.  See
+    // regression esbmc-cpp/gcc-template-tests/ctor2.
+    if (aggregate_without_init)
+    {
+      const auto &construct_expr =
+        static_cast<const clang::CXXConstructExpr &>(*stmt);
+      const clang::CXXConstructorDecl *ctor = construct_expr.getConstructor();
+      if (ctor && !ctor->isTrivial())
+        aggregate_without_init = false;
+    }
+
     if (vd.isStaticDataMember() && vd.isOutOfLine())
     {
       // Reorder to respect definition order for static_lifetime_init().
