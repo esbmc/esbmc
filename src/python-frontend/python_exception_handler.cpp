@@ -336,6 +336,25 @@ void python_exception_handler::get_raise_statement(
       tmp.location() = location;
       raise = tmp;
     }
+    else if (
+      raise.id() == "sideeffect" && raise.get("statement") == "cpp-throw")
+    {
+      // A no-argument exception constructor whose class inherits __init__
+      // (e.g. `raise E()` where `class E(Exception): pass`) lowers to a bare
+      // cpp-throw side-effect rather than a constructed instance. Wrapping it
+      // in the cpp-throw built below would nest two throws and hand value_set
+      // a non-struct operand, aborting in make_member. Synthesize a
+      // zero-initialised instance instead, as the _init_undefined path does
+      // for classes with no __init__ at all. (A constructor with arguments or
+      // a custom __init__ yields a proper instance and keeps the paths above.)
+      if (type.is_empty())
+        type = any_type();
+      typet resolved = type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.name_space().follow(type);
+      raise = gen_zero(resolved);
+      raise.type() = type;
+    }
     else
     {
       if (type.is_empty())
