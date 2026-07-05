@@ -111,6 +111,32 @@ static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
   std::string value;
+  // A negative literal parses as UnaryOp(USub, Constant); numerically negate a
+  // constant numeric operand so str.format()/format() handle negatives
+  // (otherwise the whole call degrades to a nondet string). Fold numerically
+  // rather than string-prepending '-' so -0 renders "0" (not "-0"). A nested
+  // unary (--5), a non-numeric operand (-"a", a TypeError in CPython), and
+  // UAdd/Invert fall through to the throw below and stay on the nondet path.
+  if (
+    arg.contains("_type") && arg["_type"] == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant" &&
+    arg["operand"].contains("value"))
+  {
+    const auto &ov = arg["operand"]["value"];
+    if (ov.is_number_integer())
+      return std::to_string(-ov.get<long long>());
+    if (ov.is_boolean())
+      return ov.get<bool>() ? "-1" : "0";
+    if (ov.is_number_float())
+    {
+      std::ostringstream oss;
+      oss << -ov.get<double>();
+      return oss.str();
+    }
+  }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
     if (arg.contains("_bigint"))
@@ -153,9 +179,25 @@ std::string apply_format_spec(
 {
   // Only constant numeric/string literals are folded; anything else (a
   // variable, a computed value) throws and degrades to the nondet fallback.
-  if (arg.value("_type", std::string()) != "Constant" || !arg.contains("value"))
+  // A negative literal parses as UnaryOp(USub, Constant); unwrap it so numeric
+  // specs (including grouping) work on negatives too.
+  const nlohmann::json *cnode = &arg;
+  bool negate = false;
+  if (
+    arg.value("_type", std::string()) == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant")
+  {
+    cnode = &arg["operand"];
+    negate = true;
+  }
+  if (
+    cnode->value("_type", std::string()) != "Constant" ||
+    !cnode->contains("value"))
     throw std::runtime_error("format spec on a non-constant value");
-  const auto &val = arg["value"];
+  const auto &val = (*cnode)["value"];
 
   enum
   {
@@ -188,6 +230,17 @@ std::string apply_format_spec(
   }
   else
     throw std::runtime_error("format spec on an unsupported constant type");
+
+  // Apply a leading unary minus to the folded numeric value.
+  if (negate)
+  {
+    if (kind == KIND_INT)
+      ival = -ival;
+    else if (kind == KIND_FLOAT)
+      dval = -dval;
+    else
+      throw std::runtime_error("unary minus on a non-numeric format value");
+  }
 
   // Parse the spec.
   size_t p = 0;
