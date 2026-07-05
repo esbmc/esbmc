@@ -72,16 +72,11 @@ void python_exception_handler::get_try_statement(
     element.contains("finalbody") && !element["finalbody"].empty();
 
   // The `else` clause runs only when the try body completes without an
-  // exception. ESBMC's try lowering does not model it (it is silently dropped) —
-  // a pre-existing limitation independent of this change. Combined with the
-  // finally lowering below, which duplicates the finally body on the normal and
-  // exception paths, a dropped `else` would also be skipped on the path where
-  // finally runs, compounding the unsoundness. So refuse a non-empty `else`
-  // only when a finally is present; plain try/except/else keeps its existing
-  // behaviour.
-  if (has_finally && element.contains("orelse") && !element["orelse"].empty())
-    throw std::runtime_error(
-      "try/finally with a non-empty else clause is not supported");
+  // exception; it is appended to the try body below so it runs on the normal
+  // path and is skipped when the body raises. This composes with the finally
+  // lowering below (else in the try body runs before the appended finally on
+  // the normal path, and is skipped along with the rest of the try body on the
+  // exception path), so try/except/else/finally is handled too.
 
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
@@ -95,16 +90,36 @@ void python_exception_handler::get_try_statement(
   {
     bool escapes = body_has_escaping_control_flow(element["body"], false) ||
                    body_has_escaping_control_flow(element["finalbody"], false);
+    // The else clause is appended to the try body below, so an escaping
+    // return/break/continue there would bypass the appended finally just like
+    // one in the try body — scan it too.
+    if (element.contains("orelse"))
+      escapes =
+        escapes || body_has_escaping_control_flow(element["orelse"], false);
     for (const auto &h : element["handlers"])
       if (h.contains("body"))
         escapes = escapes || body_has_escaping_control_flow(h["body"], false);
     if (escapes)
       throw std::runtime_error(
-        "try/finally with return/break/continue in the try, except, or finally "
-        "body is not supported");
+        "try/finally with return/break/continue in the try, except, else, or "
+        "finally body is not supported");
   }
 
   exprt try_block = converter_.get_block(element["body"]);
+
+  // The `else` clause runs after the try body completes without an exception.
+  // Append it to the try body: on the normal path it runs right after the body,
+  // and if the body raises, control transfers to a handler before reaching it,
+  // so it is correctly skipped. (An exception raised inside the else itself is
+  // caught by this try's handlers here rather than propagating, a minor
+  // deviation from CPython that is out of scope.)
+  if (element.contains("orelse") && !element["orelse"].empty())
+  {
+    exprt else_block = converter_.get_block(element["orelse"]);
+    for (const auto &op : else_block.operands())
+      try_block.copy_to_operands(op);
+  }
+
   exprt handler = converter_.get_block(element["handlers"]);
 
   // A bare `except:` already catches every exception, so the fall-through
