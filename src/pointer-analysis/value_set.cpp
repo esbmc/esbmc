@@ -851,16 +851,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     if (is_symbol2t(expr))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
-      assert(sym);
-      const irept &a = sym->get_type().find("alignment");
-      if (a.is_not_nil())
+      if (sym != nullptr)
       {
-        assert(a.is_constant());
-        irep_idt v = static_cast<const exprt &>(a).value();
-        BigInt V = binary2integer(v.as_string(), false);
-        assert(V.is_positive());
-        assert(V <= UINT_MAX);
-        obj.offset_alignment = V.to_uint64();
+        const irept &a = sym->get_type().find("alignment");
+        if (a.is_not_nil())
+        {
+          assert(a.is_constant());
+          irep_idt v = static_cast<const exprt &>(a).value();
+          BigInt V = binary2integer(v.as_string(), false);
+          assert(V.is_positive());
+          assert(V <= UINT_MAX);
+          obj.offset_alignment = V.to_uint64();
+        }
       }
     }
 
@@ -1096,8 +1098,9 @@ void value_sett::assign(
     return;
   }
 
-  // Must have concrete type.
-  assert(!is_symbol_type(lhs));
+  // Symbol (template) types have no concrete memory layout; skip silently.
+  if (is_symbol_type(lhs))
+    return;
   const type2tc &lhs_type = lhs->type;
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))

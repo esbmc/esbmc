@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --malloc-zero-is-null --no-pointer-check --no-bounds-check --incremental-bmc
+^VERIFICATION FAILED$

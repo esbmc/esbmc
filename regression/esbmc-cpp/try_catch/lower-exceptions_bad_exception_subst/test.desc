@@ -1,0 +1,5 @@
+KNOWNBUG
+main.cpp
+--unwind 4 --no-unwinding-assertions --std c++03
+
+^VERIFICATION SUCCESSFUL$

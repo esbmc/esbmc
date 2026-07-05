@@ -133,6 +133,170 @@ These hold throughout the pipeline; the rest of the document assumes them.
   `thread_local` so parallel symex (`--k-induction-parallel`) does not race
   on shared numbering or symbol names.
 
+## Formal model
+
+The two services above have a compact formal reading. This section gives (a) the
+*grammar* of the points-to facts the analysis manipulates, and (b) the *transfer
+functions* that map program expressions and assignments onto those facts. Both
+are exactly what `value_set.cpp` computes; the function or branch that realises
+each rule is named alongside it.
+
+### Grammar of points-to facts
+
+A value-set state `ρ` (the `value_sett::values` map) is a set of entries, each
+binding a *pointer location* to the set of objects it may point at. In EBNF
+(`|` alternation, `{ }` zero-or-more, `[ ]` optional):
+
+```text
+state      ::= { entry }                          (* value_sett::values *)
+entry      ::= location "=" "{" [ object { "," object } ] "}"
+location   ::= identifier suffix                  (* entryt.identifier ++ suffix *)
+identifier ::= l1_name                            (* an l1 variable *)
+             | "value_set::dynamic_object" int    (* heap block *)
+             | "value_set::return_value"
+suffix     ::= { "." field | "[]" }               (* struct member / array-of-ptr *)
+
+object     ::= "<" referent "," offset "," align "," type ">"
+             | "unknown"                          (* unknown2t: may point anywhere *)
+             | "invalid"                          (* invalid2t: provably bad      *)
+referent   ::= l1_name | "dynamic_object" int | "NULL"
+offset     ::= int | "*"                          (* "*" = symbolic; offset_is_set=false *)
+align      ::= int                                (* bytes; >= 1 whenever offset = "*"    *)
+```
+
+This is the syntax `value_sett::output` prints under `--show-value-sets`
+(`value_set.cpp:22-108`): every `object` is a `<referent, offset, align, type>`
+tuple, except `unknown`/`invalid` referents, which print bare. Internally each
+tuple is an `objectt` (`offset`, `offset_is_set`, `offset_alignment`) keyed, in
+the entry's `object_mapt`, by an index into `object_numbering` that names the
+referent. `align` is `objectt::offset_alignment` in bytes and is meaningful
+precisely when `offset` is symbolic.
+
+When a value set is *exported* to a client (`get_value_set` → `valuest`,
+`value_set.cpp:182-194`) each tuple becomes an `object_descriptor2t(referent,
+offset, align)` expression, while `unknown`/`invalid` stay as `unknown2t` /
+`invalid2t`. That `valuest` is exactly what `dereferencet` consumes.
+
+### Transfer functions
+
+Write `ρ ⊢ e ⇓ M` for "in state `ρ`, expression `e` evaluates to the object-map
+`M`" — the relation computed by `value_sett::get_value_set_rec`. Each rule is
+tagged with the branch that implements it:
+
+```text
+                ρ(p · suffix) = M
+[SYM]    ---------------------------------                is_symbol2t
+                  ρ ⊢ p ⇓ M
+
+[NULL]   ρ ⊢ NULL ⇓ { <NULL, 0, ..> }                    is_symbol2t, thename = "NULL"
+
+             refset(x) = M
+[ADDR]   ----------------------                          is_address_of2t → get_reference_set
+             ρ ⊢ &x ⇓ M
+
+           ρ ⊢ a ⇓ Ma     ρ ⊢ b ⇓ Mb
+[IF]     ------------------------------                  is_if2t
+           ρ ⊢ (c ? a : b) ⇓ Ma ∪ Mb
+
+             ρ ⊢ e ⇓ M
+[CAST]   ------------------                              is_typecast2t / is_bitcast2t
+           ρ ⊢ (T)e ⇓ M
+
+           ρ ⊢ p ⇓ M     k constant,  s = sizeof(*p)
+[PTR+k]  ----------------------------------------------  is_add2t/is_sub2t, constant arm
+           ρ ⊢ p + k ⇓ { <o, off + k·s, a> : <o, off, a> ∈ M, off ≠ * }
+
+           ρ ⊢ p ⇓ M     i not constant
+[PTR+i]  ----------------------------------------------  is_add2t/is_sub2t, nondet arm
+           ρ ⊢ p + i ⇓ { <o, *, min(nat(o), align(p))> : <o, _, _> ∈ M }
+
+           refset(*p) = R     ∀ o ∈ R.  ρ ⊢ o ⇓ M_o
+[DEREF]  ----------------------------------------------  is_dereference2t
+           ρ ⊢ *p ⇓  ⋃ M_o
+
+[NEW]    ρ ⊢ malloc/new @ ℓ ⇓ { <dynamic_object_ℓ, 0, 1> }   is_sideeffect2t (alloc)
+
+             ρ ⊢ e ⇓ M
+[MEMB]   --------------------------------                is_member2t
+           ρ ⊢ e.f ⇓ M  with suffix ".f"
+
+             ρ ⊢ e ⇓ M
+[INDEX]  --------------------------------                is_index2t
+           ρ ⊢ e[i] ⇓ M  with suffix "[]"
+
+[OTHER]  ρ ⊢ e ⇓ { unknown }   (any expr none of the above match)
+```
+
+Two properties are worth stressing, both visible in the rules:
+
+* **Arrays are summarised, not enumerated.** `[INDEX]` attaches the suffix `[]`
+  rather than tracking element `i`, so a whole array of pointers shares one
+  entry. This is what makes the analysis terminate on unbounded arrays, at the
+  cost of per-element precision.
+* **Pointer arithmetic degrades the offset, never the object set.** `[PTR+k]`
+  keeps the referent set identical and only shifts offsets; `[PTR+i]` keeps the
+  set but widens every offset to symbolic with the alignment lower bound
+  `min(nat(o), align(p))`. The `offset_alignment` machinery described under
+  *Key invariants* is exactly this `align` component.
+
+### Assignment and join
+
+An assignment rebinds one location to the value set of its right-hand side
+(`value_sett::assign`, `value_set.cpp:1074`):
+
+```text
+            ρ ⊢ rhs ⇓ M
+[ASSIGN] ------------------------------------------------
+          ρ ⊢ (lhs = rhs) ⇒ ρ[ lhs ↦ M ]               (symex: overwrite)
+                          ⇒ ρ[ lhs ↦ ρ(lhs) ⊔ M ]      (static: join, add_to_sets=true)
+```
+
+The join `⊔` (`make_union` / `insert`, `value_set.cpp:168`, `value_set.h:350`)
+is set union on referents; when the *same* referent carries two offsets it
+widens conservatively:
+
+```text
+   <o, n, _>  ⊔  <o, n, _>  =  <o, n>                          (equal: unchanged)
+   <o, a, _>  ⊔  <o, b, _>  =  <o, *, min(align(a), align(b))> (a ≠ b)
+   <o, *, x>  ⊔  <o, _, y>  =  <o, *, min(x, y)>               (either symbolic)
+```
+
+So two definite-but-different offsets for one object collapse to a symbolic
+offset with the coarser alignment — the lattice climbs from "exact offset" to
+"aligned-but-unknown offset" and finally (via `unknown`) to "points anywhere."
+
+### Worked examples
+
+Each line shows the resulting entry in `--show-value-sets` notation
+(`<referent, offset, align, type>`; `*` = symbolic offset). The `align` column
+is written abstractly as `a` (a byte alignment lower bound): its concrete value
+follows the `offset_alignment` rules and the 8-byte scalar default in
+`get_natural_alignment`, and is best read off `--show-value-sets` for a given
+program. Only the referent set and the offset are pinned down here:
+
+```text
+int g;
+int *p = &g;            p = { <g, 0, a, signedbv> }       [ADDR]
+int *q = p;             q = { <g, 0, a, signedbv> }       [SYM]
+p = p + 3;              p = { <g, 12, a, signedbv> }      [PTR+k] (offset += 3·sizeof(int))
+p = p + nondet_int();   p = { <g, *, a', signedbv> }      [PTR+i] (offset widened; a' <= a)
+
+struct S { int *fld; } s;
+s.fld = &g;             s.fld = { <g, 0, a, signedbv> }   [MEMB]  (suffix ".fld")
+
+int *a[10];
+a[i] = &g;              a[] = { <g, 0, a, signedbv> }     [INDEX] (one entry, all i)
+
+int *h = malloc(n);     h = { <dynamic_object_ℓ, 0, a, ...> }   [NEW]  (ℓ = alloc site)
+
+int *r = c ? &g : &h;   r = { <g, 0, a, signedbv>,
+                              <h, 0, a, signedbv> }       [IF]
+```
+
+The longer `*baz = 1` walkthrough later in this document
+([Example walkthrough](#example-walkthrough)) shows `[IF]`, `[PTR+i]`, and the
+join interacting within a single statement.
+
 ## Value sets (`value_set.{h,cpp}`)
 
 `value_sett` maps `(l1 identifier, suffix) → entryt`. An `entryt` holds an

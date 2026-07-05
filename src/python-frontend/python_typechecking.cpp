@@ -5,9 +5,10 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <unordered_set>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+
+using namespace python_expr;
 
 python_typechecking::python_typechecking(python_converter &converter)
   : converter_(converter)
@@ -192,15 +193,18 @@ exprt python_typechecking::build_isinstance_check(
     const symbolt *symbol = ns.lookup(effective_type);
     if (symbol == nullptr)
       return nil_exprt();
-    type_operand = symbol_expr(*symbol);
+    type_operand = build_symbol(*symbol);
   }
   else
     type_operand = gen_zero(effective_type);
 
-  exprt isinstance_expr("isinstance", typet("bool"));
-  isinstance_expr.copy_to_operands(value_expr);
-  isinstance_expr.move_to_operands(type_operand);
-  return isinstance_expr;
+  // V.3: build the isinstance node in IREP2. isinstance2t is a 2-operand
+  // custom kind with forward/back migrate arms (since #3289), so this is the
+  // exact round-trip of the legacy node.
+  expr2tc value2, type2;
+  migrate_expr(value_expr, value2);
+  migrate_expr(type_operand, type2);
+  return migrate_expr_back(isinstance2tc(value2, type2));
 }
 
 exprt python_typechecking::build_none_check(const exprt &value_expr) const
@@ -219,19 +223,25 @@ exprt python_typechecking::build_none_check(const exprt &value_expr) const
   };
 
   if (is_optional_struct(resolved_type))
-    return member_exprt(value_expr, "is_none", bool_type());
+    return build_member(value_expr, "is_none", bool_type());
 
   if (resolved_type.is_pointer())
   {
     typet subtype = ns.follow(resolved_type.subtype());
     if (is_optional_struct(subtype))
     {
-      dereference_exprt deref(value_expr, subtype);
-      return member_exprt(deref, "is_none", bool_type());
+      exprt deref = build_dereference(value_expr, subtype);
+      return build_member(deref, "is_none", bool_type());
     }
 
+    // V.3: build the `value == NULL` check in IREP2. Keep the legacy
+    // gen_zero(original_type) so the null-pointer constant is preserved
+    // exactly (round-tripped through migrate), then compare in IREP2.
     exprt null_expr = gen_zero(original_type);
-    return equality_exprt(value_expr, null_expr);
+    expr2tc ve2, null2;
+    migrate_expr(value_expr, ve2);
+    migrate_expr(null_expr, null2);
+    return migrate_expr_back(equality2tc(ve2, null2));
   }
 
   if (resolved_type == none_type())
@@ -277,16 +287,20 @@ bool python_typechecking::build_type_assertion(
   if (checks.empty())
     return false;
 
-  exprt assertion_expr = checks.front();
+  // V.3: build the OR-fold of the type checks in IREP2, back-migrated once
+  // at the legacy code_assertt seam. Each check is migrated forward and the
+  // disjunction is composed with or2tc; operand order (assertion-so-far on
+  // the left, next check on the right) is preserved from the legacy fold.
+  expr2tc assertion2;
+  migrate_expr(checks.front(), assertion2);
   for (size_t i = 1; i < checks.size(); ++i)
   {
-    exprt or_expr("or", typet("bool"));
-    or_expr.move_to_operands(assertion_expr);
-    or_expr.move_to_operands(checks[i]);
-    assertion_expr = or_expr;
+    expr2tc check2;
+    migrate_expr(checks[i], check2);
+    assertion2 = or2tc(assertion2, check2);
   }
 
-  out_assert = code_assertt(assertion_expr);
+  out_assert = code_assertt(migrate_expr_back(assertion2));
   out_assert.location() = location;
 
   if (!context_name.empty())

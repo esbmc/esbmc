@@ -61,25 +61,31 @@ exprt python_converter::make_enum_member_struct_expr(
   const symbolt *str_sym = symbol_table_.find_symbol(str_id);
   assert(str_sym);
 
-  // Build struct_exprt { value: int_sym, name: &str_sym[0] }
-  struct_exprt struct_val(st);
-
-  // value component: the integer value of the enum member
-  struct_val.operands().push_back(symbol_expr(int_sym));
-
-  // name component: char* pointer to the first element of the name string
+  // name component: char* pointer to the first element of the name string,
+  // &str_sym[0]. str_sym is a static char-array symbol, so the index source is
+  // array-typed.
   exprt str_expr = symbol_expr(*str_sym);
   exprt zero_idx = from_integer(0, index_type());
-  // V.3: IREP2 index access (exact round-trip of index_exprt); str_sym is a
-  // static char-array symbol, so the source is array-typed.
   expr2tc se2, zi2;
   migrate_expr(str_expr, se2);
   migrate_expr(zero_idx, zi2);
-  exprt name_ptr = address_of_exprt(migrate_expr_back(
-    index2tc(migrate_type(str_expr.type().subtype()), se2, zi2)));
+  expr2tc idx2 = index2tc(migrate_type(str_expr.type().subtype()), se2, zi2);
+  exprt name_ptr = migrate_expr_back(address_of2tc(idx2->type, idx2));
   name_ptr.type() = gen_pointer_type(char_type());
-  struct_val.operands().push_back(name_ptr);
 
+  // V.3: assemble the enum member struct { value, name } in IREP2 and
+  // back-migrate once. Both members are already-built value exprs (the member's
+  // integer value symbol and the char* name pointer), so migrating them
+  // round-trips exactly. Re-attach the struct type afterwards: migrate_type does
+  // not carry the frontend struct's component attributes.
+  expr2tc value_member, name_member;
+  migrate_expr(symbol_expr(int_sym), value_member);
+  migrate_expr(name_ptr, name_member);
+
+  std::vector<expr2tc> members{std::move(value_member), std::move(name_member)};
+  exprt struct_val =
+    migrate_expr_back(constant_struct2tc(migrate_type(st), members));
+  struct_val.type() = st;
   return struct_val;
 }
 
@@ -114,23 +120,24 @@ exprt python_converter::create_member_expression(
 {
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.get_type());
-  if (source.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = source.type().subtype();
-    deref.move_to_operands(source);
-    source = std::move(deref);
-  }
+
+  // V.3: build the (optional) pointer dereference and the member access in
+  // IREP2, back-migrated once at the legacy seam. Building dereference2tc
+  // directly is byte-identical to migrating a staged legacy "dereference"
+  // node, and avoids the extra round-trip.
+  expr2tc s2;
+  migrate_expr(source, s2);
   typet source_type = source.type();
+  if (source_type.is_pointer())
+  {
+    source_type = source_type.subtype();
+    s2 = dereference2tc(migrate_type(source_type), s2);
+  }
   if (source_type.id() == "symbol")
     source_type = ns.follow(source_type);
   if (!source_type.is_struct() && !source_type.is_union())
     return gen_zero(clean_type);
 
-  // V.3: IREP2 member access (exact round-trip of member_exprt). `source` is
-  // struct/union (checked above) or a by-name symbol; both are valid sources.
-  expr2tc s2;
-  migrate_expr(source, s2);
   return migrate_expr_back(member2tc(migrate_type(clean_type), s2, attr_name));
 }
 

@@ -1,0 +1,4 @@
+CORE
+main.c
+--64 --incremental-bmc --no-pointer-check --no-bounds-check --force-malloc-success
+\A(?![\s\S]*missing argument for parameter)[\s\S]*VERIFICATION SUCCESSFUL[\s\S]*\Z

@@ -1,9 +1,12 @@
 #include "char_utils.h"
 
+#include <python-frontend/python_expr_builder.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>
+
+using namespace python_expr;
 
 namespace python_char_utils
 {
@@ -42,8 +45,9 @@ bool try_get_single_char_expr(
 
   if (is_char_array_of_length(expr.type(), 2))
   {
+    // Source is a 2-char array (checked above) -> index2t source ok.
     exprt zero_index = from_integer(0, index_type());
-    char_expr = index_exprt(expr, zero_index, char_type());
+    char_expr = build_index(expr, zero_index, char_type());
     return true;
   }
 
@@ -51,8 +55,8 @@ bool try_get_single_char_expr(
     allow_void_pointer && expr.type().is_pointer() &&
     (expr.type().subtype().is_nil() || expr.type().subtype().id() == "empty"))
   {
-    exprt char_ptr = typecast_exprt(expr, pointer_typet(char_type()));
-    char_expr = dereference_exprt(char_ptr, char_type());
+    exprt char_ptr = build_typecast(expr, pointer_typet(char_type()));
+    char_expr = build_dereference(char_ptr, char_type());
     return true;
   }
 
@@ -65,7 +69,7 @@ exprt get_char_value_as_int(const exprt &expr, bool allow_void_pointer)
   if (!try_get_single_char_expr(expr, char_expr, allow_void_pointer))
     return nil_exprt();
 
-  return typecast_exprt(char_expr, signedbv_typet(8));
+  return build_typecast(char_expr, signedbv_typet(8));
 }
 
 } // namespace python_char_utils

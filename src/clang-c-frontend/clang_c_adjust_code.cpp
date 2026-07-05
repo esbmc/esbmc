@@ -137,6 +137,20 @@ void clang_c_adjust::adjust_for(codet &code)
   //
   //   { a; for(;b;c) d; }
   //
+  // A nil init means there is nothing to hoist, so the wrap is unnecessary.
+  // Skipping it keeps adjust_for idempotent: when more than one language
+  // frontend adjusts the same context (e.g. c2goto registers both the C and
+  // C++ frontends, and language_uit::typecheck runs every module's adjust over
+  // the shared context), a re-run would otherwise move the now-nil init into a
+  // fresh block as a stray non-code operand and break goto_convert with
+  // "non-code operand in this block" (esbmc/esbmc#5298).
+  //
+  // adjust_for is the only structurally-mutating adjust_* method: the siblings
+  // (adjust_while/adjust_switch/adjust_ifthenelse/adjust_assign) merely insert
+  // idempotent typecasts, so re-application is harmless and they need no guard.
+  // This hoist is the sole non-idempotent transform, hence the only one fenced.
+  if (code.op0().is_nil())
+    return;
 
   code_blockt code_block;
   code_block.location() = code.location();

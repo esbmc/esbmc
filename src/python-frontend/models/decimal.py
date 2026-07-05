@@ -1,3 +1,10 @@
+# Operational model for decimal.Decimal used by ESBMC's Python frontend.
+# protected-access: the comparison/copy methods read the operand's
+# representation fields (other._sign/_int/_exp/_is_special) directly; for this
+# value type, accessing another Decimal's "protected" fields is by design.
+# pylint: disable=protected-access
+
+
 class Decimal:
     _sign: int = 0
     _int: int = 0
@@ -408,3 +415,122 @@ class Decimal:
         quotient: int = self_int // other_int
         remainder: int = self_int - quotient * other_int
         return Decimal(self._sign, remainder, self_exp, 0)
+
+    def __pos__(self) -> "Decimal":
+        return Decimal(self._sign, self._int, self._exp, self._is_special)
+
+    def is_nan(self) -> bool:
+        return self._is_special >= 2
+
+    def is_snan(self) -> bool:
+        return self._is_special == 3
+
+    def is_qnan(self) -> bool:
+        return self._is_special == 2
+
+    def is_infinite(self) -> bool:
+        return self._is_special == 1
+
+    def is_finite(self) -> bool:
+        return self._is_special == 0
+
+    def is_zero(self) -> bool:
+        if self._is_special != 0:
+            return False
+        return self._int == 0
+
+    def is_signed(self) -> bool:
+        return self._sign == 1
+
+    def copy_abs(self) -> "Decimal":
+        return Decimal(0, self._int, self._exp, self._is_special)
+
+    def copy_negate(self) -> "Decimal":
+        return Decimal(1 - self._sign, self._int, self._exp, self._is_special)
+
+    def copy_sign(self, other: "Decimal") -> "Decimal":
+        return Decimal(other._sign, self._int, self._exp, self._is_special)
+
+    def _digit_count(self) -> int:
+        if self._int == 0:
+            return 1
+        count: int = 0
+        val: int = self._int
+        while val > 0:
+            val = val // 10
+            count = count + 1
+        return count
+
+    def adjusted(self) -> int:
+        if self._is_special != 0:
+            return 0
+        return self._digit_count() - 1 + self._exp
+
+    def is_normal(self) -> bool:
+        if self._is_special != 0:
+            return False
+        if self._int == 0:
+            return False
+        return self.adjusted() >= -999999
+
+    def is_subnormal(self) -> bool:
+        if self._is_special != 0:
+            return False
+        if self._int == 0:
+            return False
+        return self.adjusted() < -999999
+
+    def compare(self, other: "Decimal") -> "Decimal":
+        if self._is_special >= 2 or other._is_special >= 2:
+            return Decimal(0, 0, 0, 2)
+        if self == other:
+            return Decimal(0, 0, 0, 0)
+        if self < other:
+            return Decimal(1, 1, 0, 0)
+        return Decimal(0, 1, 0, 0)
+
+    def compare_signal(self, other: "Decimal") -> "Decimal":
+        # CPython raises InvalidOperation on NaN; we cannot model exceptions,
+        # so this behaves identically to compare().
+        return self.compare(other)
+
+    def max(self, other: "Decimal") -> "Decimal":
+        if self._is_special >= 2 and other._is_special >= 2:
+            return Decimal(0, 0, 0, 2)
+        if self._is_special >= 2:
+            return Decimal(other._sign, other._int, other._exp, other._is_special)
+        if other._is_special >= 2:
+            return Decimal(self._sign, self._int, self._exp, self._is_special)
+        if self > other:
+            return Decimal(self._sign, self._int, self._exp, self._is_special)
+        return Decimal(other._sign, other._int, other._exp, other._is_special)
+
+    def min(self, other: "Decimal") -> "Decimal":
+        if self._is_special >= 2 and other._is_special >= 2:
+            return Decimal(0, 0, 0, 2)
+        if self._is_special >= 2:
+            return Decimal(other._sign, other._int, other._exp, other._is_special)
+        if other._is_special >= 2:
+            return Decimal(self._sign, self._int, self._exp, self._is_special)
+        if self < other:
+            return Decimal(self._sign, self._int, self._exp, self._is_special)
+        return Decimal(other._sign, other._int, other._exp, other._is_special)
+
+    def __bool__(self) -> bool:
+        if self._is_special != 0:
+            return True
+        return self._int != 0
+
+    def __int__(self) -> int:
+        assert self._is_special == 0
+        result: int = self._int
+        exp: int = self._exp
+        while exp > 0:
+            result = result * 10
+            exp = exp - 1
+        while exp < 0:
+            result = result // 10
+            exp = exp + 1
+        if self._sign == 1:
+            result = 0 - result
+        return result

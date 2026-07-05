@@ -41,6 +41,10 @@ protected:
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
+  void annotate_exception_specification(
+    const clang::FunctionDecl &fd,
+    typet &type) override;
+
   /**
    *  Get reference for constructor callsite
    */

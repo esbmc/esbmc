@@ -515,7 +515,6 @@ bool solidity_convertert::get_high_level_call_wrapper(
 
 nlohmann::json solidity_convertert::reorder_arguments(
   const nlohmann::json &expr,
-  const nlohmann::json &src_ast_json,
   const nlohmann::json &callee_expr_json)
 {
   // build a map from name to argument

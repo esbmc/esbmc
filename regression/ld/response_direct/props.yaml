@@ -1,0 +1,7 @@
+properties:
+  - id: R1
+    kind: response
+    trigger: Start
+    response: Out
+    max_scans: 2
+    justification: "direct coil; Out tracks Start in the same scan"

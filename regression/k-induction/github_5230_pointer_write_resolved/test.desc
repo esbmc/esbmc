@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-inductive-step 5 --no-bounds-check
+^VERIFICATION SUCCESSFUL$
+Solution found by the inductive step

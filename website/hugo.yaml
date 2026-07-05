@@ -44,6 +44,11 @@ menu:
       url: "https://github.com/esbmc/esbmc/discussions"
       params:
         icon: chat
+    - name: API Reference
+      weight: 8
+      url: "/docs/api"
+      params:
+        icon: book-open
 
 params:
   navbar:

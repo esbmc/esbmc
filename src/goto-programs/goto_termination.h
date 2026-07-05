@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_TERMINATION_H_
 
 #include <goto-programs/goto_functions.h>
+#include <util/namespace.h>
 #include <util/options.h>
 
 /// Reduce non-termination to a reachability safety property.
@@ -29,6 +30,9 @@
 /// real non-termination witness. The pass sets options'
 /// "disable-inductive-step" so the BMC driver treats IS as
 /// inconclusive for the program.
-void goto_termination(goto_functionst &goto_functions, optionst &options);
+void goto_termination(
+  goto_functionst &goto_functions,
+  optionst &options,
+  const namespacet &ns);
 
 #endif /* GOTO_PROGRAMS_GOTO_TERMINATION_H_ */

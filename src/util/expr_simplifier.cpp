@@ -4890,6 +4890,18 @@ expr2tc extract2t::do_simplify() const
   return constant_int2tc(type, BigInt(theval));
 }
 
+expr2tc sizeof2t::do_simplify() const
+{
+  // Unwrap to the eagerly-computed byte size (esbmc/esbmc#5337). `value` already
+  // holds clang's authoritative sizeof (or the VLA byte-size expression), so no
+  // recomputation is needed here. Re-type to this node's own size type if they
+  // differ, so an arithmetic context built around the node (e.g. `n*sizeof(T)`)
+  // never sees a width/sign-mismatched operand once the node folds.
+  if (value->type == type)
+    return value;
+  return typecast2tc(type, value);
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 {
@@ -5761,8 +5773,7 @@ ESBMC_NIL_SIMPLIFY(code_cpp_del_array)
 ESBMC_NIL_SIMPLIFY(code_cpp_delete)
 ESBMC_NIL_SIMPLIFY(code_decl)
 ESBMC_NIL_SIMPLIFY(code_dead)
-ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl)
-ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl_end)
+ESBMC_NIL_SIMPLIFY(new_object)
 ESBMC_NIL_SIMPLIFY(isinstance)
 ESBMC_NIL_SIMPLIFY(hasattr)
 ESBMC_NIL_SIMPLIFY(isnone)

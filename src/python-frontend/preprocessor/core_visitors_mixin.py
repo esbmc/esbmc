@@ -51,6 +51,139 @@ class CoreVisitorsMixin:
         "zip",
     }
 
+    def _update_assignment_call_origins(self, targets, value):
+        # Track `x = Call(...)` so eq-shape rewrites can recover the inline
+        # form on `x == ...`; all other target shapes invalidate.
+
+        rebound = set()
+
+        def invalidate(target):
+            if isinstance(target, ast.Name):
+                rebound.add(target.id)
+                self._assignment_call_origins.pop(target.id, None)
+            elif isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                rebound.add(target.value.id)
+                self._assignment_call_origins.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
+
+        # Drop tracked origins that reference a rebound free variable —
+        # otherwise the cascade rewrites against the new binding.
+        if rebound:
+            for tracked, origin in list(self._assignment_call_origins.items()):
+                for n in ast.walk(origin):
+                    if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                            and n.id in rebound):
+                        self._assignment_call_origins.pop(tracked, None)
+                        break
+
+        if (len(targets) == 1 and isinstance(targets[0], ast.Name) and isinstance(value, ast.Call)):
+            self._assignment_call_origins[targets[0].id] = value
+
+    def _scan_eq_only_items_view_targets(self, body):
+        """Return target names safe to neutralise: exactly one Store and
+        every Load on one side of an equality compare. Any other use
+        (iteration, len, subscript, rebinding) would observe the placeholder
+        instead of the cascade-rewritten value.
+        """
+        candidates = {}  # target name -> receiver name
+        synthetic = ast.Module(body=list(body), type_ignores=[])
+        for stmt in ast.walk(synthetic):
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and self._is_items_view_call(stmt.value)):
+                recv = self._items_view_receiver_name(stmt.value)
+                if recv is not None:
+                    candidates[stmt.targets[0].id] = recv
+        if not candidates:
+            return set()
+
+        # Names inside a comprehension/generator are scope-local in Python 3
+        # except the outermost iter of the first generator.
+        comp_local_ids = set()
+
+        def _add_names(sub_tree):
+            for n in ast.walk(sub_tree):
+                if isinstance(n, ast.Name):
+                    comp_local_ids.add(id(n))
+
+        for node in ast.walk(synthetic):
+            if not isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                continue
+            if isinstance(node, ast.DictComp):
+                _add_names(node.key)
+                _add_names(node.value)
+            else:
+                _add_names(node.elt)
+            for i, gen in enumerate(node.generators):
+                _add_names(gen.target)
+                for if_node in gen.ifs:
+                    _add_names(if_node)
+                if i > 0:
+                    _add_names(gen.iter)
+
+        # Watch receivers too: a rebound dict would let the cascade rewrite
+        # against a different value than the captured origin.
+        watched = set(candidates) | set(candidates.values())
+        store_count = {n: 0 for n in watched}
+        disqualified = set()
+        for parent in ast.walk(synthetic):
+            for child in ast.iter_child_nodes(parent):
+                if not isinstance(child, ast.Name) or child.id not in watched:
+                    continue
+                if id(child) in comp_local_ids:
+                    continue
+                if isinstance(child.ctx, ast.Store):
+                    store_count[child.id] += 1
+                    continue
+                if child.id not in candidates:
+                    continue
+                # Load is safe only on one side of an Eq compare.
+                if (isinstance(parent, ast.Compare) and len(parent.ops) == 1
+                        and isinstance(parent.ops[0], ast.Eq)
+                        and (parent.left is child or
+                             (len(parent.comparators) == 1 and parent.comparators[0] is child))):
+                    continue
+                disqualified.add(child.id)
+        return {
+            n
+            for n, recv in candidates.items()
+            if store_count[n] == 1 and store_count.get(recv, 0) <= 1 and n not in disqualified
+        }
+
+    def _is_items_view_call(self, node):
+        """True if node is W(d.<attr>()) or sorted(list(d.<attr>())) with
+        W in (list, sorted) and attr in (items, keys, values)."""
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
+            return False
+        arg = node.args[0]
+        if node.func.id == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
+        return (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute)
+                and arg.func.attr in ("items", "keys", "values") and not arg.args
+                and not getattr(arg, "keywords", []))
+
+    def _items_view_receiver_name(self, node):
+        """Return the receiver Name id of an items-view-call, else None."""
+        if not self._is_items_view_call(node):
+            return None
+        arg = node.args[0]
+        if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id == "list"):
+            arg = arg.args[0]
+        receiver = arg.func.value
+        return receiver.id if isinstance(receiver, ast.Name) else None
+
     def _invalidate_list_literals_for_assign_targets(self, targets):
 
         def invalidate(target):
@@ -138,6 +271,167 @@ class CoreVisitorsMixin:
                 self.known_variable_types[target.id] = lowered_type
             assigns.append(assign)
         return prefix + assigns
+
+    def _maybe_lower_dict_from_comprehension_assign(self, node):
+        """Lower ``x = dict([(k, v) for <gens>])`` into ``x = {}`` followed by
+        population loops ``for <gens>: x[k] = v``.
+
+        The ``dict(<comprehension>)`` constructor is otherwise routed through the
+        runtime dict-comprehension model, whose symbolic list iteration is far
+        more expensive than ordinary for-loop lowering and times out even on
+        tiny inputs. Emitting the plain ``{}`` + for-loop pattern reuses the
+        fast, well-tested dict-subscript-assign path. Handles ListComp and
+        GeneratorExp whose element is an explicit ``(key, value)`` 2-tuple.
+        (HumanEval/93, /126)
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "dict" and len(value.args) == 1 and not value.keywords):
+            return None
+        comp = value.args[0]
+        if not isinstance(comp, (ast.ListComp, ast.GeneratorExp)):
+            return None
+        if not (isinstance(comp.elt, ast.Tuple) and len(comp.elt.elts) == 2):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.elt.elts[0])),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.elt.elts[1])))]
+
+        # Wrap with the comprehension's generators, outermost first. Each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # lowered: NodeTransformer does not re-visit nodes we return, so run
+        # the outermost loop through visit_For explicitly (mirrors
+        # _lower_listcomp). Otherwise the converter rejects the raw For node.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Mirror the metadata a plain ``x = {}`` assignment would record so
+        # downstream rewrites and type inference treat the name as a dict. The
+        # original ``dict(<comprehension>)`` value is an ast.Call, so visit_Assign
+        # registered it as the target's call-origin; drop that stale entry so a
+        # later ``target == ...`` is not rewritten against the discarded call.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
+
+    def _maybe_lower_dictcomp_over_items(self, node):
+        """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
+        followed by a population loop, e.g.
+        ``x = {key: val for k, v in d.items()}`` ->
+        ``x = {}; for k, v in d.items(): x[key] = val``, and
+        ``x = {v: val for u, v in d}`` -> ``x = {}; for u, v in d: x[v] = val``.
+
+        The converter's dict-comprehension handler models a list-of-tuples
+        iterable but not a dict view: ``d.items()`` returns the keys list as a
+        placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
+        dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
+        for-loop lowering (visit_For -> _transform_items_for / dict-key
+        iteration) gives the comprehension the bindings it needs. Scoped to dict
+        iterables so list-of-tuples dict comprehensions keep their existing
+        converter path.
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        comp = node.value
+        if not isinstance(comp, ast.DictComp):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+        outer = comp.generators[0].iter
+        is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                         and outer.func.attr == "items")
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        if not (is_items_call or is_dict_iter or is_keys_call):
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.key)),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.value)))]
+
+        # Wrap with the comprehension's generators, outermost first; each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # (NodeTransformer does not re-visit returned nodes), so run the
+        # outermost loop through visit_For explicitly.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Treat the target as a dict for downstream rewrites/type inference.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
 
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
@@ -504,14 +798,90 @@ class CoreVisitorsMixin:
         return node
 
     @staticmethod
+    def _maybe_fold_as_integer_ratio(node):
+        # (2.5).as_integer_ratio() on a numeric literal folds to its exact
+        # (numerator, denominator) tuple, computed by CPython itself, so the
+        # result matches the interpreter bit-for-bit. Non-literal receivers
+        # are left to the regular dispatch.
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "as_integer_ratio"
+                and not node.args and not node.keywords):
+            return None
+        recv = node.func.value
+        value = None
+        if (isinstance(recv, ast.Constant) and isinstance(recv.value, (int, float))
+                and not isinstance(recv.value, bool)):
+            value = recv.value
+        elif (isinstance(recv, ast.UnaryOp) and isinstance(recv.op, (ast.USub, ast.UAdd))
+              and isinstance(recv.operand, ast.Constant)
+              and isinstance(recv.operand.value,
+                             (int, float)) and not isinstance(recv.operand.value, bool)):
+            value = -recv.operand.value if isinstance(recv.op, ast.USub) else recv.operand.value
+        if value is None:
+            return None
+        try:
+            num, den = value.as_integer_ratio()
+        except (OverflowError, ValueError):  # inf / nan
+            return None
+        # Stay within the frontend's 64-bit integer comfort zone; larger
+        # ratios (huge exponents) fall through unfolded.
+        if abs(num) > 2**63 - 1 or den > 2**63 - 1:
+            return None
+        result = ast.Tuple(
+            elts=[ast.Constant(value=num), ast.Constant(value=den)],
+            ctx=ast.Load(),
+        )
+        ast.copy_location(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    @staticmethod
     def _normalize_int_from_bytes_endianness(node):
-        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "int" and node.func.attr == "from_bytes"
-                and len(node.args) > 1):
-            if isinstance(node.args[1], ast.Constant) and node.args[1].value == "big":
-                node.args[1] = ast.Constant(value=True)
-            else:
-                node.args[1] = ast.Constant(value=False)
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
+            return
+        # Positional byteorder: int.from_bytes(b, "big" | "little").
+        if len(node.args) > 1:
+            is_big = isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"
+            node.args[1] = ast.Constant(value=is_big)
+        # Keyword byteorder=: CPython names the parameter "byteorder"; the OM
+        # model names it "big_endian". Rename the keyword to the model's
+        # parameter and fold its string value to the bool the model expects.
+        for kw in node.keywords:
+            if kw.arg == "byteorder":
+                is_big = isinstance(kw.value, ast.Constant) and kw.value.value == "big"
+                kw.arg = "big_endian"
+                kw.value = ast.Constant(value=is_big)
+        ast.fix_missing_locations(node)
+
+    @staticmethod
+    def _normalize_math_gcd_lcm_variadic(node):
+        # math.gcd / math.lcm accept any number of integer arguments in CPython,
+        # but the operational model (models/math.py) is binary. Normalise to
+        # nested 2-argument calls reusing the binary model: f() -> identity,
+        # f(x) -> f(x, identity), f(a, b, c, ...) -> f(f(a, b), c, ...). gcd's
+        # identity is 0 (gcd(x, 0) == abs(x)); lcm's is 1 (lcm(x, 1) == abs(x)).
+        # Only the canonical `math.gcd(...)` / `math.lcm(...)` spelling is
+        # normalised; `from math import gcd` and `import math as m` forms (and a
+        # user object named `math`) fall through unchanged.
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math" and node.func.attr in ("gcd", "lcm")):
+            return
+        if node.keywords or len(node.args) == 2:
+            return  # gcd/lcm take no keywords; the binary form is already modelled
+        if any(isinstance(a, ast.Starred) for a in node.args):
+            return  # *args splat: argument count is not statically known
+        identity = 0 if node.func.attr == "gcd" else 1
+        args = node.args
+        if len(args) == 0:
+            node.args = [ast.Constant(value=identity), ast.Constant(value=identity)]
+        elif len(args) == 1:
+            node.args = [args[0], ast.Constant(value=identity)]
+        else:  # >= 3: left-fold into nested binary calls
+            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]], keywords=[])
+            for a in args[2:-1]:
+                acc = ast.Call(func=copy.deepcopy(node.func), args=[acc, a], keywords=[])
+            node.args = [acc, args[-1]]
+        ast.fix_missing_locations(node)
 
     def _fill_missing_args_with_defaults(self, node, function_name, expected_args, keywords):
         missing_args = []
@@ -596,6 +966,275 @@ class CoreVisitorsMixin:
                 param_type = self._extract_type_from_annotation(arg.annotation)
                 self.known_variable_types[arg.arg] = param_type
                 self.variable_annotations[arg.arg] = arg.annotation
+        self._infer_dict_params_structurally(node)
+
+    def _infer_dict_params_structurally(self, node):
+        """Recover the container *kind* of unannotated parameters.
+
+        An unannotated parameter carries no static type, so a dict passed into
+        it is treated as a list: iterating it (`for k, v in p`) or comprehending
+        over it then fails. Only dicts expose .items()/.keys()/.values(), so a
+        parameter on which any of those is called in the body is a dict. This
+        recovers the kind, not the element type (which would be unsound to
+        guess), and unblocks iteration/comprehension over a parameter dict
+        (#5444).
+        """
+        # Unannotated parameters only; annotated ones are recorded above.
+        all_args = (list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs))
+        candidates = {arg.arg for arg in all_args if arg.annotation is None}
+        dict_methods = {"items", "keys", "values"}
+        for n in ast.walk(node):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in dict_methods and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id in candidates):
+                self.known_variable_types[n.func.value.id] = "dict"
+
+        # Recover the concrete key/value types of parameter dicts from their
+        # call sites, so iteration/comprehension over them resolves
+        # tuple/scalar element types instead of erasing them (#5444). This
+        # also *establishes* the dict kind for parameters the method scan
+        # above could not mark (a body that only iterates the dict, e.g.
+        # `{v: 0 for u, v in g}`, calls no dict method):
+        # _recover_param_dict_annotation returns a shape only when every
+        # direct call site passes an agreeing dict, so the kind comes from
+        # the actual arguments, never from body-usage guessing.
+        positional = list(node.args.posonlyargs) + list(node.args.args)
+        for idx, arg in enumerate(positional):
+            name = arg.arg
+            # The call-shape table is keyed by bare function name, and method
+            # calls (obj.f(...)) are never recorded in it -- so a method's
+            # lookup can only ever hit an unrelated same-named function's
+            # evidence. Skip the conventional receiver outright; it is never
+            # a dict passed positionally.
+            if idx == 0 and name in ("self", "cls"):
+                continue
+            if arg.annotation is None and name not in self.variable_annotations:
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                # The shape table also records list-literal shapes (#5571);
+                # only a dict-based shape may stamp the dict kind here.
+                if (recovered is not None
+                        and self._get_base_type_name(recovered) in ("dict", "Dict")):
+                    self.known_variable_types[name] = "dict"
+                    self.variable_annotations[name] = recovered
+            elif (arg.annotation is not None
+                  and self._get_base_type_name(arg.annotation) == "list"):
+                # An ANNOTATED list[tuple[..., str, ...]] parameter carries no
+                # component sizes; when every call site passes an agreeing
+                # list-of-tuple-literals, the sized shape (str components
+                # embedded as literals, #5571) replaces the bare annotation.
+                # _recover_param_dict_annotation's all-sites-agree refusal
+                # applies unchanged; compatibility with the user's annotation
+                # is checked structurally so a wrong-shaped call site can
+                # never widen or narrow the declared type.
+                #
+                # The sized shape is stamped onto arg.annotation itself, not
+                # just the preprocessor-local variable_annotations table: the
+                # C++ frontend re-derives the element type of a `pairs[i]`
+                # subscript straight from the parameter's own JSON decl node
+                # (get_elem_type_from_annotation in list_access.cpp), which
+                # variable_annotations never reaches. Stamping the arg node is
+                # sound here specifically because _recover_param_dict_annotation
+                # requires byte-identical ast.dump() of the recovered
+                # ANNOTATION across every call site -- agreement is on the
+                # shape and per-component byte lengths (the only facts the
+                # C++ consumer reads: value.size() + 1), never on element
+                # values, which may differ between a list's entries (#5571).
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if (recovered is not None
+                        and self._sized_matches_declared(recovered, arg.annotation)):
+                    # Deep-copy per store: the recovered node is the shape
+                    # table's own object, shared across call records; a
+                    # future in-place pass must not propagate cross-function.
+                    self.variable_annotations[name] = copy.deepcopy(recovered)
+                    stamped = copy.deepcopy(recovered)
+                    ast.copy_location(stamped, arg.annotation)
+                    ast.fix_missing_locations(stamped)
+                    arg.annotation = stamped
+
+    def _recover_param_dict_annotation(self, func_name, param_index):
+        """Recover a parameter dict's dict[K, V] annotation from its call sites.
+
+        Returns the inferred annotation node only when every direct call to
+        ``func_name`` passes, at ``param_index``, a dict literal or a name bound
+        to a dict literal whose inferred dict[K, V] type is identical. If any
+        call site is unknown or the shapes disagree, returns None so the
+        parameter stays untyped (a sound refusal rather than a wrong guess).
+        """
+        calls = self._dict_param_call_shapes.get(func_name, [])
+        candidates = []
+        for shapes in calls:
+            # A call that does not supply this parameter positionally (keyword
+            # arg, splat, too few args) leaves its shape unknown, which forces a
+            # refusal rather than silently trusting the remaining call sites.
+            candidates.append(shapes[param_index] if param_index < len(shapes) else None)
+        if not candidates or any(c is None for c in candidates):
+            return None
+        dumps = {ast.dump(c) for c in candidates}
+        return candidates[0] if len(dumps) == 1 else None
+
+    def _build_dict_annotation_from_literal(self, dict_node):
+        """Build a concrete dict[K, V] annotation node from a dict literal.
+
+        Returns None when the literal contains a ** spread (a None key --
+        its contribution is unknowable statically), when any entry's key
+        annotation disagrees with the first entry's, or when the key or value
+        type cannot be inferred, so callers treat the shape as unknown.
+        """
+        if not dict_node.keys or not dict_node.values or None in dict_node.keys:
+            return None
+        key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        if key_ann is None:
+            return None
+        # Every entry must agree with the first on the key annotation --
+        # trusting entry 0 alone would stamp {('A','B'): 1, 7: 2} as
+        # dict[tuple[str, str], int].
+        for k in dict_node.keys[1:]:
+            other = self._infer_dict_key_annotation(k)
+            if other is None or ast.dump(other) != ast.dump(key_ann):
+                return None
+        key_ann = self._size_tuple_str_components(key_ann, dict_node.keys)
+        val_ann = self._infer_dict_value_annotation(dict_node.values[0])
+        if key_ann is None or val_ann is None:
+            return None
+        return ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+
+    def _build_list_annotation_from_literal(self, list_node):
+        """Build a list[tuple[...]] annotation from a list-of-tuple-literals,
+        with tuple str components sized via _size_tuple_str_components.
+
+        Returns None unless every element is a tuple literal and every
+        element's inferred annotation agrees with the first's — the same
+        sound refusal discipline as _build_dict_annotation_from_literal
+        (#5571).
+        """
+        if not list_node.elts:
+            return None
+        if not all(isinstance(e, ast.Tuple) for e in list_node.elts):
+            return None
+        elem_ann = self._infer_dict_key_annotation(list_node.elts[0])
+        if elem_ann is None:
+            return None
+        for e in list_node.elts[1:]:
+            other = self._infer_dict_key_annotation(e)
+            if other is None or ast.dump(other) != ast.dump(elem_ann):
+                return None
+        elem_ann = self._size_tuple_str_components(elem_ann, list_node.elts)
+        return ast.Subscript(
+            value=ast.Name(id="list", ctx=ast.Load()),
+            slice=elem_ann,
+            ctx=ast.Load(),
+        )
+
+    def _sized_matches_declared(self, sized, declared):
+        """True when `sized` is the call-site-recovered annotation for the
+        user-`declared` one, differing only by str components carrying an
+        embedded string literal where the declaration says bare 'str'.
+
+        Any other structural difference (base type, arity, non-str member
+        types) means the call sites disagree with the declaration, and the
+        declaration must win untouched.
+        """
+        if isinstance(declared, ast.Name):
+            if declared.id == "str":
+                return (isinstance(sized, ast.Constant)
+                        and isinstance(sized.value, str)) or (isinstance(sized, ast.Name)
+                                                              and sized.id == "str")
+            return isinstance(sized, ast.Name) and sized.id == declared.id
+        if isinstance(declared, ast.Subscript) and isinstance(sized, ast.Subscript):
+            if ast.dump(declared.value) != ast.dump(sized.value):
+                return False
+            d_slice, s_slice = declared.slice, sized.slice
+            if isinstance(d_slice, ast.Tuple) and isinstance(s_slice, ast.Tuple):
+                return (len(d_slice.elts) == len(s_slice.elts) and all(
+                    self._sized_matches_declared(s, d) for s, d in zip(s_slice.elts, d_slice.elts)))
+            if isinstance(d_slice, ast.Tuple) != isinstance(s_slice, ast.Tuple):
+                return False
+            return self._sized_matches_declared(s_slice, d_slice)
+        return ast.dump(sized) == ast.dump(declared)
+
+    def _size_tuple_str_components(self, key_ann, tuples):
+        """Embed a concrete byte length for each str component of a
+        tuple[str, ...] annotation, when every tuple literal in the SAME
+        container literal (dict keys, or list elements -- #5571) agrees on
+        that component's exact UTF-8 byte length (the quantity the C++
+        layers size structs with).
+
+        A bare 'str' component carries no size, so the C++ struct built for
+        the recovered tuple key ends up with a 0-byte placeholder for it --
+        unusable for anything beyond existence (any read is an out-of-bounds
+        access on a genuinely 0-byte object, #5444). Every key in a dict
+        literal is caller-stamped (not a body-usage guess), so when they all
+        agree on a component's length, that length is sound to encode; a
+        str-typed component whose keys disagree, or aren't all literal
+        strings, is left as bare 'str' -- the pre-existing (safe) refusal
+        path for that component.
+        """
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
+                and isinstance(key_ann.slice, ast.Tuple)):
+            return key_ann
+        elts = key_ann.slice.elts
+        for i, elt in enumerate(elts):
+            if not (isinstance(elt, ast.Name) and elt.id == "str"):
+                continue
+            sample = None
+            homogeneous = True
+            for k in tuples:
+                if not (isinstance(k, ast.Tuple) and i < len(k.elts)):
+                    homogeneous = False
+                    break
+                comp = k.elts[i]
+                if not (isinstance(comp, ast.Constant) and isinstance(comp.value, str)):
+                    homogeneous = False
+                    break
+                # Agreement is on UTF-8 BYTE length -- the quantity the C++
+                # side sizes structs with (tuple_handler sizes as
+                # value.size()+1 on the UTF-8 encoded string, matching
+                # string_builder::build_string_literal). len() counts
+                # characters, which diverges for non-ASCII ('é' is 1 char, 2
+                # bytes) and would size the struct from one key while other
+                # keys occupy a different byte width.
+                if sample is None:
+                    sample = comp.value
+                elif len(comp.value.encode("utf-8")) != len(sample.encode("utf-8")):
+                    homogeneous = False
+                    break
+            if homogeneous and sample is not None:
+                elts[i] = ast.Constant(value=sample)
+        return key_ann
+
+    def _infer_dict_key_annotation(self, key_node):
+        """Build a full key-type annotation node (preserving tuple element types).
+
+        Unlike _infer_dict_key_type, a tuple key yields the nested
+        tuple[A, B, ...] annotation rather than the bare name 'tuple', so the
+        recovered parameter dict carries the concrete struct shape. Returns None
+        for anything not statically known.
+        """
+        if isinstance(key_node, ast.Constant):
+            value = key_node.value
+            if isinstance(value, bool):
+                return ast.Name(id="bool", ctx=ast.Load())
+            if isinstance(value, float):
+                return ast.Name(id="float", ctx=ast.Load())
+            if isinstance(value, int):
+                return ast.Name(id="int", ctx=ast.Load())
+            if isinstance(value, str):
+                return ast.Name(id="str", ctx=ast.Load())
+            return None
+        if isinstance(key_node, ast.Tuple):
+            elt_anns = [self._infer_dict_key_annotation(e) for e in key_node.elts]
+            if not elt_anns or any(e is None for e in elt_anns):
+                return None
+            return ast.Subscript(
+                value=ast.Name(id="tuple", ctx=ast.Load()),
+                slice=ast.Tuple(elts=elt_anns, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        return None
 
     def _build_qualified_function_name(self, node):
         if hasattr(self, "current_class_name") and self.current_class_name:
@@ -641,17 +1280,51 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default
         return return_nodes
 
+    def visit_Delete(self, node):
+        # `del a[i]` / `del a` mutates or unbinds `a`; drop any tracked list
+        # literal so later subscript reads are not constant-folded to stale
+        # element values (the del lowers to list.pop(i) in the converter).
+        node = self.generic_visit(node)
+        for target in node.targets:
+            if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                self.list_literal_values.pop(target.value.id, None)
+            elif isinstance(target, ast.Name):
+                self.list_literal_values.pop(target.id, None)
+        return node
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
         self._invalidate_list_literals_for_assign_targets(node.targets)
+        self._update_assignment_call_origins(node.targets, node.value)
+        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
+        # certified x as eq-only with a known dict receiver; the cascade
+        # then recovers the assert against the tracked Call origin.
+        # Only sorted() is neutralised: plain `list(d.items())` still has a
+        # materialised list path elsewhere that other rewrites depend on.
+        neutralized_target = None
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
+            recv = self._items_view_receiver_name(node.value)
+            if recv is not None and self._is_known_dict_name(recv):
+                placeholder = ast.List(elts=[], ctx=ast.Load())
+                ast.copy_location(placeholder, node.value)
+                ast.fix_missing_locations(placeholder)
+                node.value = placeholder
+                neutralized_target = node.targets[0].id
 
         if self._maybe_record_type_alias_assign(node):
             return None
 
         node = self.generic_visit(node)
         self._update_known_literal_for_simple_assign(node)
+        # Drop any literal recorded by _update_known_literal_for_simple_assign
+        # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
+        # the cascade transforms decline) cannot constant-fold `x` to `[]`.
+        if neutralized_target is not None:
+            self._known_literal_values.pop(neutralized_target, None)
 
         expanded = self._maybe_expand_nondet_assign(node)
         if expanded is not None:
@@ -660,6 +1333,14 @@ class CoreVisitorsMixin:
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
+
+        lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
+        if lowered_dict_comp is not None:
+            return lowered_dict_comp
+
+        lowered_items_dictcomp = self._maybe_lower_dictcomp_over_items(node)
+        if lowered_items_dictcomp is not None:
+            return lowered_items_dictcomp
 
         lowered_listcomp = self._maybe_lower_listcomp_assign(node)
         if lowered_listcomp is not None:
@@ -684,19 +1365,40 @@ class CoreVisitorsMixin:
             # means the name was rebound away from a dict; do not treat a stale
             # dict-literal binding as a dict.
             return False
-        return name in self.dict_literal_vars
+        # A bare ``dict``/``Dict`` annotation (e.g. ``def f(d: dict)``) carries
+        # no element types but still reliably marks the name as a dict. Mirror
+        # the subscript branch: an annotation for any other base type means the
+        # name is not a dict, regardless of a stale dict-literal binding.
+        if isinstance(ann, ast.Name):
+            return ann.id in ("dict", "Dict")
+        if name in self.dict_literal_vars:
+            return True
+        # An unannotated parameter recovered as a dict by structural inference
+        # (a .items()/.keys()/.values() call on it in the body — see
+        # _infer_dict_params_structurally) is a reliable dict too, so dict-view
+        # comprehensions and bare-dict iteration over a parameter dict desugar
+        # through the for-loop key-iteration path instead of reaching the C++
+        # dict-comp handler, which cannot consume a dict struct (#5444).
+        return self.known_variable_types.get(name) == "dict"
 
     def _maybe_rewrite_dict_to_list_call(self, node):
-        """Rewrite list(d) -> d.keys() and sorted(d, ...) -> sorted(d.keys(), ...).
+        """Rewrite iterating builtins over a dict to use d.keys().
 
-        The bare list()/sorted() builtins reinterpret the dict struct as a list
-        (wrong length, unsound subscript). Routing through d.keys() reuses the
-        correctly-typed dict-keys list path. Only fires for names reliably known
-        to be dicts. (GitHub #4790)
+        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        The bare builtins reinterpret the dict struct as a list (wrong length,
+        unsound subscript / wrong reduction). Routing through d.keys() reuses the
+        correctly-typed dict-keys list path — Python iterates a dict over its
+        keys. Only fires for names reliably known to be dicts. (GitHub #4790)
         """
-        if not (isinstance(node.func, ast.Name) and node.func.id in ("list", "sorted")):
+        if not (isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted", "max", "min", "sum")):
             return None
         if not node.args or (node.keywords and node.func.id == "list"):
+            return None
+        # max()/min() with several positional arguments is the variadic form
+        # (the max/min OF the arguments), not reduction over a single iterable —
+        # a dict argument there is compared, not iterated, so leave it alone.
+        if node.func.id in ("max", "min") and len(node.args) != 1:
             return None
         first = node.args[0]
         if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
@@ -744,7 +1446,12 @@ class CoreVisitorsMixin:
         if rewritten_decimal is not None:
             return rewritten_decimal
 
+        rewritten_ratio = self._maybe_fold_as_integer_ratio(node)
+        if rewritten_ratio is not None:
+            return rewritten_ratio
+
         self._normalize_int_from_bytes_endianness(node)
+        self._normalize_math_gcd_lcm_variadic(node)
 
         if not self._apply_call_signature_defaults(node):
             self.generic_visit(node)
@@ -758,6 +1465,19 @@ class CoreVisitorsMixin:
         # restore on exit so a dict named `d` in one function does not make a
         # same-named plain parameter in another function look like a dict.
         saved_dict_vars = set(self.dict_literal_vars)
+        # Parameter/local variable kinds are scope-local for the same reason:
+        # an unannotated dict parameter recorded in one function must not make a
+        # same-named plain parameter in another function look like a dict (#5444).
+        saved_known_types = dict(self.known_variable_types)
+        # Recovered parameter-dict annotations (#5444) are scope-local too: a
+        # synthesized dict[K, V] for a parameter in one function must not leak
+        # onto a same-named parameter elsewhere.
+        saved_var_anns = dict(self.variable_annotations)
+        # Per-function scope for call-origin tracking and the eq-only set.
+        saved_call_origins = dict(self._assignment_call_origins)
+        self._assignment_call_origins.clear()
+        saved_eq_only = set(self._eq_only_items_view_targets)
+        self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -789,3 +1509,7 @@ class CoreVisitorsMixin:
             return return_nodes
         finally:
             self.dict_literal_vars = saved_dict_vars
+            self.known_variable_types = saved_known_types
+            self.variable_annotations = saved_var_anns
+            self._assignment_call_origins = saved_call_origins
+            self._eq_only_items_view_targets = saved_eq_only

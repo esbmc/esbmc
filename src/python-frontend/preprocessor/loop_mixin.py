@@ -217,6 +217,7 @@ class LoopMixin:
         their `while ... orelse=[]` shape uniformly without each having to
         remember to preserve the original `orelse`.
         """
+        self._update_assignment_call_origins([node.target], None)
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
@@ -384,6 +385,20 @@ class LoopMixin:
             # homogeneous pure literals to preserve runtime isinstance semantics.
             self.is_range_loop = False
             return self._unroll_list_literal_for(node, list_literal)
+        # Inline list-literal iterable with a tuple/list-unpacking target, e.g.
+        # `for u, v in [(1, 2), (3, 4)]:`. Unroll like a name-bound list literal
+        # so each statically-known element keeps its tuple/list shape and feeds
+        # the converter's assignment-unpacking pipeline (`u, v = (1, 2)`). The
+        # generic iterable path would instead bind the element to an Any-typed
+        # temp and subscript-unpack it, which aborts with type2t::symbolic_type_excp.
+        # Shares _unroll_list_literal_for's tuple-target limitation: the RHS must
+        # stay a literal for the converter, so element sub-expressions are not
+        # snapshotted -- a tuple element naming a body-mutated variable would read
+        # the mutated value (evaluate-once divergence). Constant tuples are exact.
+        if (isinstance(node.iter, ast.List) and isinstance(node.target, (ast.Tuple, ast.List))
+                and self._can_safely_unroll_list_literal_for(node, node.iter)):
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(node, node.iter)
         # Check if iterating over a generator variable
         if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
             inlined = self._inline_generator_for(node)
@@ -491,10 +506,25 @@ class LoopMixin:
             if target_is_name:
                 rhs = ast.Name(id=temp_names[idx], ctx=ast.Load())
                 self.ensure_all_locations(rhs, node)
-                target_assign = ast.Assign(
-                    targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
-                    value=rhs,
-                )
+                # Annotate the binding with the element's class when known, so a
+                # user-class element keeps its type even if the body never
+                # touches its attributes. Without this, the loop variable falls
+                # back to Any (void*), and appending it to a list stores a
+                # zero type-id, so a later attribute access on a read-back
+                # element dereferences an invalid pointer (#4805).
+                elem_class = self._element_instance_class(elt)
+                if elem_class:
+                    target_assign = ast.AnnAssign(
+                        target=ast.Name(id=node.target.id, ctx=ast.Store()),
+                        annotation=ast.Name(id=elem_class, ctx=ast.Load()),
+                        value=rhs,
+                        simple=1,
+                    )
+                else:
+                    target_assign = ast.Assign(
+                        targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+                        value=rhs,
+                    )
             else:
                 # Tuple/list unpacking: keep the RHS as the original literal so
                 # the converter's tuple-unpacking path can still extract elts.
@@ -1199,6 +1229,17 @@ class LoopMixin:
                     and isinstance(_v_elt, ast.Name)
                     and self._uses_string_subscript(_v_elt.id, node.body)):
                 val_ann = ast.Name(id="dict", ctx=ast.Load())
+            # val added to a float accumulator in the body => value is float.
+            # An unannotated-parameter dict erases the value type to void*, so a
+            # float value is read as `*(void**)item->value` and the accumulate
+            # lowers to `s = IEEE_ADD(s, (double)w)` -- a numeric cast of a
+            # pointer-typed term that produces an ill-sorted floating-point node
+            # (#5501). Typing the value as float routes the read through the
+            # float_buf path, which yields a real-sorted double.
+            if (isinstance(val_ann, ast.Name) and val_ann.id == "Any"
+                    and isinstance(_v_elt, ast.Name)
+                    and self._value_used_in_float_arith(_v_elt.id, node.body)):
+                val_ann = ast.Name(id="float", ctx=ast.Load())
 
         # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
         # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
@@ -1300,6 +1341,40 @@ class LoopMixin:
                 return True
         return False
 
+    def _value_used_in_float_arith(self, var_name, body):
+        """Return True if var_name is combined with a float operand in arithmetic.
+
+        Detects `acc += var` (and `-=`, `*=`, ...) where acc is float, and
+        `acc + var` / `var * f` where the other operand is a float literal or a
+        name known to hold a float. Used to recover the value element type of an
+        unannotated-parameter dict whose values are floats (#5501): the loop
+        variable is otherwise erased to void*, and reading a float through void*
+        produces an ill-sorted IEEE node.
+        """
+        arith_ops = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
+
+        def is_float_operand(operand):
+            if isinstance(operand, ast.Constant):
+                return isinstance(operand.value, float)
+            if isinstance(operand, ast.Name):
+                return self.known_variable_types.get(operand.id) == "float"
+            return False
+
+        def mentions_var(operand):
+            return any(isinstance(n, ast.Name) and n.id == var_name for n in ast.walk(operand))
+
+        module = ast.Module(body=list(body), type_ignores=[])
+        for node in ast.walk(module):
+            if (isinstance(node, ast.AugAssign) and isinstance(node.op, arith_ops)
+                    and is_float_operand(node.target) and mentions_var(node.value)):
+                return True
+            if isinstance(node, ast.BinOp) and isinstance(node.op, arith_ops):
+                left, right = node.left, node.right
+                if ((mentions_var(left) and is_float_operand(right))
+                        or (mentions_var(right) and is_float_operand(left))):
+                    return True
+        return False
+
     def _kv_types_from_annotation(self, annotation):
         """Extract (key_ann, val_ann) AST nodes from a dict[K, V] annotation node.
 
@@ -1310,6 +1385,43 @@ class LoopMixin:
                 and len(annotation.slice.elts) >= 2):
             return annotation.slice.elts[0], annotation.slice.elts[1]
         return self._any_ann(), self._any_ann()
+
+    def _is_concrete_tuple_ann(self, ann_node):
+        """True for a full tuple[A, B, ...] annotation node (not the bare name
+        'tuple'). Such annotations must be preserved end-to-end so the C++ list
+        subscript read rebuilds the concrete tuple struct instead of erasing it
+        to void* (#5444)."""
+        return (isinstance(ann_node, ast.Subscript)
+                and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
+
+    def _full_tuple_annotation_node(self, iterable_node):
+        """Return the full tuple[A, B, ...] element annotation of a
+        list[tuple[...]]-annotated Name iterable, or None if unavailable.
+
+        `_get_element_type_from_container` collapses a list[tuple[str, str]]
+        element type down to the bare string "tuple" (it only ever returns a
+        base-type name), which is enough for a scalar loop target but loses
+        the tuple's concrete member types for a tuple-unpacking target
+        (`for u, v in <list[tuple[...]]>`). This mirrors that lookup but keeps
+        the full annotation node so the per-index element assignment stays
+        typed as tuple[str, str] instead of eroding to bare tuple, whose
+        element_0/element_1 members the C++ converter cannot size (#5444).
+        """
+        if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
+            return None
+        annotation = self.variable_annotations.get(iterable_node.id)
+        if not isinstance(annotation, ast.Subscript):
+            return None
+        element_annotation = annotation.slice
+        # Iterating a dict yields its keys: for a dict[K, V] annotation the
+        # slice is an ast.Tuple of (K, V), so the element is K, not the slice
+        # itself (`for u, v in g` over dict[tuple[str, str], int] unpacks a
+        # tuple[str, str] key).
+        if (self._get_base_type_name(annotation) in ("dict", "Dict")
+                and isinstance(element_annotation, ast.Tuple)
+                and len(element_annotation.elts) == 2):
+            element_annotation = element_annotation.elts[0]
+        return element_annotation if self._is_concrete_tuple_ann(element_annotation) else None
 
     def _get_base_type_name(self, ann_node):
         """Return the base type name string from an annotation node.
@@ -1382,10 +1494,19 @@ class LoopMixin:
         (produced by _create_var_subscript_assign).
         """
         base_name = self._get_base_type_name(elem_ann)
-        actual_base = base_name if base_name and base_name != "Any" else "Any"
+        # Tuple element types must keep their FULL annotation (list[tuple[A, B]]),
+        # not flatten to the base name 'tuple', so the C++ list subscript read
+        # rebuilds the concrete tuple struct instead of erasing it to void* and
+        # crashing on the unpack (#5444). Other element types (dict, scalars)
+        # keep the base-name form so get_typet(base) resolves correctly.
+        if self._is_concrete_tuple_ann(elem_ann):
+            slice_node = elem_ann
+        else:
+            actual_base = base_name if base_name and base_name != "Any" else "Any"
+            slice_node = ast.Name(id=actual_base, ctx=ast.Load())
         annotation = ast.Subscript(
             value=ast.Name(id="list", ctx=ast.Load()),
-            slice=ast.Name(id=actual_base, ctx=ast.Load()),
+            slice=slice_node,
             ctx=ast.Load(),
         )
         method_call = ast.Call(
@@ -1433,8 +1554,12 @@ class LoopMixin:
 
         Simple Name target — emits ``name: elem_ann = list_var[index_var]``.
         Tuple/List target (nested unpacking, e.g. ``for (u, v), w in d.items():``) —
-        emits a destructuring Assign ``target_elt = list_var[index_var]`` so the
-        converter's normal tuple-unpacking-from-subscript path handles it.
+        binds the element to a local tuple temp first, then destructures from that
+        temp. Unpacking directly from ``list_var[index_var]`` lowers each component
+        to ``(*(tuple*)elem->value).element_i``, which dereferences to an array
+        rvalue for string components and aborts ("Can't construct rvalue reference
+        to array type"). A whole-struct copy into a local makes each component read
+        a local member access instead, reusing the working ``u, v = t`` path.
         """
         name = self._name_id_or_none(target_elt)
         if name is not None:
@@ -1442,15 +1567,16 @@ class LoopMixin:
                                                           elem_ann))
             return
 
-        subscript = ast.Subscript(
-            value=ast.Name(id=list_var, ctx=ast.Load()),
-            slice=ast.Name(id=index_var, ctx=ast.Load()),
-            ctx=ast.Load(),
-        )
-        self.ensure_all_locations(subscript, node)
+        tmp_name = f"ESBMC_items_elt_{list_var}"
+        # Keep the full tuple annotation (tuple[A, B]) for the temp when known,
+        # so the key/value struct type is concrete instead of erased (#5444).
+        tuple_ann = (elem_ann if self._is_concrete_tuple_ann(elem_ann) else ast.Name(
+            id="tuple", ctx=ast.Load()))
+        body.append(
+            self._create_var_subscript_assign(node, tmp_name, list_var, index_var, tuple_ann))
         unpack = ast.Assign(
             targets=[target_elt],
-            value=subscript,
+            value=ast.Name(id=tmp_name, ctx=ast.Load()),
         )
         self.ensure_all_locations(unpack, node)
         body.append(unpack)
@@ -1745,6 +1871,49 @@ class LoopMixin:
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
 
+        # A tuple-unpacking target over a list[tuple[...]] iterable (e.g. the
+        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
+        # variable) needs the full tuple[A, B, ...] annotation, not the bare
+        # "tuple" name element_type collapses to -- otherwise the per-index
+        # element assignment can't size element_0/element_1 (#5444).
+        full_element_ann = None
+        if isinstance(node.target, (ast.Tuple, ast.List)) and element_type in ("tuple", "Tuple"):
+            full_element_ann = self._full_tuple_annotation_node(node.iter)
+
+        # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
+        # are tuples, so materialize d.keys() into an annotated
+        # list[<key_ann>] intermediate first. That lets the C++ list subscript
+        # read recover the concrete tuple element type from the list annotation
+        # (the working list-of-tuples path) instead of erasing it to void* and
+        # crashing on the unpack (#5444). Scoped to dicts whose key annotation
+        # is concrete; a bare/unknown key type falls through to the existing
+        # scalar-key handling below.
+        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
+                and isinstance(node.iter, ast.Name)):
+            key_ann, _ = self._get_dict_kv_types(node.iter.id)
+            if self._get_base_type_name(key_ann) not in ("Any", None):
+                keys_var = f"ESBMC_keys_{loop_id}"
+                list_ann = ast.Subscript(value=ast.Name(id="list", ctx=ast.Load()),
+                                         slice=key_ann,
+                                         ctx=ast.Load())
+                keys_assign = ast.AnnAssign(
+                    target=ast.Name(id=keys_var, ctx=ast.Store()),
+                    annotation=list_ann,
+                    value=ast.Call(func=ast.Attribute(value=node.iter, attr="keys", ctx=ast.Load()),
+                                   args=[],
+                                   keywords=[]),
+                    simple=1,
+                )
+                self.ensure_all_locations(keys_assign, node)
+                ast.fix_missing_locations(keys_assign)
+                self.variable_annotations[keys_var] = list_ann
+                node.iter = ast.Name(id=keys_var, ctx=ast.Load())
+                self.ensure_all_locations(node.iter, node)
+                inner = self._transform_iterable_for(node)
+                if not isinstance(inner, list):
+                    inner = [inner]
+                return [keys_assign] + inner
+
         # Handle dict iteration
         if annotation_id in ["dict", "Dict"]:
             # Transform: for k in d: into for k in d.keys():
@@ -1782,7 +1951,7 @@ class LoopMixin:
 
         # Create loop body with unique variable names
         transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, index_var,
-                                                  element_type)
+                                                  element_type, full_element_ann)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -1891,8 +2060,16 @@ class LoopMixin:
         iter_var_name,
         index_var,
         element_type,
+        full_element_ann=None,
     ):
-        """Create the body of the while loop with proper type annotations."""
+        """Create the body of the while loop with proper type annotations.
+
+        ``full_element_ann``, when given, is the full tuple[A, B, ...]
+        annotation node for the per-index element and takes precedence over
+        the bare ``element_type`` name -- needed so a tuple-unpacking target
+        keeps its concrete member types instead of eroding to bare tuple
+        (#5444).
+        """
         # Current iterable element expression: iter_var[index]
         current_item = ast.Subscript(
             value=ast.Name(id=iter_var_name, ctx=ast.Load()),
@@ -1905,22 +2082,39 @@ class LoopMixin:
         # Support tuple/list unpacking targets in for-loops:
         # for a, b in items: ...
         if isinstance(node.target, (ast.Tuple, ast.List)):
-            for i, elt in enumerate(node.target.elts):
-                if not isinstance(elt, ast.Name):
-                    continue
+            all_names = all(isinstance(elt, ast.Name) for elt in node.target.elts)
+            if full_element_ann is not None and all_names:
+                # Concrete tuple[A, B, ...] element: unpack with a real tuple
+                # assignment (u, v = ESBMC_loop_var) so the C++ tuple_handler's
+                # member-access unpacking (temp.element_i, sized from the
+                # tuple struct components) is used instead of a per-index
+                # constant Subscript read (ESBMC_loop_var[0]), which the
+                # tuple-subscript path cannot size and erases to void (#5444).
                 unpack_assign = ast.Assign(
-                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
-                    value=ast.Subscript(
-                        value=ast.Name(id=target_var_name, ctx=ast.Load()),
-                        slice=ast.Constant(value=i),
-                        ctx=ast.Load(),
-                    ),
+                    targets=[node.target],
+                    value=ast.Name(id=target_var_name, ctx=ast.Load()),
                 )
                 self.ensure_all_locations(unpack_assign, node)
                 unpack_assigns.append(unpack_assign)
+            else:
+                for i, elt in enumerate(node.target.elts):
+                    if not isinstance(elt, ast.Name):
+                        continue
+                    unpack_assign = ast.Assign(
+                        targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                        value=ast.Subscript(
+                            value=ast.Name(id=target_var_name, ctx=ast.Load()),
+                            slice=ast.Constant(value=i),
+                            ctx=ast.Load(),
+                        ),
+                    )
+                    self.ensure_all_locations(unpack_assign, node)
+                    unpack_assigns.append(unpack_assign)
 
         # Create target variable annotation
-        if element_type and element_type != "Any":
+        if full_element_ann is not None:
+            target_annotation = full_element_ann
+        elif element_type and element_type != "Any":
             target_annotation = ast.Name(id=element_type, ctx=ast.Load())
         else:
             target_annotation = ast.Name(id="Any", ctx=ast.Load())

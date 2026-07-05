@@ -7,33 +7,139 @@ static bool no_slice(const symbol2t &sym)
          config.no_slice_ids.count(sym.get_symbol_name());
 }
 
-template <bool Add>
-bool symex_slicet::get_symbols(const expr2tc &expr)
+void symex_slicet::collect_dependencies(const expr2tc &expr)
 {
-  bool res = false;
-
-  /* Array slicer, extract dependencies of the form arr_symbol[constant_index]
-     Needs to come before the symbols as it short circuits.
-     This should be safe as if some symbolic index is eventually added, it will go to the next case. So the full symbol will go to the dependency tree
-   */
-  if (is_index2t(expr))
+  // Explicit worklist (not recursion): guard and-chains are left-leaning and
+  // can be thousands deep, which would overflow the stack on a recursive walk.
+  //
+  // Two-color DFS memo: a node is WHITE (unseen), GREY (on the worklist this
+  // call, children in flight) or BLACK (in #collected_cache — fully drained,
+  // so every symbol in its subtree is already in #depends). Collection is
+  // purely monotone (depends.insert only), so the memo is unconditionally
+  // sound: skipping a BLACK node is a no-op. A node is promoted to BLACK only
+  // in post-order, after its subtree is drained — this prevents the pre-order
+  // partial-subtree bug where a node is marked done before its children are.
+  // The shared guard and-chain prefix is therefore walked once overall (the
+  // per-step re-walk goes from Θ(N²) to O(N)). An explicit worklist (not
+  // recursion) keeps a thousands-deep left-leaning chain off the call stack.
+  struct FrameT
   {
-    const index2t &index = to_index2t(expr);
-    if (
-      is_symbol2t(index.source_value) && is_constant_number(index.index) &&
-      !to_constant_int2t(index.index).value.is_negative())
-    {
-      const symbol2t &s = to_symbol2t(index.source_value);
-      const constant_int2t &i = to_constant_int2t(index.index);
-      if constexpr (Add)
-        return indexes[s.get_symbol_name()].insert(i.as_ulong()).second;
-    }
-  }
+    expr2tc expr;
+    bool children_done; // true on the second (post-order) visit
+  };
 
-  // Recursively look if any of the operands has a inner symbol
+  std::unordered_set<const expr2t *> grey_set; // GREY: in-flight this call
+  std::vector<FrameT> worklist{FrameT{expr, false}};
+  while (!worklist.empty())
+  {
+    FrameT frame = std::move(worklist.back());
+    worklist.pop_back();
+    const expr2tc &cur = frame.expr;
+    if (is_nil_expr(cur))
+      continue;
+
+    if (frame.children_done)
+    {
+      // Post-order: children are done. Insert symbol, then promote to BLACK.
+      if (is_symbol2t(cur))
+        depends.insert(to_symbol2t(cur).get_symbol_name());
+      grey_set.erase(cur.get());
+      collected_cache.insert(cur.get());
+      continue;
+    }
+
+    // Pre-order: first visit.
+    if (collected_cache.count(cur.get())) // BLACK: subtree already collected
+      continue;
+    if (!grey_set.insert(cur.get()).second) // GREY: already queued this call
+      continue;
+
+    // Push post-order sentinel BEFORE children so it fires after all children.
+    worklist.push_back(FrameT{cur, true});
+    cur->foreach_operand([&worklist](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        worklist.push_back(FrameT{e, false});
+    });
+  }
+}
+
+void symex_slicet::scan_array_uses(const expr2tc &expr)
+{
+  // Same explicit two-color worklist as collect_dependencies, but it writes
+  // #index_reads / #array_disqualified instead of #depends, with its own memo
+  // (#scanned_cache). Both outputs are insert-only, so a BLACK skip is a no-op
+  // and the shared guard prefix is scanned once overall (kept O(N)).
+  struct FrameT
+  {
+    expr2tc expr;
+    bool children_done;
+  };
+
+  std::unordered_set<const expr2t *> grey_set;
+  std::vector<FrameT> worklist{FrameT{expr, false}};
+  while (!worklist.empty())
+  {
+    FrameT frame = std::move(worklist.back());
+    worklist.pop_back();
+    const expr2tc &cur = frame.expr;
+    if (is_nil_expr(cur))
+      continue;
+
+    if (frame.children_done)
+    {
+      grey_set.erase(cur.get());
+      scanned_cache.insert(cur.get());
+      continue;
+    }
+
+    if (scanned_cache.count(cur.get()))
+      continue;
+    if (!grey_set.insert(cur.get()).second)
+      continue;
+
+    // arr_symbol[constant_index]: record the read index and do NOT treat the
+    // array symbol as a wholesale use. We descend only into the index subtree
+    // (it may itself contain reads); the source symbol is intentionally left
+    // unvisited so it is neither disqualified nor marked BLACK here.
+    if (is_index2t(cur))
+    {
+      const index2t &index = to_index2t(cur);
+      if (
+        is_symbol2t(index.source_value) && is_constant_int2t(index.index) &&
+        !to_constant_int2t(index.index).value.is_negative())
+      {
+        index_reads[to_symbol2t(index.source_value).get_symbol_name()].insert(
+          to_constant_int2t(index.index).value.to_uint64());
+
+        worklist.push_back(FrameT{cur, true});
+        worklist.push_back(FrameT{index.index, false});
+        continue;
+      }
+    }
+
+    // Any array-typed symbol reached other than as the source of a constant
+    // index read defeats per-index reasoning for that version.
+    if (is_symbol2t(cur) && is_array_type(cur->type))
+      array_disqualified.insert(to_symbol2t(cur).get_symbol_name());
+
+    worklist.push_back(FrameT{cur, true});
+    cur->foreach_operand([&worklist](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        worklist.push_back(FrameT{e, false});
+    });
+  }
+}
+
+bool symex_slicet::depends_on_tracked(const expr2tc &expr)
+{
+  // Read-only query; not memoised (depends mutates across steps). Only ever
+  // called on shallow exprs (SSA lhs symbol / assume cond), so recursion is
+  // safe. No array short-circuit here: the original Add=false path fell
+  // through to the operands for index2t.
+  bool res = false;
   expr->foreach_operand([this, &res](const expr2tc &e) {
     if (!is_nil_expr(e))
-      res |= get_symbols<Add>(e);
+      res |= depends_on_tracked(e);
     return res;
   });
 
@@ -41,29 +147,30 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
     return res;
 
   const symbol2t &s = to_symbol2t(expr);
-  if constexpr (Add)
-    res |= depends.insert(s.get_symbol_name()).second;
-  else
-    res |= no_slice(s) || depends.find(s.get_symbol_name()) != depends.end();
-  return res;
+  return res || no_slice(s) ||
+         depends.find(s.get_symbol_name()) != depends.end();
 }
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
-  get_symbols<true>(SSA_step.guard);
-  get_symbols<true>(SSA_step.cond);
+  scan_array_uses(SSA_step.guard);
+  scan_array_uses(SSA_step.cond);
+  collect_dependencies(SSA_step.guard);
+  collect_dependencies(SSA_step.cond);
 }
 
 void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
   if (!slice_assumes)
   {
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.cond);
+    scan_array_uses(SSA_step.guard);
+    scan_array_uses(SSA_step.cond);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.cond);
     return;
   }
 
-  if (!get_symbols<false>(SSA_step.cond))
+  if (!depends_on_tracked(SSA_step.cond))
   {
     // we don't really need it
     SSA_step.ignore = true;
@@ -79,8 +186,10 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   else
   {
     // If we need it, add the symbols to dependency
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.cond);
+    scan_array_uses(SSA_step.guard);
+    scan_array_uses(SSA_step.cond);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.cond);
   }
 }
 
@@ -90,7 +199,13 @@ void symex_slicet::run_on_assignment(
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
 
-  if (!get_symbols<false>(SSA_step.lhs))
+  // An array write `arr_n = arr_m with [const_i := v]` whose lhs is tracked is
+  // still kept as a step, but the *store* is dropped (rewritten to the identity
+  // `arr_n == arr_m`) when index const_i is provably never read — see the kept
+  // branch below. Eligibility uses the monotone #index_reads /
+  // #array_disqualified maps populated by #scan_array_uses; dropping a store to
+  // an unread index is sound (a dead store) and keeps #depends monotone.
+  if (!depends_on_tracked(SSA_step.lhs))
   {
     // Should we add nondet to the dependency list (mostly for test cases)?
     if (!slice_nondet)
@@ -104,59 +219,6 @@ void symex_slicet::run_on_assignment(
       }
     }
 
-    const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
-    auto it = indexes.find(lhs.get_symbol_name());
-    // WITH(symbol[constant_index] := constant_value)
-    if (
-      is_with2t(SSA_step.rhs) &&
-      is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
-      is_constant_int2t(to_with2t(SSA_step.rhs).update_field) &&
-      !to_constant_int2t(to_with2t(SSA_step.rhs).update_field)
-         .value.is_negative())
-    {
-      const with2t &with = to_with2t(SSA_step.rhs);
-      const symbol2t &rhs_symbol = to_symbol2t(with.source_value);
-      const constant_int2t &rhs_index = to_constant_int2t(with.update_field);
-
-      // Is lhs in the watch list?
-      if (it != indexes.end())
-      {
-        // Found an array in the dependency list! Its guard should be added to the dependency list
-        get_symbols<true>(SSA_step.guard);
-
-        // Is this updating a watched index?
-        if (it->second.count(rhs_index.as_ulong()) > 0)
-        {
-          // Add next array as a dependency and remove one index.
-          indexes[rhs_symbol.get_symbol_name()] = it->second;
-          indexes[rhs_symbol.get_symbol_name()].erase(rhs_index.as_ulong());
-
-          // Finally, the update_value becomes a dependency as well
-          get_symbols<true>(with.update_value);
-        }
-        else
-        {
-          log_debug(
-            "slice",
-            "slice ignoring update to array {} at index {}",
-            rhs_symbol.get_symbol_name(),
-            rhs_index.as_ulong());
-          // Don't need the update, transform into ID and propagate dependences
-          SSA_step.cond = equality2tc(SSA_step.lhs, with.source_value);
-          indexes[rhs_symbol.get_symbol_name()] = it->second;
-        }
-        return;
-      }
-    }
-
-    // We might be trying to initialize an array in a weird way
-    if (it != indexes.end())
-    {
-      get_symbols<true>(SSA_step.guard);
-      get_symbols<true>(SSA_step.rhs);
-      return;
-    }
-
     // we don't really need it
     SSA_step.ignore = true;
     ++sliced;
@@ -167,12 +229,80 @@ void symex_slicet::run_on_assignment(
   }
   else
   {
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.rhs);
+    scan_array_uses(SSA_step.guard);
 
-    // Remove this symbol as we won't be seeing any references to it further
-    // into the history.
-    depends.erase(to_symbol2t(SSA_step.lhs).get_symbol_name());
+    const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
+
+    // Dead-store elimination for `lhs = src with [const_i := v]`: if index
+    // const_i of this array version is provably never read (not in the
+    // per-version read-set and the version is not disqualified), the store is
+    // dead. Rewrite the encoded condition to the identity `lhs == src`,
+    // dropping the store AND its update value v from dependency collection. If
+    // lhs[const_i] is never observed then the reads inside v are dead too, so we
+    // deliberately do NOT scan v in that case. Keep SSA_step.rhs unchanged:
+    // trace construction may use it to recover the source-level assigned value.
+    //
+    // The read-set propagation mirrors the original per-index slicer: src
+    // inherits lhs's read-set; when a store is KEPT (index const_i is read) the
+    // written index is omitted while propagating, since an earlier store to
+    // that same index produces a value that this store overwrites. Existing
+    // direct reads of src are preserved by inserting into src's current set.
+    if (
+      is_with2t(SSA_step.rhs) &&
+      is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
+      is_constant_int2t(to_with2t(SSA_step.rhs).update_field) &&
+      !to_constant_int2t(to_with2t(SSA_step.rhs).update_field)
+         .value.is_negative())
+    {
+      const with2t &with = to_with2t(SSA_step.rhs);
+      const expr2tc src = with.source_value;
+      const expr2tc update_value = with.update_value;
+      const std::string lhs_name = lhs.get_symbol_name();
+      const std::string src_name = to_symbol2t(src).get_symbol_name();
+      const size_t idx = to_constant_int2t(with.update_field).value.to_uint64();
+
+      const bool disq = array_disqualified.count(lhs_name) != 0;
+      if (!disq && !index_reads[lhs_name].count(idx))
+      {
+        // Dead store: encode identity, but leave rhs as the original WITH for
+        // counterexample reconstruction.
+        log_debug(
+          "slice",
+          "slice dropping dead store to array {} at index {}",
+          src_name,
+          idx);
+        SSA_step.cond = equality2tc(SSA_step.lhs, src);
+
+        // src inherits lhs's reads (monotone — over-approximate, never erase).
+        index_reads[src_name].insert(
+          index_reads[lhs_name].begin(), index_reads[lhs_name].end());
+
+        collect_dependencies(SSA_step.guard);
+        collect_dependencies(src);
+        return;
+      }
+
+      // Store kept: v is live, scan it for reads. src inherits lhs's reads
+      // except for the overwritten index. Do not assign the set wholesale:
+      // src may also have direct downstream reads already recorded.
+      scan_array_uses(update_value);
+      auto &src_reads = index_reads[src_name];
+      for (const auto read_index : index_reads[lhs_name])
+        if (read_index != idx)
+          src_reads.insert(read_index);
+      if (disq)
+        array_disqualified.insert(src_name);
+    }
+    else
+      scan_array_uses(SSA_step.rhs);
+
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.rhs);
+
+    // NB: the historic depends.erase(lhs) is intentionally NOT performed.
+    // Slicing is monotone backward reachability — keeping the erase out leaves
+    // the sliced-step set byte-identical (verified) while keeping #depends
+    // monotone, the precondition for the collected_cache memo to be sound.
   }
 }
 
@@ -180,7 +310,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  if (!get_symbols<false>(SSA_step.lhs))
+  if (!depends_on_tracked(SSA_step.lhs))
   {
     // we don't really need it
     SSA_step.ignore = true;
@@ -254,10 +384,10 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
         else
           // in goto-coverage mode, the assertions are converted to assert(0）
           // the original guards are stored in comment.
-          claim_msg = it->comment;
+          claim_msg = id2string(it->comment);
         claim_loc = it->source.pc->location.as_string();
         claim_property = it->source.pc->location.property().as_string();
-        claim_cstr = it->comment + " at " + claim_loc;
+        claim_cstr = id2string(it->comment) + " at " + claim_loc;
         continue;
       }
 

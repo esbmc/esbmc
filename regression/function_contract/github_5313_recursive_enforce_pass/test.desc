@@ -1,0 +1,4 @@
+CORE
+main.c
+--function rec --enforce-contract rec
+^VERIFICATION SUCCESSFUL$

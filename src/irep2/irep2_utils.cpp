@@ -306,7 +306,7 @@ void get_symbols(
 }
 
 // Field-overload catalogue for the generic switch dispatchers in
-// irep2_dispatch.h: pretty-printing, cmp/lt, CRC, SHA-1 ingestion,
+// irep2_dispatch.h: pretty-printing, cmp/lt, SHA-1 ingestion,
 // sub-expression iteration, and delegate calling, specialised for each
 // field type that needs non-default behaviour. Primary templates live in
 // irep2_dispatch.h alongside the dispatchers themselves.
@@ -448,15 +448,50 @@ std::string type_to_string(const bool &thebool, int)
 
 std::string type_to_string(const sideeffect_allockind &data, int)
 {
-  return (data == sideeffect_allockind::malloc)          ? "malloc"
-         : (data == sideeffect_allockind::realloc)       ? "realloc"
-         : (data == sideeffect_allockind::alloca)        ? "alloca"
-         : (data == sideeffect_allockind::cpp_new)       ? "cpp_new"
-         : (data == sideeffect_allockind::cpp_new_arr)   ? "cpp_new_arr"
-         : (data == sideeffect_allockind::nondet)        ? "nondet"
-         : (data == sideeffect_allockind::va_arg)        ? "va_arg"
-         : (data == sideeffect_allockind::function_call) ? "function_call"
-                                                         : "unknown";
+  switch (data)
+  {
+  case sideeffect_allockind::malloc:
+    return "malloc";
+  case sideeffect_allockind::realloc:
+    return "realloc";
+  case sideeffect_allockind::alloca:
+    return "alloca";
+  case sideeffect_allockind::cpp_new:
+    return "cpp_new";
+  case sideeffect_allockind::cpp_new_arr:
+    return "cpp_new_arr";
+  case sideeffect_allockind::nondet:
+    return "nondet";
+  case sideeffect_allockind::va_arg:
+    return "va_arg";
+  case sideeffect_allockind::printf2:
+    return "printf2";
+  case sideeffect_allockind::function_call:
+    return "function_call";
+  case sideeffect_allockind::preincrement:
+    return "preincrement";
+  case sideeffect_allockind::postincrement:
+    return "postincrement";
+  case sideeffect_allockind::predecrement:
+    return "predecrement";
+  case sideeffect_allockind::postdecrement:
+    return "postdecrement";
+  case sideeffect_allockind::old_snapshot:
+    return "old_snapshot";
+  case sideeffect_allockind::assigns_target:
+    return "assigns_target";
+  case sideeffect_allockind::statement_expression:
+    return "statement_expression";
+  case sideeffect_allockind::temporary_object:
+    return "temporary_object";
+  case sideeffect_allockind::gcc_conditional_expression:
+    return "gcc_conditional_expression";
+  case sideeffect_allockind::cpp_delete:
+    return "cpp_delete";
+  case sideeffect_allockind::cpp_delete_array:
+    return "cpp_delete_array";
+  }
+  return "unknown";
 }
 
 std::string type_to_string(const unsigned int &theval, int)
@@ -495,6 +530,16 @@ std::string type_to_string(const printf_kindt &theval, int)
     return "vfprintf";
   case printf_kindt::SNPRINTF:
     return "snprintf";
+  case printf_kindt::VPRINTF:
+    return "vprintf";
+  case printf_kindt::VSPRINTF:
+    return "vsprintf";
+  case printf_kindt::VSNPRINTF:
+    return "vsnprintf";
+  case printf_kindt::ASPRINTF:
+    return "asprintf";
+  case printf_kindt::VASPRINTF:
+    return "vasprintf";
   }
   assert(0 && "Unrecognized printf_kindt enum value");
   abort();
@@ -679,117 +724,4 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
     return 1;
   else
     return side1->lt(*side2.get());
-}
-
-// do_type_crc overloads. Trivial cases (bool, unsigned
-// int, small enums) use the primary templates in irep2_dispatch.h.
-
-// BigInt::dump writes only the magnitude (most-significant-byte first,
-// left-padded with zeros) and reports false on buffer-too-small. Try a
-// stack buffer; on overflow, double a heap buffer until it succeeds.
-// The sign byte is fed first so +x and -x do not collide.
-namespace
-{
-template <typename Sink>
-void feed_bigint(const BigInt &theint, Sink &&sink)
-{
-  // Always include the sign so +x and -x do not collide.
-  const uint8_t sign = theint.is_positive() ? 1 : 0;
-  sink(&sign, sizeof(sign));
-
-  if (theint.is_zero())
-    return;
-
-  std::array<unsigned char, 256> stack_buf;
-  if (theint.dump(stack_buf.data(), stack_buf.size()))
-  {
-    sink(stack_buf.data(), stack_buf.size());
-    return;
-  }
-
-  std::vector<unsigned char> heap_buf(stack_buf.size() * 2);
-  while (!theint.dump(heap_buf.data(), heap_buf.size()))
-    heap_buf.resize(heap_buf.size() * 2);
-  sink(heap_buf.data(), heap_buf.size());
-}
-} // namespace
-
-size_t do_type_crc(const BigInt &theint)
-{
-  size_t crc = 0;
-  feed_bigint(theint, [&](const unsigned char *data, size_t len) {
-    for (size_t i = 0; i < len; ++i)
-      esbmct::hash_combine(crc, data[i]);
-  });
-  return crc;
-}
-
-size_t do_type_crc(const fixedbvt &theval)
-{
-  return do_type_crc(BigInt(theval.to_ansi_c_string().c_str()));
-}
-
-size_t do_type_crc(const ieee_floatt &theval)
-{
-  return do_type_crc(theval.pack());
-}
-
-size_t do_type_crc(const std::vector<expr2tc> &theval)
-{
-  size_t crc = 0;
-  for (auto const &it : theval)
-    esbmct::hash_combine(crc, it->crc());
-
-  return crc;
-}
-
-size_t do_type_crc(const std::vector<type2tc> &theval)
-{
-  size_t crc = 0;
-  for (auto const &it : theval)
-    esbmct::hash_combine(crc, it->crc());
-
-  return crc;
-}
-
-size_t do_type_crc(const std::vector<irep_idt> &theval)
-{
-  // irep_idt is an interned dstring: its hash() returns the stable
-  // table index, unique per string identity within the process. Mix
-  // that directly instead of looking up the std::string and hashing
-  // its char array per element.
-  size_t crc = 0;
-  for (auto const &it : theval)
-    esbmct::hash_combine(crc, it.hash());
-
-  return crc;
-}
-
-size_t do_type_crc(const expr2tc &theval)
-{
-  if (theval.get() != nullptr)
-    return theval->crc();
-  return std::hash<uint8_t>{}(0);
-}
-
-size_t do_type_crc(const type2tc &theval)
-{
-  if (theval.get() != nullptr)
-    return theval->crc();
-  return std::hash<uint8_t>{}(0);
-}
-
-size_t do_type_crc(const irep_idt &theval)
-{
-  return theval.hash();
-}
-
-size_t do_type_crc(const type2t::type_ids &i)
-{
-  return std::hash<uint8_t>{}(i);
-}
-
-size_t do_type_crc(const expr2t::expr_ids &i)
-{
-  return std::hash<uint8_t>{}(i);
 }

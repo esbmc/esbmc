@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: NumPy array modulo broadcasting is not modelled.*$

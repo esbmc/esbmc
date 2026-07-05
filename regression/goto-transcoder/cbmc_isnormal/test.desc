@@ -1,0 +1,4 @@
+CORE
+cbmc_isnormal.goto
+--binary
+^VERIFICATION SUCCESSFUL$

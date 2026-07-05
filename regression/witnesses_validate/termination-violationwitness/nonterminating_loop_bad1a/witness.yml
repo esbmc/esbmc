@@ -1,0 +1,55 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2025 The SV-Benchmarks Community
+#
+# SPDX-License-Identifier: Apache-2.0
+
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.1"
+    uuid: a87fcd77-1d09-413d-8ff4-da4c3bac156d
+    creation_time: "2025-10-03T15:35:47+02:00"
+    producer:
+      name: "Paulina"
+      version: "ASE-paper"
+    task:
+      input_files:
+      - "nonterminating-loop.c"
+      input_file_hashes:
+        nonterminating-loop.c: 94318f2e020fa99240fdeb58b4aaa55ec050234af8261d6ef5de47ee65978d23
+      specification: "CHECK( init(main()), LTL(F end) )"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "follow"
+        constraint:
+          value: "x == y" # skips infinite cycle
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 14
+          column: 5
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "cycle"
+        constraint:
+          value: "true"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 16
+          column: 5
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "cycle"
+        constraint:
+          value: "false"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 21
+          column: 9

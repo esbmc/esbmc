@@ -1,7 +1,13 @@
 ---
-title:
-  "Counterexample Guided Abstract Refinement: Integer vs. Bit-Vector Encoding"
+title: "Integer vs. Bit-Vector Encoding"
 ---
+
+ESBMC encodes arithmetic as bit-precise bit-vectors by default. The `--ir`
+option switches to an integer/real (`Int`/`Real` sort) encoding instead. The two
+encodings expose a tradeoff: integer encoding can refute some assertions far
+faster, while bit-vector encoding is the only one that captures fixed-width
+overflow. The examples below illustrate both sides of that tradeoff and a manual
+workflow for combining them.
 
 ## Example 1: Checking the Pythagorean Theorem
 
@@ -201,10 +207,14 @@ Aborted (core dumped)
 - The integer encoding efficiently verifies the correctness of the program once
   overflow checks are introduced, ensuring safe behavior.
 
-## Pseudocode for Counterexample-Guided Abstraction Refinement
+## A Manual Refinement Workflow
 
-The following pseudocode outlines the steps involved in counterexample-guided
-abstraction refinement:
+ESBMC does not perform predicate-abstraction CEGAR internally; integer encoding
+(`--ir`) and bit-vector encoding are simply two solver back-ends you select. The
+pseudocode below sketches a *manual* loop that combines them: add overflow
+checks, verify under integer encoding, validate each counterexample against a
+compiled test case, and discard spurious ones with an `assume` before
+re-running.
 
 ```
 Function VerifyProgram(c_program):

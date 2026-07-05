@@ -6,8 +6,14 @@
 #include <set>
 #include <fmt/core.h>
 #include <util/message.h>
+#include <util/compiler_defs.h>
 
+// toml++ is a vendored third-party header; silence its deprecated literal
+// operators rather than patching the upstream file.
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_DEPRECATED_LITERAL_OPERATOR()
 #include "lib/toml.hpp"
+CC_DIAGNOSTIC_POP()
 
 static const std::string toml_type_to_string(const toml::node &node)
 {

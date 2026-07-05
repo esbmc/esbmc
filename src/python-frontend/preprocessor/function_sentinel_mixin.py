@@ -46,22 +46,14 @@ class FunctionSentinelMixin:
                 ),
                 ctx=ast.Load(),
             ),
-            value=ast.Call(
-                func=ast.Name(id="tuple", ctx=ast.Load()),
-                args=[
-                    ast.Call(
-                        func=ast.Name(id="sorted", ctx=ast.Load()),
-                        args=[
-                            ast.List(
-                                elts=[ast.Constant(value=0.0),
-                                      ast.Constant(value=0.0)],
-                                ctx=ast.Load(),
-                            )
-                        ],
-                        keywords=[],
-                    )
-                ],
-                keywords=[],
+            # Seed only needs to fix closest_pair's type to Tuple[float, float].
+            # A plain tuple literal does this directly; tuple(sorted([...]))
+            # would now lower to a shallow *list* copy (list pointer) and
+            # assigning that into the tuple-struct target trips the value-set
+            # make_member assertion (is_struct_type || is_union_type).
+            value=ast.Tuple(
+                elts=[ast.Constant(value=0.0), ast.Constant(value=0.0)],
+                ctx=ast.Load(),
             ),
             simple=1,
         )

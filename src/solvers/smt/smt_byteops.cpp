@@ -1,7 +1,7 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/type_byte_size.h>
 
-smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
@@ -26,7 +26,7 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
     return convert_byte_extract_bv_mode(data, source, offs, src_width);
 }
 
-smt_astt smt_convt::convert_byte_extract_int_mode(
+smt_astt smt_solver_baset::convert_byte_extract_int_mode(
   const byte_extract2t &data,
   expr2tc source,
   expr2tc offs,
@@ -129,7 +129,7 @@ smt_astt smt_convt::convert_byte_extract_int_mode(
   }
 }
 
-smt_astt smt_convt::convert_byte_extract_bv_mode(
+smt_astt smt_solver_baset::convert_byte_extract_bv_mode(
   const byte_extract2t &data,
   expr2tc source,
   expr2tc offs,
@@ -193,7 +193,8 @@ smt_astt smt_convt::convert_byte_extract_bv_mode(
   return mk_extract(source_ast, upper, lower);
 }
 
-expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
+expr2tc
+smt_solver_baset::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 {
   // For non-constant shift amounts, we use conditional expressions
   // for common shift amounts (bit-aligned shifts from 0 to 64)
@@ -233,7 +234,7 @@ expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
   return result;
 }
 
-smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
   assert(data.type == data.source_value->type);
@@ -270,7 +271,8 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_byte_update_bv_mode(data);
 }
 
-smt_astt smt_convt::convert_byte_update_int_mode(const byte_update2t &data)
+smt_astt
+smt_solver_baset::convert_byte_update_int_mode(const byte_update2t &data)
 {
   expr2tc source = data.source_value;
   expr2tc offs = data.source_offset;
@@ -315,7 +317,7 @@ smt_astt smt_convt::convert_byte_update_int_mode(const byte_update2t &data)
   return convert_ast(result);
 }
 
-expr2tc smt_convt::convert_byte_update_int_mode_expr(
+expr2tc smt_solver_baset::convert_byte_update_int_mode_expr(
   const byte_update2t &data,
   expr2tc source,
   expr2tc offs,
@@ -398,7 +400,8 @@ expr2tc smt_convt::convert_byte_update_int_mode_expr(
   return result;
 }
 
-smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
+smt_astt
+smt_solver_baset::convert_byte_update_bv_mode(const byte_update2t &data)
 {
   if (!is_bv_type(data.type) && !is_fixedbv_type(data.type))
   {

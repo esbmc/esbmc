@@ -1,0 +1,1 @@
+../svcomp_ternary_1B0/ternary.c

@@ -1,4 +1,6 @@
 CORE
 main.py
 --unwind 1
-^\s*Throwing an exception of type ValueError but there is not catch for it.$
+
+^VERIFICATION FAILED$
+uncaught exception

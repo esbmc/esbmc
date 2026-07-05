@@ -44,6 +44,13 @@ public:
    */
   void get_try_statement(const nlohmann::json &element, codet &block);
 
+  /// True if `node` contains a return/break/continue that would transfer
+  /// control out of an enclosing try (used to refuse try/finally shapes whose
+  /// appended finally would be skipped). `in_loop` tracks loop nesting so that
+  /// break/continue captured by a nested loop are not counted.
+  static bool
+  body_has_escaping_control_flow(const nlohmann::json &node, bool in_loop);
+
   /**
    * Convert a Python raise statement.
    *

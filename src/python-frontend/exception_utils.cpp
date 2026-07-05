@@ -1,4 +1,5 @@
 #include <python-frontend/exception_utils.h>
+#include <python-frontend/python_expr_builder.h>
 
 #include <util/c_types.h>
 
@@ -26,7 +27,8 @@ exprt make_exception_raise(
   string_constantt string_name(message, t, string_constantt::k_default);
 
   exprt sym("struct", type);
-  sym.copy_to_operands(address_of_exprt(string_name));
+  // V.3: build the address-of in IREP2 (operand is a string constant).
+  sym.copy_to_operands(python_expr::build_address_of(string_name));
 
   exprt raise = side_effect_exprt("cpp-throw", type);
   raise.move_to_operands(sym);

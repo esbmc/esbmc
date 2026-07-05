@@ -35,3 +35,6 @@ src/CPackSourceConfig.cmake
 # macOS debug symbols and compiled test binaries in regression dirs
 *.dSYM/
 regression/**/test
+
+# Generated doxygen API reference (see .doxygen)
+docs/html/

@@ -3,54 +3,18 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
+#include <util/migrate.h>
 #include <irep2/irep2_guard.h>
+#include <util/prefix.h>
 #include <util/std_expr.h>
+#include <map>
+#include <set>
 
 class w_guardst
 {
 public:
   explicit w_guardst(contextt &_context) : context(_context)
   {
-  }
-
-  std::list<irep_idt> w_guards;
-
-  const symbolt &
-  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
-  {
-    const irep_idt identifier = "tmp_" + id2string(object);
-
-    const symbolt *s = context.find_symbol(identifier);
-    if (s != nullptr)
-      return *s;
-
-    w_guards.push_back(identifier);
-
-    type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
-
-    symbolt new_symbol;
-    new_symbol.id = identifier;
-    new_symbol.name = identifier;
-    set_symbol_type(
-      new_symbol, original_expr.is_index() ? index : get_bool_type());
-    new_symbol.static_lifetime = true;
-    {
-      exprt v = new_symbol.get_value();
-      v.make_false();
-      new_symbol.set_value(std::move(v));
-    }
-
-    symbolt *symbol_ptr;
-    context.move(new_symbol, symbol_ptr);
-    return *symbol_ptr;
-  }
-
-  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
-  {
-    // introduce a new expression: RACE_CHECK(&x)
-    // its operand is the address of the variable
-    // which we will replace during symbolic execution.
-    return races_check2tc(address_of2tc(original_expr->type, original_expr));
   }
 
   expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
@@ -67,46 +31,40 @@ public:
 
 protected:
   contextt &context;
+
+  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
+  {
+    // Introduce a RACE_CHECK(&x) marker whose operand is the address of the
+    // accessed object; goto_symext::replace_races_check lowers it to the
+    // __ESBMC_races_flag slot for that (object, offset) during symbolic
+    // execution.
+    return races_check2tc(address_of2tc(original_expr->type, original_expr));
+  }
 };
 
 void w_guardst::add_initialization(goto_programt &goto_program)
 {
-  goto_programt::targett t = goto_program.instructions.begin();
-  const namespacet ns(context);
+  // __ESBMC_races_flag is an infinite array of booleans indexed by a unique
+  // (pointer object, byte offset) key (see goto_symext::replace_races_check).
+  // Declare it and reset every slot to false at program entry.
+  type2tc flag_type = array_type2tc(get_bool_type(), expr2tc(), true);
+  expr2tc all_false = constant_array_of2tc(flag_type, gen_false_expr());
 
-  // introduce new infinite array: __ESBMC_races_flag[]
-  // initialize it to zero: ARRAY_OF(0)
-  type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
-  const irep_idt identifier = "c:@F@__ESBMC_races_flag";
-  w_guards.push_back(identifier);
   symbolt new_symbol;
-  new_symbol.id = identifier;
-  new_symbol.name = identifier;
-  set_symbol_type(new_symbol, arrayt);
+  new_symbol.id = "c:@F@__ESBMC_races_flag";
+  new_symbol.name = new_symbol.id;
+  set_symbol_type(new_symbol, flag_type);
   new_symbol.static_lifetime = true;
-  {
-    exprt v = new_symbol.get_value();
-    v.make_false();
-    new_symbol.set_value(std::move(v));
-  }
-  context.move_symbol_to_context(new_symbol);
+  new_symbol.set_value(migrate_expr_back(all_false));
+  const symbolt &flag = *context.move_symbol_to_context(new_symbol);
 
-  for (const auto &w_guard : w_guards)
-  {
-    const symbolt &s = *ns.lookup(w_guard);
-    exprt symbol = symbol_expr(s);
-    expr2tc new_sym;
-    migrate_expr(symbol, new_sym);
+  expr2tc flag_symbol;
+  migrate_expr(symbol_expr(flag), flag_symbol);
 
-    expr2tc falsity = s.get_type().is_array()
-                        ? gen_zero(migrate_symbol_type(s), true)
-                        : gen_false_expr();
-    t = goto_program.insert(t);
-    t->type = ASSIGN;
-    t->code = code_assign2tc(new_sym, falsity);
-
-    t++;
-  }
+  goto_programt::targett t =
+    goto_program.insert(goto_program.instructions.begin());
+  t->type = ASSIGN;
+  t->code = code_assign2tc(flag_symbol, all_false);
 }
 
 // Collect the root symbol of every object whose address is taken in `expr`,
@@ -167,15 +125,171 @@ static void collect_thread_escaped_locals(
   }
 }
 
+// Collect the identifiers of every function whose *address* is taken in `e`
+// (a function used as a value -- assigned to a function pointer, passed as an
+// argument, stored in a struct field, etc.). Such a function may later be
+// invoked through that pointer from a context this static analysis cannot see,
+// so it must never be classified as "always executed atomically".
+static void collect_address_taken_functions(
+  const expr2tc &e,
+  const goto_functionst &goto_functions,
+  std::set<irep_idt> &escaped)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_symbol2t(e))
+  {
+    const irep_idt &name = to_symbol2t(e).thename;
+    if (
+      goto_functions.function_map.find(name) !=
+      goto_functions.function_map.end())
+      escaped.insert(name);
+  }
+
+  e->foreach_operand([&goto_functions, &escaped](const expr2tc &op) {
+    collect_address_taken_functions(op, goto_functions, escaped);
+  });
+}
+
+// Compute the set of functions that are *always* executed inside an atomic
+// region. A function qualifies when every direct call to it is made from an
+// atomic context -- lexically inside an atomic_begin/end region, from the body
+// of a __VERIFIER_atomic_* function (which goto_convert wraps in an atomic
+// region), or from another always-atomic function -- and its address is never
+// taken (so it cannot be reached via a function pointer from an unknown,
+// possibly non-atomic, context).
+//
+// Accesses inside such a function can never participate in a data race: at
+// every invocation the thread holds the global atomic lock, so no other thread
+// runs concurrently. The data-race instrumenter must therefore treat their
+// bodies as atomic, exactly as it already does for the lexically-wrapped body
+// of a __VERIFIER_atomic_* function. Without this, a shared read in a helper
+// reached only from a __VERIFIER_atomic_* function -- e.g. isEmpty() reading
+// the shared `top` in SV-COMP's pthread-ext/25_stack, invoked only from
+// __VERIFIER_atomic_assert -- is instrumented as a non-atomic access and
+// reports a spurious race against a concurrent atomic writer (issues
+// #5133-#5135).
+//
+// Sound by construction: a function is suppressed only when *every* path to it
+// is atomic, so no genuinely racy (non-atomic) access is ever hidden. A
+// function with a single non-atomic call site, no call site at all (e.g. a
+// thread entry point), or an escaping address is left fully instrumented.
+//
+// Precision limitation (not a soundness issue): a recursive helper reached only
+// from atomic contexts is not classified, because the fixpoint requires the
+// caller to already be atomic and a function in a recursion cycle never reaches
+// that state. Such helpers stay fully instrumented -- they are over-, never
+// under-approximated -- so no race is hidden; the original false alarm simply
+// persists for that (rare) shape.
+static std::set<irep_idt>
+compute_always_atomic_functions(const goto_functionst &goto_functions)
+{
+  std::set<irep_idt> escaped;
+
+  // Per direct call site: the caller, and whether the call instruction is
+  // lexically inside an atomic region of that caller.
+  struct callsitet
+  {
+    irep_idt caller;
+    bool lexically_atomic;
+  };
+  std::map<irep_idt, std::vector<callsitet>> callsites;
+
+  forall_goto_functions (f_it, goto_functions)
+  {
+    const irep_idt &caller = f_it->first;
+    // Lexical atomic nesting depth. goto_convert emits balanced
+    // atomic_begin/end regions, so the count stays >= 0; an end is only honored
+    // while inside a region. Any residual imbalance would merely under-count
+    // (treat a call as non-atomic), which is the safe, race-preserving
+    // direction.
+    int atomic_depth = 0;
+    forall_goto_program_instructions (i_it, f_it->second.body)
+    {
+      if (i_it->is_atomic_begin())
+        ++atomic_depth;
+      else if (i_it->is_atomic_end() && atomic_depth > 0)
+        --atomic_depth;
+      else if (i_it->is_function_call())
+      {
+        const code_function_call2t &call = to_code_function_call2t(i_it->code);
+        collect_address_taken_functions(call.ret, goto_functions, escaped);
+        for (const expr2tc &arg : call.operands)
+          collect_address_taken_functions(arg, goto_functions, escaped);
+
+        if (is_symbol2t(call.function))
+          callsites[to_symbol2t(call.function).thename].push_back(
+            {caller, atomic_depth > 0});
+        else
+          // indirect call through a pointer: its target set was already
+          // captured as escaped at the pointer's definition site
+          collect_address_taken_functions(
+            call.function, goto_functions, escaped);
+      }
+      else
+      {
+        if (!is_nil_expr(i_it->code))
+          collect_address_taken_functions(i_it->code, goto_functions, escaped);
+        if (!is_nil_expr(i_it->guard))
+          collect_address_taken_functions(i_it->guard, goto_functions, escaped);
+      }
+    }
+  }
+
+  // Seed with the lexically-wrapped __VERIFIER_atomic_* functions, then close
+  // under "every call site is atomic" to a fixpoint. The prefix must match the
+  // one goto_convert_functions.cpp uses to wrap these bodies in atomic regions.
+  std::set<irep_idt> always_atomic;
+  forall_goto_functions (f_it, goto_functions)
+    if (has_prefix(id2string(f_it->first), "c:@F@__VERIFIER_atomic_"))
+      always_atomic.insert(f_it->first);
+
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    for (const auto &entry : callsites)
+    {
+      const irep_idt &callee = entry.first;
+      if (always_atomic.count(callee) || escaped.count(callee))
+        continue;
+
+      bool all_atomic = true;
+      for (const callsitet &cs : entry.second)
+        if (!cs.lexically_atomic && !always_atomic.count(cs.caller))
+        {
+          all_atomic = false;
+          break;
+        }
+
+      if (all_atomic)
+      {
+        always_atomic.insert(callee);
+        changed = true;
+      }
+    }
+  }
+
+  return always_atomic;
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards,
-  const rw_sett::shared_localst &shared_locals)
+  const rw_sett::shared_localst &shared_locals,
+  bool body_is_atomic)
 {
   namespacet ns(context);
 
-  bool is_atomic = false;
+  // A function whose every invocation is atomic (see
+  // compute_always_atomic_functions) executes its whole body inside the global
+  // atomic lock, so -- like the lexically-wrapped body of a __VERIFIER_atomic_*
+  // function -- none of its accesses can race. Start the body in the atomic
+  // state so its shared reads/writes are handled by the atomic path below and
+  // no spurious race assertion is emitted.
+  bool is_atomic = body_is_atomic;
 
   // In data-races-check-only mode every interleaving point is derived from a
   // yield() call, and add_race_assertions only emits those around *non-atomic*
@@ -467,7 +581,10 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
   rw_sett::shared_localst shared_locals;
   collect_thread_escaped_locals(goto_program, shared_locals);
 
-  add_race_assertions(context, goto_program, w_guards, shared_locals);
+  // No call-graph context is available for a single program, so no function
+  // can be proven always-atomic; instrument every access normally.
+  add_race_assertions(
+    context, goto_program, w_guards, shared_locals, /*body_is_atomic=*/false);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
@@ -485,9 +602,21 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
   forall_goto_functions (f_it, goto_functions)
     collect_thread_escaped_locals(f_it->second.body, shared_locals);
 
+  // A function reached only from atomic contexts runs its whole body under the
+  // global atomic lock, so its accesses can never race and must be instrumented
+  // as atomic (issues #5133-#5135). This is an interprocedural property, so it
+  // is computed once over the whole call graph before any body is instrumented.
+  const std::set<irep_idt> always_atomic =
+    compute_always_atomic_functions(goto_functions);
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(context, f_it->second.body, w_guards, shared_locals);
+      add_race_assertions(
+        context,
+        f_it->second.body,
+        w_guards,
+        shared_locals,
+        always_atomic.count(f_it->first) > 0);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

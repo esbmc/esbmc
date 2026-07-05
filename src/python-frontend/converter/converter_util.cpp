@@ -119,6 +119,16 @@ bool python_converter::is_pytest_generation_mode() const
 bool python_converter::is_model_file(const nlohmann::json &node) const
 {
   const std::string file = get_location_from_decl(node).file().as_string();
+  // The file under verification is never a model — not even when it is passed
+  // by a bare relative name (e.g. `main.py`) that the no-directory heuristic
+  // below would otherwise misread as a model. That misclassification disabled
+  // `and`/`or` short-circuit lowering for the main module, so a guard like
+  // `x is None or x.field is None` was emitted as an eager compound operand and
+  // the verdict flipped depending on whether the source was given by relative
+  // or absolute path (QuixBugs detect_cycle).
+  if (file == main_python_file)
+    return false;
+
   if (file.find("/models/") != std::string::npos)
     return true;
 

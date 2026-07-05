@@ -79,8 +79,9 @@ bool read_bin_goto_object(
       auto it = goto_functions.function_map.find(symbol.id);
       if (it == goto_functions.function_map.end())
         goto_functions.function_map.emplace(symbol.id, goto_functiont());
-      goto_functions.function_map.at(symbol.id).type =
-        migrate_symbol_type(symbol);
+      goto_functiont &f = goto_functions.function_map.at(symbol.id);
+      f.type = migrate_symbol_type(symbol);
+      f.exception_spec = exception_specificationt::from_type(symbol.get_type());
     }
 
     // Add functions only from the list if there is a whitelist

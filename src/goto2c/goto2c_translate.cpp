@@ -230,8 +230,6 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   // These are C++ instructions. We do not translate those at the moment.
   case THROW:
   case CATCH:
-  case THROW_DECL:
-  case THROW_DECL_END:
     assert(!"C++ instructions are not supported by GOTO2C");
     out << "C++ instruction";
     break;

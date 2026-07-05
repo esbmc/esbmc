@@ -1,0 +1,5 @@
+CORE
+main.c
+ -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+^.*dereference failure on memchr: reading memory segment of size 4 with 8 bytes.*$

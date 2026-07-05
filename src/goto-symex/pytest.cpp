@@ -3,6 +3,7 @@
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/config.h>
@@ -131,7 +132,7 @@ std::string pytest_generator::extract_function_name(
   // extract function name from SSA steps
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.source.pc->location.function() != "")
@@ -617,7 +618,7 @@ void pytest_generator::collect(
 
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())
@@ -1122,7 +1123,7 @@ void pytest_generator::generate_single(
   // Traverse SSA steps to extract nondet variables
   for (auto const &SSA_step : target.SSA_steps)
   {
-    if (!smt_conv.l_get(SSA_step.guard_ast).is_true())
+    if (SSA_step.ignore || !smt_conv.l_get(SSA_step.guard).is_true())
       continue;
 
     if (SSA_step.is_assignment())

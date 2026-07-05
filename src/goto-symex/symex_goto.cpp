@@ -106,36 +106,13 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
-  // Violation-witness: steer branch direction if the current waypoint is a
-  // branching at this location.  Skip backward GOTOs (loop back edges).
-  if (
-    validate_witness && forward &&
-    cur_state->cur_seg < cur_state->witness_segs.size())
-  {
-    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    if (cur_state->cur_wp < seg.size())
-    {
-      const waypoint &wp = seg[cur_state->cur_wp];
-      if (wp.type == waypoint::branching)
-      {
-        const auto &loc = cur_state->source.pc->location;
-        if (
-          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-          (wp.function_id.empty() || wp.function_id == loc.get_function()))
-        {
-          const bool is_avoid = (wp.action == waypoint::avoid);
-          bool direction_true = (wp.value == "true") ^ is_avoid;
-          bool goto_taken =
-            instruction.flipped_guard ? direction_true : !direction_true;
-          if (goto_taken)
-            new_guard_true = true;
-          else
-            new_guard_false = true;
-          cur_state->advance_witness_position();
-        }
-      }
-    }
-  }
+  symex_witness_branching(
+    old_guard,
+    new_guard,
+    forward,
+    new_guard_true,
+    new_guard_false,
+    instruction);
 
   if (new_guard_false)
   {
@@ -436,9 +413,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (
-      has_prefix(variable.base_name.as_string(), "symex::invalid_object") ||
-      has_prefix(variable.base_name.as_string(), "symex_throw::thrown_obj"))
+    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment

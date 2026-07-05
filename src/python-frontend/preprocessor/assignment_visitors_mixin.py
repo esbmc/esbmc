@@ -9,6 +9,8 @@ class AssignmentVisitorsMixin:
         if node.annotation is not None:
             node.annotation = self._resolve_annotation_aliases(node.annotation)
 
+        self._update_assignment_call_origins([node.target], node.value)
+
         node = self.generic_visit(node)
 
         if getattr(node, "value", None) is not None:
@@ -69,6 +71,8 @@ class AssignmentVisitorsMixin:
         if (isinstance(node.target, ast.Subscript) and isinstance(node.target.value, ast.Name)
                 and node.target.value.id in self.list_literal_values):
             self.list_literal_values.pop(node.target.value.id, None)
+
+        self._update_assignment_call_origins([node.target], None)
 
         node = self.generic_visit(node)
 

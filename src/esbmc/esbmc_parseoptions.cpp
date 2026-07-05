@@ -19,8 +19,10 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/goto_symex.h>
+#include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
+#include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
 #include <util/filesystem.h>
@@ -29,6 +31,7 @@ extern "C"
 #include <limits>
 #include <util/expr_util.h>
 #include <iostream>
+#include <fstream>
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
@@ -44,9 +47,11 @@ extern "C"
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_binary_reader.h>
+#include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
+#include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
@@ -182,13 +187,17 @@ static void segfault_handler(int sig)
 //
 // \param str - string representation of a time interval,
 // \return - number of seconds that represents the input string value.
-uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
+uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty timeout value");
+    abort();
+  }
+  uint64_t mult = 1;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 's':
       mult = 1;
@@ -207,12 +216,8 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       abort();
     }
   }
-  else
-  {
-    mult = 1;
-  }
-
-  uint64_t timeout = strtol(str, nullptr, 10);
+  uint64_t timeout = 0;
+  std::from_chars(str.data(), str.data() + str.size(), timeout);
   timeout *= mult;
   return timeout;
 }
@@ -231,14 +236,18 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 // this method throws an error.
 //
 // \param str - string representation of a memory limit,
-// \return - number of megabytes that represents the input string value.
-uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
+// \return - number of bytes that represents the input string value.
+uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty memlimit value");
+    abort();
+  }
+  uint64_t mult = 1024ULL * 1024ULL;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 'b':
       mult = 1;
@@ -247,22 +256,18 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024;
       break;
     case 'm':
-      mult = 1024 * 1024;
+      mult = 1024ULL * 1024ULL;
       break;
     case 'g':
-      mult = 1024 * 1024 * 1024;
+      mult = 1024ULL * 1024ULL * 1024ULL;
       break;
     default:
       log_error("Unrecognized memlimit suffix");
       abort();
     }
   }
-  else
-  {
-    mult = 1024 * 1024;
-  }
-
-  uint64_t size = strtol(str, nullptr, 10);
+  uint64_t size = 0;
+  std::from_chars(str.data(), str.data() + str.size(), size);
   size *= mult;
   return size;
 }
@@ -570,6 +575,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
+
+  if (cmdline.isset("clz-zero-check"))
+    options.set_option("clz-zero-check", true);
 
   if (cmdline.isset("timeout"))
   {
@@ -1296,10 +1304,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1307,7 +1315,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_SATISFIABLE)
+      if (res == P_SATISFIABLE)
       {
         r.k = k_step;
 
@@ -1403,10 +1411,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_status("Checking forward condition, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1417,7 +1425,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_UNSATISFIABLE)
+      if (res == P_UNSATISFIABLE)
       {
         r.k = k_step;
 
@@ -1472,10 +1480,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       log_status("Checking inductive step, k = {:d}", k_step);
 
       // If an exception was thrown, we should abort the process
-      int res = smt_convt::P_ERROR;
+      smt_resultt res = P_ERROR;
       try
       {
-        res = do_bmc(bmc);
+        res = static_cast<smt_resultt>(do_bmc(bmc));
       }
       catch (...)
       {
@@ -1486,7 +1494,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         break;
 
       // Send information to parent if no bug was found
-      if (res == smt_convt::P_UNSATISFIABLE)
+      if (res == P_UNSATISFIABLE)
       {
         r.k = k_step;
 
@@ -1825,14 +1833,14 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     return tvt(tvt::TV_FALSE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     log_result("\nBug found (k = {:d})", k_step);
     return tvt(tvt::TV_TRUE);
 
@@ -1889,14 +1897,14 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 
   switch (res)
   {
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     log_result(
       "\nSolution found by the forward condition; "
       "all states are reachable (k = {:d})",
@@ -1947,7 +1955,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  int res = do_bmc(bmc);
+  smt_resultt res = static_cast<smt_resultt>(do_bmc(bmc));
 
   // Symex may flip `disable-inductive-step` mid-run when it encounters
   // a construct the IS cannot soundly handle (recursion, threads,
@@ -1959,14 +1967,14 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
 
   switch (res)
   {
-  case smt_convt::P_SATISFIABLE:
+  case P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
 
-  case smt_convt::P_SMTLIB:
-  case smt_convt::P_ERROR:
+  case P_SMTLIB:
+  case P_ERROR:
     break;
 
-  case smt_convt::P_UNSATISFIABLE:
+  case P_UNSATISFIABLE:
     log_result(
       "\nSolution found by the inductive step "
       "(k = {:d})",
@@ -1998,7 +2006,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res;
+  smt_resultt res;
   try
   {
     res = bmc.start_bmc();
@@ -2010,7 +2018,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
     // also checks `disable-inductive-step` to suppress any verdict.
     log_status("Inductive step aborted: {}", e.reason);
-    res = smt_convt::P_ERROR;
+    res = P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC
@@ -2112,6 +2120,32 @@ bool esbmc_parseoptionst::get_goto_program(
   return false;
 }
 
+// Retarget the synthesised __ESBMC_main wrapper so its boilerplate call to
+// c:@F@main instead dispatches to `target`. Used to bridge the entry point of a
+// loaded --binary onto the program's real entry: a CBMC goto-binary's
+// __CPROVER__start, or a user-selected --function harness. Without this,
+// __ESBMC_main would run the empty boilerplate main and report a verdict over
+// essentially no program. No-op if __ESBMC_main was not synthesised.
+static void
+retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
+{
+  auto entry = goto_functions.function_map.find("__ESBMC_main");
+  if (entry == goto_functions.function_map.end())
+    return;
+
+  Forall_goto_program_instructions (it, entry->second.body)
+  {
+    if (!it->is_function_call())
+      continue;
+
+    code_function_call2t &call = to_code_function_call2t(it->code);
+    if (
+      is_symbol2t(call.function) &&
+      to_symbol2t(call.function).thename == "c:@F@main")
+      call.function = symbol2tc(get_empty_type(), target);
+  }
+}
+
 // This method creates a GOTO program from the source specified by the
 // command line options. A GOTO program can be created:
 //
@@ -2137,29 +2171,43 @@ bool esbmc_parseoptionst::create_goto_program(
     {
       if (cmdline.isset("cprover"))
         log_warning(
-          "Be sure you are manually linking with the cprover libraries. This "
-          "will be automated in the future.");
+          "--cprover is deprecated and has no effect; ESBMC additions are now "
+          "linked automatically for CBMC goto-binaries (disable with "
+          "--no-cprover-additions)");
+
+      // A CBMC goto-binary needs ESBMC's additions (the __ESBMC_main entry
+      // wrapper and the CPROVER-intrinsic bodies). Synthesise and link them
+      // automatically, before reading the binaries so that goto_convert only
+      // ever runs over the boilerplate and never clobbers the loaded bodies.
+      const bool cbmc_additions =
+        has_cbmc_binary_input() && !cmdline.isset("no-cprover-additions");
+      if (cbmc_additions)
+      {
+        log_status(
+          "CBMC goto-binary detected: linking ESBMC additions automatically");
+        if (synthesize_cprover_additions(options, goto_functions))
+          return true;
+      }
+
       if (read_goto_binary(goto_functions))
         return true;
 
+      // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
+      // c:@F@main, onto the program's real entry. An explicit --function wins;
+      // otherwise a CBMC binary dispatches into __CPROVER__start (it runs
+      // __CPROVER_initialize and calls the program's main/harness). Without
+      // this, a CBMC binary verifies the empty boilerplate main and may report
+      // a spurious SUCCESSFUL.
       if (cmdline.isset("function"))
-      {
-        Forall_goto_program_instructions (
-          it, goto_functions.function_map["__ESBMC_main"].body)
-        {
-          if (!it->is_function_call())
-            continue;
-
-          if (
-            !is_symbol2t(to_code_function_call2t(it->code).function) ||
-            to_symbol2t(to_code_function_call2t(it->code).function).thename !=
-              "c:@F@main")
-            continue;
-
-          to_code_function_call2t(it->code).function =
-            symbol2tc(get_empty_type(), cmdline.getval("function"));
-        }
-      }
+        retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+      else if (
+        cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
+        retarget_esbmc_main(goto_functions, "__CPROVER__start");
+      else if (cbmc_additions)
+        log_warning(
+          "CBMC goto-binary support is experimental: no entry point to bridge "
+          "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
+          "boilerplate main and the verdict may be unsound.");
 
       goto_functions.update();
     }
@@ -2208,6 +2256,67 @@ bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
   }
 
   return false;
+}
+
+// True if any --binary input is a CBMC goto-binary. CBMC's format starts with
+// the magic 0x7f 'G' 'B' 'F'; ESBMC's own format starts with 'G' 'B' 'F'.
+bool esbmc_parseoptionst::has_cbmc_binary_input()
+{
+  for (const auto &arg : cmdline.args)
+  {
+    std::ifstream in(arg, std::ios::in | std::ios::binary);
+    unsigned char hdr[4] = {0, 0, 0, 0};
+    // Bounded read: capped at sizeof(hdr) into the fixed-size buffer, and the
+    // gcount() check confirms a full header before any byte is inspected
+    // (CWE-120/CWE-20). Flawfinder: ignore
+    in.read(reinterpret_cast<char *>(hdr), sizeof(hdr));
+    if (
+      in.gcount() >= static_cast<std::streamsize>(sizeof(hdr)) &&
+      is_cbmc_goto_magic(hdr))
+      return true;
+  }
+  return false;
+}
+
+// Compile a boilerplate translation unit through the normal C-frontend pipeline
+// to obtain ESBMC's "additions": typecheck() pulls in the C library via
+// add_cprover_library, final() builds the __ESBMC_main entry wrapper, and
+// goto_convert() turns them into goto bodies. This is exactly the prebuilt
+// library.goto that one otherwise links manually. We run it before reading the
+// CBMC binary so goto_convert only ever sees the boilerplate's symbols.
+bool esbmc_parseoptionst::synthesize_cprover_additions(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  file_operations::tmp_file tf =
+    file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
+  static const char boilerplate[] =
+    "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
+    "int main(void) { return 0; }\n";
+  if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
+  {
+    log_error("could not write boilerplate for CPROVER additions");
+    return true;
+  }
+
+  // Point the command line at the boilerplate for this one compile, then
+  // restore it for the subsequent binary read. The user's --function names a
+  // harness in the CBMC binary, not in this boilerplate, so also neutralise
+  // config.main (which config.cpp sets from --function) for the compile --
+  // otherwise the boilerplate's entry-point synthesis (clang_c_main) looks for
+  // that harness here and aborts with "main symbol not found". The retarget in
+  // create_goto_program applies --function to the loaded binary afterwards.
+  cmdlinet::argst saved_args = cmdline.args;
+  const std::string saved_main = config.main;
+  cmdline.args = {tf.path()};
+  config.main = "";
+  bool failed = parse_goto_program(options, goto_functions);
+  cmdline.args = saved_args;
+  config.main = saved_main;
+
+  if (failed)
+    log_error("failed to synthesize ESBMC additions for CBMC goto-binary");
+  return failed;
 }
 
 // This method creates a GOTO program by parsing the input program files.
@@ -2404,6 +2513,13 @@ bool esbmc_parseoptionst::process_goto_program(
       algorithm->run(goto_functions);
     }
 
+    // Lower throw/catch to symbolic guarded control flow (#5075). Run before
+    // inlining so per-call-site exception propagation is still explicit. This
+    // is now the only exception path: a program the pass cannot lower is
+    // reported as an error rather than silently miscompiled (the legacy
+    // imperative path in symex was removed once the lowered subset covered it).
+    remove_exceptions(goto_functions, context, ns);
+
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
     {
@@ -2495,13 +2611,27 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
+    // goto_k_induction returns true when a loop writes an array element
+    // through a pointer, which the inductive-step havoc cannot soundly
+    // generalise. Disable the inductive step in that case so its UNSAT is
+    // not reported as proof (#5224); base case and forward condition run.
+    auto disable_is_if_unsound = [&](bool unsound) {
+      if (unsound)
+      {
+        log_warning(
+          "k-induction does not support loops that write array elements "
+          "through a pointer yet. Disabling inductive step");
+        options.set_option("disable-inductive-step", true);
+      }
+    };
+
     if (cmdline.isset("loop-invariant"))
     {
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      goto_k_induction(goto_functions);
+      disable_is_if_unsound(goto_k_induction(goto_functions, ns));
     }
     else
     {
@@ -2511,7 +2641,7 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        goto_k_induction(goto_functions);
+        disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (cmdline.isset("loop-invariant-check"))
       {
@@ -2559,7 +2689,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options);
+        goto_termination(goto_functions, options, ns);
     }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran
@@ -3389,8 +3519,6 @@ void esbmc_parseoptionst::print_ileave_points(
       case DEAD:
       case THROW:
       case CATCH:
-      case THROW_DECL:
-      case THROW_DECL_END:
       case LOOP_INVARIANT:
         break;
       }

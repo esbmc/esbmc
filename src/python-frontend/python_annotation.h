@@ -151,6 +151,15 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  void collect_return_types(
+    const Json &body,
+    const std::string &func_name,
+    std::set<std::string> &types);
+  // True if @p node (a return-value expression subtree) contains a direct call
+  // to @p func_name. Used to skip self-recursive returns during return-type
+  // inference so they don't re-enter the analysis (stack overflow).
+  static bool
+  expr_calls_function(const Json &node, const std::string &func_name);
 
   // ----- annotation-node constructors (annotation_expr.inl) -----
   Json create_name_annotation(

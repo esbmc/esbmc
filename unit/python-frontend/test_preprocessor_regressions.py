@@ -1,5 +1,4 @@
 import ast
-import importlib.util
 import os
 import sys
 
@@ -11,16 +10,8 @@ if PY_FRONTEND_DIR not in sys.path:
     sys.path.insert(0, PY_FRONTEND_DIR)
 
 
-def _load_module(module_name: str, rel_path: str):
-    module_path = os.path.join(ROOT, rel_path)
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-preprocessor_mod = _load_module("esbmc_preprocessor_regressions",
-                                "src/python-frontend/preprocessor.py")
+# pylint: disable=wrong-import-position
+import preprocessor as preprocessor_mod
 
 
 def test_isolate_genexp_targets_renames_inner_iter_loads_before_shadowing():

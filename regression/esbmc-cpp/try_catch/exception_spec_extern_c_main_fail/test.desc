@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--no-unwinding-assertions
+^VERIFICATION FAILED$
+uncaught exception

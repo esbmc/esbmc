@@ -15,6 +15,10 @@ if(ENABLE_PYTHON_FRONTEND)
   set(PYTHON_FRONTEND_TARGETS pythonfrontend)
 endif()
 
+if(ENABLE_LD_FRONTEND)
+  set(LD_FRONTEND_TARGETS ldfrontend)
+endif()
+
 if(ENABLE_GOTO_CONTRACTOR)
   set(GOTO_CONTRACTOR_TARGETS gotocontractor)
 endif()
@@ -38,7 +42,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable(esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+add_executable(esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -48,6 +52,7 @@ cmake_path(SET MY_MAGIC_PATH NORMALIZE "${cvc5_DIR}/../../")
 cmake_path(ABSOLUTE_PATH MY_MAGIC_PATH OUTPUT_VARIABLE CVC_LINK_DIR)
 message("Looking at ${CVC_LINK_DIR}")
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
+                            ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}

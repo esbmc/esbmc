@@ -282,15 +282,15 @@ template <class T>
 struct is_array<T[]> : true_type
 {
 };
-template <class T, size_t N>
-struct is_array<T[N]> : true_type
+template <class T, size_t _Np>
+struct is_array<T[_Np]> : true_type
 {
 };
 template <class T>
 inline constexpr bool is_array_v = is_array<T>::value;
 
 // extent — number of elements in the first array dimension (0 for non-arrays)
-template <class T, size_t N = 0>
+template <class T, size_t _Np = 0>
 struct extent : integral_constant<size_t, 0>
 {
 };
@@ -298,16 +298,16 @@ template <class T>
 struct extent<T[], 0> : integral_constant<size_t, 0>
 {
 };
-template <class T, size_t I>
-struct extent<T[I], 0> : integral_constant<size_t, I>
+template <class T, size_t _Ip>
+struct extent<T[_Ip], 0> : integral_constant<size_t, _Ip>
 {
 };
-template <class T, size_t N>
-struct extent<T[], N> : extent<T, N - 1>
+template <class T, size_t _Np>
+struct extent<T[], _Np> : extent<T, _Np - 1>
 {
 };
-template <class T, size_t I, size_t N>
-struct extent<T[I], N> : extent<T, N - 1>
+template <class T, size_t _Ip, size_t _Np>
+struct extent<T[_Ip], _Np> : extent<T, _Np - 1>
 {
 };
 template <class T>

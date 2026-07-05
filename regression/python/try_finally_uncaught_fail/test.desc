@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 1
+^VERIFICATION FAILED$
+^Violated property:$
+main.py line 10

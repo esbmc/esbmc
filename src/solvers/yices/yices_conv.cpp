@@ -20,7 +20,7 @@
 
 #define new_ast new_solver_ast<yices_smt_ast>
 
-smt_convt *create_new_yices_solver(
+smt_solver_baset *create_new_yices_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -35,7 +35,7 @@ smt_convt *create_new_yices_solver(
 }
 
 yices_convt::yices_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options), array_iface(false, false), fp_convt(this)
+  : smt_solver_baset(ns, options), array_iface(false, false), fp_convt(this)
 {
   yices_init();
 
@@ -60,7 +60,7 @@ yices_convt::~yices_convt()
 
 void yices_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   int32_t res = yices_push(yices_ctx);
 
   if (res != 0)
@@ -82,21 +82,21 @@ void yices_convt::pop_ctx()
     abort();
   }
 
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt yices_convt::dec_solve()
+smt_resultt yices_convt::dec_solve()
 {
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
   if (result == STATUS_SAT)
-    return smt_convt::P_SATISFIABLE;
+    return P_SATISFIABLE;
 
   if (result == STATUS_UNSAT)
-    return smt_convt::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
-  return smt_convt::P_ERROR;
+  return P_ERROR;
 }
 
 const std::string yices_convt::solver_text()
@@ -693,6 +693,41 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
   return new_ast(term, s);
 }
 
+smt_astt yices_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function term by name (Yices interns named terms), so
+  // every application shares it and the solver enforces congruence natively.
+  term_t fun = yices_get_term_by_name(name.c_str());
+  if (fun == NULL_TERM)
+  {
+    std::vector<type_t> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<type_t>(arg->sort)->s);
+
+    type_t fun_type = yices_function_type(
+      domain.size(), domain.data(), to_solver_smt_sort<type_t>(rangesort)->s);
+    fun = yices_new_uninterpreted_term(fun_type);
+    yices_set_term_name(fun, name.c_str());
+  }
+
+  std::vector<term_t> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<yices_smt_ast>(arg)->a);
+
+  return new_ast(
+    yices_application(fun, apply_args.size(), apply_args.data()), rangesort);
+}
+
 smt_astt yices_convt::mk_array_symbol(
   const std::string &name,
   smt_sortt s,
@@ -831,7 +866,7 @@ expr2tc yices_convt::tuple_get_array_elem(
   return get_array_elem(array, index, get_flattened_array_subtype(subtype));
 }
 
-void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void yices_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
   if (sort->id == SMT_SORT_ARRAY)
   {
@@ -849,7 +884,7 @@ void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   }
 }
 
-smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+smt_astt yices_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   type2tc type = sort->get_tuple_type();
   smt_sortt elemsort = ctx->convert_sort(struct_union_members(type)[elem]);
@@ -858,7 +893,7 @@ smt_astt yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
 }
 
 smt_astt yices_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -1036,7 +1071,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   unsigned int i = 0;
   for (auto const &it : members)
   {
-    outmem.push_back(smt_convt::get_by_ast(
+    outmem.push_back(smt_solver_baset::get_by_ast(
       it,
       new_ast(
         yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),

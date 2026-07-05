@@ -93,6 +93,8 @@ void intern_location(waypoint &wp)
 {
   if (wp.line != c_nonset)
     wp.line_id = irep_idt(integer2string(wp.line));
+  if (wp.column != c_nonset)
+    wp.column_id = irep_idt(integer2string(wp.column));
   wp.function_id = irep_idt(wp.function);
 }
 
@@ -105,9 +107,51 @@ struct
   waypoint target;
   bool has_target = false;
 } wp_cache;
+
+// Returns the 1-based column of the first '?' outside string/char literals and
+// // line comments, or 0 if none exists.
+size_t first_ternary_col_in_line(const std::string &text)
+{
+  enum class S
+  {
+    Code,
+    Str,
+    Chr
+  } state = S::Code;
+  for (size_t i = 0; i < text.size(); ++i)
+  {
+    char c = text[i];
+    switch (state)
+    {
+    case S::Code:
+      if (c == '/' && i + 1 < text.size() && text[i + 1] == '/')
+        return 0;
+      if (c == '"')
+        state = S::Str;
+      else if (c == '\'')
+        state = S::Chr;
+      else if (c == '?')
+        return i + 1;
+      break;
+    case S::Str:
+      if (c == '\\')
+        ++i;
+      else if (c == '"')
+        state = S::Code;
+      break;
+    case S::Chr:
+      if (c == '\\')
+        ++i;
+      else if (c == '\'')
+        state = S::Code;
+      break;
+    }
+  }
+  return 0;
+}
 } // namespace
 
-std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
+std::vector<waypoint> &yaml_parser::get_waypoints(const std::string &path)
 {
   if (path == wp_cache.path)
     return wp_cache.waypoints;
@@ -143,7 +187,6 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
         if (!seg || !seg.IsSequence())
           continue;
 
-        size_t wp_count = 0;
         for (const auto &wp_node : seg)
         {
           const auto &node = wp_node["waypoint"];
@@ -157,10 +200,8 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
           {
             wp_cache.target = wp;
             wp_cache.has_target = true;
-            continue;
           }
           wp.segment_idx = seg_idx;
-          wp.wp_idx_in_seg = wp_count++;
           wp_cache.waypoints.push_back(std::move(wp));
         }
         ++seg_idx;
@@ -185,6 +226,54 @@ bool yaml_parser::get_target_waypoint(const std::string &path, waypoint &out)
   return true;
 }
 
+void yaml_parser::fill_columns(
+  const std::string &src_path,
+  std::vector<waypoint> &waypoints)
+{
+  std::vector<waypoint *> pending;
+  for (auto &wp : waypoints)
+  {
+    if (
+      wp.type == waypoint::branching && wp.action != waypoint::avoid &&
+      wp.column == c_nonset && wp.line != c_nonset && wp.line > 0)
+      pending.push_back(&wp);
+  }
+  if (pending.empty())
+    return;
+
+  std::ifstream in(src_path);
+  if (!in)
+    return;
+
+  std::sort(
+    pending.begin(), pending.end(), [](const waypoint *a, const waypoint *b) {
+      return a->line < b->line;
+    });
+
+  size_t cur_line = 0;
+  size_t pi = 0;
+  std::string line_text;
+  while (pi < pending.size() && std::getline(in, line_text))
+  {
+    ++cur_line;
+    if (static_cast<size_t>(pending[pi]->line.to_int64()) != cur_line)
+      continue;
+
+    size_t col = first_ternary_col_in_line(line_text);
+    while (pi < pending.size() &&
+           static_cast<size_t>(pending[pi]->line.to_int64()) == cur_line)
+    {
+      if (col != 0)
+      {
+        waypoint &wp = *pending[pi];
+        wp.column = BigInt(static_cast<long long>(col));
+        wp.column_id = irep_idt(integer2string(wp.column));
+      }
+      ++pi;
+    }
+  }
+}
+
 waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
 {
   waypoint wp;
@@ -195,8 +284,13 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
     wp.action = action_from_string(node["action"].as<std::string>());
 
   const auto &constraint = node["constraint"];
-  if (constraint && constraint["value"])
-    wp.value = constraint["value"].as<std::string>();
+  if (constraint)
+  {
+    if (constraint["value"])
+      wp.value = constraint["value"].as<std::string>();
+    if (constraint["format"])
+      wp.format = constraint["format"].as<std::string>();
+  }
 
   const auto &loc = node["location"];
   if (loc)
@@ -205,6 +299,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
       wp.file = loc["file_name"].as<std::string>();
     if (loc["line"])
       wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["column"])
+      wp.column = BigInt(loc["column"].as<std::string>().c_str(), 10);
     if (loc["function"])
       wp.function = loc["function"].as<std::string>();
   }
@@ -247,7 +343,10 @@ std::string yaml_parser::build_violation_witness_source(
   const std::string &original_path,
   const std::vector<waypoint> &waypoints)
 {
-  // Inject after the source line so declarations are in scope.
+  // Inject assumption waypoints on the same physical line as the pointed
+  // statement. This preserves physical line numbers for all subsequent lines,
+  // so both SV-COMP mode (--sv-comp, physical line numbers) and regular runs
+  // (logical line numbers via #line) see the correct line for each waypoint.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
@@ -271,24 +370,25 @@ std::string yaml_parser::build_violation_witness_source(
   while (std::getline(in, line_text))
   {
     ++line_num;
-    out << line_text << "\n";
 
     auto it = by_line.find(line_num);
     if (it != by_line.end())
     {
-      out << "#line " << line_num << " \"" << original_path << "\"\n";
       for (const waypoint *wp : it->second)
       {
-        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", "
-            << wp->wp_idx_in_seg << ", (_Bool)(" << wp->value << "));\n";
         log_progress(
           "Injecting {} assumption at line {}: {}",
           wp->action == waypoint::avoid ? "avoid" : "follow",
           line_num,
           wp->value);
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
+        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", (_Bool)("
+            << wp->value << "));\n";
+        out << "#line " << line_num << " \"" << original_path << "\"\n";
       }
-      out << "#line " << (line_num + 1) << " \"" << original_path << "\"\n";
     }
+
+    out << line_text << "\n";
   }
 
   return out.str();

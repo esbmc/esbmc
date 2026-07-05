@@ -1,11 +1,13 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <sstream>
 #include <util/base_type.h>
 #include <util/c_types.h>
 
-smt_astt
-array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt array_sym_smt_ast::ite(
+  smt_solver_baset *ctx,
+  smt_astt cond,
+  smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
   tuple_sym_smt_astt true_val = this;
@@ -44,7 +46,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt array_sym_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -57,7 +59,7 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
     is_pointer_type(arrtype.subtype) ? ctx->pointer_struct : arrtype.subtype;
   const std::vector<type2tc> &members = struct_union_members(eltype);
 
-  smt_convt::ast_vec eqs;
+  smt_solver_baset::ast_vec eqs;
   eqs.reserve(members.size());
 
   // Iterate through each field and encode an equality.
@@ -77,7 +79,7 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 smt_astt array_sym_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
   const expr2tc &idx_expr) const
@@ -123,7 +125,8 @@ smt_astt array_sym_smt_ast::update(
   return result;
 }
 
-smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+smt_astt
+array_sym_smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
   const array_type2t &array_type = to_array_type(sort->get_tuple_type());
   const type2tc &eltype = is_pointer_type(array_type.subtype)
@@ -153,7 +156,8 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return result;
 }
 
-smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt
+array_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
 {
   // Pull struct type out, access the relevent element, then wrap it in an
   // array type.
@@ -185,7 +189,7 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   return ctx->mk_smt_symbol(sym_name, s);
 }
 
-void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void array_sym_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
   // We have two tuple_sym_smt_asts and need to call assign on all of their
   // components.

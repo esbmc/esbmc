@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_CVC_CVC_CONV_H_
 #define _ESBMC_SOLVERS_CVC_CVC_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <cvc4/cvc4.h>
 
 class cvc_smt_ast : public solver_smt_ast<CVC4::Expr>
@@ -12,13 +12,13 @@ public:
   void dump() const override;
 };
 
-class cvc_convt : public smt_convt, public array_iface, public fp_convt
+class cvc_convt : public smt_solver_baset, public array_iface, public fp_convt
 {
 public:
   cvc_convt(const namespacet &ns, const optionst &options);
   ~cvc_convt() override = default;
 
-  smt_convt::resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   bool get_bool(smt_astt a) override;
@@ -138,6 +138,10 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
@@ -156,6 +160,10 @@ public:
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;
   CVC4::SymbolTable sym_tab;
+
+  /** Uninterpreted-function variables, keyed by name, so every application
+   *  shares one declaration and the solver enforces functional congruence. */
+  std::unordered_map<std::string, CVC4::Expr> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */

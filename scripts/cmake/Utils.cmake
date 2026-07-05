@@ -107,30 +107,32 @@ function(mangle output_c dir)
   endif()
 endfunction()
 
-function(download_zip_and_extract ID URL)
-  # TODO: might be a good idea to add sha1 checks
-  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.zip)
+# Downloads URL to ${CMAKE_BINARY_DIR}/${ID}.<ext> and extracts it into
+# ${CMAKE_BINARY_DIR}/${ID}. A failed download is fatal (and the partial file is
+# removed so the next configure retries) — file(DOWNLOAD) does not fail on its
+# own, which previously left 0-byte archives that "extracted" to empty dirs.
+function(_download_and_extract ID URL ARCHIVE)
+  if(NOT EXISTS ${ARCHIVE})
     message(STATUS "Downloading ${ID} from ${URL}")
-    file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.zip SHOW_PROGRESS)
+    file(DOWNLOAD ${URL} ${ARCHIVE} SHOW_PROGRESS TLS_VERIFY ON STATUS _dl_status)
+    list(GET _dl_status 0 _dl_code)
+    if(NOT _dl_code EQUAL 0)
+      list(GET _dl_status 1 _dl_msg)
+      file(REMOVE ${ARCHIVE})
+      message(FATAL_ERROR "Failed to download ${ID} from ${URL}: ${_dl_msg}")
+    endif()
   endif()
 
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
     message(STATUS "Extracting ${ID}")
-    file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.zip DESTINATION ${CMAKE_BINARY_DIR}/${ID})
+    file(ARCHIVE_EXTRACT INPUT ${ARCHIVE} DESTINATION ${CMAKE_BINARY_DIR}/${ID})
   endif()
+endfunction()
 
+function(download_zip_and_extract ID URL)
+  _download_and_extract(${ID} ${URL} ${CMAKE_BINARY_DIR}/${ID}.zip)
 endfunction()
 
 function(download_tar_zip_and_extract ID URL)
-  # TODO: might be a good idea to add sha1 checks
-  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.tar.xz)
-    message(STATUS "Downloading ${ID} from ${URL}")
-    file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.tar.xz SHOW_PROGRESS)
-  endif()
-
-  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
-    message(STATUS "Extracting ${ID}")
-    file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.tar.xz DESTINATION ${CMAKE_BINARY_DIR}/${ID})
-  endif()
-
+  _download_and_extract(${ID} ${URL} ${CMAKE_BINARY_DIR}/${ID}.tar.xz)
 endfunction()

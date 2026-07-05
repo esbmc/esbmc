@@ -164,8 +164,15 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
+/* These classifiers are function-like macros in the C <math.h> (e.g. glibc
+ * lowers isinf to __builtin_isinf_sign). Undefine them so the std:: overloads
+ * below are real functions; otherwise `std::isinf(x)` macro-expands to
+ * `std::__builtin_isinf_sign(x)`, which is not a member of std (issue #5). */
 #undef isnan
+#undef isinf
+#undef isfinite
 #undef isnormal
+#undef signbit
 
 #define CIMPORT3(name)                                                         \
   bool name(float x)                                                           \
@@ -179,10 +186,19 @@ double modf(Integer num, double *iptr);
   bool name(long double x)                                                     \
   {                                                                            \
     return __builtin_##name(x);                                                \
+  }                                                                            \
+  /* [c.math.fpclass]: an integral argument is treated as double. */           \
+  template <typename T>                                                        \
+  typename std::enable_if<std::is_integral<T>::value, bool>::type name(T x)    \
+  {                                                                            \
+    return __builtin_##name((double)x);                                        \
   }
 
 CIMPORT3(isnan);
+CIMPORT3(isinf);
+CIMPORT3(isfinite);
 CIMPORT3(isnormal);
+CIMPORT3(signbit);
 
 #undef trunc
 #undef truncf

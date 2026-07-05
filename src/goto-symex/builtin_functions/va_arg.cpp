@@ -15,7 +15,7 @@ void goto_symext::symex_va_arg(
   std::string base =
     id2string(cur_state->top().function_identifier) + "::va_arg";
 
-  irep_idt id = base + std::to_string(cur_state->top().va_index++);
+  irep_idt id = base + std::to_string(cur_state->top().va_cursor++);
 
   expr2tc va_rhs;
 

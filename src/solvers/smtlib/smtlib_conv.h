@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
 #include <list>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <string>
 #ifndef _WIN32
 #  include <unistd.h>
@@ -18,8 +18,8 @@
  *  'HACKS' function represents some kind of special case, according to where
  *  it is encountered; the same for 'INVALID'.
  *
- *  @see smt_convt::convert_terminal
- *  @see smt_convt::convert_ast
+ *  @see smt_solver_baset::convert_terminal
+ *  @see smt_solver_baset::convert_ast
  */
 enum smt_func_kind
 {
@@ -114,6 +114,11 @@ enum smt_func_kind
 
   SMT_FUNC_BV2FLOAT,
   SMT_FUNC_FLOAT2BV,
+
+  // Uninterpreted-function application. Unlike the other non-terminals it is
+  // printed as its own `symname` rather than a fixed operator from
+  // smt_func_name_table, and may carry any arity.
+  SMT_FUNC_UF,
 };
 
 struct sexpr
@@ -154,7 +159,7 @@ public:
 class smtlib_smt_ast : public smt_ast
 {
 public:
-  smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
+  smtlib_smt_ast(smt_solver_baset *ctx, const smt_sort *s, smt_func_kind k)
     : smt_ast(ctx, s), kind(k)
   {
   }
@@ -172,13 +177,15 @@ public:
   std::vector<smt_astt> args;
 };
 
-class smtlib_convt : public smt_convt, public array_iface, public fp_convt
+class smtlib_convt : public smt_solver_baset,
+                     public array_iface,
+                     public fp_convt
 {
 public:
   smtlib_convt(const namespacet &_ns, const optionst &options);
   ~smtlib_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;
@@ -243,6 +250,10 @@ public:
   smt_astt mk_smt_bv(const BigInt &theint, smt_sortt s) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -351,6 +362,13 @@ public:
     symbol_tablet;
 
   symbol_tablet symbol_table;
+
+  /** Uninterpreted functions already emitted via (declare-fun ...), mapped to
+   *  the context level at which they were declared, so each function symbol is
+   *  declared to the solver exactly once per scope and every application shares
+   *  it (giving native functional congruence). Entries are pruned on the
+   *  matching pop, when (pop 1) removes their declaration from the solver. */
+  std::unordered_map<std::string, unsigned int> declared_ufs;
 
   static const std::string temp_prefix;
 

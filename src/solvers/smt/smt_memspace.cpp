@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <sstream>
 #include <utility>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
 
@@ -30,7 +30,7 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt smt_convt::convert_ptr_cmp(
+smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &side1,
   const expr2tc &side2,
   const expr2tc &templ_expr)
@@ -81,8 +81,9 @@ smt_astt smt_convt::convert_ptr_cmp(
   return convert_ast(op);
 }
 
-smt_astt
-smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
+smt_astt smt_solver_baset::convert_pointer_arith(
+  const expr2tc &expr,
+  const type2tc &type)
 {
   const expr2tc &side1 = *expr->get_sub_expr(0);
   const expr2tc &side2 = *expr->get_sub_expr(1);
@@ -228,7 +229,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   abort();
 }
 
-void smt_convt::renumber_symbol_address(
+void smt_solver_baset::renumber_symbol_address(
   const expr2tc &guard,
   const expr2tc &addr_symbol,
   const expr2tc &new_size)
@@ -268,7 +269,7 @@ void smt_convt::renumber_symbol_address(
   }
 }
 
-smt_astt smt_convt::convert_identifier_pointer(
+smt_astt smt_solver_baset::convert_identifier_pointer(
   const expr2tc &expr,
   const std::string &symbol,
   const typet *type)
@@ -353,7 +354,7 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(
+smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
   const typet *type)
@@ -443,7 +444,7 @@ smt_astt smt_convt::init_pointer_obj(
   return ptr_val;
 }
 
-void smt_convt::finalize_pointer_chain(unsigned int objnum)
+void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 {
   type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
@@ -512,7 +513,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
   }
 }
 
-smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
 
@@ -596,7 +597,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
-void smt_convt::init_addr_space_array()
+void smt_solver_baset::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -663,7 +664,9 @@ void smt_convt::init_addr_space_array()
   addr_space_data.back()[1] = 0;
 }
 
-void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
+void smt_solver_baset::bump_addrspace_array(
+  unsigned int idx,
+  const expr2tc &val)
 {
   expr2tc oldname = symbol2tc(
     addr_space_arr_type,
@@ -679,7 +682,7 @@ void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   convert_assign(equality2tc(newname, store));
 }
 
-std::string smt_convt::get_cur_addrspace_ident()
+std::string smt_solver_baset::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

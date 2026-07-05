@@ -1,9 +1,29 @@
 # Design Proposal: a sound return-length model for the printf / (v)asprintf family
 
-**Status:** DRAFT PROPOSAL (for discussion — no implementation committed)
-**Tracking:** #4976, #4977, #4978, #4979 (busybox `no-overflow` false alarms); umbrella #2513; related #2797 (missing libc OM bodies)
+**Status:** IMPLEMENTED — Phases 0–2 merged; Phase 3 Patch 1 (§4.2.1 object-size `%s` bound) in PR #5628; Phase 3 §4.4 va_list recovery deferred (optional precision)
+**Tracking:** #4976, #4977, #4978, #4979 (busybox `no-overflow` false alarms) — **all CLOSED**; umbrella #2513; related #2797 (missing libc OM bodies); follow-on precision tracked by #5012.
 **Author context:** follow-up to `docs/svcomp-issue-triage.md` §3.1 and the finding that wiring `vasprintf` into the *current* `symex_printf` is unsound (PR #5009).
-**Date:** 2026-05-31
+**Date:** 2026-05-31 (proposal); 2026-06-26 (status update)
+
+> **Implementation status (2026-06-26).** The sound model proposed here shipped across
+> four PRs and closed the four busybox false alarms:
+> - **Phase 1 / G-A** — non-constant format no longer under-approximates: **PR #5017**.
+> - **Phase 1 / G-B** — non-literal `%s` contributes the sound *unbounded* fallback (never 0).
+> - **Phase 2 / G-D** — `vprintf`/`vsprintf`/`vsnprintf`/`asprintf`/`vasprintf` wired into
+>   `symex_printf`: **PR #5270**, with the unbounded-return cap at `INT_MAX/2` (**PR #5278**)
+>   and the `*strp` heap-allocation model (**PR #5279**).
+> - **Phase 3 Patch 1 / §4.2.1** — non-literal `%s` over a finite char array of `N` bytes
+>   contributes the sound object-size bound `N − 1` instead of staying unbounded: **PR #5628**.
+>   The `v*` variants keep the operand unreliable (the `%s` position is the `va_list` pointer),
+>   so `%s` stays unbounded there until va_list recovery.
+> - **Phase 3 §4.4 / G-C** — `va_list` `%s` argument recovery: **deferred** (precision-only;
+>   correctness never depends on it). Tracked under #5012.
+>
+> Regression coverage lives in `regression/esbmc/`: `asprintf_const_format_exact`,
+> `vasprintf_const_format_no_overflow`, `vasprintf_overflow_fail`,
+> `vasprintf_unbounded_s_no_overflow`, `vasprintf_unbounded_s_overflow_fail`, and the
+> reduced reproducers `github_4977`/`github_4978`/`github_4979` (+ `github_4978_fail`).
+> Issues #4976–#4979 were closed on 2026-06-09. See `docs/svcomp-issue-triage.md` §3.1.
 
 ---
 
@@ -209,7 +229,9 @@ closes the constant-format cases and never introduces a false negative.
   follows: removes latent false negatives in `sprintf`/`snprintf`. Full §8 soundness gate.
 - **Phase 2 — wire the family (G-D):** constant-format path only; `(v)asprintf` return + consistent
   allocation size. Tests + §8.
-- **Phase 3 — va_list `%s` tightening (G-C):** precision pass; optional.
+- **Phase 3 — `%s` tightening:** precision pass; optional. Patch 1 (§4.2.1 object-size bound for a
+  non-literal `%s` over a finite char array) shipped in PR #5628; Patch 2 (§4.4 va_list recovery,
+  G-C) remains deferred.
 - **Phase 4 — measurement & docs:** SV-COMP overflow run, update `svcomp-issue-triage.md` §3.1 with
   the outcome, close whichever of #4976–#4979 actually flip.
 

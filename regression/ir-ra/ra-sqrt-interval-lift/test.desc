@@ -1,0 +1,7 @@
+THOROUGH
+main.c
+--ir-ieee --z3 --smt-formula-too
+ra_sqrt::
+ra_sqrt_lo::
+ra_sqrt_hi::
+^VERIFICATION FAILED$

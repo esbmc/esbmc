@@ -1,0 +1,4 @@
+CORE
+calc.ld
+--ld-props props.yaml --ld-sound-mode --k-induction --unlimited-k-steps
+^VERIFICATION SUCCESSFUL$

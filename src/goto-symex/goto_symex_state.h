@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
@@ -211,6 +212,13 @@ public:
      */
     unsigned int va_index;
 
+    /** Cursor into this activation's va_args, advanced by each va_arg use.
+     *  Starts equal to va_index. va_cursor == va_index means no argument has
+     *  been consumed yet; symex_printf's va_list recovery relies on this
+     *  (after any consumption a va_start rewind is indistinguishable from
+     *  further consumption, so recovery must decline). */
+    unsigned int va_cursor;
+
     /** Record the entry guard of the function */
     guard2tc entry_guard;
 
@@ -221,35 +229,15 @@ public:
     BigInt stack_frame_total;
 
     framet(unsigned int thread_id, const namespacet *ns = nullptr)
-      : return_value(expr2tc()), hidden(false), stack_frame_total(0)
+      : return_value(expr2tc()),
+        va_index(UINT_MAX),
+        va_cursor(UINT_MAX),
+        hidden(false),
+        stack_frame_total(0)
     {
       level1.thread_id = thread_id;
       level1.ns = ns;
     }
-  };
-
-  // Exception Handling
-
-  class exceptiont
-  {
-  public:
-    exceptiont() : has_throw_decl(false)
-    {
-    }
-
-    // types -> locations
-    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
-    catch_mapt catch_map;
-
-    // types -> what order they were declared in, important for polymorphism etc
-    typedef std::map<irep_idt, unsigned> catch_ordert;
-    catch_ordert catch_order;
-
-    // list of exception types than can be thrown
-    typedef std::set<irep_idt> throw_list_sett;
-    throw_list_sett throw_list_set;
-
-    bool has_throw_decl;
   };
 
   // Macros
@@ -478,12 +466,20 @@ public:
 
   // --- Violation-witness replay state ---
 
-  /// witness_segs[seg][wp]: all actionable waypoints
+  /// witness_segs[seg]: all actionable waypoints per segment
   std::vector<std::vector<waypoint>> witness_segs;
   size_t cur_seg;
-  size_t cur_wp;
+  /// Set to true the first time the target assertion is allowed through.
+  /// Subsequent assertions at the target line (from continuation calls after
+  /// the witness call chain returns) are filtered to avoid false positives.
+  bool witness_target_reached;
 
-  /// Advance the cursor to the next waypoint.
+  /// Pre-built O(1) lookup for branching(cycle) waypoints.
+  /// Maps line_id → direction_true (from wp.value == "true").
+  /// Populated at init time; queried on every forward-goto without touching
+  /// cur_seg (cycle branching is a persistent constraint, not a one-shot).
+  std::unordered_map<irep_idt, bool> cycle_branch_map;
+
   void advance_witness_position();
 };
 

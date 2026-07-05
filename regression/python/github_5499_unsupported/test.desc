@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: unsupported: str % formatting requires a literal format string$

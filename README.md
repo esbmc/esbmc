@@ -13,6 +13,7 @@ ESBMC supports:
 - The Soot framework via Jimple as its Java/Kotlin frontend;
 - The CPython 3.10 parser as its [Python frontend](./src/python-frontend/README.md); the first SMT-based bounded model checker for Python programs;
 - Implements the Solidity grammar production rules as its Solidity frontend;
+- The SAFE-LD frontend for verifying IEC 61131-3 [Ladder Diagram](https://esbmc.github.io/docs/ld/) programs for programmable logic controllers (PLCs), enabled at build time with `-DENABLE_LD_FRONTEND=On`;
 - Supports IEEE floating-point arithmetic for various SMT solvers.
 
 ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
@@ -199,7 +200,7 @@ VERIFICATION FAILED
 ```
 
 ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
-For detailed information about Python support, please take a look at the [Python Frontend Documentation](https://claude.ai/chat/src/python-frontend/README.md).
+For detailed information about Python support, please take a look at the [Python Frontend Documentation](src/python-frontend/README.md).
 
 ## Tutorials
 
