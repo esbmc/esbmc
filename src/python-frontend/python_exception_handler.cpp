@@ -72,14 +72,13 @@ void python_exception_handler::get_try_statement(
     element.contains("finalbody") && !element["finalbody"].empty();
 
   // The `else` clause runs only when the try body completes without an
-  // exception. ESBMC's try lowering does not model it (it is silently dropped) —
-  // a pre-existing limitation independent of this change. Combined with the
-  // finally lowering below, which duplicates the finally body on the normal and
-  // exception paths, a dropped `else` would also be skipped on the path where
-  // finally runs, compounding the unsoundness. So refuse a non-empty `else`
-  // only when a finally is present; plain try/except/else keeps its existing
-  // behaviour.
-  if (has_finally && element.contains("orelse") && !element["orelse"].empty())
+  // exception. Plain try/except/else is modelled below with a guard flag. When
+  // a finally is also present the finally lowering duplicates the finally body
+  // on the normal and exception paths, which would interleave incorrectly with
+  // the else guard, so refuse a non-empty `else` only when a finally is present.
+  const bool has_else =
+    element.contains("orelse") && !element["orelse"].empty();
+  if (has_finally && has_else)
     throw std::runtime_error(
       "try/finally with a non-empty else clause is not supported");
 
@@ -105,6 +104,32 @@ void python_exception_handler::get_try_statement(
   }
 
   exprt try_block = converter_.get_block(element["body"]);
+
+  // `else` clause: run it only when the try body completed without an
+  // exception, and outside this try's handler scope (its own exceptions must
+  // propagate, not be caught here). Use a guard flag set false before the try
+  // and true as the last statement of the try body (reached only on the
+  // no-exception path); the else body runs under `if guard:` after the catch.
+  // A return/break/continue in the try body also skips the else for free: it
+  // jumps past both `guard = true` and the `if (guard)`, so the else needs no
+  // escaping-control-flow refusal (unlike finally).
+  symbolt *else_guard = nullptr;
+  if (has_else)
+  {
+    locationt loc = converter_.get_location_from_decl(element);
+    else_guard = &converter_.create_tmp_symbol(
+      element, "$try_else_guard$", bool_type(), false_exprt());
+    code_declt guard_decl(build_symbol(*else_guard));
+    guard_decl.location() = loc;
+    block.move_to_operands(guard_decl);
+    code_assignt guard_init(build_symbol(*else_guard), false_exprt());
+    guard_init.location() = loc;
+    block.move_to_operands(guard_init);
+    code_assignt guard_set(build_symbol(*else_guard), true_exprt());
+    guard_set.location() = loc;
+    try_block.copy_to_operands(guard_set);
+  }
+
   exprt handler = converter_.get_block(element["handlers"]);
 
   // A bare `except:` already catches every exception, so the fall-through
@@ -143,6 +168,19 @@ void python_exception_handler::get_try_statement(
   for (const auto &op : handler_ops)
     new_expr.copy_to_operands(op);
   block.move_to_operands(new_expr);
+
+  // else body, gated on the no-exception guard, after the catch construct so
+  // it lies outside the handler scope. (finally + else is refused above, so
+  // this never coexists with the finally block below.)
+  if (has_else)
+  {
+    exprt else_block = converter_.get_block(element["orelse"]);
+    code_ifthenelset if_else;
+    if_else.cond() = build_symbol(*else_guard);
+    if_else.then_case() = to_code(else_block);
+    if_else.location() = converter_.get_location_from_decl(element);
+    block.move_to_operands(if_else);
+  }
 
   // finally on the normal-completion path (and after a caught exception).
   if (has_finally)
