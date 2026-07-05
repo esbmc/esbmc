@@ -354,18 +354,28 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
-void python_exception_handler::get_except_handler_statement(
+// Emit a single catch block for `type_node` (an exception-type Name node, or
+// null for a bare `except:`), running the handler body. Appends it to `block`.
+void python_exception_handler::emit_catch_block(
   const nlohmann::json &element,
+  const nlohmann::json &type_node,
   codet &block)
 {
   symbolt *exception_symbol = nullptr;
   typet exception_type;
 
   // Create exception variable symbol before processing body
-  if (!element["type"].is_null())
+  if (!type_node.is_null())
   {
+    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
+    // as `except socket.error:` is an Attribute node with no "id"; reject it
+    // with a clean diagnostic rather than crashing on the missing json key.
+    if (!type_node.contains("id"))
+      throw std::runtime_error(
+        "except with a dotted/attribute exception type is not supported");
+
     exception_type =
-      type_handler_.get_typet(element["type"]["id"].get<std::string>());
+      type_handler_.get_typet(type_node["id"].get<std::string>());
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();
@@ -422,6 +432,27 @@ void python_exception_handler::get_except_handler_statement(
   }
 
   block.move_to_operands(catch_block);
+}
+
+void python_exception_handler::get_except_handler_statement(
+  const nlohmann::json &element,
+  codet &block)
+{
+  const nlohmann::json &type_node = element["type"];
+
+  // `except (A, B, ...):` lists several exception types as a tuple and catches
+  // any of them. Model it as one catch block per type, each running the same
+  // body (mirroring `except A: <body>` followed by `except B: <body>`).
+  if (
+    !type_node.is_null() && type_node.contains("_type") &&
+    type_node["_type"] == "Tuple")
+  {
+    for (const auto &elt : type_node["elts"])
+      emit_catch_block(element, elt, block);
+    return;
+  }
+
+  emit_catch_block(element, type_node, block);
 }
 
 // ---------------------------------------------------------------------------
