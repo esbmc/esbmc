@@ -697,6 +697,25 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
     else
     {
+      // Reconcile a pointer operand against an integer one before building the
+      // comparison, mirroring the first comparison (bin_expr). An unannotated
+      // param is typed as a pointer but holds an integer value round-tripped as
+      // (int*)n; building `ptr <= int` raw here aborts in the SMT backend
+      // (convert_ptr_cmp). Cast the pointer to the integer operand's type,
+      // exactly as the reconciled first comparison does for an integer bound
+      // (get_binary_operator_expr, "cast void* to integer"). Restricted to
+      // integers: a float bound is reconciled differently there (the float is
+      // bitcast to the pointer type), so folding it in here would make the two
+      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A float-bounded
+      // chained comparison over an unannotated param stays a pre-existing
+      // crash, unchanged by this patch.
+      auto is_integer = [](const typet &t) {
+        return t.is_signedbv() || t.is_unsignedbv();
+      };
+      if (op1.type().is_pointer() && is_integer(op2.type()))
+        op1 = typecast_exprt(op1, op2.type());
+      else if (op2.type().is_pointer() && is_integer(op1.type()))
+        op2 = typecast_exprt(op2, op1.type());
       exprt logical_expr(
         python_frontend::map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1, op2);
