@@ -1648,6 +1648,56 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             msg << " at " << loc.get_file() << ":" << loc.get_line();
           throw std::runtime_error(msg.str());
         }
+
+        // Fancy indexing through a variable holding a concrete literal
+        // list of integers, e.g. `idx = [0, 2]; a[idx]`. `idx` is a plain
+        // Python list (not a numpy int array), so it reaches here as the
+        // list model's struct type rather than an array_typet. Resolve it
+        // the same way build_bool_mask_row_select resolves a mask
+        // variable: read its sole AST declaration and reuse
+        // build_fancy_index, which already handles a literal list at the
+        // subscript site (`a[[0, 2]]`).
+        if (mask_type == type_handler_.get_list_type())
+        {
+          const std::string idx_name = slice["id"].get<std::string>();
+          const locationt loc = get_location_from_decl(element);
+
+          auto reject = [&](const std::string &reason) {
+            std::ostringstream msg;
+            msg << "TypeError: fancy indexing through a variable (a[idx]) "
+                << reason;
+            if (!loc.is_nil())
+              msg << " at " << loc.get_file() << ":" << loc.get_line();
+            throw std::runtime_error(msg.str());
+          };
+
+          // find_var_decl returns the first textual assignment in scope,
+          // not necessarily the one reaching this use site; reject any
+          // reassignment rather than risk resolving a stale index list.
+          if (json_utils::has_multiple_assignments_in_scope(
+                idx_name, current_func_name_, *ast_json))
+            reject(
+              "requires an index variable that is assigned exactly once "
+              "(no reassignment) so its literal value can be resolved "
+              "unambiguously");
+
+          const nlohmann::json idx_decl =
+            json_utils::find_var_decl(idx_name, current_func_name_, *ast_json);
+
+          if (
+            idx_decl.is_null() || !idx_decl.contains("value") ||
+            idx_decl["value"].value("_type", "") != "List" ||
+            !idx_decl["value"].contains("elts"))
+            reject(
+              "requires an index variable whose value is a concrete "
+              "literal list of integers, e.g. idx = [0, 2]");
+
+          std::vector<nlohmann::json> idx_elts(
+            idx_decl["value"]["elts"].begin(), idx_decl["value"]["elts"].end());
+          python_list list(*this, element);
+          expr = list.build_fancy_index(array, idx_elts, element);
+          break;
+        }
       }
     }
 
