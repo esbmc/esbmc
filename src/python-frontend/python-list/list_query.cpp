@@ -827,7 +827,64 @@ exprt python_list::build_index_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  return build_count_index_list_call(list, op, elem, "c:@F@__ESBMC_list_index");
+  // list.index(x): locate x with the non-asserting try_find_index (returns
+  // SIZE_MAX when absent) and raise a ValueError from the frontend on the
+  // not-found path, so `try/except ValueError` can catch it — instead of the
+  // asserting __ESBMC_list_index model, which fires an uncatchable property
+  // violation. Mirrors the dict KeyError and list.remove ValueError lowerings.
+  list_elem_info elem_info = get_list_element_info(op, elem);
+
+  const symbolt *find_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_try_find_index");
+  if (!find_func)
+    throw std::runtime_error(
+      "__ESBMC_list_try_find_index function not found in symbol table");
+
+  exprt element_arg;
+  if (
+    elem_info.elem_symbol->get_type().is_pointer() &&
+    elem_info.elem_symbol->get_type().subtype() == char_type())
+    element_arg = build_symbol(*elem_info.elem_symbol);
+  else
+    element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
+
+  symbolt &idx = converter_.create_tmp_symbol(
+    op, "index_ret", size_type(), gen_zero(size_type()));
+  code_declt idx_decl(build_symbol(idx));
+  idx_decl.location() = elem_info.location;
+  converter_.add_instruction(idx_decl);
+
+  code_function_callt find_call;
+  find_call.function() = build_symbol(*find_func);
+  find_call.lhs() = build_symbol(idx);
+  find_call.arguments().push_back(build_symbol(list));
+  find_call.arguments().push_back(element_arg);
+  find_call.arguments().push_back(build_symbol(*elem_info.elem_type_sym));
+  find_call.arguments().push_back(elem_info.elem_size);
+  find_call.type() = size_type();
+  find_call.location() = elem_info.location;
+  converter_.add_instruction(find_call);
+
+  // if (idx == SIZE_MAX) raise ValueError("list.index(x): x not in list")
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  const constant_exprt size_max(size_max_val, size_type());
+  expr2tc idx2, max2;
+  migrate_expr(build_symbol(idx), idx2);
+  migrate_expr(size_max, max2);
+  exprt not_found = migrate_expr_back(equality2tc(idx2, max2));
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "list.index(x): x not in list");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = not_found;
+  guard.then_case() = throw_code;
+  guard.location() = elem_info.location;
+  converter_.add_instruction(guard);
+
+  return build_symbol(idx);
 }
 
 exprt python_list::build_index_range_list_call(
