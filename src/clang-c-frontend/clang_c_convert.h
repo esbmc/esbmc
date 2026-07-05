@@ -108,7 +108,7 @@ protected:
   // adversarial/machine-generated input yields a clean diagnostic. The C++
   // frontend's get_type override reuses the same guard. See #5048.
   unsigned type_recursion_depth = 0;
-  static constexpr unsigned max_type_recursion_depth = 1000;
+  static constexpr unsigned max_type_recursion_depth = 256;
 
   // RAII helper bumping type_recursion_depth for the lifetime of a get_type
   // call; type_recursion_limit_reached() logs and signals when the bound is hit.
