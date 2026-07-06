@@ -1121,24 +1121,56 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       // Both LIST and TUPLE store their elements in tuple_val; a list literal
       // receiver folds the same way a tuple one does. Without covering LIST,
       // `[...].index(x)` fell through to the OM, whose value matching returns
-      // a wrong index for a literal receiver.
+      // a wrong index for a literal receiver. The optional start/end arguments
+      // (list.index(x, start[, end])) restrict the search to l[start:end] but
+      // return the index in the original sequence.
       if (
         !recv ||
         (recv->kind != PyConstValue::TUPLE &&
          recv->kind != PyConstValue::LIST) ||
-        node["args"].size() != 1)
+        node["args"].empty() || node["args"].size() > 3)
         return std::nullopt;
 
       auto needle = eval_expr(node["args"][0], env);
       if (!needle)
         return std::nullopt;
 
-      for (size_t i = 0; i < recv->tuple_val.size(); ++i)
+      const long long n = static_cast<long long>(recv->tuple_val.size());
+      long long start = 0;
+      long long stop = n;
+      if (node["args"].size() >= 2)
       {
-        if (pyconst_equal(recv->tuple_val[i], *needle))
-          return PyConstValue::make_int(static_cast<long long>(i));
+        auto s = eval_expr(node["args"][1], env);
+        if (!s || s->kind != PyConstValue::INT)
+          return std::nullopt;
+        start = s->int_val;
+        if (start < 0)
+          start += n;
+        if (start < 0)
+          start = 0;
+        if (start > n)
+          start = n;
       }
-      return std::nullopt;
+      if (node["args"].size() == 3)
+      {
+        auto e = eval_expr(node["args"][2], env);
+        if (!e || e->kind != PyConstValue::INT)
+          return std::nullopt;
+        stop = e->int_val;
+        if (stop < 0)
+          stop += n;
+        if (stop < 0)
+          stop = 0;
+        if (stop > n)
+          stop = n;
+      }
+
+      for (long long i = start; i < stop; ++i)
+      {
+        if (pyconst_equal(recv->tuple_val[static_cast<size_t>(i)], *needle))
+          return PyConstValue::make_int(i);
+      }
+      return std::nullopt; // not found: let the OM raise ValueError
     }
 
     // list/tuple .count(x) on a constant receiver folds at conversion time.
@@ -1553,9 +1585,43 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return PyConstValue::make_float(rounded);
     }
 
-    // Built-in: min(), max() for two int arguments
+    // Built-in: min(), max()
     if (func_name == "min" || func_name == "max")
     {
+      const bool want_min = (func_name == "min");
+
+      // A key=/default= keyword changes the result (min(s, key=...) compares
+      // key(x), not x), which this fold does not apply; defer such calls to the
+      // runtime model rather than fold a wrong value.
+      if (node.contains("keywords") && !node["keywords"].empty())
+        return std::nullopt;
+
+      // Single string argument: min/max over the characters, returning the
+      // extreme character as a one-character string (min("cba") == "a"). Other
+      // single-iterable kinds (lists, tuples) are left to the runtime model.
+      // Fold only over ASCII: a non-ASCII str is multi-byte UTF-8 in
+      // string_val, where a per-byte comparison does not match CPython's
+      // per-code-point ordering, so defer those to the runtime model. Compare
+      // as unsigned char so the ordering is by byte value.
+      if (node["args"].size() == 1)
+      {
+        auto it = eval_expr(node["args"][0], env);
+        if (!it || it->kind != PyConstValue::STRING || it->string_val.empty())
+          return std::nullopt;
+        unsigned char best = static_cast<unsigned char>(it->string_val[0]);
+        for (char c : it->string_val)
+        {
+          const unsigned char uc = static_cast<unsigned char>(c);
+          if (uc >= 0x80)
+            return std::nullopt;
+          if (want_min ? (uc < best) : (uc > best))
+            best = uc;
+        }
+        return PyConstValue::make_string(
+          std::string(1, static_cast<char>(best)));
+      }
+
+      // Two int arguments: min(a, b) / max(a, b).
       if (node["args"].size() != 2)
         return std::nullopt;
       auto a = eval_expr(node["args"][0], env);
@@ -1564,7 +1630,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         !a || !b || a->kind != PyConstValue::INT ||
         b->kind != PyConstValue::INT)
         return std::nullopt;
-      if (func_name == "min")
+      if (want_min)
         return PyConstValue::make_int(std::min(a->int_val, b->int_val));
       return PyConstValue::make_int(std::max(a->int_val, b->int_val));
     }

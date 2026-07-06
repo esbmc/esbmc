@@ -12,7 +12,7 @@
 
 namespace std
 {
-template <class Key, class T, class Compare = less<Key>>
+template <class Key, class T, class Compare = less<Key> >
 class map
 {
 public:
@@ -859,7 +859,7 @@ public:
   }
 };
 
-template <class Key, class T, class Compare = less<Key>>
+template <class Key, class T, class Compare = less<Key> >
 class multimap
 {
 public:
