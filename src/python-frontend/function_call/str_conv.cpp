@@ -6,6 +6,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -464,6 +465,10 @@ exprt function_call_expr::handle_int_to_bytes() const
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
+  // std::to_string uses %f, which honours the host rounding mode; an earlier
+  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
+  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
+  const round_to_nearest_guard rounding_guard;
   std::string str_val = std::to_string(arg["value"].get<double>());
 
   // Remove unnecessary trailing zeros and dot if needed (to match Python str behavior)
@@ -471,6 +476,15 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
   str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
   if (str_val.back() == '.')
     str_val.pop_back();
+
+  // CPython's str()/repr() of a whole-number float keeps a ".0" suffix
+  // (str(1.0) == "1.0", not "1"); re-append it when the strip above removed the
+  // fractional part entirely. Guard on a trailing digit so non-numeric spellings
+  // (inf/nan) are left untouched.
+  if (
+    str_val.find('.') == std::string::npos && !str_val.empty() &&
+    std::isdigit(static_cast<unsigned char>(str_val.back())))
+    str_val += ".0";
 
   typet t = type_handler_.get_typet("str", str_val.size() + 1);
   return converter_.make_char_array_expr(
