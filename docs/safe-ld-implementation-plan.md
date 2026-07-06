@@ -1,7 +1,7 @@
-# SAFE-LD Implementation Plan: SMT-Based Formal Verification of Ladder Diagram Programs
+# ESBMC-PLC Implementation Plan: SMT-Based Formal Verification of Ladder Diagram Programs
 
 **Status:** PLANNING — WP2 partially implemented (skeleton #5280, pipeline #5289)  
-**Project:** APP113435 — SAFE-LD (EPSRC Standard Research Grant)  
+**Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
 **Date:** 2026-06-09
 
@@ -16,7 +16,7 @@
 
 ## 1. Overview
 
-SAFE-LD adds a new language front-end to ESBMC for IEC 61131-3 Ladder Diagram (LD) programs,
+ESBMC-PLC adds a new language front-end to ESBMC for IEC 61131-3 Ladder Diagram (LD) programs,
 the most widely deployed PLC programming language. The front-end accepts vendor-neutral
 **PLCopen XML** files exported from TIA Portal, Codesys, or Rockwell and translates them
 **directly into ESBMC's GOTO IR** (via the irep2 type system), with safety assertions
@@ -27,7 +27,7 @@ The approach is semantics-driven: every LD construct is first given a formal mea
 **Structural Operational Semantics (SOS)** state-transition function over the PLC variable
 store, and the GOTO IR is derived systematically from that semantics. This grounds
 translation correctness mathematically, reduces reliance on unverified translation
-components, and distinguishes SAFE-LD from prior syntax-driven approaches.
+components, and distinguishes ESBMC-PLC from prior syntax-driven approaches.
 
 ```
 PLCopen XML  ──►  Parser  ──►  Semantic Analyser  ──►  LdIR
@@ -46,7 +46,7 @@ YAML props   ──────────────────────�
 ```
 
 The verification pipeline is exposed as `ld-verify`, a thin wrapper that orchestrates
-the above steps and formats results for end users. SAFE-LD integrates as a new
+the above steps and formats results for end users. ESBMC-PLC integrates as a new
 `languaget` subclass and requires **no changes to the verification pipeline, solvers, or
 symex**. Registering a new front-end does require small additions to ESBMC's language
 dispatch layer (`src/langapi/mode.h`, `mode.cpp`, and `src/esbmc/globals.cpp`), exactly
@@ -58,7 +58,7 @@ as all other front-ends (Python, Jimple, Solidity) do — see §4.2.
 
 ```
 src/
-└── ld-frontend/              # new directory — the entire SAFE-LD front-end
+└── ld-frontend/              # new directory — the entire ESBMC-PLC front-end
     ├── CMakeLists.txt
     ├── ld_language.h          # languaget subclass (mirrors python_language.h)
     ├── ld_language.cpp
@@ -177,7 +177,7 @@ to prove the translation preserves the cyclic-scan semantics.
 **Execution model scope (Tier 1).** The IR models a **strictly synchronous, single-task**
 cyclic scan: one periodic task, no I/O interrupt tasks, no multi-task PLC configurations,
 no pre-emptive scheduling. This is the correct scope for the IEC 61131-3 safety properties
-targeted by SAFE-LD. Programs containing interrupt task declarations or multi-task
+targeted by ESBMC-PLC. Programs containing interrupt task declarations or multi-task
 configurations are rejected by the semantic analyser with a structured
 `UnsupportedConstruct(InterruptTask, tier=2)` error. Multi-task support is Tier 2; if
 addressed in future work, ESBMC's existing concurrency primitives would be the integration
@@ -307,7 +307,7 @@ ld-verify [options] <program.xml> [--props <props.yaml>]
 ```
 
 Internally it invokes `esbmc` with the `.ld`-renamed input file and the configured
-strategy. Because SAFE-LD generates GOTO IR directly, ESBMC's clang front-end is
+strategy. Because ESBMC-PLC generates GOTO IR directly, ESBMC's clang front-end is
 **never invoked** — `ld_languaget::typecheck()` populates the `contextt` and
 control passes straight to symex.
 
@@ -358,7 +358,7 @@ needed.
 
 This section defines the formal guarantee that `ld_converter` is expected to satisfy
 and outlines the proof strategy. The guarantee is stated as a semantic preservation
-theorem; it is the obligation that makes SAFE-LD a formal tool rather than a
+theorem; it is the obligation that makes ESBMC-PLC a formal tool rather than a
 best-effort translator.
 
 #### Semantic Preservation Theorem
@@ -543,7 +543,7 @@ independent reviewers.
 **M2 gate:** YAML format applied to 20 synthetic programs representing all property kinds;
 all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 
-### WP2 — SAFE-LD Tool Development (Months 4–12)
+### WP2 — ESBMC-PLC Tool Development (Months 4–12)
 
 | Task | Subtasks | Milestone | Status |
 |---|---|---|---|
@@ -592,7 +592,7 @@ category proposal (T4.5).
 | T4.1 Paper 1: Semantics + Tool | Journal article (IEEE Transactions on Industrial Informatics target) | M9 (Month 28): submitted |
 | T4.2 Paper 2: CSs + Comparison | Journal article (TACAS / CAV / ISSTA target) | M10 (Month 32): submitted |
 | T4.3 LLM Property Generation (exploratory) | Prototype + preliminary empirical result; not a production feature | — |
-| T4.4 Open-Source Release | SAFE-LD + ld-verify tagged release; TIA Portal + Codesys integration guides | M11 (Month 36): full open-source release |
+| T4.4 Open-Source Release | ESBMC-PLC + ld-verify tagged release; TIA Portal + Codesys integration guides | M11 (Month 36): full open-source release |
 | T4.5 SV-COMP Category Proposal | Submission to SV-COMP steering committee | M11 (Month 36) |
 
 ---
@@ -643,7 +643,7 @@ both the translation and the verifier on real semantic errors, not just syntacti
 
 ## 8. Key Design Decisions
 
-1. **Direct GOTO IR generation; no C intermediary.** SAFE-LD's `ld_converter` populates
+1. **Direct GOTO IR generation; no C intermediary.** ESBMC-PLC's `ld_converter` populates
    ESBMC's `contextt` directly with `symbolt` entries and `codet` trees, following the
    same pattern as `python_converter`. ESBMC's clang front-end is never invoked. This
    significantly reduces reliance on unverified translation components: the path from LD
