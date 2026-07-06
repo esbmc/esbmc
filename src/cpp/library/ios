@@ -44,8 +44,8 @@ enum _Ios_Openmode
   __app = 1L << 0,
   __ate = 1L << 1,
   __bin = 1L << 2,
-  __in = 1L << 3,
-  __out = 1L << 4,
+  __ios_in = 1L << 3,
+  __ios_out = 1L << 4,
   __trunc = 1L << 5,
   __ios_openmode_end = 1L << 16
 };
@@ -101,8 +101,8 @@ public:
   static const openmode app = __app;
   static const openmode ate = __ate;
   static const openmode binary = __bin;
-  static const openmode in = __in;
-  static const openmode out = __out;
+  static const openmode in = __ios_in;
+  static const openmode out = __ios_out;
   static const openmode trunc = __trunc;
 
   static const seekdir beg = __beg;
