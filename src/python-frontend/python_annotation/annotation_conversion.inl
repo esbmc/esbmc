@@ -247,6 +247,14 @@ std::string python_annotation<Json>::resolve_subscript_type(
         extract_type_info(idx_node["annotation"], idx_base_type, idx_element_type) &&
         idx_base_type == "list")
         slice_is_list_var = true;
+      // No (or non-list) annotation resolved -- idx may still be an
+      // unannotated `idx = [0, 2]` whose type is only inferable from its
+      // initializer; a literal list value is as unambiguous a signal as an
+      // explicit annotation.
+      else if (
+        !idx_node.empty() && idx_node.contains("value") &&
+        idx_node["value"].value("_type", std::string()) == "List")
+        slice_is_list_var = true;
     }
 
     // A `Slice` (`a[1:3]`) or a literal index list (`a[[0, 2]]`, NumPy fancy
