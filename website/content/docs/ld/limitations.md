@@ -17,8 +17,15 @@ supported and the known restrictions.
 - **Counters** — `CTU` (count-up) and `CTD` (count-down), edge-triggered on the
   count input, with reset handling.
 - **Arithmetic function blocks** — `ADD`, `SUB`, `MUL`, `DIV`, and `MOVE`.
-- **Variable types** — `BOOL`, and the integer types `INT`/`DINT`/`TIME`
-  (modelled as 32-bit integers).
+- **User-defined function blocks** — function blocks with a Structured Text (ST)
+  body are translated rung-by-rung and inlined into the scan, so custom logic
+  (assignments, `IF`/`WHILE`, arithmetic and comparisons) participates in the
+  proof. Constructs the translator cannot lower over-approximate the block's
+  outputs as nondeterministic by default; `--ld-sound-mode` makes them fall back
+  to a no-op instead (see [Usage](/docs/ld/usage)).
+- **Variable types** — `BOOL`, the integer types `INT`/`DINT`/`TIME`
+  (modelled as 32-bit integers), and `REAL` analog values (modelled as
+  floating-point).
 - **Properties** — the five kinds described in
   [Property Format](/docs/ld/property-format).
 

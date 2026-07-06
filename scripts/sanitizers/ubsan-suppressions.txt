@@ -1,0 +1,14 @@
+# UndefinedBehaviorSanitizer suppressions for ESBMC.
+#
+# Format: one rule per line, comments start with '#'.
+#   <check-name>:<source-path-substring>
+# Common check names: signed-integer-overflow, unsigned-integer-overflow,
+# alignment, null, vla-bound, shift, integer-divide-by-zero, bool, enum,
+# float-cast-overflow, float-divide-by-zero, function, return,
+# vptr, implicit-conversion, nullability-arg, nullability-assign,
+# nullability-return.
+#
+# Keep each rule paired with the issue that tracks the underlying bug.
+# See: https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#runtime-suppressions
+#
+# (empty — populated as the bring-up CI run surfaces findings)

@@ -2,6 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -25,7 +26,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <cfenv>
 #include <cstdio>
 #include <cmath>
 #include <climits>
@@ -111,6 +111,32 @@ static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
   std::string value;
+  // A negative literal parses as UnaryOp(USub, Constant); numerically negate a
+  // constant numeric operand so str.format()/format() handle negatives
+  // (otherwise the whole call degrades to a nondet string). Fold numerically
+  // rather than string-prepending '-' so -0 renders "0" (not "-0"). A nested
+  // unary (--5), a non-numeric operand (-"a", a TypeError in CPython), and
+  // UAdd/Invert fall through to the throw below and stay on the nondet path.
+  if (
+    arg.contains("_type") && arg["_type"] == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant" &&
+    arg["operand"].contains("value"))
+  {
+    const auto &ov = arg["operand"]["value"];
+    if (ov.is_number_integer())
+      return std::to_string(-ov.get<long long>());
+    if (ov.is_boolean())
+      return ov.get<bool>() ? "-1" : "0";
+    if (ov.is_number_float())
+    {
+      std::ostringstream oss;
+      oss << -ov.get<double>();
+      return oss.str();
+    }
+  }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
     if (arg.contains("_bigint"))
@@ -129,8 +155,23 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
     {
+      const double d = arg["value"].get<double>();
+      // A whole-number float below 1e16 renders in CPython's str() as its
+      // integer digits plus ".0" (str(1.0) == "1.0", str(1000000.0) ==
+      // "1000000.0"). The default ostream format got this wrong: it dropped the
+      // ".0" and switched to exponential at 1e6. Fold that case exactly. Every
+      // other float keeps the prior ostream behaviour, which already matches
+      // CPython's exponential form for |x| >= 1e16 and |x| < 1e-4; a fixed "%f"
+      // would only trade one divergence range for another.
+      if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
+      {
+        std::string s = std::to_string(static_cast<long long>(d));
+        if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
+          s.insert(s.begin(), '-');
+        return s + ".0";
+      }
       std::ostringstream oss;
-      oss << arg["value"].get<double>();
+      oss << d;
       return oss.str();
     }
     throw std::runtime_error("format() unsupported constant type");
@@ -141,26 +182,6 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 
   throw std::runtime_error("format() requires constant arguments");
 }
-
-// Pins the host floating-point rounding mode to round-to-nearest for its
-// lifetime and restores the previous mode on destruction. Float specs are
-// folded with host snprintf, whose output depends on the ambient rounding mode;
-// a statically linked solver (e.g. CVC5 on the Linux build) can leave that mode
-// set to FE_UPWARD, which turns "{:.2f}".format(3.14159) into "3.15" instead of
-// CPython's "3.14". Pinning the mode keeps the fold deterministic and matches
-// CPython's round-half-to-even.
-struct round_to_nearest_guard
-{
-  round_to_nearest_guard() : saved_(std::fegetround())
-  {
-    std::fesetround(FE_TONEAREST);
-  }
-  ~round_to_nearest_guard()
-  {
-    std::fesetround(saved_);
-  }
-  int saved_;
-};
 
 // Format a constant value per a str.format/format() format spec
 // ([[fill]align][sign][#][0][width][.precision][type]). Throws for any value or
@@ -173,9 +194,25 @@ std::string apply_format_spec(
 {
   // Only constant numeric/string literals are folded; anything else (a
   // variable, a computed value) throws and degrades to the nondet fallback.
-  if (arg.value("_type", std::string()) != "Constant" || !arg.contains("value"))
+  // A negative literal parses as UnaryOp(USub, Constant); unwrap it so numeric
+  // specs (including grouping) work on negatives too.
+  const nlohmann::json *cnode = &arg;
+  bool negate = false;
+  if (
+    arg.value("_type", std::string()) == "UnaryOp" && arg.contains("op") &&
+    arg["op"].is_object() &&
+    arg["op"].value("_type", std::string()) == "USub" &&
+    arg.contains("operand") && arg["operand"].is_object() &&
+    arg["operand"].value("_type", std::string()) == "Constant")
+  {
+    cnode = &arg["operand"];
+    negate = true;
+  }
+  if (
+    cnode->value("_type", std::string()) != "Constant" ||
+    !cnode->contains("value"))
     throw std::runtime_error("format spec on a non-constant value");
-  const auto &val = arg["value"];
+  const auto &val = (*cnode)["value"];
 
   enum
   {
@@ -209,6 +246,17 @@ std::string apply_format_spec(
   else
     throw std::runtime_error("format spec on an unsupported constant type");
 
+  // Apply a leading unary minus to the folded numeric value.
+  if (negate)
+  {
+    if (kind == KIND_INT)
+      ival = -ival;
+    else if (kind == KIND_FLOAT)
+      dval = -dval;
+    else
+      throw std::runtime_error("unary minus on a non-numeric format value");
+  }
+
   // Parse the spec.
   size_t p = 0;
   char fill = ' ';
@@ -241,8 +289,9 @@ std::string apply_format_spec(
   int width = 0;
   while (p < spec.size() && std::isdigit(static_cast<unsigned char>(spec[p])))
     width = width * 10 + (spec[p++] - '0');
+  char grouping = '\0';
   if (p < spec.size() && (spec[p] == ',' || spec[p] == '_'))
-    throw std::runtime_error("unsupported grouping in format spec");
+    grouping = spec[p++];
   int prec = -1;
   if (p < spec.size() && spec[p] == '.')
   {
@@ -255,6 +304,18 @@ std::string apply_format_spec(
   if (p != spec.size())
     throw std::runtime_error("invalid format spec");
   (void)converter;
+
+  // Only plain decimal-integer ',' grouping is folded exactly. '_', grouping on
+  // a non-decimal base, and float/str grouping are unsupported; so is grouping
+  // combined with '0'-fill width, where CPython also groups the pad zeros
+  // ("{:08,}".format(1000) == "0,001,000") — a different composition than
+  // group-then-pad. All of these fall to the nondet fallback so no wrong value
+  // is produced.
+  if (
+    grouping != '\0' && (!(grouping == ',' && kind == KIND_INT &&
+                           (type == '\0' || type == 'd') && prec < 0) ||
+                         (width > 0 && fill == '0')))
+    throw std::runtime_error("unsupported grouping in format spec");
 
   // Build the value body (without field padding) and a default alignment.
   std::string body;
@@ -288,9 +349,37 @@ std::string apply_format_spec(
       for (; mag != 0; mag /= base)
         digits.insert(digits.begin(), alpha[mag % base]);
     }
+    // Insert thousands separators into the decimal magnitude (before the
+    // sign), guaranteed decimal here by the grouping guard above.
+    if (grouping == ',')
+    {
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      digits = grouped;
+    }
     const std::string sgn =
       neg ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
     body = sgn + digits;
+    default_align = '>';
+  }
+  else if (kind == KIND_INT && type == 'c')
+  {
+    // {:c} formats an integer as the character with that code point. Fold only
+    // 1-127: code point 0 embeds a NUL, which the null-terminated string model
+    // represents unreliably (comparisons can truncate at it), and code points
+    // > 127 are multi-byte UTF-8 the single-byte string model cannot represent.
+    // Both degrade to the sound nondet fallback.
+    if (ival < 1 || ival > 127)
+      throw std::runtime_error("code point out of foldable range for {:c}");
+    body = std::string(1, static_cast<char>(ival));
     default_align = '>';
   }
   else if (
@@ -331,6 +420,28 @@ std::string apply_format_spec(
         num = " " + num;
     }
     body = num;
+    default_align = '>';
+  }
+  else if (kind == KIND_FLOAT && type == '%')
+  {
+    // {:%} multiplies by 100, formats like 'f' (default precision 6), and
+    // appends a literal '%'.
+    const round_to_nearest_guard rounding_guard;
+    const int pr = prec >= 0 ? prec : 6;
+    const double pct = dval * 100.0;
+    int n = std::snprintf(nullptr, 0, "%.*f", pr, pct);
+    if (n < 0)
+      throw std::runtime_error("format spec percent error");
+    std::string num(static_cast<size_t>(n), '\0');
+    std::snprintf(&num[0], static_cast<size_t>(n) + 1, "%.*f", pr, pct);
+    if (!num.empty() && num[0] != '-')
+    {
+      if (sign == '+')
+        num = "+" + num;
+      else if (sign == ' ')
+        num = " " + num;
+    }
+    body = num + "%";
     default_align = '>';
   }
   else
@@ -795,8 +906,8 @@ std::optional<exprt> dispatch_search_string_methods(
   python_converter &converter)
 {
   if (
-    method_name != "find" && method_name != "index" &&
-    method_name != "rfind" && method_name != "rindex")
+    method_name != "find" && method_name != "index" && method_name != "rfind" &&
+    method_name != "rindex")
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
@@ -1208,12 +1319,57 @@ exprt string_handler::build_affix_tuple_match(
       std::string(is_suffix ? "endswith" : "startswith") +
       "() with a tuple argument is only supported for tuple literals");
 
+  // Tight constant content of a (possibly symbol-backed) char-array value.
+  // Unlike try_extract_const_string_expr this REJECTS values with any
+  // non-constant operand: a padded member snapshotting a runtime string has
+  // the shape { s[0], s[1], 0, ... }, and skipping the variable operands
+  // would silently yield "" — turning the affix test constant-true (#5571).
+  auto tight_const_content = [this](const exprt &e, std::string &out) -> bool {
+    exprt v = e;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (!sym || sym->get_value().is_nil())
+        return false;
+      v = sym->get_value();
+    }
+    if (
+      !v.is_constant() || !v.type().is_array() ||
+      v.type().subtype() != char_type())
+      return false;
+    out.clear();
+    forall_operands (it, v)
+    {
+      if (!it->is_constant())
+        return false;
+      BigInt val =
+        binary2integer(it->value().as_string(), it->type().is_signedbv());
+      if (val == 0)
+        return true;
+      out += static_cast<char>(val.to_uint64());
+    }
+    return true;
+  };
+
   exprt result = gen_boolean(false);
   for (const exprt &elem : affix_tuple.operands())
   {
+    // Tuple string members are NUL-padded to a fixed width (#5571), while
+    // the single-affix handlers below take an array affix's length from its
+    // dimension — which would include the padding. Rebuild a tight literal
+    // from fully-constant content; otherwise decay the member to char* so
+    // the pointer path measures the affix with strlen() at runtime.
+    exprt affix = elem;
+    std::string content;
+    if (tight_const_content(affix, content))
+      affix = string_builder_->build_string_literal(content);
+    else if (affix.type().is_array())
+      affix = get_array_base_address(affix);
+
     exprt one = is_suffix
-                  ? handle_string_endswith(string_obj, elem, location)
-                  : handle_string_startswith(string_obj, elem, location);
+                  ? handle_string_endswith(string_obj, affix, location)
+                  : handle_string_startswith(string_obj, affix, location);
     // result and one are synthetic bools (constant / startswith-endswith
     // results), so build the disjunction in IREP2 (V.3).
     result = build_or(result, one);
@@ -2509,18 +2665,15 @@ exprt string_handler::handle_string_title(
     return build_nondet_string_fallback(location);
   }
 
-  bool new_word = true;
+  // A letter starts a new word iff the previous character is uncased
+  // (CPython semantics -- digits are uncased, so they *end* a word:
+  // "3d movie".title() == "3D Movie"). Matches __python_str_title.
+  bool prev_cased = false;
   for (char &ch : input)
   {
-    if (std::isalpha(static_cast<unsigned char>(ch)))
-    {
-      ch = new_word ? to_upper_char(ch) : to_lower_char(ch);
-      new_word = false;
-    }
-    else
-    {
-      new_word = !std::isalnum(static_cast<unsigned char>(ch));
-    }
+    bool cased = std::isalpha(static_cast<unsigned char>(ch)) != 0;
+    ch = prev_cased ? to_lower_char(ch) : to_upper_char(ch);
+    prev_cased = cased;
   }
 
   if (!string_builder_)
@@ -3061,8 +3214,21 @@ exprt string_handler::build_partition_tuple(
     tuple_type.tag(tag);
     set_python_aggregate_kind(tuple_type, "tuple");
 
-    struct_exprt tuple_expr(tuple_type);
-    tuple_expr.operands() = {a, b, c};
+    // V.3: build the tuple struct value in IREP2, back-migrating once, then
+    // restore the full type -- migrate_type drops the frontend-only
+    // aggregate-kind marker read by the `in`/membership/subscript dispatch
+    // (see tuple_handler::get_tuple_expr).
+    std::vector<expr2tc> members;
+    members.reserve(elems.size());
+    for (const exprt *e : elems)
+    {
+      expr2tc m2;
+      migrate_expr(*e, m2);
+      members.push_back(std::move(m2));
+    }
+    exprt tuple_expr =
+      migrate_expr_back(constant_struct2tc(migrate_type(tuple_type), members));
+    tuple_expr.type() = tuple_type;
     tuple_expr.location() = location;
     return tuple_expr;
   };
@@ -3312,8 +3478,11 @@ exprt string_handler::handle_string_center(
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
 
+  // CPython puts the extra fill char on the LEFT when both the margin and
+  // the width are odd (Objects/unicodeobject.c unicode_center_impl:
+  // left = marg/2 + (marg & width & 1)), e.g. "ab".center(7) == "---ab--".
   long long pad = width - static_cast<long long>(input.size());
-  long long left = pad / 2;
+  long long left = pad / 2 + (pad & width & 1);
   long long right = pad - left;
   std::string result(static_cast<size_t>(left), fill);
   result += input;

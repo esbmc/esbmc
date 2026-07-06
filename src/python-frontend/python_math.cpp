@@ -440,8 +440,11 @@ exprt python_math::compute_expr(const exprt &expr) const
   else
     throw std::runtime_error("Unsupported math operation: " + expr.id_string());
 
-  // Return the result as a constant expression
-  return constant_exprt(result, lhs.type());
+  // Return the result as a constant expression. V.3: build the folded
+  // integer constant in IREP2 and back-migrate once -- the operands were read
+  // as bitvector integers, so lhs.type() is always integer here and the
+  // constant_int2t round-trips exactly to the same constant_exprt.
+  return migrate_expr_back(constant_int2tc(migrate_type(lhs.type()), result));
 }
 
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
