@@ -36,7 +36,10 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken).
+  // it's obviously broken). Only the relational operators are lowered here;
+  // pointer (in)equality is handled on the equality path of convert_ast, which
+  // compares the full (object, offset) representation directly, so it never
+  // reaches this function.
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
   assert(is_comp_expr(templ_expr));
@@ -59,30 +62,33 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
   expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
   expr2tc same_obj = equality2tc(o1, o2);
+
+  // Lexicographic step: the object ids decide the order; on a tie the offsets
+  // break it. The object comparison is always strict — equal objects fall
+  // through to the offset comparator, which carries the operator's own
+  // strictness (< vs <=). Encoding this once keeps the four operators
+  // consistent.
+  auto lex = [&](const expr2tc &obj_cmp, const expr2tc &off_cmp) {
+    return or2tc(obj_cmp, and2tc(same_obj, off_cmp));
+  };
+
   expr2tc op;
   switch (templ_expr->expr_id)
   {
-  case expr2t::equality_id:
-    op = and2tc(same_obj, equality2tc(s1, s2));
-    break;
-  case expr2t::notequal_id:
-    op = or2tc(notequal2tc(o1, o2), notequal2tc(s1, s2));
-    break;
   case expr2t::lessthan_id:
-    op = or2tc(lessthan2tc(o1, o2), and2tc(same_obj, lessthan2tc(s1, s2)));
+    op = lex(lessthan2tc(o1, o2), lessthan2tc(s1, s2));
     break;
   case expr2t::greaterthan_id:
-    op =
-      or2tc(greaterthan2tc(o1, o2), and2tc(same_obj, greaterthan2tc(s1, s2)));
+    op = lex(greaterthan2tc(o1, o2), greaterthan2tc(s1, s2));
     break;
   case expr2t::lessthanequal_id:
-    op = or2tc(lessthan2tc(o1, o2), and2tc(same_obj, lessthanequal2tc(s1, s2)));
+    op = lex(lessthan2tc(o1, o2), lessthanequal2tc(s1, s2));
     break;
   case expr2t::greaterthanequal_id:
-    op = or2tc(
-      greaterthan2tc(o1, o2), and2tc(same_obj, greaterthanequal2tc(s1, s2)));
+    op = lex(greaterthan2tc(o1, o2), greaterthanequal2tc(s1, s2));
     break;
   default:
+    // equality/notequal never reach here (see above).
     std::unreachable();
   }
   return convert_ast(op);
