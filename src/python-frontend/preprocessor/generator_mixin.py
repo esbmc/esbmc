@@ -91,9 +91,6 @@ class GeneratorMixin:
             [f(i,j) for i in A for j in B]  =>  for i in A: for j in B: tmp.append(f(i,j))
         """
         for generator in node.generators:
-            if len(getattr(generator, "ifs", [])) > 1:
-                raise NotImplementedError(
-                    "Only a single if-condition is supported in list comprehensions")
             if getattr(generator, "is_async", False):
                 raise NotImplementedError("Async list comprehensions are not supported")
 
@@ -126,8 +123,7 @@ class GeneratorMixin:
         loop_body = [append_expr]
         for generator in reversed(node.generators):
             if generator.ifs:
-                cond = self.visit(generator.ifs[0])
-                self.ensure_all_locations(cond, generator.ifs[0])
+                cond = self._combine_comprehension_ifs(generator.ifs)
                 if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
                 self.ensure_all_locations(if_stmt, generator.ifs[0])
                 ast.fix_missing_locations(if_stmt)
@@ -209,6 +205,10 @@ class GeneratorMixin:
         genexp_node = self._isolate_genexp_targets(genexp_node)
 
         for generator in genexp_node.generators:
+            # Generator-expression lowering (sum/any/all/... over a genexp) has
+            # a separate, currently-incomplete path; keep rejecting multiple
+            # `if` clauses here rather than emit a misleading verdict. List and
+            # set comprehensions (via _lower_listcomp) do support them.
             if len(getattr(generator, "ifs", [])) > 1:
                 raise NotImplementedError(
                     "Only a single if-condition is supported in generator expressions")
@@ -216,6 +216,22 @@ class GeneratorMixin:
                 raise NotImplementedError("Async generator expressions are not supported")
 
         return genexp_node
+
+    def _combine_comprehension_ifs(self, ifs):
+        """Combine a generator's `if` clauses into one condition.
+
+        Python allows several `if` clauses in a single comprehension generator
+        (`[x for x in A if c1 if c2]`), which is equivalent to conjoining them
+        (`if c1 and c2`). Return the visited single condition, or a BoolOp(And)
+        over all of them.
+        """
+        if len(ifs) == 1:
+            cond = self.visit(ifs[0])
+        else:
+            cond = ast.BoolOp(op=ast.And(), values=[self.visit(i) for i in ifs])
+        self.ensure_all_locations(cond, ifs[0])
+        ast.fix_missing_locations(cond)
+        return cond
 
     def _build_reduction_guard(self, tmp_name, source_node, negated):
         guard_expr = self.create_name_node(tmp_name, ast.Load(), source_node)
