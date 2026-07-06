@@ -1109,6 +1109,12 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+  // Per division site (keyed by source location), the divisor expression to
+  // use for the ZeroDivisionError guard and the division itself. An assignment
+  // RHS is converted more than once (type inference + code generation); this
+  // emits the guard and hoists a side-effecting divisor exactly once, and both
+  // passes reuse the same (once-evaluated) divisor.
+  std::map<std::string, exprt> hoisted_div_rhs_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

@@ -1478,19 +1478,63 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
      rhs.type().is_floatbv()))
   {
-    exprt is_zero("=", bool_type());
-    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+    locationt div_loc = get_location_from_decl(element);
+    const std::string div_key = div_loc.get_file().as_string() + ":" +
+                                div_loc.get_line().as_string() + ":" +
+                                div_loc.get_column().as_string();
 
-    exprt raise = get_exception_handler().gen_exception_raise(
-      "ZeroDivisionError", "division by zero");
-    codet throw_code("expression");
-    throw_code.operands().push_back(raise);
+    // An assignment RHS is converted more than once (type inference + code
+    // generation). Emit the guard and hoist the divisor exactly once per
+    // division site; a later conversion of the same site reuses the recorded
+    // divisor, so a side-effecting divisor (a call, or a nondet) is evaluated
+    // once -- otherwise `x / f()` would call f twice and `x / nondet()` would
+    // guard a different value than the one divided by.
+    auto seen = hoisted_div_rhs_.find(div_key);
+    if (!div_key.empty() && seen != hoisted_div_rhs_.end())
+    {
+      rhs = seen->second;
+    }
+    else
+    {
+      std::function<bool(const exprt &)> has_side_effect =
+        [&](const exprt &e) -> bool {
+        if (e.id() == "sideeffect")
+          return true;
+        for (const exprt &sub : e.operands())
+          if (has_side_effect(sub))
+            return true;
+        return false;
+      };
 
-    code_ifthenelset guard;
-    guard.cond() = is_zero;
-    guard.then_case() = throw_code;
-    guard.location() = get_location_from_decl(element);
-    add_instruction(guard);
+      if (has_side_effect(rhs))
+      {
+        symbolt &tmp =
+          create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
+        code_declt decl(symbol_expr(tmp));
+        decl.location() = div_loc;
+        add_instruction(decl);
+        code_assignt assign(symbol_expr(tmp), rhs);
+        assign.location() = div_loc;
+        add_instruction(assign);
+        rhs = symbol_expr(tmp);
+      }
+
+      if (!div_key.empty())
+        hoisted_div_rhs_[div_key] = rhs;
+
+      exprt is_zero("=", bool_type());
+      is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+      exprt raise = get_exception_handler().gen_exception_raise(
+        "ZeroDivisionError", "division by zero");
+      code_expressiont throw_code(raise);
+
+      code_ifthenelset guard;
+      guard.cond() = is_zero;
+      guard.then_case() = throw_code;
+      guard.location() = div_loc;
+      add_instruction(guard);
+    }
   }
 
   // Build the binary expression

@@ -1356,7 +1356,7 @@ void python_converter::get_function_definition(
   // module was imported. Return the stub's type suffix (e.g. "int") so we can
   // synthesise a safe body instead of converting the real one; "" otherwise.
   auto nondet_stub_suffix = [](const std::string &name) -> std::string {
-    for (const std::string prefix : {"__VERIFIER_nondet_", "nondet_"})
+    for (const std::string_view prefix : {"__VERIFIER_nondet_", "nondet_"})
     {
       if (name.rfind(prefix, 0) == 0)
       {
