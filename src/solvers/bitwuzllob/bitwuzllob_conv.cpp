@@ -200,7 +200,8 @@ smt_resultt bitwuzllob_convt::dec_solve()
       log_error(
         "bitwuzllob: formula is satisfiable, but building the counterexample "
         "requires a local interactive SMT-LIB2 solver; re-run with "
-        "--bitwuzllob-model-prog <cmd> (e.g. \"z3 -in\") or with --result-only");
+        "--bitwuzllob-model-prog <cmd> (e.g. \"z3 -in\") or with "
+        "--result-only");
     else
       log_error(
         "bitwuzllob: the local model solver is unavailable; cannot build a "
