@@ -75,21 +75,23 @@ void goto_convertt::do_function_call(
       new_function.type().is_pointer() &&
       new_function.type().subtype().is_code())
     {
-      exprt deref("dereference", new_function.type().subtype());
-      deref.copy_to_operands(new_function);
+      // dereference_exprt(op, tp) types the result as tp.subtype(), so passing
+      // the pointer type yields the pointed-to code type.
+      dereference_exprt deref(new_function, new_function.type());
       deref.location() = new_function.location();
       do_function_call_dereference(new_lhs, deref, new_arguments, dest);
     }
     else
     {
-      throw "do_function_call: typecast callee is not callable (expected "
-            "pointer-to-code)";
+      throw "do_function_call: typecast callee is not a pointer-to-code "
+            "value (type id: " +
+        new_function.type().id_string() + ")";
     }
   }
   else
   {
-    log_error("unexpected function argument: {}", new_function.id_string());
-    throw "do_function_call: unexpected callee expression";
+    throw "do_function_call: unexpected callee expression (id: " +
+      new_function.id_string() + ")";
   }
 }
 
