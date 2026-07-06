@@ -150,6 +150,33 @@ void cbmc_irep_readert::read_irep(irept &irep)
   }
 }
 
+// A declared table count can never exceed the number of bytes left in the
+// stream, since each element occupies at least one byte. A larger value is
+// corrupt (or hostile) input: reject it before reserve()/the read loop so it
+// cannot drive a multi-gigabyte allocation or a multi-billion-iteration spin
+// (roadmap §4.7). A stream that cannot report its length (a non-seekable pipe)
+// is left unchecked -- the reader's per-read EOF handling still bounds it, just
+// less promptly.
+static bool
+implausible_count(std::istream &in, unsigned count, const char *what)
+{
+  const std::streampos pos = in.tellg();
+  if (pos == std::streampos(-1))
+    return false;
+
+  in.seekg(0, std::ios::end);
+  const std::streampos end = in.tellg();
+  in.seekg(pos);
+  if (in.tellg() != pos) // couldn't restore the read position; don't guess
+    return false;
+
+  if (static_cast<std::streamoff>(count) <= end - pos)
+    return false;
+
+  log_error("CBMC goto-binary: {} count {} exceeds input size", what, count);
+  return true;
+}
+
 bool parse_cbmc_goto(
   std::istream &in,
   const std::string &filename,
@@ -178,6 +205,8 @@ bool parse_cbmc_goto(
 
   // Symbol table
   unsigned number_of_symbols = reader.read_word();
+  if (reader.failed() || implausible_count(in, number_of_symbols, "symbol"))
+    return true;
   result.symbols.reserve(number_of_symbols);
   for (unsigned i = 0; i < number_of_symbols; i++)
   {
@@ -226,6 +255,8 @@ bool parse_cbmc_goto(
 
   // Functions
   unsigned number_of_functions = reader.read_word();
+  if (reader.failed() || implausible_count(in, number_of_functions, "function"))
+    return true;
   result.functions.reserve(number_of_functions);
   for (unsigned i = 0; i < number_of_functions; i++)
   {
@@ -235,6 +266,10 @@ bool parse_cbmc_goto(
     cbmc_functiont function;
     function.name = reader.read_string(); // raw string, not a string ref
     unsigned number_of_instructions = reader.read_word();
+    if (
+      reader.failed() ||
+      implausible_count(in, number_of_instructions, "instruction"))
+      return true;
     function.instructions.reserve(number_of_instructions);
 
     for (unsigned j = 0; j < number_of_instructions; j++)

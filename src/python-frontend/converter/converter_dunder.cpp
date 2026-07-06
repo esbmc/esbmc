@@ -298,6 +298,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"USub", "__neg__"},
     {"UAdd", "__pos__"},
     {"abs", "__abs__"},
+    {"bool", "__bool__"},
     {"complex", "__complex__"},
     {"float", "__float__"},
     {"int", "__int__"},
