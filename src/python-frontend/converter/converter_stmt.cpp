@@ -1047,6 +1047,12 @@ typet python_converter::resolve_any_subscript_array_type(
   {
     std::size_t source_depth = 0;
     typet source_type = ns.follow(source_probe.type());
+    // A numpy array crossing a function boundary is pointer-to-array (e.g.
+    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
+    // walk below still sees through to the real dimensionality instead of
+    // stopping at 0 and silently letting a 3-D+ source slip past.
+    if (source_type.is_pointer())
+      source_type = ns.follow(source_type.subtype());
     while (source_type.is_array())
     {
       ++source_depth;
