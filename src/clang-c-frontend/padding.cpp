@@ -336,13 +336,30 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   // We use 'max_alignment'.
   if (max_alignment > 1)
   {
-    // we may need to align it
-    BigInt displacement = offset % max_alignment;
-    if (displacement != 0)
+    // An over-aligned empty struct (e.g. `struct alignas(16) {}`) has no
+    // members, so offset is 0 and the multiple-of-alignment rule below adds
+    // nothing -- leaving a zero-byte layout while sizeof reports `alignment`.
+    // Pad it up to its alignment so byte-wise access (memcmp, aligned storage)
+    // stays in bounds. Plain empty structs have no explicit alignment, so
+    // max_alignment is 0 here and they are left unchanged (their C++ single
+    // byte, if any, is added elsewhere in the frontend).
+    if (offset == 0)
     {
-      BigInt pad_bytes = max_alignment - displacement;
-      std::size_t pad_bits = (pad_bytes * config.ansi_c.char_width).to_uint64();
+      std::size_t pad_bits =
+        (max_alignment * config.ansi_c.char_width).to_uint64();
       pad(components, components.end(), pad_bits);
+    }
+    else
+    {
+      // we may need to align it
+      BigInt displacement = offset % max_alignment;
+      if (displacement != 0)
+      {
+        BigInt pad_bytes = max_alignment - displacement;
+        std::size_t pad_bits =
+          (pad_bytes * config.ansi_c.char_width).to_uint64();
+        pad(components, components.end(), pad_bits);
+      }
     }
   }
 }

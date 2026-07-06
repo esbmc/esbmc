@@ -1,0 +1,4 @@
+CORE
+cbmc_ceil.goto
+--binary
+^VERIFICATION SUCCESSFUL$

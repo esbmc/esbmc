@@ -198,7 +198,9 @@ void fix_expression(irept &irep)
     "isfinite",
     "nearbyint",
     "signbit",
-    "ieee_sqrt"};
+    "ieee_sqrt",
+    "ieee_fma",
+    "abs"};
 
   const std::string cur = irep.id_string();
 
@@ -238,7 +240,7 @@ void expand_anon_struct(const irept &self)
   const std::string ident = self.find("identifier").id_string();
   if (ident.size() < 11 || ident.compare(0, 10, "tag-#anon#") != 0)
     return;
-  log_error("CBMC adapter: unsupported anonymous struct {}", ident);
+  log_error("CBMC adapter: unsupported anonymous aggregate {}", ident);
   abort();
 }
 
@@ -295,7 +297,10 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
         fix_expression(p.second);
   }
 
-  if (self.id() != "struct_tag")
+  // struct_tag and union_tag are the two aggregate references CBMC emits; both
+  // resolve out of the same tag cache into their concrete definition.
+  const bool is_tag = self.id() == "struct_tag" || self.id() == "union_tag";
+  if (!is_tag)
   {
     for (auto &v : self.get_sub())
       fix_type(v, cache);
@@ -319,8 +324,8 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
 
   self = it->second;
 
-  // The resolved struct may itself contain struct tags; redo the cache walk.
-  if (irep_contains(self, "struct_tag"))
+  // The resolved aggregate may itself contain tags; redo the cache walk.
+  if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
       fix_type(v, cache);
@@ -331,14 +336,19 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   }
 }
 
-// Builds the malloc side_effect_exprt (irep shape) do_mem would have built,
-// falling back to element type char -- do_mem's own fallback whenever the
-// size argument isn't a recognisable sizeof(T) pattern, which a CBMC
+// Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
+// built, falling back to element type char -- do_mem's own fallback whenever
+// the size argument isn't a recognisable sizeof(T) pattern, which a CBMC
 // binary's argument never is (sizeof is constant-folded away by goto-cc
 // well before the .goto file exists). A byte-granularity allocation is a
-// sound, if less precise, model of any malloc(n) call regardless of the
-// pointer type it's later cast to.
-irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
+// sound, if less precise, model of any malloc(n)/alloca(n) call regardless of
+// the pointer type it's later cast to. `statement` selects "malloc" (dynamic
+// object) or "alloca" (automatic, freed on function return) -- migrate_expr
+// maps them to sideeffect2t allockind malloc/alloca respectively.
+irept build_mem_rhs(
+  const irept &lhs,
+  const irept::subt &args,
+  const char *statement)
 {
   if (args.size() != 1)
     return get_nil_irep();
@@ -357,32 +367,108 @@ irept build_malloc_rhs(const irept &lhs, const irept::subt &args)
 
   irept sideeffect(irep_idt("sideeffect"));
   sideeffect.add("type") = lhs.find("type");
-  sideeffect.add("statement") = mk("malloc");
+  sideeffect.add("statement") = mk(statement);
   sideeffect.get_sub().push_back(args[0]);
   sideeffect.add("#size") = size_arg;
   sideeffect.add("#type") = static_cast<const irept &>(char_type());
   return sideeffect;
 }
 
-// Builds an ieee_sqrt exprt (irep shape), mirroring what
-// clang_c_adjust_expr.cpp builds for a syntactically-recognised sqrt/sqrtf/
-// sqrtl call. No explicit rounding_mode operand -- migrate_expr's ieee_sqrt
-// handler defaults to the standard c:@__ESBMC_rounding_mode symbol when one
-// isn't present, same as it does for the ieee_add/sub/mul/div family. That
-// default symbol is defined by esbmc_parseoptions.cpp's
-// synthesize_cprover_additions, which runs before read_cbmc_goto_object in
-// every *normal* --binary invocation, but not under --no-cprover-additions
-// -- currently masked there by an unrelated, pre-existing entry-point
-// resolution gap, not a live bug today, but not this function's to assume
-// away either.
-irept build_sqrt_rhs(const irept &lhs, const irept::subt &args)
+// Builds a unary floating-point exprt (irep shape) with the given id, mirroring
+// what clang_c_adjust_expr.cpp builds for a syntactically-recognised libm call
+// (sqrt/sqrtf/sqrtl -> ieee_sqrt, nearbyint/nearbyintf/nearbyintl ->
+// nearbyint). No explicit rounding_mode operand -- migrate_expr's ieee_sqrt /
+// nearbyint handlers default to the standard c:@__ESBMC_rounding_mode symbol
+// when one isn't present, same as the ieee_add/sub/mul/div family. That default
+// symbol is defined by esbmc_parseoptions.cpp's synthesize_cprover_additions,
+// which runs before read_cbmc_goto_object in every *normal* --binary
+// invocation, but not under --no-cprover-additions -- currently masked there by
+// an unrelated, pre-existing entry-point resolution gap, not a live bug today,
+// but not this function's to assume away either.
+irept build_unary_fp_rhs(
+  const irept &lhs,
+  const irept::subt &args,
+  const char *id)
 {
   if (args.size() != 1)
     return get_nil_irep();
 
-  irept result(irep_idt("ieee_sqrt"));
+  const irep_idt expr_id(id);
+  irept result(expr_id);
   result.add("type") = lhs.find("type");
   result.get_sub().push_back(args[0]);
+  return result;
+}
+
+// Builds the (ptr == NULL) ? malloc(size) : realloc(ptr) conditional
+// goto_convertt::do_realloc produces for realloc(ptr, size). The null guard is
+// load-bearing: symex_realloc assumes a live source object, so realloc(NULL, n)
+// must route through the malloc side-effect (C says realloc(NULL, n) == malloc
+// (n)). The malloc branch reuses build_mem_rhs; the realloc branch is a
+// side_effect("realloc", ptr) carrying the byte size in "#size", which
+// migrate_expr maps to sideeffect2t allockind realloc -> symex_realloc. The
+// "if"/"="/sideeffect ids are all in fix_expression's wrap-set, so each node's
+// operands are wrapped by the later recursion in instruction_to_esbmc_irep.
+irept build_realloc_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 2)
+    return get_nil_irep();
+
+  const irept ptr = args[0];
+  const irept size = args[1];
+
+  irept::subt size_only;
+  size_only.push_back(size);
+  irept malloc_branch = build_mem_rhs(lhs, size_only, "malloc");
+  if (malloc_branch.is_nil())
+    return get_nil_irep();
+
+  // realloc branch: side_effect("realloc", ptr), #size = size coerced to size_t
+  // (mirrors build_mem_rhs; get_alloc_size always coerces the allocation
+  // size). fix_expression only recurses into get_sub()/get_named_sub(), never
+  // comments, so normalise the "#size" copy explicitly here.
+  irept size_arg(irep_idt("typecast"));
+  size_arg.add("type") = static_cast<const irept &>(size_type());
+  size_arg.get_sub().push_back(size);
+  fix_expression(size_arg);
+
+  irept realloc_branch(irep_idt("sideeffect"));
+  realloc_branch.add("type") = lhs.find("type");
+  realloc_branch.add("statement") = mk("realloc");
+  realloc_branch.get_sub().push_back(ptr);
+  realloc_branch.add("#size") = size_arg;
+
+  // is_null = (ptr == NULL); a NULL-valued pointer constant migrates to the
+  // null symbol (migrate.cpp).
+  irept null_const(irep_idt("constant"));
+  null_const.add("type") = ptr.find("type");
+  null_const.add("value") = mk("NULL");
+
+  irept is_null(irep_idt("="));
+  is_null.add("type") = static_cast<const irept &>(bool_type());
+  is_null.get_sub().push_back(ptr);
+  is_null.get_sub().push_back(null_const);
+
+  irept if_expr(irep_idt("if"));
+  if_expr.add("type") = lhs.find("type");
+  if_expr.get_sub().push_back(is_null);
+  if_expr.get_sub().push_back(malloc_branch);
+  if_expr.get_sub().push_back(realloc_branch);
+  return if_expr;
+}
+
+// Builds an ieee_fma exprt for fma(a, b, c) = a*b + c (single-rounding fused
+// multiply-add). migrate_expr reads op0/op1/op2 and defaults the rounding mode
+// like the rest of the ieee_* family (see build_unary_fp_rhs).
+irept build_fma_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 3)
+    return get_nil_irep();
+
+  irept result(irep_idt("ieee_fma"));
+  result.add("type") = lhs.find("type");
+  for (const irept &a : args)
+    result.get_sub().push_back(a);
   return result;
 }
 
@@ -405,21 +491,53 @@ bool fix_builtin_call(irept &code)
   if (sub.size() != 3 || sub[1].id() != "symbol")
     return false;
 
-  if (sub[0].is_nil())
-    return false; // do_mem/the AST rewrite are themselves no-ops here
-
   const std::string callee = sub[1].find("identifier").id_string();
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
-  const irept lhs = sub[0];
   const irept::subt args = sub[2].get_sub();
+
+  // free(ptr) returns void, so unlike the value-returning builtins below it has
+  // a nil lhs and lowers to an OTHER instruction carrying a "free" codet (the
+  // shape goto_convertt::do_free produces), not an assign. migrate_expr maps
+  // that to code_free2t -> symex_free, which actually deallocates and so lets
+  // ESBMC detect use-after-free on CBMC binaries (otherwise free is a bodyless
+  // external returning nondet and the deallocation is silently dropped).
+  if (callee == "free")
+  {
+    if (args.size() != 1)
+      return false;
+    const irept ptr = args[0];
+    code.set("statement", "free");
+    code.get_sub().clear();
+    code.get_sub().push_back(ptr);
+    return true;
+  }
+
+  if (sub[0].is_nil())
+    return false; // do_mem/the AST rewrite are themselves no-ops here
+
+  const irept lhs = sub[0];
 
   irept rhs;
   if (callee == "malloc")
-    rhs = build_malloc_rhs(lhs, args);
+    rhs = build_mem_rhs(lhs, args, "malloc");
+  else if (callee == "alloca" || callee == "__builtin_alloca")
+    rhs = build_mem_rhs(lhs, args, "alloca");
+  else if (callee == "realloc")
+    rhs = build_realloc_rhs(lhs, args);
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
-    rhs = build_sqrt_rhs(lhs, args);
+    rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
+  else if (
+    callee == "nearbyint" || callee == "nearbyintf" || callee == "nearbyintl")
+    rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
+  else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
+    rhs = build_fma_rhs(lhs, args);
+  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
+  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
+  // must be in fix_expression's operand-wrap set for the argument to reach it.
+  else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
+    rhs = build_unary_fp_rhs(lhs, args, "abs");
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
 
@@ -500,13 +618,13 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN; the instruction
-  // kind must agree with the rewritten code, not CBMC's original raw type.
-  // 13 is goto_program_instruction_typet::ASSIGN (shared numbering, see
-  // map_cbmc_instruction_type).
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...) or
+  // an OTHER "free" codet; the instruction kind must agree with the rewritten
+  // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
+  // numbering, see map_cbmc_instruction_type).
   result.add("typeid") = mk(
     rewrote_builtin_call
-      ? "13"
+      ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));
   result.add("guard") = ins.guard;
 
@@ -646,7 +764,8 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
 
   for (auto &sym : parsed.symbols)
   {
-    if (sym.is_type && sym.stype.id() == "struct")
+    if (
+      sym.is_type && (sym.stype.id() == "struct" || sym.stype.id() == "union"))
     {
       const std::string tagname = "tag-" + sym.base_name;
       fix_type(sym.stype, type_cache);
@@ -659,9 +778,10 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
   for (auto &symbol : out.symbols)
   {
     fix_type(symbol, type_cache);
-    if (irep_contains(symbol, "struct_tag"))
+    if (
+      irep_contains(symbol, "struct_tag") || irep_contains(symbol, "union_tag"))
     {
-      log_error("CBMC adapter: struct_tag should have been resolved");
+      log_error("CBMC adapter: struct_tag/union_tag should have been resolved");
       abort();
     }
     if (symbol.find("type").id() == "c_bool")

@@ -111,7 +111,7 @@ struct char_traits
 template <
   class CharT,
   class Traits = char_traits<CharT>,
-  class Alloc = allocator<CharT>>
+  class Alloc = allocator<CharT> >
 class basic_string
 {
 public:

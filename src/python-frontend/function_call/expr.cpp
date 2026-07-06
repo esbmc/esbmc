@@ -930,6 +930,13 @@ exprt function_call_expr::build_constant_from_arg() const
     if (value_expr.statement() == "cpp-throw")
       return value_expr;
 
+    // A custom object defining __bool__ decides its own truthiness; otherwise
+    // the value's own type (numeric/pointer) is cast to bool below.
+    exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+      "bool", value_expr, converter_.get_location_from_decl(call_));
+    if (!dunder_result.is_nil())
+      return dunder_result;
+
     if (is_complex_type(value_expr.type()))
       return complex_to_bool_expr(value_expr);
 
@@ -4144,6 +4151,64 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
+
+  // sum() over a tuple: the sum/sum_float models iterate a *list*
+  // representation that a tuple struct does not have, so they return
+  // garbage (e.g. sum((1, 2, 3)) != 6). Fold the tuple's members directly
+  // with '+', promoting to double when any element is float so mixed
+  // int/float tuples keep Python semantics (sum((1, 2.5, 3)) == 6.5).
+  if (
+    func_name == "sum" && !is_user_imported && !is_numpy_model_call &&
+    (n_args == 1 || n_args == 2) &&
+    find_function(converter_.ast()["body"], func_name).empty())
+  {
+    exprt arg = converter_.get_expr(call_["args"][0]);
+    const typet &at = converter_.ns.follow(arg.type());
+    if (
+      at.is_struct() &&
+      to_struct_type(at).tag().as_string().starts_with("tag-tuple"))
+    {
+      const struct_typet::componentst &comps = to_struct_type(at).components();
+      // Only fold numeric tuples; leave non-numeric ones (nested tuples,
+      // strings — a TypeError in CPython anyway) to the existing path so
+      // this change is scoped to the case it fixes.
+      bool any_float = false, all_numeric = true;
+      for (const auto &c : comps)
+      {
+        const typet &ct = converter_.ns.follow(c.type());
+        if (ct.is_floatbv() || ct.is_fixedbv())
+          any_float = true;
+        else if (!ct.is_signedbv() && !ct.is_unsignedbv() && !ct.is_bool())
+          all_numeric = false;
+      }
+      if (all_numeric)
+      {
+        const type2tc rt2 =
+          migrate_type(any_float ? double_type() : long_long_int_type());
+
+        expr2tc acc;
+        if (n_args == 2)
+        {
+          migrate_expr(converter_.get_expr(call_["args"][1]), acc);
+          if (acc->type != rt2)
+            acc = typecast2tc(rt2, acc);
+        }
+        else
+          acc = gen_zero(rt2);
+
+        for (const auto &c : comps)
+        {
+          expr2tc m2;
+          migrate_expr(build_member(arg, c.get_name(), c.type()), m2);
+          if (m2->type != rt2)
+            m2 = typecast2tc(rt2, m2);
+          acc = add2tc(rt2, acc, m2);
+        }
+        return migrate_expr_back(acc);
+      }
+    }
+  }
+
   const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
                                  func_name == "sorted" ||
                                  func_name == "reversed";
@@ -5169,12 +5234,19 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       }
       else if (arg.is_constant())
       {
-        // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+        // Constant array (e.g. a folded string concat or a str-method result
+        // like "{}".format(x)) must be materialized before address_of_exprt.
+        // The DECL alone leaves the temp uninitialised, so strlen/get_object_size
+        // over it reads nondet bytes and runs past the array bounds; emit an
+        // explicit assignment of the constant value (mirrors the list path).
         symbolt &tmp = converter_.create_tmp_symbol(
-          call_, "$const_str_arg$", arg.type(), arg);
+          call_, "$const_str_arg$", arg.type(), exprt());
         code_declt tmp_decl(build_symbol(tmp));
         tmp_decl.location() = location;
         converter_.current_block->copy_to_operands(tmp_decl);
+        code_assignt tmp_assign(build_symbol(tmp), arg);
+        tmp_assign.location() = location;
+        converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
       call.arguments().push_back(build_address_of(arg));

@@ -810,6 +810,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           "Cannot resolve attribute '{}' on subscript result", attr_name);
         abort();
       }
+      else if (element["value"]["_type"] == "Call")
+      {
+        // Attribute access on an inline call result, e.g. `C().attr`. Convert
+        // the call to its (materialised) instance and resolve the member on
+        // it, the same way `d[k].attr` is handled above. A named instance
+        // (`c = C(); c.attr`) already works; this covers the unnamed case.
+        exprt base_expr = get_expr(element["value"]);
+        const std::string &attr_name = element["attr"].get<std::string>();
+
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
+        {
+          expr = resolved;
+          break;
+        }
+
+        log_error("Cannot resolve attribute '{}' on call result", attr_name);
+        abort();
+      }
       else
       {
         log_error(
@@ -1414,6 +1433,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
+
+    // A fully-constant string slice (e.g. "abcdef"[5:0:-1]) folds at
+    // conversion time. The runtime string-slice path mishandles a negative
+    // step — wrong content and an unconstrained length — whereas consteval's
+    // slice computation matches CPython. Gate on the converted str type (a
+    // bytes literal decodes to the same Constant JSON as str, and its runtime
+    // slice is a separate concern), so only a genuine constant str slice folds
+    // and anything non-constant falls through to the existing runtime path.
+    if (
+      ast_json && slice.is_object() && slice.value("_type", "") == "Slice" &&
+      type_utils::is_string_type(array_type))
+    {
+      python_consteval slice_evaluator(*ast_json);
+      if (auto folded = slice_evaluator.try_eval_global_expr(element))
+        if (folded->kind == PyConstValue::STRING)
+        {
+          expr = string_builder_->build_string_literal(folded->string_val);
+          break;
+        }
+    }
 
     // Unwrap pointer-to-dict so d[key] reaches the dict handler when
     // d is held by pointer (e.g. dict-of-class-value via the symbol table).
