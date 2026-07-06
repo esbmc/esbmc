@@ -1,11 +1,11 @@
-# SAFE-LD Property Specification Format
+# ESBMC-PLC Property Specification Format
 
 **Status:** DRAFT (WP1 / T1.3)  
 **Version:** 0.1  
 **Date:** 2026-06-09
 
 This document specifies the YAML format used to express safety properties for
-IEC 61131-3 Ladder Diagram programs verified with SAFE-LD.
+IEC 61131-3 Ladder Diagram programs verified with ESBMC-PLC.
 
 ---
 
