@@ -422,6 +422,24 @@ void python_converter::handle_assignment_type_adjustments(
   if (target_is_subscript)
     return;
 
+  // Assigning to a struct member (self.attr = value): an unannotated parameter
+  // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
+  // empty) but holds an integer value round-tripped as (int*)n. Writing that
+  // into a non-pointer integer field aborts with2t's type-compat assertion.
+  // Cast the any-type RHS to the member's declared integer type, recovering the
+  // integer. Restricted to the empty-subtype carrier (matching is_any_ptr in
+  // converter_binop): a genuine pointer value (None, a class instance, a list)
+  // is left untouched so it is not silently reinterpreted as an integer, and a
+  // float member (which would need a bit-reinterpretation) is left unchanged.
+  if (
+    lhs.id() == "member" && rhs.type().is_pointer() &&
+    rhs.type().subtype().id() == "empty" &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  {
+    rhs = typecast_exprt(rhs, lhs.type());
+    return;
+  }
+
   // Handle assignment of function to function pointer variable
   if (
     lhs.type().is_pointer() && lhs.type().subtype().is_code() &&

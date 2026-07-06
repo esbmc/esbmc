@@ -2,9 +2,11 @@
 
 **Program:** repo-wide "IREP2-native frontend→goto pipeline" (the Part V umbrella, #4715).
 **This issue:** the mandatory first spike. Read-only investigation + one throw-away prototype.
-**Owner:** TBD. **Status:** Phase A executed (2026-07-05) — census complete, **D3
-provisionally selected, D1 ruled out**; Phase B corpus measurement pending. See
-Appendix A. **Refs:** #4715, Part V of `docs/irep2-migration.md`.
+**Owner:** TBD. **Status:** Phases A+B executed (2026-07-05) — **D3 selected (go),
+D1 ruled out; W1-loc refuted as a *fidelity* wall** (the barrier is native-
+dispatcher implementation cost, not location correctness). Phase C prototype is
+the next step. See Appendices A & B. **Refs:** #4715, Part V of
+`docs/irep2-migration.md`.
 
 ---
 
@@ -231,3 +233,58 @@ over `regression/{esbmc,python,cbmc}`; tabulate the equality rate and characteri
 every inequality (multi-line expr / macro / generated temp). A ~100 % equality
 rate promotes D3 from "provisional" to "selected" and unblocks the Phase C
 Python-only `--irep2-native-body` prototype.
+
+---
+
+## Appendix B — Phase B result: Q-LOC is 100 % inheritance, D3 is a GO (2026-07-05)
+
+Deliverable (2). Phase A left one empirical question: does the pipeline ever
+*consume* a genuinely per-operand-distinct location, i.e. do the multi-line /
+macro shapes §2 suspected actually reach `goto_convert` with a distinct operand
+location? The answer, measured on the **shipped binary** (no rebuild — see the
+mechanism note below for why the corpus percentage is 100 % *by construction*):
+
+**Mechanism (why the rate is 100 %, not a sample).** The body round-trip at
+`goto_convert_functions.cpp:184` (`migrate_expr_back(get_value2())`) is
+**unconditional** (V.4.4b) and IREP2 value nodes carry no location, so every
+value operand reaches `restore_value_locations` (`:187`) **location-less**;
+restore then stamps each with its enclosing statement's location (pure
+inheritance). So the operand locations `goto_convert` consumes today are
+*already* the inherited statement locations — the frontend's distinct operand
+locations, if any, were discarded one line earlier. D3 (an IREP2-native pass that
+inherits the `code_*2t::location` at consumption) therefore reproduces today's
+bytes *by construction*, for any corpus.
+
+**Adversarial confirmation on the suspected counterexamples.** Ran
+`--goto-functions-only` on the three shapes §2 named as the likely Q-LOC
+violators; in every case the generated instructions carry the **enclosing
+statement** line, never the operand's own line:
+
+| Probe | Operand on a distinct line | Generated instruction location | Inherited? |
+|---|---|---|---|
+| in-expression call `int y = 1 +`↵`h(2);` (stmt line 4, `h(2)` line 5) | line 5 | `DECL`/`FUNCTION_CALL`/`ASSIGN` all **line 4** | ✅ |
+| macro `int y =`↵`CALL;` where `CALL`≡`h(9)` (stmt line 5, expansion line 6) | line 6 | `FUNCTION_CALL`/`ASSIGN` all **line 5** | ✅ |
+| deep nest `int y = a(`↵`b(3));` (stmt line 5, `b(3)` line 6) | line 6 | inner `b(3)` **and** outer `a(...)` both **line 5** | ✅ |
+
+**Verdict — D3 GO; W1-loc is not a fidelity wall.** The V.4 outcome classified
+W1 a `RETAIN_BOUNDARY` because "value-operand source locations cannot live in
+IREP2." Phases A+B refute that as a *correctness* barrier: the pipeline never
+consumes a distinct operand location — it consumes the enclosing statement
+location, which lives on the `code_*2t` kinds already. So literal 100 %
+(body-through-`goto_convert` with no `migrate_*` back-hop) **is reachable at
+byte-identical fidelity** via D3; no per-node location field (D1) and no
+located-operand set (D2) is required. What remains is **not** a fidelity
+impossibility but the **engineering cost** the V.4 outcome also named: an
+IREP2-native `goto_convert` dispatcher that reimplements `convert_block`'s
+destructor-stack / `end_location` unwind, goto target-tracking, and the
+side-effect hoisting — behind a per-frontend flag, gated on byte-identical GOTO
+across every frontend. That cost is real and unchanged; the spike's contribution
+is to move W1-loc from "impossible without location-fidelity loss" to "possible,
+priced as a large cross-frontend program."
+
+**Recommended next step (Phase C).** A throw-away Python-only prototype behind
+`--irep2-native-body` that routes the Python body to an IREP2-native
+`goto_convert` inheriting `code_*2t::location`, gated on byte-identical GOTO over
+`regression/python` + the model-`.py` corpus + an `esbmc-cpp` smoke stratum. Its
+purpose is to *measure the implementation cost* now that fidelity is settled — it
+is a sizing experiment, not a landable PR, exactly as the V.1k rounds were.
