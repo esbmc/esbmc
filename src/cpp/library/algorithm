@@ -1,7 +1,7 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
-//#include "iterator"
+#include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
 #include <utility>
 
@@ -558,15 +558,8 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
   return dest;
 }
 
-#if __cplusplus < 201103L /* <type_traits> provides it for C++ >= 11 */
-template <class Ty>
-void swap(Ty &a, Ty &b)
-{
-  Ty c(a);
-  a = b;
-  b = c;
-}
-#endif
+/* swap is provided by <utility> (included above) for both C++03 and C++11+;
+   defining it here as well caused a redefinition error under -std=c++03. */
 
 template <class FwdIt1, class FwdIt2>
 FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2)
@@ -937,7 +930,7 @@ BidIt stable_partition(BidIt first, BidIt last, Pr pred)
   {
     if (pred(*next))
     {
-      auto tmp = *next;
+      typename std::iterator_traits<BidIt>::value_type tmp = *next;
       BidIt i = next;
       while (i != first)
       {
@@ -2142,16 +2135,18 @@ template <class RanIt>
 void push_heap(RanIt first, RanIt last)
 {
   // Sift up the element at *(last - 1) within the max-heap [first, last).
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto child = n - 1;
+  diff_t child = n - 1;
   while (child > 0)
   {
-    auto parent = (child - 1) / 2;
+    diff_t parent = (child - 1) / 2;
     if (*(first + parent) < *(first + child))
     {
-      auto tmp = *(first + parent);
+      val_t tmp = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = tmp;
       child = parent;
@@ -2164,16 +2159,18 @@ void push_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void push_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto child = n - 1;
+  diff_t child = n - 1;
   while (child > 0)
   {
-    auto parent = (child - 1) / 2;
+    diff_t parent = (child - 1) / 2;
     if (pred(*(first + parent), *(first + child)))
     {
-      auto tmp = *(first + parent);
+      val_t tmp = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = tmp;
       child = parent;
@@ -2187,24 +2184,26 @@ template <class RanIt>
 void pop_heap(RanIt first, RanIt last)
 {
   // Move max to end, then sift down [first, last - 1).
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto tmp = *first;
+  val_t tmp = *first;
   *first = *(last - 1);
   *(last - 1) = tmp;
   --n;
-  decltype(n) parent = 0;
+  diff_t parent = 0;
   while (true)
   {
-    auto child = 2 * parent + 1;
+    diff_t child = 2 * parent + 1;
     if (child >= n)
       break;
     if (child + 1 < n && *(first + child) < *(first + child + 1))
       ++child;
     if (*(first + parent) < *(first + child))
     {
-      auto t = *(first + parent);
+      val_t t = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = t;
       parent = child;
@@ -2217,24 +2216,26 @@ void pop_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void pop_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   if (n <= 1)
     return;
-  auto tmp = *first;
+  val_t tmp = *first;
   *first = *(last - 1);
   *(last - 1) = tmp;
   --n;
-  decltype(n) parent = 0;
+  diff_t parent = 0;
   while (true)
   {
-    auto child = 2 * parent + 1;
+    diff_t child = 2 * parent + 1;
     if (child >= n)
       break;
     if (child + 1 < n && pred(*(first + child), *(first + child + 1)))
       ++child;
     if (pred(*(first + parent), *(first + child)))
     {
-      auto t = *(first + parent);
+      val_t t = *(first + parent);
       *(first + parent) = *(first + child);
       *(first + child) = t;
       parent = child;
@@ -2247,12 +2248,14 @@ void pop_heap(RanIt first, RanIt last, Pr pred)
 template <class RanIt>
 void make_heap(RanIt first, RanIt last)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
 
   for (int i = (n / 2) - 1; i >= 0; --i)
   {
     int parent = i;
-    auto value = *(first + parent);
+    val_t value = *(first + parent);
     while (1)
     {
       int child = 2 * parent + 1;
@@ -2277,11 +2280,13 @@ void make_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void make_heap(RanIt first, RanIt last, Pr pred)
 {
-  auto n = last - first;
+  typedef typename std::iterator_traits<RanIt>::difference_type diff_t;
+  typedef typename std::iterator_traits<RanIt>::value_type val_t;
+  diff_t n = last - first;
   for (int i = (n / 2) - 1; i >= 0; --i)
   {
     int parent = i;
-    auto value = *(first + parent);
+    val_t value = *(first + parent);
     while (true)
     {
       int child = 2 * parent + 1;
