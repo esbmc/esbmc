@@ -10,3 +10,6 @@ assert max("aAzZ") == "z"
 s = "dcba"
 assert min(s) == "a"
 assert max(s) == "d"
+# Repeated characters compare by value, not by first occurrence.
+assert min("banana") == "a"
+assert max("banana") == "n"
