@@ -1610,7 +1610,15 @@ bool clang_cpp_convertert::build_destructor_chain(
   for (const clang::FieldDecl *field : llvm::reverse(fields))
   {
     clang::QualType qt = field->getType();
-    const clang::CXXRecordDecl *rec = qt->getAsCXXRecordDecl();
+
+    // An array member of class type has each element destroyed; peel the
+    // (possibly nested) array dimensions to reach the element record type,
+    // since QualType::getAsCXXRecordDecl returns null for array types.
+    clang::QualType elem_qt = qt;
+    while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+      elem_qt = at->getElementType();
+
+    const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
     if (!rec)
       continue;
     const symbolt *sym = lookup_dtor(rec->getDestructor());
@@ -1623,8 +1631,43 @@ bool clang_cpp_convertert::build_destructor_chain(
 
     std::string field_name, field_id;
     get_decl_name(*field, field_name, field_id);
-    emit_dtor_call(
-      *sym, address_of_exprt(member_exprt(deref, field_name, field_type)));
+    exprt member = member_exprt(deref, field_name, field_type);
+
+    if (qt->isArrayType())
+    {
+      // C++ [class.dtor]/9: array elements are destroyed in reverse index
+      // order.  Emit one destructor call per element, recursing into nested
+      // arrays so every leaf element is destroyed.
+      std::function<bool(const exprt &)> destroy_elements =
+        [&](const exprt &arr) -> bool {
+        const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
+        BigInt count;
+        if (to_integer(arr_type.size(), count))
+        {
+          log_error("cannot determine array size for member dtor chain");
+          return true;
+        }
+
+        const typet &elem_type = arr_type.subtype();
+        for (BigInt i = 0; i < count; ++i)
+        {
+          index_exprt element(
+            arr, from_integer(count - 1 - i, index_type()), elem_type);
+          if (ns.follow(elem_type).is_array())
+          {
+            if (destroy_elements(element))
+              return true;
+          }
+          else
+            emit_dtor_call(*sym, address_of_exprt(element));
+        }
+        return false;
+      };
+      if (destroy_elements(member))
+        return true;
+    }
+    else
+      emit_dtor_call(*sym, address_of_exprt(member));
   }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
