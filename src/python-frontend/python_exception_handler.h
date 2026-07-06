@@ -74,6 +74,13 @@ public:
   void
   get_except_handler_statement(const nlohmann::json &element, codet &block);
 
+  // Emit one catch block for a single exception-type node (or null for a bare
+  // `except:`); used per type when `except (A, B):` lists a tuple of types.
+  void emit_catch_block(
+    const nlohmann::json &element,
+    const nlohmann::json &type_node,
+    codet &block);
+
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
   // -----------------------------------------------------------------------

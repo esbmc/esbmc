@@ -666,8 +666,10 @@ size_t __ESBMC_list_index_range(
       return i;
     ++i;
   }
-  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
-  return 0;
+  // Not found in l[start:end]. Return the SIZE_MAX sentinel so the frontend can
+  // raise a catchable ValueError (the dict KeyError / list.remove pattern);
+  // asserting here would be an uncatchable property violation instead.
+  return SIZE_MAX;
 }
 
 /* ---------- extend list ---------- */

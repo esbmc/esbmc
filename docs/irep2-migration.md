@@ -4239,6 +4239,33 @@ migration. Re-opening it requires either an IREP2-native location-carriage
 design (a large, separate initiative) or a decision that location fidelity may
 degrade (it may not — it is `test.desc`- and witness-visible).
 
+> **2026-07-05 update — the W1-loc spike (`docs/spike-v1k-w1loc.md`, Phases A–B)
+> refutes the fidelity premise above; W1-loc is reclassified.** The Conclusion
+> rests on "the pipeline consumes per-node source locations and fidelity depends
+> on it." Measured, that premise is false at the consumption sites. Phase A's
+> census found the *entire* operand-location-read set in the goto-convert /
+> side-effect pipeline is two sites — the `&&`/`||` lowering
+> (`goto_sideeffects.cpp:213`, which overwrites the operand location with the
+> enclosing expr's *before* reading it) and the do-while condition
+> (`goto_convert.cpp:1255`) — and `restore_value_locations` is pure inheritance.
+> Phase B closed it: the body round-trip is **unconditional** (V.4.4b) and IREP2
+> value nodes carry no location, so every value operand reaches
+> `restore_value_locations` location-less and is stamped with its enclosing
+> statement location. So the operand locations `goto_convert` consumes *today* are
+> already the inherited statement locations — confirmed byte-for-byte on the
+> multi-line-expression, macro-expansion, and deep-nested-call shapes this section
+> feared as counterexamples (every generated instruction carries the statement
+> line, never the operand's own line). **Consequence:** design **D3** — an
+> IREP2-native `goto_convert` that inherits `code_*2t::location` at consumption —
+> reproduces today's bytes *by construction*; no per-node location field (D1) and
+> no located-operand set (D2) is required. W1-loc is therefore **not** a fidelity
+> wall. What survives of this Conclusion is only its *cost* clause: re-opening W1
+> still needs the "large, separate initiative" of an IREP2-native dispatcher (the
+> `convert_block` destructor-stack / `end_location` unwind, goto target-tracking,
+> side-effect hoisting), per-frontend-flagged and byte-identical-GOTO-gated. W1
+> moves from `RETAIN_BOUNDARY (fidelity)` to **reachable, priced as a large
+> cross-frontend program** — the spike's Phase C sizes it.
+
 ### Phase V.5 — IREP2-native counterexample printer (removes W4)
 Part II Phase 2.7: an IREP2 C/C++ printer so traces / `test.desc`-matched text
 are produced without the legacy printer reading `#cpp_type`/`#cformat`.

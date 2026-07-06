@@ -798,18 +798,18 @@ exprt python_list::handle_range_slice(
       step_val = 1; // continue with valid value to keep IR consistent
     }
   }
-  // Python raises ValueError on step==0; emit a failing assertion so
-  // verification reports it rather than silently producing a slice.
-  // code_assertt does not insert assume(false), so the rest of the slice
-  // IR still runs with step_val==1 — that is harmless: the violation is
-  // already reported by the checker.
+  // Python raises ValueError on step==0. Raise it from the frontend (a
+  // cpp-throw) so try/except ValueError can catch it — a code_assert would be
+  // an uncatchable property violation. The raise diverts control, so the rest
+  // of the slice IR (kept consistent with step_val==1) is a dead path.
   if (literal_zero_step)
   {
-    // V.3: build the always-fail assert condition in IREP2.
-    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
-    step_assert.location() = converter_.get_location_from_decl(slice_node);
-    step_assert.location().comment("ValueError: slice step cannot be zero");
-    converter_.add_instruction(step_assert);
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "slice step cannot be zero");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = converter_.get_location_from_decl(slice_node);
+    converter_.add_instruction(throw_code);
   }
   bool negative_step = (step_val < 0);
 

@@ -400,6 +400,63 @@ irept build_unary_fp_rhs(
   return result;
 }
 
+// Builds the (ptr == NULL) ? malloc(size) : realloc(ptr) conditional
+// goto_convertt::do_realloc produces for realloc(ptr, size). The null guard is
+// load-bearing: symex_realloc assumes a live source object, so realloc(NULL, n)
+// must route through the malloc side-effect (C says realloc(NULL, n) == malloc
+// (n)). The malloc branch reuses build_mem_rhs; the realloc branch is a
+// side_effect("realloc", ptr) carrying the byte size in "#size", which
+// migrate_expr maps to sideeffect2t allockind realloc -> symex_realloc. The
+// "if"/"="/sideeffect ids are all in fix_expression's wrap-set, so each node's
+// operands are wrapped by the later recursion in instruction_to_esbmc_irep.
+irept build_realloc_rhs(const irept &lhs, const irept::subt &args)
+{
+  if (args.size() != 2)
+    return get_nil_irep();
+
+  const irept ptr = args[0];
+  const irept size = args[1];
+
+  irept::subt size_only;
+  size_only.push_back(size);
+  irept malloc_branch = build_mem_rhs(lhs, size_only, "malloc");
+  if (malloc_branch.is_nil())
+    return get_nil_irep();
+
+  // realloc branch: side_effect("realloc", ptr), #size = size coerced to size_t
+  // (mirrors build_mem_rhs; get_alloc_size always coerces the allocation
+  // size). fix_expression only recurses into get_sub()/get_named_sub(), never
+  // comments, so normalise the "#size" copy explicitly here.
+  irept size_arg(irep_idt("typecast"));
+  size_arg.add("type") = static_cast<const irept &>(size_type());
+  size_arg.get_sub().push_back(size);
+  fix_expression(size_arg);
+
+  irept realloc_branch(irep_idt("sideeffect"));
+  realloc_branch.add("type") = lhs.find("type");
+  realloc_branch.add("statement") = mk("realloc");
+  realloc_branch.get_sub().push_back(ptr);
+  realloc_branch.add("#size") = size_arg;
+
+  // is_null = (ptr == NULL); a NULL-valued pointer constant migrates to the
+  // null symbol (migrate.cpp).
+  irept null_const(irep_idt("constant"));
+  null_const.add("type") = ptr.find("type");
+  null_const.add("value") = mk("NULL");
+
+  irept is_null(irep_idt("="));
+  is_null.add("type") = static_cast<const irept &>(bool_type());
+  is_null.get_sub().push_back(ptr);
+  is_null.get_sub().push_back(null_const);
+
+  irept if_expr(irep_idt("if"));
+  if_expr.add("type") = lhs.find("type");
+  if_expr.get_sub().push_back(is_null);
+  if_expr.get_sub().push_back(malloc_branch);
+  if_expr.get_sub().push_back(realloc_branch);
+  return if_expr;
+}
+
 // Builds an ieee_fma exprt for fma(a, b, c) = a*b + c (single-rounding fused
 // multiply-add). migrate_expr reads op0/op1/op2 and defaults the rounding mode
 // like the rest of the ieee_* family (see build_unary_fp_rhs).
@@ -467,6 +524,8 @@ bool fix_builtin_call(irept &code)
     rhs = build_mem_rhs(lhs, args, "malloc");
   else if (callee == "alloca" || callee == "__builtin_alloca")
     rhs = build_mem_rhs(lhs, args, "alloca");
+  else if (callee == "realloc")
+    rhs = build_realloc_rhs(lhs, args);
   else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
     rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
   else if (

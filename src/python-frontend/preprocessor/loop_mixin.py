@@ -1097,8 +1097,14 @@ class LoopMixin:
         self.ensure_all_locations(loop_var_init, node)
         ast.fix_missing_locations(loop_var_init)
 
-        # Create the body of the while loop, including updating the start and has_next variables
-        while_body = ([loop_var_init] + transformed_body + [
+        # Create the body of the while loop. The loop variable is snapshotted
+        # from the counter, then the counter and has_next are advanced *before*
+        # the loop body — not after — so that a `continue` in the body (which
+        # jumps straight to the while condition) does not skip the advance and
+        # spin forever. This mirrors the index-increment-before-body layout used
+        # by the items/iterable while-lowerings.
+        while_body = ([
+            loop_var_init,
             ast.Assign(
                 targets=[ast.Name(id=start_var, ctx=ast.Store())],
                 value=ast.Call(
@@ -1115,7 +1121,7 @@ class LoopMixin:
                     keywords=[],
                 ),
             ),
-        ])
+        ] + transformed_body)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])

@@ -26,6 +26,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/exception_specification.h>
 #include <util/string_constant.h>
@@ -1617,7 +1618,15 @@ bool clang_cpp_convertert::build_destructor_chain(
   for (const clang::FieldDecl *field : llvm::reverse(fields))
   {
     clang::QualType qt = field->getType();
-    const clang::CXXRecordDecl *rec = qt->getAsCXXRecordDecl();
+
+    // An array member of class type has each element destroyed; peel the
+    // (possibly nested) array dimensions to reach the element record type,
+    // since QualType::getAsCXXRecordDecl returns null for array types.
+    clang::QualType elem_qt = qt;
+    while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+      elem_qt = at->getElementType();
+
+    const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
     if (!rec)
       continue;
     const symbolt *sym = lookup_dtor(rec->getDestructor());
@@ -1630,8 +1639,43 @@ bool clang_cpp_convertert::build_destructor_chain(
 
     std::string field_name, field_id;
     get_decl_name(*field, field_name, field_id);
-    emit_dtor_call(
-      *sym, address_of_exprt(member_exprt(deref, field_name, field_type)));
+    exprt member = member_exprt(deref, field_name, field_type);
+
+    if (qt->isArrayType())
+    {
+      // C++ [class.dtor]/9: array elements are destroyed in reverse index
+      // order.  Emit one destructor call per element, recursing into nested
+      // arrays so every leaf element is destroyed.
+      std::function<bool(const exprt &)> destroy_elements =
+        [&](const exprt &arr) -> bool {
+        const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
+        BigInt count;
+        if (to_integer(arr_type.size(), count))
+        {
+          log_error("cannot determine array size for member dtor chain");
+          return true;
+        }
+
+        const typet &elem_type = arr_type.subtype();
+        for (BigInt i = 0; i < count; ++i)
+        {
+          index_exprt element(
+            arr, from_integer(count - 1 - i, index_type()), elem_type);
+          if (ns.follow(elem_type).is_array())
+          {
+            if (destroy_elements(element))
+              return true;
+          }
+          else
+            emit_dtor_call(*sym, address_of_exprt(element));
+        }
+        return false;
+      };
+      if (destroy_elements(member))
+        return true;
+    }
+    else
+      emit_dtor_call(*sym, address_of_exprt(member));
   }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
@@ -1709,10 +1753,17 @@ bool clang_cpp_convertert::get_function_body(
       return true;
   }
 
-  if (new_expr.statement() != "block")
+  if (new_expr.statement() != "block" && new_expr.statement() != "cpp-catch")
     return false;
 
-  code_blockt &body = to_code_block(to_code(new_expr));
+  // A constructor/destructor may use a function-try-block; its body is then a
+  // `cpp-catch` whose first operand is the try block and whose remaining
+  // operands are the handlers. The member/base initializers and the destructor
+  // chain operate on that try block, so `body` points at it in that case.
+  const bool function_try_block = new_expr.statement() == "cpp-catch";
+  code_blockt &body = function_try_block
+                        ? to_code_block(to_code(new_expr.op0()))
+                        : to_code_block(to_code(new_expr));
 
   // if it's a constructor, check for initializers
   if (fd.getKind() == clang::Decl::CXXConstructor)
@@ -1903,6 +1954,25 @@ bool clang_cpp_convertert::get_function_body(
     if (build_destructor_chain(
           static_cast<const clang::CXXDestructorDecl &>(fd), body))
       return true;
+  }
+
+  // C++ [except.handle]/15: if control reaches the end of a handler of a
+  // constructor's or destructor's function-try-block, the currently handled
+  // exception is rethrown — a handler there cannot swallow an exception raised
+  // while constructing/destroying a base or member subobject. Append an
+  // implicit `throw;` to each handler to model this.
+  if (
+    function_try_block && (fd.getKind() == clang::Decl::CXXConstructor ||
+                           fd.getKind() == clang::Decl::CXXDestructor))
+  {
+    codet::operandst &ops = new_expr.operands();
+    for (std::size_t i = 1; i < ops.size(); i++)
+    {
+      code_blockt &handler = to_code_block(to_code(ops[i]));
+      exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+      convert_expression_to_code(rethrow);
+      handler.operands().push_back(rethrow);
+    }
   }
 
   return false;

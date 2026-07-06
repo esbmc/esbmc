@@ -623,6 +623,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // the symbol's value (address_of(func)), because gen_pointer_type
       // does not preserve the full code_typet (return type + arguments).
       bool resolved = false;
+      const code_typet *resolved_func_type = nullptr;
       if (
         var_symbol->get_value().is_address_of() &&
         !var_symbol->get_value().operands().empty() &&
@@ -632,8 +633,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           var_symbol->get_value().operands()[0].identifier());
         if (target_func && target_func->get_type().is_code())
         {
-          const code_typet &func_type = to_code_type(target_func->get_type());
-          call.type() = func_type.return_type();
+          resolved_func_type = &to_code_type(target_func->get_type());
+          call.type() = resolved_func_type->return_type();
           resolved = true;
         }
       }
@@ -641,9 +642,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Try to get return type from the pointer's subtype
       if (!resolved && var_symbol->get_type().subtype().is_code())
       {
-        const code_typet &func_type =
-          to_code_type(var_symbol->get_type().subtype());
-        call.type() = func_type.return_type();
+        resolved_func_type = &to_code_type(var_symbol->get_type().subtype());
+        call.type() = resolved_func_type->return_type();
         resolved = true;
       }
 
@@ -662,6 +662,29 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (arg_expr.type().is_code() && arg_expr.is_symbol())
             arg_expr = address_of_exprt(arg_expr);
           call.arguments().push_back(arg_expr);
+        }
+      }
+
+      // Fill omitted trailing parameters that carry a default value (e.g. a
+      // `lambda x, y=2: ...` called with fewer arguments), so symex does not
+      // model them as nondet. Stop at the first parameter that cannot be
+      // filled so the remaining positional arguments stay aligned: either it
+      // has no default, or its default is a string/array. A string default is
+      // stored raw (a char array) and needs the string_constantt/address-of
+      // conversion finalize_call applies to direct calls; pushing it here would
+      // pass an unconverted array->pointer argument (right content but wrong
+      // len()), so leave it — and everything after it — nondet as before.
+      if (resolved_func_type)
+      {
+        const auto &params = resolved_func_type->arguments();
+        for (size_t i = call.arguments().size(); i < params.size(); ++i)
+        {
+          if (!params[i].has_default_value())
+            break;
+          const exprt &default_val = params[i].default_value();
+          if (default_val.type().is_array())
+            break;
+          call.arguments().push_back(default_val);
         }
       }
 
