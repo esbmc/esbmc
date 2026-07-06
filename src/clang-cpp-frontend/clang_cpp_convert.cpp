@@ -1942,8 +1942,7 @@ bool clang_cpp_convertert::get_function_body(
                 BigInt count;
                 if (to_integer(arr_type.size(), count))
                 {
-                  log_error(
-                    "cannot determine array size for member ctor init");
+                  log_error("cannot determine array size for member ctor init");
                   abort();
                 }
 
