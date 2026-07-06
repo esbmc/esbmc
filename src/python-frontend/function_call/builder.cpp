@@ -403,6 +403,14 @@ symbol_id function_call_builder::build_function_id() const
         function_id.set_function(func_name);
         return function_id;
       }
+      else if (
+        arg.contains("func") && arg["func"].is_object() &&
+        arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"].value("attr", "") == "encode")
+        // len(s.encode()): the encoded bytes are a wide-int array whose zero
+        // high bytes make strlen stop at the first element, so size by element
+        // count instead (matches the bytes variable and bytes-slice paths).
+        func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;

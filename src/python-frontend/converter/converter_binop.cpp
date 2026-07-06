@@ -467,13 +467,34 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   if (logical_expr.operands().size() == 1)
     return logical_expr.operands().front();
 
+  // V.3: build the boolean `and`/`or` as the left-nested IREP2 and2t/or2t
+  // chain that migrate splices the legacy n-ary node into (cf.
+  // handle_chained_comparisons_logic), then back-migrate once. goto_convert's
+  // mandatory IREP2 body round-trip normalises both forms identically, so
+  // this is byte-identical. Operands are >= 2 here (the size()==1 degenerate
+  // case returned above), so the loop always yields a binary node.
+  auto build_boolean_chain = [](const exprt &e) -> exprt {
+    expr2tc acc;
+    migrate_expr(e.operands().front(), acc);
+    for (std::size_t i = 1; i < e.operands().size(); ++i)
+    {
+      expr2tc op2;
+      migrate_expr(e.operands()[i], op2);
+      if (e.is_and())
+        acc = and2tc(acc, op2);
+      else
+        acc = or2tc(acc, op2);
+    }
+    return migrate_expr_back(acc);
+  };
+
   // Shockingly enough, a BoolOp may not return a boolean.
   if (contains_non_boolean)
   {
     typet t = extract_type_from_boolean_op(logical_expr).type();
     // Are we dealing with an actual bool expression?
     if (t.is_bool())
-      return logical_expr;
+      return build_boolean_chain(logical_expr);
     // Result expression starts from last operand as default else branch.
     const type2tc t2 = migrate_type(t);
     exprt result_expr = logical_expr.operands().back();
@@ -511,7 +532,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
     }
     return result_expr;
   }
-  return logical_expr;
+  return build_boolean_chain(logical_expr);
 }
 inline bool is_ieee_op(const exprt &expr)
 {
@@ -676,6 +697,25 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
     else
     {
+      // Reconcile a pointer operand against an integer one before building the
+      // comparison, mirroring the first comparison (bin_expr). An unannotated
+      // param is typed as a pointer but holds an integer value round-tripped as
+      // (int*)n; building `ptr <= int` raw here aborts in the SMT backend
+      // (convert_ptr_cmp). Cast the pointer to the integer operand's type,
+      // exactly as the reconciled first comparison does for an integer bound
+      // (get_binary_operator_expr, "cast void* to integer"). Restricted to
+      // integers: a float bound is reconciled differently there (the float is
+      // bitcast to the pointer type), so folding it in here would make the two
+      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A float-bounded
+      // chained comparison over an unannotated param stays a pre-existing
+      // crash, unchanged by this patch.
+      auto is_integer = [](const typet &t) {
+        return t.is_signedbv() || t.is_unsignedbv();
+      };
+      if (op1.type().is_pointer() && is_integer(op2.type()))
+        op1 = typecast_exprt(op1, op2.type());
+      else if (op2.type().is_pointer() && is_integer(op1.type()))
+        op2 = typecast_exprt(op2, op1.type());
       exprt logical_expr(
         python_frontend::map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1, op2);

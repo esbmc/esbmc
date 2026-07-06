@@ -22,6 +22,7 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
+#include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
 #include <util/filesystem.h>
@@ -186,13 +187,17 @@ static void segfault_handler(int sig)
 //
 // \param str - string representation of a time interval,
 // \return - number of seconds that represents the input string value.
-uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
+uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty timeout value");
+    abort();
+  }
+  uint64_t mult = 1;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 's':
       mult = 1;
@@ -211,12 +216,8 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       abort();
     }
   }
-  else
-  {
-    mult = 1;
-  }
-
-  uint64_t timeout = strtol(str, nullptr, 10);
+  uint64_t timeout = 0;
+  std::from_chars(str.data(), str.data() + str.size(), timeout);
   timeout *= mult;
   return timeout;
 }
@@ -235,14 +236,18 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 // this method throws an error.
 //
 // \param str - string representation of a memory limit,
-// \return - number of megabytes that represents the input string value.
-uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
+// \return - number of bytes that represents the input string value.
+uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty memlimit value");
+    abort();
+  }
+  uint64_t mult = 1024ULL * 1024ULL;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 'b':
       mult = 1;
@@ -251,22 +256,18 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024;
       break;
     case 'm':
-      mult = 1024 * 1024;
+      mult = 1024ULL * 1024ULL;
       break;
     case 'g':
-      mult = 1024 * 1024 * 1024;
+      mult = 1024ULL * 1024ULL * 1024ULL;
       break;
     default:
       log_error("Unrecognized memlimit suffix");
       abort();
     }
   }
-  else
-  {
-    mult = 1024 * 1024;
-  }
-
-  uint64_t size = strtol(str, nullptr, 10);
+  uint64_t size = 0;
+  std::from_chars(str.data(), str.data() + str.size(), size);
   size *= mult;
   return size;
 }
@@ -2153,6 +2154,8 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 //
 // \param options - options to be passed through,
 // \param goto_functions - this is where the created GOTO program is stored.
+static void link_cbmc_libm_bodies(goto_functionst &goto_functions);
+
 bool esbmc_parseoptionst::create_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -2190,6 +2193,12 @@ bool esbmc_parseoptionst::create_goto_program(
 
       if (read_goto_binary(goto_functions))
         return true;
+
+      // Resolve CBMC's bodyless libm externals (ceil/floor/trunc/round, ...) to
+      // the operational-model bodies the additions linked, before symex sees a
+      // bodyless call returning nondet.
+      if (cbmc_additions)
+        link_cbmc_libm_bodies(goto_functions);
 
       // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
       // c:@F@main, onto the program's real entry. An explicit --function wins;
@@ -2277,6 +2286,43 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   return false;
 }
 
+// Bridge CBMC's plain-named bodyless libm externals (e.g. `ceil`) to the
+// operational-model bodies the additions link under the C-frontend-mangled id
+// (`c:@F@ceil`). CBMC emits ceil/floor/trunc/round (and float/long-double
+// variants) as bodyless FUNCTION_CALL externals; unlike sqrt/fabs -- rewritten
+// to expressions in cbmc_adapter -- they have no ESBMC expression form and must
+// run the library body. Copying the bodied function's body and type onto the
+// bodyless declaration lets symex resolve the call: argument_assignments binds
+// actual args using the copied type's parameter names, which match the copied
+// body (goto-symex/symex_function.cpp).
+static void link_cbmc_libm_bodies(goto_functionst &goto_functions)
+{
+  static const char *const libm[] = {
+    "ceilf",     "ceil",     "ceill",     "floorf", "floor", "floorl",
+    "truncf",    "trunc",    "truncl",    "roundf", "round", "roundl",
+    "copysignf", "copysign", "copysignl", "fminf",  "fmin",  "fminl",
+    "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",  "fdiml"};
+
+  for (const char *name : libm)
+  {
+    auto bodyless = goto_functions.function_map.find(name);
+    if (
+      bodyless == goto_functions.function_map.end() ||
+      bodyless->second.body_available)
+      continue;
+
+    auto bodied = goto_functions.function_map.find(std::string("c:@F@") + name);
+    if (
+      bodied == goto_functions.function_map.end() ||
+      !bodied->second.body_available)
+      continue;
+
+    bodyless->second.body = bodied->second.body; // operator= fixes up targets
+    bodyless->second.type = bodied->second.type;
+    bodyless->second.body_available = true;
+  }
+}
+
 // Compile a boilerplate translation unit through the normal C-frontend pipeline
 // to obtain ESBMC's "additions": typecheck() pulls in the C library via
 // add_cprover_library, final() builds the __ESBMC_main entry wrapper, and
@@ -2289,8 +2335,24 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
 {
   file_operations::tmp_file tf =
     file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
+  // Taking the addresses of the bodied libm functions marks them referenced, so
+  // add_cprover_library links their operational-model bodies into the additions;
+  // link_cbmc_libm_bodies then bridges the CBMC binary's plain-named bodyless
+  // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
+  // these have no ESBMC expression form and must run the C library body.
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
+    "#include <math.h>\n"
+    "void *const __esbmc_cbmc_libm_refs[] = {\n"
+    "  (void *)ceilf,     (void *)ceil,     (void *)ceill,\n"
+    "  (void *)floorf,    (void *)floor,    (void *)floorl,\n"
+    "  (void *)truncf,    (void *)trunc,    (void *)truncl,\n"
+    "  (void *)roundf,    (void *)round,    (void *)roundl,\n"
+    "  (void *)copysignf, (void *)copysign, (void *)copysignl,\n"
+    "  (void *)fminf,     (void *)fmin,     (void *)fminl,\n"
+    "  (void *)fmaxf,     (void *)fmax,     (void *)fmaxl,\n"
+    "  (void *)fdimf,     (void *)fdim,     (void *)fdiml,\n"
+    "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
   {
@@ -2299,11 +2361,19 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   }
 
   // Point the command line at the boilerplate for this one compile, then
-  // restore it for the subsequent binary read.
+  // restore it for the subsequent binary read. The user's --function names a
+  // harness in the CBMC binary, not in this boilerplate, so also neutralise
+  // config.main (which config.cpp sets from --function) for the compile --
+  // otherwise the boilerplate's entry-point synthesis (clang_c_main) looks for
+  // that harness here and aborts with "main symbol not found". The retarget in
+  // create_goto_program applies --function to the loaded binary afterwards.
   cmdlinet::argst saved_args = cmdline.args;
+  const std::string saved_main = config.main;
   cmdline.args = {tf.path()};
+  config.main = "";
   bool failed = parse_goto_program(options, goto_functions);
   cmdline.args = saved_args;
+  config.main = saved_main;
 
   if (failed)
     log_error("failed to synthesize ESBMC additions for CBMC goto-binary");

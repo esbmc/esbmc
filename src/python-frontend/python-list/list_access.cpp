@@ -798,18 +798,18 @@ exprt python_list::handle_range_slice(
       step_val = 1; // continue with valid value to keep IR consistent
     }
   }
-  // Python raises ValueError on step==0; emit a failing assertion so
-  // verification reports it rather than silently producing a slice.
-  // code_assertt does not insert assume(false), so the rest of the slice
-  // IR still runs with step_val==1 — that is harmless: the violation is
-  // already reported by the checker.
+  // Python raises ValueError on step==0. Raise it from the frontend (a
+  // cpp-throw) so try/except ValueError can catch it — a code_assert would be
+  // an uncatchable property violation. The raise diverts control, so the rest
+  // of the slice IR (kept consistent with step_val==1) is a dead path.
   if (literal_zero_step)
   {
-    // V.3: build the always-fail assert condition in IREP2.
-    code_assertt step_assert(migrate_expr_back(gen_false_expr()));
-    step_assert.location() = converter_.get_location_from_decl(slice_node);
-    step_assert.location().comment("ValueError: slice step cannot be zero");
-    converter_.add_instruction(step_assert);
+    exprt raise = converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "slice step cannot be zero");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = converter_.get_location_from_decl(slice_node);
+    converter_.add_instruction(throw_code);
   }
   bool negative_step = (step_val < 0);
 
@@ -1121,15 +1121,23 @@ exprt python_list::handle_range_slice(
   // for the common step==1 case.
   const typet signed_t = signed_size_type();
   const typet counter_type = negative_step ? signed_t : size_type();
+  // V.3: build the slice-bound arithmetic natively in IREP2. Every call site
+  // passes operands uniformly at signed_t (size_signed/val_signed via
+  // build_typecast, one_s via from_integer), so add2t/sub2t with an explicit
+  // signed_t2 result is the exact round-trip of the legacy plus/minus whose
+  // result type was overridden to signed_t.
+  const type2tc signed_t2 = migrate_type(signed_t);
   auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    plus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(add2tc(signed_t2, lhs2, rhs2));
   };
   auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
-    minus_exprt out(lhs, rhs);
-    out.type() = signed_t;
-    return out;
+    expr2tc lhs2, rhs2;
+    migrate_expr(lhs, lhs2);
+    migrate_expr(rhs, rhs2);
+    return migrate_expr_back(sub2tc(signed_t2, lhs2, rhs2));
   };
 
   // Resolve a slice bound following CPython's slice.indices(len) semantics.
@@ -1140,7 +1148,6 @@ exprt python_list::handle_range_slice(
     const exprt size_signed = build_typecast(build_symbol(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
-    const type2tc signed_t2 = migrate_type(signed_t); // V.3: for IREP2 selects
 
     // Step 1: produce a signed `resolved` value.
     //   - missing bound → step-direction default

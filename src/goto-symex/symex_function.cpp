@@ -813,6 +813,22 @@ bool goto_symext::is_python_gc_object(const symbolt *base) const
     return false;
 
   const typet &bt = ns.follow(base->get_type());
+
+  // A Python `str` local is modelled as a fixed-size char array (see
+  // tuple_handler::get_tuple_type_from_annotation and string_builder). Like
+  // user-class instances below, a Python string is an immutable,
+  // reference-counted object that is never manually freed and -- per CPython
+  // semantics -- stays valid for as long as any reference to it is reachable,
+  // including a reference returned from (or otherwise escaping) its defining
+  // function. Without this, a string local that isn't eliminated by
+  // frontend-level constant folding (e.g. one reassigned under a loop or
+  // branch before being returned) is torn down by pop_frame() like a C stack
+  // array, and the caller's read through the returned pointer is flagged as
+  // an expired-pointer dereference -- a false positive, since CPython would
+  // never invalidate that memory (#5571).
+  if (bt.is_array() && bt.subtype() == char_type())
+    return true;
+
   if (!bt.is_struct())
     return false;
 

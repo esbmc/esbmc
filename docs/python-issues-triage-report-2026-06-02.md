@@ -3814,3 +3814,137 @@ The rest of the battery (`ljust`/`rjust`/`zfill`/`expandtabs`/`bit_length`/3-arg
 ### 77b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+## 80. 2026-07-04 re-validation (seventieth sweep) & str()/repr() whole-number float suffix
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. A battery of
+string/format/numeric idioms (`format()` specs, `%`-formatting, `str.format()` fields,
+`swapcase`/`capitalize`/`partition`/`count`/`zfill`, `round`, `divmod`, float `str()`/`repr()`)
+found one CPython divergence in the **highest-value class** — a wrong-value/soundness defect where a
+false assertion verified `SUCCESSFUL`.
+
+### 80a. New isolated, soundly-fixable defect found & fixed
+**`str()`/`repr()` of a whole-number float dropped the `.0`, so `str(1.0)` folded to `"1"` and the
+false `assert str(1.0) == "1"` verified `SUCCESSFUL`.**
+
+CPython's `str(1.0)`/`repr(1.0)` is `"1.0"`, not `"1"` — a float always renders with a decimal part.
+`handle_float_to_str` (`src/python-frontend/function_call/str_conv.cpp`) formats via
+`std::to_string` (`"1.000000"`) then strips trailing zeros and a dangling dot to recover
+`str(5.5) == "5.5"` — but for a whole-number value that strip removed the fractional part
+*entirely* (`"1.000000"` → `"1."` → `"1"`), so `str(1.0)` folded to `"1"`. The false claim
+`assert str(1.0) == "1"` then verified `SUCCESSFUL` (a soundness hole) while the valid
+`assert str(1.0) == "1.0"` reported a spurious `FAILED`. The f-string path (`f"{1.0}"`) already
+rendered `"1.0"` correctly; only the `str()`/`repr()` fold diverged.
+
+**Fix**: re-append `".0"` when the strip left no decimal point, guarded on a trailing digit so any
+non-numeric spelling is untouched (inf/nan literals never reach this fold — they fail earlier at JSON
+AST parsing). Fractional positive floats keep their existing behaviour (they retain a `.`). Negative
+float literals are a `UnaryOp` and route through a separate path that does not reach this fold, so
+they are unaffected (see the adjacent-gaps note below).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_float_whole_number{,_fail}` (CORE): the positive covers whole-number floats
+(`1.0`/`2.0`/`3.0`/`10.0`/`100.0`/`0.0`) and unchanged fractional cases (`0.5`/`0.1`/`1.5`/`5.5`);
+the `_fail` pins the previously-false-`SUCCESSFUL` `assert str(1.0) == "1"`, now correctly `FAILED`.
+CPython sanity passes (`scripts/check_python_tests.sh str_float_whole`); dual-solver Bitwuzla + Z3
+agree on the positive test (solver-agnostic — a frontend constant fold). Verified no regression on
+the `str`/`strip` fold subset.
+
+**Known adjacent gaps (out of scope, no false-`SUCCESSFUL`):** negative-float `str()` folds to
+neither the correct nor a wrong constant (spurious `FAILED`, a separate UnaryOp-routing limitation);
+`repr()` of a bare float/int does not fold; and `std::to_string`'s fixed 6-digit `%f` still diverges
+from CPython's shortest round-trip repr for values needing more precision (`str(1/3)`) or scientific
+notation (`str(1e16)`). None of these produce a false `SUCCESSFUL`; each is a distinct follow-up.
+
+Likewise the `format()` builtin still rejects width/precision/grouping specs (`format(5, "03d")`,
+`format(3.14, ".2f")`, `format(1000000, ",")`) with a clean "not supported" error even though the
+`%`-operator machinery already renders the equivalent forms — a feature gap, not a soundness bug,
+noted for a future sweep.
+
+## 81. 2026-07-04 re-validation (seventy-first sweep) & format() numeric mini-spec
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. The §80 sweep's
+battery flagged the `format()` builtin as a feature gap (it rejected every spec beyond a bare
+presentation type); this sweep closes it. Unlike the wrong-value sweeps this is a
+restore-working-behaviour feature, implemented **fail-closed** so it cannot introduce a false
+`SUCCESSFUL`.
+
+### 81a. Feature restored: the format-spec mini-language for numeric values
+**`format(value, spec)` folded only a bare base/type char; any width/alignment/precision/grouping
+spec (`format(5, "03d")`, `format(3.14, ".2f")`, `format(1000000, ",")`) errored "not supported"**,
+even though the `%`-operator already renders the equivalent forms.
+
+`handle_format` (`src/python-frontend/function_call/str_conv.cpp`) now parses the CPython
+format-spec grammar `[[fill]align][sign][#][0][width][grouping][.precision][type]` for a constant
+numeric value and renders the modelled subset: integer types `d`/`x`/`X`/`o`/`b` with
+width/zero-pad/alignment/fill/sign, `#` alternate-form prefixes, and `,`/`_` grouping; float types
+`f`/`F`/`e`/`E`/`g`/`G`/`%` with precision, sign, width, zero-pad and alignment (float rendering
+reuses the same `round_to_nearest_guard` + two-pass `snprintf` approach as the `%`-operator fold, so
+it matches CPython's round-half-to-even).
+
+**Fail-closed discipline.** The renderer returns `std::nullopt` for any feature or combination it
+does not fully model — the repr-like default float format, `c`/`n` types, `#`/grouping on floats,
+and grouping combined with zero/`=` padding (which needs the fill to participate in the grouping,
+`format(1234, "08,") == "0,001,234"`). The caller then rejects the spec with a clean error, exactly
+as before, so an unmodelled spec can never mis-fold into a false `SUCCESSFUL`. This preserves the
+report's "unsound fix is worse than an honest error" policy.
+
+**Validation.** A CPython differential harness enumerated **660 (value, spec) combinations** (12
+ints × 37 int specs + 10 floats × 24 float specs) and confirmed every folded result is **bit-for-bit
+identical to CPython** — zero mismatches. The deliberately-excluded specs were separately confirmed
+to reject with a clean error (never a false `SUCCESSFUL`, including against the correct CPython
+value). New regression pair `regression/python/builtin_format_numeric_spec{,_fail}` (CORE): the
+positive covers width/zero-pad/sign/base/alternate-form/grouping/alignment/fill for ints and
+precision/sign/width/zero-pad/`%`/exponent types for floats; the `_fail` pins the now-active
+`format(5, "03d") == "5"` as a real `FAILED`. All 14 existing `format`/`fstring`/`percent`
+regression tests pass unchanged (incl. the `github_4642` bignum trap and the `github_4807` nondet
+fallbacks); dual-solver Bitwuzla + Z3 agree; CPython sanity passes.
+
+## 82. 2026-07-04 re-validation (seventy-second sweep) & str.format() whole-number float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep closes
+the `str.format()` counterpart of the §80 `str()` whole-float defect — the same wrong-value class in
+a different code path.
+
+### 82a. New isolated, soundly-fixable defect found & fixed
+**An empty `"{}"` replacement field formatted a whole-number float without the `.0`, so
+`"{}".format(1.0)` folded to `"1"` and the false `assert "{}".format(1.0) == "1"` verified
+`SUCCESSFUL`.**
+
+`format_value_from_json` (`src/python-frontend/string/string_method_handler.cpp`) rendered a float
+`{}` field with `std::ostringstream << double`, which uses the default 6-significant-digit format:
+`1.0` prints as `"1"` (dropping the `.0`) and `1000000.0` as `"1e+06"`. CPython's `str.format()` of
+an empty field formats a float with `str()`, i.e. `"{}".format(1.0) == "1.0"` and
+`"{}".format(1000000.0) == "1000000.0"`. The false claim `"{}".format(1.0) == "1"` then verified
+`SUCCESSFUL` (a soundness hole) while the valid `== "1.0"` reported a spurious `FAILED`. The f-string
+path (`f"{1.0}"`) already rendered `"1.0"` correctly; only the `str.format()` empty-field fold
+diverged.
+
+**Fix (surgical, no new divergence)**: fold only the whole-number case — a float with `d ==
+floor(d)` and `|d| < 1e16` renders in CPython exactly as its integer digits plus `".0"`
+(`str(1000000.0) == "1000000.0"`), which is provably correct and exactly what the ostream default
+got wrong. Every other float keeps the prior `std::ostringstream << double` behaviour, which already
+matches CPython's exponential form for `|x| >= 1e16` and `|x| < 1e-4`. Deliberately *not* switching
+the whole branch to a fixed `"%f"`: that would turn `"{}".format(1e16)` into `"10000000000000000.0"`
+and `"{}".format(1e-10)` into `"0.0"` — new false-`SUCCESSFUL`s in the exact ranges the ostream
+handled correctly (caught in code review). `-0.0` is handled (`std::signbit` re-adds the sign →
+`"-0.0"`).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_format_whole_float{,_fail}` (CORE): the positive covers whole-number floats
+(incl. `1000000.0`), unchanged fractional cases, and mixed `{}` fields with int/str/bool arguments;
+the `_fail` pins the previously-false-`SUCCESSFUL` `"{}".format(1.0) == "1"`, now correctly `FAILED`.
+A CPython differential soundness harness over 31 values (incl. `1e16`/`1e20`/`1e-10`/`-0.0`/
+`9999999999999998.0`) confirmed **zero cases where a wrong string verifies `SUCCESSFUL`**. Dual-solver
+Bitwuzla + Z3 agree; CPython sanity passes (`scripts/check_python_tests.sh str_format_whole_float`);
+all existing `format`/`fstring`/`percent` tests pass unchanged.
+
+The remaining ostream limitations (shortest round-trip repr; `1234.5678` → `"1234.57"` at 6 sig
+digits) are pre-existing and unchanged by this fix; none produces a *new* false `SUCCESSFUL`.
+Separately, a negative literal `{}` field (`int` or `float`) is a `UnaryOp` node that
+`format_value_from_json` does not match, so it degrades to the sound nondet-string fallback (a
+spurious `FAILED`, never a false `SUCCESSFUL`) — a pre-existing `UnaryOp`-routing limitation shared
+with the `str()` negative-float gap, left out of scope.
+
+### 82b. Everything else: unchanged disposition
+The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
+infeasible `hashlib` case all stand. The §5 priority order stands.
