@@ -41,39 +41,46 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   assert(is_pointer_type(side2));
   assert(is_comp_expr(templ_expr));
 
-  /* Compare just the offsets. This is compatible with both C and CHERI-C,
-   * because we already asserted that they point to the same object (unless
-   * --no-pointer-relation-check was specified, in which case the user opted
-   * out of sanity anyway). */
-
-  /* Create a copy of the expression and replace both sides with the respective
-   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
-   * required because objects could be larger than half the address space, in
-   * which case offsets could flip sign. */
+  /* Compare the (object, offset) pairs lexicographically. Within one object
+   * this is the offset comparison C defines for related pointers, compatible
+   * with both C and CHERI-C. Across objects — reachable only when the
+   * same-object assertion is disabled — it yields an arbitrary but consistent
+   * total order, so the algebraic properties of the operator (e.g.
+   * antisymmetry of <=) still hold; comparing only the offsets would let
+   * p<=q and q<=p be satisfied simultaneously for distinct objects.
+   *
+   * The offsets are typecast to unsigned for the comparison because objects
+   * could be larger than half the address space, in which case offsets could
+   * flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
+  expr2tc o1 = pointer_object2tc(type, side1);
+  expr2tc o2 = pointer_object2tc(type, side2);
   expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
   expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc same_obj = equality2tc(o1, o2);
   expr2tc op;
   switch (templ_expr->expr_id)
   {
   case expr2t::equality_id:
-    op = equality2tc(s1, s2);
+    op = and2tc(same_obj, equality2tc(s1, s2));
     break;
   case expr2t::notequal_id:
-    op = notequal2tc(s1, s2);
+    op = or2tc(notequal2tc(o1, o2), notequal2tc(s1, s2));
     break;
   case expr2t::lessthan_id:
-    op = lessthan2tc(s1, s2);
+    op = or2tc(lessthan2tc(o1, o2), and2tc(same_obj, lessthan2tc(s1, s2)));
     break;
   case expr2t::greaterthan_id:
-    op = greaterthan2tc(s1, s2);
+    op =
+      or2tc(greaterthan2tc(o1, o2), and2tc(same_obj, greaterthan2tc(s1, s2)));
     break;
   case expr2t::lessthanequal_id:
-    op = lessthanequal2tc(s1, s2);
+    op = or2tc(lessthan2tc(o1, o2), and2tc(same_obj, lessthanequal2tc(s1, s2)));
     break;
   case expr2t::greaterthanequal_id:
-    op = greaterthanequal2tc(s1, s2);
+    op = or2tc(
+      greaterthan2tc(o1, o2), and2tc(same_obj, greaterthanequal2tc(s1, s2)));
     break;
   default:
     std::unreachable();
