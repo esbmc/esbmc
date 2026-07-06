@@ -185,7 +185,9 @@ void goto_inlinet::expand_function_call(
   // Calls to __builtin_va_start/__builtin_va_copy exist solely as markers
   // for symex's va_list-started tracking; they have no body and are
   // intercepted in run_builtin, so they must survive inlining untouched.
-  if (has_prefix(id2string(identifier), "c:@F@__builtin_va_"))
+  if (
+    identifier == "c:@F@__builtin_va_start" ||
+    identifier == "c:@F@__builtin_va_copy")
   {
     ++target;
     return;
