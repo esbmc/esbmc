@@ -198,6 +198,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  va_started = sym.va_started;
   interval_domain_state = sym.interval_domain_state;
 
   stack_limit = sym.stack_limit;

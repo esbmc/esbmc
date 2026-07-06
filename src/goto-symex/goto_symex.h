@@ -1192,6 +1192,19 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Resolve a va_list expression to the l1 identity record of the local
+   *  variable backing it; nullopt when it cannot be pinned down to one. */
+  std::optional<renaming::level2t::name_record>
+  va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** Whether the va_list denoted by this expression is known (or assumed)
+   *  to have been initialised by va_start/va_copy. va_lists whose base
+   *  cannot be resolved to a local variable's symbol are conservatively
+   *  assumed started. */
+  bool va_list_is_started(const expr2tc &va_list_expr) const;
+  /** Record the started-by-va_start state of the va_list denoted by this
+   *  expression. No-op if the base cannot be resolved to a local
+   *  variable's symbol. */
+  void va_list_mark_started(const expr2tc &va_list_expr, bool started);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1271,6 +1284,19 @@ protected:
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
+
+  /** Level-1 identities (base name, activation, thread) of va_list objects
+   *  initialised by va_start, or by va_copy from a started source. Keyed on
+   *  the l1 renaming so the same object is recognised across frames (a
+   *  va_list reached through a pointer dereferences to the owning
+   *  activation's l1 name) and across recursion or loop re-declaration (each
+   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  Insertion ignores the path guard, over-approximating towards "started",
+   *  so a conditional va_start can never yield a false positive. */
+  std::unordered_set<
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_started;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
