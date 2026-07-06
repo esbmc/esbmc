@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
 #include <python-frontend/round_to_nearest_guard.h>
@@ -1463,6 +1464,33 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return nondet_comparison(
         "unsupported comparison between pointer-backed and non-pointer "
         "values");
+  }
+
+  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+  // guarded exception raise — the same mechanism list indexing uses for
+  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
+  // as SAFE while a bare division by zero propagates and fails. The built-in
+  // C-level div-by-zero assertion cannot express this: it fires regardless of
+  // the surrounding try/except, so caught divisions were wrongly reported.
+  if (
+    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
+     rhs.type().is_floatbv()))
+  {
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+    exprt raise = get_exception_handler().gen_exception_raise(
+      "ZeroDivisionError", "division by zero");
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = is_zero;
+    guard.then_case() = throw_code;
+    guard.location() = get_location_from_decl(element);
+    add_instruction(guard);
   }
 
   // Build the binary expression
