@@ -2446,29 +2446,49 @@ class LoopMixin:
         func_name = call.func.id
         loc = source_node
 
-        # Parse arguments
-        max_size_node = ast.Constant(value=8)
-        if call.args:
-            max_size_node = call.args[0]
-
         # Determine nondet type functions
         def _get_nondet_func(call_arg):
-            """Extract function name'nondet_bool' from a Call node."""
+            """Extract a nondet generator function name from either a Call node
+            (nondet_bool()) or a bare function reference (nondet_bool). A bare
+            Name only counts as a generator when it is nondet-prefixed, so a
+            plain variable/size argument is never mistaken for one."""
             if isinstance(call_arg, ast.Call) and isinstance(call_arg.func, ast.Name):
                 return call_arg.func.id
+            if isinstance(call_arg, ast.Name) and (
+                    call_arg.id.startswith("nondet_")
+                    or call_arg.id.startswith("__VERIFIER_nondet_")):
+                return call_arg.id
             return None
 
         def _get_type_name(call_arg):
-            """Extract type name'bool' from nondet_bool() Call node."""
+            """Extract type name 'bool' from a nondet_bool generator ref."""
             fn = _get_nondet_func(call_arg)
-            if fn and fn.startswith("nondet_"):
-                return fn[len("nondet_"):]
+            if fn:
+                for prefix in ("__VERIFIER_nondet_", "nondet_"):
+                    if fn.startswith(prefix):
+                        return fn[len(prefix):]
             return "int"
+
+        # Parse arguments. Two calling conventions are supported:
+        #   ESBMC-native:  nondet_list(max_size, nondet_bool()) + keywords
+        #   SV-COMP:       nondet_list(nondet_int) / nondet_dict(nondet_k,
+        #                  nondet_v) -- the element/key/value generator is
+        #                  passed as a leading positional function reference.
+        # A leading positional generator is not a size, so keep the default.
+        first_is_generator = bool(call.args) and _get_nondet_func(
+            call.args[0]) is not None
+
+        max_size_node = ast.Constant(value=8)
+        if call.args and not first_is_generator:
+            max_size_node = call.args[0]
 
         if func_name == "nondet_list":
             elem_func = "nondet_int"
             elem_type_name = "int"
-            if len(call.args) >= 2:
+            if first_is_generator:
+                elem_func = _get_nondet_func(call.args[0])
+                elem_type_name = _get_type_name(call.args[0])
+            elif len(call.args) >= 2:
                 fn = _get_nondet_func(call.args[1])
                 if fn:
                     elem_func = fn
@@ -2483,6 +2503,11 @@ class LoopMixin:
             val_func = "nondet_int"
             key_type_name = "int"
             val_type_name = "int"
+            if first_is_generator:
+                key_type_name = _get_type_name(call.args[0])
+                if len(call.args) >= 2 and _get_nondet_func(call.args[1]):
+                    val_func = _get_nondet_func(call.args[1])
+                    val_type_name = _get_type_name(call.args[1])
             for kw in call.keywords:
                 if kw.arg == "key_type":
                     fn = _get_nondet_func(kw.value)

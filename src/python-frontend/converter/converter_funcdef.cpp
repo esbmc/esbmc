@@ -1346,11 +1346,65 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body. Mark it as a function body (not a conditional one)
-  // so straight-line retyping (#4770/#4774) is permitted on the function's own
-  // unconditional statements — see the retype gate in get_var_assign.
-  exprt function_body =
-    get_block(function_node["body"], /*is_function_body=*/true);
+  // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
+  // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
+  // function_call_expr::build_nondet_call(), so a direct call never runs this
+  // body. Some reference stubs — notably SV-COMP's _sv_verifier.py — implement
+  // them with constructs the frontend cannot model (a function-local
+  // `import sys`, sys.float_info, generator expressions); converting those
+  // bodies used to abort() in converter_expr (a core dump) as soon as the
+  // module was imported. Return the stub's type suffix (e.g. "int") so we can
+  // synthesise a safe body instead of converting the real one; "" otherwise.
+  auto nondet_stub_suffix = [](const std::string &name) -> std::string {
+    for (const std::string prefix : {"__VERIFIER_nondet_", "nondet_"})
+    {
+      if (name.rfind(prefix, 0) == 0)
+      {
+        const std::string suffix = name.substr(prefix.size());
+        if (
+          suffix == "int" || suffix == "char" || suffix == "bool" ||
+          suffix == "float" || suffix == "str" || suffix == "complex")
+          return suffix;
+      }
+    }
+    return "";
+  };
+
+  const std::string nondet_suffix = nondet_stub_suffix(func_name);
+
+  exprt function_body;
+  if (!nondet_suffix.empty())
+  {
+    // The stub can be passed as a first-class value and called indirectly
+    // through a function pointer (SV-COMP's `nondet_list(nondet_int)` /
+    // `nondet_dict(...)`); in that case symex resolves the pointer to this
+    // symbol and needs a real, pointable body. An empty body makes
+    // function-pointer resolution dereference an incomplete callee and crash.
+    // Synthesise `return NONDET(natural_type)` and pin the declared return
+    // type to match, mirroring build_nondet_call's per-type value.
+    typet natural_type =
+      (nondet_suffix == "str")    ? gen_pointer_type(char_type())
+      : (nondet_suffix == "char") ? char_type()
+                                  : type_handler_.get_typet(nondet_suffix);
+
+    type.return_type() = natural_type;
+    added_symbol->set_type(type);
+
+    exprt nondet_value("sideeffect", natural_type);
+    nondet_value.statement("nondet");
+    code_returnt return_stmt;
+    return_stmt.return_value() = nondet_value;
+    code_blockt block;
+    block.copy_to_operands(return_stmt);
+    function_body = block;
+  }
+  else
+  {
+    // Process function body. Mark it as a function body (not a conditional one)
+    // so straight-line retyping (#4770/#4774) is permitted on the function's
+    // own unconditional statements — see the retype gate in get_var_assign.
+    function_body = get_block(function_node["body"], /*is_function_body=*/true);
+  }
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
