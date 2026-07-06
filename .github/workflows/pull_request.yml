@@ -264,7 +264,7 @@ jobs:
 
   coverage:
     name: Build and upload coverage to Codecov
-    runs-on: ubuntu-24.04
+    runs-on: ['self-hosted', 'Linux', 'x64', 'cov']
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
