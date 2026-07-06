@@ -9,16 +9,14 @@
 #include <util/type_byte_size.h>
 
 // A restrict-qualified pointer parameter, reduced to the data the entry
-// assertion needs: the pointer value (as a level-0 symbol), the byte size of one
-// pointed-to element, and whether its target is const (i.e. cannot be written
-// through this pointer).
+// assertion needs: the pointer value (as a level-0 symbol) and the byte size of
+// one pointed-to element.
 namespace
 {
 struct restrict_paramt
 {
   expr2tc pointer;
   BigInt element_size;
-  bool target_const;
 };
 } // namespace
 
@@ -56,7 +54,7 @@ collect_restrict_params(const symbolt &func_symbol, const namespacet &ns)
   for (const code_typet::argumentt &arg : code_type.arguments())
   {
     const typet &arg_type = arg.type();
-    if (arg_type.id() != "pointer" || !arg_type.restricted())
+    if (!arg_type.is_pointer() || !arg_type.restricted())
       continue;
 
     // A named parameter is required to reference its value in the body.
@@ -66,16 +64,19 @@ collect_restrict_params(const symbolt &func_symbol, const namespacet &ns)
 
     const type2tc pointer_type = migrate_type(arg_type);
     params.push_back(
-      {symbol2tc(pointer_type, ident),
-       element_size(pointer_type, ns),
-       arg_type.subtype().cmt_constant()});
+      {symbol2tc(pointer_type, ident), element_size(pointer_type, ns)});
   }
 
   return params;
 }
 
-// Build `!(same_object(a,b) && [oa, oa+sa) overlaps [ob, ob+sb))`: the two
-// element footprints must not alias within a shared object.
+// Build the disjointness assertion for a pair of restrict pointers. The pointers
+// alias illegally when both designate an object (are non-null), point into the
+// same object, and their element footprints overlap:
+//   !(a != NULL && b != NULL && same_object(a,b) &&
+//     [oa, oa+sa) overlaps [ob, ob+sb))
+// The non-null guard avoids a false alarm on unused/null parameters, which
+// designate no object and so cannot violate the restrict contract.
 static expr2tc
 disjoint_assertion(const restrict_paramt &a, const restrict_paramt &b)
 {
@@ -87,9 +88,15 @@ disjoint_assertion(const restrict_paramt &a, const restrict_paramt &b)
   expr2tc end_b =
     add2tc(offset_type, off_b, constant_int2tc(offset_type, b.element_size));
 
+  expr2tc both_non_null = and2tc(
+    notequal2tc(a.pointer, gen_zero(a.pointer->type)),
+    notequal2tc(b.pointer, gen_zero(b.pointer->type)));
+  expr2tc ranges_overlap =
+    and2tc(lessthan2tc(off_a, end_b), lessthan2tc(off_b, end_a));
+
   expr2tc overlap = and2tc(
-    same_object2tc(a.pointer, b.pointer),
-    and2tc(lessthan2tc(off_a, end_b), lessthan2tc(off_b, end_a)));
+    both_non_null,
+    and2tc(same_object2tc(a.pointer, b.pointer), ranges_overlap));
 
   return not2tc(overlap);
 }
@@ -117,12 +124,6 @@ void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
     for (std::size_t i = 0; i < params.size(); i++)
       for (std::size_t j = i + 1; j < params.size(); j++)
       {
-        // Aliasing is only undefined when the shared object is modified. If both
-        // targets are const, neither can be written through, so overlap is
-        // well-defined and must not be flagged.
-        if (params[i].target_const && params[j].target_const)
-          continue;
-
         goto_programt::targett t = body.insert(first);
         t->make_assertion(disjoint_assertion(params[i], params[j]));
         t->location = first->location;

@@ -10,17 +10,17 @@
 /// undefined behaviour (C11 6.7.3.1); this catches the classic case, e.g.
 /// `void f(int *restrict a, int *restrict b)` called with `f(&x, &x)`.
 ///
-/// Only function-parameter aliasing is checked: the pointed-to element
-/// footprints (`sizeof(*p)` bytes, or one byte for incomplete/void subtypes)
-/// must be disjoint. The footprint is an under-approximation of the accessed
-/// region, so a genuinely disjoint use is never flagged. A pair is skipped when
-/// both targets are const, since a never-modified object cannot violate the
-/// contract. The check does, however, over-approximate the *modification*
-/// requirement of C11 6.7.3.1p4: it fires on overlap of two writable-target
-/// restrict parameters regardless of whether the body performs a modifying
-/// access, so a function that only reads through aliasing non-const restrict
-/// pointers is reported even though that is not undefined. The pass is opt-in
-/// via `--restrict-check`.
+/// Only function-parameter aliasing is checked: two non-null restrict pointers
+/// must not have overlapping element footprints (`sizeof(*p)` bytes, or one byte
+/// for incomplete/void subtypes) within a shared object. The footprint is an
+/// under-approximation of the accessed region, so a genuinely disjoint use is
+/// never flagged, and null parameters (which designate no object) are exempt.
+///
+/// The check over-approximates the *modification* clause of C11 6.7.3.1p4: it
+/// fires on overlap regardless of whether the body performs a modifying access.
+/// const-qualified targets are intentionally not exempt — 6.7.3.1p4 makes even a
+/// const access path undefined once the shared object is modified by any means,
+/// which this pass cannot rule out. The pass is opt-in via `--restrict-check`.
 ///
 /// The `#restricted` qualifier survives only on the legacy `code_typet` of the
 /// function symbol, so the parameter types are read from `context`, not from the
