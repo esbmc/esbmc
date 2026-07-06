@@ -2454,9 +2454,8 @@ class LoopMixin:
             plain variable/size argument is never mistaken for one."""
             if isinstance(call_arg, ast.Call) and isinstance(call_arg.func, ast.Name):
                 return call_arg.func.id
-            if isinstance(call_arg, ast.Name) and (
-                    call_arg.id.startswith("nondet_")
-                    or call_arg.id.startswith("__VERIFIER_nondet_")):
+            if isinstance(call_arg, ast.Name) and (call_arg.id.startswith("nondet_")
+                                                   or call_arg.id.startswith("__VERIFIER_nondet_")):
                 return call_arg.id
             return None
 
@@ -2475,8 +2474,7 @@ class LoopMixin:
         #                  nondet_v) -- the element/key/value generator is
         #                  passed as a leading positional function reference.
         # A leading positional generator is not a size, so keep the default.
-        first_is_generator = bool(call.args) and _get_nondet_func(
-            call.args[0]) is not None
+        first_is_generator = bool(call.args) and _get_nondet_func(call.args[0]) is not None
 
         max_size_node = ast.Constant(value=8)
         if call.args and not first_is_generator:
