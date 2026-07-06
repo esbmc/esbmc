@@ -1139,6 +1139,13 @@ private:
   // code_assignt between those (Z3 sort mismatch) -- get_var_assign's final
   // store must copy it element by element instead.
   bool any_subscript_array_needs_copy_ = false;
+  // The exprt resolve_any_subscript_array_type already built while probing
+  // the RHS's real type. get_var_assign's RHS fetch reuses it instead of
+  // converting the same Subscript AST node a second time (which would
+  // duplicate any temporaries/instructions the probe emitted, e.g. for
+  // fancy/mask/column selection).
+  exprt cached_any_subscript_rhs_;
+  bool has_cached_any_subscript_rhs_ = false;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
