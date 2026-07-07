@@ -1903,15 +1903,23 @@ bool clang_cpp_convertert::get_function_body(
 
           /* Bound the per-element construction: unrolling one constructor call
            * per leaf element is only viable for modestly-sized fixed arrays.
-           * Large arrays -- e.g. the ~1024-element internal buffers of STL
-           * container operational models -- would otherwise explode the VCC
-           * count. Above the bound we keep constructing just the representative
-           * element 0 (the behaviour prior to this change), so those cases are
-           * unchanged. (The static/global path in clang_cpp_main.cpp unrolls
-           * without this bound; proper bounded-loop construction is future
-           * work for both.) */
+           * The internal buffers of STL container operational models are the
+           * arrays to stay away from -- and they are not all large: the
+           * per-instance pools in <list> and <stack> hold 20 slots and <map>
+           * holds 15, while <set>/<deque>/<queue>/<unordered_*> hold hundreds
+           * to ~1024. Each such slot may itself embed a class element (e.g.
+           * list<string> stores a std::string per node), so eagerly running
+           * its constructor on every slot bloats symex -- enough to push the
+           * heavy list<string> sort test over the CI timeout. Keep the bound
+           * comfortably below the smallest of those buffers (15) so all of
+           * them retain the prior single-element behaviour, while still
+           * covering realistic user arrays. Above the bound we construct just
+           * the representative element 0 (the behaviour prior to this change),
+           * so those cases are unchanged. (The static/global path in
+           * clang_cpp_main.cpp unrolls without this bound; proper bounded-loop
+           * construction is future work for both.) */
           const bool is_fixed_array = ns.follow(new_member.type()).is_array();
-          const BigInt max_unroll = 64;
+          const BigInt max_unroll = 8;
           BigInt total_elements = 1;
           for (typet t = ns.follow(new_member.type()); t.is_array();
                t = ns.follow(to_array_type(t).subtype()))
