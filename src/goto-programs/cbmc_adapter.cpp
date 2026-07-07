@@ -111,6 +111,14 @@ void fix_expression(irept &irep)
     irep.id("string-constant");
   else if (irep.id() == "ieee_float_equal")
     irep.id("=");
+  else if (irep.id() == "ieee_float_notequal")
+    // CBMC's IEEE-754 float inequality (NaN != NaN is true) has no migrate_expr
+    // handler, so it aborts with "migrate expr failed". ESBMC's own C frontend
+    // lowers a float != to a plain "notequal" whose floatbv SMT encoding already
+    // implements IEEE semantics (NaN-aware), so rewrite to that -- the exact
+    // counterpart of the "ieee_float_equal" -> "=" rewrite above. "notequal" is
+    // in the operand-wrap set below, so its operands reach migrate_expr.
+    irep.id("notequal");
   else if (
     (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
      irep.id() == "/") &&

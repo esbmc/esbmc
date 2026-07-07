@@ -85,6 +85,7 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -168,11 +169,33 @@ limitation). `same_object` was checked and needs no change — CBMC's typechecke
 at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
 as a `same_object`/`same-object` node in the first place.
 
+**Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
+as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
+counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
+adapter rewrite (`→ "="`); `ieee_float_notequal` had **no** `migrate_expr` handler, so any
+CBMC binary containing a float `!=` **aborted** with `migrate expr failed` — including every
+libm model that guards on `x != x` (e.g. `exp`'s `isnan`/`isfinite` inline checks, which is
+how it first surfaced). Fixed in `fix_expression` by rewriting `ieee_float_notequal` to
+ESBMC's native `notequal`, whose floatbv SMT encoding already implements IEEE semantics
+(verified: `float n=0.0f/0.0f; assert(n != n);` verifies SUCCESSFUL natively) — so the
+rewrite is faithful, not just crash-avoiding. Mirrors the `ieee_float_equal → "="` line
+exactly; `notequal` is already in the operand-wrap set. Verdict parity tested both directions
+(`cbmc_float_ne` SUCCESSFUL / `cbmc_float_ne_fail` FAILED) plus a NaN case that pins the IEEE
+semantics rather than mere crash-avoidance (`cbmc_float_ne_nan`: `n != n` on `n = 0.0f/0.0f`
+verifies SUCCESSFUL — a bitwise-equality `notequal` would report FAILED here), dual-solver
+(Bitwuzla + Z3).
+
 Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
 rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
 audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
 gap-by-gap discovery.
+
+Confirmed **not** a gap: the `printf` family. CBMC inlines its own
+`<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
+`printf` reaches the adapter as a *bodied* function, not a bodyless external — ESBMC loads
+it and matches CBMC's verdict with no rewrite. §4.8's speculation that it shares the
+bodyless-external shape does not hold for CBMC 6.8.0.
 
 **Float-classification predicates, investigated by direct testing against real CBMC
 binaries.** `math.h`'s `isnan`/`isinf`/`isnormal` lower (via `__builtin_isnan` etc.) to
