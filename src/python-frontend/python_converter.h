@@ -1109,12 +1109,14 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
-  // Per division site (keyed by source location), the divisor expression to
-  // use for the ZeroDivisionError guard and the division itself. An assignment
-  // RHS is converted more than once (type inference + code generation); this
-  // emits the guard and hoists a side-effecting divisor exactly once, and both
-  // passes reuse the same (once-evaluated) divisor.
-  std::map<std::string, exprt> hoisted_div_rhs_;
+  // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
+  // where the division is really code-generated in its execution context.
+  // Suppress it while a lambda body is converted at its definition (operands
+  // are still unbound parameters) and during the discarded type-probe pass of
+  // an assignment RHS (which would otherwise emit the guard twice as dead code
+  // and evaluate a side-effecting divisor an extra time).
+  bool converting_lambda_body_ = false;
+  bool in_rhs_type_probe_ = false;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

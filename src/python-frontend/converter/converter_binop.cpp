@@ -1476,65 +1476,50 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (
     (op == "Div" || op == "FloorDiv" || op == "Mod") &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
-     rhs.type().is_floatbv()))
+     rhs.type().is_floatbv()) &&
+    !converting_lambda_body_ && !in_rhs_type_probe_)
   {
-    locationt div_loc = get_location_from_decl(element);
-    const std::string div_key = div_loc.get_file().as_string() + ":" +
-                                div_loc.get_line().as_string() + ":" +
-                                div_loc.get_column().as_string();
-
-    // An assignment RHS is converted more than once (type inference + code
-    // generation). Emit the guard and hoist the divisor exactly once per
-    // division site; a later conversion of the same site reuses the recorded
-    // divisor, so a side-effecting divisor (a call, or a nondet) is evaluated
-    // once -- otherwise `x / f()` would call f twice and `x / nondet()` would
-    // guard a different value than the one divided by.
-    auto seen = hoisted_div_rhs_.find(div_key);
-    if (!div_key.empty() && seen != hoisted_div_rhs_.end())
-    {
-      rhs = seen->second;
-    }
-    else
-    {
-      std::function<bool(const exprt &)> has_side_effect =
-        [&](const exprt &e) -> bool {
-        if (e.id() == "sideeffect")
+    // The divisor is referenced by both the zero-check guard and the division
+    // itself. If it carries a side effect (a call, or a nondet) it would be
+    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+    // a different value than the one divided by. Hoist a side-effecting divisor
+    // into a temporary so it is evaluated exactly once.
+    std::function<bool(const exprt &)> has_side_effect =
+      [&](const exprt &e) -> bool {
+      if (e.id() == "sideeffect")
+        return true;
+      for (const exprt &sub : e.operands())
+        if (has_side_effect(sub))
           return true;
-        for (const exprt &sub : e.operands())
-          if (has_side_effect(sub))
-            return true;
-        return false;
-      };
+      return false;
+    };
 
-      if (has_side_effect(rhs))
-      {
-        symbolt &tmp =
-          create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
-        code_declt decl(symbol_expr(tmp));
-        decl.location() = div_loc;
-        add_instruction(decl);
-        code_assignt assign(symbol_expr(tmp), rhs);
-        assign.location() = div_loc;
-        add_instruction(assign);
-        rhs = symbol_expr(tmp);
-      }
-
-      if (!div_key.empty())
-        hoisted_div_rhs_[div_key] = rhs;
-
-      exprt is_zero("=", bool_type());
-      is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-
-      exprt raise = get_exception_handler().gen_exception_raise(
-        "ZeroDivisionError", "division by zero");
-      code_expressiont throw_code(raise);
-
-      code_ifthenelset guard;
-      guard.cond() = is_zero;
-      guard.then_case() = throw_code;
-      guard.location() = div_loc;
-      add_instruction(guard);
+    locationt div_loc = get_location_from_decl(element);
+    if (has_side_effect(rhs))
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = div_loc;
+      add_instruction(decl);
+      code_assignt assign(symbol_expr(tmp), rhs);
+      assign.location() = div_loc;
+      add_instruction(assign);
+      rhs = symbol_expr(tmp);
     }
+
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+    exprt raise = get_exception_handler().gen_exception_raise(
+      "ZeroDivisionError", "division by zero");
+    code_expressiont throw_code(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = is_zero;
+    guard.then_case() = throw_code;
+    guard.location() = div_loc;
+    add_instruction(guard);
   }
 
   // Build the binary expression
