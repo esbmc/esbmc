@@ -200,7 +200,13 @@ void fix_expression(irept &irep)
     "signbit",
     "ieee_sqrt",
     "ieee_fma",
-    "abs"};
+    "abs",
+    // Unary bit-builtins: migrate_expr already handles popcount/bswap via op0(),
+    // but without wrapping CBMC's raw operands into "operands" here, op0() reads
+    // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
+    // / __builtin_popcount lower to these ids in CBMC's goto.
+    "popcount",
+    "bswap"};
 
   const std::string cur = irep.id_string();
 

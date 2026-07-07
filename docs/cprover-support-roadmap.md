@@ -85,6 +85,7 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -167,6 +168,17 @@ case is a KNOWNBUG regression, `cbmc_w_ok_false`, mirroring the pre-existing `r_
 limitation). `same_object` was checked and needs no change — CBMC's typechecker desugars it
 at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
 as a `same_object`/`same-object` node in the first place.
+
+**Unary bit-builtins `popcount`/`bswap` — ✅ landed.** `__builtin_popcount` and
+`__builtin_bswap32` lower to CBMC `popcount`/`bswap` ireps, both of which `migrate_expr`
+already handles via `op0()` — but neither was in `fix_expression`'s operand-wrap set, so
+CBMC's raw operands stayed in `get_sub()`, `op0()` read an empty operand list, and the
+verdict was garbage/crash (the exact `isnan`/`pointer_offset` failure shape). Fixed by adding
+`popcount`/`bswap` to the wrap-set. Verdict parity both directions, dual-solver
+(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`). Still open in the same family:
+`__builtin_clz`/`ctz` reach the adapter as an id `migrate_expr` has no handler for at all
+(aborts with `migrate expr failed`), so they need a migrate handler + irep2 node, not just a
+wrap-set entry — tracked separately.
 
 Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
 rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
