@@ -304,11 +304,14 @@ instrumentation.
 | PR | Kinds made native | Notes |
 |---|---|---|
 | #5866 | `code_block2t` (decl-free), `code_skip2t` | The seam + the decl-free structural leaves; destructor stack never touched. |
-| *(this)* | `code_assign2t` (side-effect-free, non-atomic, non-code-typed source) | The first **value statement**. Guarded by the exact predicates `convert_assign` uses (`has_sideeffect` on both operands, `rhs.type().is_code()`, `is_atomic_symbol`/`has_atomic_read`); anything richer falls back. Design **D3**: the statement's own `code_assign2t::location` is carried; the side-effect-free reduction means the stored instruction is `code2` itself (value-operand locations are dropped by `migrate_expr` regardless), so no round-trip and no `restore_value_locations` stamping is needed. |
+| #5896 | `code_assign2t` (side-effect-free, non-atomic, non-code-typed source) | The first **value statement**. Guarded by the exact predicates `convert_assign` uses (`has_sideeffect` on both operands, `rhs.type().is_code()`, `is_atomic_symbol`/`has_atomic_read`); anything richer falls back. Design **D3**: the statement's own `code_assign2t::location` is carried; the side-effect-free reduction means the stored instruction is `code2` itself (value-operand locations are dropped by `migrate_expr` regardless), so no round-trip and no `restore_value_locations` stamping is needed. |
+| *(this)* | `code_expression2t` (side-effect-free, non-code, non-ternary operand) | The second value statement → one `OTHER`. Guard mirrors `convert_expression`'s non-`OTHER` branches: `has_sideeffect(op)` (lowered), `op.is_code()` (re-dispatched via `convert()`), `op.id()=="if"` (top-level ternary peeled unconditionally into `convert_ifthenelse` at `goto_convert.cpp:507`). Same D3 store-`code2` emission as assign, but located at the statement's own `code_expression2t::location` (which `convert_expression` reads off the operand post-`restore_value_locations`); falls back when that location is nil/empty-file so an inherited block location is never lost. |
 
-*Next:* the remaining single-instruction value statements (`code_expression2t`
-side-effect-free → `OTHER`; `code_return2t` valueless in a non-value function →
-GOTO-to-`return_target`), then the side-effect-bearing statements, which require
+*Next:* `code_return2t` is the obvious sibling but a **trap** — a trailing
+`return;` in a void function is elided by the frontend (empty body, no GOTO), and
+non-tail valueless returns sit under an `if` (unsupported) so the whole body
+falls back; it is hard to exercise in a decl-free top-level block. The remaining
+gains are the side-effect-bearing statements (calls, `++`/`--`), which require
 the IREP2-native `remove_sideeffects` / `do_function_call` reimplementation the
-Conclusion prices as the real cost. Decls (destructor-stack unwind) and gotos
-(target tracking) remain the two structural pieces the block walk still needs.
+Conclusion prices as the real cost, and the two structural pieces the block walk
+still lacks: decls (destructor-stack unwind) and gotos/labels (target tracking).

@@ -143,11 +143,14 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 
 // W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
 // natively (design D3), appending to `dest`, and recurse into nested blocks.
-// Returns false the instant an unsupported kind appears — the caller discards
-// the partial `dest`, so a failed walk never corrupts the fallback body. Only
-// the structural leaves are handled so far; each reads its own code_*2t fields
-// directly (no legacy round-trip) and carries the statement's own location, so
-// the output matches goto_convertt::convert() byte-for-byte on this subset.
+// Returns false the instant an unsupported kind (or a shape whose native
+// emission would not be byte-identical) appears — the caller discards the
+// partial `dest`, so a failed walk never corrupts the fallback body. So far:
+// the decl-free structural leaves (block/skip) and the single-instruction value
+// statements (assign/expression) that reduce to one ASSIGN/OTHER with nothing
+// to lower; each reads its own code_*2t fields directly (no legacy round-trip)
+// and carries the statement's own location, matching goto_convertt::convert()
+// byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest)
@@ -218,6 +221,38 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->code = code2;
     t->location = assign.location;
+    return true;
+  }
+
+  if (is_code_expression2t(code2))
+  {
+    const code_expression2t &expr_stmt = to_code_expression2t(code2);
+
+    // convert_expression() emits a single OTHER only in its plain else-branch
+    // (goto_convert.cpp:519-530): a side-effect operand is lowered by
+    // remove_sideeffects, a code-typed operand is re-dispatched through convert()
+    // (goto_convert.cpp:501), and a top-level ternary is peeled off
+    // unconditionally into convert_ifthenelse (goto_convert.cpp:507), before
+    // remove_sideeffects runs. Fall back on all of those, deciding with the exact
+    // predicates convert_expression uses on a throwaway legacy view of the
+    // operand.
+    exprt op = migrate_expr_back(expr_stmt.operand);
+    if (op.is_nil() || has_sideeffect(op) || op.is_code() || op.id() == "if")
+      return false;
+
+    // convert_expression locates the OTHER at the operand location, which
+    // restore_value_locations sets to the enclosing statement location. When the
+    // statement carries its own located #location that already IS that location,
+    // so emit code2 directly (migrate_expr drops the operand location, so the
+    // stored code round-trips to code2) at the statement location. Fall back on a
+    // location-less statement, whose operand the round-trip would instead stamp
+    // with an inherited block location.
+    if (expr_stmt.location.is_nil() || expr_stmt.location.get_file().empty())
+      return false;
+
+    goto_programt::targett t = dest.add_instruction(OTHER);
+    t->code = code2;
+    t->location = expr_stmt.location;
     return true;
   }
 
