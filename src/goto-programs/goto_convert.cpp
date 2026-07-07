@@ -827,7 +827,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable
 /// (stops early at the first match; does not recurse into address_of).
-static bool has_atomic_read(const exprt &expr, const namespacet &ns)
+bool goto_convertt::has_atomic_read(const exprt &expr, const namespacet &ns)
 {
   if (expr.is_address_of())
     return false;

@@ -20,6 +20,11 @@ public:
   /// Returns true iff @p expr is a direct reference to a C11 _Atomic variable.
   static bool is_atomic_symbol(const exprt &expr, const namespacet &ns);
 
+  /// Returns true iff @p expr contains a direct read of any C11 _Atomic
+  /// variable (does not recurse into address_of). Shared with the IREP2-native
+  /// body dispatcher so it gates an assignment exactly as convert_assign does.
+  static bool has_atomic_read(const exprt &expr, const namespacet &ns);
+
   goto_convertt(contextt &_context, optionst &_options)
     : context(_context),
       options(_options),

@@ -148,7 +148,9 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // the structural leaves are handled so far; each reads its own code_*2t fields
 // directly (no legacy round-trip) and carries the statement's own location, so
 // the output matches goto_convertt::convert() byte-for-byte on this subset.
-static bool convert_native_rec(const expr2tc &code2, goto_programt &dest)
+bool goto_convert_functionst::convert_native_rec(
+  const expr2tc &code2,
+  goto_programt &dest)
 {
   if (is_code_block2t(code2))
   {
@@ -177,6 +179,45 @@ static bool convert_native_rec(const expr2tc &code2, goto_programt &dest)
     // node equals convert_skip()'s migrate_expr(skip) result — reuse it here
     // instead of round-tripping.
     t->code = code2;
+    return true;
+  }
+
+  if (is_code_assign2t(code2))
+  {
+    const code_assign2t &assign = to_code_assign2t(code2);
+
+    // convert_assign() collapses to a single ASSIGN instruction only when there
+    // is nothing to lower: no side effect in either operand (so goto_sideeffects
+    // never runs, and the value operand locations restore_value_locations would
+    // stamp are dropped again by the final migrate_expr anyway), the source is
+    // not a code-typed statement, and neither side touches a C11 _Atomic object
+    // (which would take the convert_assign_atomic path). Decide with the exact
+    // predicates convert_assign uses, on a throwaway legacy view of the two
+    // operands; any richer shape falls back so flag-on stays byte-identical to
+    // flag-off.
+    //
+    // A top-level ternary is the one non-side-effect shape remove_sideeffects
+    // still enters (goto_sideeffects.cpp:180 early-returns only on
+    // `!has_sideeffect(e) && e.id() != "if"`): under --validate-violation-witness
+    // it lowers `c ? a : b` to a DECL/IF/GOTO branch, which a single ASSIGN would
+    // not reproduce. Mirror that exact entry condition so we fall back on it.
+    exprt lhs = migrate_expr_back(assign.target);
+    exprt rhs = migrate_expr_back(assign.source);
+    if (
+      has_sideeffect(lhs) || has_sideeffect(rhs) || lhs.id() == "if" ||
+      rhs.id() == "if" || rhs.type().is_code() || is_atomic_symbol(lhs, ns) ||
+      has_atomic_read(rhs, ns))
+      return false;
+
+    // For side-effect-free operands the instruction convert_assign emits is
+    // migrate_expr(code_assignt(lhs, rhs)) located at the statement — which
+    // round-trips back to `code2` itself (migrate_expr drops the operand
+    // locations, so none of restore_value_locations' stamping survives in the
+    // stored code). Emit it directly, no round-trip, carrying the statement's
+    // own location, exactly as copy(new_assign, ASSIGN) would.
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code2;
+    t->location = assign.location;
     return true;
   }
 
