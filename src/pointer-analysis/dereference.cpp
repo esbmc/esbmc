@@ -2277,6 +2277,17 @@ expr2tc dereferencet::stitch_together_from_byte_array(
       num_bits64));
 }
 
+// The single definition of "dynamic object" shared by the validity/free check
+// and the heap-vs-stack CWE classification below: symex names every dynamic
+// allocation "symex_dynamic::...". Heap allocations (malloc/calloc/realloc) use
+// that bare prefix; alloca, which lives on the stack, carries the extra
+// "alloca::" infix (see symex_mem() in
+// goto-symex/builtin_functions/memory_alloc.cpp).
+static bool is_symex_dynamic_object(const std::string &id)
+{
+  return has_prefix(id, "symex_dynamic::");
+}
+
 void dereferencet::valid_check(
   const expr2tc &object,
   const guard2tc &guard,
@@ -2313,7 +2324,7 @@ void dereferencet::valid_check(
     }
 
     const symbolt &sym = *ns.lookup(to_symbol2t(symbol).thename);
-    if (has_prefix(sym.id.as_string(), "symex_dynamic::"))
+    if (is_symex_dynamic_object(sym.id.as_string()))
     {
       // Assert that it hasn't (nondeterministically) been invalidated.
       expr2tc addrof = address_of2tc(symbol->type, symbol);
@@ -2366,11 +2377,13 @@ void dereferencet::valid_check(
   }
 }
 
-// True when `obj`'s base object is a heap allocation (malloc/calloc/realloc).
-// symex names such objects "symex_dynamic::dynamic_N_{array,value}"; alloca,
-// which lives on the stack, gets the extra "alloca::" infix (see symex_mem()
-// in goto-symex/builtin_functions/memory_alloc.cpp). Only heap overflows map
-// to CWE-122 Heap-based Buffer Overflow.
+// True when `obj`'s base object is a heap allocation (malloc/calloc/realloc):
+// an "symex_dynamic::" object that is not the stack-resident "alloca::" variant.
+// Only heap overflows map to CWE-122 (Heap-based Buffer Overflow). When the base
+// is not a resolvable symbol (an unknown/nondet object), we deliberately fall
+// back to the stack classification (CWE-121): symex dereferences per concrete
+// object, so a genuine heap access resolves to a symbol here, and the fallback
+// only affects objects whose origin is already unknown.
 static bool is_heap_object(const expr2tc &obj, const namespacet &ns)
 {
   const expr2tc &base = get_base_object(obj);
@@ -2380,7 +2393,7 @@ static bool is_heap_object(const expr2tc &obj, const namespacet &ns)
   if (!sym)
     return false;
   const std::string id = sym->id.as_string();
-  return has_prefix(id, "symex_dynamic::") &&
+  return is_symex_dynamic_object(id) &&
          !has_prefix(id, "symex_dynamic::alloca::");
 }
 
@@ -2603,6 +2616,11 @@ void dereferencet::check_data_obj_access(
   {
     guard2tc tmp_guard = guard;
     tmp_guard.add(gt);
+    // A size-one heap object (e.g. malloc(sizeof(int))) is intentionally tagged
+    // CWE-122 here even though CWE-122's canonical text implies a buffer/array:
+    // it is still a heap out-of-bounds access, and coarsening scalar heap
+    // objects to CWE-122 matches the existing read/write coarsening (the list
+    // keeps both CWE-125 and CWE-787).
     dereference_failure(
       "pointer dereference",
       is_heap_object(value, ns) ? "Access to object out of bounds: heap object"
