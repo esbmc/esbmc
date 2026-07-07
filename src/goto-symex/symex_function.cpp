@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cassert>
-#include <map>
 #include <unordered_set>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -33,74 +32,98 @@ bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 
 namespace
 {
+// The trailing symbol name of a mangled identifier (`c:@F@exit` -> `exit`,
+// `c:main.c@F@foo` -> `foo`). Used to spot library terminators by base name
+// regardless of the file/scope prefix the frontend attaches.
+std::string trailing_symbol_name(const irep_idt &identifier)
+{
+  const std::string &s = identifier.as_string();
+  const std::string::size_type at = s.rfind('@');
+  return at == std::string::npos ? s : s.substr(at + 1);
+}
+
+// A call to one of these ends the current path without returning normally and
+// without recursing further: exit()/abort()/_Exit() and the __assert_fail
+// family model this with a trailing `__ESBMC_assume(0)` in their bodies
+// (src/c2goto/library/stdlib.c), which the caller-local CFG walk below cannot
+// see. Treating such a call as a terminating path keeps a recursion whose base
+// case is `exit()`/`abort()` (rather than a normal `return`) from being
+// misreported as CWE-674 — the structural dual of reaching END_FUNCTION.
+bool is_terminating_call(const irep_idt &identifier)
+{
+  static const std::unordered_set<std::string> terminators = {
+    "exit",
+    "_Exit",
+    "quick_exit",
+    "abort",
+    "__assert_fail",
+    "__assert_rtn",
+    "__assert",
+    "_wassert",
+    "__builtin_unreachable"};
+  return terminators.count(trailing_symbol_name(identifier)) != 0;
+}
+
 // A recursive function has a *reachable base case* iff some path from its
-// entry reaches END_FUNCTION without going through a direct recursive
-// self-call. If no such path exists, the function can never return without
-// first recursing again — the recursion is genuinely unbounded (CWE-674
-// "Uncontrolled Recursion") rather than merely deep.
+// entry leaves the function — reaching END_FUNCTION or a terminating call
+// (exit/abort/...) — without going through a direct recursive self-call. If no
+// such path exists, the function can never leave without first recursing again
+// — the recursion is genuinely unbounded (CWE-674 "Uncontrolled Recursion")
+// rather than merely deep.
 //
-// The analysis is deliberately structural: it walks the CFG treating a
-// direct self-call as an impassable edge and otherwise following
-// get_successors(). It is sound but incomplete — it never reports a
-// recursion that has *any* non-recursive return path, so terminating
-// recursion that only exhausts the unwinding bound keeps the existing
-// "recursion unwinding assertion" comment. Callers consult this solely to
-// relabel a recursion-unwinding claim that has already fired (the recursion
-// really did reach the bound on a feasible path), so the combination is a
-// sound witness of non-termination.
+// The analysis is deliberately structural and reachability-only: it walks the
+// CFG treating a direct self-call as an impassable edge and otherwise following
+// get_successors(), and does *not* reason about branch feasibility. A base case
+// guarded by a statically-false condition (`if (0) return 0;`) therefore still
+// counts as a reachable base case as long as goto constant-folding leaves the
+// branch in the CFG; this keeps the label a pure function of the goto program.
+// It is sound but incomplete — it never reports a recursion that has *any*
+// non-recursive exit path, so terminating recursion that only exhausts the
+// unwinding bound keeps the existing "recursion unwinding assertion" comment.
+// Callers consult this solely to relabel a recursion-unwinding claim that has
+// already fired (the recursion really did reach the bound on a feasible path),
+// so the combination is a sound witness of non-termination.
 bool recursion_has_no_base_case(
   const goto_functiont &goto_function,
   const irep_idt &identifier)
 {
-  // Keyed on the mangled identifier alone: sound because symex is
-  // single-threaded and there is exactly one body per identifier per process
-  // (k-induction phases reuse the same function_map; --k-induction-parallel
-  // forks). The structural base-case property is invariant to the unwind
-  // bound and phase, so a cached result never goes stale.
-  static std::map<irep_idt, bool> cache;
-  auto cached = cache.find(identifier);
-  if (cached != cache.end())
-    return cached->second;
-
   const goto_programt &body = goto_function.body;
-  bool no_base_case = false;
-  if (!body.instructions.empty())
+  if (body.instructions.empty())
+    return false;
+
+  std::unordered_set<const goto_programt::instructiont *> visited;
+  std::vector<goto_programt::const_targett> work{body.instructions.begin()};
+  while (!work.empty())
   {
-    std::unordered_set<const goto_programt::instructiont *> visited;
-    std::vector<goto_programt::const_targett> work{body.instructions.begin()};
-    bool reached_end = false;
-    while (!work.empty())
+    goto_programt::const_targett cur = work.back();
+    work.pop_back();
+    if (!visited.insert(&*cur).second)
+      continue;
+    if (cur->is_end_function())
+      return false; // a normal return path exists: base case reachable
+    if (cur->is_function_call())
     {
-      goto_programt::const_targett cur = work.back();
-      work.pop_back();
-      if (!visited.insert(&*cur).second)
-        continue;
-      if (cur->is_end_function())
+      const code_function_call2t &c = to_code_function_call2t(cur->code);
+      if (is_symbol2t(c.function))
       {
-        reached_end = true;
-        break;
-      }
-      // A direct recursive self-call is an impassable sink: reaching
-      // END_FUNCTION through it requires the recursion to bottom out first.
-      if (cur->is_function_call())
-      {
-        const code_function_call2t &c = to_code_function_call2t(cur->code);
-        if (
-          is_symbol2t(c.function) &&
-          to_symbol2t(c.function).thename == identifier)
+        const irep_idt &callee = to_symbol2t(c.function).thename;
+        // A direct recursive self-call is an impassable sink: reaching an exit
+        // through it requires the recursion to bottom out first.
+        if (callee == identifier)
           continue;
+        // A terminating call (exit/abort/...) ends the path without recursing.
+        if (is_terminating_call(callee))
+          return false;
       }
-      goto_programt::const_targetst succs;
-      body.get_successors(cur, succs);
-      for (const auto &s : succs)
-        if (s != body.instructions.end())
-          work.push_back(s);
     }
-    no_base_case = !reached_end;
+    goto_programt::const_targetst succs;
+    body.get_successors(cur, succs);
+    for (const auto &s : succs)
+      if (s != body.instructions.end())
+        work.push_back(s);
   }
 
-  cache.emplace(identifier, no_base_case);
-  return no_base_case;
+  return true; // every exit path passes through the recursive self-call
 }
 } // namespace
 
