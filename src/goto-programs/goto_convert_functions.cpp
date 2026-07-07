@@ -151,7 +151,8 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower, and
 // trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
 // DEAD, the block managing the destructor stack as convert_block does). Each
-// carries the statement's own location, matching goto_convertt::convert()
+// reads its own code_*2t fields directly (no legacy round-trip) and carries the
+// statement's own location, matching goto_convertt::convert()
 // byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,

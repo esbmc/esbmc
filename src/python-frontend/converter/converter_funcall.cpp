@@ -751,9 +751,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_python_model_func(func_name) &&
       !is_class(func_name, *ast_json))
     {
+      // A call into an unrecognised module (e.g. itertools.islice) has no
+      // definition in the AST, so find_function returns an empty node. Skip
+      // loading here and let the call fall through to the "Undefined function
+      // - replacing with assert(false)" fallback instead of feeding an empty
+      // node to get_function_definition, which would dereference missing
+      // fields and abort (issue #5898).
       const auto &func_node = find_function((*ast_json)["body"], func_name);
-      assert(!func_node.empty());
-      get_function_definition(func_node);
+      if (!func_node.empty())
+        get_function_definition(func_node);
     }
   }
 

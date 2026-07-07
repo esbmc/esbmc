@@ -588,6 +588,23 @@ exprt make_va_list(const exprt &expr)
   return expr;
 }
 
+// Keep a va_start/va_copy call in the GOTO program (with no lhs) so symex
+// can track which va_lists have been initialised. run_builtin intercepts
+// the call; no actual function body is ever looked up.
+static void emit_va_marker_call(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  code_function_callt call;
+  call.location() = function.location();
+  call.function() = function;
+  call.arguments() = arguments;
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+  migrate_expr(call, t->code);
+  t->location = function.location();
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1258,8 +1275,11 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_not_nil())
     {
+      // Carry the va_list lvalue as the operand so symex can flag a va_arg
+      // on a va_list that was never initialised by va_start; the argument's
+      // value plays no role in resolving the vararg itself.
       side_effect_exprt rhs("va_arg", lhs.type());
-      rhs.copy_to_operands(gen_zero(lhs.type()));
+      rhs.copy_to_operands(make_va_list(arguments[0]));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -1351,6 +1371,8 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_start argument expected to be lvalue");
       abort();
     }
+
+    emit_va_marker_call(function, arguments, dest);
   }
   else if (base_name == "__builtin_va_end")
   {
@@ -1391,6 +1413,9 @@ void goto_convertt::do_function_call_symbol(
       migrate_expr(assign_expr, t->code);
       t->location = function.location();
     }
+
+    if (arguments.size() >= 2)
+      emit_va_marker_call(function, arguments, dest);
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")
