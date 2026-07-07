@@ -52,10 +52,13 @@ jobs:
         name: release-windows-latest
         path: C:/deps/esbmc
 
-    # Release pipeline (canon-names): emit the canonical esbmc-windows.zip asset.
+    # Release pipeline (canon-names): emit the canonical esbmc-windows.zip asset
+    # with a top-level release/ folder, matching the Linux and macOS archives.
     - name: Package canonical release asset
       if: ${{ inputs.canon-names }}
-      run: Compress-Archive -Path C:/deps/esbmc -DestinationPath esbmc-windows.zip
+      run: |
+        Rename-Item -Path C:/deps/esbmc -NewName release
+        Compress-Archive -Path C:/deps/release -DestinationPath esbmc-windows.zip
       shell: pwsh
     - name: Upload canonical release asset
       if: ${{ inputs.canon-names }}
