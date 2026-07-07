@@ -24,7 +24,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### Features
 
-ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
+ESBMC detects software errors by simulating a finite prefix of the program's execution with all possible inputs. Classes of implementation errors that can be detected include:
  * User-specified assertion failures
  * Out-of-bounds array access
  * Illegal pointer dereferences, such as:
@@ -34,7 +34,7 @@ ESBMC detects errors in software by simulating a finite prefix of the program ex
    * Misaligned memory access
  * Integer overflows
  * Undefined behavior on shift operations
- * `restrict`-qualified pointer parameters that alias (opt-in via `--restrict-check`)
+ * `restrict`-qualified pointer parameters that alias
  * Floating-point for NaN
  * Divide by zero
  * Memory leaks
