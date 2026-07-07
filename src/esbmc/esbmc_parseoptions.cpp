@@ -822,7 +822,13 @@ int esbmc_parseoptionst::doit()
           "falsification",
           "termination",
           "loop-invariant",
-          "multi-fail-fast"})
+          "multi-fail-fast",
+          // Standalone phase-only modes: the dead-code report is only emitted
+          // on the base-case pass (bmc.cpp `bs && !fc && !is`), so a run under
+          // --forward-condition / --inductive-step would exit SUCCESSFUL
+          // without ever printing the [Dead code] findings.
+          "forward-condition",
+          "inductive-step"})
       if (cmdline.isset(incompatible))
       {
         log_error(
@@ -991,10 +997,17 @@ int esbmc_parseoptionst::doit()
   bmct bmc(goto_functions, options, context);
   int bmc_result = do_bmc(bmc);
   // Dead-code analysis is advisory: its probes are SAT for every live branch,
-  // which would otherwise surface as a non-zero (FAILED) exit code. The
-  // findings are reported separately, so always exit 0 (issue #4495).
+  // which do_bmc maps to a non-zero (FAILED) exit code. The findings are
+  // reported separately, so remap that to 0 — but only for a completed
+  // analysis. A solver error (P_ERROR) or an SMTLIB-only emission (P_SMTLIB)
+  // is not a finished advisory run, so propagate it rather than masking a
+  // crashed/incomplete analysis as success (issue #4495).
   if (options.get_bool_option("dead-code-check"))
+  {
+    if (bmc_result == P_ERROR || bmc_result == P_SMTLIB)
+      return bmc_result;
     return 0;
+  }
   return bmc_result;
 }
 

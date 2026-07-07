@@ -775,6 +775,9 @@ static void report_dead_code(
   if (findings.empty())
   {
     log_result("No provably-dead code found.");
+    // Still emit a well-formed SARIF run with an empty results array so a
+    // clean --sarif-output run is not a missing document (issue #4495).
+    sarif_dead_code(options, findings);
     return;
   }
 
