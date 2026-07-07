@@ -536,7 +536,17 @@ bool fix_builtin_call(irept &code)
   // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
   // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
   // must be in fix_expression's operand-wrap set for the argument to reach it.
-  else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
+  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
+  // type), so the same rewrite covers the integer abs family -- CBMC emits
+  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
+  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
+  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
+  else if (
+    callee == "fabsf" || callee == "fabs" || callee == "fabsl" ||
+    callee == "abs" || callee == "labs" || callee == "llabs" ||
+    callee == "imaxabs" || callee == "__builtin_abs" ||
+    callee == "__builtin_labs" || callee == "__builtin_llabs" ||
+    callee == "__builtin_imaxabs")
     rhs = build_unary_fp_rhs(lhs, args, "abs");
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8
