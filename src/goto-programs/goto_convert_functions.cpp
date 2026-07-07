@@ -1,4 +1,5 @@
 #include <cassert>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
@@ -146,10 +147,11 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
 // Returns false the instant an unsupported kind (or a shape whose native
 // emission would not be byte-identical) appears — the caller discards the
 // partial `dest`, so a failed walk never corrupts the fallback body. So far:
-// the decl-free structural leaves (block/skip) and the single-instruction value
-// statements (assign/expression) that reduce to one ASSIGN/OTHER with nothing
-// to lower; each reads its own code_*2t fields directly (no legacy round-trip)
-// and carries the statement's own location, matching goto_convertt::convert()
+// the structural leaves (block/skip), the single-instruction value statements
+// (assign/expression) that reduce to one ASSIGN/OTHER with nothing to lower, and
+// trivial-type declarations (DECL + optional side-effect-free ASSIGN + scope-exit
+// DEAD, the block managing the destructor stack as convert_block does). Each
+// carries the statement's own location, matching goto_convertt::convert()
 // byte-for-byte on this subset.
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
@@ -159,12 +161,29 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_block2t &block = to_code_block2t(code2);
 
-    // A decl-free block reduces convert_block() to converting its children: no
-    // code_decl2t in the supported set means the destructor stack is never
-    // touched, so the end-of-block destructor unwind is a no-op.
+    // Mirror convert_block(): save the destructor stack, convert the children
+    // (a code_decl2t pushes a scope-exit code_dead), then emit those destructors
+    // at the block's end_location and restore the stack. A decl-free block
+    // leaves the stack untouched, so the unwind and restore are both no-ops and
+    // this stays byte-identical to the pre-decl handler for the block/skip/
+    // assign/expression subset.
+    destructor_stackt old_stack = targets.destructor_stack;
+
     for (const expr2tc &stmt : block.operands)
       if (!convert_native_rec(stmt, dest))
+      {
+        // Fallback: undo any code_dead this partial walk pushed, so the caller's
+        // goto_convert_rec re-converts against a clean destructor stack.
+        targets.destructor_stack = old_stack;
         return false;
+      }
+
+    // No native statement emits a trailing unconditional goto (return/goto/break
+    // are unsupported), so convert_block's "unreachable -> skip destructors"
+    // guard is always false here and is omitted. unwind_destructor_stack is
+    // stack-neutral; the explicit restore below pops this block's code_deads.
+    unwind_destructor_stack(block.end_location, old_stack.size(), dest);
+    targets.destructor_stack = old_stack;
 
     // Mirror the tail of convert(): a statement that emitted no instruction
     // leaves an empty program, which must carry a SKIP at the block location.
@@ -253,6 +272,70 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt::targett t = dest.add_instruction(OTHER);
     t->code = code2;
     t->location = expr_stmt.location;
+    return true;
+  }
+
+  if (is_code_decl2t(code2))
+  {
+    const code_decl2t &decl = to_code_decl2t(code2);
+
+    symbolt *s = context.find_symbol(decl.value);
+    if (s == nullptr)
+      return false;
+
+    // convert_decl (goto_convert.cpp:705) has several paths this native handler
+    // does not reproduce; fall back on each so flag-on stays byte-identical:
+    //  - a static-lifetime or code-typed symbol is a no-op SKIP (:730),
+    //  - an array type may be a VLA needing rewrite_vla_decl / a dynamic-size
+    //    generator (:734) — exclude all arrays conservatively,
+    //  - a type with a destructor pushes a second stack entry and lowers a
+    //    FUNCTION_CALL at scope exit (:800),
+    //  - a temporary_object or side-effect initializer is lowered (:760-787).
+    // What remains is exactly convert_decl's plain path: a DECL, an optional
+    // side-effect-free ASSIGN, and one scope-exit code_dead.
+    if (
+      s->static_lifetime || s->get_type().is_code() || s->get_type().is_array())
+      return false;
+
+    code_function_callt destructor;
+    if (get_destructor(ns, s->get_type(), destructor))
+      return false;
+
+    exprt initializer = is_nil_expr(decl.init) ? static_cast<exprt>(nil_exprt())
+                                               : migrate_expr_back(decl.init);
+    // A top-level ternary initializer is side-effect-free yet still lowered to a
+    // DECL/IF/GOTO branch by remove_sideeffects under --validate-violation-witness
+    // (goto_sideeffects.cpp:180), which a single ASSIGN would not reproduce —
+    // mirror the same guard the assign handler carries.
+    if (
+      initializer.is_not_nil() &&
+      (has_sideeffect(initializer) || initializer.id() == "if" ||
+       (initializer.id() == "sideeffect" &&
+        initializer.statement() == "temporary_object")))
+      return false;
+
+    // Emit exactly as convert_decl does: copy() migrates the freshly-built
+    // legacy node, so the DECL/ASSIGN instructions match byte-for-byte. Build the
+    // DECL/ASSIGN symbol from the decl operand type (migrate_type_back(decl.type),
+    // what convert_decl uses via new_code.op0()); the scope-exit code_dead uses
+    // the symbol-table type (s->get_type()), also matching convert_decl — the two
+    // sources coincide today but are kept distinct so a stale symbol-table type
+    // cannot silently diverge the DECL bytes.
+    const symbol_exprt var(s->id, migrate_type_back(decl.type));
+
+    code_declt decl_code(var);
+    decl_code.location() = decl.location;
+    copy(decl_code, DECL, dest);
+
+    if (initializer.is_not_nil())
+    {
+      code_assignt assign(var, initializer);
+      assign.location() = decl.location;
+      copy(assign, ASSIGN, dest);
+    }
+
+    targets.destructor_stack.push_back(
+      code_deadt(symbol_exprt(s->id, s->get_type())));
     return true;
   }
 
