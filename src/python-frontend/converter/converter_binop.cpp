@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
+#include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
@@ -1796,6 +1797,28 @@ exprt python_converter::handle_array_operations(
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();
       throw std::runtime_error(msg.str());
+    }
+    // `str + <non-str>` (e.g. `1 + "s"`) is a Python TypeError. The
+    // concatenation promotion below is only valid when the non-array operand is
+    // itself a character (a 1-char string from indexing/chr(), which
+    // get_python_type_category tags "string"); a genuine number is a type
+    // error. Raise a catchable TypeError so it can escape main() or be caught,
+    // instead of falling into string concatenation, which crashes reading the
+    // numeric operand's AST value as a string (issue #5904).
+    if (lhs_char != rhs_char)
+    {
+      const exprt &other = lhs_char ? rhs : lhs;
+      const std::string cat = get_python_type_category(other.type());
+      // Only raise for a *definitively* non-string operand (numeric, list,
+      // bytes). An empty category is an unannotated any_type (void*) whose real
+      // type is unknown here — a genuinely-str value flows through the
+      // concatenation path fine, so do not misfire a TypeError on it.
+      if (cat != "string" && !cat.empty())
+        return get_exception_handler().gen_exception_raise(
+          "TypeError",
+          "unsupported operand type(s) for +: '" +
+            type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+            type_handler_.get_python_type_name(rhs.type()) + "'");
     }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);

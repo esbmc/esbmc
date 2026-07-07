@@ -4647,10 +4647,36 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       else
       {
         const std::string &func_name = function_id_.get_function();
+        locationt location = converter_.get_location_from_decl(call_);
+
+        // A method call `recv.foo()` whose receiver type has no such method is a
+        // Python AttributeError, not an unsupported free function. Raise a
+        // catchable AttributeError (issue #5904) so it can escape main()
+        // (uncaught) or be suppressed by `except AttributeError`. Bare
+        // free-function calls (`func()`, a Name) keep the generic
+        // unsupported-function stub below.
+        if (
+          call_.contains("func") && call_["func"].is_object() &&
+          call_["func"].value("_type", "") == "Attribute")
+        {
+          const std::string recv = get_object_name();
+          std::string recv_type = type_handler_.get_var_type(recv);
+          if (recv_type.empty())
+            recv_type = "object";
+          // Return the cpp-throw directly (not a nondet placeholder) so it
+          // propagates through nested expression contexts via
+          // contains_cpp_throw, matching how attribute access and the binop
+          // TypeError raise are consumed.
+          exprt raise = converter_.get_exception_handler().gen_exception_raise(
+            "AttributeError",
+            "'" + recv_type + "' object has no attribute '" + func_name + "'");
+          raise.location() = location;
+          return raise;
+        }
+
         log_warning(
           "Undefined function '{}' - replacing with assert(false)", func_name);
         // Create a side effect expression with nondet for assignments
-        locationt location = converter_.get_location_from_decl(call_);
         // Create a nondet expression as a placeholder that won't crash
         // This allows the code to continue but marks it as undefined behavior
         exprt nondet_expr("sideeffect", empty_typet());
@@ -5815,7 +5841,7 @@ exprt function_call_expr::generate_attribute_error(
   const typet &expected_type) const
 {
   locationt location = converter_.get_location_from_decl(call_);
-  std::ostringstream error_msg;
+  std::ostringstream detail;
 
   if (possible_classes.size() > 1)
   {
@@ -5827,29 +5853,30 @@ exprt function_call_expr::generate_attribute_error(
         display_classes += ", ";
       display_classes += "'" + possible_classes[i] + "'";
     }
-    error_msg << "AttributeError: object has no attribute '" << method_name
-              << "' (possible types: " << display_classes << ")";
+    detail << "object has no attribute '" << method_name
+           << "' (possible types: " << display_classes << ")";
   }
   else if (possible_classes.size() == 1)
   {
-    error_msg << "AttributeError: '" << possible_classes[0]
-              << "' object has no attribute '" << method_name << "'";
+    detail << "'" << possible_classes[0] << "' object has no attribute '"
+           << method_name << "'";
   }
   else
   {
-    error_msg << "AttributeError: object has no attribute '" << method_name
-              << "'";
+    detail << "object has no attribute '" << method_name << "'";
   }
 
-  log_warning("{}", error_msg.str());
+  log_warning("AttributeError: {}", detail.str());
 
-  // V.3: build the always-fail assert condition in IREP2.
-  code_assertt assert_code(migrate_expr_back(gen_false_expr()));
-  assert_code.location() = location;
-  assert_code.location().user_provided(true);
-  assert_code.location().comment(error_msg.str());
-
-  converter_.add_instruction(assert_code);
+  // Raise a catchable Python AttributeError (issue #5904) rather than a bare
+  // assert(false), so it can escape main() (uncaught) or be suppressed by a
+  // matching `except AttributeError`.
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError", detail.str());
+  codet throw_code("expression");
+  throw_code.location() = location;
+  throw_code.operands().push_back(raise);
+  converter_.add_instruction(throw_code);
 
   // Compute fallback type: use expected_type if valid, otherwise Any
   typet fallback_type = expected_type;
@@ -5862,7 +5889,7 @@ exprt function_call_expr::generate_attribute_error(
   nondet_fallback.statement("nondet");
   nondet_fallback.location() = location;
   nondet_fallback.location().user_provided(true);
-  nondet_fallback.location().comment(error_msg.str());
+  nondet_fallback.location().comment("AttributeError: " + detail.str());
 
   return nondet_fallback;
 }

@@ -1204,17 +1204,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           element.contains("value") && element["value"].contains("id")
             ? element["value"]["id"].get<std::string>()
             : std::string();
+        // Raise a catchable Python AttributeError (issue #5904) rather than
+        // aborting the frontend, so it can escape main() (uncaught) or be
+        // suppressed by a matching `except AttributeError`.
         std::ostringstream msg;
-        msg << "AttributeError: '";
-        if (!base_name.empty())
-          msg << base_name;
-        else
-          msg << "object";
-        msg << "' has no attribute '" << attr_name << "'";
-        const locationt loc = get_location_from_decl(element);
-        if (!loc.is_nil())
-          msg << " at " << loc.get_file() << ":" << loc.get_line();
-        throw std::runtime_error(msg.str());
+        msg << "'" << (base_name.empty() ? "object" : base_name)
+            << "' object has no attribute '" << attr_name << "'";
+        expr = get_exception_handler().gen_exception_raise(
+          "AttributeError", msg.str());
+        break;
       }
 
       // Read-modify-set: we may push_back a new component into the class
@@ -1371,8 +1369,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
           else
           {
-            throw std::runtime_error(
-              "Attribute \"" + attr_name + "\" not found");
+            // Instance of a known class but the attribute genuinely does not
+            // exist: raise a catchable AttributeError (issue #5904) instead of
+            // aborting conversion.
+            expr = get_exception_handler().gen_exception_raise(
+              "AttributeError",
+              "'" + extract_class_name_from_tag(obj_type_name) +
+                "' object has no attribute '" + attr_name + "'");
           }
         }
         else
