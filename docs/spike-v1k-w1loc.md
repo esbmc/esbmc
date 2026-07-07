@@ -288,3 +288,27 @@ priced as a large cross-frontend program."
 `regression/python` + the model-`.py` corpus + an `esbmc-cpp` smoke stratum. Its
 purpose is to *measure the implementation cost* now that fidelity is settled — it
 is a sizing experiment, not a landable PR, exactly as the V.1k rounds were.
+
+---
+
+## Appendix C — Phase C progress (in flight)
+
+Deliverable (3), grown incrementally (the V-track "one `code_*2t` kind at a
+time" cadence) rather than as a single throw-away branch. The default-off
+`--irep2-native-body` seam and dispatcher `convert_native_rec` land on master
+and grow one supported kind per PR; each PR gates on **byte-identical
+`--goto-functions-only` flag-on vs flag-off** across a cross-frontend corpus
+(the §5 gate 1), with the native path proven reachable (C-Live) by temporary
+instrumentation.
+
+| PR | Kinds made native | Notes |
+|---|---|---|
+| #5866 | `code_block2t` (decl-free), `code_skip2t` | The seam + the decl-free structural leaves; destructor stack never touched. |
+| *(this)* | `code_assign2t` (side-effect-free, non-atomic, non-code-typed source) | The first **value statement**. Guarded by the exact predicates `convert_assign` uses (`has_sideeffect` on both operands, `rhs.type().is_code()`, `is_atomic_symbol`/`has_atomic_read`); anything richer falls back. Design **D3**: the statement's own `code_assign2t::location` is carried; the side-effect-free reduction means the stored instruction is `code2` itself (value-operand locations are dropped by `migrate_expr` regardless), so no round-trip and no `restore_value_locations` stamping is needed. |
+
+*Next:* the remaining single-instruction value statements (`code_expression2t`
+side-effect-free → `OTHER`; `code_return2t` valueless in a non-value function →
+GOTO-to-`return_target`), then the side-effect-bearing statements, which require
+the IREP2-native `remove_sideeffects` / `do_function_call` reimplementation the
+Conclusion prices as the real cost. Decls (destructor-stack unwind) and gotos
+(target tracking) remain the two structural pieces the block walk still needs.
