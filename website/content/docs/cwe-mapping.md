@@ -163,7 +163,7 @@ restricted to user source (system-header and operational-model locations are
 excluded by a best-effort path heuristic). Inter-procedural dead-store
 detection is a future extension.
 
-### CWE-561 — Dead Code (`--dead-code-check`)
+## Dead code (CWE-561, advisory)
 
 [CWE-561](https://cwe.mitre.org/data/definitions/561.html) (Dead Code) is
 `ALLOWED` for vulnerability mapping in CWE 4.20, but ESBMC treats it as an
@@ -207,6 +207,23 @@ dead.c:9: dead code: unreachable branch [guard: x > 5]
 
 VERIFICATION SUCCESSFUL
 ```
+
+### Scope and limitations
+
+- **Branch directions only.** The analysis probes the two directions of each
+  `if`/loop guard. Canonical CWE-561 shapes with no branch guard — statements
+  after an unconditional `return`/`abort`, or entirely unreferenced functions —
+  are *not* detected; they simply report no dead code.
+- **Bounded, and beyond-bound branches read as dead.** A branch that becomes
+  reachable only past the unwinding bound is cut like any other beyond-bound
+  path and is therefore listed as unreachable — the report is explicitly scoped
+  "up to the current unwinding bound", not an absolute proof. Raise `--unwind`
+  for loop-bearing programs.
+- **Completeness depends on every probe solving.** A finding is "this branch's
+  probe was never satisfiable". A solver *error* aborts the run (non-zero exit,
+  not a false SUCCESSFUL). A per-claim `--timeout`, however, leaves a probe
+  unsolved and that branch would then be listed as dead; do not pair
+  `--dead-code-check` with a per-claim timeout if the finding set must be exact.
 
 ## Ids dropped vs. published mappings
 

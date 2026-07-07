@@ -1,0 +1,6 @@
+CORE
+main.c
+--dead-code-check --sarif-output -
+^VERIFICATION SUCCESSFUL$
+"version": "2.1.0"
+"results": \[\]
