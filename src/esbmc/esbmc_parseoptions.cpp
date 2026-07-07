@@ -33,6 +33,7 @@ extern "C"
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
+#include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
@@ -2845,6 +2846,12 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("data-races-check", true);
       options.set_option("no-por", true);
       add_race_assertions(context, goto_functions);
+    }
+
+    if (cmdline.isset("restrict-check"))
+    {
+      log_status("Adding Restrict Aliasing Checks");
+      add_restrict_assertions(context, goto_functions);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
