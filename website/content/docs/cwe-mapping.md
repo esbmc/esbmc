@@ -167,6 +167,15 @@ allocation, so an excessive size is still reported under
 `--force-malloc-success`. CWE-770 is the class-level entry for unbounded
 allocation; ESBMC maps to the CWE-789 variant.
 
+A typed request such as `malloc(sizeof(T))` is lowered to an element count of
+one with element type `T`, so the check scales by `sizeof(T)`; a byte-count
+request (`malloc(n)`, `malloc(n * sizeof(T))`) keeps a `char` element type and
+is compared directly. `calloc` and other allocators modelled by an operational
+model (e.g. `strdup`) are covered by instrumenting their model bodies, so a
+violation there is reported at the model's internal `malloc` site rather than
+the user call site, and a library routine that allocates an input-sized buffer
+can raise a genuine but library-located CWE-789.
+
 ## Ids dropped vs. published mappings
 
 The mapping derives from Table 4 of Sousa et al., _"Finding Software

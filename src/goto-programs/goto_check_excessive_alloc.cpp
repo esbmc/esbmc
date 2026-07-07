@@ -26,10 +26,17 @@ const char *alloc_fn_name(sideeffect2t::allockind kind)
 }
 
 /// Total requested allocation size in bytes for `se`, or a nil expression
-/// when it cannot be computed (a size-one allocation, or an element type with
-/// no static size). `malloc`/`realloc` sizes are already in bytes;
-/// `operator new[]` carries an element count that is scaled by
-/// `sizeof(element)`.
+/// when it cannot be computed (an element type with no static size).
+///
+/// The allocation model (`goto_symext::symex_mem`, src/goto-symex/
+/// builtin_functions/memory_alloc.cpp) uniformly allocates `se.size` elements
+/// of `se.alloctype`, so the requested byte count is `size * sizeof(alloctype)`
+/// for every kind we check. This matters for typed requests: the frontend
+/// lowers a bare `malloc(sizeof(T))` to `size == 1, alloctype == T` (never a
+/// raw byte count), so without the scaling a large `T` would be checked as
+/// `1 <= K` and slip through. A byte-count request such as `malloc(n)` or
+/// `n * sizeof(T)` keeps `alloctype == char` (sizeof 1), so the scaling is the
+/// identity there.
 expr2tc alloc_byte_size(const sideeffect2t &se, const namespacet &ns)
 {
   if (is_nil_expr(se.size))
@@ -39,19 +46,19 @@ expr2tc alloc_byte_size(const sideeffect2t &se, const namespacet &ns)
   if (size->type != size_type2())
     size = typecast2tc(size_type2(), size);
 
-  if (se.kind != sideeffect2t::allockind::cpp_new_arr)
-    return size; // already a byte count
-
+  // A char/unknown element type is already a byte count: no scaling needed.
   if (is_nil_type(se.alloctype) || is_empty_type(se.alloctype))
     return size;
 
   try
   {
-    // count * sizeof(element), in the same modular size_type arithmetic symex
+    // size * sizeof(element), in the same modular size_type arithmetic symex
     // uses to model the allocation. A count near 2^64 can wrap the product to
     // a small value and slip under K — a false negative, never a false
     // positive; it mirrors the model rather than contradicting it.
     BigInt elem_bytes = type_byte_size(se.alloctype, &ns);
+    if (elem_bytes == 1)
+      return size; // sizeof(char)-equivalent: avoid a redundant `* 1`
     return mul2tc(
       size_type2(), size, constant_int2tc(size_type2(), elem_bytes));
   }
@@ -121,6 +128,17 @@ void collect_allocs(
 }
 } // namespace
 
+// This pass instruments *every* function, user code and linked operational
+// models alike. malloc/realloc/operator new[] are frontend intrinsics lowered
+// to inline sideeffects at the user call site, so they are checked there.
+// Model-based allocators (calloc, strdup, kmalloc, ldv_malloc, ...) are real
+// functions whose OM bodies allocate via malloc/realloc; instrumenting those
+// bodies is what gives calloc & co. their CWE-789 coverage. The trade-off is
+// that such a finding is reported at the model's malloc site (e.g.
+// stdlib.c:calloc) rather than the user's call site, and a library routine
+// that allocates an input-sized buffer (e.g. strdup of a symbolic-length
+// string) can surface a genuine — but library-located — CWE-789. Both are
+// documented in website/content/docs/cwe-mapping.md.
 bool goto_check_excessive_alloc::runOnFunction(
   std::pair<const irep_idt, goto_functiont> &F)
 {
@@ -133,7 +151,11 @@ bool goto_check_excessive_alloc::runOnFunction(
   // Collect the target assignments (with their allocation sites) first:
   // inserting an ASSERT before an allocation shifts that allocation to the
   // next slot, so a single forward scan that inserted in place would
-  // re-encounter and re-instrument it.
+  // re-encounter and re-instrument it. Scanning assignment right-hand sides is
+  // sufficient: every allocation that survives to the GOTO program lands on an
+  // assignment (an allocation whose result is discarded, `malloc(n);`, is
+  // elided by the frontend before this pass runs, so there is nothing to
+  // check).
   std::vector<std::pair<goto_programt::targett, std::vector<alloc_site_t>>>
     work;
   for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
