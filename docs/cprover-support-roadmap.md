@@ -489,7 +489,7 @@ state is CBMC-verdict parity as the sole oracle and goto-transcoder retired.
 
 # Kani support
 
-For rust, we have a few extra remarks
+For Rust, we have a few extra remarks.
 
 ## Overview
 
@@ -499,7 +499,7 @@ Analysis of 1,378 Kani benchmark tests run against ESBMC backend reveals systema
 - Total Tests: 1,378
 - Crashes (SIGSEGV rc=139): ~1,200 (87%)
 - Aborts (SIGABRT rc=134): ~50 (4%)
-- Successfully Parsed: ~130 (9%)
+- Successfully Parsed: ~128 (9%)
 
 ---
 
@@ -831,7 +831,9 @@ _RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod28transmute_2ways_ar
 
 ## Test Execution Notes
 
-All tests located in: `/home/rafael/kani-benchmarks/out/<test-name>/`
+All tests are located under the Kani benchmarks output directory, referred to
+below as `$KANI_BENCHMARKS_OUT` (e.g. `<kani-benchmarks-root>/out`):
+`$KANI_BENCHMARKS_OUT/<test-name>/`
 
 Each test directory contains:
 - `parse.log` - output from C generation phase (Kani → ESBMC C)
@@ -839,7 +841,7 @@ Each test directory contains:
 
 **To investigate a specific test**:
 ```bash
-cd /home/rafael/kani-benchmarks/out/<test-name>
+cd "$KANI_BENCHMARKS_OUT/<test-name>"
 tail -100 parse.log   # Check for parse phase errors
 tail -100 verify.log  # Check for verification phase errors
 ```
