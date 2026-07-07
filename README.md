@@ -34,6 +34,7 @@ ESBMC detects errors in software by simulating a finite prefix of the program ex
    * Misaligned memory access
  * Integer overflows
  * Undefined behavior on shift operations
+ * `restrict`-qualified pointer parameters that alias (opt-in via `--restrict-check`)
  * Floating-point for NaN
  * Divide by zero
  * Memory leaks

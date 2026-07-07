@@ -1,0 +1,4 @@
+CORE
+main.c
+--restrict-check
+^VERIFICATION SUCCESSFUL$
