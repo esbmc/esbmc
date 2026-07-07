@@ -610,7 +610,8 @@ public:
   exprt handle_string_splitlines(
     const nlohmann::json &call,
     const exprt &string_obj,
-    const locationt &location);
+    const locationt &location,
+    bool keepends = false);
 
   /**
    * @brief Handle str.format() method (minimal support, constant-only)
