@@ -485,3 +485,384 @@ state is CBMC-verdict parity as the sole oracle and goto-transcoder retired.
 - Reference converter: <https://github.com/esbmc/goto-transcoder> (`adapter.rs`, `cbmc.rs`,
   `bytereader.rs`)
 - Prior art: PR #2443 (CPROVER migration compatibility, commit `24d9591a62`)
+
+
+# Kani support
+
+For rust, we have a few extra remarks
+
+## Overview
+
+Analysis of 1,378 Kani benchmark tests run against ESBMC backend reveals systematic failures across 8 major issue categories. This document organizes failures into actionable umbrella issues with concrete minimal reproducer test cases.
+
+**Statistics:**
+- Total Tests: 1,378
+- Crashes (SIGSEGV rc=139): ~1,200 (87%)
+- Aborts (SIGABRT rc=134): ~50 (4%)
+- Successfully Parsed: ~130 (9%)
+
+---
+
+## UMBRELLA #1: Transmute/Type Reinterpretation Crashes
+
+**Status**: 🔴 BROKEN
+**Impact**: ~200+ tests
+**Severity**: 🔴 CRITICAL
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+ESBMC crashes with segmentation fault when processing `transmute` operations and type-casting intrinsics. Both safe `transmute` and unsafe `transmute_unchecked` variants fail during both parse and verify phases. The lowering layer cannot properly represent bit-level type reinterpretation in the C intermediate representation.
+
+**Affected Operations**:
+- `mem::transmute()` - type reinterpretation
+- `mem::transmute_unchecked()` - unchecked variant
+- Type casts across different layouts
+- Pointer/reference address preservation
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify19check_typed_swap_u8
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify24transmute_2ways_i8_to_u8
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify26transmute_2ways_f32_to_i32
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify34transmute_unchecked_2ways_i8_to_u8
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify27check_transmute_ptr_address
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod28transmute_2ways_arr_to_tuple
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify29should_succeed_tuple_to_array
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core10intrinsics6verify19check_typed_swap_u8
+```
+(Simplest failing case - basic u8 swap operation)
+
+---
+
+## UMBRELLA #2: Arithmetic Verification Failures
+
+**Status**: 🔴 BROKEN
+**Impact**: ~150+ tests
+**Severity**: 🔴 CRITICAL
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+ESBMC crashes during symbolic execution of checked/unchecked arithmetic operations, particularly multiply operations with edge cases. Tests for widening multiplication, carrying multiplication, and edge case validation all fail during the verification phase.
+
+**Affected Operations**:
+- `u{8,16,32,64,128}::checked_mul()`
+- `u{8,16,32,64,128}::unchecked_mul()`
+- `i{8,16,32,64,128}::checked_mul()`
+- `i{8,16,32,64,128}::unchecked_mul()`
+- Widening multiply (`u8::widening_mul_u8()`)
+- Carrying multiply (`u8::carrying_mul_u8()`)
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify22carrying_mul_u32_small
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify22unchecked_mul_u32_edge
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify24checked_unchecked_mul_i8
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify27unchecked_mul_i128_large_neg
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify25widening_mul_u64_mid_edge
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
+```
+(Basic u8 widening multiply - smallest failing case)
+
+---
+
+## UMBRELLA #3: Pointer Operations Crash
+
+**Status**: 🔴 BROKEN
+**Impact**: ~60+ tests
+**Severity**: 🔴 CRITICAL
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+ESBMC segfaults on pointer manipulation intrinsics (align_offset, read, offset_from, etc.). Crashes occur during C generation phase in the lowering layer, indicating fundamental issues in pointer semantics translation from Rust to C.
+
+**Affected Operations**:
+- `*const T::read()` / `*mut T::read()` - unsafe pointer dereference
+- `*const T::align_offset()` / `*mut T::align_offset()` - alignment calculation
+- `*const T::offset_from()` / `*mut T::offset_from()` - pointer distance
+- Pointer alignment verification
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core3ptr6verify15check_read_u128
+_RNvNtNtCsfemxtvIyyHd_4core3ptr6verify21check_align_offset_u8
+_RNvNtNtCsfemxtvIyyHd_4core3ptr6verify23check_align_offset_4096
+_RNvNtNtCsfemxtvIyyHd_4core3ptr6verify22check_align_offset_zst
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core3ptr6verify21check_align_offset_u8
+```
+(Basic u8 alignment offset - simplest pointer operation)
+
+---
+
+## UMBRELLA #4: Memory Swap Operations Unsupported
+
+**Status**: 🔴 BROKEN
+**Impact**: ~20+ tests
+**Severity**: 🟠 HIGH
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+`mem::swap` and collection swap operations (Vec, VecDeque) crash during both parsing and verification. These are fundamental memory safety operations that ESBMC cannot currently verify.
+
+**Affected Operations**:
+- `mem::swap::<T>()` - primitive type swap
+- `Vec::swap()` - vector element swap
+- `VecDeque::swap()` - double-ended queue swap
+- `mem::swap()` with aggregate types
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsldpw2oyRQaa_5alloc3vec6verify18verify_swap_remove
+_RNvNtNtNtCsldpw2oyRQaa_5alloc11collections9vec_deque6verify19check_vecdeque_swap
+_RNvNtNtCsfemxtvIyyHd_4core3mem6verify20check_swap_primitive
+_RNvNtNtCsfemxtvIyyHd_4core3mem6verify22check_swap_adt_no_drop
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core3mem6verify20check_swap_primitive
+```
+(Primitive type swap - simplest swap operation)
+
+---
+
+## UMBRELLA #5: Float-to-Integer Conversion Crashes
+
+**Status**: 🔴 BROKEN
+**Impact**: ~100+ tests
+**Severity**: 🟠 HIGH
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+Unchecked float-to-integer conversion operations fail across all precision levels (f16, f32, f64, f128) and all target integer types (i8 through i128, u8 through u128, isize, usize). Both checked and unchecked variants crash.
+
+**Affected Operations**:
+- `f16::to_int_unchecked()` / `to_int_checked()`
+- `f32::to_int_unchecked()` / `to_int_checked()`
+- `f64::to_int_unchecked()` / `to_int_checked()`
+- `f128::to_int_unchecked()` / `to_int_checked()`
+- All target types: i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify31checked_f32_to_int_unchecked_i8
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify32checked_f32_to_int_unchecked_i32
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify32checked_f64_to_int_unchecked_i64
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify33checked_f16_to_int_unchecked_i128
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify34checked_f128_to_int_unchecked_usize
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core3num6verify31checked_f32_to_int_unchecked_i8
+```
+(f32 to i8 conversion - simplest float-to-int case)
+
+---
+
+## UMBRELLA #6: Slice and Collection Operations Crash
+
+**Status**: 🔴 BROKEN
+**Impact**: ~15+ tests
+**Severity**: 🟠 HIGH
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+Slice operations (reverse) and Option/Vec conversions fail in the verifier. These are fundamental data structure operations that ESBMC cannot abstract properly.
+
+**Affected Operations**:
+- `[T]::reverse()` - slice reversal
+- `Option<T>::as_slice()` - option to slice conversion
+- Slice borrowing and manipulation
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core5slice6verify13check_reverse
+_RNvNtNtCsfemxtvIyyHd_4core6option6verify15verify_as_slice
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core5slice6verify13check_reverse
+```
+(Basic slice reverse - simplest collection operation)
+
+---
+
+## UMBRELLA #7: Contract System Causes Aborts (Parse Succeeds, Verify Fails)
+
+**Status**: 🟠 PARTIAL
+**Impact**: ~50+ tests
+**Severity**: 🟠 HIGH
+**Exit Codes**: rc=0 (parse), rc=134 (verify - SIGABRT)
+
+**Description**:
+Tests that successfully parse (rc=0) generate valid GOTO programs, but verification phase terminates with SIGABRT. Root cause appears to be:
+1. Contract registration system losing metadata (200+ "dropping thread_local" warnings)
+2. Closure handling in `kani_force_fn_once` / `kani_apply_closure`
+3. Panic scenario verification assertions failing
+4. Resource exhaustion or assertion violations in verification engine
+
+This is distinct from umbrella issues #1-6 because parse phase succeeds.
+
+**Affected Operations**:
+- `Duration::checked_sub()` with contracts
+- Panic scenario verification (`*_panics` variants)
+- Any operation with higher-order contracts or closures
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtCsfemxtvIyyHd_4core4time15duration_verify20duration_checked_sub
+_RNvNtNtCsfemxtvIyyHd_4core4time15duration_verify27duration_checked_sub_panics
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtCsfemxtvIyyHd_4core4time15duration_verify20duration_checked_sub
+```
+(Duration checked subtraction - parse succeeds, verify aborts)
+
+**Notable Warning Pattern**:
+```
+WARNING: CBMC adapter: dropping 'thread_local' on symbol _R...kani_register_contract...
+WARNING: CBMC adapter: dropping 'thread_local' on symbol _R...kani_force_fn_once...
+WARNING: CBMC adapter: dropping 'thread_local' on symbol _R...tmp_statement_expression
+```
+(Hundreds of these in verify.log for this category)
+
+---
+
+## UMBRELLA #8: Generic Type Instantiation Limits
+
+**Status**: 🟠 PARTIAL
+**Impact**: ~50+ tests
+**Severity**: 🟡 MEDIUM
+**Exit Codes**: rc=139 (both parse & verify)
+
+**Description**:
+Tests with deeply nested generic type parameters cause ESBMC to crash during lowering. The C type representation becomes too complex or hits internal limits. Symbol names suggest complex generic instantiation (e.g., `10struct_mod28transmute_2ways_arr_to_tuple` indicates struct-generic-array-transmute combinations).
+
+**Affected Operations**:
+- Transmute with generic aggregate types (structs, tuples, arrays)
+- Generic closures with Option/Result wrappers
+- Deeply nested type parameters in contracts
+
+**Test Candidates** (pick one):
+```
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod28transmute_2ways_arr_to_tuple
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod29transmute_2ways_struct_to_arr
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod31transmute_2ways_struct_to_tuple
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify6i8_mod28transmute_2ways_arr_to_tuple
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify7arr_mod28transmute_2ways_arr_to_tuple
+```
+
+**Minimal Reproducer**:
+```
+_RNvNtNtNtCsfemxtvIyyHd_4core10intrinsics6verify10struct_mod28transmute_2ways_arr_to_tuple
+```
+(Struct-generic transmute - represents generic type complexity)
+
+---
+
+## PRIORITY MATRIX FOR INVESTIGATION
+
+### Tier 1 - Highest ROI (affects most tests, likely shared root cause)
+
+| Issue | Tests | Priority | Reason |
+|-------|-------|----------|--------|
+| **UMBRELLA #1**: Transmute | 200+ | 🔴 P0 | Fundamental unsafe feature, highest test count |
+| **UMBRELLA #2**: Arithmetic | 150+ | 🔴 P0 | Common verification goal, large impact |
+
+### Tier 2 - High Impact (medium test count, critical features)
+
+| Issue | Tests | Priority | Reason |
+|-------|-------|----------|--------|
+| **UMBRELLA #5**: Float→Int | 100+ | 🟠 P1 | Numeric safety, medium test count |
+| **UMBRELLA #3**: Pointers | 60+ | 🟠 P1 | Memory safety critical, 60+ tests |
+
+### Tier 3 - Medium Priority (parse succeeds or scope-limited)
+
+| Issue | Tests | Priority | Reason |
+|-------|-------|----------|--------|
+| **UMBRELLA #7**: Contracts | 50+ | 🟡 P2 | Parse succeeds (different pattern), new info |
+| **UMBRELLA #8**: Generics | 50+ | 🟡 P2 | Scope limitation, architectural |
+
+### Tier 4 - Lower Priority (smaller test sets)
+
+| Issue | Tests | Priority | Reason |
+|-------|-------|----------|--------|
+| **UMBRELLA #4**: Swap | 20+ | 🟡 P3 | Specific operations, lower count |
+| **UMBRELLA #6**: Collections | 15+ | 🟡 P3 | Data structures, smallest set |
+
+---
+
+## Recommended Investigation Order
+
+1. **Start with UMBRELLA #1 (Transmute)**:
+   - Simplest test: `check_typed_swap_u8`
+   - Affects 200+ tests
+   - Likely points to fundamental lowering issue
+
+2. **Then UMBRELLA #2 (Arithmetic)**:
+   - Simplest test: `widening_mul_u8`
+   - Affects 150+ tests
+   - May share root cause with #1
+
+3. **Then UMBRELLA #7 (Contracts)**:
+   - Different pattern (parse succeeds)
+   - Will require different debugging approach
+   - May reveal verification-layer issues
+
+4. **Remaining issues** can be addressed after the above are stabilized
+
+---
+
+## Test Execution Notes
+
+All tests located in: `/home/rafael/kani-benchmarks/out/<test-name>/`
+
+Each test directory contains:
+- `parse.log` - output from C generation phase (Kani → ESBMC C)
+- `verify.log` - output from symbolic verification phase (ESBMC SMT solving)
+
+**To investigate a specific test**:
+```bash
+cd /home/rafael/kani-benchmarks/out/<test-name>
+tail -100 parse.log   # Check for parse phase errors
+tail -100 verify.log  # Check for verification phase errors
+```
+
+---
+
+## Additional Metadata
+
+**Test Suite Coverage**:
+- ✅ core::convert - PARTIAL (type conversions)
+- 🔴 core::intrinsics - BROKEN (unsafe ops)
+- 🔴 core::mem - BROKEN (memory operations)
+- 🔴 core::num - BROKEN (arithmetic)
+- 🔴 core::option - BROKEN (option types)
+- 🔴 core::ptr - BROKEN (pointer manipulation)
+- 🔴 core::slice - BROKEN (slice operations)
+- 🟠 core::time - PARTIAL (contracts abort)
+
+**Exit Code Reference**:
+- `0` = Success
+- `134` = SIGABRT (abort signal - assertion/contract failure)
+- `139` = SIGSEGV (segmentation fault - memory access violation)
+
+**Warning Pattern Index**:
+- Thread-local loss: "`CBMC adapter: dropping 'thread_local'`" (200+ per test)
+- Found in: Umbrella #7 tests (contracts), partially in #8 (generics)
