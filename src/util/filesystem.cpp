@@ -1,11 +1,18 @@
 #include <util/filesystem.h>
 #include <boost/filesystem.hpp>
+#include <algorithm>
 #include <fstream>
 #include <vector>
+
+#ifndef _WIN32
+#  include <csignal>
+#  include <sys/types.h>
+#endif
 
 using namespace file_operations;
 
 static std::vector<std::string> registered_tmp_paths;
+static std::vector<long> registered_pgroups;
 
 void file_operations::register_tmp_for_cleanup(const std::string &path)
 {
@@ -20,6 +27,27 @@ void file_operations::cleanup_registered_tmps()
     boost::filesystem::remove_all(p, ec);
   }
   registered_tmp_paths.clear();
+}
+
+void file_operations::register_pgroup_for_cleanup(long pgid)
+{
+  registered_pgroups.push_back(pgid);
+}
+
+void file_operations::unregister_pgroup(long pgid)
+{
+  auto &v = registered_pgroups;
+  v.erase(std::remove(v.begin(), v.end(), pgid), v.end());
+}
+
+void file_operations::kill_registered_pgroups()
+{
+#ifndef _WIN32
+  for (long pgid : registered_pgroups)
+    if (pgid > 0)
+      killpg(static_cast<pid_t>(pgid), SIGKILL);
+#endif
+  registered_pgroups.clear();
 }
 
 tmp_path::tmp_path(std::string path, bool keep)
