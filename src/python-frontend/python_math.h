@@ -38,6 +38,13 @@ private:
    */
   exprt resolve_symbol(const exprt &operand) const;
 
+  /// Fold an expression to an integer constant *only* when it genuinely is one:
+  /// an integer literal, a symbol assigned an integer constant, or a +,-,*,/
+  /// tree whose leaves all fold to integer constants. Returns std::nullopt for
+  /// anything symbolic/nondet, so callers keep a symbolic encoding rather than
+  /// fabricating a bogus 0 from an empty value string (issue #5915).
+  std::optional<BigInt> try_fold_int_constant(const exprt &expr) const;
+
   /// Resolve a constant-like expression (constant or constant-valued symbol)
   /// to a host double when possible.
   std::optional<double> try_resolve_constant_double(const exprt &operand) const;
@@ -126,14 +133,15 @@ public:
     const nlohmann::json &element);
 
   /**
-   * @brief Compute a mathematical expression with constant operands
-   * 
-   * Evaluates binary arithmetic operations (+, -, *, /) when both operands
-   * are constants or can be resolved to constants via symbol lookup.
-   * 
-   * @param expr The binary expression to evaluate
-   * @return A constant expression with the computed result
-   * @throws std::runtime_error if operation is unsupported
+   * @brief Fold a +,-,*,/ expression to a constant when it is genuinely one.
+   *
+   * Returns a constant expression when @p expr (and all its operands) resolve
+   * to integer constants; otherwise returns @p expr unchanged so callers keep
+   * a symbolic encoding. Never fabricates a 0 from a non-constant operand
+   * (issue #5915).
+   *
+   * @param expr A +,-,*,/ binary expression
+   * @return The folded constant, or @p expr unchanged if not constant
    */
   exprt compute_expr(const exprt &expr) const;
 
