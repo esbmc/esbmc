@@ -18,9 +18,12 @@ int main()
   int lt = (p1 < p2), gt = (p1 > p2);
   __ESBMC_assert(!(lt && gt), "lt/gt exclusive");
   __ESBMC_assert(lt || gt, "trichotomy for distinct objects");
+  /* >= and <= describe the same total order in mirror directions */
+  __ESBMC_assert((p1 >= p2) == (p2 <= p1), ">= mirrors <=");
   /* same-object comparisons keep the C-defined offset order */
   char arr[4];
   __ESBMC_assert(&arr[1] < &arr[3], "in-object order");
+  __ESBMC_assert(&arr[3] >= &arr[1], "in-object order (>=)");
   __ESBMC_assert(!(&arr[3] <= &arr[1]), "in-object strictness");
   return 0;
 }
