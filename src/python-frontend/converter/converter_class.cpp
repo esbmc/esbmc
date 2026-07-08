@@ -61,25 +61,31 @@ exprt python_converter::make_enum_member_struct_expr(
   const symbolt *str_sym = symbol_table_.find_symbol(str_id);
   assert(str_sym);
 
-  // Build struct_exprt { value: int_sym, name: &str_sym[0] }
-  struct_exprt struct_val(st);
-
-  // value component: the integer value of the enum member
-  struct_val.operands().push_back(symbol_expr(int_sym));
-
-  // name component: char* pointer to the first element of the name string
+  // name component: char* pointer to the first element of the name string,
+  // &str_sym[0]. str_sym is a static char-array symbol, so the index source is
+  // array-typed.
   exprt str_expr = symbol_expr(*str_sym);
   exprt zero_idx = from_integer(0, index_type());
-  // V.3: build &str_sym[0] entirely in IREP2, back-migrating once. str_sym is
-  // a static char-array symbol, so the index source is array-typed.
   expr2tc se2, zi2;
   migrate_expr(str_expr, se2);
   migrate_expr(zero_idx, zi2);
   expr2tc idx2 = index2tc(migrate_type(str_expr.type().subtype()), se2, zi2);
   exprt name_ptr = migrate_expr_back(address_of2tc(idx2->type, idx2));
   name_ptr.type() = gen_pointer_type(char_type());
-  struct_val.operands().push_back(name_ptr);
 
+  // V.3: assemble the enum member struct { value, name } in IREP2 and
+  // back-migrate once. Both members are already-built value exprs (the member's
+  // integer value symbol and the char* name pointer), so migrating them
+  // round-trips exactly. Re-attach the struct type afterwards: migrate_type does
+  // not carry the frontend struct's component attributes.
+  expr2tc value_member, name_member;
+  migrate_expr(symbol_expr(int_sym), value_member);
+  migrate_expr(name_ptr, name_member);
+
+  std::vector<expr2tc> members{std::move(value_member), std::move(name_member)};
+  exprt struct_val =
+    migrate_expr_back(constant_struct2tc(migrate_type(st), members));
+  struct_val.type() = st;
   return struct_val;
 }
 

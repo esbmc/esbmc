@@ -1,0 +1,10 @@
+# AddressSanitizer interceptor suppressions for ESBMC.
+#
+# Format: one rule per line, comments start with '#'.
+#   interceptor_via_fun:<function name substring>
+#   interceptor_via_lib:<library path substring>
+#
+# Keep each rule paired with the issue that tracks the underlying bug.
+# See: https://clang.llvm.org/docs/AddressSanitizer.html#suppressing-issues
+#
+# (empty — populated as the bring-up CI run surfaces findings)

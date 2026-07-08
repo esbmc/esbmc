@@ -1,0 +1,80 @@
+name: Sanitizers
+
+# Builds ESBMC under clang's AddressSanitizer and UndefinedBehaviorSanitizer
+# and runs the CORE regression suite, capturing every sanitizer diagnostic
+# to per-PID log files. The deduplicated findings are written to the job
+# summary; the raw logs upload as artifacts for triage.
+#
+# This workflow tracks https://github.com/esbmc/esbmc/issues/223.
+#
+# Bring-up note: `continue-on-error: true` is set so a finding does not
+# block master while the suppression files are still being populated.
+# Once the steady-state suppressions are in place a follow-up PR will
+# drop the flag and promote this workflow to a required check.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'regression/CMakeLists.txt'
+      - 'scripts/build.sh'
+      - 'scripts/cmake/Sanitizers.cmake'
+      - 'scripts/sanitizers/**'
+      - '.github/workflows/sanitizers.yml'
+
+jobs:
+  sanitizer:
+    name: ${{ matrix.sanitizer }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, ubsan]
+    env:
+      ESBMC_SANITIZER_LOG_DIR: ${{ github.workspace }}/sanitizer-logs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare log directory
+        run: mkdir -p "$ESBMC_SANITIZER_LOG_DIR"
+
+      - name: Build ESBMC (${{ matrix.sanitizer }})
+        run: |
+          case "${{ matrix.sanitizer }}" in
+            asan)  STYPE=ASAN ;;
+            ubsan) STYPE=UBSAN ;;
+            *) echo "unknown sanitizer ${{ matrix.sanitizer }}"; exit 1 ;;
+          esac
+          ./scripts/build.sh -b Sanitizer -s "$STYPE"
+
+      - name: Run CORE regression under ${{ matrix.sanitizer }}
+        run: |
+          source scripts/sanitizers/common-options.sh
+          cd build
+          # ESBMC_REGRESS_TIMEOUT defaults to 1200s but is overridden to 120s
+          # by the standard PR workflow; restore 600s explicitly so we are not
+          # at the mercy of a stale cache. -DENABLE_SANITIZER_CI=ON forces
+          # MODES=CORE inside regression/CMakeLists.txt.
+          cmake -DESBMC_REGRESS_TIMEOUT=600 -DENABLE_SANITIZER_CI=ON .
+          # -j2 keeps memory pressure manageable — ASan inflates RSS several
+          # fold and the ubuntu-24.04 runner has 16 GB.
+          # `|| true` lets a failing test still feed collect_findings.py;
+          # the script's own exit code drives the step's success bit.
+          ctest -j2 --output-on-failure -L '^esbmc/$' || true
+
+      - name: Collect findings
+        if: always()
+        run: python3 scripts/sanitizers/collect_findings.py
+
+      - name: Upload sanitizer logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-${{ matrix.sanitizer }}-logs
+          path: ${{ env.ESBMC_SANITIZER_LOG_DIR }}
+          retention-days: 30
+          if-no-files-found: warn

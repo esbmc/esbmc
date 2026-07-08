@@ -246,9 +246,21 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
           if (auto res = optional_is_none_field(val))
             return res;
         }
-        // For void* (any_type) with no Optional in the value set,
-        // fall back to null-pointer check: x is None ↔ x == NULL.
-        if (is_empty_type(to_pointer_type(side->type).subtype))
+        // Fall back to a null-pointer check: `x is None` ↔ `x == NULL`.
+        // This covers void* (any_type, unannotated) and — since class
+        // instances became heap-allocated Class* references — a pointer to a
+        // user-class struct, whose field/variable holds NULL exactly when its
+        // Python value is None. The pointee may still be an unresolved symbol
+        // tag (`tag-<Class>`) rather than an inlined struct, so follow it.
+        // Without this, `Class* is None` folded to a constant False below
+        // ("None is never equal to non-None"), silently defeating guards like
+        // `node is None or node.next is None` and producing spurious NULL
+        // dereferences (QuixBugs detect_cycle).
+        const type2tc &subt = to_pointer_type(side->type).subtype;
+        bool null_is_none = is_empty_type(subt) || is_struct_type(subt);
+        if (!null_is_none && is_symbol_type(subt))
+          null_is_none = ns.follow(migrate_type_back(subt)).id() == "struct";
+        if (null_is_none)
           return equality2tc(side, gen_zero(side->type));
       }
       return std::nullopt;

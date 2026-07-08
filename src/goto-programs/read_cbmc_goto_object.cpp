@@ -2,6 +2,8 @@
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_irep.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 #include <util/migrate.h>
 #include <util/message.h>
 #include <util/symbol.h>
@@ -18,6 +20,9 @@ bool is_cbmc_goto_magic(const unsigned char header[4])
 
 unsigned cbmc_irep_readert::read_word()
 {
+  if (failed_)
+    return 0;
+
   unsigned shift_distance = 0;
   // Accumulate in 64 bits so that bits shifted past bit 31 stay visible and an
   // over-wide varint is detectable rather than silently truncated.
@@ -28,7 +33,8 @@ unsigned cbmc_irep_readert::read_word()
     if (shift_distance >= 64)
     {
       log_error("CBMC goto-binary: malformed varint (too many bytes)");
-      abort();
+      failed_ = true;
+      return 0;
     }
 
     unsigned byte = static_cast<unsigned char>(in.get());
@@ -38,7 +44,8 @@ unsigned cbmc_irep_readert::read_word()
     if (res > UINT32_MAX)
     {
       log_error("CBMC goto-binary: input number {} exceeds 32 bits", res);
-      abort();
+      failed_ = true;
+      return 0;
     }
 
     if ((byte & 0x80) == 0)
@@ -50,6 +57,9 @@ unsigned cbmc_irep_readert::read_word()
 
 std::string cbmc_irep_readert::read_string()
 {
+  if (failed_)
+    return {};
+
   std::string result;
 
   while (in.good())
@@ -74,6 +84,8 @@ std::string cbmc_irep_readert::read_string()
 irep_idt cbmc_irep_readert::read_string_ref()
 {
   unsigned id = read_word();
+  if (failed_)
+    return irep_idt();
 
   auto it = string_cache.find(id);
   if (it != string_cache.end())
@@ -87,6 +99,8 @@ irep_idt cbmc_irep_readert::read_string_ref()
 void cbmc_irep_readert::read_reference(irept &irep)
 {
   unsigned id = read_word();
+  if (failed_)
+    return;
 
   auto it = irep_cache.find(id);
   if (it != irep_cache.end())
@@ -103,32 +117,64 @@ void cbmc_irep_readert::read_irep(irept &irep)
 {
   irep.id(read_string_ref());
 
-  while (in.peek() == 'S')
+  // Guard each loop on failed_ so a malformed child (which sets the flag deep
+  // in read_reference) stops the walk instead of spinning on garbage bytes.
+  while (!failed_ && in.peek() == 'S')
   {
     in.get();
     irep.get_sub().emplace_back();
     read_reference(irep.get_sub().back());
   }
 
-  while (in.peek() == 'N')
+  while (!failed_ && in.peek() == 'N')
   {
     in.get();
     irep_idt name = read_string_ref();
     read_reference(irep.add(name));
   }
 
-  while (in.peek() == 'C')
+  while (!failed_ && in.peek() == 'C')
   {
     in.get();
     irep_idt name = read_string_ref();
     read_reference(irep.add(name));
   }
+
+  if (failed_)
+    return;
 
   if (in.get() != 0)
   {
     log_error("CBMC goto-binary: irep not terminated");
-    abort();
+    failed_ = true;
   }
+}
+
+// A declared table count can never exceed the number of bytes left in the
+// stream, since each element occupies at least one byte. A larger value is
+// corrupt (or hostile) input: reject it before reserve()/the read loop so it
+// cannot drive a multi-gigabyte allocation or a multi-billion-iteration spin
+// (roadmap §4.7). A stream that cannot report its length (a non-seekable pipe)
+// is left unchecked -- the reader's per-read EOF handling still bounds it, just
+// less promptly.
+static bool
+implausible_count(std::istream &in, unsigned count, const char *what)
+{
+  const std::streampos pos = in.tellg();
+  if (pos == std::streampos(-1))
+    return false;
+
+  in.seekg(0, std::ios::end);
+  const std::streampos end = in.tellg();
+  in.seekg(pos);
+  if (in.tellg() != pos) // couldn't restore the read position; don't guess
+    return false;
+
+  if (static_cast<std::streamoff>(count) <= end - pos)
+    return false;
+
+  log_error("CBMC goto-binary: {} count {} exceeds input size", what, count);
+  return true;
 }
 
 bool parse_cbmc_goto(
@@ -159,9 +205,14 @@ bool parse_cbmc_goto(
 
   // Symbol table
   unsigned number_of_symbols = reader.read_word();
+  if (reader.failed() || implausible_count(in, number_of_symbols, "symbol"))
+    return true;
   result.symbols.reserve(number_of_symbols);
   for (unsigned i = 0; i < number_of_symbols; i++)
   {
+    if (reader.failed())
+      return true;
+
     cbmc_symbolt sym;
     reader.read_reference(sym.stype);
     reader.read_reference(sym.value);
@@ -204,16 +255,28 @@ bool parse_cbmc_goto(
 
   // Functions
   unsigned number_of_functions = reader.read_word();
+  if (reader.failed() || implausible_count(in, number_of_functions, "function"))
+    return true;
   result.functions.reserve(number_of_functions);
   for (unsigned i = 0; i < number_of_functions; i++)
   {
+    if (reader.failed())
+      return true;
+
     cbmc_functiont function;
     function.name = reader.read_string(); // raw string, not a string ref
     unsigned number_of_instructions = reader.read_word();
+    if (
+      reader.failed() ||
+      implausible_count(in, number_of_instructions, "instruction"))
+      return true;
     function.instructions.reserve(number_of_instructions);
 
     for (unsigned j = 0; j < number_of_instructions; j++)
     {
+      if (reader.failed())
+        return true;
+
       cbmc_instructiont instruction;
       reader.read_reference(instruction.code);
       reader.read_reference(instruction.source_location);
@@ -236,6 +299,11 @@ bool parse_cbmc_goto(
 
     result.functions.push_back(std::move(function));
   }
+
+  // A malformed encoding anywhere above leaves the reader in a failed state
+  // with a partial parse; report it as a recoverable error, not a success.
+  if (reader.failed())
+    return true;
 
   return false;
 }
@@ -270,6 +338,31 @@ bool read_cbmc_goto_object(
     }
 
     context.add(symbol);
+  }
+
+  // cbmc_adapter.cpp's fix_expression promotes CBMC's type-blind float
+  // arithmetic to ieee_add/sub/mul/div, whose migrate_expr handlers
+  // reference c:@__ESBMC_rounding_mode when no explicit rounding_mode
+  // operand is present. That symbol isn't part of the CBMC binary itself;
+  // normally esbmc_parseoptions.cpp's synthesize_cprover_additions defines
+  // it via the C frontend before this function runs, but define it here too
+  // so correctness doesn't depend on that unrelated driver step always
+  // running first (mirrors ld_converter.cpp's identical fix for the LD
+  // frontend).
+  if (!context.find_symbol("c:@__ESBMC_rounding_mode"))
+  {
+    symbolt rounding_mode;
+    rounding_mode.id = "c:@__ESBMC_rounding_mode";
+    rounding_mode.name = "__ESBMC_rounding_mode";
+    rounding_mode.module = "cbmc";
+    rounding_mode.mode = "C";
+    rounding_mode.lvalue = true;
+    rounding_mode.static_lifetime = true;
+    rounding_mode.file_local = false;
+    rounding_mode.is_extern = false;
+    rounding_mode.set_type(int_type());
+    rounding_mode.set_value(gen_zero(int_type()));
+    context.add(rounding_mode);
   }
 
   assert(migrate_namespace_lookup);

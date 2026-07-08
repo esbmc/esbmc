@@ -32,6 +32,9 @@ set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
+option(ENABLE_SANITIZER_CI
+    "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
+
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -87,6 +90,19 @@ endfunction()
 # conditionally enable regression suites based on configured support
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
+endif()
+if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
+    # The backend is only built when smtlib is (see its CMakeLists.txt). The
+    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
+    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
+    # shell. Also look next to a --DZ3_DIR passed for linking, so a build that
+    # bundled z3 but has no system z3 still runs the suite.
+    find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_BITWUZLLOB_TEST_Z3)
+        set(REGRESSIONS_BITWUZLLOB bitwuzllob)
+    else()
+        message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+    endif()
 endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
@@ -212,6 +228,7 @@ if(APPLE)
                     termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
@@ -249,6 +266,7 @@ elseif(WIN32)
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -276,6 +294,7 @@ else()
                     cuda/Supported_long_time
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -326,7 +345,11 @@ foreach(regression IN LISTS REGRESSIONS)
     else()
         set(MODES CORE KNOWNBUG FUTURE THOROUGH)
     endif()
-    if(CORE_REGRESSION_ONLY)
+    # ENABLE_SANITIZER_CI mirrors CORE_REGRESSION_ONLY but is keyed on the
+    # sanitizer workflow rather than benchmark bring-up. Sanitizer-instrumented
+    # builds run 3-5x slower; restricting to CORE keeps each leg of the matrix
+    # inside the workflow's 90-minute budget.
+    if(CORE_REGRESSION_ONLY OR ENABLE_SANITIZER_CI)
       set(MODES CORE)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")

@@ -258,6 +258,7 @@ collect_ubuntu_packages() {
     default-jdk
     tar
     xz-utils
+    z3
   )
 
   if [[ "$ARCH" != "aarch64" ]]; then

@@ -1,4 +1,4 @@
 CORE
 main.cpp
 --compact-trace
-^  b = \{ \.x=2 \}$
+^  this->x = \{ \.x=2 \}$

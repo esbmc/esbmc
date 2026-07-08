@@ -2634,7 +2634,17 @@ exprt numpy_call_expr::create_expr_from_call()
         if (function == "imag")
           return imag;
         if (function == "conj" || function == "conjugate")
-          return make_complex(real, minus_exprt(from_double(0.0, dt), imag));
+        {
+          // V.3: build the conjugate's `0.0 - imag` negation in IREP2. migrate
+          // lowers a legacy `minus` (id "-") to sub2t unconditionally (no
+          // rounding mode, even for floatbv), so this sub2tc is the exact
+          // round-trip of the legacy minus_exprt.
+          expr2tc zero2, imag2;
+          migrate_expr(from_double(0.0, dt), zero2);
+          migrate_expr(imag, imag2);
+          return make_complex(
+            real, migrate_expr_back(sub2tc(migrate_type(dt), zero2, imag2)));
+        }
         if (function == "abs")
           return converter_.get_complex_handler().handle_abs(arg_expr);
         if (function == "angle")

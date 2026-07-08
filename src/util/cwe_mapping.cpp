@@ -111,6 +111,12 @@ const std::vector<entry_t> &rules_table()
       // execution ...") rather than against a violated-property comment.
       {"non-terminating execution",
        {"infinite-loop", "Loop with unreachable exit condition", {835}}},
+      // Uncontrolled recursion (CWE-674). Emitted only when symex proves a
+      // recursive function has no reachable base case (see
+      // symex_function.cpp); the plain "recursion unwinding assertion" for a
+      // merely-exhausted k-bound stays unmapped.
+      {"uncontrolled recursion",
+       {"uncontrolled-recursion", "Uncontrolled recursion", {674}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -154,6 +160,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {562, "Return of Stack Variable Address"},
     {590, "Free of Memory not on the Heap"},
     {617, "Reachable Assertion"},
+    {674, "Uncontrolled Recursion"},
     {681, "Incorrect Conversion between Numeric Types"},
     {761, "Free of Pointer not at Start of Buffer"},
     {787, "Out-of-bounds Write"},

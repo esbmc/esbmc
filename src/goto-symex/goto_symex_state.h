@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
@@ -211,6 +212,13 @@ public:
      */
     unsigned int va_index;
 
+    /** Cursor into this activation's va_args, advanced by each va_arg use.
+     *  Starts equal to va_index. va_cursor == va_index means no argument has
+     *  been consumed yet; symex_printf's va_list recovery relies on this
+     *  (after any consumption a va_start rewind is indistinguishable from
+     *  further consumption, so recovery must decline). */
+    unsigned int va_cursor;
+
     /** Record the entry guard of the function */
     guard2tc entry_guard;
 
@@ -221,7 +229,11 @@ public:
     BigInt stack_frame_total;
 
     framet(unsigned int thread_id, const namespacet *ns = nullptr)
-      : return_value(expr2tc()), hidden(false), stack_frame_total(0)
+      : return_value(expr2tc()),
+        va_index(UINT_MAX),
+        va_cursor(UINT_MAX),
+        hidden(false),
+        stack_frame_total(0)
     {
       level1.thread_id = thread_id;
       level1.ns = ns;

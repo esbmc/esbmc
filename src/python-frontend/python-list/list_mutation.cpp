@@ -144,6 +144,30 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       from_integer(1, strlen_result.get_type()),
       strlen_result.get_type());
   }
+  // A char array at the fixed tuple-string-member width may be NUL-padded
+  // (#5571): its identity for membership and dict-key comparisons is the
+  // content, not the storage width. Store and probe with content-length + 1
+  // bytes so a padded 'B' (unpacked from a tuple) and a tight 'B' literal
+  // agree on size. The length is a loop-free ITE chain over the fixed width
+  // — a strlen() call here would hide the size behind a loop and return
+  // garbage under --no-unwinding-assertions with a small --unwind (the
+  // github_3560_2_fail false-SUCCESSFUL). Content without a NUL (e.g. a
+  // fully symbolic buffer) keeps the full width, the pre-#5571 behaviour.
+  else if (
+    elem_symbol.get_type() ==
+    type_handler_.get_typet("str", tuple_handler::tuple_str_member_size))
+  {
+    exprt sz =
+      from_integer(BigInt(tuple_handler::tuple_str_member_size), size_type());
+    for (size_t i = tuple_handler::tuple_str_member_size; i-- > 0;)
+    {
+      exprt ch =
+        build_index(build_symbol(elem_symbol), from_integer(i, index_type()));
+      exprt is_nul = equality_exprt(ch, gen_zero(char_type()));
+      sz = if_exprt(is_nul, from_integer(i + 1, size_type()), sz);
+    }
+    elem_size = sz;
+  }
   else
   {
     // Handle arrays and other types
@@ -179,12 +203,51 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
       elem_size_bytes = DEFAULT_SIZE;
     }
 
+    // A char array with statically-unknown length -- e.g. a string component
+    // recovered from a bare tuple[str, ...] annotation with no literal to
+    // size it from (#5444) -- is declared with 0 bytes of storage. Reading a
+    // real string out of it (e.g. via a runtime strlen) is not just
+    // unsizeable, it is a genuine out-of-bounds access on a 0-byte object:
+    // ESBMC's pointer-safety model has no bytes to dereference there, so a
+    // "recovered" size would report a spurious CWE-125 violation on
+    // perfectly valid Python instead of the real property. Refuse cleanly
+    // rather than fabricate an unsound size (issue #5444, deferred item 1).
     if (elem_size_bytes == 0)
     {
       throw std::runtime_error("Element size cannot be zero");
     }
 
     elem_size = from_integer(BigInt(elem_size_bytes), size_type());
+  }
+
+  // A bool element is stored via its address and compared byte-wise by the
+  // OM, so it must be widened to a long (8 bytes). Doing this only in the push
+  // path left every lookup query at bool's native 1-byte size while the stored
+  // element was 8 bytes, so __ESBMC_values_equal's size check never matched —
+  // bool dict keys, set elements, and list membership/count/dict.get all
+  // failed. Normalizing here, the single point every storage and lookup path
+  // funnels through, keeps the two sides consistent. The type hash stays the
+  // bool hash computed above, so only the stored representation/size widens.
+  if (elem.type() == bool_type())
+  {
+    symbolt &bool_as_long = converter_.create_tmp_symbol(
+      op,
+      "$bool_as_long$",
+      signedbv_typet(config.ansi_c.long_int_width),
+      exprt());
+    code_declt bool_long_decl(build_symbol(bool_as_long));
+    bool_long_decl.copy_to_operands(build_typecast(
+      build_symbol(elem_symbol), signedbv_typet(config.ansi_c.long_int_width)));
+    bool_long_decl.location() = location;
+    converter_.add_instruction(bool_long_decl);
+
+    list_elem_info bool_info;
+    bool_info.elem_type_sym = &elem_type_sym;
+    bool_info.elem_symbol = &bool_as_long;
+    bool_info.elem_size =
+      from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
+    bool_info.location = location;
+    return bool_info;
   }
 
   // Build and return the push function call
@@ -264,36 +327,11 @@ exprt python_list::build_push_list_call(
   }
   else
   {
-    // For bool types, cast to signed long int before taking address
-    // This ensures proper storage and retrieval
-    if (elem_info.elem_symbol->get_type() == bool_type())
-    {
-      symbolt &bool_as_long = converter_.create_tmp_symbol(
-        op,
-        "$bool_as_long$",
-        signedbv_typet(config.ansi_c.long_int_width),
-        exprt());
-
-      exprt bool_cast = build_typecast(
-        build_symbol(*elem_info.elem_symbol),
-        signedbv_typet(config.ansi_c.long_int_width));
-
-      code_declt bool_long_decl(build_symbol(bool_as_long));
-      bool_long_decl.copy_to_operands(bool_cast);
-      bool_long_decl.location() = elem_info.location;
-      converter_.add_instruction(bool_long_decl);
-
-      element_arg = build_address_of(build_symbol(bool_as_long));
-
-      // Update elem_size to match
-      elem_info.elem_size =
-        from_integer(BigInt(config.ansi_c.long_int_width / 8), size_type());
-    }
-    else
-    {
-      // For all other types, we must pass address of the value
-      element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
-    }
+    // For all other types, pass the address of the value. A bool element is
+    // already widened to a long by get_list_element_info (so storage and every
+    // lookup path agree on its 8-byte size), so no bool special-case is needed
+    // here.
+    element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));
   }
 
   push_func_call.arguments().push_back(element_arg); // element or &element

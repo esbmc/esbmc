@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
@@ -533,14 +534,62 @@ bool string_handler::try_extract_const_string_expr(
 
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
-  // Bare nondet `char *`. Used as a sound over-approximation when a
-  // str.*() handler cannot extract a compile-time constant receiver.
-  // Subsequent string ops over this value see arbitrary content, which
-  // preserves soundness for safety properties (we cannot conclude a
-  // specific functional result, but we cannot wrongly conclude SAFE).
-  side_effect_expr_nondett nondet(gen_pointer_type(char_type()));
+  // Sound over-approximation when a str.*() handler cannot extract a
+  // compile-time constant receiver. Subsequent string ops over this value
+  // see arbitrary content, which preserves soundness for safety properties
+  // (we cannot conclude a specific functional result, but we cannot
+  // wrongly conclude SAFE).
+  //
+  // Materialised into a declared temporary (decl + assign) rather than
+  // returned as a raw `side_effect_expr_nondett`: callers may embed the
+  // result directly in a comparison (e.g. `f"{w:e}" == "x"`), and
+  // handle_string_comparison's has_unsupported_side_effects_internal()
+  // rejects any bare `sideeffect` operand whose statement isn't
+  // "function_call" (#5767 — this used to abort GOTO conversion with
+  // "Cannot compare non-function side effects" instead of yielding a
+  // sound verdict). Routing the nondet value through a temp symbol first
+  // matches the materialisation pattern used elsewhere in the frontend
+  // (e.g. the dict-truthiness $dict_size$ temp in
+  // get_unary_operator_expr), and keeps the fallback usable in any
+  // expression position.
+  //
+  // Known under-approximation: in a `while <fallback-compare>:` TEST the
+  // decl+assign land in the enclosing block (the per-iteration
+  // materialisation path only fires for Call tests), so the nondet is
+  // fixed across iterations where Python re-evaluates the f-string each
+  // time. Still strictly better than the pre-#5767 conversion abort for
+  // comparisons; route while-tests through the loop-body materialisation
+  // machinery if per-iteration freshness is ever needed there.
+  typet ptr_type = gen_pointer_type(char_type());
+
+  if (!converter_.current_block)
+  {
+    // No statement context to hang a decl+assign on. Not expected on the
+    // module/function statement spine (get_block always installs a
+    // current_block there); kept as a defensive fallback to the previous
+    // raw-sideeffect behaviour rather than dereferencing a null block.
+    side_effect_expr_nondett nondet(ptr_type);
+    nondet.location() = location;
+    return nondet;
+  }
+
+  symbolt &tmp =
+    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
+
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  side_effect_expr_nondett nondet(ptr_type);
   nondet.location() = location;
-  return nondet;
+
+  code_assignt assign(symbol_expr(tmp), nondet);
+  assign.location() = location;
+  converter_.add_instruction(assign);
+
+  exprt result = symbol_expr(tmp);
+  result.location() = location;
+  return result;
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -615,6 +664,10 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
+  // std::pow/std::round and the ostream conversion below honour the host FP
+  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
+  // so the decimal fold matches CPython regardless of the host's mode.
+  const round_to_nearest_guard rounding_guard;
   double val = 0.0;
 
   if (width == 32 && float_bits.length() == 32)
@@ -653,19 +706,24 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
-// Parse the leading [[fill]align][width] portion of a Python format spec.
-// Returns true if any padding parameters were extracted; on success, *rest
-// is set to the remainder of the spec (precision/type) for further handling.
+// Parse the leading [[fill]align][0][width] portion of a Python format
+// spec. Returns true if any padding parameters were extracted; on success,
+// *rest is set to the remainder of the spec (precision/type) for further
+// handling. The '0'-before-width shorthand sets fill='0' and zero_pad; the
+// implied alignment depends on the value's type ('=' for numbers, '<' for
+// strings), which the caller resolves.
 static bool parse_format_padding(
   const std::string &format,
   char &fill,
   char &align,
   int &width,
+  bool &zero_pad,
   std::string &rest)
 {
   fill = ' ';
   align = '\0';
   width = 0;
+  zero_pad = false;
   rest = format;
 
   if (
@@ -682,6 +740,18 @@ static bool parse_format_padding(
   {
     align = format[0];
     rest = format.substr(1);
+  }
+
+  // Zero-padding shorthand: a '0' before the width sets fill='0'
+  // ("{:03d}" -> "007"); the implied alignment is type-dependent and is
+  // resolved by the caller ('=' sign-aware for numbers, '<' for strings).
+  if (
+    align == '\0' && rest.size() >= 2 && rest[0] == '0' &&
+    std::isdigit(static_cast<unsigned char>(rest[1])))
+  {
+    fill = '0';
+    zero_pad = true;
+    rest = rest.substr(1);
   }
 
   size_t i = 0;
@@ -722,8 +792,19 @@ apply_padding(const std::string &input, char fill, char align, int width)
     size_t right = pad - left;
     return std::string(left, fill) + input + std::string(right, fill);
   }
-  case '>':
   case '=':
+  {
+    // Padding goes between the sign and the digits ("-0042", not "00-42").
+    std::string sign;
+    std::string digits = input;
+    if (!digits.empty() && (digits[0] == '-' || digits[0] == '+'))
+    {
+      sign = digits.substr(0, 1);
+      digits = digits.substr(1);
+    }
+    return sign + std::string(pad, fill) + digits;
+  }
+  case '>':
   default:
     return std::string(pad, fill) + input;
   }
@@ -737,27 +818,134 @@ exprt string_handler::apply_format_specification(
   if (format.empty())
     return convert_to_string(expr);
 
+  // Thousands grouping for an integer: "{:,}" / "{:,d}". Computed exactly for
+  // a constant integer value here; grouping combined with a width, sign
+  // option, or float presentation falls through to the existing handling
+  // (which uses a sound nondet fallback), so this never introduces a wrong
+  // value. Without this the ',' is not consumed and the whole format is a
+  // nondet string.
+  if (
+    (format == "," || format == ",d") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    // A negative literal is stored as unary- over a constant; fold it so
+    // grouping sees the concrete value.
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      std::string digits = integer2string(neg ? -n : n);
+      std::string grouped;
+      int cnt = 0;
+      for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+      {
+        if (cnt != 0 && cnt % 3 == 0)
+          grouped.push_back(',');
+        grouped.push_back(*it);
+        ++cnt;
+      }
+      std::reverse(grouped.begin(), grouped.end());
+      if (neg)
+        grouped = "-" + grouped;
+      std::vector<unsigned char> chars(grouped.begin(), grouped.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), grouped.size() + 1));
+    }
+  }
+
   // Pad/align prefix ([[fill]align][width]). Default-align right for
   // numerics and left for strings, matching CPython.
   char fill, align;
   int width;
+  bool zero_pad;
   std::string rest;
-  if (parse_format_padding(format, fill, align, width, rest) && rest.empty())
+  const bool numeric_expr = expr.type().is_signedbv() ||
+                            expr.type().is_unsignedbv() ||
+                            expr.type().is_floatbv() || expr.type().is_bool();
+  // A trailing 'd'/'i' presentation type on an integer value renders the
+  // same text as str(), so padding composes with it directly.
+  auto int_presentation = [&](const std::string &type_char) {
+    return (type_char == "d" || type_char == "i") &&
+           (expr.type().is_signedbv() || expr.type().is_unsignedbv());
+  };
+  // The '0'-shorthand's implied alignment is type-dependent (CPython:
+  // sign-aware '=' for numbers, '<' for strings — format('ab', '05') is
+  // 'ab000').
+  auto resolve_zero_pad_align = [&]() {
+    if (zero_pad && align == '\0')
+      align = numeric_expr ? '=' : '<';
+  };
+  if (
+    parse_format_padding(format, fill, align, width, zero_pad, rest) &&
+    (rest.empty() || int_presentation(rest)))
   {
-    exprt body = convert_to_string(expr);
+    resolve_zero_pad_align();
+    // Resolve a variable to its compile-time constant value where possible
+    // so padding can fold: a negative int literal is stored as unary- over
+    // a constant, and convert_to_string returns string symbols unread.
+    exprt fmt_expr = expr;
+    if (fmt_expr.is_symbol())
+    {
+      const symbolt *sym = find_cached_symbol(
+        to_symbol_expr(fmt_expr).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+      {
+        const exprt &val = sym->get_value();
+        if (
+          val.id() == "unary-" && val.operands().size() == 1 &&
+          val.op0().is_constant())
+        {
+          BigInt v;
+          if (!to_integer(val.op0(), v))
+            fmt_expr = from_integer(-v, val.op0().type());
+        }
+      }
+    }
+    exprt body = convert_to_string(fmt_expr);
+    if (body.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(body).get_identifier().as_string());
+      if (
+        sym && sym->get_value().is_constant() &&
+        sym->get_value().type().is_array())
+        body = sym->get_value();
+    }
+    // When the rendered text cannot be read at conversion time, returning
+    // the unpadded body would be a wrong value whenever the width exceeds
+    // the runtime length — fall back to a sound nondet string instead.
+    auto unfoldable_padding = [&]() {
+      log_warning(
+        "f-string format spec '{}' on a value not foldable at conversion "
+        "time: using a nondet string",
+        format);
+      return build_nondet_string_fallback(expr.location());
+    };
     if (!body.type().is_array() || body.type().subtype() != char_type())
-      return body;
+      return width > 0 ? unfoldable_padding() : body;
     // Extract the literal characters; bail out if the body isn't a
     // string-constant or constant char array we can read.
     std::string content = extract_string_from_array_operands(body);
     if (
       content.empty() && !body.is_constant() && body.id() != "string-constant")
-      return body;
+      return width > 0 ? unfoldable_padding() : body;
     if (align == '\0')
-      align = (expr.type().is_signedbv() || expr.type().is_unsignedbv() ||
-               expr.type().is_floatbv() || expr.type().is_bool())
-                ? '>'
-                : '<';
+      align = numeric_expr ? '>' : '<';
     std::string padded = apply_padding(content, fill, align, width);
     typet string_type =
       type_handler_.build_array(char_type(), padded.size() + 1);
@@ -766,9 +954,83 @@ exprt string_handler::apply_format_specification(
     return make_char_array_expr(chars, string_type);
   }
 
-  // Handle integer formatting
-  if (format == "d" || format == "i")
+  // Presentation types that render the same text as str(): integer 'd'/'i'
+  // and string 's'.
+  if (format == "d" || format == "i" || format == "s")
     return convert_to_string(expr);
+
+  // The 'c' type renders an integer as the character with that code point.
+  // Fold only 1-127 (printable-through-DEL ASCII) for a constant integer:
+  // code point 0 embeds a NUL (unreliable in the null-terminated string model)
+  // and > 127 is multi-byte UTF-8, so those fall through to the nondet handling.
+  if (
+    format == "c" && (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n) && n >= 1 && n <= 127)
+    {
+      std::vector<unsigned char> chars{
+        static_cast<unsigned char>(n.to_uint64()), '\0'};
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), 2));
+    }
+  }
+
+  // Integer base presentations: 'x'/'X' (hex), 'o' (octal), 'b' (binary), for a
+  // constant integer value (resolving a symbol's constant value and a negative
+  // unary- literal). A non-constant value falls through to the handling below.
+  if (
+    (format == "x" || format == "X" || format == "o" || format == "b") &&
+    (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+  {
+    exprt v = expr;
+    if (v.is_symbol())
+    {
+      const symbolt *sym =
+        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+      if (sym && !sym->get_value().is_nil())
+        v = sym->get_value();
+    }
+    if (v.id() == "unary-" && v.operands().size() == 1 && v.op0().is_constant())
+    {
+      BigInt neg_v;
+      if (!to_integer(v.op0(), neg_v))
+        v = from_integer(-neg_v, v.op0().type());
+    }
+    BigInt n;
+    if (v.is_constant() && !to_integer(v, n))
+    {
+      const bool neg = n < 0;
+      BigInt mag = neg ? -n : n;
+      const unsigned base = (format == "o") ? 8 : (format == "b") ? 2 : 16;
+      const char *alpha =
+        (format == "X") ? "0123456789ABCDEF" : "0123456789abcdef";
+      std::string digits;
+      if (mag == 0)
+        digits = "0";
+      while (mag != 0)
+      {
+        digits.insert(digits.begin(), alpha[(mag % base).to_uint64()]);
+        mag /= base;
+      }
+      const std::string out = (neg ? "-" : "") + digits;
+      std::vector<unsigned char> chars(out.begin(), out.end());
+      chars.push_back('\0');
+      return make_char_array_expr(
+        chars, type_handler_.build_array(char_type(), out.size() + 1));
+    }
+    // A non-constant integer falls through: `format` is a base type, never a
+    // float spec, so the `else if` float branch below is correctly skipped and
+    // the tail nondet fallback handles it.
+  }
 
   // Handle float formatting with precision
   else if (format.find(".") != std::string::npos && format.back() == 'f')
@@ -802,6 +1064,7 @@ exprt string_handler::apply_format_specification(
         if (t.is_floatbv() && (float_width == 32 || float_width == 64))
         {
           const std::string *float_bits = nullptr;
+          std::string negated_bits;
 
           // Handle constant expressions
           if (expr.is_constant())
@@ -815,12 +1078,40 @@ exprt string_handler::apply_format_specification(
 
             if (symbol && symbol->get_value().is_constant())
               float_bits = &symbol->get_value().value().as_string();
+            else if (symbol)
+            {
+              // A negative float literal is stored as unary- over a
+              // constant; IEEE negation is a sign-bit flip (MSB first).
+              const exprt &val = symbol->get_value();
+              if (
+                val.id() == "unary-" && val.operands().size() == 1 &&
+                val.op0().is_constant() && val.op0().type().is_floatbv())
+              {
+                negated_bits = val.op0().value().as_string();
+                if (negated_bits.length() == float_width)
+                {
+                  negated_bits[0] = negated_bits[0] == '0' ? '1' : '0';
+                  float_bits = &negated_bits;
+                }
+              }
+            }
           }
 
           if (float_bits && float_bits->length() == float_width)
           {
             std::string formatted_str =
               float_to_string(*float_bits, float_width, precision);
+
+            // Compose any fill/align/width prefix parsed above with the
+            // precision-formatted text ("{:07.2f}" of 1.5 -> "0001.50"),
+            // instead of silently dropping the width.
+            if (width > 0)
+            {
+              resolve_zero_pad_align();
+              if (align == '\0')
+                align = '>';
+              formatted_str = apply_padding(formatted_str, fill, align, width);
+            }
 
             typet string_type =
               type_handler_.build_array(char_type(), formatted_str.size() + 1);
@@ -835,8 +1126,12 @@ exprt string_handler::apply_format_specification(
     }
   }
 
-  // Default: just convert to string
-  return convert_to_string(expr);
+  // Any other spec (e.g. "x", ",", combined width+precision) changes the
+  // rendered text; folding to the unformatted value would be a wrong value
+  // that can satisfy a false assertion. Fall back to a sound nondet string.
+  log_warning(
+    "f-string format spec '{}' is not modelled: using a nondet string", format);
+  return build_nondet_string_fallback(expr.location());
 }
 
 exprt string_handler::make_char_array_expr(
@@ -1006,8 +1301,25 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
         // Expression to be formatted
         exprt expr = converter_.get_expr(value["value"]);
 
+        // A !r/!a conversion changes the rendered text ("{s!r}" quotes);
+        // rendering the unconverted value would be a wrong value that can
+        // satisfy a false assertion. Not modelled — use a sound nondet
+        // string. !s renders the same text as the default.
+        int conversion =
+          (value.contains("conversion") && value["conversion"].is_number())
+            ? value["conversion"].get<int>()
+            : -1;
+        if (conversion != -1 && conversion != 's')
+        {
+          log_warning(
+            "f-string conversion '!{}' is not modelled: using a nondet "
+            "string",
+            static_cast<char>(conversion));
+          part_expr = build_nondet_string_fallback(expr.location());
+        }
         // Handle format specification if present
-        if (value.contains("format_spec") && !value["format_spec"].is_null())
+        else if (
+          value.contains("format_spec") && !value["format_spec"].is_null())
         {
           std::string format = process_format_spec(value["format_spec"]);
           part_expr = apply_format_specification(expr, format);
@@ -2179,6 +2491,16 @@ exprt string_handler::try_len_fast_path_from_name_arg(
       }
       if (part["_type"] == "FormattedValue" && part.contains("value"))
       {
+        // A format spec or !r/!a conversion changes the rendered length
+        // (e.g. "{v:>20}" pads to 20); summing the raw value length would
+        // be a wrong constant. Decline so len() stays symbolic.
+        if (part.contains("format_spec") && !part["format_spec"].is_null())
+          return std::nullopt;
+        if (
+          part.contains("conversion") && part["conversion"].is_number() &&
+          part["conversion"].get<int>() != -1 &&
+          part["conversion"].get<int>() != 's')
+          return std::nullopt;
         const auto &value = part["value"];
         if (value["_type"] == "Name" && value.contains("id"))
         {

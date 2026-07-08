@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-07-01.
+**Updated:** 2026-07-05.
 
 This file tracks what is **not yet implemented or broken** in the NumPy
 module. Completed items are in the git history and `regression/numpy/`.
@@ -11,10 +11,9 @@ module. Completed items are in the git history and `regression/numpy/`.
 
 | Feature | Status | Notes |
 |---|---|---|
-| 2-D slicing `a[:,j]`, `a[i,:]` | Partial | Basic store-chain cases work; full column/row slice still missing |
-| Fancy/integer-array indexing `a[[0,2]]` | Missing | No handler |
+| Symbolic/non-literal boolean-mask row selection | Missing | `build_bool_mask_row_select` requires the mask to be a concrete literal (`np.array([True, False])`) resolved from its AST declaration; a mask built from nondet/computed values is rejected explicitly (no unsound fallback). |
 | Strided slicing `a[::2]` | Untested | List slice model supports step but not tested for NumPy arrays |
-| Boolean-mask for 2-D arrays / list-backed masks | Missing | `build_bool_mask_index` only handles 1-D `array_typet` masks |
+| `a[i, j, k]` and n-D tuple indexing | Missing | Only up to 2-D indexing (single axis, or one axis sliced) is modelled; 3-D+ tuple indices are rejected explicitly. |
 
 ---
 
@@ -25,7 +24,7 @@ module. Completed items are in the git history and `regression/numpy/`.
 | Array creation | `empty` |
 | Sorting / searching | `sort`, `argsort`, `searchsorted`, `unique` |
 | Statistics | `std`, `var`, `median`, `percentile` |
-| Linear algebra | `det`; `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
+| Linear algebra | `inv`/`solve` limited to ≤3×3; `norm` limited to Frobenius; `eig`/`svd` limited to ≤3×3 concrete matrices |
 | Random | `np.random.*` (all) |
 | Structured arrays | Record dtypes |
 | Views / strides | No aliasing model — all ops copy |
@@ -44,6 +43,10 @@ module. Completed items are in the git history and `regression/numpy/`.
 3. **Scalability wall** (#5121): every array is a fully-unrolled value list.
    Large arrays explode. Symbolic shapes mitigate this via `--unwind` but do
    not eliminate the underlying state-explosion for large bounds.
+4. **NumPy arrays as function parameters** are not well modelled: a numpy
+   array crossing a function boundary decays to pointer-to-array, and even
+   a plain 2-D `row = a[0]` inside the callee currently fails (observed as
+   a dereference failure), not just the already-excluded 3-D+ case.
 
 ---
 
@@ -54,26 +57,25 @@ Either model correctly or downgrade to explicit "unsupported".
 
 ---
 
-## Next PR — proposed scope
+## Prioritised next steps
 
-1. **2-D slicing `a[:,j]` and `a[i,:]`** — detect `Slice(lower=None,
-   upper=None, step=None)` in a tuple subscript; emit a bounded loop that
-   copies the selected column/row into a fresh 1-D array. 4 regression tests.
-
-2. **Fancy / integer-array indexing `a[[0,2,4]]`** — detect subscript whose
-   type is `array_typet` with integer element type; bounded loop over the
-   index array with `list_at` on the source. 4 regression tests.
-
-3. **`linalg.det`** — 2×2 = `ad-bc`, 3×3 = cofactor expansion; same pattern
-   as `linalg.inv`. 3 regression tests.
-
-4. **`np.std` and `np.var`** — bounded loops using `build_list_at_call` +
+1. **`np.std` and `np.var`** — bounded loops using `build_list_at_call` +
    arithmetic expression builder; `np.mean` already exists. 4 tests each.
-
-5. **Boolean-mask indexing for 2-D arrays** — `mask` selects whole rows;
-   extends `build_bool_mask_index` to handle `array_typet` sources. 4 tests.
+2. **Symbolic/non-literal boolean-mask row selection** — needs a design
+   decision (see "Out of scope" below) before implementation.
+3. **NumPy arrays as function parameters** — investigate the
+   pointer-to-array decay at function boundaries (see soundness concern
+   above); needed before any n-D indexing work can safely extend past
+   module-level arrays.
+4. **`a[i, j, k]` and n-D tuple indexing** — a larger frontend change; only
+   worth picking up once the 2-D indexing surface above is exercised more
+   in the field.
 
 ### Out of scope
 - `np.random.*` — nondeterminism model requires a separate design decision.
 - True SMT-array scalability — solver-level change; tracked in #5121.
 - Views / strides / aliasing — deep model change; separate PR.
+- Symbolic (non-literal) boolean-mask row selection — would need either a
+  runtime-list model extension that can hold array-typed elements (blocked
+  on the encoding gap described above) or a different result
+  representation; needs a design decision before implementation.

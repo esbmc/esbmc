@@ -14,6 +14,11 @@ on:
         description: "Whether to run tests (regression) for this build"
         required: true
         type: boolean
+      canon-names:
+        description: "Upload the build as a canonical esbmc-windows.zip release asset"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -39,10 +44,28 @@ jobs:
     - uses: actions/checkout@v6
     - name: Configure ESBMC
       run: ./scripts/build.ps1
-    - uses: actions/upload-artifact@v7
+    # Default: upload the raw build folder under the fixed name release.yml downloads.
+    - name: Upload build artifact
+      if: ${{ !inputs.canon-names }}
+      uses: actions/upload-artifact@v7
       with:
         name: release-windows-latest
         path: C:/deps/esbmc
+
+    # Release pipeline (canon-names): emit the canonical esbmc-windows.zip asset
+    # with a top-level release/ folder, matching the Linux and macOS archives.
+    - name: Package canonical release asset
+      if: ${{ inputs.canon-names }}
+      run: |
+        Rename-Item -Path C:/deps/esbmc -NewName release
+        Compress-Archive -Path C:/deps/release -DestinationPath esbmc-windows.zip
+      shell: pwsh
+    - name: Upload canonical release asset
+      if: ${{ inputs.canon-names }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: esbmc-windows
+        path: esbmc-windows.zip
     - name: Run Tests
       if: ${{ inputs.testing == true }}
       run: |
