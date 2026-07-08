@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog always-unsat-mallob.sh --bitwuzllob-model-prog dead-model.sh
+^VERIFICATION SUCCESSFUL$

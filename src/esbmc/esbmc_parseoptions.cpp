@@ -20,6 +20,7 @@ extern "C"
 #include <esbmc/esbmc_parseoptions.h>
 #include <goto-symex/goto_symex.h>
 #include <solvers/smt/smt_result.h>
+#include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
@@ -120,6 +121,9 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
+  // Kill any external solver process groups first: they are in their own
+  // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
+  file_operations::kill_registered_pgroups();
   file_operations::cleanup_registered_tmps();
   // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
@@ -2019,6 +2023,16 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
     // also checks `disable-inductive-step` to suppress any verdict.
     log_status("Inductive step aborted: {}", e.reason);
+    res = P_ERROR;
+  }
+  catch (const smtlib_convt::external_process_died &e)
+  {
+    // An external SMT solver process (an --smtlib solver, or the bitwuzllob
+    // model solver) died or returned an unusable response at a point past the
+    // backend's own recovery — e.g. while a counterexample was being read out
+    // via (get-value). Report a clean failure rather than let the exception
+    // reach std::terminate.
+    log_error("SMT solver process failed: {}", e.what());
     res = P_ERROR;
   }
 

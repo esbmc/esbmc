@@ -111,6 +111,14 @@ void fix_expression(irept &irep)
     irep.id("string-constant");
   else if (irep.id() == "ieee_float_equal")
     irep.id("=");
+  else if (irep.id() == "ieee_float_notequal")
+    // CBMC's IEEE-754 float inequality (NaN != NaN is true) has no migrate_expr
+    // handler, so it aborts with "migrate expr failed". ESBMC's own C frontend
+    // lowers a float != to a plain "notequal" whose floatbv SMT encoding already
+    // implements IEEE semantics (NaN-aware), so rewrite to that -- the exact
+    // counterpart of the "ieee_float_equal" -> "=" rewrite above. "notequal" is
+    // in the operand-wrap set below, so its operands reach migrate_expr.
+    irep.id("notequal");
   else if (
     (irep.id() == "+" || irep.id() == "-" || irep.id() == "*" ||
      irep.id() == "/") &&
@@ -536,7 +544,17 @@ bool fix_builtin_call(irept &code)
   // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
   // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
   // must be in fix_expression's operand-wrap set for the argument to reach it.
-  else if (callee == "fabsf" || callee == "fabs" || callee == "fabsl")
+  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
+  // type), so the same rewrite covers the integer abs family -- CBMC emits
+  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
+  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
+  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
+  else if (
+    callee == "fabsf" || callee == "fabs" || callee == "fabsl" ||
+    callee == "abs" || callee == "labs" || callee == "llabs" ||
+    callee == "imaxabs" || callee == "__builtin_abs" ||
+    callee == "__builtin_labs" || callee == "__builtin_llabs" ||
+    callee == "__builtin_imaxabs")
     rhs = build_unary_fp_rhs(lhs, args, "abs");
   else
     return false; // not (yet) a recognised builtin; see roadmap §4.8

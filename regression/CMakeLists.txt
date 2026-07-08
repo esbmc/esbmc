@@ -91,6 +91,19 @@ endfunction()
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
+if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
+    # The backend is only built when smtlib is (see its CMakeLists.txt). The
+    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
+    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
+    # shell. Also look next to a --DZ3_DIR passed for linking, so a build that
+    # bundled z3 but has no system z3 still runs the suite.
+    find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_BITWUZLLOB_TEST_Z3)
+        set(REGRESSIONS_BITWUZLLOB bitwuzllob)
+    else()
+        message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+    endif()
+endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
 endif()
@@ -215,6 +228,7 @@ if(APPLE)
                     termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_Z3}
@@ -252,6 +266,7 @@ elseif(WIN32)
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
@@ -279,6 +294,7 @@ else()
                     cuda/Supported_long_time
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
+                    ${REGRESSIONS_BITWUZLLOB}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
