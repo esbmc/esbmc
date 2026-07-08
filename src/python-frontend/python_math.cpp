@@ -325,16 +325,22 @@ python_math::try_fold_int_constant(const exprt &expr) const
     }
   }
 
-  // Symbol assigned a compile-time integer (e.g. `a = 2`); resolve one level.
-  // A nondet / unconstrained symbol resolves to a non-constant value, so it
-  // yields nullopt rather than a fabricated 0 (issue #5915).
+  // Do NOT resolve a symbol to its symbol-table value. That value holds only
+  // the last *statically* assigned constant, which is unsound to fold when the
+  // variable is reassigned under control flow: e.g.
+  //     n = 2
+  //     if c: n = 3
+  //     x = 5 ** n
+  // leaves the symbol value at 3, so folding would prove `x == 125` even
+  // though x is 25 on the `not c` path -- a false negative. The general
+  // expression path (goto-symex SSA) keeps such a symbol symbolic; the fold
+  // path must do the same. A genuinely single-assigned constant (e.g. a
+  // module-level `a = 2`) is still handled correctly: for the base, symex
+  // concretises the symbol in the integer multiplication tree, so the result
+  // stays exact; for a symbolic exponent it flows to pow() (double) exactly as
+  // a bare-symbol exponent already did before this fix (issue #5915).
   if (expr.is_symbol())
-  {
-    const exprt resolved = resolve_symbol(expr);
-    if (resolved.is_constant() || is_basic_math_expr(resolved))
-      return try_fold_int_constant(resolved);
     return std::nullopt;
-  }
 
   // +,-,*,/ over sub-expressions that each fold to an integer constant.
   if (is_basic_math_expr(expr) && expr.operands().size() == 2)
@@ -546,9 +552,9 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   // exponent (e.g. `2 ** (a + 1)`) must stay symbolic -- folding it silently
   // read an empty value string as 0 (issue #5915). This also correctly handles
   // negative exponents, which Python's ** returns as float.
-  std::optional<BigInt> exponent_opt;
-  if (rhs.is_constant() || is_basic_math_expr(rhs))
-    exponent_opt = try_fold_int_constant(rhs);
+  // try_fold_int_constant returns nullopt for anything non-constant, so it is
+  // safe to call directly.
+  const std::optional<BigInt> exponent_opt = try_fold_int_constant(rhs);
   if (!exponent_opt.has_value())
     return handle_power_symbolic(lhs, rhs);
   const BigInt exponent = *exponent_opt;
@@ -567,9 +573,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   // base or a +,-,*,/ tree over a symbolic operand (e.g. `(a // b)`, whose
   // operand is a `/` sub-expression) stays symbolic and flows into the
   // multiplication tree (build_power_expression) below (issue #5915).
-  std::optional<BigInt> resolved_base_value;
-  if (lhs.is_constant() || is_basic_math_expr(lhs))
-    resolved_base_value = try_fold_int_constant(lhs);
+  const std::optional<BigInt> resolved_base_value = try_fold_int_constant(lhs);
 
   // Cap constant folding to keep conversion fast; large symbolic trees are
   // cheaper than huge BigInt powers.

@@ -39,10 +39,12 @@ private:
   exprt resolve_symbol(const exprt &operand) const;
 
   /// Fold an expression to an integer constant *only* when it genuinely is one:
-  /// an integer literal, a symbol assigned an integer constant, or a +,-,*,/
-  /// tree whose leaves all fold to integer constants. Returns std::nullopt for
-  /// anything symbolic/nondet, so callers keep a symbolic encoding rather than
-  /// fabricating a bogus 0 from an empty value string (issue #5915).
+  /// an integer literal, or a +,-,*,/ tree whose leaves all fold to integer
+  /// constants. Symbols are deliberately NOT resolved: their symbol-table value
+  /// holds only the last statically-assigned constant, which is unsound to fold
+  /// when the variable is reassigned under control flow (a false negative).
+  /// Returns std::nullopt for anything symbolic/nondet, so callers keep a
+  /// symbolic encoding rather than fabricating a bogus constant (issue #5915).
   std::optional<BigInt> try_fold_int_constant(const exprt &expr) const;
 
   /// Resolve a constant-like expression (constant or constant-valued symbol)
