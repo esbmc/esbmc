@@ -85,10 +85,11 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
-| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #5910) | `cbmc_adapter.cpp::fix_expression` |
+| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #5916) | `cbmc_adapter.cpp::hex_to_bin` |
+| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -197,10 +198,22 @@ already handles via `op0()` — but neither was in `fix_expression`'s operand-wr
 CBMC's raw operands stayed in `get_sub()`, `op0()` read an empty operand list, and the
 verdict was garbage/crash (the exact `isnan`/`pointer_offset` failure shape). Fixed by adding
 `popcount`/`bswap` to the wrap-set. Verdict parity both directions, dual-solver
-(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`). Still open in the same family:
-`__builtin_clz`/`ctz` reach the adapter as an id `migrate_expr` has no handler for at all
-(aborts with `migrate expr failed`), so they need a migrate handler + irep2 node, not just a
-wrap-set entry — tracked separately.
+(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`).
+
+**Bit-count builtins `clz`/`ctz` — ✅ landed.** `__builtin_clz`/`__builtin_ctz` lower to CBMC
+`count_leading_zeros`/`count_trailing_zeros` ireps, which `migrate_expr` has *no* handler for
+at all (aborts with `migrate expr failed`) — and, unlike `popcount`/`bswap`, ESBMC has no
+`clz`/`ctz` irep2 node either: the native frontend resolves `__builtin_clz` at *symex* time
+(`run_builtin.cpp`) with a popcount-based bit-count formula, and does not model `__builtin_ctz`
+at all. Rather than add a new irep2 node, `fix_expression` reproduces that same formula in terms
+of ids `migrate_expr` already lowers — `clz(x) = width − popcount(x smeared down below its MSB)`
+(mirroring `run_builtin.cpp` exactly) and `ctz(x) = popcount(~x & (x−1))` — so no new node is
+needed and the CBMC path gains `ctz` coverage the native path still lacks. Scoped to the
+`--binary` path, so it cannot perturb native handling (which never emits
+`count_{leading,trailing}_zeros` as an expression). `clz(0)`/`ctz(0)` is UB; CBMC emits its own
+`#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
+dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
+(`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
 **Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
 as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
 counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
