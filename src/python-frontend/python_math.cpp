@@ -306,6 +306,77 @@ exprt python_math::resolve_symbol(const exprt &operand) const
   return operand;
 }
 
+std::optional<BigInt>
+python_math::try_fold_int_constant(const exprt &expr) const
+{
+  // Genuine integer literal.
+  if (expr.is_constant())
+  {
+    if (!(expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+      return std::nullopt; // reject float / non-integer constants
+    try
+    {
+      return binary2integer(
+        expr.value().as_string(), expr.type().is_signedbv());
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+  }
+
+  // Do NOT resolve a symbol to its symbol-table value. That value holds only
+  // the last *statically* assigned constant, which is unsound to fold when the
+  // variable is reassigned under control flow: e.g.
+  //     n = 2
+  //     if c: n = 3
+  //     x = 5 ** n
+  // leaves the symbol value at 3, so folding would prove `x == 125` even
+  // though x is 25 on the `not c` path -- a false negative. The general
+  // expression path (goto-symex SSA) keeps such a symbol symbolic; the fold
+  // path must do the same. A genuinely single-assigned constant (e.g. a
+  // module-level `a = 2`) is still handled correctly: for the base, symex
+  // concretises the symbol in the integer multiplication tree, so the result
+  // stays exact; for a symbolic exponent it flows to pow() (double) exactly as
+  // a bare-symbol exponent already did before this fix (issue #5915).
+  if (expr.is_symbol())
+    return std::nullopt;
+
+  // +,-,*,/ over sub-expressions that each fold to an integer constant.
+  if (is_basic_math_expr(expr) && expr.operands().size() == 2)
+  {
+    const std::optional<BigInt> l = try_fold_int_constant(expr.operands()[0]);
+    if (!l.has_value())
+      return std::nullopt;
+    const std::optional<BigInt> r = try_fold_int_constant(expr.operands()[1]);
+    if (!r.has_value())
+      return std::nullopt;
+
+    const irep_idt &id = expr.id();
+    if (id == "+")
+      return *l + *r;
+    if (id == "-")
+      return *l - *r;
+    if (id == "*")
+      return *l * *r;
+    if (id == "/" && *r != 0)
+      return *l / *r;
+  }
+
+  return std::nullopt;
+}
+
+exprt python_math::compute_expr(const exprt &expr) const
+{
+  // Fold to a constant only when the expression is genuinely a compile-time
+  // integer; otherwise return it unchanged so callers keep a symbolic encoding
+  // rather than a fabricated 0 read from a non-constant operand (issue #5915).
+  if (std::optional<BigInt> value = try_fold_int_constant(expr);
+      value.has_value())
+    return from_integer(*value, expr.type());
+  return expr;
+}
+
 std::optional<double>
 python_math::try_resolve_constant_double(const exprt &operand) const
 {
@@ -415,38 +486,6 @@ const symbolt &python_math::get_c_math_symbol_cached(
   return *symbol;
 }
 
-exprt python_math::compute_expr(const exprt &expr) const
-{
-  // Resolve operands to their constant values
-  const exprt lhs = resolve_symbol(expr.operands().at(0));
-  const exprt rhs = resolve_symbol(expr.operands().at(1));
-
-  // Convert to BigInt for computation
-  const BigInt op1 =
-    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
-  const BigInt op2 =
-    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
-
-  // Perform the math operation
-  BigInt result;
-  if (expr.id() == "+")
-    result = op1 + op2;
-  else if (expr.id() == "-")
-    result = op1 - op2;
-  else if (expr.id() == "*")
-    result = op1 * op2;
-  else if (expr.id() == "/")
-    result = op1 / op2;
-  else
-    throw std::runtime_error("Unsupported math operation: " + expr.id_string());
-
-  // Return the result as a constant expression. V.3: build the folded
-  // integer constant in IREP2 and back-migrate once -- the operands were read
-  // as bitvector integers, so lhs.type() is always integer here and the
-  // constant_int2t round-trips exactly to the same constant_exprt.
-  return migrate_expr_back(constant_int2tc(migrate_type(lhs.type()), result));
-}
-
 exprt python_math::handle_power_symbolic(exprt base, exprt exp)
 {
   // Convert arguments to double type if needed
@@ -508,29 +547,17 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
     return handle_power_symbolic(lhs, rhs);
 
-  // Resolve exponent first. If it is non-constant, we can return early without
-  // spending time resolving the base.
-  exprt resolved_rhs = rhs;
-  if (is_basic_math_expr(rhs))
-    resolved_rhs = compute_expr(rhs);
-
-  // If rhs is still not constant or is a float, delegate to pow() for
-  // soundness. This correctly handles symbolic exponents and negative exponents
-  // (which Python's ** returns as float).
-  if (!resolved_rhs.is_constant() || resolved_rhs.type().is_floatbv())
+  // Resolve the exponent first: if it is not a compile-time integer, return
+  // early via pow() without resolving the base. A symbolic or nondet-containing
+  // exponent (e.g. `2 ** (a + 1)`) must stay symbolic -- folding it silently
+  // read an empty value string as 0 (issue #5915). This also correctly handles
+  // negative exponents, which Python's ** returns as float.
+  // try_fold_int_constant returns nullopt for anything non-constant, so it is
+  // safe to call directly.
+  const std::optional<BigInt> exponent_opt = try_fold_int_constant(rhs);
+  if (!exponent_opt.has_value())
     return handle_power_symbolic(lhs, rhs);
-
-  // Convert rhs to integer exponent
-  BigInt exponent;
-  try
-  {
-    exponent = binary2integer(
-      resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
-  }
-  catch (...)
-  {
-    return handle_power_symbolic(lhs, rhs);
-  }
+  const BigInt exponent = *exponent_opt;
 
   // Negative exponents: Python returns a float (e.g. 2**-1 == 0.5)
   if (exponent < 0)
@@ -542,25 +569,11 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   if (exponent == 1)
     return lhs;
 
-  exprt resolved_lhs = lhs;
-  if (is_basic_math_expr(lhs))
-    resolved_lhs = compute_expr(lhs);
-
-  std::optional<BigInt> resolved_base_value;
-  if (
-    resolved_lhs.is_constant() &&
-    (resolved_lhs.type().is_signedbv() || resolved_lhs.type().is_unsignedbv()))
-  {
-    try
-    {
-      resolved_base_value = binary2integer(
-        resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
-    }
-    catch (...)
-    {
-      // Fall back to symbolic encoding if constant conversion fails.
-    }
-  }
+  // Fold the base only when it is genuinely a compile-time integer. A nondet
+  // base or a +,-,*,/ tree over a symbolic operand (e.g. `(a // b)`, whose
+  // operand is a `/` sub-expression) stays symbolic and flows into the
+  // multiplication tree (build_power_expression) below (issue #5915).
+  const std::optional<BigInt> resolved_base_value = try_fold_int_constant(lhs);
 
   // Cap constant folding to keep conversion fast; large symbolic trees are
   // cheaper than huge BigInt powers.
