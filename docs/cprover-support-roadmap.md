@@ -89,7 +89,7 @@ and the symbol/function table layout.
 | Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::cbmc_adapt` |
+| Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #5925) | `cbmc_adapter.cpp::cbmc_adapt` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
