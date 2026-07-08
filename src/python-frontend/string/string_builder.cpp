@@ -47,10 +47,16 @@ std::vector<exprt> string_builder::extract_string_chars(
 {
   std::vector<exprt> chars;
 
-  // Handle JSON string constants first
+  // Handle JSON string constants first. Guard on is_string(): a numeric
+  // Constant (e.g. the `1` in `1 + "s"`) reaching here would otherwise throw an
+  // uncaught nlohmann::json type_error and crash the frontend. The binop path
+  // now raises a catchable TypeError before this point (issue #5904); this is a
+  // defensive fallback so any other caller degrades to the expr-based path
+  // below instead of crashing.
   if (
     !json_node.is_null() && json_node.contains("_type") &&
-    json_node["_type"] == "Constant" && json_node.contains("value"))
+    json_node["_type"] == "Constant" && json_node.contains("value") &&
+    json_node["value"].is_string())
   {
     std::string str_value = json_node["value"].get<std::string>();
     chars.reserve(str_value.size());
