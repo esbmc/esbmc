@@ -86,6 +86,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
+| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 
@@ -137,6 +138,25 @@ proof harnesses by name.
 CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Wide-constant truncation (≤64 bits) — ✅ fixed.** `fix_expression`'s constant rewrite
+called `hex_to_bin32`, which — mirroring the Rust reference's `format!("{:032b}", …)` —
+padded every converted constant to **32** bits regardless of the constant's own type width.
+CBMC stores integer constant values as hex strings, so a 64-bit value like `-5000000000LL`
+(hex `12A05F200`) was emitted as a ≤33-char binary string and then silently interpreted at
+32 bits: `__CPROVER_assume(x == -5000000000LL); assert(x < 0)` returned a **false `FAILED`**
+(x truncated to its unsigned low 32 bits, `+3589934592`) where CBMC says `SUCCESSFUL` — a
+soundness divergence, worse than a crash. Fixed by making the helper width-aware
+(`hex_to_bin(val, width)`, `width` read from the constant's own `signedbv`/`unsignedbv`
+type) so the binary string matches the type width. Surgical: the `!= 32` guard that passes
+through already-binary 32-char strings is unchanged, and 32-bit constants still pad to 32
+(byte-identical to before); only wider types change. Because the byte-identical goto-transcoder
+parity reference shares the same 32-bit bug, this fix **intentionally diverges** from that
+reference on wide constants — CBMC-**verdict** parity (roadmap §6, the end-state oracle) is the
+correctness signal here, and the full `goto-transcoder` verdict suite still passes. Values
+needing >64 bits (128-bit, above) remain out of scope and are now returned unchanged rather
+than crashing `std::stoull`. Tests `cbmc_wide_const` (the soundness repro), `cbmc_wide_const_fail`,
+`cbmc_wide_uconst`, dual-solver.
 
 **Pointer subtype double-wrap — ✅ fixed.** Found while chasing an unrelated `malloc`
 verdict mismatch (§4.8): `fix_type`'s `pointer` branch, unlike the near-identical `array`

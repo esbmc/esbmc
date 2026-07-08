@@ -9,10 +9,10 @@ Weakness Enumeration (CWE) identifiers. The mapping is pinned to **MITRE CWE
 retains ids whose Vulnerability Mapping Usage is `ALLOWED` or
 `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **31 unique CWE identifiers** across **26
+ESBMC currently distinguishes **32 unique CWE identifiers** across **27
 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193, 252, 362, 366,
-369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 681, 761, 787, 822, 823, 824,
-825, 833, 908, 1335.
+369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 674, 681, 761, 787, 822, 823,
+824, 825, 833, 908, 1335.
 
 The CWE ids appear in:
 
@@ -57,7 +57,22 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
+| `uncontrolled recursion in <function>`                       | 674                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+The last two rows distinguish two different recursion outcomes:
+
+- **`uncontrolled recursion in <function>`** (CWE-674) is emitted when symex
+  proves a recursive function has *no reachable base case* — every path to a
+  return goes through a recursive self-call, so the recursion is genuinely
+  unbounded. This is a real weakness. The analysis is structural (it treats a
+  direct self-call as an impassable edge in the function CFG) and therefore
+  sound but incomplete: it never relabels a recursion that has any
+  non-recursive return path, so terminating recursion is never mislabelled.
+- **`recursion unwinding assertion`** (unmapped) is the pre-existing outcome
+  when the recursion merely exceeds the unwind bound. A recursion that
+  terminates but is deeper than the bound keeps this comment and no CWE, since
+  it signals insufficient unwinding rather than a weakness.
 
 ## Ids dropped vs. published mappings
 

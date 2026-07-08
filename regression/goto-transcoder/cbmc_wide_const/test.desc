@@ -1,4 +1,4 @@
 CORE
-main.py
---incremental-bmc
+cbmc_wide_const.goto
+--binary
 ^VERIFICATION SUCCESSFUL$
