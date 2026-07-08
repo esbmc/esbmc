@@ -7,4 +7,13 @@
 # Keep each rule paired with the issue that tracks the underlying bug.
 # See: https://clang.llvm.org/docs/AddressSanitizer.html#suppressing-issues
 #
-# (empty — populated as the bring-up CI run surfaces findings)
+# Known build-time noise (not expressible as a suppression rule):
+# c2goto generates the .goto library models at build time and embeds
+# clang/LLVM.  Under ASan the bundled clang trips a use-after-poison in
+# clang::ASTRecordLayout (LLVM BumpPtrAllocator region poisoning, shadow
+# byte f7).  ASan suppression files only cover interceptor/leak rules, so
+# this cannot be listed here; it is handled in the build step of
+# sanitizers.yml via -fsanitize-recover=address + halt_on_error=0 +
+# exitcode=0, which lets c2goto finish writing the .goto file.  Refs #223.
+#
+# (no interceptor/library rules yet — populated as the CI run surfaces findings)
