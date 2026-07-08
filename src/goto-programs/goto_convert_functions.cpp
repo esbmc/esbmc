@@ -179,11 +179,20 @@ bool goto_convert_functionst::convert_native_rec(
         return false;
       }
 
-    // No native statement emits a trailing unconditional goto (return/goto/break
-    // are unsupported), so convert_block's "unreachable -> skip destructors"
-    // guard is always false here and is omitted. unwind_destructor_stack is
-    // stack-neutral; the explicit restore below pops this block's code_deads.
-    unwind_destructor_stack(block.end_location, old_stack.size(), dest);
+    // Mirror convert_block's unreachable guard: a code_return2t emits a trailing
+    // unconditional goto (to the end-of-function target), after which the block's
+    // destructors are dead code and convert_block skips them. Reproduce the exact
+    // test so the emitted DEADs match byte-for-byte; for the block/skip/assign/
+    // expression/decl subset (no trailing goto) this is always the else branch,
+    // identical to the prior unconditional unwind.
+    if (
+      !dest.instructions.empty() && dest.instructions.back().is_goto() &&
+      is_true(dest.instructions.back().guard))
+    {
+      // unreachable -> skip destructors, exactly as convert_block does
+    }
+    else
+      unwind_destructor_stack(block.end_location, old_stack.size(), dest);
     targets.destructor_stack = old_stack;
 
     // Mirror the tail of convert(): a statement that emitted no instruction
@@ -340,6 +349,53 @@ bool goto_convert_functionst::convert_native_rec(
     return true;
   }
 
+  if (is_code_return2t(code2))
+  {
+    const code_return2t &ret = to_code_return2t(code2);
+
+    // convert_return (goto_convert.cpp:1468) emits, for the plain case, a RETURN
+    // instruction (only when the function returns a value) followed by an
+    // unconditional GOTO to the end-of-function target. Reproduce that exactly,
+    // and fall back on every shape convert_return transforms, deciding with the
+    // same predicates on a throwaway legacy view of the return value:
+    //  - a side-effect value (remove_sideeffects lowers it into extra instrs),
+    //  - a cpp-throw return value (converted as a statement, no RETURN),
+    //  - a top-level ternary (remove_sideeffects lowers `c ? a : b`),
+    //  - a missing value in a value-returning function (nondet replacement).
+    // A void function returning a value is a C/C++ constraint violation the
+    // frontend rejects, so it never reaches here; only a valueless void return
+    // does, which correctly emits just the end-of-function goto below.
+    // The destructor unwind convert_return runs writes into a discarded dummy
+    // program and is stack-neutral, so it has no effect on the emitted body; the
+    // enclosing block handler reproduces the real (skipped) destructor behaviour
+    // via the trailing-goto guard above.
+    exprt val = is_nil_expr(ret.operand) ? static_cast<exprt>(nil_exprt())
+                                         : migrate_expr_back(ret.operand);
+    if (
+      val.is_not_nil() &&
+      (has_sideeffect(val) || val.is_code() || val.id() == "if"))
+      return false;
+
+    if (targets.has_return_value)
+    {
+      if (val.is_nil())
+        return false; // convert_return replaces a missing value with nondet
+      // The RETURN instruction convert_return emits is migrate_expr(code_returnt)
+      // located at the statement; migrate_expr drops the value-operand location
+      // restore_value_locations stamped, so it round-trips to code2 itself. Emit
+      // it directly, exactly as the assign/expression handlers do.
+      goto_programt::targett r = dest.add_instruction();
+      r->make_return();
+      r->code = code2;
+      r->location = ret.location;
+    }
+
+    goto_programt::targett g = dest.add_instruction();
+    g->make_goto(targets.return_target, gen_true_expr());
+    g->location = ret.location;
+    return true;
+  }
+
   return false; // unsupported kind: whole body falls back to goto_convert_rec
 }
 
@@ -351,8 +407,11 @@ bool goto_convert_functionst::try_convert_body_native(
   if (!convert_native_rec(body2, native))
     return false; // dest untouched; caller falls back to goto_convert_rec
 
-  // Mirror goto_convert_rec()'s post-passes; both are no-ops on the leaf subset
-  // (no gotos/labels) but keep this path a faithful goto_convert_rec twin.
+  // Mirror goto_convert_rec()'s post-passes. finish_gotos only resolves *named*
+  // (labelled) gotos, of which the native subset emits none — a code_return2t's
+  // goto targets the end-of-function iterator directly, not a label — so it stays
+  // a no-op. optimize_guarded_gotos runs identically here and in the legacy path
+  // over the same instruction sequence, so the folded output matches regardless.
   finish_gotos(native);
   optimize_guarded_gotos(native);
   dest.destructive_append(native);
