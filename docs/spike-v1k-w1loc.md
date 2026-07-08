@@ -305,13 +305,13 @@ instrumentation.
 |---|---|---|
 | #5866 | `code_block2t` (decl-free), `code_skip2t` | The seam + the decl-free structural leaves; destructor stack never touched. |
 | #5896 | `code_assign2t` (side-effect-free, non-atomic, non-code-typed source) | The first **value statement**. Guarded by the exact predicates `convert_assign` uses (`has_sideeffect` on both operands, `rhs.type().is_code()`, `is_atomic_symbol`/`has_atomic_read`); anything richer falls back. Design **D3**: the statement's own `code_assign2t::location` is carried; the side-effect-free reduction means the stored instruction is `code2` itself (value-operand locations are dropped by `migrate_expr` regardless), so no round-trip and no `restore_value_locations` stamping is needed. |
-| *(this)* | `code_expression2t` (side-effect-free, non-code, non-ternary operand) | The second value statement → one `OTHER`. Guard mirrors `convert_expression`'s non-`OTHER` branches: `has_sideeffect(op)` (lowered), `op.is_code()` (re-dispatched via `convert()`), `op.id()=="if"` (top-level ternary peeled unconditionally into `convert_ifthenelse` at `goto_convert.cpp:507`). Same D3 store-`code2` emission as assign, but located at the statement's own `code_expression2t::location` (which `convert_expression` reads off the operand post-`restore_value_locations`); falls back when that location is nil/empty-file so an inherited block location is never lost. |
+| #5897 | `code_expression2t` (side-effect-free, non-code, non-ternary operand) | The second value statement → one `OTHER`. Guard mirrors `convert_expression`'s non-`OTHER` branches: `has_sideeffect(op)` (lowered), `op.is_code()` (re-dispatched via `convert()`), `op.id()=="if"` (top-level ternary peeled unconditionally into `convert_ifthenelse` at `goto_convert.cpp:507`). Same D3 store-`code2` emission as assign, but located at the statement's own `code_expression2t::location` (which `convert_expression` reads off the operand post-`restore_value_locations`); falls back when that location is nil/empty-file so an inherited block location is never lost. |
+| *(this)* | `code_decl2t` (trivial type; non-static/non-code/non-array; side-effect-free non-ternary non-`temporary_object` init) | The **first shared-state handler**: the block handler now manages `targets.destructor_stack` exactly as `convert_block` does (save → convert children → `unwind_destructor_stack` at `end_location` → restore), and the decl handler emits `DECL` + optional side-effect-free `ASSIGN` and pushes one scope-exit `code_dead` (the block's unwind turns it into the `DEAD`). DECL/ASSIGN are built from the operand type `migrate_type_back(decl.type)`, the `code_dead` from `s->get_type()` — matching `convert_decl`'s two type sources. Fallback restores the stack on every exit so `goto_convert_rec` re-runs clean. Unlocks real function bodies with locals. The `convert_block` "unreachable → skip destructors" guard is omitted (no native statement emits a trailing unconditional goto — reinstate when `return`/`goto`/`break` land). |
 
-*Next:* `code_return2t` is the obvious sibling but a **trap** — a trailing
-`return;` in a void function is elided by the frontend (empty body, no GOTO), and
-non-tail valueless returns sit under an `if` (unsupported) so the whole body
-falls back; it is hard to exercise in a decl-free top-level block. The remaining
-gains are the side-effect-bearing statements (calls, `++`/`--`), which require
-the IREP2-native `remove_sideeffects` / `do_function_call` reimplementation the
-Conclusion prices as the real cost, and the two structural pieces the block walk
-still lacks: decls (destructor-stack unwind) and gotos/labels (target tracking).
+*Next:* `code_return2t` is a **trap** — a trailing `return;` in a void function
+is elided by the frontend (empty body, no GOTO), and non-tail valueless returns
+sit under an `if` (unsupported) so the whole body falls back. The remaining gains
+are the side-effect-bearing statements (calls, `++`/`--`) and `code_function_call2t`,
+which require the IREP2-native `remove_sideeffects` / `do_function_call`
+reimplementation the Conclusion prices as the real cost, plus `code_goto2t`/
+`code_label2t` (target tracking — and reinstating the block unreachable guard).
