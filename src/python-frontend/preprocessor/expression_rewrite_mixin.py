@@ -295,6 +295,10 @@ class ExpressionRewriteMixin:
             if stmts is not None:
                 return stmts
 
+        rewritten_seq_next = self._maybe_rewrite_seq_next_expr(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
+
         prefix, new_value, _ = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
         dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)

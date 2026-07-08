@@ -317,6 +317,7 @@ class ModuleRewriteMixin:
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
+        self._scan_sequence_iterators(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
 
     def _scan_dict_literal_bindings_and_calls(self, node):
