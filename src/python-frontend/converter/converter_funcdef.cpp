@@ -932,10 +932,13 @@ void python_converter::validate_return_paths(
   const code_typet &type,
   exprt &function_body)
 {
-  // Skip validation for void returns and constructors
+  // Skip validation for void/None returns and constructors. A None-returning
+  // function (none_type()) implicitly returns None when it falls off the end,
+  // so a "missing" return path is correct Python, not a defect.
   if (
     type.return_type().is_empty() ||
     type.return_type().id() == typet::t_empty ||
+    type.return_type() == none_type() ||
     type.return_type().id() == "constructor" ||
     !function_has_missing_return_paths(function_node))
   {
@@ -1426,6 +1429,25 @@ void python_converter::get_function_definition(
   if (type_assertions_enabled())
     get_typechecker().inject_parameter_type_assertions(
       function_node, id, type, function_body);
+
+  // Python semantics: a user function with no value-returning path implicitly
+  // returns None. Model such a function as returning none_type() and append an
+  // explicit `return None`, so a caller that binds the result (`x = f()`) gets
+  // a defined None value rather than a nondet slot — matching the already-
+  // correct `return None` path (issue #5914). Constructors ("constructor"
+  // return type) and library/import models, whose void calls exist only for
+  // side effects, are left as-is.
+  if (
+    type.return_type().is_empty() && !is_loading_models && !is_importing_module)
+  {
+    type.return_type() = none_type();
+    added_symbol->set_type(type);
+
+    code_returnt implicit_none;
+    implicit_none.return_value() = gen_zero(none_type());
+    implicit_none.location() = get_location_from_decl(function_node);
+    function_body.copy_to_operands(implicit_none);
+  }
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)
