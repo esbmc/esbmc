@@ -676,6 +676,14 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
      "treats reach_error()/__VERIFIER_error() as error sentinels"},
+    {"dead-code-check",
+     NULL,
+     "Detect provably-unreachable conditional branch directions (if/loop "
+     "guards) and report them as advisory CWE-561 findings (note level in "
+     "SARIF). Default off; does not flip the verdict to FAILED. Scope is branch "
+     "directions only: statements after an unconditional return/abort and "
+     "unreferenced functions are not analysed. Findings are bounded by the "
+     "unwinding depth (use --unwind for programs with loops)"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
