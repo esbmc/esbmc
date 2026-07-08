@@ -144,5 +144,22 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  // va_start/va_copy are kept in the GOTO program purely so that symex can
+  // track which va_lists have been initialised; a va_arg on an unstarted
+  // va_list is then flagged in symex_va_arg. The vararg values themselves
+  // are resolved positionally via the frame's va_cursor.
+  if (symname == "c:@F@__builtin_va_start" && !func_call.operands.empty())
+  {
+    va_list_mark_started(func_call.operands[0], true);
+    return true;
+  }
+
+  if (symname == "c:@F@__builtin_va_copy" && func_call.operands.size() == 2)
+  {
+    va_list_mark_started(
+      func_call.operands[0], va_list_is_started(func_call.operands[1]));
+    return true;
+  }
+
   return false;
 }

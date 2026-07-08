@@ -7,7 +7,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   remove_no_op.cpp goto_convert_functions.cpp remove_unreachable.cpp
   exception_typeid.cpp exception_globals.cpp remove_exceptions.cpp
   builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp
-  add_race_assertions.cpp rw_set.cpp goto_binary_reader.cpp static_analysis.cpp
+  add_race_assertions.cpp add_restrict_assertions.cpp rw_set.cpp goto_binary_reader.cpp static_analysis.cpp
   goto_program_serialization.cpp goto_function_serialization.cpp
   read_bin_goto_object.cpp read_cbmc_goto_object.cpp cbmc_adapter.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp goto_loop_simplify.cpp write_goto_binary.cpp

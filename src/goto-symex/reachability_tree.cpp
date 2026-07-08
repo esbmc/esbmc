@@ -1,5 +1,7 @@
+#include <goto-programs/goto_functions.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
+#include <irep2/irep2_expr.h>
 #include <util/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
@@ -34,6 +36,268 @@ reachability_treet::reachability_treet(
   por = !options.get_bool_option("no-por");
   main_thread_ended = false;
   target_template = std::move(target);
+
+  readonly_global_opt =
+    options.get_bool_option("cswitch-skip-readonly-globals");
+  scan_program_writes();
+}
+
+/* Insert `name` into `out` if it names a storage-bearing user global. */
+static void add_if_global(
+  const irep_idt &name,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  const symbolt *s = ns.lookup(name);
+  if (!s || is_esbmc_internal_symbol(name.as_string()))
+    return;
+  if (s->static_lifetime || s->get_type().is_dynamic_set())
+    out.insert(name);
+}
+
+/* Walk expression e; any symbol2t that refers to a storage-bearing global is
+ * inserted into `out`. A dereference seen as a (sub-)target flips
+ * indirect_write: we cannot name the writee, so every address-taken global
+ * must thereafter be treated as possibly written (see may_be_written). */
+static void collect_write_targets(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out,
+  bool &indirect_write)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_dereference2t(e))
+  {
+    indirect_write = true;
+    return;
+  }
+
+  if (is_index2t(e))
+    return collect_write_targets(
+      to_index2t(e).source_value, ns, out, indirect_write);
+  if (is_member2t(e))
+    return collect_write_targets(
+      to_member2t(e).source_value, ns, out, indirect_write);
+  if (is_typecast2t(e))
+    return collect_write_targets(
+      to_typecast2t(e).from, ns, out, indirect_write);
+
+  if (is_symbol2t(e))
+    return add_if_global(to_symbol2t(e).thename, ns, out);
+
+  e->foreach_operand([&](const expr2tc &sub) {
+    collect_write_targets(sub, ns, out, indirect_write);
+  });
+}
+
+/* Descend an lvalue to the named global it denotes, stopping at a dereference
+ * (the address of `*p` exposes no statically-named global). */
+static void collect_object_globals(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(e) || is_dereference2t(e))
+    return;
+  if (is_index2t(e))
+    return collect_object_globals(to_index2t(e).source_value, ns, out);
+  if (is_member2t(e))
+    return collect_object_globals(to_member2t(e).source_value, ns, out);
+  if (is_typecast2t(e))
+    return collect_object_globals(to_typecast2t(e).from, ns, out);
+  if (is_symbol2t(e))
+    add_if_global(to_symbol2t(e).thename, ns, out);
+}
+
+/* Walk e; for every address_of(obj) sub-expression record the named global
+ * whose address escapes. ESBMC lowers all array/function decay into an
+ * explicit address_of, so this captures every way a global can enter a
+ * pointer's value set. */
+static void collect_address_taken(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_address_of2t(e))
+    collect_object_globals(to_address_of2t(e).ptr_obj, ns, out);
+
+  e->foreach_operand(
+    [&](const expr2tc &sub) { collect_address_taken(sub, ns, out); });
+}
+
+/* Name of the function a FUNCTION_CALL targets, or an empty id when the callee
+ * is reached through a pointer (no statically-known name). */
+static irep_idt called_function_name(const goto_programt::instructiont &ins)
+{
+  const code_function_call2t &c = to_code_function_call2t(ins.code);
+  if (is_symbol2t(c.function))
+    return to_symbol2t(c.function).thename;
+  return irep_idt();
+}
+
+/* Set of functions that may, directly or transitively, spawn a thread (i.e.
+ * reach a call to the __ESBMC_spawn_thread intrinsic, which pthread_create
+ * lowers to). A call to any of these is the point past which more than one
+ * thread may be live. */
+static std::unordered_set<irep_idt, irep_id_hash>
+compute_thread_spawners(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::unordered_set<irep_idt, irep_id_hash> spawners;
+  std::unordered_map<
+    irep_idt,
+    std::unordered_set<irep_idt, irep_id_hash>,
+    irep_id_hash>
+    callers;
+
+  forall_goto_functions (f_it, goto_functions)
+  {
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      if (!ins.is_function_call())
+        continue;
+      const irep_idt callee = called_function_name(ins);
+      if (callee.empty())
+        continue;
+      if (callee == spawn_intrinsic)
+        spawners.insert(f_it->first);
+      callers[callee].insert(f_it->first);
+    }
+  }
+
+  // The intrinsic itself is the spawn point, so a direct call to it (a body
+  // that bypasses the pthread_create wrapper) is recognised too.
+  spawners.insert(spawn_intrinsic);
+
+  // Propagate "may spawn" up the call graph to a fixpoint: any function that
+  // calls a spawner is itself a spawner.
+  std::vector<irep_idt> work(spawners.begin(), spawners.end());
+  while (!work.empty())
+  {
+    const irep_idt f = work.back();
+    work.pop_back();
+    auto it = callers.find(f);
+    if (it == callers.end())
+      continue;
+    for (const auto &caller : it->second)
+      if (spawners.insert(caller).second)
+        work.push_back(caller);
+  }
+  return spawners;
+}
+
+/* Instructions of `body` that may execute after a thread has been spawned:
+ * every instruction reachable in the CFG (following gotos and loop back-edges)
+ * from a call to a thread-spawning function, including the spawning call
+ * itself. A write that lies outside this set runs while `body` is still the
+ * only live thread, so it cannot race with any other thread. */
+static std::unordered_set<const goto_programt::instructiont *>
+instructions_after_spawn(
+  const goto_programt &body,
+  const std::unordered_set<irep_idt, irep_id_hash> &spawners)
+{
+  std::unordered_set<const goto_programt::instructiont *> reachable;
+  std::vector<goto_programt::const_targett> work;
+
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+    if (
+      it->is_function_call() && spawners.count(called_function_name(*it)) != 0)
+      work.push_back(it);
+
+  while (!work.empty())
+  {
+    const goto_programt::const_targett cur = work.back();
+    work.pop_back();
+    if (cur == body.instructions.end() || !reachable.insert(&*cur).second)
+      continue;
+    goto_programt::const_targetst succs;
+    body.get_successors(cur, succs);
+    for (const auto &s : succs)
+      work.push_back(s);
+  }
+  return reachable;
+}
+
+void reachability_treet::scan_program_writes()
+{
+  if (!readonly_global_opt)
+    return;
+
+  // Functions whose invocation may bring a second thread to life.
+  const std::unordered_set<irep_idt, irep_id_hash> spawners =
+    compute_thread_spawners(goto_functions);
+
+  // The entry function runs as the main thread. Writes it performs strictly
+  // before it spawns the first thread are single-threaded and cannot race, so
+  // they must not mark their target as written (e.g. `global = 100;` issued in
+  // main before pthread_create leaves `global` read-only for the other
+  // threads).
+  const irep_idt entry =
+    "c:@F@" + (config.main.empty() ? std::string("main") : config.main);
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    if (f_it->first == "__ESBMC_main")
+      continue;
+
+    // For the entry function, restrict write collection to the instructions
+    // that may run after the first spawn. Only engaged when the entry actually
+    // spawns a thread itself; otherwise every write is collected, keeping the
+    // analysis sound (a never-spawning entry means either no threads exist or
+    // they are created down a path we conservatively treat as concurrent).
+    std::unordered_set<const goto_programt::instructiont *> concurrent;
+    bool filter_entry = false;
+    if (f_it->first == entry)
+    {
+      concurrent = instructions_after_spawn(f_it->second.body, spawners);
+      filter_entry = !concurrent.empty();
+    }
+
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      if (is_nil_expr(ins.code))
+        continue;
+
+      if (filter_entry && concurrent.count(&ins) == 0)
+        continue;
+
+      if (ins.is_assign())
+      {
+        const code_assign2t &a = to_code_assign2t(ins.code);
+        collect_write_targets(
+          a.target, ns, ever_written_globals, any_indirect_write);
+      }
+      else if (ins.is_function_call())
+      {
+        const code_function_call2t &c = to_code_function_call2t(ins.code);
+        if (!is_nil_expr(c.ret))
+          collect_write_targets(
+            c.ret, ns, ever_written_globals, any_indirect_write);
+        // Writes via pointer arguments are picked up when the callee body is
+        // scanned (every function body participates in this loop).
+      }
+    }
+  }
+
+  // Second pass: record every global whose address is taken anywhere in the
+  // program, scanning all functions — including __ESBMC_main, where file-scope
+  // initialisers such as `int *gp = &g;` live. Only an address-taken global
+  // can be the target of a write through an unresolved pointer, so this lets
+  // never-address-taken globals stay optimisable even when any_indirect_write.
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      collect_address_taken(ins.code, ns, address_taken_globals);
+      collect_address_taken(ins.guard, ns, address_taken_globals);
+    }
+  }
 }
 
 void reachability_treet::setup_for_new_explore()

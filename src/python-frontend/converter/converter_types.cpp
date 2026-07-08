@@ -68,27 +68,26 @@ exprt python_converter::wrap_in_optional(
 {
   assert(optional_type.is_struct());
   const struct_typet &struct_type = to_struct_type(optional_type);
+  const bool is_none = value.type() == none_type();
 
-  // Create struct expression
-  struct_exprt optional_value(struct_type);
+  // V.3: build the optional value { is_none, value } in IREP2, back-migrating
+  // once. Both members are already-built value exprs (a bool literal and either
+  // the wrapped value or a zero of the field type), so a constant_struct2t over
+  // the migrated operands round-trips exactly through migrate. Re-attach the
+  // full struct type afterwards: migrate_type drops the frontend-only
+  // #python_aggregate_kind="optional" marker that later dispatch reads with no
+  // tag fallback -- mirroring build_shape_tuple_expr / get_tuple_expr.
+  expr2tc value_member;
+  migrate_expr(
+    is_none ? gen_zero(struct_type.components()[1].type()) : value,
+    value_member);
 
-  // Set is_none field based on whether value is None
-  exprt is_none_value;
-  if (value.type() == none_type())
-  {
-    is_none_value = migrate_expr_back(gen_true_expr()); // V.3
-    // Set value field to zero for None case
-    optional_value.operands().push_back(is_none_value);
-    optional_value.operands().push_back(
-      gen_zero(struct_type.components()[1].type()));
-  }
-  else
-  {
-    is_none_value = migrate_expr_back(gen_false_expr()); // V.3
-    optional_value.operands().push_back(is_none_value);
-    optional_value.operands().push_back(value);
-  }
+  std::vector<expr2tc> members{
+    is_none ? gen_true_expr() : gen_false_expr(), std::move(value_member)};
 
+  exprt optional_value =
+    migrate_expr_back(constant_struct2tc(migrate_type(struct_type), members));
+  optional_value.type() = struct_type;
   return optional_value;
 }
 

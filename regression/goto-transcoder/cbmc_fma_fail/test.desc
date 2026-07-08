@@ -1,0 +1,4 @@
+CORE
+cbmc_fma_fail.goto
+--binary
+^VERIFICATION FAILED$

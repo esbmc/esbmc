@@ -1,0 +1,7 @@
+THOROUGH
+main.py
+--assertion-coverage-claims
+FAILED: 'n must be positive at file .*main.py line 2
+FAILED: 'n < 100 at file .*main.py line 3
+Assertion Instances Coverage: 100%
+^VERIFICATION FAILED$
