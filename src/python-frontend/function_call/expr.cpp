@@ -4649,29 +4649,36 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         const std::string &func_name = function_id_.get_function();
         locationt location = converter_.get_location_from_decl(call_);
 
-        // A method call `recv.foo()` whose receiver type has no such method is a
-        // Python AttributeError, not an unsupported free function. Raise a
-        // catchable AttributeError (issue #5904) so it can escape main()
-        // (uncaught) or be suppressed by `except AttributeError`. Bare
-        // free-function calls (`func()`, a Name) keep the generic
-        // unsupported-function stub below.
+        // A method call `recv.foo()` on a receiver of a *known* type that has
+        // no such method is a Python AttributeError, not an unsupported free
+        // function. Raise a catchable AttributeError (issue #5904) so it can
+        // escape main() (uncaught) or be suppressed by `except AttributeError`.
+        // When the receiver's type is unknown (an imported module such as
+        // `random.choice(...)`, or an unannotated value) we cannot prove the
+        // attribute is missing — the module/object may genuinely provide it and
+        // ESBMC simply does not model it — so fall through to the generic
+        // unsupported-function stub. Bare free-function calls (`func()`, a Name)
+        // likewise keep that stub.
         if (
           call_.contains("func") && call_["func"].is_object() &&
           call_["func"].value("_type", "") == "Attribute")
         {
           const std::string recv = get_object_name();
-          std::string recv_type = type_handler_.get_var_type(recv);
-          if (recv_type.empty())
-            recv_type = "object";
-          // Return the cpp-throw directly (not a nondet placeholder) so it
-          // propagates through nested expression contexts via
-          // contains_cpp_throw, matching how attribute access and the binop
-          // TypeError raise are consumed.
-          exprt raise = converter_.get_exception_handler().gen_exception_raise(
-            "AttributeError",
-            "'" + recv_type + "' object has no attribute '" + func_name + "'");
-          raise.location() = location;
-          return raise;
+          const std::string recv_type = type_handler_.get_var_type(recv);
+          if (!recv_type.empty())
+          {
+            // Return the cpp-throw directly (not a nondet placeholder) so it
+            // propagates through nested expression contexts via
+            // contains_cpp_throw, matching how attribute access and the binop
+            // TypeError raise are consumed.
+            exprt raise =
+              converter_.get_exception_handler().gen_exception_raise(
+                "AttributeError",
+                "'" + recv_type + "' object has no attribute '" + func_name +
+                  "'");
+            raise.location() = location;
+            return raise;
+          }
         }
 
         log_warning(
