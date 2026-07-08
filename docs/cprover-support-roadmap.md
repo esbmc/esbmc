@@ -89,6 +89,7 @@ and the symbol/function table layout.
 | Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Type rewrite for `c_bit_field` (bitfield members) → underlying bv narrowed to the bitfield width + `#bitfield`/`subtype` (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -171,6 +172,25 @@ pins its type from elsewhere** (`int *p;` followed by a later assignment), which
 enough that it was previously undiscovered simply because nothing had exercised a
 `malloc`-then-typed-write pattern far enough to notice the pointer was void* the whole
 time. Fixed by mirroring the `array` branch's direct assignment exactly.
+
+**Bitfield type `c_bit_field` — ✅ fixed.** CBMC types a bitfield struct member as a
+`c_bit_field` type — `{width: N; sub[0]: <underlying integer bv of width W>}` — which
+`migrate_type` has no case for, so any struct with a bitfield member aborted with
+`ERROR: c_bit_field`. ESBMC has no distinct bitfield type node: its native C frontend
+(`clang_c_convert.cpp::get_bitfield_type`) represents `unsigned a:N` as the *underlying* bv
+kind narrowed to width `N`, tagged `#bitfield`, carrying the full underlying type as its
+`subtype`; `migrate_type` then yields an `N`-bit bv. `fix_type` now rewrites `c_bit_field`
+into exactly that shape. The one subtlety is `_Bool a:1`: `migrate` reads a `#bitfield`
+**bool** as an *unsigned* `N`-bit value (`get_uint_type`), but `fix_type` otherwise maps
+CBMC's `c_bool` to `signedbv` — and a 1-bit *signed* bv reads value `1` back as `-1`, a
+verdict divergence. The rewrite detects a bool underlying before that mapping and keeps the
+result `bool`. Verdict parity with CBMC, dual-solver, across unsigned/signed fields,
+width-truncation (`s.a = 9` in a 3-bit field ⇒ `1`), signed wrap (`int a:3`, `5 ⇒ -3`),
+`_Bool:1`, and multi-field packing (`cbmc_bitfield`, `cbmc_bitfield_signed`,
+`cbmc_bitfield_bool`, `cbmc_bitfield_fail`). Bitfield members of a struct **defined inside a
+function body** additionally trip the pre-existing `struct_tag/union_tag should have been
+resolved` gap (§4.3 anon/tag resolution) — orthogonal to this fix and still open; the tests
+use file-scope struct definitions.
 
 ### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
 `fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
