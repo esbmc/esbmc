@@ -167,6 +167,44 @@ bool python_converter::function_has_missing_return_paths(
   return true; // No explicit return found
 }
 
+bool python_converter::function_is_generator(
+  const nlohmann::json &function_node)
+{
+  // A function is a generator iff its own body contains a `yield` / `yield from`
+  // expression. Recurse through nested statement bodies but stop at nested
+  // function/lambda scopes: a yield inside those belongs to the inner
+  // generator, not this one.
+  std::function<bool(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &node) -> bool {
+    if (node.is_object())
+    {
+      auto it = node.find("_type");
+      if (it != node.end() && it->is_string())
+      {
+        const std::string &kind = it->get_ref<const std::string &>();
+        if (kind == "Yield" || kind == "YieldFrom")
+          return true;
+        if (
+          kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+          kind == "Lambda")
+          return false;
+      }
+      for (const auto &child : node.items())
+        if (scan(child.value()))
+          return true;
+    }
+    else if (node.is_array())
+    {
+      for (const auto &child : node)
+        if (scan(child))
+          return true;
+    }
+    return false;
+  };
+
+  return scan(function_node["body"]);
+}
+
 TypeFlags
 python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
@@ -1436,9 +1474,12 @@ void python_converter::get_function_definition(
   // a defined None value rather than a nondet slot — matching the already-
   // correct `return None` path (issue #5914). Constructors ("constructor"
   // return type) and library/import models, whose void calls exist only for
-  // side effects, are left as-is.
+  // side effects, are left as-is. Generators (functions containing `yield`)
+  // also have an empty return type here but do NOT implicitly return None —
+  // calling one yields a generator object — so they must not be promoted.
   if (
-    type.return_type().is_empty() && !is_loading_models && !is_importing_module)
+    type.return_type().is_empty() && !is_loading_models &&
+    !is_importing_module && !function_is_generator(function_node))
   {
     type.return_type() = none_type();
     added_symbol->set_type(type);
