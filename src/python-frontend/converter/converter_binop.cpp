@@ -758,6 +758,17 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
+    // A function-returned aggregate arrives as a raw code_function_callt (or a
+    // side-effect), not an addressable value. Both the dict and tuple handlers
+    // build member accesses over it (`.keys`, `.element_i`) and migrate them to
+    // IREP2, which trips the member2t struct assertion (#5893). Materialise it
+    // into a temporary struct lvalue first, exactly as the unpacking/subscript
+    // paths do. prepare_rhs_for_unpacking is type-agnostic — it materialises a
+    // side-effect into a temp of rhs.type() — so it serves both branches.
+    if ((rhs.is_function_call() || rhs.id() == "sideeffect") && current_block)
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+
     // Recognise a dict by its struct tag as well as its aggregate-kind marker.
     // The kind irep can be dropped while a dict value flows through type
     // inference (e.g. a dict comprehension result), but the `__python_dict__`
