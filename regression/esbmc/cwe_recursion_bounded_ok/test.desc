@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 8
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*CWE)[\s\S]*\Z
+\A(?![\s\S]*recursion unwinding assertion)[\s\S]*\Z

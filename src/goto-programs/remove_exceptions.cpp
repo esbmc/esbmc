@@ -13,6 +13,8 @@
 #include <util/message.h>
 #include <irep2/irep2_utils.h>
 
+#include <algorithm>
+
 namespace
 {
 const irep_idt ellipsis_id = "ellipsis";
@@ -129,7 +131,18 @@ public:
         {
           const code_cpp_throw2t &t = to_code_cpp_throw2t(ins.code);
           if (!is_nil_expr(t.operand))
+          {
             registry.register_chain(t.exception_list);
+            // Record the dynamic type (front) for the typed uncaught-exception
+            // partition; dedup while preserving first-seen order.
+            const irep_idt &dyn = t.exception_list.front();
+            if (
+              std::find(
+                thrown_dynamic_types_.begin(),
+                thrown_dynamic_types_.end(),
+                dyn) == thrown_dynamic_types_.end())
+              thrown_dynamic_types_.push_back(dyn);
+          }
         }
         else if (ins.type == FUNCTION_CALL)
         {
@@ -384,6 +397,13 @@ private:
   // it silently.
   bool thread_entry_unresolved = false;
   unsigned storage_counter = 0;
+  // Dynamic types of every real (operand-carrying) throw in the program, in
+  // first-seen order. Used to partition the entry-epilogue uncaught-exception
+  // property by type so the verdict names the escaping exception. This is the
+  // small, exact set of types that can be in flight — unlike the registry's
+  // name_to_id, which the exception_typeidt constructor seeds from *every* type
+  // symbol, not just exception types.
+  std::vector<irep_idt> thrown_dynamic_types_;
 
   expr2tc mk_global(const char *id)
   {
@@ -899,16 +919,19 @@ private:
 
     if (spec.kind == exception_specificationt::kindt::dynamic)
       build_dynamic_spec_check(body, epilogue, spec.allowed_types, is_entry);
-    else if (
-      is_entry || spec.kind == exception_specificationt::kindt::non_throwing)
+    else if (is_entry)
+      // Any escape at the whole-program entry is uncaught; partition the
+      // property by the escaping type so the verdict names it.
+      emit_uncaught_checks(
+        body, std::next(epilogue), epilogue->location, epilogue->function);
+    else if (spec.kind == exception_specificationt::kindt::non_throwing)
       emit_terminate(
         body,
         std::next(epilogue),
         equality2tc(thrown, gen_false_expr()),
         epilogue->location,
         epilogue->function,
-        is_entry ? exception_globals::terminate_reason_uncaught
-                 : exception_globals::terminate_reason_noexcept);
+        exception_globals::terminate_reason_noexcept);
 
     body.update();
   }
@@ -1107,15 +1130,18 @@ private:
   /// and is unaffected. @p skip_cond is the condition under which execution
   /// continues past the point without terminating (nil = always terminate); the
   /// assertion is assert(skip_cond), or assert(false) when skip_cond is nil. @p
-  /// reason selects the diagnostic comment. Returns the inserted instruction so
-  /// callers can target it with a goto.
+  /// reason selects the diagnostic comment, unless @p comment_override is
+  /// non-empty, in which case it is used verbatim (used by the typed
+  /// uncaught-exception partition to name the escaping type). Returns the
+  /// inserted instruction so callers can target it with a goto.
   goto_programt::targett emit_terminate(
     goto_programt &body,
     goto_programt::targett before,
     const expr2tc &skip_cond,
     const locationt &loc,
     const irep_idt &fn,
-    exception_globals::terminate_reasont reason)
+    exception_globals::terminate_reasont reason,
+    const std::string &comment_override = {})
   {
     auto setmeta = [&](goto_programt::targett n) {
       n->location = loc;
@@ -1138,6 +1164,11 @@ private:
       is_nil_expr(skip_cond) ? gen_false_expr() : skip_cond);
     setmeta(first);
     first->location.property("exception");
+    if (!comment_override.empty())
+    {
+      first->location.comment(comment_override);
+      return first;
+    }
     switch (reason)
     {
     case exception_globals::terminate_reason_uncaught:
@@ -1157,6 +1188,65 @@ private:
       break;
     }
     return first;
+  }
+
+  /// The uncaught-exception check at a program-entry epilogue, partitioned by
+  /// the escaping exception's dynamic type. Each throwable type T gets its own
+  /// property `assert(!(thrown && typeid == id(T)))` with a comment naming T, so
+  /// a distinct verdict ("uncaught exception: IndexError") surfaces per family.
+  /// A final residual property covers any in-flight typeid outside that set,
+  /// keeping the partition complete: the conjunction of all skip-conditions is
+  /// exactly `thrown == false`, identical to the single generic assert it
+  /// replaces. The properties are inserted before @p before in program order;
+  /// returns the head (first property), so a caller can target it with a goto.
+  goto_programt::targett emit_uncaught_checks(
+    goto_programt &body,
+    goto_programt::targett before,
+    const locationt &loc,
+    const irep_idt &fn)
+  {
+    auto typeid_eq = [&](const irep_idt &name) {
+      return equality2tc(
+        type_id, constant_int2tc(type_id->type, BigInt(registry.id_of(name))));
+    };
+
+    // Residual guard: typeid matches one of the known throwable types. A state
+    // with no known type in flight fails only the residual "uncaught exception".
+    expr2tc known_disj;
+    goto_programt::targett head = before;
+    bool have_head = false;
+    for (const irep_idt &name : thrown_dynamic_types_)
+    {
+      expr2tc eq = typeid_eq(name);
+      known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+
+      // assert(!(thrown && typeid == id(T))) — fires iff T escapes uncaught.
+      auto t = emit_terminate(
+        body,
+        before,
+        not2tc(and2tc(thrown, eq)),
+        loc,
+        fn,
+        exception_globals::terminate_reason_uncaught,
+        "uncaught exception: " + name.as_string());
+      if (!have_head)
+      {
+        head = t;
+        have_head = true;
+      }
+    }
+
+    // Residual: assert(thrown == false || typeid ∈ known). With no known types
+    // this degrades to the original assert(thrown == false).
+    expr2tc not_thrown = equality2tc(thrown, gen_false_expr());
+    auto residual = emit_terminate(
+      body,
+      before,
+      is_nil_expr(known_disj) ? not_thrown : or2tc(not_thrown, known_disj),
+      loc,
+      fn,
+      exception_globals::terminate_reason_uncaught);
+    return have_head ? head : residual;
   }
 
   /// Enforce a dynamic exception specification throw(allowed...) (including the
@@ -1194,13 +1284,7 @@ private:
     // of returning it to a (non-existent) caller.
     goto_programt::targett ret = last;
     if (is_entry)
-      ret = emit_terminate(
-        body,
-        last,
-        not_thrown(),
-        loc,
-        fn,
-        exception_globals::terminate_reason_uncaught);
+      ret = emit_uncaught_checks(body, last, loc, fn);
 
     // The violation point: always terminate (reached only on a genuine
     // disallowed escape, including the handler returning without throwing).

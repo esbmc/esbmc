@@ -85,6 +85,10 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
+| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
+| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -135,6 +139,25 @@ CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the orig
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
 
+**Wide-constant truncation (≤64 bits) — ✅ fixed.** `fix_expression`'s constant rewrite
+called `hex_to_bin32`, which — mirroring the Rust reference's `format!("{:032b}", …)` —
+padded every converted constant to **32** bits regardless of the constant's own type width.
+CBMC stores integer constant values as hex strings, so a 64-bit value like `-5000000000LL`
+(hex `12A05F200`) was emitted as a ≤33-char binary string and then silently interpreted at
+32 bits: `__CPROVER_assume(x == -5000000000LL); assert(x < 0)` returned a **false `FAILED`**
+(x truncated to its unsigned low 32 bits, `+3589934592`) where CBMC says `SUCCESSFUL` — a
+soundness divergence, worse than a crash. Fixed by making the helper width-aware
+(`hex_to_bin(val, width)`, `width` read from the constant's own `signedbv`/`unsignedbv`
+type) so the binary string matches the type width. Surgical: the `!= 32` guard that passes
+through already-binary 32-char strings is unchanged, and 32-bit constants still pad to 32
+(byte-identical to before); only wider types change. Because the byte-identical goto-transcoder
+parity reference shares the same 32-bit bug, this fix **intentionally diverges** from that
+reference on wide constants — CBMC-**verdict** parity (roadmap §6, the end-state oracle) is the
+correctness signal here, and the full `goto-transcoder` verdict suite still passes. Values
+needing >64 bits (128-bit, above) remain out of scope and are now returned unchanged rather
+than crashing `std::stoull`. Tests `cbmc_wide_const` (the soundness repro), `cbmc_wide_const_fail`,
+`cbmc_wide_uconst`, dual-solver.
+
 **Pointer subtype double-wrap — ✅ fixed.** Found while chasing an unrelated `malloc`
 verdict mismatch (§4.8): `fix_type`'s `pointer` branch, unlike the near-identical `array`
 branch three lines below it, wrapped the pointed-to type's positional sub in an
@@ -168,11 +191,43 @@ limitation). `same_object` was checked and needs no change — CBMC's typechecke
 at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
 as a `same_object`/`same-object` node in the first place.
 
+**Unary bit-builtins `popcount`/`bswap` — ✅ landed.** `__builtin_popcount` and
+`__builtin_bswap32` lower to CBMC `popcount`/`bswap` ireps, both of which `migrate_expr`
+already handles via `op0()` — but neither was in `fix_expression`'s operand-wrap set, so
+CBMC's raw operands stayed in `get_sub()`, `op0()` read an empty operand list, and the
+verdict was garbage/crash (the exact `isnan`/`pointer_offset` failure shape). Fixed by adding
+`popcount`/`bswap` to the wrap-set. Verdict parity both directions, dual-solver
+(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`). Still open in the same family:
+`__builtin_clz`/`ctz` reach the adapter as an id `migrate_expr` has no handler for at all
+(aborts with `migrate expr failed`), so they need a migrate handler + irep2 node, not just a
+wrap-set entry — tracked separately.
+**Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
+as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
+counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
+adapter rewrite (`→ "="`); `ieee_float_notequal` had **no** `migrate_expr` handler, so any
+CBMC binary containing a float `!=` **aborted** with `migrate expr failed` — including every
+libm model that guards on `x != x` (e.g. `exp`'s `isnan`/`isfinite` inline checks, which is
+how it first surfaced). Fixed in `fix_expression` by rewriting `ieee_float_notequal` to
+ESBMC's native `notequal`, whose floatbv SMT encoding already implements IEEE semantics
+(verified: `float n=0.0f/0.0f; assert(n != n);` verifies SUCCESSFUL natively) — so the
+rewrite is faithful, not just crash-avoiding. Mirrors the `ieee_float_equal → "="` line
+exactly; `notequal` is already in the operand-wrap set. Verdict parity tested both directions
+(`cbmc_float_ne` SUCCESSFUL / `cbmc_float_ne_fail` FAILED) plus a NaN case that pins the IEEE
+semantics rather than mere crash-avoidance (`cbmc_float_ne_nan`: `n != n` on `n = 0.0f/0.0f`
+verifies SUCCESSFUL — a bitwise-equality `notequal` would report FAILED here), dual-solver
+(Bitwuzla + Z3).
+
 Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
 rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
 audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
 gap-by-gap discovery.
+
+Confirmed **not** a gap: the `printf` family. CBMC inlines its own
+`<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
+`printf` reaches the adapter as a *bodied* function, not a bodyless external — ESBMC loads
+it and matches CBMC's verdict with no rewrite. §4.8's speculation that it shares the
+bodyless-external shape does not hold for CBMC 6.8.0.
 
 **Float-classification predicates, investigated by direct testing against real CBMC
 binaries.** `math.h`'s `isnan`/`isinf`/`isnormal` lower (via `__builtin_isnan` etc.) to
@@ -339,6 +394,19 @@ double-free also verified against CBMC.
 `abs` expr — the same shape `clang_c_adjust_expr.cpp` builds for a syntactically-recognised
 call; `migrate_expr`'s abs handler reads `op0()`, so `abs` is added to `fix_expression`'s
 operand-wrap set for the argument to reach it.
+
+**Integer abs family `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_` spellings) — ✅ landed.**
+The integer counterpart of `fabsf`: CBMC emits these as bodyless `FUNCTION_CALL` externals
+too, so ESBMC returned nondet and a valid `abs(-7)==7` reported `FAILED` where CBMC says
+`SUCCESSFUL`. The native `abs` expr is type-agnostic (`build_unary_fp_rhs` takes the lhs
+type), so the same rewrite the float family uses covers integer abs unchanged — just extend
+the callee match. Tests `cbmc_abs`/`_fail` (int) and `cbmc_llabs` (64-bit-typed), dual-solver.
+While building these, discovered a **pre-existing, abs-independent 64-bit-constant truncation
+bug**: `__CPROVER_assume(x == -5000000000LL); assert(x < 0)` returns `FAILED` under ESBMC vs
+`SUCCESSFUL` under CBMC — the 64-bit constant is truncated to its low 32 bits and
+zero-extended (`fix_expression`'s constant rewrite / `hex_to_bin32` is 32-bit-only; roadmap
+§4.3, §7). The abs tests deliberately use values inside 2^31 to avoid conflating the two;
+the constant bug is tracked as a separate follow-up.
 
 **`realloc` — ✅ landed (PR #5794).** CBMC emits `realloc` as a *bodyless* `FUNCTION_CALL`
 external, so ESBMC returned nondet and a *valid* realloc use reported `FAILED` where CBMC

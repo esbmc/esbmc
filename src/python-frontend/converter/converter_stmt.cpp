@@ -50,6 +50,22 @@ bool is_py_string_type(const typet &t)
   return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
 }
 
+// True when `expr` (or any of its operands) is a `cpp-throw` marker, i.e. a
+// probe build hit an error path instead of producing a usable value.
+bool contains_cpp_throw(const exprt &expr)
+{
+  if (expr.statement() == "cpp-throw")
+    return true;
+
+  for (const auto &op : expr.operands())
+  {
+    if (contains_cpp_throw(op))
+      return true;
+  }
+
+  return false;
+}
+
 bool is_py_numeric_scalar_type(const typet &t)
 {
   if (t.is_floatbv() || t.is_bool())
@@ -999,6 +1015,75 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
+typet python_converter::resolve_any_subscript_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (
+    current_type != any_type() || ast_node["value"].is_null() ||
+    ast_node["value"].value("_type", std::string()) != "Subscript")
+    return current_type;
+
+  // Evaluate the actual subscript result before deciding anything: a fully
+  // scalar access (`a[0, 0, 1]`) or an out-of-range/rank-mismatched index
+  // must fall through unchanged (resp. propagate its own real error) rather
+  // than be pre-empted by the 3-D source check below, which only applies
+  // once we know the result itself is an array.
+  exprt subscript_probe = get_expr(ast_node["value"]);
+  if (contains_cpp_throw(subscript_probe))
+    return current_type;
+
+  const typet probed_type = ns.follow(subscript_probe.type());
+  if (!probed_type.is_array())
+    return current_type;
+
+  // Reject a source array of more than 2 dimensions: n-D indexing is out of
+  // scope, and the resulting slice's nesting depth alone can't be told apart
+  // from a legitimate 2-D row/column/fancy/mask selection (both are a
+  // 2-level nested array), so the check has to look at the source instead.
+  const nlohmann::json &source_node = ast_node["value"]["value"];
+  exprt source_probe = get_expr(source_node);
+  if (!contains_cpp_throw(source_probe))
+  {
+    std::size_t source_depth = 0;
+    typet source_type = ns.follow(source_probe.type());
+    // A numpy array crossing a function boundary is pointer-to-array (e.g.
+    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
+    // walk below still sees through to the real dimensionality instead of
+    // stopping at 0 and silently letting a 3-D+ source slip past.
+    if (source_type.is_pointer())
+      source_type = ns.follow(source_type.subtype());
+    while (source_type.is_array())
+    {
+      ++source_depth;
+      source_type = ns.follow(to_array_type(source_type).subtype());
+    }
+    if (source_depth > 2)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: assigning a 3-D+ array-typed subscript result to "
+             "a variable is not supported";
+      const locationt loc = get_location_from_decl(ast_node);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // A materialized helper result (fancy/mask/column selection) is already a
+  // plain symbol and copies via a normal whole-array code_assignt; a bare
+  // `a[i]` chain is a raw index expression instead, which the final store
+  // must copy element by element (see the flag's doc comment).
+  any_subscript_array_needs_copy_ = !subscript_probe.is_symbol();
+
+  // Reuse this exact conversion as the RHS later instead of converting the
+  // same Subscript node again from scratch.
+  cached_any_subscript_rhs_ = subscript_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
+}
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -1797,6 +1882,8 @@ void python_converter::get_var_assign(
   }
 
   current_element_type = element_type;
+  any_subscript_array_needs_copy_ = false;
+  has_cached_any_subscript_rhs_ = false;
   typet annotated_type = element_type;
   std::vector<typet> annotation_types;
   bool can_emit_annotation_check = false;
@@ -1808,6 +1895,12 @@ void python_converter::get_var_assign(
   symbolt *lhs_symbol = nullptr;
   locationt location_begin;
   symbol_id sid = create_symbol_id();
+  // Set wherever a `code_declt` is already emitted for `lhs_symbol` during
+  // symbol creation below, so the any_subscript_array_needs_copy_ copy-loop
+  // further down (which needs its own decl when nothing declared the symbol
+  // yet, e.g. the plain-Assign path) does not emit a second one for the same
+  // symbol.
+  bool lhs_already_declared = false;
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
@@ -2097,6 +2190,9 @@ void python_converter::get_var_assign(
       current_element_type = rhs.type();
     }
 
+    current_element_type =
+      resolve_any_subscript_array_type(ast_node, current_element_type);
+
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
     annotation_location = location_begin;
@@ -2134,6 +2230,7 @@ void python_converter::get_var_assign(
         code_declt decl(symbol_expr(*lhs_symbol));
         decl.location() = location_begin;
         target_block.copy_to_operands(decl);
+        lhs_already_declared = true;
       }
     }
 
@@ -2222,6 +2319,9 @@ void python_converter::get_var_assign(
         ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
         !current_element_type.is_empty())
       {
+        current_element_type =
+          resolve_any_subscript_array_type(ast_node, current_element_type);
+
         std::string module_name = location_begin.get_file().as_string();
         symbolt symbol = create_symbol(
           module_name,
@@ -2289,15 +2389,27 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
-    is_converting_rhs = true;
-
-    if (lhs_symbol)
-      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+    if (has_cached_any_subscript_rhs_)
+    {
+      // Already converted once by resolve_any_subscript_array_type's type
+      // probe; reuse it rather than converting the same Subscript node (and
+      // re-emitting any temporaries it built) a second time.
+      rhs = cached_any_subscript_rhs_;
+      has_cached_any_subscript_rhs_ = false;
+    }
     else
-      rhs = get_expr(ast_node["value"]);
+    {
+      is_converting_rhs = true;
+
+      if (lhs_symbol)
+        rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+      else
+        rhs = get_expr(ast_node["value"]);
+
+      is_converting_rhs = false;
+    }
 
     has_value = true;
-    is_converting_rhs = false;
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(ast_node, lhs_type, rhs);
@@ -2675,6 +2787,48 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
+
+    if (any_subscript_array_needs_copy_ && lhs.type().is_array())
+    {
+      any_subscript_array_needs_copy_ = false;
+
+      const array_typet &dst_type = to_array_type(lhs.type());
+      if (!dst_type.size().is_constant())
+        throw std::runtime_error(
+          "TypeError: assigning a symbolic-shape array-typed subscript "
+          "result to a variable is not supported");
+
+      if (!lhs_already_declared)
+      {
+        code_declt decl(symbol_expr(*lhs_symbol));
+        decl.location() = location_begin;
+        target_block.copy_to_operands(decl);
+      }
+
+      const typet elem_type = ns.follow(dst_type.subtype());
+      const BigInt len = binary2integer(dst_type.size().value().c_str(), false);
+      for (BigInt i = 0; i < len; ++i)
+      {
+        exprt idx = from_integer(i, size_type());
+        exprt src_elem = python_expr::build_index(rhs, idx, elem_type);
+        exprt dst_elem = python_expr::build_index(lhs, idx, elem_type);
+        code_assignt elem_assign(dst_elem, src_elem);
+        elem_assign.location() = location_begin;
+        target_block.copy_to_operands(elem_assign);
+      }
+
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
