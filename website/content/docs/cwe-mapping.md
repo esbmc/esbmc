@@ -88,12 +88,20 @@ file.c:1: dead store: assignment to x never read
   CWE: CWE-563
 ```
 
-Only automatic-storage, non-`extern`, non-address-taken scalar locals are
-considered; excluding address-taken variables keeps the analysis sound without
-an alias analysis. Advisories are additive: the verdict, existing regressions,
-and the SV-COMP wrapper are unaffected when the flag is off. In SARIF the dead
-store appears as a `result.level = "note"` under rule id `dead-store`, with
-CWE-563 in `taxa`. Inter-procedural dead-store detection is a future extension.
+Only automatic-storage, non-`extern`, non-address-taken, non-`volatile` scalar
+locals are considered; excluding address-taken variables keeps the analysis
+sound without an alias analysis, and a `volatile` write is an observable side
+effect (C11 §5.1.2.3), never a dead store. Advisories are additive: the verdict,
+existing regressions, and the SV-COMP wrapper are unaffected when the flag is
+off. In SARIF the dead store appears as a `result.level = "note"` under rule id
+`dead-store`, with CWE-563 in `taxa`; it is emitted from a verdict-independent
+point so it reaches SARIF even under `--result-only` / a suppressed
+counterexample. Functions that use exceptions (`throw`/`catch`) are skipped:
+this pass runs before exception lowering, so the handler edges are not yet in
+the CFG and a value read only in a `catch` would be misreported. Reporting is
+restricted to user source (system-header and operational-model locations are
+excluded by a best-effort path heuristic). Inter-procedural dead-store
+detection is a future extension.
 
 ## Ids dropped vs. published mappings
 

@@ -16,6 +16,5 @@ struct dead_store_advisoryt
   /// Routed through util/cwe_mapping so it resolves to CWE-563.
   std::string comment;
   std::string file;
-  std::string function;
   unsigned line = 0;
 };

@@ -80,10 +80,26 @@ bool is_reportable_location(const locationt &loc)
   const std::string file = loc.get_file().as_string();
   if (file.empty() || file == "<built-in>" || file == "<builtin>")
     return false;
-  if (has_prefix(file, "/usr/"))
+  // ESBMC's own bundled operational-model / library sources: "-headers-" is
+  // the extracted-headers temp dir at runtime, "c2goto/library/" the in-tree
+  // path (mirrors remove_exceptions.cpp::is_library_function).
+  if (
+    file.find("-headers-") != std::string::npos ||
+    file.find("c2goto/library/") != std::string::npos)
     return false;
-  return file.find("-headers-") == std::string::npos &&
-         file.find("c2goto/library/") == std::string::npos;
+  // System headers across platforms. There is no location system-header flag,
+  // so this is a best-effort path heuristic: Linux (/usr/include, but NOT the
+  // user-installed /usr/local tree), and the macOS SDK / Xcode toolchain roots.
+  // A dead store inside a system-header `static inline` is rare and, if missed,
+  // only under-reports; the important direction — not suppressing user code
+  // under /usr/local — is preserved.
+  if (has_prefix(file, "/usr/") && !has_prefix(file, "/usr/local/"))
+    return false;
+  if (
+    has_prefix(file, "/Library/Developer/") ||
+    has_prefix(file, "/Applications/Xcode"))
+    return false;
+  return true;
 }
 
 /// Non-throwing decimal parse of a source line number; 0 on empty/non-numeric
@@ -104,6 +120,16 @@ bool goto_check_dead_store::runOnFunction(
 
   goto_programt &body = F.second.body;
   const auto end = body.instructions.cend();
+
+  // This pass runs before the throw/catch -> guarded-control-flow lowering
+  // (#5075), so get_successors() below sees only normal edges. In a function
+  // with exceptions a value written in a try body and read only in a catch
+  // handler has no successor edge to the handler, so its store would be
+  // misreported as dead. Skip such functions rather than emit false positives;
+  // C++ dead-store detection is a follow-up once this runs post-lowering.
+  for (auto it = body.instructions.cbegin(); it != end; ++it)
+    if (it->is_throw() || it->is_catch())
+      return false;
 
   // Index every instruction so CFG successors resolve to positions.
   std::vector<goto_programt::const_targett> insns;
@@ -204,8 +230,19 @@ bool goto_check_dead_store::runOnFunction(
       collect_symbols(fc.function, reads);
       for (const auto &arg : fc.operands)
         collect_symbols(arg, reads);
-      if (is_symbol2t(fc.ret))
+      // A void call (e.g. terminate() in the C++ exception model) has a null
+      // return operand; is_symbol2t would dereference it. is_nil_expr is the
+      // null-safe guard.
+      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
+      {
         def_bit = bit_of(to_symbol2t(fc.ret).thename);
+        // `x = f();` with x never read is a dead store of the call's return
+        // value. The CALL instruction still executes (its side effects are
+        // preserved); only the unused assignment of the result is reported.
+        if (def_bit >= 0)
+          sites.push_back(
+            {i, static_cast<size_t>(def_bit), to_symbol2t(fc.ret).thename});
+      }
       else
         collect_symbols(fc.ret, reads);
     }
@@ -281,7 +318,6 @@ bool goto_check_dead_store::runOnFunction(
     adv.lhs_name = name;
     adv.comment = "dead store: assignment to " + name + " never read";
     adv.file = loc.get_file().as_string();
-    adv.function = loc.get_function().as_string();
     adv.line = parse_line(loc.get_line().as_string());
     advisories.push_back(std::move(adv));
   }
