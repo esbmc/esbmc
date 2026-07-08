@@ -19,9 +19,10 @@ class SequenceIteratorMixin:
     Because the consumption index is tracked statically in source order, the
     rewrite is only sound for iterators consumed in straight-line code. The
     pre-scan (``_scan_sequence_iterators``) blacklists any iterator whose
-    binding or consumption is inside a loop/comprehension, or that is rebound;
-    blacklisted iterators are left untouched (falling back to the frontend's
-    existing behaviour, so there is no regression).
+    binding or consumption is inside a loop, comprehension, or conditional, or
+    that is rebound, consumed in a non-rewritable position, or closed over
+    across scopes; blacklisted iterators are left untouched (falling back to the
+    frontend's existing behaviour, so there is no regression).
     """
 
     # ---- constant / length helpers -------------------------------------
@@ -48,8 +49,7 @@ class SequenceIteratorMixin:
         """Length of a ``range(...)`` call with constant integer args, or None."""
         if call.keywords or not 1 <= len(call.args) <= 3:
             return None
-        args = [a for a in (self._seq_const_int(x) for x in call.args)
-                if a is not None]
+        args = [a for a in (self._seq_const_int(x) for x in call.args) if a is not None]
         if len(args) != len(call.args):
             return None
         if len(args) == 1:
@@ -92,10 +92,8 @@ class SequenceIteratorMixin:
     @staticmethod
     def _is_dunder_iter_call(node):
         """True for ``RECV.__iter__()`` with no arguments."""
-        return (isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "__iter__"
-                and not node.args and not node.keywords)
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "__iter__" and not node.args and not node.keywords)
 
     @staticmethod
     def _seq_next_consumed_name(call):
@@ -103,11 +101,11 @@ class SequenceIteratorMixin:
         if not isinstance(call, ast.Call) or call.keywords:
             return None
         func = call.func
-        if (isinstance(func, ast.Name) and func.id == "next"
-                and len(call.args) == 1 and isinstance(call.args[0], ast.Name)):
+        if (isinstance(func, ast.Name) and func.id == "next" and len(call.args) == 1
+                and isinstance(call.args[0], ast.Name)):
             return call.args[0].id
-        if (isinstance(func, ast.Attribute) and func.attr == "__next__"
-                and not call.args and isinstance(func.value, ast.Name)):
+        if (isinstance(func, ast.Attribute) and func.attr == "__next__" and not call.args
+                and isinstance(func.value, ast.Name)):
             return func.value.id
         return None
 
@@ -117,8 +115,7 @@ class SequenceIteratorMixin:
     def _ast_types(*names):
         """Tuple of the named ``ast`` node classes that exist in this Python
         (some — ``Match``, ``TryStar`` — are version-dependent)."""
-        return tuple(t for t in (getattr(ast, n, None) for n in names)
-                     if t is not None)
+        return tuple(t for t in (getattr(ast, n, None) for n in names) if t is not None)
 
     def _scan_sequence_iterators(self, node):
         """Blacklist iterator names that cannot be lowered with a static index.
@@ -145,12 +142,10 @@ class SequenceIteratorMixin:
         assign_counts = {}
         binding_scope = {}
         consume_scopes = {}
-        nonlinear_types = self._ast_types(
-            "For", "AsyncFor", "While", "ListComp", "SetComp", "DictComp",
-            "GeneratorExp", "If", "IfExp", "Try", "TryStar", "With",
-            "AsyncWith", "Match")
-        scope_types = self._ast_types(
-            "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef")
+        nonlinear_types = self._ast_types("For", "AsyncFor", "While", "ListComp", "SetComp",
+                                          "DictComp", "GeneratorExp", "If", "IfExp", "Try",
+                                          "TryStar", "With", "AsyncWith", "Match")
+        scope_types = self._ast_types("FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef")
 
         # Consumption calls sitting in a directly-rewritable statement position:
         # the call is the entire value of an ``Assign`` or an ``Expr``.
