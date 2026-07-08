@@ -143,9 +143,7 @@ irept mk_binary(
 
 void fix_expression(irept &irep)
 {
-  if (
-    irep.id() == "count_leading_zeros" ||
-    irep.id() == "count_trailing_zeros")
+  if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
   {
     // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
     // migrate_expr has no handler for (it aborts with "migrate expr failed").
