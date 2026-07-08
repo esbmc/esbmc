@@ -33,10 +33,20 @@ bool has_sub(const irept &i, const irep_idt &k)
   return m.find(k) != m.end();
 }
 
-// CBMC sometimes stores constant values as hex; ESBMC wants a binary string.
-// Mirrors Rust `format!("{:032b}", u64::from_str_radix(value, 16))`.
-std::string hex_to_bin32(const std::string &hex)
+// CBMC stores integer constant values as hex; ESBMC wants a binary string
+// whose length matches the constant's own type width. The Rust reference
+// (`format!("{:032b}", ...)`) hardcoded 32, which truncated the representation
+// of constants in wider (e.g. 64-bit) types: a 64-bit value was emitted as a
+// <=33-char string and silently interpreted at 32 bits, so e.g. -5000000000LL
+// verified as its low 32 bits (roadmap §4.3/§7). Pad to `width` bits instead.
+// Values needing more than 64 bits (128-bit constants, §4.3) are out of range
+// for this uint64_t path and are returned unchanged rather than crashing
+// std::stoull -- note this leaves such a value as a raw hex string (a known
+// limitation, roadmap §4.3), but the >64-bit path is not otherwise exercised.
+std::string hex_to_bin(const std::string &hex, std::size_t width)
 {
+  if (hex.size() > 16) // > 64 bits: cannot round-trip through uint64_t
+    return hex;
   unsigned long long n = std::stoull(hex, nullptr, 16);
   std::string bits;
   if (n == 0)
@@ -48,8 +58,8 @@ std::string hex_to_bin32(const std::string &hex)
       n >>= 1;
     }
   std::reverse(bits.begin(), bits.end());
-  if (bits.size() < 32)
-    bits = std::string(32 - bits.size(), '0') + bits;
+  if (bits.size() < width)
+    bits = std::string(width - bits.size(), '0') + bits;
   return bits;
 }
 
@@ -147,8 +157,22 @@ void fix_expression(irept &irep)
     {
       const std::string val = irep.find("value").id_string();
       // Value may be a hex representation or binary; we want the binary one.
+      // A value already exactly 32 chars is treated as an existing 32-bit
+      // binary string and left as-is; anything else is a hex value converted to
+      // a binary string of the type's own bit width (see hex_to_bin).
       if (val.size() != 32)
-        irep.add("value") = mk(hex_to_bin32(val));
+      {
+        std::size_t width = 32;
+        const std::string ws = irep.find("type").find("width").id_string();
+        // A bitvector type's width is always a plain decimal integer; guard the
+        // parse defensively so a malformed/absent width falls back to 32 rather
+        // than throwing out of std::stoul.
+        if (
+          !ws.empty() &&
+          ws.find_first_not_of("0123456789") == std::string::npos)
+          width = static_cast<std::size_t>(std::stoul(ws));
+        irep.add("value") = mk(hex_to_bin(val, width));
+      }
     }
   }
 
