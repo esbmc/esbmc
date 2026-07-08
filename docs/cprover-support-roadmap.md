@@ -85,6 +85,7 @@ and the symbol/function table layout.
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
@@ -190,6 +191,16 @@ limitation). `same_object` was checked and needs no change — CBMC's typechecke
 at parse time into `pointer_object(a) == pointer_object(b)`, so it never reaches the adapter
 as a `same_object`/`same-object` node in the first place.
 
+**Unary bit-builtins `popcount`/`bswap` — ✅ landed.** `__builtin_popcount` and
+`__builtin_bswap32` lower to CBMC `popcount`/`bswap` ireps, both of which `migrate_expr`
+already handles via `op0()` — but neither was in `fix_expression`'s operand-wrap set, so
+CBMC's raw operands stayed in `get_sub()`, `op0()` read an empty operand list, and the
+verdict was garbage/crash (the exact `isnan`/`pointer_offset` failure shape). Fixed by adding
+`popcount`/`bswap` to the wrap-set. Verdict parity both directions, dual-solver
+(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`). Still open in the same family:
+`__builtin_clz`/`ctz` reach the adapter as an id `migrate_expr` has no handler for at all
+(aborts with `migrate expr failed`), so they need a migrate handler + irep2 node, not just a
+wrap-set entry — tracked separately.
 **Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
 as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
 counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
