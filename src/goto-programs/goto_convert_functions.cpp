@@ -141,6 +141,64 @@ static void restore_value_locations(exprt &code, const locationt &inherited)
   }
 }
 
+// W1-loc spike Phase C (esbmc/esbmc#4715): consume one IREP2 statement `code2`
+// natively (design D3), appending to `dest`, and recurse into nested blocks.
+// Returns false the instant an unsupported kind appears — the caller discards
+// the partial `dest`, so a failed walk never corrupts the fallback body. Only
+// the structural leaves are handled so far; each reads its own code_*2t fields
+// directly (no legacy round-trip) and carries the statement's own location, so
+// the output matches goto_convertt::convert() byte-for-byte on this subset.
+static bool convert_native_rec(const expr2tc &code2, goto_programt &dest)
+{
+  if (is_code_block2t(code2))
+  {
+    const code_block2t &block = to_code_block2t(code2);
+
+    // A decl-free block reduces convert_block() to converting its children: no
+    // code_decl2t in the supported set means the destructor stack is never
+    // touched, so the end-of-block destructor unwind is a no-op.
+    for (const expr2tc &stmt : block.operands)
+      if (!convert_native_rec(stmt, dest))
+        return false;
+
+    // Mirror the tail of convert(): a statement that emitted no instruction
+    // leaves an empty program, which must carry a SKIP at the block location.
+    // Only an (recursively) empty block reaches here; a skip always emits.
+    if (dest.instructions.empty())
+      dest.add_instruction(SKIP)->location = block.location;
+    return true;
+  }
+
+  if (is_code_skip2t(code2))
+  {
+    goto_programt::targett t = dest.add_instruction(SKIP);
+    t->location = to_code_skip2t(code2).location;
+    // code_skip2t is only ever built with an empty type (migrate.cpp), so this
+    // node equals convert_skip()'s migrate_expr(skip) result — reuse it here
+    // instead of round-tripping.
+    t->code = code2;
+    return true;
+  }
+
+  return false; // unsupported kind: whole body falls back to goto_convert_rec
+}
+
+bool goto_convert_functionst::try_convert_body_native(
+  const expr2tc &body2,
+  goto_programt &dest)
+{
+  goto_programt native;
+  if (!convert_native_rec(body2, native))
+    return false; // dest untouched; caller falls back to goto_convert_rec
+
+  // Mirror goto_convert_rec()'s post-passes; both are no-ops on the leaf subset
+  // (no gotos/labels) but keep this path a faithful goto_convert_rec twin.
+  finish_gotos(native);
+  optimize_guarded_gotos(native);
+  dest.destructive_append(native);
+  return true;
+}
+
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.id;
@@ -213,7 +271,17 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets.has_return_value =
     to_code_type(f.type).ret_type->type_id != type2t::empty_id;
 
-  goto_convert_rec(code, f.body);
+  // W1-loc spike Phase C (esbmc/esbmc#4715): --irep2-native-body routes the
+  // body through the IREP2-native dispatcher, which consumes code_*2t directly
+  // (no whole-body legacy round-trip) and inherits statement locations onto
+  // value operands. Until every kind in this body is supported it returns
+  // false and we fall back to goto_convert_rec on the round-tripped `code`, so
+  // flag-on is byte-identical to flag-off. `code`/`end_location` above are
+  // still computed from the round-trip; the native path only replaces the
+  // body-instruction dispatch.
+  if (!(options.get_bool_option("irep2-native-body") &&
+        try_convert_body_native(symbol.get_value2(), f.body)))
+    goto_convert_rec(code, f.body);
 
   // add non-det return value, if needed
   if (targets.has_return_value)

@@ -119,6 +119,23 @@ bool goto_symext::recover_va_list_args(
   {
     if (is_nil_expr(insn.code))
       continue;
+    // Skip the va_start/va_copy markers this analysis itself relies on: they
+    // reference &ap by construction, but starting (or copying into) a va_list
+    // is not the address-laundering the scan below guards against. va_copy's
+    // laundering, where it matters, is carried by the separate ASSIGN it emits
+    // on pointer-va_list targets, which the scan still inspects.
+    if (is_code_function_call2t(insn.code))
+    {
+      const expr2tc &fn = to_code_function_call2t(insn.code).function;
+      if (is_symbol2t(fn))
+      {
+        const irep_idt &fn_name = to_symbol2t(fn).thename;
+        if (
+          fn_name == "c:@F@__builtin_va_start" ||
+          fn_name == "c:@F@__builtin_va_copy")
+          continue;
+      }
+    }
     if (is_code_assign2t(insn.code))
     {
       const code_assign2t &assign = to_code_assign2t(insn.code);

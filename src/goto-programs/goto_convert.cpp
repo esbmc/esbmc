@@ -759,14 +759,32 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   if (!initializer.is_nil())
   {
-    goto_programt sideeffects;
-    // the side effect is not just removed. Actually, it's converted and removed.
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
+    // A temporary_object initializer carrying a constructor (C++ `T t;` or
+    // `T t = T(...)`) constructs the object in place: retarget the
+    // constructor's new_object to `var` and emit it directly, instead of
+    // constructing a separate temporary and copying it. The copy path would
+    // leave that temporary with its own scope-exit destructor -- a spurious
+    // second destructor for what is semantically a single object.
+    if (
+      initializer.id() == "sideeffect" &&
+      initializer.statement() == "temporary_object" &&
+      static_cast<const exprt &>(initializer.initializer()).is_not_nil())
+    {
+      exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
+      replace_new_object(var, ctor_code);
+      convert(to_code(ctor_code), dest);
+    }
+    else
+    {
+      goto_programt sideeffects;
+      // the side effect is not just removed. Actually, it's converted and removed.
+      remove_sideeffects(initializer, sideeffects);
+      dest.destructive_append(sideeffects);
 
-    code_assignt assign(var, initializer);
-    assign.location() = new_code.location();
-    copy(assign, ASSIGN, dest);
+      code_assignt assign(var, initializer);
+      assign.location() = new_code.location();
+      copy(assign, ASSIGN, dest);
+    }
   }
 
   // now create a 'dead' instruction -- will be added after the

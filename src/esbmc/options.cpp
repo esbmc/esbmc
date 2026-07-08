@@ -614,6 +614,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable runtime isinstance assertions for annotated code"},
     {"memory-leak-check", NULL, "Enable memory leak check"},
     {"overflow-check", NULL, "Enable arithmetic over- and underflow check"},
+    {"restrict-check",
+     NULL,
+     "Check C restrict-qualified pointer parameters do not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
@@ -852,7 +855,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "Deprecated no-op (accepted for backward compatibility). goto_convert "
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
-     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
+     "bypass and the --no-irep2-bodies escape hatch have been removed."},
+    {"irep2-native-body",
+     NULL,
+     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
+     "Route function bodies to an IREP2-native goto_convert that consumes "
+     "code_*2t directly and inherits the statement location onto value "
+     "operands at consumption, skipping the whole-body legacy round-trip. "
+     "Grown one statement kind at a time; any body containing an unsupported "
+     "construct falls back to the round-trip path, so flag-on is byte-"
+     "identical to flag-off until the native path is complete."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

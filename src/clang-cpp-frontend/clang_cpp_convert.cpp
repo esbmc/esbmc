@@ -778,11 +778,22 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*mtemp.getSubExpr(), tmp))
       return true;
 
-    side_effect_exprt temporary("temporary_object");
-    temporary.type() = tmp.type();
-    temporary.copy_to_operands(tmp);
+    // If the sub-expression already materialised a temporary (e.g. a class
+    // prvalue `B(7)`, lowered to a temporary_object by the constructor call),
+    // bind the reference directly to it. Wrapping it in a second
+    // temporary_object would construct one object and then copy it into
+    // another, leaving both with a scope-exit destructor.
+    exprt addr;
+    if (tmp.id() == "sideeffect" && tmp.statement() == "temporary_object")
+      addr = address_of_exprt(tmp);
+    else
+    {
+      side_effect_exprt temporary("temporary_object");
+      temporary.type() = tmp.type();
+      temporary.copy_to_operands(tmp);
+      addr = address_of_exprt(temporary);
+    }
 
-    address_of_exprt addr(temporary);
     if (mtemp.isBoundToLvalueReference())
       addr.type().set("#reference", true);
     else
