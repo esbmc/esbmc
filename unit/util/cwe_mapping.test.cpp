@@ -98,12 +98,24 @@ TEST_CASE("cwe_for matches unchecked return value", "[util][cwe_mapping]")
     "unchecked-return-value");
 }
 
+TEST_CASE("cwe_for matches uncontrolled recursion", "[util][cwe_mapping]")
+{
+  // A recursive function with no reachable base case (symex emits
+  // "uncontrolled recursion in <fn>") is CWE-674.
+  REQUIRE(cwe_for("uncontrolled recursion in f") == std::vector<unsigned>{674});
+  REQUIRE(
+    std::string(cwe_rule_for("uncontrolled recursion in ackermann").sarif_id) ==
+    "uncontrolled-recursion");
+}
+
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("").empty());
   REQUIRE(cwe_for("some unrelated assertion text").empty());
   // Unwinding bound is intentionally unmapped.
   REQUIRE(cwe_for("unwinding assertion loop 0").empty());
+  // A merely-exhausted recursion k-bound stays unmapped; only the
+  // no-base-case case ("uncontrolled recursion") maps to CWE-674.
   REQUIRE(cwe_for("recursion unwinding assertion").empty());
 }
 
@@ -123,6 +135,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(833) == "Deadlock");
   REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
   REQUIRE(cwe_name(252) == "Unchecked Return Value");
+  REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
