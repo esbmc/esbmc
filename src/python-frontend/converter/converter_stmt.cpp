@@ -2167,7 +2167,12 @@ void python_converter::get_var_assign(
         {
           if (ast_node["_type"] != "Call")
           {
+            // Discarded probe: suppress the ZeroDivisionError guard so a
+            // division here is not emitted (and its divisor not evaluated) an
+            // extra time; the real RHS build below emits it once.
+            in_rhs_type_probe_ = true;
             rhs = get_rhs_with_dict_resolution(ast_node, current_element_type);
+            in_rhs_type_probe_ = false;
           }
         }
       }

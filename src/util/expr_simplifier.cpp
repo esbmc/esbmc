@@ -2382,8 +2382,12 @@ static expr2tc do_bit_munge_operation(
      * not representable. */
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
-     * behavior in C++, we should avoid doing that during simplification. */
-    can_eval &= !is_shift || br < 64;
+     * behavior in C++, we should avoid doing that during simplification. A
+     * negative amount is equally out of range: br is used above to build the
+     * uint64_t operand r, so a signed -1 becomes 2^64-1 and would shift far
+     * past the width. Require 0 <= br < 64 and otherwise leave the shift
+     * symbolic for the solver. */
+    can_eval &= !is_shift || (br >= 0 && br < 64);
     if (can_eval)
     {
       uint64_t res = opfunc(l, r);

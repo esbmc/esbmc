@@ -1524,6 +1524,62 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
+  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+  // guarded exception raise — the same mechanism list indexing uses for
+  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
+  // as SAFE while a bare division by zero propagates and fails. The built-in
+  // C-level div-by-zero assertion cannot express this: it fires regardless of
+  // the surrounding try/except, so caught divisions were wrongly reported.
+  if (
+    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
+    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
+     rhs.type().is_floatbv()) &&
+    !converting_lambda_body_ && !in_rhs_type_probe_)
+  {
+    // The divisor is referenced by both the zero-check guard and the division
+    // itself. If it carries a side effect (a call, or a nondet) it would be
+    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+    // a different value than the one divided by. Hoist a side-effecting divisor
+    // into a temporary so it is evaluated exactly once.
+    std::function<bool(const exprt &)> has_side_effect =
+      [&](const exprt &e) -> bool {
+      if (e.id() == "sideeffect")
+        return true;
+      for (const exprt &sub : e.operands())
+        if (has_side_effect(sub))
+          return true;
+      return false;
+    };
+
+    locationt div_loc = get_location_from_decl(element);
+    if (has_side_effect(rhs))
+    {
+      symbolt &tmp =
+        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
+      code_declt decl(symbol_expr(tmp));
+      decl.location() = div_loc;
+      add_instruction(decl);
+      code_assignt assign(symbol_expr(tmp), rhs);
+      assign.location() = div_loc;
+      add_instruction(assign);
+      rhs = symbol_expr(tmp);
+    }
+
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+
+    exprt raise = get_exception_handler().gen_exception_raise(
+      "ZeroDivisionError", "division by zero");
+    code_expressiont throw_code(raise);
+
+    code_ifthenelset guard;
+    guard.cond() = is_zero;
+    guard.then_case() = throw_code;
+    guard.location() = div_loc;
+    add_instruction(guard);
+  }
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
