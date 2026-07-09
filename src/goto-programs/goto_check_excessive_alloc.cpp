@@ -26,7 +26,8 @@ const char *alloc_fn_name(sideeffect2t::allockind kind)
 }
 
 /// Total requested allocation size in bytes for `se`, or a nil expression
-/// when it cannot be computed (an element type with no static size).
+/// when it cannot be computed (an element type with no size at all, i.e. a
+/// flexible/incomplete array member).
 ///
 /// The allocation model (`goto_symext::symex_mem`, src/goto-symex/
 /// builtin_functions/memory_alloc.cpp) uniformly allocates `se.size` elements
@@ -62,9 +63,29 @@ expr2tc alloc_byte_size(const sideeffect2t &se, const namespacet &ns)
     return mul2tc(
       size_type2(), size, constant_int2tc(size_type2(), elem_bytes));
   }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    // A dynamically-sized (VLA) element type, e.g. malloc(sizeof(int[n])):
+    // the frontend records size == 1 with a VLA alloctype, so the byte size
+    // is symbolic but still computable. type_byte_size_expr handles dyn-sized
+    // arrays (unlike the BigInt type_byte_size above, which throws), so scale
+    // by the symbolic element size rather than skipping — otherwise a large
+    // runtime n slips under the bound unchecked.
+    try
+    {
+      expr2tc elem_bytes = type_byte_size_expr(se.alloctype, &ns);
+      if (elem_bytes->type != size_type2())
+        elem_bytes = typecast2tc(size_type2(), elem_bytes);
+      return mul2tc(size_type2(), size, elem_bytes);
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return expr2tc(); // nested element size still unknown — skip
+    }
+  }
   catch (const array_type2t::array_size_excp &)
   {
-    // Element type has no static byte size (flexible/infinite array member).
+    // Element type has no size at all (flexible/incomplete array member).
     return expr2tc();
   }
 }
