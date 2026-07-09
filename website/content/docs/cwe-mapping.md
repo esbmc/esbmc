@@ -69,9 +69,14 @@ substring table ordered longest-substring-first.
 | `unreachable code reached`                                   | 617                                         |
 | `non-terminating execution`                                  | 835                                         |
 | `dead store` _(advisory; `--dead-store-check`)_              | 563                                         |
-| `dead code` _(advisory; `--dead-code-check` only)_           | 561                                         |
 | `uncontrolled recursion in <function>`                       | 674                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+CWE-561 (Dead Code) is **not** in this substring table. It is advisory and
+emitted only by the `--dead-code-check` reporter through a dedicated rule
+(`dead_code_cwe_rule()`), so an ordinary violation whose comment happens to
+contain the text "dead code" is never mislabelled as CWE-561. See
+[Dead code](#dead-code-cwe-561-advisory) below.
 
 The last two rows distinguish two different recursion outcomes:
 
