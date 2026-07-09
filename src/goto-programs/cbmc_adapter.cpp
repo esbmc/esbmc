@@ -396,6 +396,41 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     return;
   }
 
+  if (self.id() == "c_bit_field")
+  {
+    // CBMC types a bitfield member as c_bit_field{width: N; sub[0]: <underlying
+    // integer bv of width W>}. ESBMC has no c_bit_field type -- migrate_type
+    // aborts on it ("ERROR: c_bit_field") -- and instead represents a bitfield
+    // exactly as its native C frontend does (clang_c_convert.cpp::
+    // get_bitfield_type): the underlying bv kind narrowed to the bitfield width
+    // N, tagged #bitfield, carrying the full underlying type as its subtype.
+    // migrate_type then reads width N and yields an N-bit bv (get_uint_type(N)
+    // for the bool case, signedbv/unsignedbv of N bits otherwise).
+    if (self.get_sub().empty())
+    {
+      // CBMC always emits the underlying integer type as sub[0]; a c_bit_field
+      // without it is malformed. Fail loud (like expand_anon_struct) rather
+      // than emit an id-less type migrate_type would choke on obscurely.
+      log_error("CBMC adapter: c_bit_field without an underlying type");
+      abort();
+    }
+    irept underlying = self.get_sub()[0];
+    // A _Bool bitfield must stay boolean: ESBMC's migrate reads a #bitfield
+    // bool as an *unsigned* N-bit value (get_uint_type), whereas fix_type maps
+    // CBMC's c_bool to signedbv -- a 1-bit signedbv would read value 1 as -1.
+    // Detect the bool underlying before that rewrite and keep the result "bool".
+    const bool bool_underlying =
+      underlying.id() == "bool" || underlying.id() == "c_bool";
+    fix_type(underlying, cache);
+    const irep_idt bf_width = self.find("width").id();
+    self.id(bool_underlying ? irep_idt("bool") : underlying.id());
+    self.get_sub().clear();
+    self.set("width", bf_width);
+    self.set("#bitfield", true);
+    self.add("subtype") = underlying;
+    return;
+  }
+
   if (self.id() == "code" && has_sub(self, "parameters"))
   {
     irept arguments(irep_idt("arguments"));
