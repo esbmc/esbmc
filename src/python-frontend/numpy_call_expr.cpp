@@ -3961,7 +3961,7 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(out);
   }
 
-  if (function == "std")
+  if (function == "std" || function == "var")
   {
     if (call_["args"].empty())
       throw std::runtime_error(
@@ -4034,7 +4034,7 @@ exprt numpy_call_expr::get()
 
     nlohmann::json out;
     out["_type"] = "Constant";
-    out["value"] = std::sqrt(variance);
+    out["value"] = (function == "var") ? variance : std::sqrt(variance);
     return converter_.get_expr(out);
   }
 
