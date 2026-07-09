@@ -221,8 +221,10 @@ void sarif_dead_code(
   // `results` array: consumers expect a well-formed run, not a missing file.
 
   // Single source of truth: the dead-code rule (id / description / CWE-561)
-  // comes from util/cwe_mapping, shared with the textual output.
-  const cwe_rule_t &rule = cwe_rule_for("dead code");
+  // comes from util/cwe_mapping, shared with the textual output. It is a
+  // dedicated accessor, not a cwe_rule_for() substring lookup, so CWE-561 never
+  // leaks into ordinary violation mapping (issue #4495).
+  const cwe_rule_t &rule = dead_code_cwe_rule();
 
   json run = new_sarif_run();
 

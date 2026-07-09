@@ -44,6 +44,13 @@ const cwe_rule_t &cwe_rule_for(std::string_view comment);
 // Convenience wrapper: returns `cwe_rule_for(comment).cwes`.
 std::vector<unsigned> cwe_for(std::string_view comment);
 
+// Returns the dedicated rule for the --dead-code-check advisory (CWE-561).
+// This is deliberately NOT part of the cwe_rule_for() substring table: dead
+// code is only ever emitted by the dead-code reporter, and folding it into the
+// generic matcher would mislabel any ordinary violation whose comment contains
+// the substring "dead code". See issue #4495.
+const cwe_rule_t &dead_code_cwe_rule();
+
 // Formats a list of ids as "CWE-476, CWE-125". Returns the empty string when
 // `ids` is empty.
 std::string format_cwe_list(const std::vector<unsigned> &ids);

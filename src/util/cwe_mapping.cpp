@@ -105,10 +105,6 @@ const std::vector<entry_t> &rules_table()
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
-      // Dead code (advisory, CWE-561). Emitted only under --dead-code-check;
-      // the dual of the CWE-617 reachability check above — a statement that
-      // the solver proves unreachable under all inputs.
-      {"dead code", {"dead-code", "Dead code", {561}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -181,6 +177,17 @@ const cwe_rule_t &cwe_rule_for(std::string_view comment)
 std::vector<unsigned> cwe_for(std::string_view comment)
 {
   return cwe_rule_for(comment).cwes;
+}
+
+const cwe_rule_t &dead_code_cwe_rule()
+{
+  // Dead code (CWE-561) is advisory and emitted only by the --dead-code-check
+  // reporter, so it is intentionally kept OUT of the cwe_rule_for() substring
+  // table: a global "dead code" key would mislabel any ordinary violation
+  // whose comment happens to contain that text (e.g. a user assertion message)
+  // as CWE-561. See issue #4495.
+  static const cwe_rule_t rule{"dead-code", "Dead code", {561}};
+  return rule;
 }
 
 std::string format_cwe_list(const std::vector<unsigned> &ids)

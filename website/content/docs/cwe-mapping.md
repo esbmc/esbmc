@@ -62,8 +62,13 @@ substring table ordered longest-substring-first.
 | `use of uninitialized variable`                              | 457                                         |
 | `unchecked return value`                                     | 252                                         |
 | `unreachable code reached`                                   | 617                                         |
-| `dead code` _(advisory; `--dead-code-check` only)_           | 561                                         |
 | `recursion unwinding assertion` / `unwinding assertion loop` | _(none — k-bound exceeded, not a weakness)_ |
+
+CWE-561 (Dead Code) is **not** in this substring table. It is advisory and
+emitted only by the `--dead-code-check` reporter through a dedicated rule
+(`dead_code_cwe_rule()`), so an ordinary violation whose comment happens to
+contain the text "dead code" is never mislabelled as CWE-561. See
+[Dead code](#dead-code-cwe-561-advisory) below.
 
 ## Dead code (CWE-561, advisory)
 

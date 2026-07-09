@@ -68,21 +68,27 @@ TEST_CASE("cwe_for matches reachability violation", "[util][cwe_mapping]")
   REQUIRE(cwe_for("unreachable code reached") == std::vector<unsigned>{617});
 }
 
-TEST_CASE("cwe_for matches dead code (advisory)", "[util][cwe_mapping]")
+TEST_CASE(
+  "dead-code advisory uses a dedicated CWE-561 rule",
+  "[util][cwe_mapping]")
 {
-  REQUIRE(cwe_for("dead code reached: never") == std::vector<unsigned>{561});
+  // The dead-code advisory has its own accessor with the stable id, short
+  // description, and CWE-561.
+  REQUIRE(std::string(dead_code_cwe_rule().sarif_id) == "dead-code");
+  REQUIRE(std::string(dead_code_cwe_rule().short_description) == "Dead code");
+  REQUIRE(dead_code_cwe_rule().cwes == std::vector<unsigned>{561});
+
+  // Regression for issue #4495: "dead code" is deliberately NOT in the
+  // cwe_rule_for() substring table, so an ordinary violation whose comment
+  // merely contains that text is not mislabelled CWE-561 / ruleId dead-code.
+  REQUIRE(cwe_for("assertion failure: dead code should not happen").empty());
   REQUIRE(
-    cwe_for("dead code: unreachable branch [guard: x > 0]") ==
-    std::vector<unsigned>{561});
+    std::string(cwe_rule_for("dead code should not happen").sarif_id) ==
+    "esbmc-assertion");
+
+  // Dead code and the CWE-617 reachability check remain distinct rules.
   REQUIRE(
-    std::string(cwe_rule_for("dead code reached: never").sarif_id) ==
-    "dead-code");
-  REQUIRE(
-    std::string(cwe_rule_for("dead code reached: never").short_description) ==
-    "Dead code");
-  // Dead code and the CWE-617 reachability check are distinct rules.
-  REQUIRE(
-    std::string(cwe_rule_for("dead code reached: never").sarif_id) !=
+    std::string(dead_code_cwe_rule().sarif_id) !=
     std::string(cwe_rule_for("unreachable code reached").sarif_id));
 }
 
@@ -207,7 +213,6 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "unreachable code reached",
-        "dead code reached: never",
         ""})
   {
     const cwe_rule_t &rule = cwe_rule_for(comment);

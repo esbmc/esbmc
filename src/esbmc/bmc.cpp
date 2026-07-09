@@ -769,7 +769,7 @@ static void report_dead_code(
     findings.push_back(std::move(f));
   }
 
-  const std::string cwes = format_cwe_list(cwe_for("dead code"));
+  const std::string cwes = format_cwe_list(dead_code_cwe_rule().cwes);
 
   log_success("\n[Dead code]\n");
   if (findings.empty())
