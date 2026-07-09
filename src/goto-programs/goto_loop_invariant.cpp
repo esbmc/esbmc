@@ -37,6 +37,7 @@
 #include <util/i2string.h>
 #include <util/std_expr.h>
 #include <util/options.h>
+#include <util/prefix.h>
 #include <irep2/irep2_utils.h>
 #include <map>
 #include <set>
@@ -277,6 +278,13 @@ static bool loop_has_constant_bound(const loopst &loop)
     return false;
   };
 
+  // Instruction addresses in the loop body [head, exit), so an exit branch is
+  // one whose target is not in this set (O(log n) lookup instead of a nested
+  // O(n) scan per branch).
+  std::set<const goto_programt::instructiont *> body;
+  for (goto_programt::targett s = head; s != exit; ++s)
+    body.insert(&*s);
+
   // Walk the loop, tracking copies of monotone counters; at each branch that
   // EXITS the loop, test whether it bounds a counter above by a constant.
   for (goto_programt::targett it = head; it != exit; ++it)
@@ -298,28 +306,15 @@ static bool loop_has_constant_bound(const loopst &loop)
     }
     if (!it->is_goto() || is_nil_expr(it->guard) || is_true(it->guard))
       continue;
-    // Does this branch leave the loop body [head, exit)?
+    // Does this branch leave the loop body [head, exit)?  A target outside the
+    // body set (including the exit instruction itself) is an exit edge.
     bool exits = false;
     for (const goto_programt::targett &tgt : it->targets)
-    {
-      if (tgt == exit)
+      if (!body.count(&*tgt))
       {
         exits = true;
         break;
       }
-      bool inside = false;
-      for (goto_programt::targett s = head; s != exit; ++s)
-        if (s == tgt)
-        {
-          inside = true;
-          break;
-        }
-      if (!inside)
-      {
-        exits = true;
-        break;
-      }
-    }
     if (exits && exits_when_counter_large(it->guard))
       return true;
   }
@@ -349,12 +344,15 @@ loop_has_post_loop_assertion(const loopst &loop, goto_functiont &goto_function)
     const code_function_call2t &call = to_code_function_call2t(ins.code);
     if (!is_symbol2t(call.function))
       return false;
-    const std::string name = id2string(to_symbol2t(call.function).thename);
-    return name.find("__VERIFIER_assert") != std::string::npos ||
-           name.find("reach_error") != std::string::npos ||
-           name.find("__assert_fail") != std::string::npos ||
-           name.find("__VERIFIER_error") != std::string::npos ||
-           name.find("abort") != std::string::npos;
+    // The clang frontend mangles function symbols as "c:@F@<name>"; strip that
+    // prefix and match the base name EXACTLY, so a helper whose name merely
+    // contains a keyword (e.g. assume_abort_if_not contains "abort") is not
+    // mistaken for a property/terminator call.
+    const std::string full = id2string(to_symbol2t(call.function).thename);
+    const std::string name = has_prefix(full, "c:@F@") ? full.substr(5) : full;
+    return name == "__VERIFIER_assert" || name == "reach_error" ||
+           name == "__assert_fail" || name == "__VERIFIER_error" ||
+           name == "abort";
   };
   goto_programt::targett exit = loop.get_original_loop_exit();
   for (goto_programt::targett it = exit;
@@ -391,12 +389,14 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // completeness loss. Gate the skip on the integer encoding.
   const bool int_encoding = config.options.get_bool_option("ir") ||
                             config.options.get_bool_option("ir-ieee");
-  if (int_encoding && loop_has_constant_bound(loop) &&
-      loop_has_post_loop_assertion(loop, goto_function))
+  if (
+    int_encoding && loop_has_constant_bound(loop) &&
+    loop_has_post_loop_assertion(loop, goto_function))
   {
     log_status(
       "loop-invariant: constant-bounded loop with a post-loop property check "
-      "under --ir; skipping the integer-encoding-unsound summary and leaving it "
+      "under --ir; skipping the integer-encoding-unsound summary and leaving "
+      "it "
       "to k-induction/BMC");
     return;
   }
