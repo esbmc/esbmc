@@ -3,6 +3,7 @@
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_adjust.h>
+#include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -204,6 +205,12 @@ bool python_languaget::parse(const std::string &path)
 
   try
   {
+    // Retype this module's list parameters from their call sites, before the
+    // annotator derives element types from their annotations (GitHub #5936).
+    // Callees in imported modules are retyped in python_converter::convert(),
+    // where the import graph is available.
+    python_param_annotations::propagate_tuple_list_params({{&ast, &ast, ""}});
+
     // Add type information
     python_annotation<nlohmann::json> ann(ast, global_scope_);
     const std::string function = config.options.get_option("function");
