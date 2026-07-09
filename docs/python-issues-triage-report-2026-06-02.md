@@ -3996,3 +3996,51 @@ a false `SUCCESSFUL`**): the `format()` builtin with a negative float and an emp
 `repr()` of a bare float/int still does not fold. The §3 design-level blockers, §3c policy-banned
 timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand. The §5 priority
 order stands.
+
+## 85. 2026-07-09 re-validation (seventy-fifth sweep) & repr() of a bare int/float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. This sweep takes the
+second §83b/§84b-named follow-up (the sibling of the §84 `format()` empty-spec float sweep): `repr()`
+of a bare int or float did not fold.
+
+### 85a. Feature restored: `repr(<int>)` / `repr(<float>)` folds to `str(value)`
+
+**`repr(5)` / `repr(1.0)` (and any bare int/float) hit the general-call handler
+(`WARNING: Undefined function 'repr' - replacing with assert(false)`), so a program using them reported
+a spurious `FAILED` instead of folding to `"5"` / `"1.0"`.**
+
+The `repr()` dispatch-table entry (`src/python-frontend/function_call/expr.cpp`) folded only the
+`complex` case and delegated everything else — including bare ints and floats — to
+`handle_general_function_call`, which treats `repr` as an undefined user function. `str()` of the same
+value already folded (via the builtin-type-constructor entry → `build_constant_from_arg` /
+`convert_to_string`); only the `repr()` side was missing. For an int or a float
+`repr(x) == str(x)` in Python (only `str`/container/object reprs differ — `repr("x")` adds quotes,
+`repr(True)` is `"True"`), so the numeric case can reuse the exact `str()` folding.
+
+**Fix**: in the `repr()` action, after the `complex` check, route an int- or float-typed operand
+through `converter_.get_string_handler().convert_to_string(value_expr)` — the same helper `str()`'s
+numeric path uses, which folds a constant to a char-array literal and dispatches a non-constant to the
+matching `__python_*_to_str` runtime model. The gate excludes `bool` and every non-numeric type
+(`!vt.is_bool() && (is_integer_type(vt) || vt.is_floatbv())`), so `repr` of a string, bool, list or
+object keeps the general-call fallback — a clean error, never a wrong fold. This restores working
+behaviour and cannot introduce a false `SUCCESSFUL` (an unmodelled `repr` still errors). Because it
+delegates to the shared `str()` renderer, it inherits — and adds no new instance of — `str()`'s known
+float gap (>6 fractional digits / scientific notation), which remains the §80 follow-up.
+
+New regression pair `regression/python/builtin_repr_int_float{,_fail}` (CORE): the positive is the
+liveness witness for the new branch, covering int literals (positive/negative/zero/large), whole and
+dyadic-fractional float literals (`repr(1.0)` keeps `"1.0"`, `repr(-0.125)`), a non-constant int that
+exercises the runtime `__python_*_to_str` path (`repr(x) == "42"`), and `repr(x) == str(x)`
+consistency; the `_fail` pins the previously-erroring `repr(-1.0) == "-1"`, now correctly `FAILED`.
+Every positive assertion was differential-tested bit-for-bit against CPython (`repr(v) == str(v)` for
+all cited ints and floats); the focused `repr`/`str`/`format`/`fstring`/`percent` ctest subset
+(168 tests) passes 100%. The constant folds are solver-agnostic; the non-constant `repr(x)` case
+lowers to the same runtime model as `str(x)`.
+
+### 85b. Next candidate & everything else: unchanged disposition
+With both §84b candidates now closed (`format()` empty-spec float in §84 / PR, `repr()` int/float
+here), the natural next sweep is a fresh idiom battery against `master` to surface the next isolated,
+soundly-fixable defect (`repr` of a **string** — needing quote-wrapping and escaping — and `repr` of a
+`bool`/`None` remain deliberately out of scope: each is a clean error, never a false `SUCCESSFUL`). The
+§3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
+`hashlib` case all stand. The §5 priority order stands.
