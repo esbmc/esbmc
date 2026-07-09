@@ -3961,6 +3961,83 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(out);
   }
 
+  if (function == "std")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() missing argument");
+
+    if (call_.contains("keywords") && !call_["keywords"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() does not support axis, ddof, keepdims, where, out or dtype "
+        "arguments yet");
+
+    auto resolve_var = [this](nlohmann::json &var) {
+      if (var["_type"] == "Name")
+      {
+        var = json_utils::find_var_decl(
+          var["id"], converter_.current_function_name(), converter_.ast());
+        if (!var.contains("value") || !var["value"].is_object())
+          return;
+        if (var["value"]["_type"] == "Call")
+        {
+          if (var["value"].contains("args") && !var["value"]["args"].empty())
+            var = var["value"]["args"][0];
+          else
+            var = var["value"];
+        }
+        else
+          var = var["value"];
+      }
+    };
+
+    nlohmann::json arg = call_["args"][0];
+    resolve_var(arg);
+
+    std::vector<numeric_value> values_1d;
+    std::vector<std::vector<numeric_value>> values_2d;
+    std::vector<numeric_value> values;
+    if (try_extract_numeric_1d_list(arg, values_1d))
+      values = values_1d;
+    else if (try_extract_numeric_2d_list(arg, values_2d))
+    {
+      for (const auto &row : values_2d)
+        values.insert(values.end(), row.begin(), row.end());
+    }
+    else
+    {
+      numeric_value scalar;
+      if (!try_extract_numeric_constant(arg, scalar))
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() currently supports constant numeric inputs only");
+      values.push_back(scalar);
+    }
+
+    if (values.empty())
+      throw std::runtime_error(
+        "ValueError: numpy." + function + "() arg is an empty sequence");
+
+    double mean = 0.0;
+    for (const auto &value : values)
+      mean += to_double(value);
+    mean /= static_cast<double>(values.size());
+
+    double sq_dev_sum = 0.0;
+    for (const auto &value : values)
+    {
+      const double dev = to_double(value) - mean;
+      sq_dev_sum += dev * dev;
+    }
+    const double variance = sq_dev_sum / static_cast<double>(values.size());
+
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = std::sqrt(variance);
+    return converter_.get_expr(out);
+  }
+
   if (
     function == "greater" || function == "less" ||
     function == "greater_equal" || function == "less_equal" ||
