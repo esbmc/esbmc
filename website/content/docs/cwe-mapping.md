@@ -105,7 +105,11 @@ is [CWE-835](https://cwe.mitre.org/data/definitions/835.html), "Loop with
 Unreachable Exit Condition ('Infinite Loop')". Unlike the property violations
 above, a non-termination verdict is proven by UNSAT and therefore has **no
 counterexample trace**, so ESBMC anchors the CWE annotation to the loop's exit
-marker. The annotation still reaches the text output (the `CWE: CWE-835` line
+marker. Markers inside ESBMC's own library helpers — such as the
+`while (atexit_count > 0)` loop in `__ESBMC_atexit_handler`, which is linked
+into every program — rank below markers in user code, so the reported location
+never points into ESBMC's installed sources. The annotation still reaches the
+text output (the `CWE: CWE-835` line
 follows the `... non-terminating execution` verdict) and the SARIF, JSON and
 GraphML outputs, exactly as it does for any other violation kind. (The YAML
 witness format has no CWE field, so it is unaffected.) Unwinding-assertion

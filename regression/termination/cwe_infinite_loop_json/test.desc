@@ -4,3 +4,4 @@ main.c
 ^VERIFICATION FAILED$
 CHECK_JSON report.json $[0].status == "violation"
 CHECK_JSON report.json $[0].steps[0].assertion.cwe[0] == 835
+CHECK_JSON report.json $[0].steps[0].function == "main"

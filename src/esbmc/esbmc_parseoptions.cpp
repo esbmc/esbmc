@@ -1558,11 +1558,12 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 // "non-terminating execution" rule -> CWE-835).
 //
 // CWE-835 is a loop weakness, so a per-loop marker is preferred as the
-// anchor; an abort-call marker is only a fallback. The inductive-step
-// verdict is a whole-program property, so with several loops present the
-// chosen marker is a best-effort representative location — only the CWE
-// id (835) is guaranteed, not that it is the specific non-terminating
-// loop.
+// anchor; an abort-call marker is only a fallback. Markers in library
+// helpers (body.hide) rank below both, so the anchor never lands in
+// ESBMC's own installed sources. The inductive-step verdict is a
+// whole-program property, so with several loops present the chosen
+// marker is a best-effort representative location — only the CWE id
+// (835) is guaranteed, not that it is the specific non-terminating loop.
 static void report_non_termination_cwe(
   optionst &options,
   const namespacet &ns,
@@ -1578,39 +1579,54 @@ static void report_non_termination_cwe(
   if (!(want_sarif || want_graphml || want_json))
     return;
 
-  goto_programt::const_targett marker, fallback;
-  bool found = false, have_fallback = false;
+  // Anchor candidates, best first. A user-source location always beats a
+  // library helper: goto_termination inserts per-loop markers into helpers
+  // too (see the marker pass there), and __ESBMC_atexit_handler's
+  // `while (atexit_count > 0)` is linked into every program. Since
+  // function_map is ordered by mangled id, `c:@F@__ESBMC_atexit_handler`
+  // sorts before `c:@F@main`, so scanning without this rank anchors the
+  // CWE to ESBMC's own stdlib.c instead of the user's loop.
+  enum anchor_rankt
+  {
+    USER_LOOP = 0,
+    USER_ABORT,
+    LIB_LOOP,
+    LIB_ABORT,
+    NO_ANCHOR
+  };
+
+  goto_programt::const_targett marker;
+  anchor_rankt best = NO_ANCHOR;
   for (const auto &fn : goto_functions.function_map)
   {
     if (!fn.second.body_available)
       continue;
+    const bool is_lib = fn.second.body.hide;
     for (auto it = fn.second.body.instructions.begin();
-         !found && it != fn.second.body.instructions.end();
+         best != USER_LOOP && it != fn.second.body.instructions.end();
          ++it)
     {
       if (!it->is_assert())
         continue;
       const std::string mc = it->location.comment().as_string();
+      anchor_rankt rank;
       if (mc == "termination per-loop marker")
+        rank = is_lib ? LIB_LOOP : USER_LOOP;
+      else if (mc == "termination abort-call marker")
+        rank = is_lib ? LIB_ABORT : USER_ABORT;
+      else
+        continue;
+      if (rank < best)
       {
         marker = it;
-        found = true;
-      }
-      else if (!have_fallback && mc == "termination abort-call marker")
-      {
-        fallback = it;
-        have_fallback = true;
+        best = rank;
       }
     }
-    if (found)
+    if (best == USER_LOOP)
       break;
   }
-  if (!found)
-  {
-    if (!have_fallback)
-      return;
-    marker = fallback;
-  }
+  if (best == NO_ANCHOR)
+    return;
 
   goto_tracet trace;
   goto_trace_stept step;
