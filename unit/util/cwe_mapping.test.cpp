@@ -112,6 +112,20 @@ TEST_CASE("cwe_for matches non-termination verdict", "[util][cwe_mapping]")
                   .sarif_id) == "infinite-loop");
 }
 
+TEST_CASE("cwe_for matches dead store", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("dead store: assignment to x never read") ==
+    std::vector<unsigned>{563});
+  REQUIRE(
+    std::string(
+      cwe_rule_for("dead store: assignment to x never read").sarif_id) ==
+    "dead-store");
+  REQUIRE(
+    std::string(cwe_rule_for("dead store: assignment to x never read")
+                  .short_description) == "Dead store");
+}
+
 TEST_CASE("cwe_for matches uncontrolled recursion", "[util][cwe_mapping]")
 {
   // A recursive function with no reachable base case (symex emits
@@ -149,6 +163,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(833) == "Deadlock");
   REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
   REQUIRE(cwe_name(252) == "Unchecked Return Value");
+  REQUIRE(cwe_name(563) == "Assignment to Variable without Use");
   REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   REQUIRE(
     cwe_name(835) == "Loop with Unreachable Exit Condition ('Infinite Loop')");
@@ -218,6 +233,7 @@ TEST_CASE(
         "unchecked return value of fopen: f",
         "unreachable code reached",
         "Recurrent set shows a non-terminating execution",
+        "dead store: assignment to x never read",
         ""})
   {
     const cwe_rule_t &rule = cwe_rule_for(comment);
@@ -254,7 +270,8 @@ TEST_CASE(
         "Access to object out of bounds",
         "dereference failure: memset of memory segment of size 4",
         "undefined behavior on shift operation",
-        "Recurrent set shows a non-terminating execution"})
+        "Recurrent set shows a non-terminating execution",
+        "dead store: assignment to x never read"})
   {
     for (unsigned id : cwe_for(comment))
       REQUIRE_FALSE(cwe_name(id).empty());

@@ -295,6 +295,10 @@ class ExpressionRewriteMixin:
             if stmts is not None:
                 return stmts
 
+        rewritten_seq_next = self._maybe_rewrite_seq_next_expr(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
+
         prefix, new_value, _ = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
         dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
@@ -337,6 +341,14 @@ class ExpressionRewriteMixin:
         return comparison
 
     def visit_While(self, node):
+        # Hoist generator initialisation (e.g. `j = 0`) for `var = next(gen)`
+        # loop bodies out of the loop *before* visiting it, so the init runs
+        # once and the generator's state persists across iterations. Without
+        # this the init is inlined inside the loop body and resets every pass,
+        # so `next(gen)` always yields the first value and the loop never makes
+        # progress (wedges into an unbounded loop). Mirrors the range-for path
+        # in _visit_for_inner.
+        gen_pre_stmts = self._hoist_generator_inits(node.body, node)
         node = self.generic_visit(node)
         # Lower `while ... else: <orelse>` (the else runs when the loop ends
         # without break) into a did-not-break flag, the same desugaring used for
@@ -350,8 +362,9 @@ class ExpressionRewriteMixin:
         node.test = self._transform_list_truthiness(node.test, node)
         result = (prefix or []) + [node]
         if while_else_pre or while_else_post:
-            return while_else_pre + result + while_else_post
-        return result if prefix else node
+            result = while_else_pre + result + while_else_post
+        result = gen_pre_stmts + result
+        return result if len(result) > 1 else node
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

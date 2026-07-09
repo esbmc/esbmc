@@ -45,7 +45,20 @@ jobs:
       - name: Build ESBMC (${{ matrix.sanitizer }})
         run: |
           case "${{ matrix.sanitizer }}" in
-            asan)  STYPE=ASAN ;;
+            asan)
+              STYPE=ASAN
+              # c2goto is invoked at build time to generate the .goto library
+              # models and embeds clang/LLVM.  Under ASan the bundled clang
+              # trips a use-after-poison (LLVM BumpPtrAllocator region
+              # poisoning) and a diagnostic-printer leak — noise that lives in
+              # clang, not ESBMC.  With the default options those abort the
+              # build tool and stop ninja.  Let the build tools continue past
+              # the report (needs -fsanitize-recover=address, set in
+              # Sanitizers.cmake), skip LSan for the build, and exit 0 so the
+              # .goto outputs are produced.  The regression step keeps its own
+              # options from common-options.sh.
+              export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:exitcode=0"
+              ;;
             ubsan) STYPE=UBSAN ;;
             *) echo "unknown sanitizer ${{ matrix.sanitizer }}"; exit 1 ;;
           esac

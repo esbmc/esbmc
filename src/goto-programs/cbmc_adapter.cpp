@@ -79,8 +79,125 @@ bool irep_contains(const irept &i, const irep_idt &id)
   return false;
 }
 
+// Width of a bitvector type irep; falls back to 32 if absent/malformed.
+std::size_t bv_width(const irept &bv_type)
+{
+  const std::string ws = bv_type.find("width").id_string();
+  if (!ws.empty() && ws.find_first_not_of("0123456789") == std::string::npos)
+    return static_cast<std::size_t>(std::stoul(ws));
+  return 32;
+}
+
+// Lowercase hex rendering of a small integer (no "0x").
+std::string int_to_hex(unsigned long long value)
+{
+  if (value == 0)
+    return "0";
+  static const char *digits = "0123456789abcdef";
+  std::string s;
+  while (value != 0)
+  {
+    s.push_back(digits[value & 0xF]);
+    value >>= 4;
+  }
+  std::reverse(s.begin(), s.end());
+  return s;
+}
+
+// A "constant" irep of the given bitvector type holding `value`. The value is
+// emitted as a hex string so fix_expression's own constant branch converts it
+// to a binary string of the type's exact width on the later recursion (the same
+// path CBMC's own constants take -- see hex_to_bin), rather than duplicating
+// that width logic here.
+irept mk_bv_const(const irept &bv_type, unsigned long long value)
+{
+  irept c("constant");
+  c.add("type") = bv_type;
+  c.add("value") = mk(int_to_hex(value));
+  return c;
+}
+
+// A unary/binary expression node with raw operands in get_sub(); the later
+// wrap step in fix_expression moves them into "operands" and the recursion
+// normalises them, exactly as for CBMC's own nodes.
+irept mk_unary(const irep_idt &id, const irept &type, const irept &op)
+{
+  irept e(id);
+  e.add("type") = type;
+  e.get_sub().push_back(op);
+  return e;
+}
+
+irept mk_binary(
+  const irep_idt &id,
+  const irept &type,
+  const irept &lhs,
+  const irept &rhs)
+{
+  irept e(id);
+  e.add("type") = type;
+  e.get_sub().push_back(lhs);
+  e.get_sub().push_back(rhs);
+  return e;
+}
+
 void fix_expression(irept &irep)
 {
+  if (irep.id() == "count_leading_zeros" || irep.id() == "count_trailing_zeros")
+  {
+    // CBMC lowers __builtin_clz/__builtin_ctz to these expression ids, which
+    // migrate_expr has no handler for (it aborts with "migrate expr failed").
+    // ESBMC's native path resolves __builtin_clz at symex time
+    // (run_builtin.cpp) via a popcount-based bit-count formula; there is no
+    // clz/ctz irep2 node. Reproduce that formula here in terms of ids
+    // migrate_expr already lowers (bitor, lshr, bitand, bitnot, "-", popcount),
+    // so no new node is needed. Scoped to the CBMC --binary path, so it never
+    // perturbs native handling (which never emits count_{leading,trailing}_zeros
+    // as an expression). clz(0)/ctz(0) is UB; CBMC emits its own #bounds_check
+    // guard for the zero argument, which is matched independently.
+    const bool leading = irep.id() == "count_leading_zeros";
+    const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept optype = operand.find("type"); // operand's bitvector type
+    const irept restype = irep.find("type");   // int result type (signedbv/32)
+    const std::size_t width = bv_width(optype);
+
+    if (leading)
+    {
+      // clz(x) = width - popcount(x with every bit below its most-significant
+      // set bit smeared down), matching run_builtin.cpp exactly.
+      irept smeared = operand;
+      for (std::size_t shift = 1; shift < width; shift <<= 1)
+        smeared = mk_binary(
+          "bitor",
+          optype,
+          smeared,
+          mk_binary("lshr", optype, smeared, mk_bv_const(optype, shift)));
+
+      irept popcount("popcount");
+      popcount.add("type") = restype; // migrate forces int32; kept well-formed
+      popcount.get_sub().push_back(smeared);
+
+      irep.id("-");
+      irep.get_sub().clear();
+      irep.get_sub().push_back(mk_bv_const(restype, width));
+      irep.get_sub().push_back(popcount);
+    }
+    else
+    {
+      // ctz(x) = popcount(~x & (x - 1)): the run of trailing-zero bit positions
+      // (x-1 borrows through them, ~x keeps exactly those bits).
+      irept arg = mk_binary(
+        "bitand",
+        optype,
+        mk_unary("bitnot", optype, operand),
+        mk_binary("-", optype, operand, mk_bv_const(optype, 1)));
+
+      irep.id("popcount");
+      irep.get_sub().clear();
+      irep.get_sub().push_back(arg);
+    }
+  }
+
   if (irep.id() == "sign" && irep.find("type").id() == "bool")
   {
     // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
@@ -161,18 +278,7 @@ void fix_expression(irept &irep)
       // binary string and left as-is; anything else is a hex value converted to
       // a binary string of the type's own bit width (see hex_to_bin).
       if (val.size() != 32)
-      {
-        std::size_t width = 32;
-        const std::string ws = irep.find("type").find("width").id_string();
-        // A bitvector type's width is always a plain decimal integer; guard the
-        // parse defensively so a malformed/absent width falls back to 32 rather
-        // than throwing out of std::stoul.
-        if (
-          !ws.empty() &&
-          ws.find_first_not_of("0123456789") == std::string::npos)
-          width = static_cast<std::size_t>(std::stoul(ws));
-        irep.add("value") = mk(hex_to_bin(val, width));
-      }
+        irep.add("value") = mk(hex_to_bin(val, bv_width(irep.find("type"))));
     }
   }
 
@@ -232,7 +338,13 @@ void fix_expression(irept &irep)
     "signbit",
     "ieee_sqrt",
     "ieee_fma",
-    "abs"};
+    "abs",
+    // Unary bit-builtins: migrate_expr already handles popcount/bswap via op0(),
+    // but without wrapping CBMC's raw operands into "operands" here, op0() reads
+    // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
+    // / __builtin_popcount lower to these ids in CBMC's goto.
+    "popcount",
+    "bswap"};
 
   const std::string cur = irep.id_string();
 
@@ -281,6 +393,41 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   if (self.id() == "c_bool")
   {
     self.id("signedbv");
+    return;
+  }
+
+  if (self.id() == "c_bit_field")
+  {
+    // CBMC types a bitfield member as c_bit_field{width: N; sub[0]: <underlying
+    // integer bv of width W>}. ESBMC has no c_bit_field type -- migrate_type
+    // aborts on it ("ERROR: c_bit_field") -- and instead represents a bitfield
+    // exactly as its native C frontend does (clang_c_convert.cpp::
+    // get_bitfield_type): the underlying bv kind narrowed to the bitfield width
+    // N, tagged #bitfield, carrying the full underlying type as its subtype.
+    // migrate_type then reads width N and yields an N-bit bv (get_uint_type(N)
+    // for the bool case, signedbv/unsignedbv of N bits otherwise).
+    if (self.get_sub().empty())
+    {
+      // CBMC always emits the underlying integer type as sub[0]; a c_bit_field
+      // without it is malformed. Fail loud (like expand_anon_struct) rather
+      // than emit an id-less type migrate_type would choke on obscurely.
+      log_error("CBMC adapter: c_bit_field without an underlying type");
+      abort();
+    }
+    irept underlying = self.get_sub()[0];
+    // A _Bool bitfield must stay boolean: ESBMC's migrate reads a #bitfield
+    // bool as an *unsigned* N-bit value (get_uint_type), whereas fix_type maps
+    // CBMC's c_bool to signedbv -- a 1-bit signedbv would read value 1 as -1.
+    // Detect the bool underlying before that rewrite and keep the result "bool".
+    const bool bool_underlying =
+      underlying.id() == "bool" || underlying.id() == "c_bool";
+    fix_type(underlying, cache);
+    const irep_idt bf_width = self.find("width").id();
+    self.id(bool_underlying ? irep_idt("bool") : underlying.id());
+    self.get_sub().clear();
+    self.set("width", bf_width);
+    self.set("#bitfield", true);
+    self.add("subtype") = underlying;
     return;
   }
 
@@ -809,9 +956,16 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
     if (
       sym.is_type && (sym.stype.id() == "struct" || sym.stype.id() == "union"))
     {
-      const std::string tagname = "tag-" + sym.base_name;
+      // A struct_tag/union_tag reference identifies its definition by the type
+      // symbol's *name*, which is scope-qualified: `tag-S` at file scope but
+      // `main::1::tag-S` for a struct declared inside a function body. Keying
+      // the cache by `"tag-" + base_name` only matched the former, so any
+      // function-local struct went unresolved and aborted ("struct_tag/union_tag
+      // should have been resolved"). Key by the symbol name, which equals the
+      // reference identifier at every scope (identical to the old key at file
+      // scope, where name == "tag-" + base_name).
       fix_type(sym.stype, type_cache);
-      type_cache[tagname] = sym.stype;
+      type_cache[sym.name] = sym.stype;
     }
     out.symbols.push_back(symbol_to_esbmc_irep(sym));
   }
