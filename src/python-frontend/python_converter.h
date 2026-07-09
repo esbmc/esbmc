@@ -366,6 +366,8 @@ private:
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
+  bool function_is_generator(const nlohmann::json &function_node);
+
   exprt materialize_list_function_call(
     const exprt &expr,
     const nlohmann::json &element,
