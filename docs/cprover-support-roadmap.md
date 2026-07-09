@@ -90,6 +90,12 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #5925) | `cbmc_adapter.cpp::cbmc_adapt` |
+| Type rewrite for `c_bit_field` (bitfield members) → underlying bv narrowed to the bitfield width + `#bitfield`/`subtype` (§4.3, Phase 3) | ✅ (PR #5924) | `cbmc_adapter.cpp::fix_type` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #5910) | `cbmc_adapter.cpp::fix_expression` |
+| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #5916) | `cbmc_adapter.cpp::hex_to_bin` |
+| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -188,6 +194,25 @@ enough that it was previously undiscovered simply because nothing had exercised 
 `malloc`-then-typed-write pattern far enough to notice the pointer was void* the whole
 time. Fixed by mirroring the `array` branch's direct assignment exactly.
 
+**Bitfield type `c_bit_field` — ✅ fixed.** CBMC types a bitfield struct member as a
+`c_bit_field` type — `{width: N; sub[0]: <underlying integer bv of width W>}` — which
+`migrate_type` has no case for, so any struct with a bitfield member aborted with
+`ERROR: c_bit_field`. ESBMC has no distinct bitfield type node: its native C frontend
+(`clang_c_convert.cpp::get_bitfield_type`) represents `unsigned a:N` as the *underlying* bv
+kind narrowed to width `N`, tagged `#bitfield`, carrying the full underlying type as its
+`subtype`; `migrate_type` then yields an `N`-bit bv. `fix_type` now rewrites `c_bit_field`
+into exactly that shape. The one subtlety is `_Bool a:1`: `migrate` reads a `#bitfield`
+**bool** as an *unsigned* `N`-bit value (`get_uint_type`), but `fix_type` otherwise maps
+CBMC's `c_bool` to `signedbv` — and a 1-bit *signed* bv reads value `1` back as `-1`, a
+verdict divergence. The rewrite detects a bool underlying before that mapping and keeps the
+result `bool`. Verdict parity with CBMC, dual-solver, across unsigned/signed fields,
+width-truncation (`s.a = 9` in a 3-bit field ⇒ `1`), signed wrap (`int a:3`, `5 ⇒ -3`),
+`_Bool:1`, and multi-field packing (`cbmc_bitfield`, `cbmc_bitfield_signed`,
+`cbmc_bitfield_bool`, `cbmc_bitfield_fail`). Bitfield members of a struct **defined inside a
+function body** additionally trip the pre-existing `struct_tag/union_tag should have been
+resolved` gap (§4.3 anon/tag resolution) — orthogonal to this fix and still open; the tests
+use file-scope struct definitions.
+
 ### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
 `fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
 wrapped into the `"operands"` named-sub `exprt::operands()` expects; anything missing from
@@ -213,10 +238,22 @@ already handles via `op0()` — but neither was in `fix_expression`'s operand-wr
 CBMC's raw operands stayed in `get_sub()`, `op0()` read an empty operand list, and the
 verdict was garbage/crash (the exact `isnan`/`pointer_offset` failure shape). Fixed by adding
 `popcount`/`bswap` to the wrap-set. Verdict parity both directions, dual-solver
-(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`). Still open in the same family:
-`__builtin_clz`/`ctz` reach the adapter as an id `migrate_expr` has no handler for at all
-(aborts with `migrate expr failed`), so they need a migrate handler + irep2 node, not just a
-wrap-set entry — tracked separately.
+(`cbmc_popcount`/`_fail`, `cbmc_bswap`/`_fail`).
+
+**Bit-count builtins `clz`/`ctz` — ✅ landed.** `__builtin_clz`/`__builtin_ctz` lower to CBMC
+`count_leading_zeros`/`count_trailing_zeros` ireps, which `migrate_expr` has *no* handler for
+at all (aborts with `migrate expr failed`) — and, unlike `popcount`/`bswap`, ESBMC has no
+`clz`/`ctz` irep2 node either: the native frontend resolves `__builtin_clz` at *symex* time
+(`run_builtin.cpp`) with a popcount-based bit-count formula, and does not model `__builtin_ctz`
+at all. Rather than add a new irep2 node, `fix_expression` reproduces that same formula in terms
+of ids `migrate_expr` already lowers — `clz(x) = width − popcount(x smeared down below its MSB)`
+(mirroring `run_builtin.cpp` exactly) and `ctz(x) = popcount(~x & (x−1))` — so no new node is
+needed and the CBMC path gains `ctz` coverage the native path still lacks. Scoped to the
+`--binary` path, so it cannot perturb native handling (which never emits
+`count_{leading,trailing}_zeros` as an expression). `clz(0)`/`ctz(0)` is UB; CBMC emits its own
+`#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
+dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
+(`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
 **Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
 as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
 counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
