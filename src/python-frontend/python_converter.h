@@ -1134,6 +1134,14 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+  // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
+  // where the division is really code-generated in its execution context.
+  // Suppress it while a lambda body is converted at its definition (operands
+  // are still unbound parameters) and during the discarded type-probe pass of
+  // an assignment RHS (which would otherwise emit the guard twice as dead code
+  // and evaluate a side-effecting divisor an extra time).
+  bool converting_lambda_body_ = false;
+  bool in_rhs_type_probe_ = false;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
   // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
   // raw index/slice expression rather than an already-materialized array
