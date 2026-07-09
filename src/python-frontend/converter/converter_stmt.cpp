@@ -3782,6 +3782,14 @@ void python_converter::get_return_statements(
           wrap_in_optional(none_expr, current_func_return_type_);
       }
     }
+    // A bare `return` yields None. When the function returns None — either
+    // already typed none_type(), or still an empty placeholder that the funcdef
+    // will promote to none_type() (issue #5914) — give the RETURN an explicit
+    // None value so it matches the declared none_type() slot at the call site.
+    else if (
+      current_func_return_type_ == none_type() ||
+      current_func_return_type_.is_empty())
+      return_code.return_value() = gen_zero(none_type());
 
     target_block.copy_to_operands(return_code);
     return;

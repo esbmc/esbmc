@@ -971,9 +971,18 @@ exprt function_call_builder::build() const
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      code_typet trampoline_type;
-      trampoline_type.return_type() = empty_typet();
-      typet param_type = pointer_typet(trampoline_type);
+      if (call_["args"].size() != 1)
+        throw std::runtime_error(func_name + " takes exactly one argument");
+      exprt arg = converter_.get_expr(call_["args"][0]);
+      if (arg.type().is_code())
+        arg = build_address_of(arg);
+
+      // intrinsic_spawn_thread requires a *literal* address_of(symbol); a
+      // typecast around it trips its is_address_of2t assertion. The trampoline
+      // returns None, whose GOTO return type is none_type() rather than void
+      // (issue #5914), so derive the parameter type from the actual address
+      // expression instead of forcing pointer-to-void() and typecasting.
+      typet param_type = arg.type();
 
       code_typet fn_type;
       fn_type.return_type() = uint_type();
@@ -986,14 +995,6 @@ exprt function_call_builder::build() const
           converter_.python_file(), func_name, symbol_id, location, fn_type);
         converter_.add_symbol(symbol);
       }
-
-      if (call_["args"].size() != 1)
-        throw std::runtime_error(func_name + " takes exactly one argument");
-      exprt arg = converter_.get_expr(call_["args"][0]);
-      if (arg.type().is_code())
-        arg = build_address_of(arg);
-      if (arg.type() != param_type)
-        arg = build_typecast(arg, param_type);
 
       code_function_callt call;
       call.function() = symbol_exprt(symbol_id, fn_type);
