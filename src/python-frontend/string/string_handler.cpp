@@ -18,6 +18,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/migrate.h>
 #include <util/python_types.h>
 #include <util/std_expr.h>
@@ -31,6 +32,7 @@
 #include <cmath>
 #include <cctype>
 #include <climits>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -706,6 +708,48 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
+std::optional<std::string> string_handler::cpython_float_str(double d)
+{
+  // std::to_string / setprecision(6) below honour the host FP rounding mode,
+  // which the pipeline can leave non-default; pin FE_TONEAREST so the decimal
+  // fold matches CPython regardless of the host's mode.
+  const round_to_nearest_guard rounding_guard;
+
+  // CPython spells the non-finite floats "nan"/"inf"/"-inf"; the fixed-notation
+  // fold below cannot produce them.
+  if (std::isnan(d))
+    return "nan";
+  if (std::isinf(d))
+    return d < 0 ? "-inf" : "inf";
+
+  // CPython uses exponential notation outside [1e-4, 1e16); the fixed fold
+  // below cannot reproduce it, so refuse those ranges (str(1e-5) == "1e-05",
+  // str(1e16) == "1e+16", not the fixed spellings).
+  const double mag = std::fabs(d);
+  if (!(d == 0.0 || (mag >= 1e-4 && mag < 1e16)))
+    return std::nullopt;
+
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(6) << d;
+  std::string s = oss.str();
+
+  // Match Python's str(float): drop trailing fractional zeros but keep at least
+  // one digit after the dot ("5.0", not "5.").
+  const auto dot = s.find('.');
+  const size_t last_nonzero = s.find_last_not_of('0');
+  if (last_nonzero == dot)
+    s.resize(dot + 2);
+  else
+    s.resize(last_nonzero + 1);
+
+  // The 6-decimal rendering is only CPython's repr when it loses no precision.
+  // If the string does not parse back to the exact same double, the value needs
+  // more digits than were emitted; refuse rather than fold a wrong constant.
+  if (std::strtod(s.c_str(), nullptr) != d)
+    return std::nullopt;
+  return s;
+}
+
 // Parse the leading [[fill]align][0][width] portion of a Python format
 // spec. Returns true if any padding parameters were extracted; on success,
 // *rest is set to the remainder of the spec (precision/type) for further
@@ -1189,30 +1233,25 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
     else if (t.is_floatbv())
     {
-      std::string str_value = "0.0";
-      if (expr.is_constant() && !expr.value().empty())
+      // A fixed 6-decimal fold cannot faithfully reproduce CPython's shortest
+      // round-trip repr for every double (precision loss for values like 1/3,
+      // exponential notation outside [1e-4, 1e16)). cpython_float_str returns
+      // nullopt when it cannot produce the exact spelling; fall back to a sound
+      // nondet string rather than fold a wrong constant that could satisfy a
+      // false assertion.
+      std::optional<std::string> folded;
+      if (!expr.value().empty() && bv_width(t) == 64)
       {
-        const std::string &float_bits = expr.value().as_string();
-        if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
-        {
-          str_value = float_to_string(float_bits, 64, 6);
-          // Match Python's str(float): drop trailing fractional zeros, keep
-          // at least one digit after the dot ("5.0" rather than "5.").
-          auto dot = str_value.find('.');
-          if (dot != std::string::npos)
-          {
-            size_t last_nonzero = str_value.find_last_not_of('0');
-            if (last_nonzero == dot)
-              str_value.resize(dot + 2);
-            else
-              str_value.resize(last_nonzero + 1);
-          }
-        }
+        ieee_floatt f;
+        f.from_expr(to_constant_expr(expr));
+        folded = cpython_float_str(f.to_double());
       }
+      if (!folded)
+        return build_nondet_string_fallback(expr.location());
 
       typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+        type_handler_.build_array(char_type(), folded->size() + 1);
+      std::vector<unsigned char> chars(folded->begin(), folded->end());
       chars.push_back('\0');
 
       return make_char_array_expr(chars, string_type);

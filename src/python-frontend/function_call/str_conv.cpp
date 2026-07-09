@@ -465,30 +465,15 @@ exprt function_call_expr::handle_int_to_bytes() const
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
-  // std::to_string uses %f, which honours the host rounding mode; an earlier
-  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
-  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
-  const round_to_nearest_guard rounding_guard;
-  std::string str_val = std::to_string(arg["value"].get<double>());
-
-  // Remove unnecessary trailing zeros and dot if needed (to match Python str behavior)
-  // Example: "5.500000" → "5.5"
-  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
-  if (str_val.back() == '.')
-    str_val.pop_back();
-
-  // CPython's str()/repr() of a whole-number float keeps a ".0" suffix
-  // (str(1.0) == "1.0", not "1"); re-append it when the strip above removed the
-  // fractional part entirely. Guard on a trailing digit so non-numeric spellings
-  // (inf/nan) are left untouched.
-  if (
-    str_val.find('.') == std::string::npos && !str_val.empty() &&
-    std::isdigit(static_cast<unsigned char>(str_val.back())))
-    str_val += ".0";
-
-  typet t = type_handler_.get_typet("str", str_val.size() + 1);
-  return converter_.make_char_array_expr(
-    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
+  // Fold the constant float through the shared string handler. It renders
+  // CPython's repr only when it can prove the 6-decimal spelling exact and
+  // emits a sound nondet string otherwise: a fixed %f fold here cannot
+  // reproduce CPython's shortest round-trip repr for every double (precision
+  // loss for str(0.1234567), exponential notation outside [1e-4, 1e16)) and
+  // would materialise a wrong constant that could verify a false assertion.
+  // Delegating also keeps this literal path in sync with the variable path.
+  return converter_.get_string_handler().convert_to_string(
+    converter_.get_expr(arg));
 }
 
 exprt function_call_expr::handle_complex_to_str() const
