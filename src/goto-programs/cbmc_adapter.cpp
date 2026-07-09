@@ -956,9 +956,16 @@ cbmc_adapted_resultt adapt_cbmc_to_esbmc(cbmc_parse_resultt parsed)
     if (
       sym.is_type && (sym.stype.id() == "struct" || sym.stype.id() == "union"))
     {
-      const std::string tagname = "tag-" + sym.base_name;
+      // A struct_tag/union_tag reference identifies its definition by the type
+      // symbol's *name*, which is scope-qualified: `tag-S` at file scope but
+      // `main::1::tag-S` for a struct declared inside a function body. Keying
+      // the cache by `"tag-" + base_name` only matched the former, so any
+      // function-local struct went unresolved and aborted ("struct_tag/union_tag
+      // should have been resolved"). Key by the symbol name, which equals the
+      // reference identifier at every scope (identical to the old key at file
+      // scope, where name == "tag-" + base_name).
       fix_type(sym.stype, type_cache);
-      type_cache[tagname] = sym.stype;
+      type_cache[sym.name] = sym.stype;
     }
     out.symbols.push_back(symbol_to_esbmc_irep(sym));
   }

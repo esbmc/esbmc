@@ -89,6 +89,7 @@ and the symbol/function table layout.
 | Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #5925) | `cbmc_adapter.cpp::cbmc_adapt` |
 | Type rewrite for `c_bit_field` (bitfield members) → underlying bv narrowed to the bitfield width + `#bitfield`/`subtype` (§4.3, Phase 3) | ✅ (PR #5924) | `cbmc_adapter.cpp::fix_type` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #5910) | `cbmc_adapter.cpp::fix_expression` |
 | Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #5916) | `cbmc_adapter.cpp::hex_to_bin` |
@@ -144,6 +145,21 @@ proof harnesses by name.
 CBMC's `ST[...]`/`SYM`/`*{...}` type-name grammar (a skeleton exists in the original Rust
 `adapter.rs::Anon2Struct`). Separately, the hex→binary constant rewrite goes through
 `uint64_t`, so constants wider than 64 bits (e.g. 128-bit) are wrong.
+
+**Function-local struct/union tags — ✅ fixed.** A `struct_tag`/`union_tag` reference
+resolves to its definition by the type symbol's *name*, which CBMC scope-qualifies:
+`tag-S` at file scope but `main::1::tag-S` for a struct declared inside a function body. The
+adapter's tag cache was keyed `"tag-" + base_name`, which only matched the file-scope form,
+so **any function-local struct or union** went unresolved and aborted with
+`struct_tag/union_tag should have been resolved`. Fixed by keying the cache on the symbol
+*name* (`type_cache[sym.name]`), which equals the reference identifier at every scope and is
+byte-identical to the old key at file scope (`name == "tag-" + base_name` there). This also
+correctly distinguishes same-named structs in different scopes (`struct S` with different
+layouts in two functions get distinct `f::…::tag-S` / `main::…::tag-S` names). Verdict
+parity with CBMC, dual-solver, across local struct/union, nested, pointer-to-local, array-of-
+local, and two-scope-same-name cases (`cbmc_local_struct`, `cbmc_local_struct_fail`,
+`cbmc_local_union`, `cbmc_local_struct_scopes`). (A function-local struct with a *bitfield*
+member additionally needs the §4.3 `c_bit_field` fix to verify end-to-end.)
 
 **Wide-constant truncation (≤64 bits) — ✅ fixed.** `fix_expression`'s constant rewrite
 called `hex_to_bin32`, which — mirroring the Rust reference's `format!("{:032b}", …)` —
