@@ -1320,6 +1320,8 @@ class CoreVisitorsMixin:
 
         node = self.generic_visit(node)
         self._update_known_literal_for_simple_assign(node)
+        self._track_static_seq_binding(node)
+        self._maybe_track_seq_iterator(node)
         # Drop any literal recorded by _update_known_literal_for_simple_assign
         # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
         # the cascade transforms decline) cannot constant-fold `x` to `[]`.
@@ -1333,6 +1335,10 @@ class CoreVisitorsMixin:
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
+
+        rewritten_seq_next = self._maybe_rewrite_seq_next_assign(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
 
         lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
         if lowered_dict_comp is not None:

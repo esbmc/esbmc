@@ -37,6 +37,16 @@ class PreprocessorStateMixin:
         self.generator_func_defs = {}
         self.generator_next_index = {}
         self.generator_emitted_init = set()
+        # Sequence-iterator protocol lowering (range_iter): maps a name bound to
+        # a statically-sized sequence (range()/list/tuple literal) to that
+        # length, an iterator var (from ``seq.__iter__()``) to its captured
+        # length, the running per-iterator consumption index, and the set of
+        # iterator names disqualified because they are consumed inside a loop or
+        # rebound (so static index tracking would be unsound).
+        self._static_seq_len = {}
+        self.seq_iterator_length = {}
+        self.seq_iterator_index = {}
+        self._seq_iter_blacklist = set()
         self.dict_items_vars = {}
         self._defaultdict_factory = {}
         self._defaultdict_initialized_keys = {}
