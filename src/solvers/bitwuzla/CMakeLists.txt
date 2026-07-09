@@ -1,4 +1,5 @@
 set(Bitwuzla_MIN_VERSION "0.1")
+include(ExecuteOrFail)
 
 if(DEFINED Bitwuzla_DIR)
     set(ENABLE_BITWUZLA ON)
@@ -14,14 +15,16 @@ else()
 
     message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
-        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-fpexp
+        esbmc_execute_or_fail(
+          TAG "bitwuzla/configure"
+          COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-fpexp
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
-
         message("[bitwuzla] Building...")
-        execute_process(COMMAND meson install
-          WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
-    COMMAND_ECHO STDOUT)
+        esbmc_execute_or_fail(
+          TAG "bitwuzla/build"
+          COMMAND meson install
+          WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
     endif()

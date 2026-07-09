@@ -1,5 +1,6 @@
 set(Boolector_MIN_VERSION "3.2.0")
 include(CPM)
+include(ExecuteOrFail)
 
 if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
@@ -19,20 +20,33 @@ else()
 
     # TODO: Maybe we should do a PR to boolector repo and make our
     # life easier in here.
+    # The setup-*.sh scripts download a pinned tarball with a curl that has
+    # neither -f nor --retry, so a transient HTTP error is unpacked as if it
+    # were the archive ("gzip: stdin: not in gzip format"). Retry them.
     message("[boolector] Setting up lingeling")
-    execute_process(COMMAND "./contrib/setup-lingeling.sh"
-                    WORKING_DIRECTORY ${boolector_SOURCE_DIR})
+    esbmc_execute_with_retry(
+      TAG "boolector/lingeling"
+      RETRIES 3
+      COMMAND "./contrib/setup-lingeling.sh"
+      WORKING_DIRECTORY ${boolector_SOURCE_DIR})
 
     message("[boolector] Setting up btor2tools")
-    execute_process(COMMAND "./contrib/setup-btor2tools.sh"
-                    WORKING_DIRECTORY ${boolector_SOURCE_DIR})
+    esbmc_execute_with_retry(
+      TAG "boolector/btor2tools"
+      RETRIES 3
+      COMMAND "./contrib/setup-btor2tools.sh"
+      WORKING_DIRECTORY ${boolector_SOURCE_DIR})
 
     message("[boolector] Configuring build")
-    execute_process(COMMAND ${boolector_SOURCE_DIR}/configure.sh --prefix ${boolector_BINARY_DIR}
-                    WORKING_DIRECTORY ${boolector_SOURCE_DIR})
+    esbmc_execute_or_fail(
+      TAG "boolector/configure"
+      COMMAND ${boolector_SOURCE_DIR}/configure.sh --prefix ${boolector_BINARY_DIR}
+      WORKING_DIRECTORY ${boolector_SOURCE_DIR})
 
     message("[boolector] Building...")
-    execute_process(COMMAND make -j4 install
+    esbmc_execute_or_fail(
+      TAG "boolector/build"
+      COMMAND make -j4 install
       WORKING_DIRECTORY ${boolector_SOURCE_DIR}/build)
 
     set(Boolector_DIR ${boolector_BINARY_DIR})

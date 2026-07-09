@@ -1,4 +1,5 @@
 set(CVC4_MIN_VERSION "1.6")
+include(ExecuteOrFail)
 
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
@@ -13,11 +14,15 @@ else()
             GIT_TAG cvc5-1.0.5)
 
         message("[cvc5] Configuring")
-        execute_process(COMMAND ./configure.sh --auto-download --prefix=${cvc5_BINARY_DIR}
-                            WORKING_DIRECTORY ${cvc5_SOURCE_DIR})
+        esbmc_execute_or_fail(
+            TAG "cvc5/configure"
+            COMMAND ./configure.sh --auto-download --prefix=${cvc5_BINARY_DIR}
+            WORKING_DIRECTORY ${cvc5_SOURCE_DIR})
 
         message("[cvc5] Building")
-        execute_process(COMMAND make -j4 install
+        esbmc_execute_or_fail(
+            TAG "cvc5/build"
+            COMMAND make -j4 install
             WORKING_DIRECTORY ${cvc5_SOURCE_DIR}/build)
 
         set(CVC4_DIR ${cvc5_BINARY_DIR})

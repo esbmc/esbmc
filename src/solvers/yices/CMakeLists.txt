@@ -1,4 +1,5 @@
 set(Yices_MIN_VERSION "2.6.1")
+include(ExecuteOrFail)
 
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
@@ -16,23 +17,33 @@ else()
     # at configuration time
 
     message("[yices] Preparing")
-    execute_process(COMMAND "autoreconf"
-                WORKING_DIRECTORY ${yices_SOURCE_DIR})
+    esbmc_execute_or_fail(
+        TAG "yices/autoreconf"
+        COMMAND "autoreconf"
+        WORKING_DIRECTORY ${yices_SOURCE_DIR})
 
     message("[yices] Configuring build")
-    execute_process(COMMAND ${yices_SOURCE_DIR}/configure --prefix ${yices_BINARY_DIR}
-                WORKING_DIRECTORY ${yices_SOURCE_DIR})
-
-    message("[yices] Building...")
-    execute_process(COMMAND make -j4
+    esbmc_execute_or_fail(
+        TAG "yices/configure"
+        COMMAND ${yices_SOURCE_DIR}/configure --prefix ${yices_BINARY_DIR}
         WORKING_DIRECTORY ${yices_SOURCE_DIR})
 
     message("[yices] Building...")
-    execute_process(COMMAND make static-lib
+    esbmc_execute_or_fail(
+        TAG "yices/build"
+        COMMAND make -j4
+        WORKING_DIRECTORY ${yices_SOURCE_DIR})
+
+    message("[yices] Building static library...")
+    esbmc_execute_or_fail(
+        TAG "yices/static-lib"
+        COMMAND make static-lib
         WORKING_DIRECTORY ${yices_SOURCE_DIR})
 
     message("[yices] Installing...")
-    execute_process(COMMAND make install
+    esbmc_execute_or_fail(
+        TAG "yices/install"
+        COMMAND make install
         WORKING_DIRECTORY ${yices_SOURCE_DIR})
 
     file(COPY ${yices_SOURCE_DIR}/build/x86_64-pc-linux-gnu-release/static_lib/libyices.a
