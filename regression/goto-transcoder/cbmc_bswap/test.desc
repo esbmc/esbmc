@@ -1,0 +1,4 @@
+CORE
+cbmc_bswap.goto
+--binary
+^VERIFICATION SUCCESSFUL$

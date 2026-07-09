@@ -40,6 +40,7 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
@@ -121,6 +122,17 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 
   if (witness_yaml_output != "")
     correctness_yaml_goto_trace(options, ns, goto_trace);
+
+  // On a successful verification there is no error trace, but dead-store
+  // advisories (CWE-563) are still valid and must reach SARIF. Emit an
+  // advisory-only document; guarded so flag-off runs write nothing new.
+  if (
+    !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -150,7 +162,10 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     violation_yaml_goto_trace(options, ns, goto_trace);
 
   if (!options.get_option("sarif-output").empty())
-    sarif_goto_trace(options, ns, goto_trace);
+  {
+    sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -768,9 +783,23 @@ void report_coverage(
     const int tracked_instance = reached_mul_claims.size();
     const int total_instance = goto_coveraget::total_assert_ins;
 
+    // Assertions never observed during symbolic execution: either their
+    // branch was pruned by a constant guard, or their path guard is
+    // unsatisfiable so the claim is vacuously valid (discussion #5745).
+    std::vector<std::string> unreached_claims;
+    for (const auto &[claim_msg, claim_loc] : goto_coveraget::all_claims)
+    {
+      const std::string claim_sig = claim_msg + "\t" + claim_loc;
+      if (reached_mul_claims.count(claim_sig) == 0)
+        unreached_claims.push_back(claim_sig);
+    }
+
     log_success("\n[Coverage]\n");
     // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+    // "Total/Unreached Asserts" count static claims; the "Instances" lines
+    // count their goto-unwound copies.
     log_result("Total Asserts: {}", total);
+    log_result("Unreached Asserts: {}", unreached_claims.size());
     if (total_instance >= tracked_instance)
       log_result("Total Assertion Instances: {}", total_instance);
     else
@@ -786,7 +815,12 @@ void report_coverage(
       // reached claims:
       for (const auto &claim : reached_mul_claims)
       {
-        log_status("  {}", prettify_solidity_expr(claim));
+        log_status("  {} : REACHED", prettify_solidity_expr(claim));
+      }
+      // unreached claims:
+      for (const auto &claim : unreached_claims)
+      {
+        log_status("  {} : UNREACHED", prettify_solidity_expr(claim));
       }
     }
 
@@ -1324,6 +1358,21 @@ smt_resultt bmct::start_bmc()
     // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
   report_result(res);
+
+  // Dead-store advisories are verdict-independent, but the trace paths that
+  // emit them (successful_trace / error_trace) do not run on every verdict —
+  // e.g. a FAILED run under --no-cex / --result-only, or an SMTLIB-only
+  // emission. Emit an advisory-only SARIF document here if none was written
+  // with a trace, so the advisory is not silently dropped (the textual
+  // advisory prints unconditionally in the driver).
+  if (
+    !dead_store_sarif_written && !dead_store_advisories.empty() &&
+    !options.get_option("sarif-output").empty())
+  {
+    goto_tracet empty_trace;
+    sarif_goto_trace(options, ns, empty_trace, dead_store_advisories);
+    dead_store_sarif_written = true;
+  }
   return res;
 }
 

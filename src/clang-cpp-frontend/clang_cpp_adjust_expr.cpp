@@ -251,9 +251,13 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // just populate rhs' argument and replace the entire expression
     exprt &lhs = expr.op0();
     exprt arg = address_of_exprt(lhs);
-    exprt base_symbol = arg.op0();
-    assert(base_symbol.op0().id() == "symbol");
-    // TODO: wrap base symbol into dereference if it's a member
+    // Sanity: the object being constructed must ultimately root at a symbol,
+    // whether it is a plain member `s.m` or a nested member/array element such
+    // as `s.arr[i]` (emitted for per-element construction of array members).
+    const exprt *base_symbol = &lhs;
+    while (base_symbol->has_operands())
+      base_symbol = &base_symbol->op0();
+    assert(base_symbol->id() == "symbol");
     exprt::operandst &arguments = rhs_func_call.arguments();
     arguments.insert(arguments.begin(), arg);
 
@@ -479,6 +483,15 @@ void clang_cpp_adjust::convert_exception_id(
   std::string cpp_type = type.get("#cpp_type").as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+
+  // Fallback: an unusual catch parameter type (e.g. a function type, as in the
+  // ill-formed `catch (exception())`) matches none of the cases above and would
+  // leave `ids` empty, which callers such as adjust_catch dereference via
+  // `ids.front()`. Emit the type's own id so the result is never empty; such a
+  // synthetic id simply never matches a real throw, which is the intended
+  // behaviour for a catch clause that cannot name a throwable type.
+  if (ids.empty())
+    ids.emplace_back(id2string(type.id()) + suffix);
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(

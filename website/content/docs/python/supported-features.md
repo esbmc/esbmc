@@ -57,6 +57,7 @@ This page is a reference of all Python language constructs, data structures, and
 - Built-in variable access in f-strings: `f"Running as: {__name__}"`
 - Integer format specs: `f"{num:d}"`, `f"{num:i}"`
 - Float format specs: `f"{val:.2f}"`, `f"{price:.1f}"`
+- Full format specs applied to f-string fields: fill/alignment (`<`, `>`, `^`, and sign-aware `=`), width, zero-padding, and the `+`/`-`/space sign flags — e.g. `f"{x:03d}"` → `"007"`, `f"{n:05d}"` → `"-0042"`, `f"{s:>5}"` → `"   ab"`, `f"{v:07.2f}"` → `"0001.50"`
 - Boolean formatting: automatic conversion to `True`/`False` strings
 - Empty and literal f-strings: `f""`, `f"Just a string"`
 - F-string concatenation with other strings
@@ -78,7 +79,7 @@ This page is a reference of all Python language constructs, data structures, and
 - `count(x)`: Return the number of occurrences of a value
 - `index(x[, start[, end]])`: Return the position of the first occurrence of a value; the optional `start`/`end` bounds search the slice `l[start:end]` and return the absolute index (CPython slice-clamping semantics), raising `ValueError` if not found
 - `in` operator: Membership testing (`2 in [1, 2, 3]`), including membership of a user-class instance by identity (`obj in [obj]`)
-- `del l[i]`: Remove the element at a constant index
+- `del l[i]`: Remove the element at a constant index; `del l[i:j]` removes a slice
 - **Slice assignment**: `l[i:j] = src` and the extended form `l[i:j:k] = src`, including grow/shrink replacement (step 1), step > 1 (CPython requires matching lengths), and negative step (`l[::-1] = src`)
 - `+` operator: List concatenation (`[1,2] + [3,4]`)
 - **Repetition**: `lst * n` with both literal and variable lists
@@ -87,7 +88,7 @@ This page is a reference of all Python language constructs, data structures, and
 
 ### Strings
 
-**Predicates**: `startswith()`, `endswith()`, `isspace()`, `isalpha()`, `isdigit()`, `islower()`, `isupper()`, `isalnum()`, `isnumeric()`, `isidentifier()`
+**Predicates**: `startswith()`, `endswith()`, `isspace()`, `isalpha()`, `isdigit()`, `islower()`, `isupper()`, `isalnum()`, `isnumeric()`, `isidentifier()`, `istitle()`, `isascii()`, `isdecimal()`, `isprintable()`
 
 `startswith()`/`endswith()` also accept a **tuple of affixes** (`s.startswith(("ab", "x"))` is true if `s` matches any element) and the optional **position arguments** `s.startswith(prefix, start[, end])`, evaluated as `s[start:end].startswith(prefix)` with Python slice clamping over constant receivers.
 
@@ -101,7 +102,9 @@ This page is a reference of all Python language constructs, data structures, and
 
 **Padding**: `center()`, `ljust()`, `rjust()`, `zfill()`, `expandtabs()`
 
-**Formatting**: `format()` with `{}`, `{0}`, `{name}` placeholders; `format_map()` with constant dicts
+**Formatting**: `format()` with `{}`, `{0}`, `{name}` placeholders, including **format specs** on any positional, indexed, or keyword field (`"{:.2f}"`, `"{:>5}"`, `"{:^6}"`, `"{:05d}"`, `"{:+d}"`, `"{:08.2f}"` — fill/alignment, width, zero-pad, sign, and precision, applied to the original constant value); `format_map()` with constant dicts
+
+**Printf-style `%` operator**: bare conversions (`"%s=%d" % ("x", 5)`, `"%x" % 255`), flags/width/precision (`"%.2f" % 3.14159`, `"%05d" % 7`, `"%-5d" % 42`, `"%+d" % 5`, `"%8.2f"`, `"%e"`, sign-aware zero padding `"%07.2f" % -3.1`), integer precision as a minimum digit count (`"%.3d" % 5` → `"005"`), string width/precision truncation (`"%10s"`, `"%.3s"`), and the `%(name)s` mapping form against a right-hand dict (`"%(n)d" % {"n": 5}`, repeated keys, `%%` literal percent)
 
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
@@ -121,7 +124,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Empty set**: `set()` (note: `{}` creates an empty dict, not a set)
 - **From iterable**: `set(list)`, `set(str)`, `set(d.keys())`, `set(d.values())`
 - **Operators**: `-` (difference), `&` (intersection), `|` (union), `^` (symmetric difference, equivalent to `.symmetric_difference()`); the augmented assignment `^=` is supported too
-- **Methods**: `issubset(other)`, `issuperset(other)`, `symmetric_difference(other)`, `update(other)`, and the method forms `union(other)`, `intersection(other)`, `difference(other)` (non-mutating; they route to the same builders as the `|`/`&`/`-` operators and return a fresh set). Subset/superset relations are evaluated directly over the operand lists (a set-materialization bypass), so `set(iterable).issuperset(...)` works without first building the set.
+- **Methods**: `issubset(other)`, `issuperset(other)`, `symmetric_difference(other)`, `update(other)`, and the variadic method forms `union(*others)`, `intersection(*others)`, `difference(*others)` (non-mutating; they accept any number of operands, route to the same builders as the `|`/`&`/`-` operators, and return a fresh set). Subset/superset relations are evaluated directly over the operand lists (a set-materialization bypass), so `set(iterable).issuperset(...)` works without first building the set.
 - **Membership**: `x in s`, `x not in s`
 - **Equality**: `s1 == s2`, `s1 != s2` (order-independent)
 - **`len()`** built-in
@@ -142,13 +145,14 @@ This page is a reference of all Python language constructs, data structures, and
 ### Dictionaries
 
 - **Literals**: `{"a": 1, "b": 2}`
+- **Constructor**: `dict()` (empty), `dict(a=1, b=2)` (keyword form), and `dict([("k", 9)])` (positional iterable of key/value pairs)
 - **Subscript access**: `d["a"]`; raises `KeyError` if absent
 - **Subscript assignment**: `d["c"] = 3`
 - **Membership**: `"a" in d`, `"a" not in d`
 - **Deletion**: `del d["a"]`; raises `KeyError` if absent
 - **Equality**: `d1 == d2` (order-independent)
 - **Iteration**: `for` loops over `d.keys()`, `d.values()`, `d.items()`, and directly over the dict (`for k in d:`). For a **local dict literal** with tuple keys, the destructuring form `for u, v in d:` is also supported — each key is unrolled as a tuple literal so it unpacks correctly. Iteration, dict comprehensions, and `.items()` unpacking over an **unannotated parameter dict** are sound for **scalar keys** and **integer-tuple keys** — the concrete `dict[K, V]` is recovered (scope-aware) from the call sites, and an ambiguous shape stays a clean error rather than a wrong guess. String-tuple-keyed parameter dicts remain a known gap ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
-- **`update(other)`**: Merge another dict
+- **`update(other)`**: Merge another dict; also accepts keyword arguments (`d.update(a=1, b=2)`)
 - **`get(key[, default])`**: Return value or default; returns `Optional[T]` when no default is provided
 - **`setdefault(key[, default])`**: Insert key with default if absent, then return value; supports `int`, `float`, `bool`, `str`
 - **`pop(key[, default])`**: Remove and return value; raises `KeyError` if absent and no default
@@ -188,10 +192,12 @@ Byte sequences and integer class methods:
 - **`bytes.hex([sep[, bytes_per_sep]])`** — constant-folds a literal `bytes` object to its hex string. With the optional one-character `sep` (and optional `bytes_per_sep` group size) it reproduces CPython grouping exactly: `bytes([1, 2, 3]).hex("-")` → `"01-02-03"`, `bytes([0xb9, 0x01, 0x9e, 0xf3]).hex("_", 2)` → `"b901_9ef3"` (positive group size counts from the right, negative from the left)
 - **`bytes.fromhex(s)`** — constant-folds a hex string to a `bytes` object (the inverse of `.hex()`); accepts upper/lowercase digits and ASCII whitespace *between* byte pairs, and raises CPython's `ValueError` on odd-length or non-hex input
 - **`bytes.startswith`/`endswith`/`find`/`rfind` over literal operands** — folded directly over the byte-array representation when the receiver (and affix/sub argument) are literal `bytes([...])` constructors, so `bytes([1,2,3]).endswith(bytes([2,3]))` is `True` and `bytes([1,2,3]).find(bytes([2,3]))` is `1`. `find`/`rfind` also accept a single integer byte. Non-literal receivers, `b"..."` literals, and the position-argument forms fall through to the existing dispatch unchanged
+- **`bytes.index`/`rindex` over literal operands** — the raising counterparts of `find`/`rfind`, folded over the byte-array representation: `bytes([1,2,3]).index(bytes([2,3]))` is `1`, `rindex` returns the last occurrence, a single integer byte is accepted (`bytes([1,2,3]).index(2)`), NUL bytes are treated as ordinary data, and an absent subsequence raises a catchable `ValueError` (rather than `find`'s `-1`)
 - **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary. The operational model bounds the loop length by `512`, which covers narrow 64-bit `IntWide` and 512-bit `--ir` bignum receivers and guarantees termination on symbolic `n` without an explicit `--unwind`.
 - **`int.conjugate()`** — returns the integer unchanged (the conjugate of a real integer is itself; part of the numeric-tower API)
 - **Numeric-tower properties** — `int.numerator` / `int.denominator` (an `int` is the ratio `n/1`), `int.real` / `int.imag`, and `float.real` / `float.imag`. `float.numerator` / `float.denominator` and these properties on a `bool` deliberately raise a clean `AttributeError` (CPython's `float` is not a `Rational`).
 - **`float.is_integer()`** — constant-folds on a literal float receiver (e.g. `(2.0).is_integer()` → `True`), evaluated as `isfinite(d) && d == trunc(d)` to match CPython
+- **`float.as_integer_ratio()` / `int.as_integer_ratio()`** — folds a numeric literal to its exact `(numerator, denominator)` pair in lowest terms (`(2.5).as_integer_ratio()` → `(5, 2)`, `(5).as_integer_ratio()` → `(5, 1)`, `(-2.5)` → `(-5, 2)`), including the exact dyadic ratio of a non-representable decimal (`(0.1).as_integer_ratio()`); the folded tuple unpacks (`n, d = (1.5).as_integer_ratio()`)
 - **`str.encode()` / `bytes.decode()`** — standalone constant-folded conversions over **ASCII** data (`s.encode()` → byte array of ordinals, `b.decode()` → string of byte values); a non-ASCII / multi-byte character falls through to a clean error, matching CPython's `UnicodeDecodeError`. The round-trip form `s.encode().decode()` is also supported.
 
 ## Error Handling
@@ -411,7 +417,10 @@ The blocking semantics of `put()`/`get()` (the `block`/`timeout` arguments) are 
 - **`Decimal`** class with full arithmetic:
   - **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
   - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`
-  - **Unary**: `-d` (negation), `abs(d)`
+  - **Unary**: `-d` (negation), `+d` (unary plus), `abs(d)`
+  - **Query methods**: `is_nan()`, `is_snan()`, `is_qnan()`, `is_infinite()`, `is_finite()`, `is_zero()`, `is_signed()`, `is_normal()`, `is_subnormal()`
+  - **Copy methods**: `copy_abs()`, `copy_negate()`, `copy_sign(other)`
+  - **Comparison / selection methods**: `compare(other)` (returns a `Decimal` `-1`/`0`/`1`), `max(other)`, `min(other)`, `adjusted()` (adjusted exponent)
   - Special values: infinity and NaN (via `is_special` flag; propagated through all operations)
 
 ## Heapq Module (`heapq`)
@@ -448,11 +457,15 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 ## NumPy Module (`numpy`)
 
-Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants. Some APIs remain stubs for type inference only.
+Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants, now covering 1-D, 2-D, and 3-D (n-D) shapes. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for supported 1D/2D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs; `np.arange(n)`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for 1-D, 2-D, and 3-D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs; `np.arange(n)`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`. **Symbolic shapes** are handled: a nondeterministic dimension such as `np.zeros(n)` with a constrained `n` yields an array of the corresponding length (`len(a) == 0` when `n == 0`)
 
-**Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar
+**Indexing**: n-D tuple indexing `a[i, j, k]` on 2-D and 3-D arrays (`a[0, 0, 0]`, `a[1, 1, 1]`); supplying more indices than the array has dimensions is rejected. **Boolean-mask selection** `a[mask]` returns the elements where a same-length boolean array is `True` (an all-`False` mask yields an empty array); a non-boolean or symbolic mask is rejected
+
+**Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar. **2-D slicing** selects whole rows (`a[i, :]`) and whole columns (`a[:, j]`)
+
+**Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
 
 **Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays
 
@@ -473,3 +486,7 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 - `np.dot(a, b)`, `np.matmul(a, b)`: 1D/2D inputs with both integer and float backends (via `linalg.c`), including symbolic elements. The integer path carries the operand dtype width and asserts each result element fits the dtype range, so narrow dtypes (`int16`/`int32`) flag accumulation overflow (trivially satisfied for the default 64-bit `int`; combine with `--overflow-check` for int64-level overflow)
 - `np.transpose(a)`: 2D arrays, including runtime array variables (1D is the identity); higher-rank transpose is rejected
 - `np.linalg.det(a)`: constant numeric 2x2 and 3x3 matrices (complex-valued matrices are rejected)
+- `np.linalg.inv(a)`: matrix inverse of a constant numeric 2x2 matrix
+- `np.linalg.norm(a)`: Euclidean (L2) norm of a 1-D array (`np.linalg.norm(np.array([3.0, 4.0]))` → `5.0`)
+- `np.linalg.eig(a)`: eigenvalues of a constant numeric 2x2 matrix (returned as a list)
+- `np.linalg.svd(a)`: singular values of a constant numeric 2x2 matrix (returned as a list)

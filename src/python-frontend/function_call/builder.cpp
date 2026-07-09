@@ -17,6 +17,21 @@
 
 using namespace python_expr;
 
+// True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
+// Mirrors converter_expr.cpp's helper of the same name: used here to tell
+// whether a Tuple-sliced Subscript (`a[i, j]`) is one of the two supported
+// 2-D slicing patterns (which produce an array) or a fully scalar multi-index
+// (which does not), so len() dispatch doesn't misroute the latter.
+static bool is_full_slice_node(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Slice"))
+    return false;
+  auto is_absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return is_absent("lower") && is_absent("upper") && is_absent("step");
+}
+
 static typet normalize_pylist_candidate_type(typet type, const namespacet &ns)
 {
   if (type.is_pointer())
@@ -388,6 +403,14 @@ symbol_id function_call_builder::build_function_id() const
         function_id.set_function(func_name);
         return function_id;
       }
+      else if (
+        arg.contains("func") && arg["func"].is_object() &&
+        arg["func"].value("_type", "") == "Attribute" &&
+        arg["func"].value("attr", "") == "encode")
+        // len(s.encode()): the encoded bytes are a wide-int array whose zero
+        // high bytes make strlen stop at the first element, so size by element
+        // count instead (matches the bytes variable and bytes-slice paths).
+        func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
@@ -402,6 +425,37 @@ symbol_id function_call_builder::build_function_id() const
       // count elements rather than running strlen over the byte representation
       // (which stops at the first element's zero high bytes). String slices
       // keep the strlen path (their result is a null-terminated char array).
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "List" &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[[0, 2]]): fancy indexing always selects multiple elements into
+      // a fresh numeric array, never a null-terminated string; count elements
+      // instead of running strlen.
+      func_name = kGetObjectSize;
+    }
+    else if (
+      arg["_type"] == "Subscript" && arg.contains("slice") &&
+      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Tuple" &&
+      arg["slice"].contains("elts") && arg["slice"]["elts"].is_array() &&
+      arg["slice"]["elts"].size() == 2 &&
+      is_full_slice_node(arg["slice"]["elts"][0]) !=
+        is_full_slice_node(arg["slice"]["elts"][1]) &&
+      arg.contains("value") && arg["value"].is_object() &&
+      arg["value"].value("_type", "") == "Name" &&
+      th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
+    {
+      // len(a[i, :]) / len(a[:, j]): 2-D slicing on a numpy array produces a
+      // fresh numeric array, not a null-terminated string; count elements
+      // instead of running strlen. Only the two supported 2-D slicing
+      // patterns (exactly one axis fully sliced) reach this branch -- a
+      // fully scalar multi-index like `a[0, 1]` produces a scalar and must
+      // keep falling through to normal scalar handling below.
       func_name = kGetObjectSize;
     }
     else if (arg["_type"] == "Name")
@@ -917,9 +971,18 @@ exprt function_call_builder::build() const
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
-      code_typet trampoline_type;
-      trampoline_type.return_type() = empty_typet();
-      typet param_type = pointer_typet(trampoline_type);
+      if (call_["args"].size() != 1)
+        throw std::runtime_error(func_name + " takes exactly one argument");
+      exprt arg = converter_.get_expr(call_["args"][0]);
+      if (arg.type().is_code())
+        arg = build_address_of(arg);
+
+      // intrinsic_spawn_thread requires a *literal* address_of(symbol); a
+      // typecast around it trips its is_address_of2t assertion. The trampoline
+      // returns None, whose GOTO return type is none_type() rather than void
+      // (issue #5914), so derive the parameter type from the actual address
+      // expression instead of forcing pointer-to-void() and typecasting.
+      typet param_type = arg.type();
 
       code_typet fn_type;
       fn_type.return_type() = uint_type();
@@ -932,14 +995,6 @@ exprt function_call_builder::build() const
           converter_.python_file(), func_name, symbol_id, location, fn_type);
         converter_.add_symbol(symbol);
       }
-
-      if (call_["args"].size() != 1)
-        throw std::runtime_error(func_name + " takes exactly one argument");
-      exprt arg = converter_.get_expr(call_["args"][0]);
-      if (arg.type().is_code())
-        arg = build_address_of(arg);
-      if (arg.type() != param_type)
-        arg = build_typecast(arg, param_type);
 
       code_function_callt call;
       call.function() = symbol_exprt(symbol_id, fn_type);

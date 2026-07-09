@@ -72,16 +72,11 @@ void python_exception_handler::get_try_statement(
     element.contains("finalbody") && !element["finalbody"].empty();
 
   // The `else` clause runs only when the try body completes without an
-  // exception. ESBMC's try lowering does not model it (it is silently dropped) —
-  // a pre-existing limitation independent of this change. Combined with the
-  // finally lowering below, which duplicates the finally body on the normal and
-  // exception paths, a dropped `else` would also be skipped on the path where
-  // finally runs, compounding the unsoundness. So refuse a non-empty `else`
-  // only when a finally is present; plain try/except/else keeps its existing
-  // behaviour.
-  if (has_finally && element.contains("orelse") && !element["orelse"].empty())
-    throw std::runtime_error(
-      "try/finally with a non-empty else clause is not supported");
+  // exception; it is appended to the try body below so it runs on the normal
+  // path and is skipped when the body raises. This composes with the finally
+  // lowering below (else in the try body runs before the appended finally on
+  // the normal path, and is skipped along with the rest of the try body on the
+  // exception path), so try/except/else/finally is handled too.
 
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
@@ -95,16 +90,36 @@ void python_exception_handler::get_try_statement(
   {
     bool escapes = body_has_escaping_control_flow(element["body"], false) ||
                    body_has_escaping_control_flow(element["finalbody"], false);
+    // The else clause is appended to the try body below, so an escaping
+    // return/break/continue there would bypass the appended finally just like
+    // one in the try body — scan it too.
+    if (element.contains("orelse"))
+      escapes =
+        escapes || body_has_escaping_control_flow(element["orelse"], false);
     for (const auto &h : element["handlers"])
       if (h.contains("body"))
         escapes = escapes || body_has_escaping_control_flow(h["body"], false);
     if (escapes)
       throw std::runtime_error(
-        "try/finally with return/break/continue in the try, except, or finally "
-        "body is not supported");
+        "try/finally with return/break/continue in the try, except, else, or "
+        "finally body is not supported");
   }
 
   exprt try_block = converter_.get_block(element["body"]);
+
+  // The `else` clause runs after the try body completes without an exception.
+  // Append it to the try body: on the normal path it runs right after the body,
+  // and if the body raises, control transfers to a handler before reaching it,
+  // so it is correctly skipped. (An exception raised inside the else itself is
+  // caught by this try's handlers here rather than propagating, a minor
+  // deviation from CPython that is out of scope.)
+  if (element.contains("orelse") && !element["orelse"].empty())
+  {
+    exprt else_block = converter_.get_block(element["orelse"]);
+    for (const auto &op : else_block.operands())
+      try_block.copy_to_operands(op);
+  }
+
   exprt handler = converter_.get_block(element["handlers"]);
 
   // A bare `except:` already catches every exception, so the fall-through
@@ -336,6 +351,25 @@ void python_exception_handler::get_raise_statement(
       tmp.location() = location;
       raise = tmp;
     }
+    else if (
+      raise.id() == "sideeffect" && raise.get("statement") == "cpp-throw")
+    {
+      // A no-argument exception constructor whose class inherits __init__
+      // (e.g. `raise E()` where `class E(Exception): pass`) lowers to a bare
+      // cpp-throw side-effect rather than a constructed instance. Wrapping it
+      // in the cpp-throw built below would nest two throws and hand value_set
+      // a non-struct operand, aborting in make_member. Synthesize a
+      // zero-initialised instance instead, as the _init_undefined path does
+      // for classes with no __init__ at all. (A constructor with arguments or
+      // a custom __init__ yields a proper instance and keeps the paths above.)
+      if (type.is_empty())
+        type = any_type();
+      typet resolved = type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.name_space().follow(type);
+      raise = gen_zero(resolved);
+      raise.type() = type;
+    }
     else
     {
       if (type.is_empty())
@@ -354,18 +388,28 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
-void python_exception_handler::get_except_handler_statement(
+// Emit a single catch block for `type_node` (an exception-type Name node, or
+// null for a bare `except:`), running the handler body. Appends it to `block`.
+void python_exception_handler::emit_catch_block(
   const nlohmann::json &element,
+  const nlohmann::json &type_node,
   codet &block)
 {
   symbolt *exception_symbol = nullptr;
   typet exception_type;
 
   // Create exception variable symbol before processing body
-  if (!element["type"].is_null())
+  if (!type_node.is_null())
   {
+    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
+    // as `except socket.error:` is an Attribute node with no "id"; reject it
+    // with a clean diagnostic rather than crashing on the missing json key.
+    if (!type_node.contains("id"))
+      throw std::runtime_error(
+        "except with a dotted/attribute exception type is not supported");
+
     exception_type =
-      type_handler_.get_typet(element["type"]["id"].get<std::string>());
+      type_handler_.get_typet(type_node["id"].get<std::string>());
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();
@@ -422,6 +466,27 @@ void python_exception_handler::get_except_handler_statement(
   }
 
   block.move_to_operands(catch_block);
+}
+
+void python_exception_handler::get_except_handler_statement(
+  const nlohmann::json &element,
+  codet &block)
+{
+  const nlohmann::json &type_node = element["type"];
+
+  // `except (A, B, ...):` lists several exception types as a tuple and catches
+  // any of them. Model it as one catch block per type, each running the same
+  // body (mirroring `except A: <body>` followed by `except B: <body>`).
+  if (
+    !type_node.is_null() && type_node.contains("_type") &&
+    type_node["_type"] == "Tuple")
+  {
+    for (const auto &elt : type_node["elts"])
+      emit_catch_block(element, elt, block);
+    return;
+  }
+
+  emit_catch_block(element, type_node, block);
 }
 
 // ---------------------------------------------------------------------------

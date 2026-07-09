@@ -50,6 +50,22 @@ bool is_py_string_type(const typet &t)
   return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
 }
 
+// True when `expr` (or any of its operands) is a `cpp-throw` marker, i.e. a
+// probe build hit an error path instead of producing a usable value.
+bool contains_cpp_throw(const exprt &expr)
+{
+  if (expr.statement() == "cpp-throw")
+    return true;
+
+  for (const auto &op : expr.operands())
+  {
+    if (contains_cpp_throw(op))
+      return true;
+  }
+
+  return false;
+}
+
 bool is_py_numeric_scalar_type(const typet &t)
 {
   if (t.is_floatbv() || t.is_bool())
@@ -422,6 +438,24 @@ void python_converter::handle_assignment_type_adjustments(
   if (target_is_subscript)
     return;
 
+  // Assigning to a struct member (self.attr = value): an unannotated parameter
+  // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
+  // empty) but holds an integer value round-tripped as (int*)n. Writing that
+  // into a non-pointer integer field aborts with2t's type-compat assertion.
+  // Cast the any-type RHS to the member's declared integer type, recovering the
+  // integer. Restricted to the empty-subtype carrier (matching is_any_ptr in
+  // converter_binop): a genuine pointer value (None, a class instance, a list)
+  // is left untouched so it is not silently reinterpreted as an integer, and a
+  // float member (which would need a bit-reinterpretation) is left unchanged.
+  if (
+    lhs.id() == "member" && rhs.type().is_pointer() &&
+    rhs.type().subtype().id() == "empty" &&
+    (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  {
+    rhs = typecast_exprt(rhs, lhs.type());
+    return;
+  }
+
   // Handle assignment of function to function pointer variable
   if (
     lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
@@ -581,11 +615,15 @@ void python_converter::handle_assignment_type_adjustments(
         {
           // Prevent type change from scalar (int/float/bool) to string/array
           // when a prior declaration exists with the scalar type, as this
-          // creates a type inconsistency in the GOTO program.
+          // creates a type inconsistency in the GOTO program. A void-typed
+          // symbol (annotation pass could not infer, e.g. a tuple-unpack
+          // target) holds no prior scalar, so adopting the array type is the
+          // only consistent choice (#5571).
           bool is_incompatible =
             rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
             !lhs_symbol->get_type().is_pointer() &&
             !lhs_symbol->get_type().id().empty() &&
+            lhs_symbol->get_type().id() != "empty" &&
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
@@ -975,6 +1013,75 @@ std::string python_converter::infer_type_from_any_annotation(
   }
 
   return lhs_type;
+}
+
+typet python_converter::resolve_any_subscript_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (
+    current_type != any_type() || ast_node["value"].is_null() ||
+    ast_node["value"].value("_type", std::string()) != "Subscript")
+    return current_type;
+
+  // Evaluate the actual subscript result before deciding anything: a fully
+  // scalar access (`a[0, 0, 1]`) or an out-of-range/rank-mismatched index
+  // must fall through unchanged (resp. propagate its own real error) rather
+  // than be pre-empted by the 3-D source check below, which only applies
+  // once we know the result itself is an array.
+  exprt subscript_probe = get_expr(ast_node["value"]);
+  if (contains_cpp_throw(subscript_probe))
+    return current_type;
+
+  const typet probed_type = ns.follow(subscript_probe.type());
+  if (!probed_type.is_array())
+    return current_type;
+
+  // Reject a source array of more than 2 dimensions: n-D indexing is out of
+  // scope, and the resulting slice's nesting depth alone can't be told apart
+  // from a legitimate 2-D row/column/fancy/mask selection (both are a
+  // 2-level nested array), so the check has to look at the source instead.
+  const nlohmann::json &source_node = ast_node["value"]["value"];
+  exprt source_probe = get_expr(source_node);
+  if (!contains_cpp_throw(source_probe))
+  {
+    std::size_t source_depth = 0;
+    typet source_type = ns.follow(source_probe.type());
+    // A numpy array crossing a function boundary is pointer-to-array (e.g.
+    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
+    // walk below still sees through to the real dimensionality instead of
+    // stopping at 0 and silently letting a 3-D+ source slip past.
+    if (source_type.is_pointer())
+      source_type = ns.follow(source_type.subtype());
+    while (source_type.is_array())
+    {
+      ++source_depth;
+      source_type = ns.follow(to_array_type(source_type).subtype());
+    }
+    if (source_depth > 2)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: assigning a 3-D+ array-typed subscript result to "
+             "a variable is not supported";
+      const locationt loc = get_location_from_decl(ast_node);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
+  // A materialized helper result (fancy/mask/column selection) is already a
+  // plain symbol and copies via a normal whole-array code_assignt; a bare
+  // `a[i]` chain is a raw index expression instead, which the final store
+  // must copy element by element (see the flag's doc comment).
+  any_subscript_array_needs_copy_ = !subscript_probe.is_symbol();
+
+  // Reuse this exact conversion as the RHS later instead of converting the
+  // same Subscript node again from scratch.
+  cached_any_subscript_rhs_ = subscript_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
 }
 
 bool python_converter::handle_unpacking_assignment(
@@ -1775,6 +1882,8 @@ void python_converter::get_var_assign(
   }
 
   current_element_type = element_type;
+  any_subscript_array_needs_copy_ = false;
+  has_cached_any_subscript_rhs_ = false;
   typet annotated_type = element_type;
   std::vector<typet> annotation_types;
   bool can_emit_annotation_check = false;
@@ -1786,6 +1895,12 @@ void python_converter::get_var_assign(
   symbolt *lhs_symbol = nullptr;
   locationt location_begin;
   symbol_id sid = create_symbol_id();
+  // Set wherever a `code_declt` is already emitted for `lhs_symbol` during
+  // symbol creation below, so the any_subscript_array_needs_copy_ copy-loop
+  // further down (which needs its own decl when nothing declared the symbol
+  // yet, e.g. the plain-Assign path) does not emit a second one for the same
+  // symbol.
+  bool lhs_already_declared = false;
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
@@ -2075,6 +2190,9 @@ void python_converter::get_var_assign(
       current_element_type = rhs.type();
     }
 
+    current_element_type =
+      resolve_any_subscript_array_type(ast_node, current_element_type);
+
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
     annotation_location = location_begin;
@@ -2112,6 +2230,7 @@ void python_converter::get_var_assign(
         code_declt decl(symbol_expr(*lhs_symbol));
         decl.location() = location_begin;
         target_block.copy_to_operands(decl);
+        lhs_already_declared = true;
       }
     }
 
@@ -2200,6 +2319,9 @@ void python_converter::get_var_assign(
         ast_node.contains("annotation") && !ast_node["annotation"].is_null() &&
         !current_element_type.is_empty())
       {
+        current_element_type =
+          resolve_any_subscript_array_type(ast_node, current_element_type);
+
         std::string module_name = location_begin.get_file().as_string();
         symbolt symbol = create_symbol(
           module_name,
@@ -2267,15 +2389,27 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
-    is_converting_rhs = true;
-
-    if (lhs_symbol)
-      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+    if (has_cached_any_subscript_rhs_)
+    {
+      // Already converted once by resolve_any_subscript_array_type's type
+      // probe; reuse it rather than converting the same Subscript node (and
+      // re-emitting any temporaries it built) a second time.
+      rhs = cached_any_subscript_rhs_;
+      has_cached_any_subscript_rhs_ = false;
+    }
     else
-      rhs = get_expr(ast_node["value"]);
+    {
+      is_converting_rhs = true;
+
+      if (lhs_symbol)
+        rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
+      else
+        rhs = get_expr(ast_node["value"]);
+
+      is_converting_rhs = false;
+    }
 
     has_value = true;
-    is_converting_rhs = false;
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(ast_node, lhs_type, rhs);
@@ -2653,6 +2787,48 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
+
+    if (any_subscript_array_needs_copy_ && lhs.type().is_array())
+    {
+      any_subscript_array_needs_copy_ = false;
+
+      const array_typet &dst_type = to_array_type(lhs.type());
+      if (!dst_type.size().is_constant())
+        throw std::runtime_error(
+          "TypeError: assigning a symbolic-shape array-typed subscript "
+          "result to a variable is not supported");
+
+      if (!lhs_already_declared)
+      {
+        code_declt decl(symbol_expr(*lhs_symbol));
+        decl.location() = location_begin;
+        target_block.copy_to_operands(decl);
+      }
+
+      const typet elem_type = ns.follow(dst_type.subtype());
+      const BigInt len = binary2integer(dst_type.size().value().c_str(), false);
+      for (BigInt i = 0; i < len; ++i)
+      {
+        exprt idx = from_integer(i, size_type());
+        exprt src_elem = python_expr::build_index(rhs, idx, elem_type);
+        exprt dst_elem = python_expr::build_index(lhs, idx, elem_type);
+        code_assignt elem_assign(dst_elem, src_elem);
+        elem_assign.location() = location_begin;
+        target_block.copy_to_operands(elem_assign);
+      }
+
+      if (type_assertions_enabled() && can_emit_annotation_check)
+        get_typechecker().emit_type_annotation_assertion(
+          lhs,
+          annotated_type,
+          annotation_types,
+          annotated_name,
+          annotation_location,
+          target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
@@ -3523,12 +3699,22 @@ exprt python_converter::box_value_on_heap(
   const locationt &location,
   codet &target_block)
 {
+  return box_value_on_heap(
+    value, location, target_block, current_func_return_type_);
+}
+
+exprt python_converter::box_value_on_heap(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block,
+  const typet &ptr_type)
+{
   const symbolt *new_obj_sym =
     symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
   assert(new_obj_sym && "__ESBMC_new_object model required");
 
-  symbolt heap_symbol = create_return_temp_variable(
-    current_func_return_type_, location, "ctor_box");
+  symbolt heap_symbol =
+    create_return_temp_variable(ptr_type, location, "ctor_box");
   symbol_table_.add(heap_symbol);
   exprt heap_ptr = symbol_expr(heap_symbol);
 
@@ -3542,8 +3728,31 @@ exprt python_converter::box_value_on_heap(
   alloc_call.location() = location;
   target_block.copy_to_operands(alloc_call);
 
-  exprt deref("dereference", current_func_return_type_.subtype());
+  exprt deref("dereference", ptr_type.subtype());
   deref.copy_to_operands(heap_ptr);
+
+  // Whole-array assignment through a dereference is rejected by the
+  // dereference layer ("Can't construct rvalue reference to array type"),
+  // so a boxed array of statically-known size is stored element-wise.
+  if (ptr_type.subtype().is_array())
+  {
+    const array_typet &arr_t = to_array_type(ptr_type.subtype());
+    assert(arr_t.size().is_constant());
+    const size_t n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false)
+        .to_uint64();
+    for (size_t i = 0; i < n; i++)
+    {
+      exprt idx = from_integer(i, index_type());
+      code_assignt store(
+        python_expr::build_index(deref, idx, arr_t.subtype()),
+        python_expr::build_index(value, idx, arr_t.subtype()));
+      store.location() = location;
+      target_block.copy_to_operands(store);
+    }
+    return heap_ptr;
+  }
+
   code_assignt store(deref, value);
   store.location() = location;
   target_block.copy_to_operands(store);
@@ -3573,6 +3782,14 @@ void python_converter::get_return_statements(
           wrap_in_optional(none_expr, current_func_return_type_);
       }
     }
+    // A bare `return` yields None. When the function returns None — either
+    // already typed none_type(), or still an empty placeholder that the funcdef
+    // will promote to none_type() (issue #5914) — give the RETURN an explicit
+    // None value so it matches the declared none_type() slot at the call site.
+    else if (
+      current_func_return_type_ == none_type() ||
+      current_func_return_type_.is_empty())
+      return_code.return_value() = gen_zero(none_type());
 
     target_block.copy_to_operands(return_code);
     return;
@@ -3727,9 +3944,27 @@ void python_converter::get_return_statements(
         // V.3: build the address-of in IREP2 (operand is a string constant).
         return_value = python_expr::build_address_of(return_value);
       }
+      else if (to_array_type(return_value.type()).size().is_constant())
+      {
+        // For non-constant arrays (variables), convert to pointer. The
+        // array is function-local (e.g. a string copied out of a tuple,
+        // #5571), so its storage expires with this frame: box the bytes
+        // onto a fresh non-expiring heap object first — the same model as
+        // returning a constructed class value (#3067) — and hand back a
+        // pointer into that.
+        exprt boxed = box_value_on_heap(
+          return_value,
+          location,
+          target_block,
+          gen_pointer_type(return_value.type()));
+        exprt deref("dereference", return_value.type());
+        deref.copy_to_operands(boxed);
+        return_value = string_handler_.get_array_base_address(deref);
+      }
       else
       {
-        // For non-constant arrays (variables), convert to pointer
+        // Symbolic-size array: element-wise boxing needs a static count, so
+        // keep the plain decay (the pre-#5571 behaviour for this rare case).
         return_value = string_handler_.get_array_base_address(return_value);
       }
     }

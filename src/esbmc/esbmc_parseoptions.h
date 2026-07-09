@@ -9,6 +9,7 @@
 #include <util/parseoptions.h>
 #include <util/algorithms.h>
 #include <util/threeval.h>
+#include <string_view>
 
 // Macro to determine if color output should be enabled
 #ifdef _WIN32
@@ -111,8 +112,8 @@ protected:
 
   bool set_claims(goto_functionst &goto_functions);
 
-  uint64_t read_time_spec(const char *str);
-  uint64_t read_mem_spec(const char *str);
+  uint64_t read_time_spec(std::string_view str);
+  uint64_t read_mem_spec(std::string_view str);
 
   void preprocessing();
 
@@ -132,6 +133,10 @@ protected:
 
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;
+
+  // Dead-store advisories (CWE-563) collected by --dead-store-check during
+  // goto preprocessing; surfaced textually and (via bmct) in SARIF.
+  std::vector<dead_store_advisoryt> dead_store_advisories;
 
   // coverage mode
   bool is_coverage;

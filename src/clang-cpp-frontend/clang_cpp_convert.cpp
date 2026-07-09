@@ -26,6 +26,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/exception_specification.h>
 #include <util/string_constant.h>
@@ -777,11 +778,22 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*mtemp.getSubExpr(), tmp))
       return true;
 
-    side_effect_exprt temporary("temporary_object");
-    temporary.type() = tmp.type();
-    temporary.copy_to_operands(tmp);
+    // If the sub-expression already materialised a temporary (e.g. a class
+    // prvalue `B(7)`, lowered to a temporary_object by the constructor call),
+    // bind the reference directly to it. Wrapping it in a second
+    // temporary_object would construct one object and then copy it into
+    // another, leaving both with a scope-exit destructor.
+    exprt addr;
+    if (tmp.id() == "sideeffect" && tmp.statement() == "temporary_object")
+      addr = address_of_exprt(tmp);
+    else
+    {
+      side_effect_exprt temporary("temporary_object");
+      temporary.type() = tmp.type();
+      temporary.copy_to_operands(tmp);
+      addr = address_of_exprt(temporary);
+    }
 
-    address_of_exprt addr(temporary);
     if (mtemp.isBoundToLvalueReference())
       addr.type().set("#reference", true);
     else
@@ -1116,6 +1128,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
     std::string type_name;
+    // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
+    // to be evaluated (the dynamic type is read from the object's vtable). We
+    // model that by reading the operand's vtable pointer, so a typeid applied
+    // to `*p` with a null `p` faults on the dereference — the standard mandates
+    // std::bad_typeid there. `vtable_read` holds that read when applicable.
+    exprt vtable_read = nil_exprt();
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
@@ -1124,9 +1142,34 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
-        log_warning("Typeid for polymorphism is not implemented");
       type_name = qtype.getAsString();
+
+      const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
+      // [expr.typeid]/2 singles out the case where the operand is obtained by
+      // dereferencing a pointer: a null pointer there yields std::bad_typeid.
+      // Detect that `*p` form at the AST level so a plain lvalue operand (which
+      // cannot be null) keeps its existing handling untouched.
+      const auto *unary = llvm::dyn_cast<clang::UnaryOperator>(
+        cxxtid.getExprOperand()->IgnoreParenImpCasts());
+      const bool is_deref_operand =
+        unary && unary->getOpcode() == clang::UO_Deref;
+      if (
+        !cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic() &&
+        is_deref_operand)
+      {
+        exprt operand;
+        if (get_expr(*cxxtid.getExprOperand(), operand))
+          return true;
+
+        const typet &op_type = ns.follow(operand.type());
+        if (operand.id() == "dereference" && op_type.is_struct())
+          for (const auto &comp : to_struct_type(op_type).components())
+            if (comp.get_bool("is_vtptr"))
+            {
+              vtable_read = member_exprt(operand, comp.name(), comp.type());
+              break;
+            }
+      }
     }
 
     exprt size = constant_exprt(
@@ -1148,7 +1191,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // Front end can't account for polymorphism
     exprt sym("struct", t);
     sym.copy_to_operands(address_of_exprt(string_name));
-    sym.copy_to_operands(gen_zero(pointer_type()));
+    if (vtable_read.is_not_nil())
+    {
+      // Reading the vtable pointer dereferences the operand, so a null operand
+      // faults here (modelling std::bad_typeid). Cast to the field type.
+      gen_typecast(ns, vtable_read, pointer_type());
+      sym.copy_to_operands(vtable_read);
+    }
+    else
+      sym.copy_to_operands(gen_zero(pointer_type()));
     make_temporary(sym);
 
     new_expr = sym;
@@ -1570,7 +1621,15 @@ bool clang_cpp_convertert::build_destructor_chain(
   for (const clang::FieldDecl *field : llvm::reverse(fields))
   {
     clang::QualType qt = field->getType();
-    const clang::CXXRecordDecl *rec = qt->getAsCXXRecordDecl();
+
+    // An array member of class type has each element destroyed; peel the
+    // (possibly nested) array dimensions to reach the element record type,
+    // since QualType::getAsCXXRecordDecl returns null for array types.
+    clang::QualType elem_qt = qt;
+    while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+      elem_qt = at->getElementType();
+
+    const clang::CXXRecordDecl *rec = elem_qt->getAsCXXRecordDecl();
     if (!rec)
       continue;
     const symbolt *sym = lookup_dtor(rec->getDestructor());
@@ -1583,8 +1642,43 @@ bool clang_cpp_convertert::build_destructor_chain(
 
     std::string field_name, field_id;
     get_decl_name(*field, field_name, field_id);
-    emit_dtor_call(
-      *sym, address_of_exprt(member_exprt(deref, field_name, field_type)));
+    exprt member = member_exprt(deref, field_name, field_type);
+
+    if (qt->isArrayType())
+    {
+      // C++ [class.dtor]/9: array elements are destroyed in reverse index
+      // order.  Emit one destructor call per element, recursing into nested
+      // arrays so every leaf element is destroyed.
+      std::function<bool(const exprt &)> destroy_elements =
+        [&](const exprt &arr) -> bool {
+        const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
+        BigInt count;
+        if (to_integer(arr_type.size(), count))
+        {
+          log_error("cannot determine array size for member dtor chain");
+          return true;
+        }
+
+        const typet &elem_type = arr_type.subtype();
+        for (BigInt i = 0; i < count; ++i)
+        {
+          index_exprt element(
+            arr, from_integer(count - 1 - i, index_type()), elem_type);
+          if (ns.follow(elem_type).is_array())
+          {
+            if (destroy_elements(element))
+              return true;
+          }
+          else
+            emit_dtor_call(*sym, address_of_exprt(element));
+        }
+        return false;
+      };
+      if (destroy_elements(member))
+        return true;
+    }
+    else
+      emit_dtor_call(*sym, address_of_exprt(member));
   }
 
   // 2. Direct non-virtual base subobjects, reverse declaration order.
@@ -1662,10 +1756,17 @@ bool clang_cpp_convertert::get_function_body(
       return true;
   }
 
-  if (new_expr.statement() != "block")
+  if (new_expr.statement() != "block" && new_expr.statement() != "cpp-catch")
     return false;
 
-  code_blockt &body = to_code_block(to_code(new_expr));
+  // A constructor/destructor may use a function-try-block; its body is then a
+  // `cpp-catch` whose first operand is the try block and whose remaining
+  // operands are the handlers. The member/base initializers and the destructor
+  // chain operate on that try block, so `body` points at it in that case.
+  const bool function_try_block = new_expr.statement() == "cpp-catch";
+  code_blockt &body = function_try_block
+                        ? to_code_block(to_code(new_expr.op0()))
+                        : to_code_block(to_code(new_expr));
 
   // if it's a constructor, check for initializers
   if (fd.getKind() == clang::Decl::CXXConstructor)
@@ -1807,10 +1908,88 @@ bool clang_cpp_convertert::get_function_body(
           new_member.op0() = init_sym;
 
           /* 1. array_init$.member = rhs; */
-          initializer = side_effect_exprt("assign", new_member.type());
-          initializer.move_to_operands(new_member, rhs);
-          initializer.location() = new_expr.location();
-          initializers.push_back(initializer);
+          const bool is_ctor_call = rhs.id() == "sideeffect" &&
+                                    rhs.statement() == "function_call" &&
+                                    rhs.get_bool("constructor");
+
+          /* Bound the per-element construction: unrolling one constructor call
+           * per leaf element is only viable for modestly-sized fixed arrays.
+           * The internal buffers of STL container operational models are the
+           * arrays to stay away from -- and they are not all large: the
+           * per-instance pools in <list> and <stack> hold 20 slots and <map>
+           * holds 15, while <set>/<deque>/<queue>/<unordered_*> hold hundreds
+           * to ~1024. Each such slot may itself embed a class element (e.g.
+           * list<string> stores a std::string per node), so eagerly running
+           * its constructor on every slot bloats symex -- enough to push the
+           * heavy list<string> sort test over the CI timeout. Keep the bound
+           * comfortably below the smallest of those buffers (15) so all of
+           * them retain the prior single-element behaviour, while still
+           * covering realistic user arrays. Above the bound we construct just
+           * the representative element 0 (the behaviour prior to this change),
+           * so those cases are unchanged. (The static/global path in
+           * clang_cpp_main.cpp unrolls without this bound; proper bounded-loop
+           * construction is future work for both.) */
+          const bool is_fixed_array = ns.follow(new_member.type()).is_array();
+          const BigInt max_unroll = 8;
+          BigInt total_elements = 1;
+          for (typet t = ns.follow(new_member.type()); t.is_array();
+               t = ns.follow(to_array_type(t).subtype()))
+          {
+            BigInt dim;
+            if (to_integer(to_array_type(t).size(), dim))
+            {
+              /* unknown size: treat as large */
+              total_elements = max_unroll + 1;
+              break;
+            }
+            total_elements *= dim;
+          }
+
+          if (is_ctor_call && is_fixed_array && total_elements <= max_unroll)
+          {
+            /* A single CXXConstructExpr for an array member stands for
+             * constructing *every* element (e.g. `B b_array[2];` runs B's
+             * default ctor twice).  adjust_side_effect_assign lowers an
+             * `array = ctor()` assign to a single `ctor(&array)` call, which
+             * only constructs element 0.  Emit one per-element assign instead
+             * so every leaf element is constructed, recursing into nested
+             * arrays.  Mirrors the static/local path in clang_cpp_main.cpp. */
+            std::function<void(const exprt &)> construct_elements =
+              [&](const exprt &arr) {
+                const array_typet &arr_type =
+                  to_array_type(ns.follow(arr.type()));
+                BigInt count;
+                if (to_integer(arr_type.size(), count))
+                {
+                  log_error("cannot determine array size for member ctor init");
+                  abort();
+                }
+
+                const typet &elem_type = arr_type.subtype();
+                for (BigInt idx = 0; idx < count; ++idx)
+                {
+                  index_exprt element(
+                    arr, from_integer(idx, index_type()), elem_type);
+                  if (ns.follow(elem_type).is_array())
+                  {
+                    construct_elements(element);
+                    continue;
+                  }
+                  side_effect_exprt elem_init("assign", elem_type);
+                  elem_init.copy_to_operands(element, rhs);
+                  elem_init.location() = new_expr.location();
+                  initializers.push_back(elem_init);
+                }
+              };
+            construct_elements(new_member);
+          }
+          else
+          {
+            initializer = side_effect_exprt("assign", new_member.type());
+            initializer.move_to_operands(new_member, rhs);
+            initializer.location() = new_expr.location();
+            initializers.push_back(initializer);
+          }
 
           /* 2. *this = array_init$; */
           initializer = side_effect_exprt("assign", this_sym.type());
@@ -1856,6 +2035,25 @@ bool clang_cpp_convertert::get_function_body(
     if (build_destructor_chain(
           static_cast<const clang::CXXDestructorDecl &>(fd), body))
       return true;
+  }
+
+  // C++ [except.handle]/15: if control reaches the end of a handler of a
+  // constructor's or destructor's function-try-block, the currently handled
+  // exception is rethrown — a handler there cannot swallow an exception raised
+  // while constructing/destroying a base or member subobject. Append an
+  // implicit `throw;` to each handler to model this.
+  if (
+    function_try_block && (fd.getKind() == clang::Decl::CXXConstructor ||
+                           fd.getKind() == clang::Decl::CXXDestructor))
+  {
+    codet::operandst &ops = new_expr.operands();
+    for (std::size_t i = 1; i < ops.size(); i++)
+    {
+      code_blockt &handler = to_code_block(to_code(ops[i]));
+      exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+      convert_expression_to_code(rethrow);
+      handler.operands().push_back(rethrow);
+    }
   }
 
   return false;
@@ -2316,12 +2514,33 @@ bool clang_cpp_convertert::annotate_class_method(
     {
       fd_symb->set_type(component_type);
       /*
-       * we indicate the need for vptr initializations in contructor.
-       * vptr initializations will be added in the adjuster.
+       * We indicate the need for vptr initializations in the ctor/dtor;
+       * they are added in the adjuster.
+       *
+       * `has_vptr_component` is only set while the enclosing class is being
+       * converted, so it is stale (false) when a ctor/dtor body is converted
+       * in a different translation unit than the one that first set up the
+       * class' vtable — the vptr init would then be dropped and virtual calls
+       * during construction/destruction would find no target (multi-TU
+       * polymorphic classes). Fall back to inspecting the already-built class
+       * symbol for a vtable-pointer component, exactly as the adjuster does.
        */
+      bool needs_vptr_init = has_vptr_component;
+      if (!needs_vptr_init)
+      {
+        const symbolt *class_symb = context.find_symbol(parent_class_id);
+        if (class_symb && class_symb->get_type().is_struct())
+          for (const auto &c :
+               to_struct_type(class_symb->get_type()).components())
+            if (c.get_bool("is_vtptr"))
+            {
+              needs_vptr_init = true;
+              break;
+            }
+      }
       {
         exprt v = fd_symb->get_value();
-        v.need_vptr_init(has_vptr_component);
+        v.need_vptr_init(needs_vptr_init);
         fd_symb->set_value(std::move(v));
       }
     }
@@ -2435,6 +2654,12 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
+
+  // Mark this as a base-subobject constructor call so gen_vptr_initializations
+  // can insert the vptr assignments *after* all base ctors run but *before*
+  // the derived class's own member initializers and constructor body
+  // (Itanium ABI / C++ [class.cdtor]).
+  call.set("#is_base_ctor_call", true);
 }
 
 bool clang_cpp_convertert::need_new_object(

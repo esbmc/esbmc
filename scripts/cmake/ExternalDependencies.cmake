@@ -15,6 +15,18 @@ if(DOWNLOAD_DEPENDENCIES)
     URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
     URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d)
   fetchcontent_makeavailable(json)
+  # The pinned headers must beat any system copy for every target. Several
+  # targets list ${Boost_INCLUDE_DIRS} (e.g. /opt/homebrew/include, which can
+  # also carry a different nlohmann-json) in their own include list, which
+  # precedes the nlohmann_json::nlohmann_json link-interface include; targets
+  # then silently compile against the system version while the fetched one is
+  # linked elsewhere, and the mixed inline-namespace ABIs
+  # (nlohmann::json_abi_v3_11_3 vs v3_12_0) fail to link across libraries
+  # (seen in unit/python-frontend). Prepending directory-wide enforces the
+  # pin uniformly. Deliberately not SYSTEM: -isystem paths are searched
+  # after every plain -I path, which would hand precedence back to the
+  # system copy.
+  include_directories(BEFORE "${json_SOURCE_DIR}/include")
 
   # yaml-cpp (pinned for reproducible builds; was tracking the default branch)
   fetchcontent_declare(yaml-cpp

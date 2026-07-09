@@ -1,0 +1,4 @@
+CORE
+cbmc_alloca.goto
+--binary
+^VERIFICATION SUCCESSFUL$

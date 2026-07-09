@@ -966,6 +966,27 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to an array literal.
+   *
+   *  Mirrors symex_assign_structure for a constant_array lhs: project each
+   *  element out and recurse, so a reconstituted array (e.g. an array-typed
+   *  struct member surfaced by symex_assign_structure) is assigned
+   *  element-wise instead of hitting the unhandled-lhs abort.
+   *
+   *  @param lhs Array literal to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to the array
+   *  @param guard Guard of the current assignment
+   */
+  void symex_assign_array_structure(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guard2tc &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to a union.
    *
    *  @param lhs Symbol to assign to
@@ -1169,6 +1190,22 @@ protected:
     const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
+  /** Recover the variadic arguments hidden behind a va_list operand of a
+   *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
+   *  Succeeds only under conservative conditions guaranteeing the mapping is
+   *  exact: the call must sit in the variadic function's own frame, the
+   *  va_list operand must be one of that function's own non-parameter
+   *  locals, and no va_arg may have been consumed in the activation yet. On
+   *  success fills `out` with the activation's L2-renamed va_arg values (in
+   *  declaration order) and returns true; otherwise returns false and the
+   *  caller must keep treating the arguments as unreliable (sound fallback).
+   *  @param call The original (unrenamed) printf side effect.
+   *  @param fmt_idx Index of the format-string operand within `call`.
+   *  @param out Receives the recovered argument expressions on success. */
+  bool recover_va_list_args(
+    const code_printf2t &call,
+    size_t fmt_idx,
+    std::list<expr2tc> &out);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
@@ -1176,6 +1213,19 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Resolve a va_list expression to the l1 identity record of the local
+   *  variable backing it; nullopt when it cannot be pinned down to one. */
+  std::optional<renaming::level2t::name_record>
+  va_list_l1_record(const expr2tc &va_list_expr) const;
+  /** Whether the va_list denoted by this expression is known (or assumed)
+   *  to have been initialised by va_start/va_copy. va_lists whose base
+   *  cannot be resolved to a local variable's symbol are conservatively
+   *  assumed started. */
+  bool va_list_is_started(const expr2tc &va_list_expr) const;
+  /** Record the started-by-va_start state of the va_list denoted by this
+   *  expression. No-op if the base cannot be resolved to a local
+   *  variable's symbol. */
+  void va_list_mark_started(const expr2tc &va_list_expr, bool started);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1255,6 +1305,19 @@ protected:
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
+
+  /** Level-1 identities (base name, activation, thread) of va_list objects
+   *  initialised by va_start, or by va_copy from a started source. Keyed on
+   *  the l1 renaming so the same object is recognised across frames (a
+   *  va_list reached through a pointer dereferences to the owning
+   *  activation's l1 name) and across recursion or loop re-declaration (each
+   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  Insertion ignores the path guard, over-approximating towards "started",
+   *  so a conditional va_start can never yield a false positive. */
+  std::unordered_set<
+    renaming::level2t::name_record,
+    renaming::level2t::name_rec_hash>
+    va_started;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

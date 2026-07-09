@@ -798,6 +798,43 @@ class CoreVisitorsMixin:
         return node
 
     @staticmethod
+    def _maybe_fold_as_integer_ratio(node):
+        # (2.5).as_integer_ratio() on a numeric literal folds to its exact
+        # (numerator, denominator) tuple, computed by CPython itself, so the
+        # result matches the interpreter bit-for-bit. Non-literal receivers
+        # are left to the regular dispatch.
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "as_integer_ratio"
+                and not node.args and not node.keywords):
+            return None
+        recv = node.func.value
+        value = None
+        if (isinstance(recv, ast.Constant) and isinstance(recv.value, (int, float))
+                and not isinstance(recv.value, bool)):
+            value = recv.value
+        elif (isinstance(recv, ast.UnaryOp) and isinstance(recv.op, (ast.USub, ast.UAdd))
+              and isinstance(recv.operand, ast.Constant)
+              and isinstance(recv.operand.value,
+                             (int, float)) and not isinstance(recv.operand.value, bool)):
+            value = -recv.operand.value if isinstance(recv.op, ast.USub) else recv.operand.value
+        if value is None:
+            return None
+        try:
+            num, den = value.as_integer_ratio()
+        except (OverflowError, ValueError):  # inf / nan
+            return None
+        # Stay within the frontend's 64-bit integer comfort zone; larger
+        # ratios (huge exponents) fall through unfolded.
+        if abs(num) > 2**63 - 1 or den > 2**63 - 1:
+            return None
+        result = ast.Tuple(
+            elts=[ast.Constant(value=num), ast.Constant(value=den)],
+            ctx=ast.Load(),
+        )
+        ast.copy_location(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    @staticmethod
     def _normalize_int_from_bytes_endianness(node):
         if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "int" and node.func.attr == "from_bytes"):
@@ -952,17 +989,67 @@ class CoreVisitorsMixin:
                     and n.func.value.id in candidates):
                 self.known_variable_types[n.func.value.id] = "dict"
 
-        # Recover the concrete key/value types of each structurally-inferred
-        # parameter dict from its call sites, so iteration/comprehension over it
-        # resolves tuple/scalar element types instead of erasing them (#5444).
+        # Recover the concrete key/value types of parameter dicts from their
+        # call sites, so iteration/comprehension over them resolves
+        # tuple/scalar element types instead of erasing them (#5444). This
+        # also *establishes* the dict kind for parameters the method scan
+        # above could not mark (a body that only iterates the dict, e.g.
+        # `{v: 0 for u, v in g}`, calls no dict method):
+        # _recover_param_dict_annotation returns a shape only when every
+        # direct call site passes an agreeing dict, so the kind comes from
+        # the actual arguments, never from body-usage guessing.
         positional = list(node.args.posonlyargs) + list(node.args.args)
         for idx, arg in enumerate(positional):
             name = arg.arg
-            if (arg.annotation is None and name not in self.variable_annotations
-                    and self.known_variable_types.get(name) == "dict"):
+            # The call-shape table is keyed by bare function name, and method
+            # calls (obj.f(...)) are never recorded in it -- so a method's
+            # lookup can only ever hit an unrelated same-named function's
+            # evidence. Skip the conventional receiver outright; it is never
+            # a dict passed positionally.
+            if idx == 0 and name in ("self", "cls"):
+                continue
+            if arg.annotation is None and name not in self.variable_annotations:
                 recovered = self._recover_param_dict_annotation(node.name, idx)
-                if recovered is not None:
+                # The shape table also records list-literal shapes (#5571);
+                # only a dict-based shape may stamp the dict kind here.
+                if (recovered is not None
+                        and self._get_base_type_name(recovered) in ("dict", "Dict")):
+                    self.known_variable_types[name] = "dict"
                     self.variable_annotations[name] = recovered
+            elif (arg.annotation is not None
+                  and self._get_base_type_name(arg.annotation) == "list"):
+                # An ANNOTATED list[tuple[..., str, ...]] parameter carries no
+                # component sizes; when every call site passes an agreeing
+                # list-of-tuple-literals, the sized shape (str components
+                # embedded as literals, #5571) replaces the bare annotation.
+                # _recover_param_dict_annotation's all-sites-agree refusal
+                # applies unchanged; compatibility with the user's annotation
+                # is checked structurally so a wrong-shaped call site can
+                # never widen or narrow the declared type.
+                #
+                # The sized shape is stamped onto arg.annotation itself, not
+                # just the preprocessor-local variable_annotations table: the
+                # C++ frontend re-derives the element type of a `pairs[i]`
+                # subscript straight from the parameter's own JSON decl node
+                # (get_elem_type_from_annotation in list_access.cpp), which
+                # variable_annotations never reaches. Stamping the arg node is
+                # sound here specifically because _recover_param_dict_annotation
+                # requires byte-identical ast.dump() of the recovered
+                # ANNOTATION across every call site -- agreement is on the
+                # shape and per-component byte lengths (the only facts the
+                # C++ consumer reads: value.size() + 1), never on element
+                # values, which may differ between a list's entries (#5571).
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if (recovered is not None
+                        and self._sized_matches_declared(recovered, arg.annotation)):
+                    # Deep-copy per store: the recovered node is the shape
+                    # table's own object, shared across call records; a
+                    # future in-place pass must not propagate cross-function.
+                    self.variable_annotations[name] = copy.deepcopy(recovered)
+                    stamped = copy.deepcopy(recovered)
+                    ast.copy_location(stamped, arg.annotation)
+                    ast.fix_missing_locations(stamped)
+                    arg.annotation = stamped
 
     def _recover_param_dict_annotation(self, func_name, param_index):
         """Recover a parameter dict's dict[K, V] annotation from its call sites.
@@ -988,12 +1075,24 @@ class CoreVisitorsMixin:
     def _build_dict_annotation_from_literal(self, dict_node):
         """Build a concrete dict[K, V] annotation node from a dict literal.
 
-        Returns None when either the key or value type cannot be inferred from
-        the literal's first entry, so callers treat the shape as unknown.
+        Returns None when the literal contains a ** spread (a None key --
+        its contribution is unknowable statically), when any entry's key
+        annotation disagrees with the first entry's, or when the key or value
+        type cannot be inferred, so callers treat the shape as unknown.
         """
-        if not dict_node.keys or not dict_node.values or dict_node.keys[0] is None:
+        if not dict_node.keys or not dict_node.values or None in dict_node.keys:
             return None
         key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        if key_ann is None:
+            return None
+        # Every entry must agree with the first on the key annotation --
+        # trusting entry 0 alone would stamp {('A','B'): 1, 7: 2} as
+        # dict[tuple[str, str], int].
+        for k in dict_node.keys[1:]:
+            other = self._infer_dict_key_annotation(k)
+            if other is None or ast.dump(other) != ast.dump(key_ann):
+                return None
+        key_ann = self._size_tuple_str_components(key_ann, dict_node.keys)
         val_ann = self._infer_dict_value_annotation(dict_node.values[0])
         if key_ann is None or val_ann is None:
             return None
@@ -1002,6 +1101,110 @@ class CoreVisitorsMixin:
             slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
             ctx=ast.Load(),
         )
+
+    def _build_list_annotation_from_literal(self, list_node):
+        """Build a list[tuple[...]] annotation from a list-of-tuple-literals,
+        with tuple str components sized via _size_tuple_str_components.
+
+        Returns None unless every element is a tuple literal and every
+        element's inferred annotation agrees with the first's — the same
+        sound refusal discipline as _build_dict_annotation_from_literal
+        (#5571).
+        """
+        if not list_node.elts:
+            return None
+        if not all(isinstance(e, ast.Tuple) for e in list_node.elts):
+            return None
+        elem_ann = self._infer_dict_key_annotation(list_node.elts[0])
+        if elem_ann is None:
+            return None
+        for e in list_node.elts[1:]:
+            other = self._infer_dict_key_annotation(e)
+            if other is None or ast.dump(other) != ast.dump(elem_ann):
+                return None
+        elem_ann = self._size_tuple_str_components(elem_ann, list_node.elts)
+        return ast.Subscript(
+            value=ast.Name(id="list", ctx=ast.Load()),
+            slice=elem_ann,
+            ctx=ast.Load(),
+        )
+
+    def _sized_matches_declared(self, sized, declared):
+        """True when `sized` is the call-site-recovered annotation for the
+        user-`declared` one, differing only by str components carrying an
+        embedded string literal where the declaration says bare 'str'.
+
+        Any other structural difference (base type, arity, non-str member
+        types) means the call sites disagree with the declaration, and the
+        declaration must win untouched.
+        """
+        if isinstance(declared, ast.Name):
+            if declared.id == "str":
+                return (isinstance(sized, ast.Constant)
+                        and isinstance(sized.value, str)) or (isinstance(sized, ast.Name)
+                                                              and sized.id == "str")
+            return isinstance(sized, ast.Name) and sized.id == declared.id
+        if isinstance(declared, ast.Subscript) and isinstance(sized, ast.Subscript):
+            if ast.dump(declared.value) != ast.dump(sized.value):
+                return False
+            d_slice, s_slice = declared.slice, sized.slice
+            if isinstance(d_slice, ast.Tuple) and isinstance(s_slice, ast.Tuple):
+                return (len(d_slice.elts) == len(s_slice.elts) and all(
+                    self._sized_matches_declared(s, d) for s, d in zip(s_slice.elts, d_slice.elts)))
+            if isinstance(d_slice, ast.Tuple) != isinstance(s_slice, ast.Tuple):
+                return False
+            return self._sized_matches_declared(s_slice, d_slice)
+        return ast.dump(sized) == ast.dump(declared)
+
+    def _size_tuple_str_components(self, key_ann, tuples):
+        """Embed a concrete byte length for each str component of a
+        tuple[str, ...] annotation, when every tuple literal in the SAME
+        container literal (dict keys, or list elements -- #5571) agrees on
+        that component's exact UTF-8 byte length (the quantity the C++
+        layers size structs with).
+
+        A bare 'str' component carries no size, so the C++ struct built for
+        the recovered tuple key ends up with a 0-byte placeholder for it --
+        unusable for anything beyond existence (any read is an out-of-bounds
+        access on a genuinely 0-byte object, #5444). Every key in a dict
+        literal is caller-stamped (not a body-usage guess), so when they all
+        agree on a component's length, that length is sound to encode; a
+        str-typed component whose keys disagree, or aren't all literal
+        strings, is left as bare 'str' -- the pre-existing (safe) refusal
+        path for that component.
+        """
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
+                and isinstance(key_ann.slice, ast.Tuple)):
+            return key_ann
+        elts = key_ann.slice.elts
+        for i, elt in enumerate(elts):
+            if not (isinstance(elt, ast.Name) and elt.id == "str"):
+                continue
+            sample = None
+            homogeneous = True
+            for k in tuples:
+                if not (isinstance(k, ast.Tuple) and i < len(k.elts)):
+                    homogeneous = False
+                    break
+                comp = k.elts[i]
+                if not (isinstance(comp, ast.Constant) and isinstance(comp.value, str)):
+                    homogeneous = False
+                    break
+                # Agreement is on UTF-8 BYTE length -- the quantity the C++
+                # side sizes structs with (tuple_handler sizes as
+                # value.size()+1 on the UTF-8 encoded string, matching
+                # string_builder::build_string_literal). len() counts
+                # characters, which diverges for non-ASCII ('é' is 1 char, 2
+                # bytes) and would size the struct from one key while other
+                # keys occupy a different byte width.
+                if sample is None:
+                    sample = comp.value
+                elif len(comp.value.encode("utf-8")) != len(sample.encode("utf-8")):
+                    homogeneous = False
+                    break
+            if homogeneous and sample is not None:
+                elts[i] = ast.Constant(value=sample)
+        return key_ann
 
     def _infer_dict_key_annotation(self, key_node):
         """Build a full key-type annotation node (preserving tuple element types).
@@ -1117,6 +1320,8 @@ class CoreVisitorsMixin:
 
         node = self.generic_visit(node)
         self._update_known_literal_for_simple_assign(node)
+        self._track_static_seq_binding(node)
+        self._maybe_track_seq_iterator(node)
         # Drop any literal recorded by _update_known_literal_for_simple_assign
         # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
         # the cascade transforms decline) cannot constant-fold `x` to `[]`.
@@ -1130,6 +1335,10 @@ class CoreVisitorsMixin:
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
+
+        rewritten_seq_next = self._maybe_rewrite_seq_next_assign(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
 
         lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
         if lowered_dict_comp is not None:
@@ -1242,6 +1451,10 @@ class CoreVisitorsMixin:
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:
             return rewritten_decimal
+
+        rewritten_ratio = self._maybe_fold_as_integer_ratio(node)
+        if rewritten_ratio is not None:
+            return rewritten_ratio
 
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
