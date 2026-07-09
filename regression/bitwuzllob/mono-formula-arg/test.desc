@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog "z3 -smt2 %f"
+^VERIFICATION SUCCESSFUL$

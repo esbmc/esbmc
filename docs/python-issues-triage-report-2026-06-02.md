@@ -3948,3 +3948,51 @@ with the `str()` negative-float gap, left out of scope.
 ### 82b. Everything else: unchanged disposition
 The §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the
 infeasible `hashlib` case all stand. The §5 priority order stands.
+
+## 83. 2026-07-08 re-validation (seventy-third sweep) & str.format() negative whole-number float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §82 fixed the
+positive `"{}".format(1.0)` whole-number-float `.0` drop but left the **negative** counterpart on the
+old code path; this sweep closes it — the same wrong-value/soundness class (false `SUCCESSFUL`).
+
+### 83a. New isolated, soundly-fixable defect found & fixed
+**A negative whole-number float in an empty `"{}"` replacement field dropped the `.0`, so
+`"{}".format(-1.0)` folded to `"-1"` and the false `assert "{}".format(-1.0) == "-1"` verified
+`SUCCESSFUL`.**
+
+`format_value_from_json` (`src/python-frontend/string/string_method_handler.cpp`) formats an empty
+`{}` field. A negative literal parses as `UnaryOp(USub, Constant)`, and that branch rendered a float
+with a raw `std::ostringstream << -value` — the exact default-format divergence §82 fixed for the
+positive `Constant` branch, but never mirrored here. So `"{}".format(-1.0)` folded to `"-1"` (and
+`"{}".format(-1000000.0)` to `"-1e+06"`, `"{}".format(-0.0)` to `"-0"`), while the positive
+`"{}".format(1.0)` already rendered `"1.0"` correctly. The false `"{}".format(-1.0) == "-1"` then
+verified `SUCCESSFUL` (a soundness hole) while the valid `== "-1.0"` reported a spurious `FAILED`.
+The f-string path (`f"{-1.0}"`) already rendered `"-1.0"` correctly; only the `str.format()` negative
+empty-field fold diverged.
+
+**Fix (de-duplicate, no new divergence)**: extract the whole-number-float rendering §82 added into a
+single `format_float_value(double)` helper and route both the positive `Constant` branch and the
+negative `UnaryOp(USub)` branch through it. A whole-number float with `d == floor(d)` and
+`|d| < 1e16` renders as its integer digits plus `".0"` (`str(-1000000.0) == "-1000000.0"`), which is
+provably correct; `std::signbit` re-adds the sign so `-0.0` renders `"-0.0"`. Every other float keeps
+the prior `std::ostringstream` behaviour, which already matches CPython's exponential form for
+`|x| >= 1e16` and `|x| < 1e-4` — the fix deliberately does *not* widen that range (which §82's review
+showed would trade one divergence for another).
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_format_neg_whole_float{,_fail}` (CORE): the positive covers negative
+whole-number floats (`-1.0`/`-2.0`/`-100.0`/`-1000000.0`/`-0.0`), unchanged negative fractional cases
+(`-0.5`/`-1.5`), the still-correct positive case, and a mixed field (`"x={} y={}".format(-3.0, -4)`);
+the `_fail` pins the previously-false-`SUCCESSFUL` `"{}".format(-1.0) == "-1"`, now correctly
+`FAILED`. CPython sanity confirms every positive assertion holds and the `_fail` claim is genuinely
+false; dual-solver Bitwuzla + Z3 agree on the positive test; all 41 existing
+`fstring`/`format`/`percent`/`repr` regression tests pass unchanged.
+
+### 83b. Next candidate & everything else: unchanged disposition
+Next soundly-fixable candidates observed but deferred (each a clean error / spurious `FAILED`, **never
+a false `SUCCESSFUL`**): the `format()` builtin with a negative float and an empty spec
+(`format(-1.0)`) throws `format() spec '' is not supported for this value` even though the equivalent
+`"{}".format(-1.0)` now folds — a `UnaryOp`-routing gap in the `format()` empty-spec path; and
+`repr()` of a bare float/int still does not fold. The §3 design-level blockers, §3c policy-banned
+timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand. The §5 priority
+order stands.

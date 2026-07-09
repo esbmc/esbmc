@@ -1,0 +1,9 @@
+CORE
+main.c
+--dead-store-check --sarif-output - --incremental-bmc
+^VERIFICATION FAILED$
+dead store: assignment to x never read
+"level": "note"
+"ruleId": "dead-store"
+"level": "error"
+"id": "563"

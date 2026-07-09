@@ -98,12 +98,38 @@ TEST_CASE("cwe_for matches unchecked return value", "[util][cwe_mapping]")
     "unchecked-return-value");
 }
 
+TEST_CASE("cwe_for matches dead store", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("dead store: assignment to x never read") ==
+    std::vector<unsigned>{563});
+  REQUIRE(
+    std::string(
+      cwe_rule_for("dead store: assignment to x never read").sarif_id) ==
+    "dead-store");
+  REQUIRE(
+    std::string(cwe_rule_for("dead store: assignment to x never read")
+                  .short_description) == "Dead store");
+}
+
+TEST_CASE("cwe_for matches uncontrolled recursion", "[util][cwe_mapping]")
+{
+  // A recursive function with no reachable base case (symex emits
+  // "uncontrolled recursion in <fn>") is CWE-674.
+  REQUIRE(cwe_for("uncontrolled recursion in f") == std::vector<unsigned>{674});
+  REQUIRE(
+    std::string(cwe_rule_for("uncontrolled recursion in ackermann").sarif_id) ==
+    "uncontrolled-recursion");
+}
+
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("").empty());
   REQUIRE(cwe_for("some unrelated assertion text").empty());
   // Unwinding bound is intentionally unmapped.
   REQUIRE(cwe_for("unwinding assertion loop 0").empty());
+  // A merely-exhausted recursion k-bound stays unmapped; only the
+  // no-base-case case ("uncontrolled recursion") maps to CWE-674.
   REQUIRE(cwe_for("recursion unwinding assertion").empty());
 }
 
@@ -123,6 +149,8 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(833) == "Deadlock");
   REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
   REQUIRE(cwe_name(252) == "Unchecked Return Value");
+  REQUIRE(cwe_name(563) == "Assignment to Variable without Use");
+  REQUIRE(cwe_name(674) == "Uncontrolled Recursion");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -188,6 +216,7 @@ TEST_CASE(
         "use of uninitialized variable: foo",
         "unchecked return value of fopen: f",
         "unreachable code reached",
+        "dead store: assignment to x never read",
         ""})
   {
     const cwe_rule_t &rule = cwe_rule_for(comment);
@@ -223,7 +252,8 @@ TEST_CASE(
         "unchecked return value of fopen: f",
         "Access to object out of bounds",
         "dereference failure: memset of memory segment of size 4",
-        "undefined behavior on shift operation"})
+        "undefined behavior on shift operation",
+        "dead store: assignment to x never read"})
   {
     for (unsigned id : cwe_for(comment))
       REQUIRE_FALSE(cwe_name(id).empty());

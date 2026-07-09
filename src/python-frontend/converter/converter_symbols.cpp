@@ -99,38 +99,45 @@ symbolt *python_converter::find_function_in_base_classes(
   std::string method_name,
   bool is_ctor) const
 {
-  symbolt *func = nullptr;
-
   // Find class node in the AST
   auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
 
-  if (class_node != nlohmann::json())
+  if (class_node == nlohmann::json())
+    return nullptr;
+
+  // Name of the callee under the current class: for a constructor it is the
+  // class name itself, otherwise the method name. The caller only reaches this
+  // for methods/constructors, so symbol_id always carries the "@C@<class>@F@"
+  // marker; pos and span are loop-invariant.
+  const std::string current_func_name = is_ctor ? class_name : method_name;
+  const std::size_t pos = symbol_id.rfind("@C@" + class_name);
+  const std::size_t span =
+    std::string("@C@" + class_name + "@F@" + current_func_name).length();
+
+  // Search the method in every base class, transitively (walk the MRO).
+  // Python enforces acyclic inheritance, so this recursion terminates.
+  for (const auto &base_class_node : class_node["bases"])
   {
-    std::string current_class = class_name;
-    std::string current_func_name = (is_ctor) ? class_name : method_name;
+    const std::string &base_class = base_class_node["id"].get<std::string>();
+
+    // Under the base class, a constructor is named after that base.
+    const std::string base_func_name = is_ctor ? base_class : method_name;
+
     std::string sym_id = symbol_id;
-    // Search for method in all bases classes
-    for (const auto &base_class_node : class_node["bases"])
-    {
-      const std::string &base_class = base_class_node["id"].get<std::string>();
-      if (is_ctor)
-        method_name = base_class;
+    sym_id.replace(pos, span, "@C@" + base_class + "@F@" + base_func_name);
 
-      std::size_t pos = sym_id.rfind("@C@" + current_class);
+    if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
+      return func;
 
-      sym_id.replace(
-        pos,
-        std::string("@C@" + current_class + "@F@" + current_func_name).length(),
-        std::string("@C@" + base_class + "@F@" + method_name));
-
-      if ((func = symbol_table_.find_symbol(sym_id.c_str())))
-        return func;
-
-      current_class = base_class;
-    }
+    // Not defined directly in this base: descend into its own bases so a
+    // method inherited from a grandparent (or higher) still resolves.
+    if (
+      symbolt *func = find_function_in_base_classes(
+        base_class, sym_id, base_func_name, is_ctor))
+      return func;
   }
 
-  return func;
+  return nullptr;
 }
 
 symbolt *

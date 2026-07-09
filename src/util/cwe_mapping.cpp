@@ -105,6 +105,15 @@ const std::vector<entry_t> &rules_table()
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
+      // Dead store advisory (CWE-563). Emitted only under --dead-store-check;
+      // note-level, does not flip the verdict. See docs/cwe-mapping.md.
+      {"dead store", {"dead-store", "Dead store", {563}}},
+      // Uncontrolled recursion (CWE-674). Emitted only when symex proves a
+      // recursive function has no reachable base case (see
+      // symex_function.cpp); the plain "recursion unwinding assertion" for a
+      // merely-exhausted k-bound stays unmapped.
+      {"uncontrolled recursion",
+       {"uncontrolled-recursion", "Uncontrolled recursion", {674}}},
     };
     // Sort by descending substring length so that strict-substring overlaps
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
@@ -146,8 +155,10 @@ const std::map<unsigned, std::string_view> &names_map()
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
     {562, "Return of Stack Variable Address"},
+    {563, "Assignment to Variable without Use"},
     {590, "Free of Memory not on the Heap"},
     {617, "Reachable Assertion"},
+    {674, "Uncontrolled Recursion"},
     {681, "Incorrect Conversion between Numeric Types"},
     {761, "Free of Pointer not at Start of Buffer"},
     {787, "Out-of-bounds Write"},

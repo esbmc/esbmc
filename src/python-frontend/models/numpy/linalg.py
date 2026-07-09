@@ -2,7 +2,7 @@
 # Operational-model stubs: argument names are part of the API contract
 # matched by ESBMC's Python converter, even when the abstract body does
 # not reference them.
-def det(a: float, b: float) -> float:
+def det(a: list) -> float:
     return 2.0
 
 def inv(a: list) -> list:

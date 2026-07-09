@@ -759,6 +759,17 @@ exprt python_converter::handle_membership_operator(
     const struct_typet &struct_type = to_struct_type(rhs_resolved_type);
     const irep_idt kind = python_aggregate_kind(struct_type);
 
+    // A function-returned aggregate arrives as a raw code_function_callt (or a
+    // side-effect), not an addressable value. Both the dict and tuple handlers
+    // build member accesses over it (`.keys`, `.element_i`) and migrate them to
+    // IREP2, which trips the member2t struct assertion (#5893). Materialise it
+    // into a temporary struct lvalue first, exactly as the unpacking/subscript
+    // paths do. prepare_rhs_for_unpacking is type-agnostic — it materialises a
+    // side-effect into a temp of rhs.type() — so it serves both branches.
+    if ((rhs.is_function_call() || rhs.id() == "sideeffect") && current_block)
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+
     // Recognise a dict by its struct tag as well as its aggregate-kind marker.
     // The kind irep can be dropped while a dict value flows through type
     // inference (e.g. a dict comprehension result), but the `__python_dict__`
@@ -1853,6 +1864,28 @@ exprt python_converter::handle_array_operations(
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();
       throw std::runtime_error(msg.str());
+    }
+    // `str + <non-str>` (e.g. `1 + "s"`) is a Python TypeError. The
+    // concatenation promotion below is only valid when the non-array operand is
+    // itself a character (a 1-char string from indexing/chr(), which
+    // get_python_type_category tags "string"); a genuine number is a type
+    // error. Raise a catchable TypeError so it can escape main() or be caught,
+    // instead of falling into string concatenation, which crashes reading the
+    // numeric operand's AST value as a string (issue #5904).
+    if (lhs_char != rhs_char)
+    {
+      const exprt &other = lhs_char ? rhs : lhs;
+      const std::string cat = get_python_type_category(other.type());
+      // Only raise for a *definitively* non-string operand (numeric, list,
+      // bytes). An empty category is an unannotated any_type (void*) whose real
+      // type is unknown here — a genuinely-str value flows through the
+      // concatenation path fine, so do not misfire a TypeError on it.
+      if (cat != "string" && !cat.empty())
+        return get_exception_handler().gen_exception_raise(
+          "TypeError",
+          "unsupported operand type(s) for +: '" +
+            type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+            type_handler_.get_python_type_name(rhs.type()) + "'");
     }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
