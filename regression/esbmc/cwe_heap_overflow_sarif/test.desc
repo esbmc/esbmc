@@ -1,0 +1,8 @@
+CORE
+main.c
+--incremental-bmc --sarif-output -
+^VERIFICATION FAILED$
+"ruleId": "heap-array-bounds-violated"
+"name": "CWE"
+"version": "4.20"
+"id": "122"
