@@ -9,6 +9,7 @@
 #include <util/prefix.h>
 #include <util/std_code.h>
 #include <util/symbol.h>
+#include <algorithm>
 #include <iostream>
 #include <map>
 #include <set>
@@ -164,10 +165,12 @@ void esbmc_parseoptionst::add_monitor_exprs(
   const std::map<std::string, std::pair<std::set<std::string>, expr2tc>>
     &monitors)
 {
-  // We've been handed an instruction, look for assignments to the
-  // symbol we're looking for. When we find one, append a goto instruction that
-  // re-evaluates a proposition expression. Because there can be more than one,
-  // we put re-evaluations in atomic blocks.
+  // We've been handed an instruction; look for assignments to a symbol
+  // referenced by some monitor proposition. When we find one, wrap the
+  // assignment in an atomic block so the monitor thread observes it as a
+  // single transition. (The explicit context switch to the monitor thread
+  // after the assignment — __ESBMC_switch_to_monitor — is currently
+  // disabled; see the #if 0 block below.)
 
   if (!insn->is_assign())
     return;
@@ -182,13 +185,13 @@ void esbmc_parseoptionst::add_monitor_exprs(
   symbol2t &sym = to_symbol2t(assign.target);
 
   // Is this actually an assignment that we're interested in?
-  std::string sym_name = sym.get_symbol_name();
-  std::set<std::pair<std::string, expr2tc>> triggered;
-  for (const auto &[prop, pair] : monitors)
-    if (pair.first.find(sym_name) != pair.first.end())
-      triggered.emplace(prop, pair.second);
+  const std::string sym_name = sym.get_symbol_name();
+  const bool monitored = std::any_of(
+    monitors.begin(), monitors.end(), [&sym_name](const auto &monitor) {
+      return monitor.second.first.count(sym_name) != 0;
+    });
 
-  if (triggered.empty())
+  if (!monitored)
     return;
 
   goto_programt::instructiont new_insn;

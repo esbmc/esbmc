@@ -25,6 +25,7 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
@@ -63,7 +64,6 @@ extern "C"
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/dead_store_analysis.h>
-#include <util/cwe_mapping.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -337,11 +337,12 @@ static std::string colorize_flag_refs(const std::string &text)
   {
     if (
       i + 2 < text.size() && text[i] == '-' && text[i + 1] == '-' &&
-      (std::isalnum(text[i + 2]) || text[i + 2] == '-'))
+      (std::isalnum((unsigned char)text[i + 2]) || text[i + 2] == '-'))
     {
       size_t start = i;
       i += 2;
-      while (i < text.size() && (std::isalnum(text[i]) || text[i] == '-'))
+      while (i < text.size() &&
+             (std::isalnum((unsigned char)text[i]) || text[i] == '-'))
         i++;
       result += CLR_BOLD;
       result += text.substr(start, i - start);
@@ -370,8 +371,12 @@ void esbmc_parseoptionst::help()
   auto const esbmc_string = fmt::format(" ESBMC {} ", ESBMC_VERSION);
   auto const title_start = std::string("* * * ");
   auto const title_end = std::string(" * * *");
-  auto const inner =
-    80 - title_start.length() - title_end.length() - esbmc_string.length();
+  // Clamp at 0 so an over-long version string can't underflow the
+  // unsigned padding width.
+  auto const inner = std::max<ptrdiff_t>(
+    0,
+    80 - static_cast<ptrdiff_t>(
+           title_start.length() + title_end.length() + esbmc_string.length()));
   auto const left_pad = std::string(inner / 2, '=');
   auto const right_pad = std::string(inner - inner / 2, '=');
   log_status(
