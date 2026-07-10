@@ -1484,8 +1484,15 @@ void dereferencet::construct_from_dyn_struct_offset(
 
   // if we are accessing the struct using a byte, we can ignore alignment
   // rules, so convert the struct to bv and dispatch it to
-  // construct_from_dyn_offset
-  if (access_sz == config.ansi_c.char_width)
+  // construct_from_dyn_offset.
+  //
+  // Not under integer/real encoding (--ir): there a struct has no bit-vector
+  // representation, and the extract/concat needed to reinterpret one aborts
+  // the solver with a sort mismatch. Fall through to the member-wise path
+  // below, which addresses each field directly. A byte access satisfies every
+  // alignment constraint anyway, so nothing is lost by taking the slow path.
+  const bool int_encoding = options.get_bool_option("int-encoding");
+  if (access_sz == config.ansi_c.char_width && !int_encoding)
   {
     uint64_t struct_bits = type_byte_size_bits(value->type, &ns).to_uint64();
     value = bitcast2tc(get_uint_type(struct_bits), value);
