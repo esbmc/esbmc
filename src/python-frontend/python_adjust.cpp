@@ -1,6 +1,7 @@
 #include <python-frontend/python_adjust.h>
 
 #include <irep2/irep2_utils.h>
+#include <util/message.h>
 #include <vector>
 
 python_adjust::python_adjust(contextt &_context)
@@ -16,6 +17,7 @@ bool python_adjust::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  bool error = false;
   for (symbolt *symbol : symbol_list)
   {
     if (symbol->is_type)
@@ -42,9 +44,25 @@ bool python_adjust::adjust()
     // symbol_type member sources.
     if (value != original)
       symbol->set_value(value);
+
+    // Post-adjust strong invariant (V.1k B.4): re-enforce what the relaxed
+    // member2t/index2t construction assert deferred — no member/index source may
+    // survive as a transient symbol_type2t. On the live pipeline this pass runs
+    // after clang_cpp_adjust, which already resolves every source, so the check
+    // never fires and the pass stays inert; it is a dead-but-tested safety net
+    // that deterministically catches a B.5-era resolution bug once the pass
+    // replaces clang_cpp_adjust and becomes the sole resolver.
+    if (has_unresolved_source(value))
+    {
+      log_error(
+        "python_adjust: symbol `{}' retains an unresolved member/index source "
+        "after adjust (V.1k post-adjust invariant violated)",
+        symbol->id.as_string());
+      error = true;
+    }
   }
 
-  return false;
+  return error;
 }
 
 namespace
@@ -110,4 +128,25 @@ bool python_adjust::resolve_source(expr2tc &source)
 
   source = source->with_type(resolved);
   return true;
+}
+
+bool python_adjust::has_unresolved_source(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // A member/index whose source type is still a symbol_type2t is unresolved:
+  // resolve_source could not follow it to a concrete aggregate (e.g. it follows
+  // to a non-aggregate scalar), so the strong construction invariant is unmet.
+  if (is_member2t(expr) && is_symbol_type(to_member2t(expr).source_value->type))
+    return true;
+  if (is_index2t(expr) && is_symbol_type(to_index2t(expr).source_value->type))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (has_unresolved_source(e))
+      found = true;
+  });
+  return found;
 }
