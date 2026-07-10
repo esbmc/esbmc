@@ -1,0 +1,8 @@
+CORE
+main.c
+--termination --k-step 2 --max-k-step 6 --max-inductive-step 3 --sarif-output -
+^VERIFICATION FAILED$
+"ruleId": "infinite-loop"
+"external/cwe/cwe-835"
+"helpUri": "https://cwe.mitre.org/data/definitions/835.html"
+"version": "4.20"

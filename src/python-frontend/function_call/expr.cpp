@@ -3597,10 +3597,23 @@ function_call_expr::get_dispatch_table()
            format_complex_string(real_val, imag_val));
        }
        exprt value_expr = converter_.get_expr(arg);
-       if (
-         !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
-         is_complex_type(value_expr.type()))
-         return handle_complex_to_str();
+       if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+       {
+         if (is_complex_type(value_expr.type()))
+           return handle_complex_to_str();
+         // repr(x) == str(x) for an int or a float (only str/container/object
+         // reprs differ from str), so reuse str()'s numeric folding via
+         // convert_to_string: it folds a constant to a char-array literal and
+         // dispatches a non-constant to the matching __python_*_to_str model.
+         // Bool, strings and everything else keep the general-call fallback
+         // (repr(True) is "True", repr("x") adds quotes) — a clean error, never
+         // a wrong fold.
+         const typet &vt = value_expr.type();
+         if (
+           !vt.is_bool() &&
+           (type_utils::is_integer_type(vt) || vt.is_floatbv()))
+           return converter_.get_string_handler().convert_to_string(value_expr);
+       }
        return handle_general_function_call();
      },
      "repr()"},
