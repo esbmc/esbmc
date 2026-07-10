@@ -3570,6 +3570,90 @@ across the `clang_cpp_adjust` boundary, because that boundary cannot be half-cro
 relaxed asserts (`member2t`/`index2t`/`constant_struct2t` for `symbol_id`) remain the
 correct foundation for that combined effort.
 
+#### V.1k/B.5 combined-milestone design spike (2026-07-10) — the completion `python_adjust` must reproduce to supplant `clang_cpp_adjust`
+
+The dead-but-tested B.4 infra is now complete: the exit contract landed
+(`has_unresolved_source` over all three relaxed asserts — #5946 member/index,
+#5947 `constant_struct2t`), so the pass now *asserts* it left no transient
+`symbol_type2t` behind. Every remaining converter drain (the F-P11 general-operand
+wall) is gated on RV2, which is gated on this milestone. Per §V.6 the milestone is
+"the mandatory first spike"; this section grounds it in what `clang_cpp_adjust`
+actually does on the Python path so the work is an ordered, testable list rather
+than an open-ended reimplementation.
+
+**Where the two passes meet (confirmed).** `python_languaget::typecheck` runs
+`clang_cpp_adjust adjuster(context); adjuster.adjust()` on Python output
+(`python_language.cpp:250-251`), then — only under `--python-irep2-adjust`
+(default off) — runs `python_adjust` *after* it (`:254-266`). The flip this
+milestone performs is: reproduce `clang_cpp_adjust`'s Python-relevant completion
+inside `python_adjust`, validate parity, then drop the `clang_cpp_adjust` hop and
+move `python_adjust` *before* goto-convert. It cannot be half-crossed — running
+both over the same nodes double-resolves (unsound, the B.3 negative result, #5623).
+
+**Census — the `clang_c_adjust::adjust_expr` completion steps that fire on Python
+output (confirmed by reading `clang-c-frontend/clang_c_adjust_expr.cpp`).** The
+dispatch is at `:77-204`. The steps a Python body actually exercises, and which
+`python_adjust` reproduces today:
+
+| Step | What it does (file:line) | `python_adjust` today |
+|---|---|---|
+| `adjust_type` | symbol-type macro expansion; array VLA size; struct/union **component recurse + `add_padding`** (`:686-746`, padding at `:731`) | **not reproduced** — `resolve_source` follows a symbol_type to its aggregate but inserts no padding and does not recurse component types |
+| `adjust_struct` (aggregate literal) | `ns.follow` the type + **insert padding operands** + recurse (`:152-176`, padding at `:168-172`) | **not reproduced** — the pass leaves `constant_struct2t` untouched (B.4 only *flags* an unresolved one) |
+| `adjust_member` | pointer auto-deref; array→`index` coercion (`:293-313`) | **partial** — `resolve_source` follows the symbol_type source; the C-style base coercion (`:298-312`) is not replicated (Python member sources arrive pre-dereferenced as `dereference2t`) |
+| `adjust_index` | index→`index_type` typecast; `p[i]`→`*(p+i)` desugaring; struct-in-array byte rewrite (`:465-523`) | **partial** — same symbol_type follow only; the `p[i]`→`*(p+i)` rewrite (`:487-495`) is **not** reproduced, and Python containers are pointer-backed, so it *will* fire |
+| `adjust_expr_binary_arithmetic` | implicit arithmetic conversion: common type + typecast insertion (`:353-464`) | **not reproduced** — this is the width-hazard the converter currently reconciles by hand (`c_implicit_typecast_arithmetic`, #5581 blind-cast caveat) |
+| `adjust_side_effect_function_call` / `adjust_function_call_arguments` | argument type reconciliation (`:790`, `:933`) | **not reproduced** |
+
+**Key parity subtlety to settle first (open).** `adjust_type` does **not** eagerly
+rewrite a non-macro symbol type to its followed struct — it leaves the by-name
+reference and relies on consumption-time `ns.follow` (`:709-712` only overwrites a
+`is_macro` symbol). `python_adjust::resolve_source` instead follows *eagerly*
+(the IREP2 `member2t` construction invariant forces a resolved source). So the two
+passes can produce structurally different member/index *sources* (resolved struct
+vs by-name symbol) even when semantically equal. Whether that survives the
+GOTO-byte-identity gate — or whether goto-convert's own `migrate` step already
+follows, collapsing the difference — is the **first empirical question** the spike
+run must answer, because it determines whether the flip can be GOTO-byte-gated at
+all or must fall back to deterministic verdict+matched-text parity (RV-adj2).
+
+**Ordered, testable decomposition.** Each step adds one completion capability to
+`python_adjust`, unit-tested in isolation. Crucially, because the flag-on pass
+runs *after* `clang_cpp_adjust` until the final flip, each new capability that
+merely *duplicates* work `clang_cpp_adjust` already did must be a **no-op on the
+flag-on fixture** — giving a free inertness gate per step (the same lever B.4
+used): a capability that changes flag-on output is either wrong or is doing work
+`clang_cpp_adjust` was *not* doing, which must be understood before proceeding.
+
+- **S1 — `adjust_type` completion.** Symbol-type macro expansion + array-size
+  adjust + struct/union component recurse + `add_padding` over IREP2 types. Unit
+  round-trip vs a hand-built by-name struct type; inert on flag-on.
+- **S2 — aggregate-literal completion.** `constant_struct2t`: follow the type and
+  insert padding operands to match the resolved struct's components. Turns B.4's
+  *flag* into a *resolution*. Unit-tested; inert on flag-on.
+- **S3 — member/index operand coercion.** Reproduce the pointer-deref / `p[i]`→
+  `*(p+i)` / index typecast steps for the pointer-backed Python container/instance
+  sources. Unit-tested against the pointer cases the B.1 correction documented.
+- **S4 — implicit arithmetic conversion.** Common-type + typecast insertion for
+  binary arithmetic/relational nodes, replacing the converter's hand-rolled
+  `c_implicit_typecast_arithmetic` reconciliation. Gate hard on the #5581
+  sub-`int`-width soundness case (the `int8`/`uint8` dtype hazard the B.4 keystone
+  already tripped once).
+- **S5 — call-argument reconciliation** if the census confirms Python emits
+  unreconciled call arguments pre-adjust (verify against `converter_funcall`).
+- **S6 — the flip.** Move `python_adjust` before goto-convert; drop the
+  `clang_cpp_adjust` hop on the Python path; discharge RV2 (20-test fixture + full
+  `regression/python` + model corpus, dual-solver + asserts) and RV3 (`esbmc-cpp`,
+  since the relaxed asserts and any shared type touch reach C++).
+
+**Acceptance (RV2, hard gate) and residual risk.** Unchanged from §V.4 risk
+register: dual-solver (Bitwuzla + Z3) verdict + matched-text parity, asserts-on,
+over the full python strata + model `.py` corpus, plus `esbmc-cpp`. New spike
+risks to fold into the register on execution: *RV-adj5 (padding-layout drift)* —
+S1/S2 padding must reproduce `add_padding` byte-for-byte or struct member offsets
+drift the SMT encoding; *RV-adj6 (eager-vs-lazy source)* — the parity subtlety
+above. Until S1–S6 land and RV2 is discharged the F-P11 converter wall stays
+blocked by design; no further pre-adjust converter drain can proceed ahead of it.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
