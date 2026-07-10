@@ -645,9 +645,12 @@ struct bit_not
 };
 
 #if __cplusplus >= 201103L
-// Simplified std::invoke model
+// Simplified std::invoke model.
+// The trailing return type deduces exactly as decltype(auto) would here, but
+// keeps this declaration parseable in C++11: decltype(auto) is C++14.
 template <typename Func, typename... Args>
-decltype(auto) invoke(Func &&f, Args &&...args)
+auto invoke(Func &&f, Args &&...args)
+  -> decltype(::std::forward<Func>(f)(::std::forward<Args>(args)...))
 {
   return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
