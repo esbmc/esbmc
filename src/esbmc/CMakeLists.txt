@@ -42,9 +42,10 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable(esbmc main.cpp esbmc_parseoptions.cpp
+add_executable(esbmc main.cpp
     parseoptions/bmc_strategy.cpp
     parseoptions/command_line_options.cpp
+    parseoptions/driver.cpp
     parseoptions/function_contracts.cpp
     parseoptions/goto_program.cpp
     parseoptions/k_induction.cpp
