@@ -63,7 +63,6 @@ extern "C"
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/dead_store_analysis.h>
-#include <util/cwe_mapping.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -190,6 +189,7 @@ uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
     abort();
   }
   uint64_t mult = 1;
+  size_t digits = str.size();
   if (!isdigit((unsigned char)str.back()))
   {
     switch (str.back())
@@ -210,9 +210,15 @@ uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
       log_error("Unrecognized timeout suffix");
       abort();
     }
+    --digits;
   }
   uint64_t timeout = 0;
-  std::from_chars(str.data(), str.data() + str.size(), timeout);
+  auto [ptr, ec] = std::from_chars(str.data(), str.data() + digits, timeout);
+  if (ec != std::errc() || ptr != str.data() + digits)
+  {
+    log_error("Invalid timeout value '{}'", std::string(str));
+    abort();
+  }
   timeout *= mult;
   return timeout;
 }
@@ -240,6 +246,7 @@ uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
     abort();
   }
   uint64_t mult = 1024ULL * 1024ULL;
+  size_t digits = str.size();
   if (!isdigit((unsigned char)str.back()))
   {
     switch (str.back())
@@ -260,9 +267,15 @@ uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
       log_error("Unrecognized memlimit suffix");
       abort();
     }
+    --digits;
   }
   uint64_t size = 0;
-  std::from_chars(str.data(), str.data() + str.size(), size);
+  auto [ptr, ec] = std::from_chars(str.data(), str.data() + digits, size);
+  if (ec != std::errc() || ptr != str.data() + digits)
+  {
+    log_error("Invalid memlimit value '{}'", std::string(str));
+    abort();
+  }
   size *= mult;
   return size;
 }
