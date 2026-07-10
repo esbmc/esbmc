@@ -232,6 +232,27 @@ void fix_expression(irept &irep)
     irep.get_sub().push_back(zero);
   }
 
+  if (
+    (irep.id() == "forall" || irep.id() == "exists") &&
+    irep.get_sub().size() == 2 && irep.get_sub()[0].id() == "tuple")
+  {
+    // CBMC binds a quantifier's variable(s) inside a "tuple" node in the first
+    // operand; ESBMC's forall2t/exists2t (and the solver, smt_solver.cpp) expect
+    // side_1 to be the bound symbol itself. Unwrap a single-symbol tuple to the
+    // bare symbol. A tuple with more than one bound variable is left untouched
+    // (forall2t binds exactly one symbol) so it aborts cleanly rather than
+    // silently dropping the extra binders -- a soundness hazard.
+    const irept &tuple = irep.get_sub()[0];
+    if (tuple.get_sub().size() == 1)
+    {
+      // Copy the bound symbol out before overwriting the slot that holds the
+      // tuple (the source lives inside it), mirroring fix_builtin_call's
+      // copy-before-mutate discipline.
+      const irept bound = tuple.get_sub()[0];
+      irep.get_sub()[0] = bound;
+    }
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
@@ -289,6 +310,10 @@ void fix_expression(irept &irep)
     "notequal",
     "and",
     "or",
+    // Boolean implication (a ==> b); migrate_expr lowers "=>" to implies2t via a
+    // wrapped operand pair. Common in quantifier bodies (__CPROVER_forall guards)
+    // but valid in any boolean context.
+    "=>",
     "mod",
     "not",
     "*",
@@ -344,7 +369,13 @@ void fix_expression(irept &irep)
     // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
     // / __builtin_popcount lower to these ids in CBMC's goto.
     "popcount",
-    "bswap"};
+    "bswap",
+    // Quantifier predicates: __CPROVER_forall/__CPROVER_exists lower to these
+    // ids, which migrate_expr handles via op0()/op1() (bound symbol, predicate).
+    // Without wrapping CBMC's raw operands into "operands" here, op0() reads an
+    // empty operand list and segfaults (same failure shape as isnan/popcount).
+    "forall",
+    "exists"};
 
   const std::string cur = irep.id_string();
 
