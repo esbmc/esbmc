@@ -3,6 +3,7 @@
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_adjust.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -185,6 +186,11 @@ bool python_languaget::parse(const std::string &path)
 
   try
   {
+    // Parse under FE_TONEAREST: nlohmann converts float literals with the
+    // host strtod, and a leftover non-default rounding mode (e.g. gaol's
+    // static init leaves FE_UPWARD on goto-contractor builds) would store a
+    // double one ulp away from CPython's value for the same literal.
+    const round_to_nearest_guard rounding_guard;
     ast = nlohmann::json::parse(ast_json);
   }
   catch (const nlohmann::json::exception &e)
