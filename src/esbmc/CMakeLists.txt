@@ -44,6 +44,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
 
 add_executable(esbmc main.cpp esbmc_parseoptions.cpp
     parseoptions/function_contracts.cpp
+    parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
     bmc.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
