@@ -406,3 +406,25 @@ TEST_CASE(
   python_adjust adjuster(ctx);
   REQUIRE(adjuster.adjust());
 }
+
+TEST_CASE(
+  "python_adjust B.4 adjust() flags an unresolved constant_struct type "
+  "post-adjust",
+  "[python-adjust]")
+{
+  // constant_struct2t is the third relaxed construction assert (irep2_expr.h):
+  // its own type may be a transient by-name symbol_type2t. The pass does not
+  // resolve aggregate-literal types (that is the B.5-era whole-body resolution),
+  // so a survivor must be caught by the post-adjust invariant and adjust() must
+  // return true (error).
+  contextt ctx;
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-Rec"),
+    std::vector<expr2tc>{gen_zero(get_int32_type())});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_struct_lit_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}

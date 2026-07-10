@@ -45,18 +45,20 @@ bool python_adjust::adjust()
     if (value != original)
       symbol->set_value(value);
 
-    // Post-adjust strong invariant (V.1k B.4): re-enforce what the relaxed
-    // member2t/index2t construction assert deferred — no member/index source may
-    // survive as a transient symbol_type2t. On the live pipeline this pass runs
-    // after clang_cpp_adjust, which already resolves every source, so the check
-    // never fires and the pass stays inert; it is a dead-but-tested safety net
-    // that deterministically catches a B.5-era resolution bug once the pass
-    // replaces clang_cpp_adjust and becomes the sole resolver.
+    // Post-adjust strong invariant (V.1k B.4): re-enforce what the three relaxed
+    // construction asserts deferred — no member2t/index2t source and no
+    // constant_struct2t type may survive as a transient symbol_type2t. On the
+    // live pipeline this pass runs after clang_cpp_adjust, which already resolves
+    // every by-name aggregate, so the check never fires and the pass stays inert;
+    // it is a dead-but-tested safety net that deterministically catches a
+    // B.5-era resolution bug once the pass replaces clang_cpp_adjust and becomes
+    // the sole resolver.
     if (has_unresolved_source(value))
     {
       log_error(
-        "python_adjust: symbol `{}' retains an unresolved member/index source "
-        "after adjust (V.1k post-adjust invariant violated)",
+        "python_adjust: symbol `{}' retains an unresolved by-name "
+        "(symbol_type2t) member/index/struct-literal node after adjust (V.1k "
+        "post-adjust invariant violated)",
         symbol->id.as_string());
       error = true;
     }
@@ -141,6 +143,11 @@ bool python_adjust::has_unresolved_source(const expr2tc &expr) const
   if (is_member2t(expr) && is_symbol_type(to_member2t(expr).source_value->type))
     return true;
   if (is_index2t(expr) && is_symbol_type(to_index2t(expr).source_value->type))
+    return true;
+  // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
+  // its own type may be a transient by-name symbol_type2t until the aggregate is
+  // followed. Post-adjust it must be a resolved struct too.
+  if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
     return true;
 
   bool found = false;
