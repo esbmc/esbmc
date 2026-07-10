@@ -96,6 +96,7 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
+| 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -175,10 +176,27 @@ through already-binary 32-char strings is unchanged, and 32-bit constants still 
 (byte-identical to before); only wider types change. Because the byte-identical goto-transcoder
 parity reference shares the same 32-bit bug, this fix **intentionally diverges** from that
 reference on wide constants — CBMC-**verdict** parity (roadmap §6, the end-state oracle) is the
-correctness signal here, and the full `goto-transcoder` verdict suite still passes. Values
-needing >64 bits (128-bit, above) remain out of scope and are now returned unchanged rather
-than crashing `std::stoull`. Tests `cbmc_wide_const` (the soundness repro), `cbmc_wide_const_fail`,
-`cbmc_wide_uconst`, dual-solver.
+correctness signal here, and the full `goto-transcoder` verdict suite still passes. Tests
+`cbmc_wide_const` (the soundness repro), `cbmc_wide_const_fail`, `cbmc_wide_uconst`, dual-solver.
+
+**128-bit float constants (`long double`/`float128`) — ✅ fixed.** A second, subtler collision
+with the same 32-bit heuristic. `fix_expression`'s constant rewrite skipped conversion whenever
+the value string was **exactly 32 chars** (`if (val.size() != 32)`), on the assumption that a
+32-char value is an already-binary 32-bit string. But CBMC stores *every* constant — integer and
+floating-point — as **hex**, and a 128-bit `long double`/`_Float128` value is stored as exactly
+**32 hex chars** (e.g. `1.5L` → `3FFF8000000000000000000000000000`, IEEE binary128, `width=128`,
+`f=112`). That value hit the 32-char guard, was left as raw hex, and `migrate`'s `ieee_floatt`
+misdecoded it: `long double d=1.5L; assert(d>1.0L)` read `d` as ≈0 and returned a **false
+`FAILED`** where CBMC says `SUCCESSFUL` (native ESBMC handles the same program correctly — the
+bug was purely on the `--binary` path). Fixed by keying the guard on the constant's **own type
+width** (`val.size() != width`) rather than a hardcoded 32: for every standard width the hex
+length is strictly shorter than the bit width (w=32 → 1–5 chars, w=64 → 1–16, w=128 float → 32),
+so the width test never mistakes hex for binary, and the 32-char float128 value is now converted.
+`hex_to_bin` was extended past its `uint64_t` ceiling to expand >64-bit hex per digit (4 bits
+each) instead of returning it unchanged. Byte-identical for ≤64-bit constants (same `std::stoull`
+path); the full `goto-transcoder` verdict suite still passes. Tests `cbmc_long_double` (pins the
+decoded value via `d==1.5L`, the `d>1.0L` soundness repro, and `d*2==3.0L`) and
+`cbmc_long_double_fail`, dual-solver.
 
 **Pointer subtype double-wrap — ✅ fixed.** Found while chasing an unrelated `malloc`
 verdict mismatch (§4.8): `fix_type`'s `pointer` branch, unlike the near-identical `array`

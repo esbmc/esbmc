@@ -33,31 +33,51 @@ bool has_sub(const irept &i, const irep_idt &k)
   return m.find(k) != m.end();
 }
 
-// CBMC stores integer constant values as hex; ESBMC wants a binary string
-// whose length matches the constant's own type width. The Rust reference
-// (`format!("{:032b}", ...)`) hardcoded 32, which truncated the representation
-// of constants in wider (e.g. 64-bit) types: a 64-bit value was emitted as a
-// <=33-char string and silently interpreted at 32 bits, so e.g. -5000000000LL
-// verified as its low 32 bits (roadmap §4.3/§7). Pad to `width` bits instead.
-// Values needing more than 64 bits (128-bit constants, §4.3) are out of range
-// for this uint64_t path and are returned unchanged rather than crashing
-// std::stoull -- note this leaves such a value as a raw hex string (a known
-// limitation, roadmap §4.3), but the >64-bit path is not otherwise exercised.
+// CBMC stores constant values (integer and floating-point alike) as hex;
+// ESBMC wants a binary string whose length matches the constant's own type
+// width. The Rust reference (`format!("{:032b}", ...)`) hardcoded 32, which
+// truncated the representation of constants in wider (e.g. 64-bit) types: a
+// 64-bit value was emitted as a <=33-char string and silently interpreted at
+// 32 bits, so e.g. -5000000000LL verified as its low 32 bits (roadmap §4.3/§7).
+// Pad to `width` bits instead.
 std::string hex_to_bin(const std::string &hex, std::size_t width)
 {
-  if (hex.size() > 16) // > 64 bits: cannot round-trip through uint64_t
-    return hex;
-  unsigned long long n = std::stoull(hex, nullptr, 16);
   std::string bits;
-  if (n == 0)
-    bits = "0";
-  else
-    while (n != 0)
+  if (hex.size() > 16)
+  {
+    // > 64 bits (e.g. a 128-bit float128 / long double constant): the value no
+    // longer round-trips through uint64_t, so expand each hex digit to its four
+    // bits directly. A non-hex character means the string is not hex after all
+    // (already binary, or something unexpected) -- leave it unchanged.
+    bits.reserve(hex.size() * 4);
+    for (char ch : hex)
     {
-      bits.push_back(static_cast<char>('0' + (n & 1)));
-      n >>= 1;
+      int v;
+      if (ch >= '0' && ch <= '9')
+        v = ch - '0';
+      else if (ch >= 'a' && ch <= 'f')
+        v = ch - 'a' + 10;
+      else if (ch >= 'A' && ch <= 'F')
+        v = ch - 'A' + 10;
+      else
+        return hex;
+      for (int b = 3; b >= 0; --b)
+        bits.push_back(static_cast<char>('0' + ((v >> b) & 1)));
     }
-  std::reverse(bits.begin(), bits.end());
+  }
+  else
+  {
+    unsigned long long n = std::stoull(hex, nullptr, 16);
+    if (n == 0)
+      bits = "0";
+    else
+      while (n != 0)
+      {
+        bits.push_back(static_cast<char>('0' + (n & 1)));
+        n >>= 1;
+      }
+    std::reverse(bits.begin(), bits.end());
+  }
   if (bits.size() < width)
     bits = std::string(width - bits.size(), '0') + bits;
   return bits;
@@ -273,12 +293,17 @@ void fix_expression(irept &irep)
     if (type_id != "pointer" && type_id != "bool" && has_sub(irep, "value"))
     {
       const std::string val = irep.find("value").id_string();
-      // Value may be a hex representation or binary; we want the binary one.
-      // A value already exactly 32 chars is treated as an existing 32-bit
-      // binary string and left as-is; anything else is a hex value converted to
-      // a binary string of the type's own bit width (see hex_to_bin).
-      if (val.size() != 32)
-        irep.add("value") = mk(hex_to_bin(val, bv_width(irep.find("type"))));
+      const std::size_t width = bv_width(irep.find("type"));
+      // CBMC stores the value as hex; ESBMC wants a binary string of the type's
+      // own bit width. A value already exactly `width` chars long is an existing
+      // binary string (e.g. one this pass produced earlier) and is left as-is;
+      // anything else is hex and gets converted (see hex_to_bin). Keying on the
+      // type width, not a hardcoded 32, is what makes 128-bit float128 / long
+      // double work: its value is 32 hex chars, which a `!= 32` guard mistook
+      // for an already-binary 32-bit value and left as raw hex, so migrate
+      // misdecoded it (1.5L read as ~0 -- a false verdict, not a crash).
+      if (val.size() != width)
+        irep.add("value") = mk(hex_to_bin(val, width));
     }
   }
 
