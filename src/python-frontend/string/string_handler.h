@@ -8,6 +8,7 @@
 #include <util/context.h>
 #include <util/message.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -907,6 +908,22 @@ private:
     const std::string &float_bits,
     std::size_t width,
     int precision);
+
+  /**
+   * @brief Render a constant double as CPython's str()/repr() would, or return
+   *        nullopt when the result cannot be produced exactly.
+   *
+   * The frontend renders floats with a fixed 6-decimal format, which diverges
+   * from CPython's shortest round-trip repr and would otherwise fold to a WRONG
+   * constant string (verifying a false assertion SUCCESSFUL): precision loss
+   * (str(0.333333333) would give "0.333333") and notation (CPython uses
+   * exponential outside [1e-4, 1e16): str(1e-5) == "1e-05", str(1e16) ==
+   * "1e+16"). Fold only when provably CPython's repr: the value is zero or in
+   * CPython's fixed-notation range AND the 6-decimal rendering round-trips to
+   * the exact same double. Otherwise return nullopt so callers emit a sound
+   * nondet string rather than a wrong constant.
+   */
+  static std::optional<std::string> cpython_float_str(double d);
 };
 
 #endif // PYTHON_FRONTEND_STRING_HANDLER_H

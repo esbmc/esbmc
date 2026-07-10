@@ -497,11 +497,15 @@ exprt function_call_expr::handle_int_to_bytes() const
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
-  std::string str_val = py_str_from_double(arg["value"].get<double>());
-
-  typet t = type_handler_.get_typet("str", str_val.size() + 1);
-  return converter_.make_char_array_expr(
-    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
+  // Fold the constant float through the shared string handler. It renders
+  // CPython's repr only when it can prove the 6-decimal spelling exact and
+  // emits a sound nondet string otherwise: a fixed %f fold here cannot
+  // reproduce CPython's shortest round-trip repr for every double (precision
+  // loss for str(0.1234567), exponential notation outside [1e-4, 1e16)) and
+  // would materialise a wrong constant that could verify a false assertion.
+  // Delegating also keeps this literal path in sync with the variable path.
+  return converter_.get_string_handler().convert_to_string(
+    converter_.get_expr(arg));
 }
 
 exprt function_call_expr::handle_complex_to_str() const
