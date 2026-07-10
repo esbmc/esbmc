@@ -15,12 +15,12 @@
 #   E2: 0 <= len(nondet_list()) <= 8             [default max_size == 8]
 #   E3: len(nondet_list(0)) == 0                 [degenerate bound is empty]
 xs: list[int] = nondet_list(5)
-assert len(xs) >= 0          # E1 lower
-assert len(xs) <= 5          # E1 upper
+assert len(xs) >= 0  # E1 lower
+assert len(xs) <= 5  # E1 upper
 
 ys: list[int] = nondet_list()
-assert len(ys) >= 0          # E2 lower
-assert len(ys) <= 8          # E2 upper
+assert len(ys) >= 0  # E2 lower
+assert len(ys) <= 8  # E2 upper
 
 zs: list[int] = nondet_list(0)
-assert len(zs) == 0          # E3
+assert len(zs) == 0  # E3

@@ -25,7 +25,7 @@ __ESBMC_assume(b <= 20)
 l: int = math.lcm(a, b)
 g: int = math.gcd(a, b)
 
-assert l >= 1                # E1
-assert l % a == 0            # E2
-assert l % b == 0            # E3
-assert l * g == a * b        # E4
+assert l >= 1  # E1
+assert l % a == 0  # E2
+assert l % b == 0  # E3
+assert l * g == a * b  # E4

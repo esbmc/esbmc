@@ -18,9 +18,9 @@ __ESBMC_assume(n <= 255)
 
 c: int = n.bit_count()
 
-assert c >= 0                      # E1
-assert c <= n.bit_length()         # E2
-assert (c == 0) == (n == 0)        # E3
+assert c >= 0  # E1
+assert c <= n.bit_length()  # E2
+assert (c == 0) == (n == 0)  # E3
 
 # Concrete anchors: powers of two have one bit, all-ones have full count.
 assert (0).bit_count() == 0

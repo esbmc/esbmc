@@ -19,5 +19,5 @@ __ESBMC_assume(-1000 <= c <= 1000)
 
 l: list[int] = [a, b, c]
 
-assert sum(l) == a + b + c              # E1
-assert sum(l, 10) == a + b + c + 10     # E2
+assert sum(l) == a + b + c  # E1
+assert sum(l, 10) == a + b + c + 10  # E2

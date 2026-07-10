@@ -15,4 +15,4 @@ l: list[int] = [a, b, c]
 
 m: int = max(l)
 
-assert m > a            # F1 — falsifiable (a may be the maximum)
+assert m > a  # F1 — falsifiable (a may be the maximum)

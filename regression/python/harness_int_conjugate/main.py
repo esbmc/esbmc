@@ -14,5 +14,5 @@ n: int = nondet_int()
 __ESBMC_assume(-1000 <= n <= 1000)
 
 m: int = n.conjugate()
-assert m == n                                  # E1
-assert m.conjugate() == n                      # E2
+assert m == n  # E1
+assert m.conjugate() == n  # E2

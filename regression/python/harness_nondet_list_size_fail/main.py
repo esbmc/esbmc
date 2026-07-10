@@ -8,4 +8,4 @@
 #   F1: len(nondet_list(5)) >= 1.  False because _nondet_size admits size 0,
 #       so the empty list is a legal outcome.
 xs: list[int] = nondet_list(5)
-assert len(xs) >= 1          # F1 — falsifiable (empty list is allowed)
+assert len(xs) >= 1  # F1 — falsifiable (empty list is allowed)

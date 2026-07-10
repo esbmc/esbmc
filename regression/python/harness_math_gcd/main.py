@@ -31,7 +31,7 @@ __ESBMC_assume(a + b > 0)
 
 g: int = math.gcd(a, b)
 
-assert g >= 1            # E1
-assert a % g == 0        # E2
-assert b % g == 0        # E3
-assert math.gcd(b, a) == g   # E4
+assert g >= 1  # E1
+assert a % g == 0  # E2
+assert b % g == 0  # E3
+assert math.gcd(b, a) == g  # E4

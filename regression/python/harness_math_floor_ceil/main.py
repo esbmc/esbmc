@@ -27,9 +27,9 @@ __ESBMC_assume(x <= 1000.0)
 f: int = math.floor(x)
 c: int = math.ceil(x)
 
-assert f <= x                       # E1
-assert x < f + 1                    # E2
-assert c >= x                       # E3
-assert x > c - 1                    # E4
-assert f <= c                       # E5
-assert c - f == 0 or c - f == 1     # E6
+assert f <= x  # E1
+assert x < f + 1  # E2
+assert c >= x  # E3
+assert x > c - 1  # E4
+assert f <= c  # E5
+assert c - f == 0 or c - f == 1  # E6

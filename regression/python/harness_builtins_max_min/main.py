@@ -20,8 +20,8 @@ l: list[int] = [a, b, c]
 m: int = max(l)
 n: int = min(l)
 
-assert m >= a and m >= b and m >= c            # E1
-assert m == a or m == b or m == c              # E2
-assert n <= a and n <= b and n <= c            # E3
-assert n == a or n == b or n == c              # E4
-assert n <= m                                  # E5
+assert m >= a and m >= b and m >= c  # E1
+assert m == a or m == b or m == c  # E2
+assert n <= a and n <= b and n <= c  # E3
+assert n == a or n == b or n == c  # E4
+assert n <= m  # E5

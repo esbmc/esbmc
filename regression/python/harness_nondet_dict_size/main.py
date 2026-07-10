@@ -10,8 +10,8 @@
 #   E1: 0 <= len(nondet_dict(5)) <= 5            [explicit bound honoured]
 #   E2: len(nondet_dict(0)) == 0                 [degenerate bound is empty]
 d: dict[int, int] = nondet_dict(5)
-assert len(d) >= 0           # E1 lower
-assert len(d) <= 5           # E1 upper
+assert len(d) >= 0  # E1 lower
+assert len(d) <= 5  # E1 upper
 
 e: dict[int, int] = nondet_dict(0)
-assert len(e) == 0           # E2
+assert len(e) == 0  # E2

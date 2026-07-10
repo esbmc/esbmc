@@ -24,4 +24,4 @@ __ESBMC_assume(a + b > 0)
 
 g: int = math.gcd(a, b)
 
-assert g >= 2            # F1 — falsifiable (coprime inputs give gcd == 1)
+assert g >= 2  # F1 — falsifiable (coprime inputs give gcd == 1)

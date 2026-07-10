@@ -20,6 +20,6 @@ __ESBMC_assume(n <= 8)
 f: int = math.factorial(n)
 fm: int = math.factorial(n - 1)
 
-assert f >= 1            # E1
-assert f == n * fm       # E2
-assert f >= fm           # E3
+assert f >= 1  # E1
+assert f == n * fm  # E2
+assert f >= fm  # E3

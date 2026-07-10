@@ -23,9 +23,9 @@ __ESBMC_assume(-1000 <= c <= 1000)
 l: list[int] = [a, b, c]
 s: list[int] = sorted(l)
 
-assert len(s) == 3                      # E1
-assert s[0] <= s[1]                     # E2
-assert s[1] <= s[2]                     # E2
-assert s[0] == min(l)                   # E3
-assert s[2] == max(l)                   # E4
+assert len(s) == 3  # E1
+assert s[0] <= s[1]  # E2
+assert s[1] <= s[2]  # E2
+assert s[0] == min(l)  # E3
+assert s[2] == max(l)  # E4
 assert s[0] + s[1] + s[2] == a + b + c  # E5

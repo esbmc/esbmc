@@ -18,4 +18,4 @@ __ESBMC_assume(n <= 1000)
 
 r: int = math.isqrt(n)
 
-assert r * r == n            # F1 — falsifiable (non-perfect-square n)
+assert r * r == n  # F1 — falsifiable (non-perfect-square n)

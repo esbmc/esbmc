@@ -23,6 +23,6 @@ __ESBMC_assume(n <= 1000)
 
 r: int = math.isqrt(n)
 
-assert r >= 0                        # E1
-assert r * r <= n                    # E2
-assert n < (r + 1) * (r + 1)         # E3
+assert r >= 0  # E1
+assert r * r <= n  # E2
+assert n < (r + 1) * (r + 1)  # E3

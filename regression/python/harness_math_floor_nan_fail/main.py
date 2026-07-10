@@ -18,4 +18,4 @@ x: float = nondet_float()
 # Intentionally no __ESBMC_assume finiteness bound.
 f: int = math.floor(x)
 
-assert f <= x       # unreachable once the model's guard fails first
+assert f <= x  # unreachable once the model's guard fails first

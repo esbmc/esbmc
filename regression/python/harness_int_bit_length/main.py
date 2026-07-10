@@ -21,9 +21,9 @@ __ESBMC_assume(n <= 255)
 
 r: int = n.bit_length()
 
-assert r >= 0                              # E1
-assert n < (1 << r)                        # E2
-assert n == 0 or (1 << (r - 1)) <= n       # E3
+assert r >= 0  # E1
+assert n < (1 << r)  # E2
+assert n == 0 or (1 << (r - 1)) <= n  # E3
 
 # Concrete anchors for the boundary values.
 assert (0).bit_length() == 0

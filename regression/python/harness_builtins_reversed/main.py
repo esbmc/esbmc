@@ -16,8 +16,8 @@ l: list[int] = [a, b, c]
 
 r: list[int] = reversed(l)
 
-assert len(r) == 3                              # E1
-assert r[0] == c and r[1] == b and r[2] == a   # E2
+assert len(r) == 3  # E1
+assert r[0] == c and r[1] == b and r[2] == a  # E2
 
 rr: list[int] = reversed(r)
 assert rr[0] == a and rr[1] == b and rr[2] == c  # E3

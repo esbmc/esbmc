@@ -21,8 +21,8 @@ l: list[bool] = [a, b, c]
 av: bool = all(l)
 ov: bool = any(l)
 
-assert av == (a and b and c)       # E1
-assert ov == (a or b or c)         # E2
+assert av == (a and b and c)  # E1
+assert ov == (a or b or c)  # E2
 
 if av:
-    assert ov                      # E3
+    assert ov  # E3

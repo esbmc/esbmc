@@ -24,6 +24,6 @@ __ESBMC_assume(k <= n)
 
 p: int = math.perm(n, k)
 
-assert p >= 1                                        # E1
-assert p == math.comb(n, k) * math.factorial(k)     # E2
-assert math.perm(n, n) == math.factorial(n)         # E3
+assert p >= 1  # E1
+assert p == math.comb(n, k) * math.factorial(k)  # E2
+assert math.perm(n, n) == math.factorial(n)  # E3

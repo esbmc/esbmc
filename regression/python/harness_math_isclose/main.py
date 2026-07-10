@@ -24,6 +24,6 @@ x: float = nondet_float()
 __ESBMC_assume(x >= -1000.0)
 __ESBMC_assume(x <= 1000.0)
 
-assert math.isclose(x, x)               # E1
-assert math.isclose(x, x, 0.0, 0.0)     # E2
-assert not math.isclose(1.0, 2.0)       # E3
+assert math.isclose(x, x)  # E1
+assert math.isclose(x, x, 0.0, 0.0)  # E2
+assert not math.isclose(1.0, 2.0)  # E3

@@ -26,5 +26,5 @@ __ESBMC_assume(k <= n)
 
 c: int = math.comb(n, k)
 
-assert c >= 1                            # E1
-assert c == math.comb(n, n - k)         # E2
+assert c >= 1  # E1
+assert c == math.comb(n, n - k)  # E2

@@ -20,8 +20,8 @@ __ESBMC_assume(x <= 1000.0)
 t: int = math.trunc(x)
 
 if x >= 0.0:
-    assert t == math.floor(x)       # E1
-    assert t <= x                   # E3 (non-negative side)
+    assert t == math.floor(x)  # E1
+    assert t <= x  # E3 (non-negative side)
 else:
-    assert t == math.ceil(x)        # E2
-    assert t >= x                   # E3 (negative side)
+    assert t == math.ceil(x)  # E2
+    assert t >= x  # E3 (negative side)

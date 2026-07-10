@@ -15,4 +15,4 @@ n: int = nondet_int()
 __ESBMC_assume(n >= 0)
 __ESBMC_assume(n <= 255)
 
-assert n.bit_count() == n.bit_length()     # F1 — falsifiable
+assert n.bit_count() == n.bit_length()  # F1 — falsifiable
