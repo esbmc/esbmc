@@ -1,40 +1,103 @@
-# pylint: disable=unused-argument,useless-return,unidiomatic-typecheck
-# Operational-model stubs for heapq. Argument names on heapify (whose
-# body is intentionally abstract) are part of the API contract matched
-# by ESBMC's converter. The explicit `return None` keeps the function's
-# return-type analysis aligned with the `-> None` annotation. The
-# `type(item) is tuple` test is intentional: in a closed-world FV model
-# the strict identity check is more correct than isinstance(), which
-# would also accept tuple subclasses with potentially different
-# semantics under verification.
-from typing import Any
+# Operational model for heapq, ported from CPython's Lib/heapq.py.
+#
+# The sift routines reproduce CPython's array layout element-for-element, so
+# heap[0], the pop order and tie-breaking all agree with the reference
+# implementation for any input list -- including lists that do not satisfy the
+# heap invariant. A model that merely scanned for the minimum would be unsound:
+# heappop() returns heap[0], which is the minimum only once the invariant
+# holds, and the invariant cannot be checked statically.
+#
+# The element type must be spelled out: without one the frontend infers elements
+# to be lists and mis-compares them, and `list[Any]` makes index assignment
+# through an imported module report a spurious violation. Hence `list[int]`.
+#
+# Only int elements are fully modelled.
+#   float: sound but loud. heapify() and index reads are exact, while the
+#     value-returning operations return an unconstrained result, so ESBMC
+#     reports FAILED on assertions that hold in CPython. No float program was
+#     found for which ESBMC reports SUCCESSFUL while CPython's assertion fails.
+#     Pinned by regression/python/github_5931_float_knownbug.
+#   str: sound but loud, in both directions. Pinned by github_5931_str_knownbug.
+#   tuple: UNSOUND. The frontend types tuple elements as int, so the heap layout
+#     comes out wrong and ESBMC can report SUCCESSFUL on a program CPython
+#     rejects. This is a pre-existing frontend defect, not a property of this
+#     model -- it reproduces identically against the previous model. Pinned by
+#     github_5931_tuple_knownbug_fail.
 
 
-def _heap_key(item: Any):
-    if type(item) is tuple:
-        return item[0]
+def _siftdown(heap: list[int], startpos: int, pos: int) -> None:
+    """Move heap[pos] toward startpos until its parent is no larger."""
+    newitem = heap[pos]
+    while pos > startpos:
+        parentpos = (pos - 1) // 2
+        parent = heap[parentpos]
+        if newitem < parent:
+            heap[pos] = parent
+            pos = parentpos
+        else:
+            break
+    heap[pos] = newitem
+
+
+def _siftup(heap: list[int], pos: int) -> None:
+    """Bubble the smaller child up to heap[pos], then sift the oddball down."""
+    endpos = len(heap)
+    startpos = pos
+    newitem = heap[pos]
+    childpos = 2 * pos + 1
+    while childpos < endpos:
+        rightpos = childpos + 1
+        if rightpos < endpos:
+            left = heap[childpos]
+            right = heap[rightpos]
+            if not left < right:
+                childpos = rightpos
+        heap[pos] = heap[childpos]
+        pos = childpos
+        childpos = 2 * pos + 1
+    heap[pos] = newitem
+    _siftdown(heap, startpos, pos)
+
+
+def heapify(heap: list[int]) -> None:
+    """Transform the list into a heap, in-place."""
+    i = len(heap) // 2 - 1
+    while i >= 0:
+        _siftup(heap, i)
+        i = i - 1
+
+
+def heappush(heap: list[int], item: int) -> None:
+    """Push item onto the heap, maintaining the heap invariant."""
+    heap.append(item)
+    _siftdown(heap, 0, len(heap) - 1)
+
+
+def heappop(heap: list[int]) -> int:
+    """Pop and return the smallest item, maintaining the heap invariant."""
+    lastelt = heap.pop()
+    if len(heap) == 0:
+        return lastelt
+    returnitem = heap[0]
+    heap[0] = lastelt
+    _siftup(heap, 0)
+    return returnitem
+
+
+def heapreplace(heap: list[int], item: int) -> int:
+    """Pop and return the smallest item, then push item; heap size is unchanged."""
+    returnitem = heap[0]
+    heap[0] = item
+    _siftup(heap, 0)
+    return returnitem
+
+
+def heappushpop(heap: list[int], item: int) -> int:
+    """Push item on the heap, then pop and return the smallest item."""
+    if len(heap) > 0:
+        smallest = heap[0]
+        if smallest < item:
+            heap[0] = item
+            _siftup(heap, 0)
+            return smallest
     return item
-
-
-def heapify(heap: list[Any]) -> None:
-    return None
-
-
-def heappush(heap: list[Any], item: Any) -> None:
-    heap.append(item)
-    return None
-
-
-def heappop(heap: list[Any]) -> Any:
-    best_index = 0
-    i = 1
-    while i < len(heap):
-        if _heap_key(heap[i]) < _heap_key(heap[best_index]):
-            best_index = i
-        i = i + 1
-    return heap.pop(best_index)
-
-
-def heappushpop(heap: list[Any], item: Any) -> Any:
-    heap.append(item)
-    return heappop(heap)
