@@ -3570,6 +3570,31 @@ across the `clang_cpp_adjust` boundary, because that boundary cannot be half-cro
 relaxed asserts (`member2t`/`index2t`/`constant_struct2t` for `symbol_id`) remain the
 correct foundation for that combined effort.
 
+#### B.4 post-adjust exit invariant — landed ahead of the collapsed milestone (2026-07-10)
+
+The one piece of B.4 that *is* separable from the collapsed B.3/B.4/B.5 milestone
+above landed on its own: the **post-adjust strong-invariant exit check**.
+`python_adjust::adjust()` now walks each resolved body via a recursive
+`has_unresolved_source` probe and, if any `member2t`/`index2t` source survived
+resolution as a transient `symbol_type2t` (e.g. one that follows to a
+non-aggregate scalar rather than a struct/array), `log_error`s naming the symbol
+and returns `true` (error) instead of the previous unconditional `false`. This
+re-enforces, at pass exit, exactly the strong source invariant the V.1k relaxed
+construction assert deferred.
+
+Crucially this does **not** cross the `clang_cpp_adjust` boundary the milestone
+above cannot half-cross: it only *verifies* the pass's own output, it does not
+move or replace `clang_cpp_adjust`. On the live pipeline the pass runs *after*
+`clang_cpp_adjust`, which resolves every source, so the check never fires — the
+pass stays inert (flag off ⇒ not run at all; flag on ⇒ 7/7 `python_irep2_adjust_*`
+fixture tests green, 0 divergences with the check active). It is a
+**dead-but-tested safety net** that deterministically catches a B.5-era
+resolution bug once the pass becomes the sole resolver. Unit-tested both ways
+(`unit/python-frontend/python_adjust_test.cpp`): a resolved-struct body ⇒
+`adjust()` returns `false`; a scalar-following survivor ⇒ `adjust()` returns
+`true`. The B.5 combined-milestone framing is unchanged; this only pins the exit
+contract that milestone must satisfy.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written

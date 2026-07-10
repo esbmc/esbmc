@@ -26,8 +26,10 @@ class python_adjust
 public:
   explicit python_adjust(contextt &_context);
 
-  /// Walk every non-type symbol's IREP2 value. Returns false on success,
-  /// mirroring `clang_c_adjust::adjust()`.
+  /// Walk every non-type symbol's IREP2 value. Returns true on error —
+  /// specifically if the post-adjust strong invariant is violated (a
+  /// member2t/index2t source still carries an unresolved `symbol_type2t` after
+  /// resolution); false on success, mirroring `clang_c_adjust::adjust()`.
   bool adjust();
 
   /// Recursively visit `expr` and its sub-expressions, resolving transient
@@ -47,4 +49,10 @@ protected:
   /// `pointer→tag-Cls` instance pointer — both arrive as a symbol_type2t source,
   /// since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
+
+  /// Post-adjust strong-invariant probe (V.1k B.4): true if any `member2t` or
+  /// `index2t` reachable from `expr` still has a `symbol_type2t` source — a
+  /// source the pass could not resolve to an aggregate (e.g. one that follows to
+  /// a non-aggregate scalar). Recursive.
+  bool has_unresolved_source(const expr2tc &expr) const;
 };

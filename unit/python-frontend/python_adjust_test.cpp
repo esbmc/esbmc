@@ -378,3 +378,31 @@ TEST_CASE(
   // The body must remain nil — adjust() neither materialises nor rewrites it.
   REQUIRE(is_nil_expr(ctx.find_symbol("py_adjust_code_nil_sym")->get_value2()));
 }
+
+TEST_CASE(
+  "python_adjust B.4 adjust() flags an unresolved member source post-adjust",
+  "[python-adjust]")
+{
+  // A code body reads `obj.x` where obj's tag follows to a scalar (tag-Scalar ->
+  // int): resolve_source must NOT retype the source to a non-aggregate, so the
+  // transient symbol_type2t source survives adjust. The post-adjust
+  // strong-invariant check catches the survivor and adjust() returns true
+  // (error) — the negative of the resolved-struct case above, which returns
+  // false. This is the B.5-era mis-resolution the safety net exists to catch.
+  contextt ctx;
+  symbolt scalar_type_sym;
+  scalar_type_sym.id = scalar_type_sym.name = "tag-Scalar";
+  scalar_type_sym.mode = "Python";
+  scalar_type_sym.is_type = true;
+  scalar_type_sym.set_type(get_int32_type());
+  ctx.add(scalar_type_sym);
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-Scalar"), "obj");
+  const expr2tc member = member2tc(get_int32_type(), source, "x");
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(member)});
+  add_code_symbol(ctx, "py_adjust_unresolved_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
