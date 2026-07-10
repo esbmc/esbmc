@@ -500,11 +500,14 @@ void python_consteval::seed_globals(Env &env)
   if (!ast_.contains("body") || !ast_["body"].is_array())
     return;
 
-  // Count every top-level write to each name (any Assign/AnnAssign/AugAssign
-  // target, including names bound through tuple/list unpacking). A name written
-  // more than once does not have a single stable module-scope value, so seeding
-  // it with its final value could mis-evaluate an assert that runs at an
-  // earlier program point — only single-write names are safe to seed.
+  // Count every module-scope write to each name (any Assign/AnnAssign/
+  // AugAssign target — including tuple/list/starred unpacking — plus
+  // `except ... as` bindings), walking through module-level compound
+  // statements but not into function or class bodies, which write their own
+  // scope. A name written more than once does not have a single stable
+  // module-scope value, so seeding it with its final value could
+  // mis-evaluate an assert that runs at an earlier program point — only
+  // single-write names are safe to seed.
   std::unordered_map<std::string, int> write_count;
   std::function<void(const nlohmann::json &)> count_target =
     [&](const nlohmann::json &tgt) {
@@ -516,18 +519,66 @@ void python_consteval::seed_globals(Env &env)
       else if ((tt == "Tuple" || tt == "List") && tgt.contains("elts"))
         for (const auto &e : tgt["elts"])
           count_target(e);
+      else if (tt == "Starred" && tgt.contains("value"))
+        count_target(tgt["value"]);
+    };
+  std::function<void(const nlohmann::json &)> count_stmt_writes =
+    [&](const nlohmann::json &stmt) {
+      if (!stmt.contains("_type"))
+        return;
+      const std::string &t = stmt["_type"];
+      if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "ClassDef")
+        return;
+      if (t == "Assign" && stmt.contains("targets"))
+        for (const auto &tgt : stmt["targets"])
+          count_target(tgt);
+      else if (
+        (t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
+        count_target(stmt["target"]);
+      // For-loop targets and `with ... as` bindings need no cases here:
+      // the AST preprocessor rewrites for-loops into while-loops whose
+      // per-iteration `target = arr[i]` assignment the recursion below
+      // counts, and `with` never survives to a fold. Revisit if either
+      // changes.
+      if (stmt.contains("handlers") && stmt["handlers"].is_array())
+        for (const auto &h : stmt["handlers"])
+        {
+          if (h.is_object() && h.contains("name") && h["name"].is_string())
+            ++write_count[h["name"].get<std::string>()];
+          if (h.is_object() && h.contains("body") && h["body"].is_array())
+            for (const auto &sub : h["body"])
+              count_stmt_writes(sub);
+        }
+      for (const char *key : {"body", "orelse", "finalbody"})
+        if (stmt.contains(key) && stmt[key].is_array())
+          for (const auto &sub : stmt[key])
+            count_stmt_writes(sub);
     };
   for (const auto &stmt : ast_["body"])
-  {
-    if (!stmt.contains("_type"))
-      continue;
-    const std::string &t = stmt["_type"];
-    if (t == "Assign" && stmt.contains("targets"))
-      for (const auto &tgt : stmt["targets"])
-        count_target(tgt);
-    else if ((t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
-      count_target(stmt["target"]);
-  }
+    count_stmt_writes(stmt);
+
+  // Names any function can rebind via `global` have no stable module-scope
+  // value either; collect them across the whole AST (this scan must descend
+  // into function bodies, unlike the write counter).
+  std::unordered_set<std::string> global_rebound;
+  std::function<void(const nlohmann::json &)> collect_global_decls =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          collect_global_decls(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+      if (node.value("_type", "") == "Global" && node.contains("names"))
+        for (const auto &n : node["names"])
+          if (n.is_string())
+            global_rebound.insert(n.get<std::string>());
+      for (const auto &child : node)
+        collect_global_decls(child);
+    };
+  collect_global_decls(ast_);
 
   const std::unordered_set<std::string> container_unsafe =
     collect_unsafe_container_names(ast_);
@@ -537,7 +588,7 @@ void python_consteval::seed_globals(Env &env)
       if (!target.contains("_type") || target["_type"] != "Name")
         return;
       const std::string name = target["id"].get<std::string>();
-      if (write_count[name] != 1)
+      if (write_count[name] != 1 || global_rebound.count(name))
         return;
       auto val = eval_expr(value, env);
       if (!val)
@@ -545,9 +596,8 @@ void python_consteval::seed_globals(Env &env)
       // A container may change without an assignment statement — through a
       // mutating method, subscript store, alias, or escape into a callee —
       // so a seed here would bake in a stale value (issue #5955). Scalars
-      // are immutable, so mutation cannot invalidate them; rebinding
-      // through nested compound statements or `global` is a remaining
-      // write-count gap (issue #5955 follow-up).
+      // are immutable, so for them the write counter and the `global` set
+      // above are sufficient.
       if (val->kind == PyConstValue::LIST || val->kind == PyConstValue::TUPLE)
       {
         if (container_unsafe.count(name))
