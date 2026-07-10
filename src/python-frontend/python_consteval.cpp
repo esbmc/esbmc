@@ -76,10 +76,42 @@ bool PyConstValue::is_truthy() const
   return false;
 }
 
+// CPython int/float equality is exact. A double equals a long long only when
+// it is integral and in long long range; comparing after casting the float
+// side stays exact, where casting the int side to double could collide with a
+// neighboring value above 2^53.
+static bool int_equals_double(long long i, double f)
+{
+  if (std::floor(f) != f)
+    return false;
+  if (f < -9223372036854775808.0 || f >= 9223372036854775808.0)
+    return false;
+  return static_cast<long long>(f) == i;
+}
+
 static bool pyconst_equal(const PyConstValue &lhs, const PyConstValue &rhs)
 {
   if (lhs.kind != rhs.kind)
-    return false;
+  {
+    // CPython compares bool/int/float numerically across kinds:
+    // True == 1 == 1.0. Any other kind mix is unequal.
+    const auto is_numeric = [](const PyConstValue &v) {
+      return v.kind == PyConstValue::BOOL || v.kind == PyConstValue::INT ||
+             v.kind == PyConstValue::FLOAT;
+    };
+    if (!is_numeric(lhs) || !is_numeric(rhs))
+      return false;
+
+    const auto as_int = [](const PyConstValue &v) {
+      return v.kind == PyConstValue::BOOL ? (v.bool_val ? 1LL : 0LL)
+                                          : v.int_val;
+    };
+    if (lhs.kind == PyConstValue::FLOAT)
+      return int_equals_double(as_int(rhs), lhs.float_val);
+    if (rhs.kind == PyConstValue::FLOAT)
+      return int_equals_double(as_int(lhs), rhs.float_val);
+    return as_int(lhs) == as_int(rhs);
+  }
 
   switch (lhs.kind)
   {

@@ -12,7 +12,9 @@
 #if __cplusplus >= 201103L
 #  define OM_CONSTEXPR constexpr
 #  define OM_NOEXCEPT noexcept
+#  define OM_NULLPTR nullptr
 #else
 #  define OM_CONSTEXPR
 #  define OM_NOEXCEPT
+#  define OM_NULLPTR 0
 #endif

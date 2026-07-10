@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+#include <python-frontend/python_consteval.h>
 #include <regex>
 #include <stdexcept>
 #include <unordered_set>
@@ -1897,14 +1898,65 @@ exprt function_call_expr::handle_list_remove() const
   return result;
 }
 
+const symbolt *function_call_expr::resolve_list_receiver_symbol(
+  std::string &display_name) const
+{
+  if (const symbolt *named = get_object_list_symbol(display_name))
+    return named;
+
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (receiver.value("_type", "") != "List")
+    return nullptr;
+
+  // Converting the literal emits its list_create/list_push instructions and
+  // yields the temporary symbol that holds the list.
+  display_name = "[list literal]";
+  const exprt list = converter_.get_expr(receiver);
+  if (!list.is_symbol())
+    return nullptr;
+
+  return converter_.find_symbol(list.identifier().as_string());
+}
+
+std::optional<exprt> function_call_expr::fold_constant_list_query() const
+{
+  // A wholly literal `[...].count(x)` / `[...].index(x[, start[, end]])` folds
+  // here so the result stays independent of --unwind: the list model searches
+  // with a loop, and a truncated one silently mis-verifies. The evaluator
+  // implements CPython's semantics, including index()'s start/end slicing and
+  // numeric equality across bool/int/float. An absent element (index raises
+  // ValueError) yields no value and falls through to the model, which lowers
+  // the exception.
+  //
+  // Only a *literal* receiver folds: a named receiver may have been mutated
+  // (append/insert/subscript store) or shadowed in an inner scope, neither of
+  // which module-level constant seeding can see, so folding it would bake in
+  // a stale value. The evaluator is likewise given an empty module so the
+  // needle and start/end operands fold only when they are literals
+  // themselves, never through seeded globals with the same blind spots.
+  if (call_["func"]["value"].value("_type", "") != "List")
+    return std::nullopt;
+
+  static const nlohmann::json no_module;
+  python_consteval evaluator(no_module);
+  const auto folded = evaluator.try_eval_global_expr(call_);
+  if (!folded || folded->kind != PyConstValue::INT)
+    return std::nullopt;
+
+  return from_integer(folded->int_val, long_long_int_type());
+}
+
 exprt function_call_expr::handle_list_count() const
 {
   const auto &args = call_["args"];
   if (args.size() != 1)
     throw std::runtime_error("list.count() takes exactly one argument");
 
+  if (std::optional<exprt> folded = fold_constant_list_query())
+    return *folded;
+
   std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = resolve_list_receiver_symbol(list_display_name);
   materialize_list_symbol(list_symbol);
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -1920,8 +1972,11 @@ exprt function_call_expr::handle_list_index() const
   if (args.empty() || args.size() > 3)
     throw std::runtime_error("list.index() takes one to three arguments");
 
+  if (std::optional<exprt> folded = fold_constant_list_query())
+    return *folded;
+
   std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  const symbolt *list_symbol = resolve_list_receiver_symbol(list_display_name);
   materialize_list_symbol(list_symbol);
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2211,9 +2266,15 @@ bool function_call_expr::is_list_method_call() const
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
-  // resolves to a list symbol so str receivers fall through.
+  // resolves to a list symbol so str receivers fall through. A list *literal*
+  // receiver has no symbol yet, so claim it on the AST node: otherwise it fell
+  // through to the general-call handler, which folded `[1, 2, 1].index(1, 1)`
+  // to a constant 0 and verified false assertions.
   if (method_name == "count" || method_name == "index")
   {
+    if (call_["func"]["value"].value("_type", "") == "List")
+      return true;
+
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();

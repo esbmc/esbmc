@@ -142,6 +142,30 @@ private:
    * for error messages (e.g. "mylist" or "nested[0]").
    */
   const symbolt *get_object_list_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Resolve the list receiver of a method call to a symbol.
+   *
+   * A named receiver (`a.index(x)`) resolves through get_object_list_symbol. A
+   * list *literal* receiver (`[1, 2, 1].index(x)`) has no named symbol, so it
+   * is converted here and the temporary symbol its construction creates is
+   * returned. Without this the call fell through to the general-call handler,
+   * which folded `index()` to a constant 0 and verified false assertions.
+   *
+   * @param display_name Receiver name for diagnostics, when there is one.
+   * @return The receiver's symbol, or null when it is neither.
+   */
+  const symbolt *resolve_list_receiver_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Fold a wholly literal list.count()/list.index() at conversion time.
+   *
+   * Keeps the result independent of --unwind: the list model searches with a
+   * loop, so a truncated one would silently mis-verify. Returns nothing when
+   * the receiver is not a list literal, when any operand is not itself a
+   * literal, or when index() would raise ValueError.
+   */
+  std::optional<exprt> fold_constant_list_query() const;
   void materialize_list_symbol(const symbolt *sym) const;
 
   /*
