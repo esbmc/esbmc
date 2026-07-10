@@ -84,6 +84,38 @@ static std::string utf8_encode(unsigned int int_value)
   }
   return char_out;
 }
+
+// Render a double as CPython's str()/repr() does for the modelled subset:
+// std::to_string's %f (six fractional digits) with trailing zeros stripped, and
+// a ".0" restored for whole numbers (str(1.0) == "1.0"). Shared by
+// handle_float_to_str (str()/repr()) and handle_format's empty-spec float path
+// so format(x) folds identically to str(x); it therefore inherits the same known
+// gap (values needing more than six fractional digits, e.g. str(1/3), or
+// scientific notation, e.g. str(1e16)) — pre-existing in str(), not new here.
+std::string py_str_from_double(double d)
+{
+  // std::to_string uses %f, which honours the host rounding mode; an earlier
+  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
+  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
+  const round_to_nearest_guard rounding_guard;
+  std::string str_val = std::to_string(d);
+
+  // Remove unnecessary trailing zeros and dot (to match Python str): "5.500000"
+  // -> "5.5".
+  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
+  if (str_val.back() == '.')
+    str_val.pop_back();
+
+  // A whole-number float keeps its ".0" (str(1.0) == "1.0", not "1"); re-append
+  // it when the strip above removed the fractional part entirely. Guard on a
+  // trailing digit so non-numeric spellings (inf/nan) are left untouched.
+  if (
+    str_val.find('.') == std::string::npos && !str_val.empty() &&
+    std::isdigit(static_cast<unsigned char>(str_val.back())))
+    str_val += ".0";
+
+  return str_val;
+}
 } // namespace
 
 int function_call_expr::decode_utf8_codepoint(const std::string &utf8_str) const
@@ -1049,6 +1081,16 @@ exprt function_call_expr::handle_format() const
     if (folded)
       return converter_.get_string_builder().build_string_literal(*folded);
   }
+
+  // format(value) / format(value, "") on a float is str(value): the default
+  // float.__format__ with an empty spec (format(1.0) == "1.0", format(-1.0) ==
+  // "-1.0"). py_format_number models only explicit float presentation types, so
+  // the repr-like default lands here. Folds identically to str()/repr() via the
+  // shared renderer (dval already carries the UnaryOp sign for negative
+  // literals), so it introduces no divergence beyond str()'s known gap.
+  if (spec.empty() && is_float)
+    return converter_.get_string_builder().build_string_literal(
+      py_str_from_double(dval));
 
   // format(value) / format(value, "") on a constant string is the string
   // itself (the default str.__format__ with an empty spec).
