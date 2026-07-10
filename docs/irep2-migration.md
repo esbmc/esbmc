@@ -3575,23 +3575,27 @@ correct foundation for that combined effort.
 The one piece of B.4 that *is* separable from the collapsed B.3/B.4/B.5 milestone
 above landed on its own: the **post-adjust strong-invariant exit check**.
 `python_adjust::adjust()` now walks each resolved body via a recursive
-`has_unresolved_source` probe and, if any `member2t`/`index2t` source survived
-resolution as a transient `symbol_type2t` (e.g. one that follows to a
-non-aggregate scalar rather than a struct/array), `log_error`s naming the symbol
-and returns `true` (error) instead of the previous unconditional `false`. This
-re-enforces, at pass exit, exactly the strong source invariant the V.1k relaxed
-construction assert deferred.
+`has_unresolved_source` probe and, if any node still carries a transient
+`symbol_type2t` the pass could not resolve, `log_error`s naming the symbol and
+returns `true` (error) instead of the previous unconditional `false`. The probe
+covers **all three relaxed construction asserts** (`irep2_expr.h`): a
+`member2t`/`index2t` source that follows to a non-aggregate rather than a
+struct/array, **and** a `constant_struct2t` whose own type is still a by-name
+`symbol_type2t` (the aggregate-literal assert the B.2 wiring relaxed). This
+re-enforces, at pass exit, exactly the strong invariant those relaxed asserts
+deferred.
 
 Crucially this does **not** cross the `clang_cpp_adjust` boundary the milestone
 above cannot half-cross: it only *verifies* the pass's own output, it does not
 move or replace `clang_cpp_adjust`. On the live pipeline the pass runs *after*
-`clang_cpp_adjust`, which resolves every source, so the check never fires — the
-pass stays inert (flag off ⇒ not run at all; flag on ⇒ 7/7 `python_irep2_adjust_*`
-fixture tests green, 0 divergences with the check active). It is a
-**dead-but-tested safety net** that deterministically catches a B.5-era
-resolution bug once the pass becomes the sole resolver. Unit-tested both ways
-(`unit/python-frontend/python_adjust_test.cpp`): a resolved-struct body ⇒
-`adjust()` returns `false`; a scalar-following survivor ⇒ `adjust()` returns
+`clang_cpp_adjust`, which resolves every by-name aggregate, so the check never
+fires — the pass stays inert (flag off ⇒ not run at all; flag on ⇒ 7/7
+`python_irep2_adjust_*` fixture tests green, 0 divergences with the full
+three-assert check active). It is a **dead-but-tested safety net** that
+deterministically catches a B.5-era resolution bug once the pass becomes the sole
+resolver. Unit-tested each way (`unit/python-frontend/python_adjust_test.cpp`): a
+resolved-struct body ⇒ `adjust()` returns `false`; a scalar-following member
+survivor and a by-name `constant_struct2t` survivor each ⇒ `adjust()` returns
 `true`. The B.5 combined-milestone framing is unchanged; this only pins the exit
 contract that milestone must satisfy.
 
