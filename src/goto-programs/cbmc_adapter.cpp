@@ -309,6 +309,19 @@ void fix_expression(irept &irep)
     "overflow_result--",
     "overflow_result-*",
     "overflow_result-shr",
+    // Overflow *predicates* (distinct from overflow_result, which returns the
+    // value+flag pair): CBMC's `overflow-<op>` bool node, which __builtin_add/
+    // sub/mul_overflow_p lower to. migrate_expr handles the whole family via
+    // convert_operand_pair, so each just needs its operands wrapped (same
+    // requirement as popcount/isnan); +/-/* are exercised by the builtins, the
+    // rest share the identical mechanism.
+    "overflow-+",
+    "overflow--",
+    "overflow-*",
+    "overflow-/",
+    "overflow-mod",
+    "overflow-shl",
+    "overflow-unary-",
     "lshr",
     "ashr",
     "shl",
