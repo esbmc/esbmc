@@ -1,5 +1,5 @@
 CORE
 main.cpp
 --unwind 11 --timeout 900
-^  assertion main$
+^  file .*main\.cpp line 56 .*function main$
 ^VERIFICATION FAILED$
