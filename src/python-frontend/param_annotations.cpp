@@ -164,7 +164,10 @@ public:
     : modules_(modules)
   {
     for (const auto &module : modules_)
+    {
       collect_shadowing_names(module.read->at("body"), true);
+      collect_live_names(module.read->at("body"));
+    }
   }
 
   /// One pass over every call site. Returns true if an annotation changed.
@@ -202,6 +205,44 @@ private:
 
     if (is_function || is_node(node, "ClassDef"))
       collect_shadowing_names(node["body"], false);
+  }
+
+  /// Every name that is called, or mentioned as a value. A function whose name
+  /// never appears in either position is *assumed* unreachable, so the calls in
+  /// its body say nothing about what its callees receive. Dispatch through a
+  /// string (`getattr(m, "f")()`, `globals()["f"]()`) or through a decorator
+  /// alone hides the name and is not modelled — like the rest of this
+  /// monomorphic pass, such programs are out of scope.
+  ///
+  /// Operational models make this gate essential: heapq's `_siftup` is called
+  /// by `heapify` (with the caller's tuples) and also by the unused `heappop`,
+  /// whose own `heap` parameter is unbound — counting the latter would conflict
+  /// the former away and leave `_siftup` mis-typed.
+  ///
+  /// The set is keyed by bare name across every module, which over-approximates:
+  /// an unrelated variable named `f` marks a dead `f` live. That direction only
+  /// forgoes a binding; it never produces a wrong one.
+  std::set<std::string> live_names_;
+
+  void collect_live_names(const nlohmann::json &node)
+  {
+    if (node.is_array())
+    {
+      for (const auto &elem : node)
+        collect_live_names(elem);
+      return;
+    }
+    if (!node.is_object())
+      return;
+
+    if (is_node(node, "Call"))
+      live_names_.insert(callee_name(node["func"]));
+    // A bare mention (`f = heappop`) may call it later with unknown arguments.
+    if (is_node(node, "Name"))
+      live_names_.insert(node["id"].get<std::string>());
+
+    for (const auto &child : node)
+      collect_live_names(child);
   }
 
   bool defines(size_t module, const std::string &func) const
@@ -334,8 +375,12 @@ private:
     if (is_node(node, "FunctionDef"))
     {
       const std::string &name = node["name"].get<std::string>();
-      visit(
-        node["body"], func.empty() ? name : func + "@F@" + name, module, bound);
+      if (live_names_.count(name))
+        visit(
+          node["body"],
+          func.empty() ? name : func + "@F@" + name,
+          module,
+          bound);
       return;
     }
 
