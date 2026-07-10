@@ -63,7 +63,6 @@ extern "C"
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/dead_store_analysis.h>
-#include <util/cwe_mapping.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -218,7 +217,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
 {
   // Get max number of iterations
   uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
-                          ? UINT_MAX
+                          ? std::numeric_limits<uint64_t>::max()
                           : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
@@ -375,7 +374,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
           msg += "CWE: " + cwes + "\n";
         msg += "VERIFICATION FAILED";
         log_fail("{}", msg);
-        return 0;
+        return 1;
       }
 
       // Skip IS for k = 1 (degenerates to a base-case check).

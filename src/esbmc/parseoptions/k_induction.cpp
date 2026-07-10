@@ -63,7 +63,6 @@ extern "C"
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/dead_store_analysis.h>
-#include <util/cwe_mapping.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -172,7 +171,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   if (process_type == PARENT && num_p != 3)
   {
-    log_error("Child processes were not created sucessfully.");
+    log_error("Child processes were not created successfully.");
     abort();
   }
 
@@ -200,7 +199,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
   // Get max number of iterations
   uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
-                          ? UINT_MAX
+                          ? std::numeric_limits<uint64_t>::max()
                           : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
@@ -385,7 +384,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       (solution[FORWARD_CONDITION] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      // and haven't crashed (if it crashed, solution will be max_k_step)
       if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
@@ -403,7 +402,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       (solution[INDUCTIVE_STEP] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      // and haven't crashed (if it crashed, solution will be max_k_step)
       if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
