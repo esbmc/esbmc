@@ -103,7 +103,13 @@ enum PROCESS_TYPE
 
 struct resultt
 {
+  // Both members are read/written through whole-struct pipe I/O below and
+  // consumed at a_result.type / a_result.k; cppcheck sees them as unused
+  // only in the _WIN32 configuration, where the parallel k-induction body
+  // is compiled out.
+  // cppcheck-suppress unusedStructMember
   PROCESS_TYPE type;
+  // cppcheck-suppress unusedStructMember
   uint64_t k;
 };
 
@@ -236,7 +242,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // the read length is its exact sizeof. Short reads (EOF, error,
       // EAGAIN) are checked explicitly below.
       bool valid_read = true;
-      int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
+      int read_size = read( // Flawfinder: ignore
+        forward_pipe[0],
+        &a_result,
+        sizeof(resultt));
       if (read_size != sizeof(resultt))
       {
         if (read_size == 0)
@@ -470,7 +479,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // the read length is its exact sizeof. Short reads (EOF, error,
       // EAGAIN) are checked explicitly below.
       struct resultt a_result;
-      int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
+      int read_size = read( // Flawfinder: ignore
+        backward_pipe[0],
+        &a_result,
+        sizeof(resultt));
       if (read_size != sizeof(resultt))
       {
         if (read_size == 0)

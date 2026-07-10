@@ -140,6 +140,10 @@ void timeout_handler(int)
 static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
+  // Shared by the __GLIBC__ backtrace block and the /proc/self/maps dump
+  // below; cppcheck suggests reducing its scope only in the non-glibc
+  // configuration, where the backtrace use is compiled out.
+  // cppcheck-suppress variableScope
   void *buffer[BT_BUF_SIZE];
 #  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
@@ -153,8 +157,9 @@ static void segfault_handler(int sig)
     // Bounded read: `buffer` is a fixed-size stack array and the loop
     // passes its exact size to read(2), so no overflow is possible.
     // Loop terminates on EOF (rd == 0) or on a non-EINTR error.
-    for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
-                     (rd == -1 && errno == EINTR);)
+    for (ssize_t rd;
+         (rd = read(fd, buffer, sizeof(buffer))) > 0 || // Flawfinder: ignore
+         (rd == -1 && errno == EINTR);)
       rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
     close(fd);
   }
