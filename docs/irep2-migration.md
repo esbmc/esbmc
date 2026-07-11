@@ -3817,6 +3817,60 @@ flip removes the `clang_cpp_adjust` hop, that derivation must be re-homed
 (either into `python_adjust` before the eager literal retype, or taught to
 read the resolved `struct_type2t::name`).
 
+#### Flip-probe census (2026-07-11) — the S4/S5 questions answered empirically; ordered flip-blocker list
+
+**Method.** A local, uncommitted probe gated the `clang_cpp_adjust` hop
+(`python_language.cpp:273`) behind an environment variable and ran four
+trivial flag-on programs — scalar-param call (`f(1)` into `x: float`),
+mixed-width arithmetic (`int * float`), class attribute
+(`C(4).v`), and list subscript (`l[1]`) — against the same binary with the
+hop on (baseline: 4/4 `VERIFICATION SUCCESSFUL`) and off.
+
+**Result: 4/4 SIGSEGV** — every probe, including ones with no user
+exceptions or classes at all, crashes after GOTO generation inside
+`exception_loweringt::run`'s THROW scan (`remove_exceptions.cpp:128-138`,
+crash-report symbolication). Root cause confirmed by source audit:
+`exception_list` is populated **exclusively** by `clang_cpp_adjust`
+(`clang_cpp_adjust_expr.cpp:403-411`); the Python frontend itself only emits
+an empty list for bare re-raises (`python_exception_handler.cpp:229`). The
+OM model bodies contain `raise IndexError(...)` throws even for a plain list
+subscript, so with the hop skipped every operand-carrying THROW reaches the
+unguarded `t.exception_list.front()` on an empty vector. (That `.front()` is
+also a crash-not-diagnostic fragility worth hardening in the flip-era work;
+not shipped now — the branch is unreachable on the normal pipeline.)
+
+**Consequences.**
+1. **Exception-id re-homing is the FIRST flip blocker**, not one item among
+   several: S3/S4/S5 completion gaps cannot even be *measured* empirically
+   until throws carry ids without `clang_cpp_adjust`. The natural home is
+   converter-side at throw construction (`python_exception_handler` knows the
+   class and its bases when it builds the cpp-throw), which also retires the
+   `"bases"`-at-lowering dependency for the *throw* side; catch-side
+   hierarchy matching still needs the `"bases"` carriage (scope limit 4).
+2. **S4 placement is settled by construction-assert reasoning**: IREP2
+   arith/relational constructors reject mismatched widths, so a
+   post-migration pass can never see the nodes S4 would fix — width
+   reconciliation must live **converter-side**, i.e. in
+   `build_binary_expression` (the F-P11 chokepoint) via the proven
+   width-hazard recipe (`c_implicit_typecast_arithmetic` + the #5581
+   sub-`int`-width narrow-back guard). Validation lever: once the converter
+   reconciles inline, the legacy `adjust_expr_binary_arithmetic` becomes a
+   no-op on those nodes, so flag-off GOTO-byte A/B parity gates the change
+   *today*, before any flip.
+3. **S5 (call-argument casts) remains open but bounded**: the legacy pass
+   `gen_typecast`s every argument to its declared parameter type
+   (`clang_c_adjust_expr.cpp:933-961`); the converter performs its own
+   pointer/struct coercions (`function_call/expr.cpp:5130-5174`) but general
+   scalar param casts are unverified — measurable only after blocker 1.
+
+**Ordered flip-blocker list (supersedes the scattered notes above):**
+(1) exception-id derivation re-homed to the Python path; (2) `"bases"`
+carriage for catch-side hierarchy matching (scope limit 4 / W3-V.2);
+(3) S3 member/index source resolution at scale (the B.3 pointer-source
+finding); (4) S4 converter-side width reconciliation in
+`build_binary_expression`; (5) S5 argument-cast census + completion;
+(6) honour `adjust()`'s error return at the `python_language.cpp` call site.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
