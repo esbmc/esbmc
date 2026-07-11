@@ -30,4 +30,4 @@ t2.start()
 t1.join()
 t2.join()
 
-assert counter == 1       # F1 — falsifiable (locked increments give 2)
+assert counter == 1  # F1 — falsifiable (locked increments give 2)

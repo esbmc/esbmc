@@ -34,4 +34,4 @@ t2.start()
 t1.join()
 t2.join()
 
-assert counter == 2       # E1
+assert counter == 2  # E1
