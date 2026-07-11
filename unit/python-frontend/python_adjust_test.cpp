@@ -5,6 +5,7 @@
 #include <util/context.h>
 #include <util/symbol.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>
@@ -427,4 +428,208 @@ TEST_CASE(
 
   python_adjust adjuster(ctx);
   REQUIRE(adjuster.adjust());
+}
+
+// --- S1: IREP2-native adjust_type (V.1k/B.5 combined-milestone step S1) ---
+//
+// The padding tests need the target data model set (add_padding's alignment
+// arithmetic reads config.ansi_c); set it explicitly so the tests do not
+// depend on invocation order.
+
+TEST_CASE(
+  "python_adjust S1 adjust_type expands a macro symbol type, chained",
+  "[python-adjust]")
+{
+  // py_alias2 -> py_alias1 -> int32: the macro arm must recurse until the
+  // type is concrete, mirroring clang_c_adjust::adjust_type's is_macro loop.
+  contextt ctx;
+  symbolt alias1;
+  alias1.id = alias1.name = "py_alias1";
+  alias1.mode = "Python";
+  alias1.is_type = true;
+  alias1.is_macro = true;
+  alias1.set_type(get_int32_type());
+  ctx.add(alias1);
+
+  symbolt alias2;
+  alias2.id = alias2.name = "py_alias2";
+  alias2.mode = "Python";
+  alias2.is_type = true;
+  alias2.is_macro = true;
+  alias2.set_type(symbol_type2tc("py_alias1"));
+  ctx.add(alias2);
+
+  type2tc t = symbol_type2tc("py_alias2");
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(t == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type leaves a non-macro tag by-name",
+  "[python-adjust]")
+{
+  // The RV-adj6 parity subtlety: the legacy pass only overwrites is_macro
+  // symbol types; a struct tag reference stays by-name and is followed at
+  // consumption time. Eagerly resolving it here would diverge.
+  contextt ctx;
+  add_struct_type(ctx, "Foo", "x");
+
+  type2tc t = symbol_type2tc("tag-Foo");
+  const type2tc original = t;
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(t == original);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type completes an array element type",
+  "[python-adjust]")
+{
+  // Array arm: the element type recurses through adjust_type (here a macro
+  // alias expands to int32) while the size expression is preserved.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_elem_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  const expr2tc size = gen_long(get_uint64_type(), 4);
+  type2tc t = array_type2tc(symbol_type2tc("py_elem_alias"), size, false);
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_array_type(t));
+  REQUIRE(to_array_type(t).subtype == get_int32_type());
+  REQUIRE(to_array_type(t).array_size == size);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type pads a misaligned struct like add_padding",
+  "[python-adjust]")
+{
+  // struct { int8 c; int32 i; } needs 3 bytes of padding after `c` on any
+  // data model with 4-byte int alignment. The pass must reproduce the legacy
+  // add_padding layout exactly (RV-adj5): one unsignedbv(24) padding member
+  // between the fields, total size a multiple of the alignment.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  type2tc t = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "Packed2",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_struct_type(t));
+  const struct_type2t &st = to_struct_type(t);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(st.member_names[0] == "c");
+  REQUIRE(st.member_names[2] == "i");
+  REQUIRE(is_unsignedbv_type(st.members[1]));
+  REQUIRE(st.members[1]->get_width() == 24);
+
+  // Idempotence: a second pass over the already-padded struct is a no-op —
+  // the inertness guarantee for the live (post-clang_cpp_adjust) pipeline.
+  const type2tc padded = t;
+  adjuster.adjust_type(t);
+  REQUIRE(t == padded);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type pads a union like add_padding, idempotently",
+  "[python-adjust]")
+{
+  // union { int8 b[5]; int32 i; } is 5 bytes wide with 4-byte alignment, so
+  // add_padding appends a trailing `$pad` member widening it to 8 bytes. The
+  // second pass exercises the `$pad` case of the #is_padding re-derivation:
+  // the union arm must be as idempotent as the struct one.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc bytes5 =
+    array_type2tc(signedbv_type2tc(8), gen_long(get_uint64_type(), 5), false);
+  type2tc t = union_type2tc(
+    std::vector<type2tc>{bytes5, get_int32_type()},
+    std::vector<irep_idt>{"b", "i"},
+    std::vector<irep_idt>{"b", "i"},
+    "U1",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_union_type(t));
+  const union_type2t &ut = to_union_type(t);
+  REQUIRE(ut.members.size() == 3);
+  REQUIRE(ut.member_names[2] == "$pad");
+  REQUIRE(is_unsignedbv_type(ut.members[2]));
+
+  const type2tc padded = t;
+  adjuster.adjust_type(t);
+  REQUIRE(t == padded);
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_type completes a struct member's macro type",
+  "[python-adjust]")
+{
+  // Aggregate-member recursion: a member whose type is a macro alias expands
+  // before padding runs, so the layout is computed over concrete types.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_field_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  type2tc t = struct_type2tc(
+    std::vector<type2tc>{symbol_type2tc("py_field_alias")},
+    std::vector<irep_idt>{"v"},
+    std::vector<irep_idt>{"v"},
+    "Rec1",
+    false);
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_type(t);
+
+  REQUIRE(is_struct_type(t));
+  REQUIRE(to_struct_type(t).members.at(0) == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust S1 adjust_expr completes a node's own type",
+  "[python-adjust]")
+{
+  // adjust_expr's leading type-completion (mirroring the legacy adjust_expr's
+  // adjust_type(expr.type())): a symbol whose type is a macro alias is
+  // retyped to the concrete type via with_type.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_expr_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  expr2tc e = symbol2tc(symbol_type2tc("py_expr_alias"), "x");
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(e);
+
+  REQUIRE(is_symbol2t(e));
+  REQUIRE(e->type == get_int32_type());
 }
