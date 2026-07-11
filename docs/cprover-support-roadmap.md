@@ -99,6 +99,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -292,6 +293,23 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 `#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
+
+**Find-first-set builtin `find_first_set` — ✅ landed.** `__builtin_ffs`/`ffsl`/`ffsll`
+lower to a CBMC `find_first_set` irep — the 1-based index of the least-significant set bit,
+or 0 when the argument is zero — which `migrate_expr` has *no* handler for (aborts with
+`migrate expr failed`), and, like `clz`/`ctz`, ESBMC has no `ffs` irep2 node and its native
+path does not model `__builtin_ffs` at all. Rather than add a node, `fix_expression`
+reproduces it from ids `migrate_expr` already lowers: `ffs(x) = (x == 0) ? 0 :
+popcount(~x & (x − 1)) + 1`, where the `popcount(~x & (x − 1))` term is exactly the `ctz(x)`
+formula reused from the `count_trailing_zeros` rewrite above. The `x == 0` guard is
+load-bearing — `~0 & (0 − 1)` is all-ones, whose popcount is the type *width*, not 0 — so
+without it `ffs(0)` would wrongly be `width + 1`. Scoped to the `--binary` path, so it cannot
+perturb native handling (which never emits `find_first_set`). Verdict parity with CBMC,
+dual-solver (Bitwuzla + Z3), across a 32-bit value, the zero-input guard, and a 64-bit
+`ffsll` operand (`cbmc_ffs` SUCCESSFUL), plus an off-by-one negative that confirms the value
+is really computed, not vacuously passed (`cbmc_ffs_fail`: `ffs(0x100) == 8` FAILED where the
+true answer is 9).
+
 **Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
 as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
 counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
