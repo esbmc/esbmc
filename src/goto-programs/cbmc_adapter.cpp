@@ -754,6 +754,30 @@ bool fix_builtin_call(irept &code)
     return false;
 
   const std::string callee = sub[1].find("identifier").id_string();
+
+  // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that performs
+  // the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET OTHER-instructions, which
+  // ESBMC's symex has no handler for and silently skips -- so the copy never
+  // happens and a post-copy read of the destination reports a false FAILED.
+  // Rather than teach symex those array ops, retarget the call to ESBMC's own
+  // well-tested memory intrinsic: symex dispatches any c:@F@__ESBMC* call to
+  // run_intrinsic purely by callee name (symex_main.cpp), so only the function
+  // symbol's identifier needs to change -- the 3-argument signature (dst/src/n,
+  // s/c/n) already matches intrinsic_memcpy/memset/memmove, and the lhs may be
+  // nil (the return value is often discarded). The instruction stays a
+  // FUNCTION_CALL, so return false: the caller then keeps CBMC's original
+  // FUNCTION_CALL instruction type rather than forcing it to ASSIGN.
+  static const std::unordered_map<std::string, const char *> mem_intrinsics = {
+    {"memcpy", "c:@F@__ESBMC_memcpy"},
+    {"memset", "c:@F@__ESBMC_memset"},
+    {"memmove", "c:@F@__ESBMC_memmove"}};
+  auto mem_it = mem_intrinsics.find(callee);
+  if (mem_it != mem_intrinsics.end())
+  {
+    code.get_sub()[1].set("identifier", mem_it->second);
+    return false;
+  }
+
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
