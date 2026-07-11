@@ -33,31 +33,51 @@ bool has_sub(const irept &i, const irep_idt &k)
   return m.find(k) != m.end();
 }
 
-// CBMC stores integer constant values as hex; ESBMC wants a binary string
-// whose length matches the constant's own type width. The Rust reference
-// (`format!("{:032b}", ...)`) hardcoded 32, which truncated the representation
-// of constants in wider (e.g. 64-bit) types: a 64-bit value was emitted as a
-// <=33-char string and silently interpreted at 32 bits, so e.g. -5000000000LL
-// verified as its low 32 bits (roadmap §4.3/§7). Pad to `width` bits instead.
-// Values needing more than 64 bits (128-bit constants, §4.3) are out of range
-// for this uint64_t path and are returned unchanged rather than crashing
-// std::stoull -- note this leaves such a value as a raw hex string (a known
-// limitation, roadmap §4.3), but the >64-bit path is not otherwise exercised.
+// CBMC stores constant values (integer and floating-point alike) as hex;
+// ESBMC wants a binary string whose length matches the constant's own type
+// width. The Rust reference (`format!("{:032b}", ...)`) hardcoded 32, which
+// truncated the representation of constants in wider (e.g. 64-bit) types: a
+// 64-bit value was emitted as a <=33-char string and silently interpreted at
+// 32 bits, so e.g. -5000000000LL verified as its low 32 bits (roadmap §4.3/§7).
+// Pad to `width` bits instead.
 std::string hex_to_bin(const std::string &hex, std::size_t width)
 {
-  if (hex.size() > 16) // > 64 bits: cannot round-trip through uint64_t
-    return hex;
-  unsigned long long n = std::stoull(hex, nullptr, 16);
   std::string bits;
-  if (n == 0)
-    bits = "0";
-  else
-    while (n != 0)
+  if (hex.size() > 16)
+  {
+    // > 64 bits (e.g. a 128-bit float128 / long double constant): the value no
+    // longer round-trips through uint64_t, so expand each hex digit to its four
+    // bits directly. A non-hex character means the string is not hex after all
+    // (already binary, or something unexpected) -- leave it unchanged.
+    bits.reserve(hex.size() * 4);
+    for (char ch : hex)
     {
-      bits.push_back(static_cast<char>('0' + (n & 1)));
-      n >>= 1;
+      int v;
+      if (ch >= '0' && ch <= '9')
+        v = ch - '0';
+      else if (ch >= 'a' && ch <= 'f')
+        v = ch - 'a' + 10;
+      else if (ch >= 'A' && ch <= 'F')
+        v = ch - 'A' + 10;
+      else
+        return hex;
+      for (int b = 3; b >= 0; --b)
+        bits.push_back(static_cast<char>('0' + ((v >> b) & 1)));
     }
-  std::reverse(bits.begin(), bits.end());
+  }
+  else
+  {
+    unsigned long long n = std::stoull(hex, nullptr, 16);
+    if (n == 0)
+      bits = "0";
+    else
+      while (n != 0)
+      {
+        bits.push_back(static_cast<char>('0' + (n & 1)));
+        n >>= 1;
+      }
+    std::reverse(bits.begin(), bits.end());
+  }
   if (bits.size() < width)
     bits = std::string(width - bits.size(), '0') + bits;
   return bits;
@@ -232,6 +252,27 @@ void fix_expression(irept &irep)
     irep.get_sub().push_back(zero);
   }
 
+  if (
+    (irep.id() == "forall" || irep.id() == "exists") &&
+    irep.get_sub().size() == 2 && irep.get_sub()[0].id() == "tuple")
+  {
+    // CBMC binds a quantifier's variable(s) inside a "tuple" node in the first
+    // operand; ESBMC's forall2t/exists2t (and the solver, smt_solver.cpp) expect
+    // side_1 to be the bound symbol itself. Unwrap a single-symbol tuple to the
+    // bare symbol. A tuple with more than one bound variable is left untouched
+    // (forall2t binds exactly one symbol) so it aborts cleanly rather than
+    // silently dropping the extra binders -- a soundness hazard.
+    const irept &tuple = irep.get_sub()[0];
+    if (tuple.get_sub().size() == 1)
+    {
+      // Copy the bound symbol out before overwriting the slot that holds the
+      // tuple (the source lives inside it), mirroring fix_builtin_call's
+      // copy-before-mutate discipline.
+      const irept bound = tuple.get_sub()[0];
+      irep.get_sub()[0] = bound;
+    }
+  }
+
   if (irep.id() == "side_effect")
     irep.id("sideeffect");
   else if (irep.id() == "string_constant")
@@ -273,12 +314,17 @@ void fix_expression(irept &irep)
     if (type_id != "pointer" && type_id != "bool" && has_sub(irep, "value"))
     {
       const std::string val = irep.find("value").id_string();
-      // Value may be a hex representation or binary; we want the binary one.
-      // A value already exactly 32 chars is treated as an existing 32-bit
-      // binary string and left as-is; anything else is a hex value converted to
-      // a binary string of the type's own bit width (see hex_to_bin).
-      if (val.size() != 32)
-        irep.add("value") = mk(hex_to_bin(val, bv_width(irep.find("type"))));
+      const std::size_t width = bv_width(irep.find("type"));
+      // CBMC stores the value as hex; ESBMC wants a binary string of the type's
+      // own bit width. A value already exactly `width` chars long is an existing
+      // binary string (e.g. one this pass produced earlier) and is left as-is;
+      // anything else is hex and gets converted (see hex_to_bin). Keying on the
+      // type width, not a hardcoded 32, is what makes 128-bit float128 / long
+      // double work: its value is 32 hex chars, which a `!= 32` guard mistook
+      // for an already-binary 32-bit value and left as raw hex, so migrate
+      // misdecoded it (1.5L read as ~0 -- a false verdict, not a crash).
+      if (val.size() != width)
+        irep.add("value") = mk(hex_to_bin(val, width));
     }
   }
 
@@ -289,6 +335,10 @@ void fix_expression(irept &irep)
     "notequal",
     "and",
     "or",
+    // Boolean implication (a ==> b); migrate_expr lowers "=>" to implies2t via a
+    // wrapped operand pair. Common in quantifier bodies (__CPROVER_forall guards)
+    // but valid in any boolean context.
+    "=>",
     "mod",
     "not",
     "*",
@@ -357,7 +407,13 @@ void fix_expression(irept &irep)
     // an empty list (same failure shape as isnan/pointer_offset). __builtin_bswap
     // / __builtin_popcount lower to these ids in CBMC's goto.
     "popcount",
-    "bswap"};
+    "bswap",
+    // Quantifier predicates: __CPROVER_forall/__CPROVER_exists lower to these
+    // ids, which migrate_expr handles via op0()/op1() (bound symbol, predicate).
+    // Without wrapping CBMC's raw operands into "operands" here, op0() reads an
+    // empty operand list and segfaults (same failure shape as isnan/popcount).
+    "forall",
+    "exists"};
 
   const std::string cur = irep.id_string();
 
@@ -406,6 +462,20 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   if (self.id() == "c_bool")
   {
     self.id("signedbv");
+    return;
+  }
+
+  if (self.id() == "c_enum_tag")
+  {
+    // CBMC references an enum type via a c_enum_tag node -- the tag counterpart
+    // of c_enum, mirroring struct_tag/union_tag. migrate_type maps c_enum/
+    // incomplete_c_enum to a signed int (C99 6.7.2.2.3) but has no case for the
+    // tag, so any enum-typed object aborts with "ERROR: c_enum_tag". An enum is
+    // consistently int-typed and migrate discards the underlying width anyway,
+    // so rather than resolve the tag through the cache (which only holds struct/
+    // union definitions) rewrite it to a bare c_enum and let migrate yield the
+    // same int type.
+    self = mk("c_enum");
     return;
   }
 

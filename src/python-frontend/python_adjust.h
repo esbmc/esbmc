@@ -28,8 +28,9 @@ public:
 
   /// Walk every non-type symbol's IREP2 value. Returns true on error —
   /// specifically if the post-adjust strong invariant is violated (a
-  /// member2t/index2t source still carries an unresolved `symbol_type2t` after
-  /// resolution); false on success, mirroring `clang_c_adjust::adjust()`.
+  /// member2t/index2t source or a constant_struct2t type still carries an
+  /// unresolved `symbol_type2t` after resolution); false on success, mirroring
+  /// `clang_c_adjust::adjust()`.
   bool adjust();
 
   /// Recursively visit `expr` and its sub-expressions, resolving transient
@@ -50,9 +51,10 @@ protected:
   /// since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
 
-  /// Post-adjust strong-invariant probe (V.1k B.4): true if any `member2t` or
-  /// `index2t` reachable from `expr` still has a `symbol_type2t` source — a
-  /// source the pass could not resolve to an aggregate (e.g. one that follows to
-  /// a non-aggregate scalar). Recursive.
+  /// Post-adjust strong-invariant probe (V.1k B.4): true if any node reachable
+  /// from `expr` still carries a transient `symbol_type2t` the pass could not
+  /// resolve — a `member2t`/`index2t` source that follows to a non-aggregate, or
+  /// a `constant_struct2t` whose own type is still by-name. Covers all three
+  /// relaxed construction asserts (irep2_expr.h). Recursive.
   bool has_unresolved_source(const expr2tc &expr) const;
 };

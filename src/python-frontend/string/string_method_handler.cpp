@@ -27,13 +27,13 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <climits>
 #include <iomanip>
 #include <limits>
 #include <optional>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -109,10 +109,19 @@ static char to_upper_char(char c)
 
 // Render a constant float as CPython's str() / empty-"{}" field does. A
 // whole-number float below 1e16 renders as its integer digits plus ".0"
-// (str(1.0) == "1.0", str(1000000.0) == "1000000.0"); the default ostream
-// format drops the ".0" and switches to exponential at 1e6, so fold that case
-// exactly. Every other float keeps the ostream behaviour, which already matches
-// CPython's exponential form for |x| >= 1e16 and |x| < 1e-4.
+// (str(1.0) == "1.0", str(1000000.0) == "1000000.0").
+//
+// Every other float renders with the fewest significant digits that still read
+// back as the same double, which is exactly how CPython's repr chooses its
+// digits. The default ostream format instead prints 6 significant digits, so it
+// silently truncated str(1.23456789) to "1.23457" and folded the false
+// `"{}".format(1.23456789) == "1.23457"` to true.
+//
+// %g then picks fixed vs. exponential notation on the same rule CPython uses:
+// exponential iff the decimal exponent is < -4 or >= the significant-digit
+// count. The two agree here because a float that is not whole always needs more
+// significant digits than its exponent, and every whole float below 1e16 is
+// handled above; CPython's own cut-over at 1e16 is what the branch encodes.
 static std::string format_float_value(double d)
 {
   if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
@@ -122,9 +131,17 @@ static std::string format_float_value(double d)
       s.insert(s.begin(), '-');
     return s + ".0";
   }
-  std::ostringstream oss;
-  oss << d;
-  return oss.str();
+
+  const round_to_nearest_guard guard;
+  char buf[40];
+  for (int precision = 1; precision < 17; ++precision)
+  {
+    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
+    if (std::strtod(buf, nullptr) == d)
+      return buf;
+  }
+  std::snprintf(buf, sizeof(buf), "%.17g", d);
+  return buf;
 }
 
 static std::string

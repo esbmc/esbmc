@@ -4095,3 +4095,58 @@ soundly-fixable defect (`repr` of a **string** — needing quote-wrapping and es
 `bool`/`None` remain deliberately out of scope: each is a clean error, never a false `SUCCESSFUL`). The
 §3 design-level blockers, §3c policy-banned timeouts, §3d questionable expectation, and the infeasible
 `hashlib` case all stand. The §5 priority order stands.
+
+---
+
+## 86. 2026-07-09 re-validation (seventy-sixth sweep) & "{}".format() shortest-repr float
+
+Re-test against current `master`. KNOWNBUG classification unchanged — §3 holds. §83b nominated the
+`format()` empty-spec gap (closed in §84); probing it surfaced a distinct, more serious defect on a
+*different* renderer — a false `SUCCESSFUL` — which this sweep fixes.
+
+### 86a. New isolated, soundly-fixable defect found & fixed
+**An empty `"{}"` replacement field rendered a float with only 6 significant digits, so
+`"{}".format(1.23456789)` folded to `"1.23457"` and the false
+`assert "{}".format(1.23456789) == "1.23457"` verified `SUCCESSFUL`.**
+
+`format_float_value` (`src/python-frontend/string/string_method_handler.cpp`) renders a constant float
+the way CPython's `str()` does, for the empty `"{}"` field used by `str.format()`. §82/§83
+special-cased whole-number floats below `1e16` (`str(1.0) == "1.0"`), but every other float fell
+through to `std::ostringstream << d`, whose default is **6 significant digits**. So
+`"{}".format(1.23456789)` folded to `"1.23457"`, `"{}".format(123456789.5)` to `"1.23457e+08"`, and
+`"{}".format(3.14159265)` to `"3.14159"`. Asserting the *wrong* string verified `SUCCESSFUL` (a
+soundness hole) while asserting the *correct* CPython string reported a spurious `FAILED`.
+
+This is a **separate renderer** from the `%.6f` fixed-decimal `str()` fold that §87 (PR #5945)
+addresses: that one loses *decimals* (`str(0.1234567)` → `"0.123457"`), this one loses *significant
+digits*. Both were live on `master` simultaneously.
+
+**Fix**: render the fallback with the fewest significant digits that still read back as the same
+double — `%.*g` for precision 1..16, returning the first whose `strtod` compares equal, else `%.17g`
+(`DBL_DECIMAL_DIG`, which always round-trips). This is exactly how CPython's `repr` chooses its
+digits. `%g`'s fixed-vs-exponential cut-over (exponent `< -4` or `>= p`) provably agrees with
+CPython's (`< -4` or `>= 16`) here: every whole float below `1e16` is handled by the earlier branch,
+and a non-whole float always needs more significant digits than its decimal exponent, so `p > E`. The
+pre-existing `round_to_nearest_guard` pins `FE_TONEAREST` across both `snprintf` and `strtod`.
+
+Note this renders *every* float correctly rather than refusing to fold the inexact ones, so it
+strictly subsumes the "fold only when provably exact" strategy; consolidating the three float
+renderers (`format_float_value`, `handle_float_to_str`, `py_format_number`) onto one shortest-repr
+helper is the natural follow-up.
+
+This is a **wrong-value/soundness fix**. New regression pair
+`regression/python/str_format_shortest_repr{,_fail}` (CORE): the positive covers long-digit values
+(`1.23456789`, `3.14159265358979`, `0.30000000000000004`, `123456789.5`), negatives, the unchanged
+whole-number and short cases (`1.0`, `-0.0`, `0.1`), and both sides of each cut-over (`0.0001` /
+`1e-05`, `1e15` / `1e16`, `1.5e20`, `1e300`); the `_fail` pins the previously-false-`SUCCESSFUL`
+`"{}".format(1.23456789) == "1.23457"`. CPython sanity confirms every positive assertion holds and
+the `_fail` claim is genuinely false; a differential run of the renderer against CPython `repr` over
+~440,000 doubles (uniform 64-bit patterns plus subnormals) found **0 mismatches**; dual-solver
+Bitwuzla + Z3 agree on the positive test; all 197 existing `format`/`fstring`/`percent`/`repr`/`str_`
+regression tests pass unchanged.
+
+### 86b. Next candidate & everything else: unchanged disposition
+Next: consolidate the remaining float renderers onto the shortest-repr helper, which would let the
+`str()` fold cover the inexact values §87 leaves nondet. The §3 design-level blockers, §3c
+policy-banned timeouts, §3d questionable expectation, and the infeasible `hashlib` case all stand.
+The §5 priority order stands.

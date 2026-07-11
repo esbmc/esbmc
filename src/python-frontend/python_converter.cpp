@@ -7,6 +7,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
+#include <python-frontend/param_annotations.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/python_class_builder.h>
 #include <python-frontend/python_converter.h>
@@ -556,6 +557,16 @@ void python_converter::convert()
     // Pre-walk the import graph so each annotator can see subscript usages
     // from any other module (GitHub #4554).
     pre_collect_module_asts(*ast_json, locator);
+
+    // Retype each imported module's list parameters from their call sites,
+    // before import_module_into_block annotates and converts them. The entry
+    // module was retyped in python_languaget::parse(); it is read here only to
+    // find the calls that reach into the imported modules (GitHub #5936).
+    std::vector<python_param_annotations::module_ast> modules{
+      {ast_json, nullptr, ""}};
+    for (auto &entry : module_ast_pool_)
+      modules.push_back({&entry.second, &entry.second, entry.first});
+    python_param_annotations::propagate_tuple_list_params(modules);
 
     // Accumulate all imports
     code_blockt all_imports_block;
