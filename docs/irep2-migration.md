@@ -3967,6 +3967,30 @@ kind carrying the call (likely a `sideeffect` function-call expression
 inside the statement, not a `code_function_call2t`), then rebuild the arm
 against that shape.
 
+#### Call-rewrite outcome (2026-07-11) — both call shapes covered; the residual is S4-in-the-body
+
+The shape hypothesis was right: an expression-context call (`assert f(3) ==
+6`) migrates as a **`sideeffect2t` with `allockind::function_call`** whose
+`operand` is the callee (`migrate.cpp:1967-1976`), not a
+`code_function_call2t` — which is why the first arm never fired.
+`python_adjust` now rewrites **both** shapes through a shared
+`wrap_function_pointer_callee`: re-type a symbol callee from the table when
+the table says pointer-to-code, dereference onto the `ns.follow`ed code
+type, and cast each argument to its declared parameter type
+(`typecast2tc`) — the legacy `adjust_symbol` + implicit-deref +
+`adjust_function_call_arguments` trio for exactly the calls the converter's
+indirect path leaves unreconciled. Inert on the live pipeline (legacy
+rewrote these calls pre-migration, so the callee arrives as a dereference);
+unit-pinned per shape plus the direct-call no-op.
+
+**Hop-off status of `lambda_default_arg`:** progressed from the
+goto-convert hard error to a **residual solver sort mismatch inside the
+lambda body** — the S4 general-reconciliation family proper (arithmetic
+over untyped-parameter carriers), not a call-shape issue. Per the census,
+S4 lives converter-side in `build_binary_expression`; the lambda body is
+the first concrete reproducer for it. That is the next work item, with the
+flag-off GOTO-byte A/B gate the census prescribed.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
