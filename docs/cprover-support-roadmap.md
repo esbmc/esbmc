@@ -96,6 +96,7 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
+| Overflow predicates `overflow-+`/`overflow--`/`overflow-*` (+ `/`/`mod`/`shl`/`unary-`) wrapped (`__builtin_{add,sub,mul}_overflow_p`) (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
@@ -292,6 +293,20 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 `#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
+
+**Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
+`__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/
+`overflow--`/`overflow-*` predicate ireps (distinct from `overflow_result-<op>`, which returns
+the value+flag pair and was already handled). `migrate_expr` fully supports the whole
+`overflow-<op>` family (`convert_operand_pair` → `overflow2tc`), but none were in
+`fix_expression`'s operand-wrap set, so their operands stayed in `get_sub()`, `convert_operand_pair`
+read an empty operand list, and the verdict **segfaulted** (the exact `isnan`/`popcount` failure
+shape). Fixed by adding the family to the wrap-set: `+`/`-`/`*` are exercised by the builtins,
+and `/`/`mod`/`shl`/`unary-` share the identical single-mechanism wrap requirement (added for
+completeness). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across genuine
+add/sub/mul overflow at `INT_MAX`/`INT_MIN` and a no-overflow negative (`cbmc_overflow_p`), plus
+a false-overflow claim (`cbmc_overflow_p_fail`: `2 + 3` reported as overflowing ⇒ FAILED).
+
 **Float inequality `ieee_float_notequal` — ✅ landed.** CBMC represents a float `!=`
 as an `ieee_float_notequal` irep (IEEE-754 semantics: `NaN != NaN` is true), the exact
 counterpart of the already-handled `ieee_float_equal`. But only `ieee_float_equal` had an
