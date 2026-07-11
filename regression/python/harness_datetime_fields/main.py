@@ -20,10 +20,10 @@ __ESBMC_assume(1 <= d <= 31)
 
 dt = datetime(y, mo, d)
 
-assert dt.year == y           # E1
-assert dt.month == mo         # E1
-assert dt.day == d            # E1
-assert dt.hour == 0           # E2
-assert dt.minute == 0         # E2
-assert dt.second == 0         # E2
-assert dt.microsecond == 0    # E2
+assert dt.year == y  # E1
+assert dt.month == mo  # E1
+assert dt.day == d  # E1
+assert dt.hour == 0  # E2
+assert dt.minute == 0  # E2
+assert dt.second == 0  # E2
+assert dt.microsecond == 0  # E2

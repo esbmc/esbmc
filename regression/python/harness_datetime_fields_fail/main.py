@@ -11,4 +11,4 @@ from datetime import datetime
 y: int = nondet_int()
 dt = datetime(y, 6, 15)
 
-assert dt.hour == 1       # F1 — falsifiable (hour defaults to 0)
+assert dt.hour == 1  # F1 — falsifiable (hour defaults to 0)

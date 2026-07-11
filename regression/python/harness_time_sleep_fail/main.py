@@ -14,4 +14,4 @@ s: float = nondet_float()
 __ESBMC_assume(s < 0.0)
 __ESBMC_assume(s >= -1000.0)
 
-time.sleep(s)   # trips the model's assert seconds >= 0.0
+time.sleep(s)  # trips the model's assert seconds >= 0.0

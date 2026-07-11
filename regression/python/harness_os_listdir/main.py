@@ -13,6 +13,6 @@ import os
 
 entries: list[str] = os.listdir("/some/path")
 
-assert len(entries) == 2          # E1
-assert entries[0] == "foo"        # E2
-assert entries[1] == "bar"        # E2
+assert len(entries) == 2  # E1
+assert entries[0] == "foo"  # E2
+assert entries[1] == "bar"  # E2

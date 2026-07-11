@@ -17,4 +17,4 @@ __ESBMC_assume(s <= 1000.0)
 
 time.sleep(s)
 
-assert True     # E1 — reaching here means sleep did not fault
+assert True  # E1 — reaching here means sleep did not fault
