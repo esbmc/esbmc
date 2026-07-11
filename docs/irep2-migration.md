@@ -3905,6 +3905,34 @@ catch-side hierarchy matching needs the `"bases"` carriage — blocker 2;
 **blockers 2–5 are now empirically measurable**, and the hop-off run of the
 exception suite is the natural work-list generator for them.
 
+#### Blocker 2 outcome (2026-07-11) — catch ids derived at construction; the exception suite holds correct verdicts hop-off
+
+The blocker-2 diagnosis sharpened on implementation: the catch side's
+failure mode was not the `"bases"` hierarchy after all, but the same
+missing-id disease as blocker 1 in a different organ. The per-handler
+`"exception_id"` attribute is set only by `clang_cpp_adjust::adjust_catch`
+(from the block's type; `clang_cpp_adjust_code.cpp:206-225`), and the
+source-form cpp-catch **migration reads that attribute**
+(`migrate.cpp:2488-2526`) — skip the hop and every handler migrates with an
+empty id that matches no throw, so catches silently never fire (the
+`except_tuple_types` wrong verdict). Fix: `emit_catch_block` now derives
+the id at construction — bare class name for a class tag, `"ellipsis"` for
+the bare-except catch-all, the type id otherwise — exactly what
+`adjust_catch`'s `convert_exception_id` `front()` yields for each shape.
+The legacy pass still runs today and overwrites with the identical value:
+**GOTO-byte A/B parity verified** (`--goto-functions-only`, stash method,
+byte-identical), 43/43 `regression/python` exception tests green.
+
+**Hop-off validation:** `except_tuple_types{,_fail}`, `try_except_else`,
+`list_index_valueerror{,_fail}` all give **correct verdicts** (positives
+SUCCESSFUL, negatives FAILED) with `clang_cpp_adjust` skipped — catch
+matching now works end-to-end without the legacy hop, throw + catch both.
+A broader hop-off sample (`dict40`, `raise_noarg_custom_exception`,
+`contains_dunder` pass) narrows the remaining gap to programs that produce
+**no verdict** hop-off: `try_finally` and `lambda_default_arg` (crash/hang
+— the S3 member/index-at-scale and S5 argument-cast families). Those are
+the blocker-3+ work-list.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
