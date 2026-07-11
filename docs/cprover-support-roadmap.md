@@ -101,6 +101,7 @@ and the symbol/function table layout.
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
 | Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -295,6 +296,21 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
 
+**Find-first-set builtin `find_first_set` — ✅ landed.** `__builtin_ffs`/`ffsl`/`ffsll`
+lower to a CBMC `find_first_set` irep — the 1-based index of the least-significant set bit,
+or 0 when the argument is zero — which `migrate_expr` has *no* handler for (aborts with
+`migrate expr failed`), and, like `clz`/`ctz`, ESBMC has no `ffs` irep2 node and its native
+path does not model `__builtin_ffs` at all. Rather than add a node, `fix_expression`
+reproduces it from ids `migrate_expr` already lowers: `ffs(x) = (x == 0) ? 0 :
+popcount(~x & (x − 1)) + 1`, where the `popcount(~x & (x − 1))` term is exactly the `ctz(x)`
+formula reused from the `count_trailing_zeros` rewrite above. The `x == 0` guard is
+load-bearing — `~0 & (0 − 1)` is all-ones, whose popcount is the type *width*, not 0 — so
+without it `ffs(0)` would wrongly be `width + 1`. Scoped to the `--binary` path, so it cannot
+perturb native handling (which never emits `find_first_set`). Verdict parity with CBMC,
+dual-solver (Bitwuzla + Z3), across a 32-bit value, the zero-input guard, and a 64-bit
+`ffsll` operand (`cbmc_ffs` SUCCESSFUL), plus an off-by-one negative that confirms the value
+is really computed, not vacuously passed (`cbmc_ffs_fail`: `ffs(0x100) == 8` FAILED where the
+true answer is 9).
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/
 `overflow--`/`overflow-*` predicate ireps (distinct from `overflow_result-<op>`, which returns
