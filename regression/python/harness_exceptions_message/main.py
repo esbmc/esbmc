@@ -14,6 +14,6 @@ try:
     raise ValueError("specific-message")
 except ValueError as e:
     caught = True
-    assert str(e) == "specific-message"      # E1
+    assert str(e) == "specific-message"  # E1
 
-assert caught                                 # E2
+assert caught  # E2

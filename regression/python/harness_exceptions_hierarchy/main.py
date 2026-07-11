@@ -15,4 +15,4 @@ try:
 except Exception:
     caught = True
 
-assert caught       # E1, E2
+assert caught  # E1, E2

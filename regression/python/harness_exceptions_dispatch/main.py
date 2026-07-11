@@ -28,5 +28,5 @@ except TypeError:
     which = 2
     assert x <= 0
 
-assert which == 1 or which == 2         # E1
-assert (which == 1) == (x > 0)          # E2
+assert which == 1 or which == 2  # E1
+assert (which == 1) == (x > 0)  # E2

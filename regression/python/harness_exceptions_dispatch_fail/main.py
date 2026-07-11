@@ -23,4 +23,4 @@ except ValueError:
 except TypeError:
     which = 2
 
-assert (which == 1) == (x <= 0)         # F1 — falsifiable (inverted)
+assert (which == 1) == (x <= 0)  # F1 — falsifiable (inverted)
