@@ -3741,6 +3741,42 @@ gap: S2/S3 must resolve exactly these survivors (or the B.5 flip's exit
 invariant will hard-fail), and the next S-step should start by classifying
 those ~26 bodies' unresolved nodes.
 
+#### S2 outcome (2026-07-11) — survivors classified (100% exception literals); aggregate-literal completion landed; flag-on exit invariant now clean
+
+**Classification (the S1-outcome action item).** The exit-invariant
+diagnostics were enriched (`collect_unresolved_sources`: one entry per node —
+kind, by-name tag, member name), and the full survivor census on the flag-on
+pipeline is decisive: **116 unresolved nodes, 100% `constant_struct2t`
+literals with by-name exception tags** — 101 `tag-IndexError`, 10
+`tag-ValueError`, 5 `tag-ZeroDivisionError` (the OM model bodies' `raise
+IndexError(...)` literals) — and **zero** member/index survivors. So S2 alone
+drains the entire pre-existing work-list, and S3 (member/index operand
+coercion) has **no pre-existing survivors**: its work only materialises when
+the converter starts emitting pre-adjust nodes or at the flip.
+
+**S2 is in** (branch `feat/python-adjust-s2-aggregate-literal`, stacked on
+S1): `adjust_expr` gains a `constant_struct2t` arm — guard-lookup the tag (no
+abort on an unknown symbol; the exit invariant flags it instead), `ns.follow`
+to the struct, complete it via S1's `adjust_type` (padding), insert
+`gen_zero` padding operands at the reserved `$`-named component positions
+when the literal lacks them (mirroring the legacy `adjust_struct` insertion,
+`clang_c_adjust_expr.cpp:152-176`), and rebuild with the resolved type. This
+resolves *eagerly* where the legacy pass leaves the literal's type lazily
+by-name — the RV-adj6 divergence, deliberate and now exercised: IREP2's
+strong construction invariant requires the resolved type on the node. On
+today's pipeline the survivors' operands were already padded by
+`clang_cpp_adjust`, so only the retype fires; the insertion path serves
+converter-built literals post-flip (unit-pinned).
+
+**Acceptance.** Flag-on exit-invariant errors: **26 symbols / 116 nodes → 0**,
+dual-solver (Bitwuzla + Z3) verdicts unchanged; exception-heavy regressions
+(`try_except_else{,_fail}`, `except_tuple_types{,_fail}`,
+`list_index_valueerror{,_fail}`, `slice_step_zero_valueerror`) hold identical
+verdicts flag-on vs flag-off (the eager retype does not disturb cpp-throw
+catch matching); 76/76 fixture + acceptance families; 24/24 unit tests. The
+flag-on pipeline is exit-invariant-clean for the first time — the B.5 flip's
+hard-fail risk from Finding 2 is retired.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
