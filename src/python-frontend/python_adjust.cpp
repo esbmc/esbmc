@@ -50,19 +50,25 @@ bool python_adjust::adjust()
 
     // Post-adjust strong invariant (V.1k B.4): re-enforce what the three relaxed
     // construction asserts deferred — no member2t/index2t source and no
-    // constant_struct2t type may survive as a transient symbol_type2t. On the
-    // live pipeline this pass runs after clang_cpp_adjust, which already resolves
-    // every by-name aggregate, so the check never fires and the pass stays inert;
-    // it is a dead-but-tested safety net that deterministically catches a
-    // B.5-era resolution bug once the pass replaces clang_cpp_adjust and becomes
-    // the sole resolver.
-    if (has_unresolved_source(value))
+    // constant_struct2t type may survive as a transient symbol_type2t, and a
+    // resolved-struct literal must carry one operand per component. Pre-S2
+    // this fired on every flag-on run (the OM exception literals,
+    // docs/irep2-migration.md "S1 outcome" finding 2); S2's aggregate-literal
+    // completion drained those, so a firing now means a node shape the
+    // remaining S-steps (S3+) must resolve — the per-node detail below is
+    // that work-list.
+    std::vector<std::string> unresolved;
+    collect_unresolved_sources(value, unresolved);
+    if (!unresolved.empty())
     {
       log_error(
-        "python_adjust: symbol `{}' retains an unresolved by-name "
-        "(symbol_type2t) member/index/struct-literal node after adjust (V.1k "
-        "post-adjust invariant violated)",
-        symbol->id.as_string());
+        "python_adjust: symbol `{}' retains {} unresolved by-name "
+        "(symbol_type2t) node(s) after adjust (V.1k post-adjust invariant "
+        "violated):",
+        symbol->id.as_string(),
+        unresolved.size());
+      for (const std::string &entry : unresolved)
+        log_error("  {}", entry);
       error = true;
     }
   }
@@ -80,6 +86,17 @@ bool is_resolved_aggregate(const type2tc &t)
   return is_struct_type(t) || is_union_type(t) || is_array_type(t) ||
          is_vector_type(t);
 }
+
+// The four reserved pad-member names add_padding assigns (padding.cpp). The
+// exact-prefix match matters: `$` cannot appear in a Python identifier, but
+// OM struct tags originate from C/C++ headers where Clang accepts `$` as an
+// extension — a substring test could misfire on a legitimate member.
+bool is_padding_member_name(const std::string &name)
+{
+  return has_prefix(name, "anon_pad$") ||
+         has_prefix(name, "anon_bit_field_pad$") ||
+         has_prefix(name, "ext_int_pad$") || name == "$pad";
+}
 } // namespace
 
 void python_adjust::adjust_expr(expr2tc &expr)
@@ -96,7 +113,12 @@ void python_adjust::adjust_expr(expr2tc &expr)
   // with no substitutable type slot (constant_bool, relations, bool ops —
   // irep2_expr.cpp); those all carry scalar types adjust_type never changes,
   // so the rebuild is unreachable for them. An adjust_type arm that starts
-  // rewriting scalar types must revisit this.
+  // rewriting scalar types must revisit this. A by-name constant_struct2t is
+  // excluded: a bare with_type retype would skip the S2 arm's padding-operand
+  // insertion (a macro tag would expand here), leaving a literal whose
+  // operand count silently disagrees with its resolved type — the S2 arm
+  // below owns that node shape entirely.
+  if (!(is_constant_struct2t(expr) && is_symbol_type(expr->type)))
   {
     type2tc t = expr->type;
     adjust_type(t);
@@ -127,6 +149,56 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr2tc source = i.source_value;
     if (resolve_source(source))
       expr = index2tc(i.type, source, i.index);
+  }
+  else if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
+  {
+    // S2: aggregate-literal completion — the third relaxed construction
+    // assert. The legacy adjust_struct (clang_c_adjust_expr.cpp:152-176)
+    // follows the type only to read components, inserts padding operands and
+    // leaves the literal's own type lazily by-name; IREP2's strong invariant
+    // requires the resolved type on the node, so this arm resolves eagerly
+    // (the RV-adj6 divergence, understood and deliberate). On today's
+    // pipeline the by-name survivors are the OM exception literals
+    // (raise IndexError(...) et al., docs/irep2-migration.md "S1 outcome"
+    // finding 2): their operands were already padded by the legacy pass, so
+    // only the retype fires; the padding-operand insertion below completes a
+    // converter-built literal once the flip makes this pass the sole
+    // resolver.
+    // Guard the follow: ns.follow asserts on an unknown tag, but an
+    // unresolvable literal must instead survive to the exit invariant
+    // (mirrors the top-level-symbol no-abort deviation in adjust_type).
+    const symbolt *s =
+      context.find_symbol(to_symbol_type(expr->type).symbol_name);
+    if (s == nullptr || !s->is_type)
+      return;
+    type2tc resolved = ns.follow(expr->type);
+    if (is_struct_type(resolved))
+    {
+      // Complete (pad) the followed type first so operand positions match
+      // the final component list. Idempotent when already padded (S1).
+      adjust_type(resolved);
+      const struct_type2t &st = to_struct_type(resolved);
+      std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
+      // Mirror the legacy already-padded heuristic: only insert padding
+      // operands when the literal doesn't have them yet. Pad members are
+      // recognised by the reserved `$` names (see the re-derivation in
+      // adjust_type); inserting at component position i keeps the remaining
+      // value operands aligned, exactly like the legacy insertion loop.
+      if (ops.size() != st.members.size())
+      {
+        for (size_t i = 0; i < st.members.size(); i++)
+        {
+          const bool is_pad =
+            is_padding_member_name(st.member_names[i].as_string());
+          if (is_pad && i <= ops.size())
+            ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+        }
+      }
+      // Rebuild only when the literal is structurally consistent; a residual
+      // mismatch is left by-name for the exit invariant to flag.
+      if (ops.size() == st.members.size())
+        expr = constant_struct2tc(resolved, ops);
+    }
   }
 }
 
@@ -220,14 +292,8 @@ void python_adjust::adjust_type(type2tc &type)
     // Python frontend never emits either, so only #is_padding needs
     // restoring.)
     for (auto &comp : to_struct_union_type(legacy).components())
-    {
-      const std::string &name = comp.get_name().as_string();
-      if (
-        has_prefix(name, "anon_pad$") ||
-        has_prefix(name, "anon_bit_field_pad$") ||
-        has_prefix(name, "ext_int_pad$") || name == "$pad")
+      if (is_padding_member_name(comp.get_name().as_string()))
         comp.set_is_padding(true);
-    }
     add_padding(legacy, ns);
     type2tc padded = migrate_type(legacy);
     if (padded != type)
@@ -258,28 +324,57 @@ bool python_adjust::resolve_source(expr2tc &source)
   return true;
 }
 
-bool python_adjust::has_unresolved_source(const expr2tc &expr) const
+void python_adjust::collect_unresolved_sources(
+  const expr2tc &expr,
+  std::vector<std::string> &out) const
 {
   if (is_nil_expr(expr))
-    return false;
+    return;
 
   // A member/index whose source type is still a symbol_type2t is unresolved:
   // resolve_source could not follow it to a concrete aggregate (e.g. it follows
   // to a non-aggregate scalar), so the strong construction invariant is unmet.
+  // Each entry names the node kind and the by-name tag — together they are the
+  // classification the B.5 resolution steps work from.
   if (is_member2t(expr) && is_symbol_type(to_member2t(expr).source_value->type))
-    return true;
+  {
+    const member2t &m = to_member2t(expr);
+    out.push_back(
+      "member `." + m.member.as_string() + "' over by-name source `" +
+      to_symbol_type(m.source_value->type).symbol_name.as_string() + "'");
+  }
   if (is_index2t(expr) && is_symbol_type(to_index2t(expr).source_value->type))
-    return true;
+    out.push_back(
+      "index over by-name source `" +
+      to_symbol_type(to_index2t(expr).source_value->type)
+        .symbol_name.as_string() +
+      "'");
   // A constant_struct2t is the third relaxed construction assert (irep2_expr.h):
   // its own type may be a transient by-name symbol_type2t until the aggregate is
   // followed. Post-adjust it must be a resolved struct too.
   if (is_constant_struct2t(expr) && is_symbol_type(expr->type))
-    return true;
+    out.push_back(
+      "struct literal with by-name type `" +
+      to_symbol_type(expr->type).symbol_name.as_string() + "'");
+  // A resolved-struct literal must also be structurally consistent: the S2
+  // completion only rebuilds when the operand count matches the component
+  // list, so a count mismatch here means some other path retyped the literal
+  // without inserting its padding operands — catch it before it reaches
+  // migration/symex (constant_struct2t's constructor asserts only the type
+  // kind, not the operand count).
+  if (
+    is_constant_struct2t(expr) && is_struct_type(expr->type) &&
+    to_constant_struct2t(expr).datatype_members.size() !=
+      to_struct_type(expr->type).members.size())
+    out.push_back(
+      "struct literal `" + to_struct_type(expr->type).name.as_string() +
+      "' with " +
+      std::to_string(to_constant_struct2t(expr).datatype_members.size()) +
+      " operand(s) against " +
+      std::to_string(to_struct_type(expr->type).members.size()) +
+      " component(s)");
 
-  bool found = false;
-  expr->foreach_operand([this, &found](const expr2tc &e) {
-    if (has_unresolved_source(e))
-      found = true;
+  expr->foreach_operand([this, &out](const expr2tc &e) {
+    collect_unresolved_sources(e, out);
   });
-  return found;
 }

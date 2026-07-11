@@ -414,10 +414,10 @@ TEST_CASE(
   "[python-adjust]")
 {
   // constant_struct2t is the third relaxed construction assert (irep2_expr.h):
-  // its own type may be a transient by-name symbol_type2t. The pass does not
-  // resolve aggregate-literal types (that is the B.5-era whole-body resolution),
-  // so a survivor must be caught by the post-adjust invariant and adjust() must
-  // return true (error).
+  // its own type may be a transient by-name symbol_type2t. S2 resolves a
+  // *registered* tag (tests below); this literal's tag-Rec is unregistered,
+  // so it must survive resolution and be caught by the post-adjust invariant:
+  // adjust() returns true (error).
   contextt ctx;
   const expr2tc lit = constant_struct2tc(
     symbol_type2tc("tag-Rec"),
@@ -608,6 +608,202 @@ TEST_CASE(
 
   REQUIRE(is_struct_type(t));
   REQUIRE(to_struct_type(t).members.at(0) == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust S2 completes a by-name struct literal to its resolved type",
+  "[python-adjust]")
+{
+  // The OM exception-literal shape (raise IndexError(...)): a
+  // constant_struct2t typed by-name whose operands are already complete. S2
+  // retypes it to the followed struct — eagerly, unlike the legacy
+  // adjust_struct (RV-adj6) — and the exit invariant stops flagging it.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Exc", "id");
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-Exc"),
+    std::vector<expr2tc>{gen_zero(get_int32_type())});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_lit_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const expr2tc &stored = ctx.find_symbol("py_adjust_s2_lit_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &resolved = to_code_expression2t(stmt).operand;
+  REQUIRE(is_constant_struct2t(resolved));
+  REQUIRE(resolved->type == struct_t);
+  REQUIRE(to_constant_struct2t(resolved).datatype_members.size() == 1);
+}
+
+TEST_CASE(
+  "python_adjust S2 inserts missing padding operands into a struct literal",
+  "[python-adjust]")
+{
+  // A converter-built literal carries only the value operands; the followed
+  // struct pads to { c, anon_pad$, i } (S1), so S2 must insert a zero pad
+  // operand at position 1, mirroring the legacy adjust_struct insertion.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "PadLit",
+    false);
+  symbolt type_sym;
+  type_sym.id = type_sym.name = "tag-PadLit";
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(unpadded);
+  ctx.add(type_sym);
+
+  expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-PadLit"),
+    std::vector<expr2tc>{
+      gen_zero(signedbv_type2tc(8)), gen_zero(get_int32_type())});
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(lit);
+
+  REQUIRE(is_constant_struct2t(lit));
+  REQUIRE(is_struct_type(lit->type));
+  const struct_type2t &st = to_struct_type(lit->type);
+  const constant_struct2t &cs = to_constant_struct2t(lit);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(cs.datatype_members.size() == 3);
+  REQUIRE(is_unsignedbv_type(cs.datatype_members[1]->type));
+  REQUIRE(cs.datatype_members[1]->type->get_width() == 24);
+  REQUIRE(cs.datatype_members[2]->type == get_int32_type());
+
+  // Idempotence: the completed literal is stable under a second walk.
+  const expr2tc done = lit;
+  adjuster.adjust_expr(lit);
+  REQUIRE(lit == done);
+}
+
+TEST_CASE(
+  "python_adjust S2 completes a macro-tag struct literal",
+  "[python-adjust]")
+{
+  // A literal typed by a macro alias of a struct: the leading type-completion
+  // block must NOT retype it bare (that would skip the padding-operand
+  // insertion); the S2 arm owns the shape end-to-end and pads it.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "MacroLit",
+    false);
+  symbolt alias;
+  alias.id = alias.name = "py_struct_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(unpadded);
+  ctx.add(alias);
+
+  expr2tc lit = constant_struct2tc(
+    symbol_type2tc("py_struct_alias"),
+    std::vector<expr2tc>{
+      gen_zero(signedbv_type2tc(8)), gen_zero(get_int32_type())});
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(lit);
+
+  REQUIRE(is_constant_struct2t(lit));
+  REQUIRE(is_struct_type(lit->type));
+  REQUIRE(to_struct_type(lit->type).members.size() == 3);
+  REQUIRE(to_constant_struct2t(lit).datatype_members.size() == 3);
+}
+
+TEST_CASE(
+  "python_adjust S2 leaves a structurally short literal for the invariant",
+  "[python-adjust]")
+{
+  // A literal missing a *value* operand (only `c`, no `i`): pad insertion
+  // cannot make the counts match, so the literal must stay by-name and be
+  // flagged — never rebuilt with misaligned operands.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "ShortLit",
+    false);
+  symbolt type_sym;
+  type_sym.id = type_sym.name = "tag-ShortLit";
+  type_sym.mode = "Python";
+  type_sym.is_type = true;
+  type_sym.set_type(unpadded);
+  ctx.add(type_sym);
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-ShortLit"),
+    std::vector<expr2tc>{gen_zero(signedbv_type2tc(8))});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_short_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
+
+TEST_CASE(
+  "python_adjust invariant flags a resolved literal with an operand-count "
+  "mismatch",
+  "[python-adjust]")
+{
+  // The durable half of the S2 safety net: even a literal that already
+  // carries a resolved struct type is flagged when its operand count
+  // disagrees with the component list (constant_struct2t's constructor
+  // asserts only the type kind, so this would otherwise reach symex).
+  contextt ctx;
+  const type2tc struct_t = add_struct_type(ctx, "Mismatch", "x");
+
+  const expr2tc lit = constant_struct2tc(struct_t, std::vector<expr2tc>{});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_mismatch_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
+}
+
+TEST_CASE(
+  "python_adjust S2 leaves a scalar-tag struct literal for the invariant",
+  "[python-adjust]")
+{
+  // tag-Scalar follows to int (not a struct): S2 must not retype the literal;
+  // the survivor is flagged by the exit invariant instead.
+  contextt ctx;
+  symbolt scalar_type_sym;
+  scalar_type_sym.id = scalar_type_sym.name = "tag-Scalar";
+  scalar_type_sym.mode = "Python";
+  scalar_type_sym.is_type = true;
+  scalar_type_sym.set_type(get_int32_type());
+  ctx.add(scalar_type_sym);
+
+  const expr2tc lit = constant_struct2tc(
+    symbol_type2tc("tag-Scalar"),
+    std::vector<expr2tc>{gen_zero(get_int32_type())});
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(lit)});
+  add_code_symbol(ctx, "py_adjust_s2_scalar_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE(adjuster.adjust());
 }
 
 TEST_CASE(

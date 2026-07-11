@@ -3,6 +3,8 @@
 #include <util/context.h>
 #include <util/namespace.h>
 #include <irep2/irep2.h>
+#include <string>
+#include <vector>
 
 /// V.1k (b) IREP2-native Python adjuster (phases B.0–B.2).
 ///
@@ -35,8 +37,13 @@ public:
 
   /// Recursively visit `expr` and its sub-expressions, resolving transient
   /// `symbol_type2t` member2t/index2t sources to their followed aggregate type
-  /// (the V.1k two-phase source invariant). Recurses operands first, so nested
-  /// sources (`self.b.a`) resolve inner-to-outer.
+  /// (the V.1k two-phase source invariant), and completing a by-name
+  /// `constant_struct2t` literal (S2): follow + pad its type and insert
+  /// zero-valued padding operands when missing. Note S2 resolves *eagerly*
+  /// where the legacy adjust_struct leaves the literal's type lazily by-name
+  /// (the deliberate RV-adj6 divergence — IREP2's strong construction
+  /// invariant requires the resolved type on the node). Recurses operands
+  /// first, so nested sources (`self.b.a`) resolve inner-to-outer.
   void adjust_expr(expr2tc &expr);
 
   /// IREP2-native `clang_c_adjust::adjust_type` (V.1k/B.5 milestone step S1):
@@ -75,10 +82,15 @@ protected:
   /// since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
 
-  /// Post-adjust strong-invariant probe (V.1k B.4): true if any node reachable
-  /// from `expr` still carries a transient `symbol_type2t` the pass could not
-  /// resolve — a `member2t`/`index2t` source that follows to a non-aggregate, or
-  /// a `constant_struct2t` whose own type is still by-name. Covers all three
-  /// relaxed construction asserts (irep2_expr.h). Recursive.
-  bool has_unresolved_source(const expr2tc &expr) const;
+  /// Post-adjust strong-invariant probe (V.1k B.4): append to `out` one
+  /// human-readable entry per unresolved node reachable from `expr` — a
+  /// `member2t`/`index2t` source or `constant_struct2t` type still carrying a
+  /// transient `symbol_type2t` (the three relaxed construction asserts,
+  /// irep2_expr.h), or a resolved-struct literal whose operand count
+  /// disagrees with its component list. adjust() logs these entries when the
+  /// exit invariant fires — the per-node detail is the work-list the B.5-era
+  /// resolution steps (S3+) drain. Recursive.
+  void collect_unresolved_sources(
+    const expr2tc &expr,
+    std::vector<std::string> &out) const;
 };
