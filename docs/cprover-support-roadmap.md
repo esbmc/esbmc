@@ -100,6 +100,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -293,6 +294,19 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 `#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
+
+**Bit-reversal expression `bitreverse` — ✅ landed.** `__builtin_bitreverse{8,16,32,64}` lower to a
+CBMC `bitreverse` irep (reverse the bit order: bit `i` ↔ bit `W−1−i`), which `migrate_expr` has *no*
+handler for (aborts with `migrate expr failed`) — and, like `clz`/`ctz`, ESBMC has no `bitreverse`
+irep2 node. `fix_expression` reproduces it from ids `migrate_expr` already lowers (`bitand`, `shl`,
+`lshr`, `bitor`) via the standard SWAR reversal — swap adjacent bits, then 2-bit groups, then 4-bit,
+… doubling the group size each step: `acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)`, where
+`mask_k` selects the low `k` bits of every `2k`-bit block (`0x5555…`, `0x3333…`, `0x0F0F…`, …). The
+loop is width-generic (⌈log₂W⌉ steps for W = 8/16/32/64) and self-referential like the `clz` smear.
+Scoped to the `--binary` path, so it never perturbs native handling (which never emits `bitreverse`).
+Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_bitreverse` (32-bit alternating-bit
+swap `0xAAAAAAAA → 0x55555555`, low-nibble-to-high `0x0F → 0xF0000000`, and a 64-bit MSB case) and
+`cbmc_bitreverse_fail` (a wrong expected value → FAILED, confirming the reversal is really computed).
 
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/
