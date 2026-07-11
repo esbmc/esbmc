@@ -3,6 +3,7 @@
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_adjust.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
@@ -186,6 +187,11 @@ bool python_languaget::parse(const std::string &path)
 
   try
   {
+    // Parse under FE_TONEAREST: nlohmann converts float literals with the
+    // host strtod, and a leftover non-default rounding mode (e.g. gaol's
+    // static init leaves FE_UPWARD on goto-contractor builds) would store a
+    // double one ulp away from CPython's value for the same literal.
+    const round_to_nearest_guard rounding_guard;
     ast = nlohmann::json::parse(ast_json);
   }
   catch (const nlohmann::json::exception &e)
@@ -235,6 +241,16 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
+  // Pin FE_TONEAREST for the whole conversion pass. The converter folds
+  // constants with host floating point (numpy scalar folds, complex-string
+  // strtod, str/format rendering), and those folds must agree bit-for-bit
+  // with the AST float literals, which are parsed under FE_TONEAREST (see
+  // parse() above). A leftover mode like gaol's FE_UPWARD on goto-contractor
+  // builds would otherwise skew only the folded side of a comparison by one
+  // ulp and flip verdicts (regression/numpy/round_decimals,
+  // regression/python/complex_constructor_extended on the DebugOpt CI).
+  const round_to_nearest_guard rounding_guard;
+
   // Load c models. The C++ handled-stack exception OM (push/pop_handled,
   // rethrow_current) is deliberately NOT pulled in for Python: it drags the full
   // C++ std::terminate closure, and Python does not use std::current_exception.
