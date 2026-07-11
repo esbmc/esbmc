@@ -100,6 +100,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -293,6 +294,21 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 `#bounds_check` zero-argument guard, matched independently. Verdict parity both directions,
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
+
+**Rotate expressions `rol`/`ror` — ✅ landed.** `__builtin_rotateleft{8,16,32,64}` /
+`__builtin_rotateright...` lower to CBMC `rol`/`ror` ireps (value, distance), which `migrate_expr`
+has *no* handler for (aborts with `migrate expr failed`) — and, like `clz`/`ctz`, ESBMC has no
+rotate irep2 node. `fix_expression` reproduces the rotate from ids `migrate_expr` already lowers
+(`shl`, `lshr`, `bitor`, `bitand`, `-`): `rol(x, n) = (x << d) | (x >> (W − d))` and
+`ror(x, n) = (x >> d) | (x << (W − d))`, where `d = n mod W`. CBMC takes the distance **mod the
+width** (`rol(x, W) == x`, `rol(x, W + k) == rol(x, k)`); the width is always a power of two, so
+`& (W − 1)` is the modulus. The complement `W − d` is likewise masked with `W − 1` so `d == 0`
+produces a 0-bit shift rather than an (edge-case) full-width shift — `rol(x, 0)` then reduces to
+`(x << 0) | (x >> 0) == x`. Scoped to the `--binary` path, so it never perturbs native handling
+(which never emits `rol`/`ror`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across
+`rol`/`ror` at 32- and 64-bit widths and the mod-width edge (`rol(x, 32) == x`,
+`rol(x, 36) == rol(x, 4)`): `cbmc_rotate` (SUCCESSFUL) and `cbmc_rotate_fail` (a wrong expected
+value → FAILED, confirming the rotation is really computed).
 
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/

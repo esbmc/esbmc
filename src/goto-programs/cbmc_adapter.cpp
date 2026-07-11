@@ -218,6 +218,43 @@ void fix_expression(irept &irep)
     }
   }
 
+  if (irep.id() == "rol" || irep.id() == "ror")
+  {
+    // CBMC lowers __builtin_rotateleft{8,16,32,64}/__builtin_rotateright... to
+    // rol/ror expression ids, which migrate_expr has no handler for (aborts with
+    // "migrate expr failed"); ESBMC has no rotate irep2 node either. As with
+    // clz/ctz above, reproduce the rotate from ids migrate_expr already lowers
+    // (shl, lshr, bitor, bitand, "-"), so no new node is needed:
+    //   rol(x, n) = (x << d) | (x >> (W - d)),  ror(x, n) = (x >> d) | (x << (W - d))
+    // where d = n mod W. CBMC takes the distance mod the width (rol(x, W) == x,
+    // rol(x, W + k) == rol(x, k)); W is always a power of two, so `& (W - 1)` is
+    // the modulus. The complement (W - d) is also masked with (W - 1) so that
+    // d == 0 yields a 0 shift rather than a full-width shift: rol(x, 0) then
+    // reduces to (x << 0) | (x >> 0) == x. Scoped to the CBMC --binary path.
+    const bool left = irep.id() == "rol";
+    const irept x = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept n = irep.get_sub().size() > 1 ? irep.get_sub()[1] : irept();
+    const irept optype = x.find("type"); // value's bitvector type
+    const std::size_t width = bv_width(optype);
+
+    // d = n & (W - 1); co = (W - d) & (W - 1)  (both in the value's width)
+    const irept d =
+      mk_binary("bitand", optype, n, mk_bv_const(optype, width - 1));
+    const irept co = mk_binary(
+      "bitand",
+      optype,
+      mk_binary("-", optype, mk_bv_const(optype, width), d),
+      mk_bv_const(optype, width - 1));
+
+    irept lo = mk_binary(left ? "shl" : "lshr", optype, x, d);
+    irept hi = mk_binary(left ? "lshr" : "shl", optype, x, co);
+
+    irep.id("bitor");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(lo);
+    irep.get_sub().push_back(hi);
+  }
+
   if (irep.id() == "sign" && irep.find("type").id() == "bool")
   {
     // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
