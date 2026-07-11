@@ -1,6 +1,7 @@
 #include <python-frontend/module_manager.h>
 #include <python-frontend/module.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/round_to_nearest_guard.h>
 #include <util/message.h>
 
 #include <nlohmann/json.hpp>
@@ -47,6 +48,9 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
   try
   {
     nlohmann::json ast;
+    // Pin FE_TONEAREST while nlohmann's strtod converts float literals (see
+    // python_language.cpp): a leftover rounding mode skews them by one ulp.
+    const round_to_nearest_guard rounding_guard;
     json_file >> ast;
     json_file.close();
 

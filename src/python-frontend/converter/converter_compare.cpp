@@ -627,11 +627,25 @@ exprt python_converter::handle_type_identity_check(
   if (op != "Is" && op != "IsNot")
     return nil_exprt();
 
-  // Resolve type identifiers from either direct names or symbol values
+  // Resolve type identifiers from direct names, symbol values, or a type()
+  // call, whose value is the compile-time name of its argument's type
   auto resolve_type_identifier = [&](
                                    const nlohmann::json &node,
                                    const exprt &expr,
                                    std::string &out_name) -> bool {
+    // type(x) is T (GitHub #5936). An unrecognised name leaves this side
+    // unresolved, so the fold below stays as conservative as it was.
+    if (
+      node["_type"] == "Call" && node["func"]["_type"] == "Name" &&
+      node["func"]["id"] == "type" && expr.is_constant())
+    {
+      const std::string name = expr.get_string("value");
+      if (!type_utils::is_type_identifier(name))
+        return false;
+      out_name = name;
+      return true;
+    }
+
     if (node["_type"] == "Name" && node.contains("id"))
     {
       std::string name = node["id"].get<std::string>();

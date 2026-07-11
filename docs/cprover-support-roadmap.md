@@ -97,6 +97,8 @@ and the symbol/function table layout.
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
+| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
+| Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -231,6 +233,24 @@ function body** additionally trip the pre-existing `struct_tag/union_tag should 
 resolved` gap (§4.3 anon/tag resolution) — orthogonal to this fix and still open; the tests
 use file-scope struct definitions.
 
+**Enum type `c_enum_tag` — ✅ fixed.** CBMC references an enum type via a `c_enum_tag` node —
+the tag counterpart of `c_enum`, exactly as `struct_tag`/`union_tag` reference `struct`/`union`.
+`migrate_type` maps `c_enum`/`incomplete_c_enum` to a signed int (C99 6.7.2.2.3, "the type of
+an enumeration is int") but has **no case for the tag**, so *any* enum-typed object — an enum
+variable, an enum struct member, an enum function parameter — aborted with `ERROR: c_enum_tag`.
+Unlike `struct_tag`/`union_tag`, resolving the tag through the adapter's cache is neither
+possible (the cache holds only `struct`/`union` definitions, `cbmc_adapt`) nor necessary:
+`migrate_type` collapses every `c_enum` to `signedbv[int_width]` regardless of the enum's
+declared underlying width, so `fix_type` rewrites `c_enum_tag` to a bare `c_enum` and lets
+migrate produce the identical int type. Contained to the CBMC-binary path (`fix_type` is never
+reached by native frontends). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across an
+enum variable/comparison, enum arithmetic, explicitly-valued flag enums (`F_A | F_C`), and an
+enum struct member (`cbmc_enum`), plus a negative case (`cbmc_enum_fail`: `BLUE == GREEN`
+FAILED, confirming the value is really compared, not a vacuous pass). A C23 enum with a *fixed*
+non-`int` underlying type would still collapse to `int` here — consistent with `migrate_type`'s
+own `c_enum` handling, so not a new divergence — and is a migrate-level concern if it ever
+matters.
+
 ### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
 `fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands
 wrapped into the `"operands"` named-sub `exprt::operands()` expects; anything missing from
@@ -288,10 +308,44 @@ semantics rather than mere crash-avoidance (`cbmc_float_ne_nan`: `n != n` on `n 
 verifies SUCCESSFUL — a bitwise-equality `notequal` would report FAILED here), dual-solver
 (Bitwuzla + Z3).
 
+**Quantifier predicates `forall`/`exists` — ✅ landed.** `__CPROVER_forall`/`__CPROVER_exists`
+lower to CBMC `forall`/`exists` ireps, which `migrate_expr` already handles via `op0()`/`op1()`
+(bound symbol, predicate) — but neither was in the operand-wrap set, so `op0()` read an empty
+operand list and **segfaulted** (the exact `isnan`/`popcount` failure shape). Three coupled
+fixes were needed for verdict parity, not just crash-avoidance:
+- **Wrap `forall`/`exists`** so their operands reach `migrate_expr`.
+- **Unwrap the bound-variable `tuple`.** CBMC binds the quantifier variable(s) inside a `tuple`
+  node in the first operand; ESBMC's `forall2t`/`exists2t` (and `smt_solver.cpp`) expect
+  `side_1` to be the bound *symbol* itself, so `migrate` aborted with `ERROR: tuple`. The
+  adapter unwraps a single-symbol tuple to the bare symbol; a multi-binder tuple is left
+  untouched (ESBMC binds exactly one symbol) so it aborts cleanly rather than silently dropping
+  binders.
+- **Wrap `=>` implication.** Quantifier guards use `guard ==> body`; `migrate_expr` lowers `=>`
+  to `implies2t` via a wrapped operand pair, but `=>` was missing from the wrap-set, so a
+  guarded `forall` segfaulted after the first two fixes. (Valid in any boolean context, not just
+  quantifiers.)
+- **`goto_check` skips quantifier bodies.** A universally/existentially bound variable ranges
+  over its whole type; its body is a pure predicate, not executed code, so `goto_check`'s bounds/
+  overflow/div-by-zero instrumentation over the bound variable is meaningless — `a[i]` inside
+  `forall i . (0<=i<n) ==> a[i]==0` is **not** a real out-of-bounds access. Previously
+  `check_rec` descended into the body with an empty guard and emitted a spurious bounds check
+  (false **FAILED** where CBMC says SUCCESSFUL — a soundness divergence, worse than a crash).
+  A new `forall_id`/`exists_id` case returns without recursing, matching CBMC (which emits no
+  such checks inside a quantifier) and letting the SMT array theory model the body. This also
+  fixes the identical pre-existing gap on ESBMC's own native `__ESBMC_forall` (a bare
+  `forall(i, a[i]==0)` spuriously bounds-failed before this change); the existing native
+  quantifier suites, which dodge it via a `(guard)?body:1` ternary, are unaffected.
+Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across a holding `forall`
+(`cbmc_forall` SUCCESSFUL), a violated `forall` (`cbmc_forall_fail` FAILED — confirms the body
+is really evaluated, not vacuously skipped), and an `exists` witness (`cbmc_exists` SUCCESSFUL).
+
 Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
-rather than instruction-level ASSUME/ASSERT, unconfirmed), array/quantifier predicates,
-IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops. Needs a systematic
-audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
+rather than instruction-level ASSUME/ASSERT, unconfirmed),
+IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
+`byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
+support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
+systematic audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
 gap-by-gap discovery.
 
 Confirmed **not** a gap: the `printf` family. CBMC inlines its own
