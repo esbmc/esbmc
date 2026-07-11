@@ -18,4 +18,4 @@ h: list[int] = [a, b, c]
 
 heapq.heapify(h)
 
-assert h[0] >= h[1]     # F1 — falsifiable (min-heap root is the smallest)
+assert h[0] >= h[1]  # F1 — falsifiable (min-heap root is the smallest)

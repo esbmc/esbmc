@@ -23,5 +23,5 @@ h: list[int] = [a, b, c]
 
 heapq.heapify(h)
 
-assert h[0] <= h[1]     # E1
-assert h[0] <= h[2]     # E2
+assert h[0] <= h[1]  # E1
+assert h[0] <= h[2]  # E2
