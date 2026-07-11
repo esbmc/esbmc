@@ -19,11 +19,11 @@ b: Decimal = Decimal("2.5")
 zero: Decimal = Decimal("0")
 one: Decimal = Decimal("1")
 
-assert a + b == b + a           # E1
-assert a * b == b * a           # E1
-assert a + zero == a            # E2
-assert a - a == zero            # E2
-assert a * one == a            # E3
-assert -(-a) == a               # E4
-assert abs(-a) == abs(a)        # E4
+assert a + b == b + a  # E1
+assert a * b == b * a  # E1
+assert a + zero == a  # E2
+assert a - a == zero  # E2
+assert a * one == a  # E3
+assert -(-a) == a  # E4
+assert abs(-a) == abs(a)  # E4
 assert a + b == Decimal("4.0")  # E5
