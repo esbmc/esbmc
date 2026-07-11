@@ -14,7 +14,7 @@
 #   E4: search fails when the substring is absent
 import re
 
-assert re.fullmatch("abc", "abc")       # E1
+assert re.fullmatch("abc", "abc")  # E1
 assert not re.fullmatch("abc", "abcd")  # E2
-assert re.search("bc", "abcd")          # E3
-assert not re.search("xy", "abcd")      # E4
+assert re.search("bc", "abcd")  # E3
+assert not re.search("xy", "abcd")  # E4

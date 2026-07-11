@@ -15,7 +15,7 @@
 #   E4: a string shorter than the pattern does not match
 import re
 
-assert re.match("abc", "abc")           # E1
-assert re.match("abc", "abcdef")        # E2
-assert not re.match("abc", "xbc")       # E3
-assert not re.match("abc", "ab")        # E4
+assert re.match("abc", "abc")  # E1
+assert re.match("abc", "abcdef")  # E2
+assert not re.match("abc", "xbc")  # E3
+assert not re.match("abc", "ab")  # E4

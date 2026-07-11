@@ -8,4 +8,4 @@
 #   F1: re.match("abc", "xyz").  "abc" is not a prefix of "xyz".
 import re
 
-assert re.match("abc", "xyz")       # F1 — falsifiable (no prefix match)
+assert re.match("abc", "xyz")  # F1 — falsifiable (no prefix match)
