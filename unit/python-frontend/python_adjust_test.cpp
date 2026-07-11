@@ -6,6 +6,7 @@
 #include <util/symbol.h>
 #include <util/c_types.h>
 #include <util/config.h>
+#include <util/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <string>
 #include <vector>
@@ -964,6 +965,251 @@ TEST_CASE(
   REQUIRE_FALSE(adjuster.adjust());
 
   REQUIRE(ctx.find_symbol("tag-Fwd")->get_type2() == empty_struct);
+}
+
+namespace
+{
+// Register `tag-<name>` whose LEGACY type is a struct carrying a "bases"
+// sub-irep listing `tag-<base>` — the layout python_class_builder::get_bases
+// produces and clang_cpp_adjust::convert_exception_id consumes.
+void add_class_with_base(
+  contextt &ctx,
+  const std::string &name,
+  const std::string &base)
+{
+  struct_typet legacy;
+  legacy.tag(name);
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-" + base));
+
+  symbolt tag;
+  tag.id = tag.name = "tag-" + name;
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+}
+} // namespace
+
+TEST_CASE(
+  "python_adjust completes an empty throw exception list from the class",
+  "[python-adjust]")
+{
+  // Flip blocker #1: a cpp-throw whose exception_list the legacy pass never
+  // derived must get [derived, direct bases...] from its operand's tag —
+  // the same one-level chain convert_exception_id produces.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(is_code_cpp_throw2t(thr));
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
+}
+
+TEST_CASE(
+  "python_adjust leaves a legacy-filled throw exception list untouched",
+  "[python-adjust]")
+{
+  // Inertness on today's pipeline: clang_cpp_adjust already derived the
+  // list; the arm must not re-derive or reorder it.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  const std::vector<irep_idt> legacy_ids{"E", "Exception"};
+  expr2tc thr = code_cpp_throw2tc(operand, legacy_ids, locationt());
+  const expr2tc original = thr;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(thr == original);
+}
+
+TEST_CASE(
+  "python_adjust derives void_ptr for an untypeable raise operand",
+  "[python-adjust]")
+{
+  // The attribute-raise fallback (`raise pkg.Error(...)`) types the operand
+  // any_type() = pointer(empty); legacy convert_exception_id derives
+  // "void_ptr" for it. An empty list here would re-create the
+  // remove_exceptions front() crash the arm exists to prevent.
+  contextt ctx;
+  const expr2tc operand =
+    symbol2tc(pointer_type2tc(get_empty_type()), "untyped_exc");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 1);
+  REQUIRE(t.exception_list[0] == "void_ptr");
+}
+
+TEST_CASE(
+  "python_adjust gives a non-class throw operand the never-empty fallback",
+  "[python-adjust]")
+{
+  // A shape the converter never emits (int operand) still must not leave an
+  // empty list — remove_exceptions dereferences front(). The synthetic
+  // type-id never matches a real throw, mirroring legacy's fallback.
+  contextt ctx;
+  expr2tc thr = code_cpp_throw2tc(
+    gen_zero(get_int32_type()), std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 1);
+  REQUIRE(t.exception_list[0] == "signedbv");
+}
+
+TEST_CASE("python_adjust leaves a bare re-raise untouched", "[python-adjust]")
+{
+  // A bare `raise` lowers to a nil-operand throw with an empty list; legacy
+  // skips it (adjust_side_effect_throw returns early) and so must this arm.
+  contextt ctx;
+  expr2tc thr =
+    code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}, locationt());
+  const expr2tc original = thr;
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  REQUIRE(thr == original);
+}
+
+TEST_CASE(
+  "python_adjust derives all direct bases of a multi-base class",
+  "[python-adjust]")
+{
+  // register_chain treats the tail as flat direct bases of front(); the
+  // derivation must emit every direct base in declaration order.
+  contextt ctx;
+  struct_typet legacy;
+  legacy.tag("M");
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-A"));
+  bases.get_sub().emplace_back(irept("tag-B"));
+  symbolt tag;
+  tag.id = tag.name = "tag-M";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-M"), "m");
+  expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(t.exception_list.size() == 3);
+  REQUIRE(t.exception_list[0] == "M");
+  REQUIRE(t.exception_list[1] == "A");
+  REQUIRE(t.exception_list[2] == "B");
+}
+
+TEST_CASE(
+  "python_adjust pre-pass write-back preserves bases for the throw chain",
+  "[python-adjust]")
+{
+  // The M2 hazard: the type-symbol pre-pass rewrites a tag (padding fires),
+  // and set_type(type2tc) would drop the legacy-only "bases" sub-irep the
+  // throw derivation reads. The write-back must re-attach it, so a body
+  // throw still derives the full chain after the tag was rewritten.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  struct_typet legacy;
+  legacy.tag("E");
+  {
+    struct_union_typet::componentt c;
+    c.id("component");
+    c.type() = migrate_type_back(signedbv_type2tc(8));
+    c.set_name("c");
+    c.pretty_name("c");
+    legacy.components().push_back(c);
+    struct_union_typet::componentt i;
+    i.id("component");
+    i.type() = migrate_type_back(get_int32_type());
+    i.set_name("i");
+    i.pretty_name("i");
+    legacy.components().push_back(i);
+  }
+  exprt &bases = static_cast<exprt &>(legacy.add("bases"));
+  bases.get_sub().emplace_back(irept("tag-Exception"));
+  symbolt tag;
+  tag.id = tag.name = "tag-E";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(legacy);
+  ctx.add(tag);
+
+  const expr2tc operand = symbol2tc(symbol_type2tc("tag-E"), "e");
+  const expr2tc thr =
+    code_cpp_throw2tc(operand, std::vector<irep_idt>{}, locationt());
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(thr)});
+  add_code_symbol(ctx, "py_adjust_throw_prepass_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  // The pre-pass padded (rewrote) the tag...
+  const symbolt *out_tag = ctx.find_symbol("tag-E");
+  REQUIRE(is_struct_type(out_tag->get_type2()));
+  REQUIRE(to_struct_type(out_tag->get_type2()).members.size() == 3);
+  // ...its legacy view kept the bases...
+  REQUIRE(out_tag->get_type().find("bases").is_not_nil());
+  // ...and the body throw derived the full chain through it.
+  const expr2tc &stored =
+    ctx.find_symbol("py_adjust_throw_prepass_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &out_thr = to_code_expression2t(stmt).operand;
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(out_thr);
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
+}
+
+TEST_CASE(
+  "python_adjust derives throw ids through an S2-resolved literal operand",
+  "[python-adjust]")
+{
+  // The OM raise shape end-to-end: the throw operand is a by-name struct
+  // literal; operand recursion (S2) retypes it to the resolved struct first,
+  // and the throw arm must derive the chain from that resolved shape.
+  contextt ctx;
+  add_class_with_base(ctx, "E", "Exception");
+
+  const expr2tc lit =
+    constant_struct2tc(symbol_type2tc("tag-E"), std::vector<expr2tc>{});
+  expr2tc thr = code_cpp_throw2tc(lit, std::vector<irep_idt>{}, locationt());
+
+  python_adjust adjuster(ctx);
+  adjuster.adjust_expr(thr);
+
+  const code_cpp_throw2t &t = to_code_cpp_throw2t(thr);
+  REQUIRE(is_constant_struct2t(t.operand));
+  REQUIRE(is_struct_type(t.operand->type));
+  REQUIRE(t.exception_list.size() == 2);
+  REQUIRE(t.exception_list[0] == "E");
+  REQUIRE(t.exception_list[1] == "Exception");
 }
 
 TEST_CASE(

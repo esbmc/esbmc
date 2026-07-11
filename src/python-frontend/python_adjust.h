@@ -93,6 +93,25 @@ protected:
   /// since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
 
+  /// Derive a cpp-throw's exception-id chain from its operand's type,
+  /// mirroring `clang_cpp_adjust::convert_exception_id`: the bare class name
+  /// followed by its direct bases for a class operand (both the by-name
+  /// `symbol_type2t` tag and the S2-resolved `struct_type2t` shape),
+  /// "void_ptr" for the untypeable-raise `any_type()` operand, a `_ptr`
+  /// suffix through real pointers, and — like legacy — a synthetic
+  /// type-id fallback so the result is never empty (remove_exceptions
+  /// dereferences front()). Used by adjust_expr to complete an empty
+  /// `code_cpp_throw2t::exception_list` — flip blocker #1
+  /// (docs/irep2-migration.md, "Flip-probe census").
+  std::vector<irep_idt> derive_exception_ids(const type2tc &type) const;
+
+  /// Recursive worker for derive_exception_ids, threading the legacy `_ptr`
+  /// suffix accumulation.
+  void derive_exception_ids_rec(
+    const type2tc &type,
+    const std::string &suffix,
+    std::vector<irep_idt> &ids) const;
+
   /// Post-adjust strong-invariant probe (V.1k B.4): append to `out` one
   /// human-readable entry per unresolved node reachable from `expr` — a
   /// `member2t`/`index2t` source or `constant_struct2t` type still carrying a
