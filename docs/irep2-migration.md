@@ -4033,6 +4033,42 @@ discharged. **Next: the S6 flip-readiness census** — run the *full*
 `regression/python` suite hop-off (the RV2-shaped gate) to enumerate
 whatever long tail remains before the flip itself can be attempted.
 
+#### S6 flip-readiness census (2026-07-11) — 92.2% of the runnable suite passes hop-off; the 278-test gap classifies into five families
+
+**Method.** All 4,261 `regression/python` test dirs, hop-off (env-gated
+`clang_cpp_adjust` skip + `--python-irep2-adjust`, Bitwuzla, 20 s cap,
+8-way parallel), each CORE test's verdict compared against its `test.desc`
+expectation; then a **hop-on baseline over every non-OK test with the same
+harness/solver/cap** to separate flip-caused failures from pre-existing or
+environmental ones (local build is Bitwuzla-only; some descs pin other
+solvers or `--ir`). KNOWNBUG/FUTURE and no-verdict-expectation descs
+skipped (365).
+
+**Topline: 3,275 of 3,553 runnable CORE tests (92.2%) pass with
+`clang_cpp_adjust` skipped entirely.** 341 of the 619 hop-off failures
+also fail hop-on under the same harness (pre-existing/environmental —
+excluded). The genuine flip gap is **278 tests**, classifying by failure
+signature into:
+
+| Family | ~Count | Signature / examples | Reading |
+|---|---|---|---|
+| **F-A: crashes, unclassified** | ~160 | bare `signal N`, first-error lines are mypy noise | needs crash-report sub-classification (the macOS `.ips` + `atos` recipe); expect them to distribute over F-B–F-E's root causes |
+| **F-B: exit-invariant survivors** | 18 | `python_adjust: symbol 'python_user_main' retains N unresolved ... nodes` — `dict_bool_key`, `dict17/25/28/31`, ... | **S3's real work-list at last**: dict-heavy bodies carry member/index sources `resolve_source` cannot follow; also shows `adjust()`'s error return being ignored (flip prereq 6) lets a detected inconsistency proceed to a crash |
+| **F-C: string/array index lowering** | 12 | `Unexpected index type in computed goto`-style abort — `concat3/11`, `github_3090_2` | string concat/subscript path expects an adjusted index shape |
+| **F-D: bytes/tuple select** | 7+ | `Select operation applied to tuple` — `bytes`, `int_from_bytes_*` | bytes lowered as tuple reaches the solver unadjusted |
+| **F-E: complex/cmath** | ~30 | 23 conservative WRONG verdicts (expected SUCCESSFUL, got FAILED: `cmath_polar_rect_*`, `complex_cmath_log_edges`) + 7 timeouts (`complex_pow_*`) | the complex OM (a struct type) needs a completion the pass doesn't do; wrongness is in the conservative direction (spurious counterexample), not unsound |
+
+**Reading for the flip decision.** The gap is concentrated and
+family-shaped, not diffuse: dicts (F-B), string indexing (F-C), bytes
+(F-D), complex (F-E), plus an unclassified crash mass (F-A) that likely
+folds into the same causes. No family is evidence against the staged
+approach — each is the same "one legacy completion, one arm" pattern that
+S1–S4 retired one by one. **Next steps in order:** (1) sub-classify F-A by
+symbolicated crash site; (2) F-B first among fixes (it is S3's concrete
+work-list and doubles as the prereq-6 error-propagation fix); (3) the flip
+itself stays gated on RV2 (this census re-run clean, dual-solver) — flag
+default stays off until the gap is drained.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
