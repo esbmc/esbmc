@@ -28,11 +28,14 @@ class python_adjust
 public:
   explicit python_adjust(contextt &_context);
 
-  /// Walk every non-type symbol's IREP2 value. Returns true on error —
+  /// Two-phase walk mirroring `clang_c_adjust::adjust()`: first complete
+  /// every type symbol's IREP2 type via adjust_type (macro expansion,
+  /// padding), so the value resolution below always follows fixed-up tags;
+  /// then walk every code symbol's IREP2 value. Returns true on error —
   /// specifically if the post-adjust strong invariant is violated (a
   /// member2t/index2t source or a constant_struct2t type still carries an
-  /// unresolved `symbol_type2t` after resolution); false on success, mirroring
-  /// `clang_c_adjust::adjust()`.
+  /// unresolved `symbol_type2t` after resolution, or a resolved literal's
+  /// operand count disagrees with its component list); false on success.
   bool adjust();
 
   /// Recursively visit `expr` and its sub-expressions, resolving transient
@@ -60,14 +63,22 @@ public:
   /// aggregates (an incomplete type stays a `symbol_type2t`), so the legacy
   /// `!type.incomplete()` guard has no analogue here.
   ///
-  /// Known S1 scope limits vs the legacy pass, deliberate until later
-  /// S-steps: (1) an unknown top-level type symbol is left by-name for the
-  /// exit invariant instead of abort()ing; (2) no `vector_typet` arm (the
-  /// Python frontend never emits vector types); (3) *type symbols themselves*
-  /// are not adjusted — the legacy adjust() completes all `is_type` symbols
-  /// first so resolution sees fixed-up tags; on the live pipeline
-  /// `clang_cpp_adjust` still does that, and the B.5 flip must add the
-  /// type-symbol pre-pass before this pass becomes the sole resolver.
+  /// Known scope limits vs the legacy pass, deliberate until later S-steps:
+  /// (1) an unknown top-level type symbol is left by-name for the exit
+  /// invariant instead of abort()ing; (2) no `vector_typet` arm (the Python
+  /// frontend never emits vector types); (3) non-type symbols' *own* types
+  /// (e.g. a function's code type) are not adjusted — the legacy
+  /// adjust_symbol completes them (`clang_c_adjust_expr.cpp:70-74`), and
+  /// `clang_cpp_adjust` still does on the live pipeline. Type symbols ARE
+  /// completed: adjust() runs a type-symbol pre-pass before value
+  /// resolution, mirroring the legacy two-phase order. (4) The pre-pass
+  /// write-back (`set_type(type2tc)`) cannot carry legacy-only struct
+  /// metadata — the `"bases"` sub-irep (read by exception_typeid.cpp and
+  /// base_type.cpp for Python exception-hierarchy/catch matching) and
+  /// component `access`/`#is_padding` flags are lost if the write-back
+  /// fires. Inert today (the write-back never fires post-clang_cpp_adjust);
+  /// the B.5 flip must either re-attach the preserved sub-ireps on a legacy
+  /// write-back or move the `"bases"` carriage to IREP2 (W3/V.2) first.
   void adjust_type(type2tc &type);
 
 protected:

@@ -3780,7 +3780,35 @@ asserts only the type kind, so that mismatch would otherwise reach symex
 silently). The flag-on pipeline is exit-invariant-clean for the first time —
 the B.5 flip's hard-fail risk from Finding 2 is retired.
 
-**Flip note (S6 prerequisite, alongside the type-symbol pre-pass above):**
+#### Type-symbol pre-pass (2026-07-11) — the S1-documented S-gap closed
+
+`adjust()` now mirrors `clang_c_adjust::adjust()`'s two-phase order: a
+pre-pass completes every **Python-mode** `is_type` symbol's IREP2 type via
+`adjust_type` (macro expansion + padding, write-back only on change) before
+the value walk, so symbolic-type resolution always follows fixed-up tags.
+The mode scoping is load-bearing, not cosmetic: C/C++-header types can carry
+bitfields whose `#bitfield` flag does not survive the IREP2 round-trip —
+re-padding those from the migrated view would write a corrupted layout back
+into the table — while every converter-emitted tag is mode `"Python"`
+(`create_symbol`, `converter_util.cpp`). Incomplete (forward-declared) tags
+migrate to a 0-member struct view; `add_padding` is a no-op there and the
+change-detection guard prevents any lossy write-back (unit-pinned, along
+with the completed-tag, non-Python-skip, and pre-pass→value-walk chain
+cases). Inert on the live flag-on pipeline (0 exit-invariant errors,
+dual-solver verdicts unchanged, 76/76 fixture). Remaining legacy completion
+**not** yet reproduced, both recorded as scope limits in `python_adjust.h`:
+non-type symbols' *own* types (`adjust_symbol`,
+`clang_c_adjust_expr.cpp:70-74` — limit 3), and **legacy-only struct
+metadata across a firing write-back** (limit 4, review-caught, latent):
+`set_type(type2tc)` drops the `"bases"` sub-irep that
+`exception_typeid.cpp:37` and `base_type.cpp:421` read for Python
+exception-hierarchy/catch matching (plus component `access`/`#is_padding`
+cosmetics). Inert while the write-back never fires; the flip must either
+re-attach preserved sub-ireps on a legacy write-back or land the W3/V.2
+IREP2-native carriage for `"bases"` first — and should also start honouring
+`adjust()`'s error return at the `python_language.cpp` call site.
+
+**Flip note (S6 prerequisite):**
 cpp-throw catch matching is safe under S2 only because exception ids are
 derived *upstream* — `clang_cpp_adjust::convert_exception_id` builds
 `code_cpp_throw2t`'s `exception_list` from the thrown *symbol* type's

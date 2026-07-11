@@ -815,6 +815,150 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "python_adjust pre-pass completes a Python tag symbol in the table",
+  "[python-adjust]")
+{
+  // The type-symbol pre-pass (mirroring clang_c_adjust::adjust()'s first
+  // loop): an unpadded Python-mode tag with a macro-typed member is
+  // macro-expanded and padded in the symbol table itself, so later
+  // resolution follows the fixed-up layout.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_prepass_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(signedbv_type2tc(8));
+  ctx.add(alias);
+
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{symbol_type2tc("py_prepass_alias"), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "PrePad",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-PrePad";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const type2tc &stored = ctx.find_symbol("tag-PrePad")->get_type2();
+  REQUIRE(is_struct_type(stored));
+  const struct_type2t &st = to_struct_type(stored);
+  REQUIRE(st.members.size() == 3);
+  REQUIRE(st.members[0] == signedbv_type2tc(8));
+  REQUIRE(is_unsignedbv_type(st.members[1]));
+  REQUIRE(st.member_names[2] == "i");
+}
+
+TEST_CASE(
+  "python_adjust pre-pass skips a non-Python type symbol",
+  "[python-adjust]")
+{
+  // C/C++-header types may carry bitfields whose #bitfield flag the IREP2
+  // round-trip drops; the pre-pass must not re-pad them (RV-adj4 scoping).
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "CPad",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-CPad";
+  tag.mode = "C";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(ctx.find_symbol("tag-CPad")->get_type2() == unpadded);
+}
+
+TEST_CASE(
+  "python_adjust pre-pass output feeds the value walk's resolution",
+  "[python-adjust]")
+{
+  // End-to-end across the two phases: the tag starts unpadded in the table;
+  // the pre-pass pads it, and the value walk's resolve_source then follows a
+  // transient member source to the *padded* layout — the reason the type
+  // pre-pass must run first (clang_c_adjust's "so that symbolic-type
+  // resolution always receives fixed up types").
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc unpadded = struct_type2tc(
+    std::vector<type2tc>{signedbv_type2tc(8), get_int32_type()},
+    std::vector<irep_idt>{"c", "i"},
+    std::vector<irep_idt>{"c", "i"},
+    "Chain",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-Chain";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(unpadded);
+  ctx.add(tag);
+
+  const expr2tc source = symbol2tc(symbol_type2tc("tag-Chain"), "obj");
+  const expr2tc member = member2tc(get_int32_type(), source, "i");
+  const expr2tc body =
+    code_block2tc(std::vector<expr2tc>{code_expression2tc(member)});
+  add_code_symbol(ctx, "py_adjust_chain_sym", body);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const expr2tc &stored = ctx.find_symbol("py_adjust_chain_sym")->get_value2();
+  const expr2tc &stmt = to_code_block2t(stored).operands.at(0);
+  const expr2tc &resolved = to_code_expression2t(stmt).operand;
+  REQUIRE(is_member2t(resolved));
+  const type2tc &src_type = to_member2t(resolved).source_value->type;
+  REQUIRE(is_struct_type(src_type));
+  REQUIRE(to_struct_type(src_type).members.size() == 3);
+}
+
+TEST_CASE(
+  "python_adjust pre-pass leaves an empty (incomplete) tag unchanged",
+  "[python-adjust]")
+{
+  // A forward-declared class tag (python_class_builder::ensure_sym) is an
+  // incomplete struct with no components; the pre-pass must pass through
+  // without padding or crashing, and without writing the symbol back.
+  config.ansi_c.set_data_model(configt::LP64);
+
+  contextt ctx;
+  const type2tc empty_struct = struct_type2tc(
+    std::vector<type2tc>{},
+    std::vector<irep_idt>{},
+    std::vector<irep_idt>{},
+    "Fwd",
+    false);
+  symbolt tag;
+  tag.id = tag.name = "tag-Fwd";
+  tag.mode = "Python";
+  tag.is_type = true;
+  tag.set_type(empty_struct);
+  ctx.add(tag);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(ctx.find_symbol("tag-Fwd")->get_type2() == empty_struct);
+}
+
+TEST_CASE(
   "python_adjust S1 adjust_expr completes a node's own type",
   "[python-adjust]")
 {
