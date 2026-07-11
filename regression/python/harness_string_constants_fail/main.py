@@ -8,4 +8,4 @@
 #   F1: string.digits[0] == '1'.  The first digit is '0'.
 import string
 
-assert string.digits[0] == '1'      # F1 — falsifiable (digits starts with '0')
+assert string.digits[0] == '1'  # F1 — falsifiable (digits starts with '0')
