@@ -12,4 +12,4 @@
 x: float = nondet_float()
 __ESBMC_assume(-1000.0 <= x <= 1000.0)
 
-assert x.is_integer()        # F1 — falsifiable (non-integral floats exist)
+assert x.is_integer()  # F1 — falsifiable (non-integral floats exist)

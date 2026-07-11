@@ -18,14 +18,14 @@ x: float = nondet_float()
 __ESBMC_assume(-1000.0 <= x <= 1000.0)
 
 r: bool = x.is_integer()
-assert r == (x == int(x))            # E1
+assert r == (x == int(x))  # E1
 if r:
-    assert x == int(x)               # E2
+    assert x == int(x)  # E2
 
 n: int = nondet_int()
 __ESBMC_assume(-1000 <= n <= 1000)
 y: float = float(n)
-assert y.is_integer()                # E3
+assert y.is_integer()  # E3
 
 # Concrete anchors.
 assert (5.0).is_integer()
