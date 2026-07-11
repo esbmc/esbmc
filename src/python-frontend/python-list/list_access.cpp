@@ -139,12 +139,15 @@ exprt python_list::build_list_at_call(
 
   if (!config.options.get_bool_option("no-bounds-check"))
   {
-    // Runtime guard only for negative-index normalization. This prevents
-    // underflowed indices (e.g., [] [-1]) from reaching the backend while
-    // preserving legacy behavior for non-negative accesses.
-    // negative_oob = is_negative && (converted_index >= size) (V.3: IREP2).
-    expr2tc negative_oob =
-      and2tc(is_negative, greaterthanequal2tc(converted_index2, size_var2));
+    // Runtime guard for any out-of-bounds normalized index -- both an
+    // underflowed negative index (e.g. `[][-1]`) and a too-large non-negative
+    // index. Raising a catchable IndexError here (rather than letting the read
+    // trip __ESBMC_list_at's hard assert) lets `try/except IndexError` observe
+    // the error, matching CPython and the negative-index path. This path is
+    // only reached for signed indices; provably-non-negative unsigned indices
+    // (loop counters) early-return above without a bounds call, so the hot path
+    // is unaffected. oob = converted_index >= size (V.3: IREP2).
+    expr2tc oob = greaterthanequal2tc(converted_index2, size_var2);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "list index out of range");
@@ -152,7 +155,7 @@ exprt python_list::build_list_at_call(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = migrate_expr_back(negative_oob);
+    guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
     converter_.add_instruction(guard);
