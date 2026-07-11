@@ -25,11 +25,11 @@ a: int = nondet_int()
 b: int = nondet_int()
 
 p = Point(a, b)
-assert p.x == a         # E1
-assert p.y == b         # E1
+assert p.x == a  # E1
+assert p.y == b  # E1
 
 q = Point(a, b)
-assert p == q           # E2
+assert p == q  # E2
 
 r = Point(a + 1, b)
-assert p != r           # E3
+assert p != r  # E3

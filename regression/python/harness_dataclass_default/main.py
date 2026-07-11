@@ -23,8 +23,8 @@ class Config:
 x: int = nondet_int()
 
 c = Config(x)
-assert c.a == x         # E1
-assert c.b == 10        # E2
+assert c.a == x  # E1
+assert c.b == 10  # E2
 
 c2 = Config(x, 20)
-assert c2.b == 20       # E3
+assert c2.b == 20  # E3

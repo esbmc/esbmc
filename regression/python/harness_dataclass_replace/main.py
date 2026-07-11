@@ -27,7 +27,7 @@ c: int = nondet_int()
 p = Point(a, b)
 p2 = replace(p, x=c)
 
-assert p2.x == c        # E1
-assert p2.y == b        # E2
-assert p.x == a         # E3
-assert p.y == b         # E3
+assert p2.x == c  # E1
+assert p2.y == b  # E2
+assert p.x == a  # E3
+assert p.y == b  # E3

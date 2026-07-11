@@ -21,4 +21,4 @@ b: int = nondet_int()
 p = Point(a, b)
 q = Point(a, b + 1)
 
-assert p == q       # F1 — falsifiable (y fields differ)
+assert p == q  # F1 — falsifiable (y fields differ)
