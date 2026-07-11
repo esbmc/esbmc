@@ -11,4 +11,4 @@ import time
 t0: float = time.time()
 t1: float = time.time()
 
-assert t0 == t1       # F1 — falsifiable (readings differ by 1.0)
+assert t0 == t1  # F1 — falsifiable (readings differ by 1.0)
