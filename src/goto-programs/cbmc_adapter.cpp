@@ -774,6 +774,30 @@ irept build_fma_rhs(const irept &lhs, const irept::subt &args)
   return result;
 }
 
+// __builtin_nan("")/__builtin_nanf("") construct a quiet NaN. CBMC's own
+// <builtin-library-__builtin_nan> body returns floatbv_div(0, 0, rounding_mode),
+// i.e. 0.0/0.0, so mirror that exactly: ieee_div of two +0.0 constants of the
+// result's float type. The NaN-payload string argument is ignored -- it does not
+// affect NaN-ness, and ESBMC's own C frontend likewise folds __builtin_nan to a
+// constant NaN without dereferencing it. ieee_div is in fix_expression's
+// operand-wrap set and defaults its rounding mode like the rest of the ieee_*
+// family. Restricted to double/float: CBMC 6.5.0 does not model __builtin_nanl
+// as a NaN (its result compares equal to itself, so x != x is FALSE), so nanl is
+// deliberately left as a bodyless external -- whose nondet return already yields
+// the same FAILED verdict CBMC gives -- to preserve verdict parity.
+irept build_nan_rhs(const irept &lhs)
+{
+  const irept ftype = lhs.find("type");
+  irept zero(irep_idt("constant"));
+  zero.add("type") = ftype;
+  zero.add("value") = mk("0"); // hex 0 -> +0.0 after width-aware conversion
+  irept result(irep_idt("ieee_div"));
+  result.add("type") = ftype;
+  result.get_sub().push_back(zero);
+  result.get_sub().push_back(zero);
+  return result;
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -835,6 +859,8 @@ bool fix_builtin_call(irept &code)
     rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
   else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
     rhs = build_fma_rhs(lhs, args);
+  else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
+    rhs = build_nan_rhs(lhs);
   // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
   // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
   // must be in fix_expression's operand-wrap set for the argument to reach it.
