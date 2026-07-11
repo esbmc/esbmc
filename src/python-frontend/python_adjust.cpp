@@ -75,6 +75,25 @@ bool python_adjust::adjust()
     if (symbol->is_type)
       continue;
 
+    // Complete the non-type symbol's own type too (the legacy adjust_symbol
+    // analogue, clang_c_adjust_expr.cpp:70-74) — scope limit (3) closing for
+    // the by-name-alias shape (a pointer-to-code lambda variable stays with
+    // the pinned call-rewrite; adjust_type has no pointer arm, legacy
+    // parity). Python-mode only, same rationale as the type-symbol pre-pass;
+    // write-back only on change keeps the live pipeline inert. Caveat for
+    // the flip-era call rewrite: a resolved-alias code type written back
+    // here carries no argument default_value (the attribute does not survive
+    // the IREP2 round-trip) — default arguments must be sourced from the
+    // function symbol, not from a variable's type.
+    if (symbol->mode == "Python")
+    {
+      const type2tc t_original = symbol->get_type2();
+      type2tc t = t_original;
+      adjust_type(t);
+      if (t != t_original)
+        symbol->set_type(t);
+    }
+
     // Only function bodies carry the member2t/index2t expressions this pass
     // resolves, and only bodies are what goto-convert later migrates via
     // get_value2() (V.4.4b). Reading get_value2() on a data symbol whose value

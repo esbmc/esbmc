@@ -142,6 +142,12 @@ void python_exception_handler::get_try_statement(
   {
     exprt finally_handler = converter_.get_block(element["finalbody"]);
     finally_handler.type().set("ellipsis", true); // catch-all
+    // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
+    // outside that path, and migration reads the attribute per handler — an
+    // unset id migrates empty and fails remove_exceptions' handler-shape
+    // check once the legacy adjust_catch (which would derive "ellipsis" from
+    // the type above) no longer runs.
+    finally_handler.set("exception_id", "ellipsis");
     side_effect_exprt rethrow("cpp-throw", empty_typet());
     rethrow.location() = converter_.get_location_from_decl(element);
     codet rethrow_code("expression");

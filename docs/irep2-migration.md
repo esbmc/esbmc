@@ -3933,6 +3933,40 @@ A broader hop-off sample (`dict40`, `raise_noarg_custom_exception`,
 — the S3 member/index-at-scale and S5 argument-cast families). Those are
 the blocker-3+ work-list.
 
+#### No-verdict diagnosis outcome (2026-07-11) — try_finally fixed (a blocker-2 straggler); scope limit (3) closed; the lambda-call rewrite is the pinned next step
+
+**`try_finally` was not a new family** — it was a blocker-2 straggler: the
+synthetic finally + re-raise catch-all handler is built outside
+`emit_catch_block` (`python_exception_handler.cpp`, `get_try_statement`)
+and set only its ellipsis *type*, so hop-off its `exception_id` migrated
+empty and failed `remove_exceptions`' handler-shape check with a clean
+diagnostic (not a crash). Fixed with the same construction-time pre-set
+(`exception_id = "ellipsis"`); GOTO-byte A/B identical on the normal
+pipeline; `try_finally` hop-off now **`VERIFICATION SUCCESSFUL`**. Census
+confirmed this was the only remaining cpp-catch construction site without
+the pre-set.
+
+**Scope limit (3) closed**: `adjust()` now completes each non-type
+Python-mode symbol's *own* type (the legacy `adjust_symbol` analogue,
+write-back only on change, unit-pinned with the non-Python skip). This
+resolved the lambda-*variable* symbol-type half of the
+`lambda_default_arg` hop-off failure.
+
+**Pinned next step — the lambda/def-alias *call* rewrite.** The remaining
+hop-off failure is precise: `goto-convert`'s `do_function_call_symbol`
+checks the callee symbol's table type (`builtin_functions.cpp:627`), and a
+lambda variable's table type is pointer-to-code (`python_lambda.cpp:50`).
+On the legacy pipeline `adjust_expr` re-types symbol expressions from the
+table and `adjust_side_effect_function_call` wraps the pointer callee in an
+implicit dereference (`clang_c_adjust_expr.cpp:918-926`), turning the
+direct-symbol call into a function-pointer call. A first
+`code_function_call2t` arm in `python_adjust` did **not fire** for the
+failing shape and was removed rather than shipped unproven — the next
+iteration must first dump the migrated body to identify the actual node
+kind carrying the call (likely a `sideeffect` function-call expression
+inside the statement, not a `code_function_call2t`), then rebuild the arm
+against that shape.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written

@@ -923,6 +923,62 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "python_adjust adjust() completes a non-type symbol's own type",
+  "[python-adjust]")
+{
+  // The legacy adjust_symbol analogue (scope limit (3) closing): a variable
+  // whose type is a by-name macro alias — the lambda-variable shape — is
+  // completed in the table so goto-convert sees the concrete type.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "py_var_alias";
+  alias.mode = "Python";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  symbolt var;
+  var.id = var.name = "py_adjust_var_sym";
+  var.mode = "Python";
+  var.set_type(symbol_type2tc("py_var_alias"));
+  ctx.add(var);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  REQUIRE(
+    ctx.find_symbol("py_adjust_var_sym")->get_type2() == get_int32_type());
+}
+
+TEST_CASE(
+  "python_adjust adjust() skips a non-Python symbol's own type",
+  "[python-adjust]")
+{
+  // Same RV-adj4 scoping as the type-symbol pre-pass.
+  contextt ctx;
+  symbolt alias;
+  alias.id = alias.name = "c_var_alias";
+  alias.mode = "C";
+  alias.is_type = true;
+  alias.is_macro = true;
+  alias.set_type(get_int32_type());
+  ctx.add(alias);
+
+  symbolt var;
+  var.id = var.name = "c_adjust_var_sym";
+  var.mode = "C";
+  var.set_type(symbol_type2tc("c_var_alias"));
+  ctx.add(var);
+
+  python_adjust adjuster(ctx);
+  REQUIRE_FALSE(adjuster.adjust());
+
+  const type2tc &kept = ctx.find_symbol("c_adjust_var_sym")->get_type2();
+  REQUIRE(is_symbol_type(kept));
+}
+
+TEST_CASE(
   "python_adjust pre-pass leaves an empty (incomplete) tag unchanged",
   "[python-adjust]")
 {
