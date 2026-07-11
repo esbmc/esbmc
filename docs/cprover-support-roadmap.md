@@ -100,6 +100,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -566,6 +567,23 @@ forms `migrate_expr` computes concretely: `nearbyint`/`nearbyintf`/`nearbyintl` 
 `c:@__ESBMC_rounding_mode` like `ieee_sqrt`. `build_sqrt_rhs` was generalised to
 `build_unary_fp_rhs(lhs, args, id)` (shared by sqrt, nearbyint, and abs) and `ieee_fma` added
 to the operand-wrap set. Tests `cbmc_nearbyint`/`cbmc_fma` (+ `_fail`), all dyadic values.
+
+**`__builtin_nan` / `__builtin_nanf` — ✅ landed.** CBMC provides a bodied
+`<builtin-library-__builtin_nan>` model that returns `floatbv_div(0, 0, __CPROVER_rounding_mode)`
+(i.e. `0.0/0.0`, a quiet NaN), but that body does not survive the reader/adapter (its
+`floatbv_div` flattened-IEEE node has no `migrate_expr` handler), so the function reaches symex
+as a **bodyless external returning nondet** — and `double d = __builtin_nan(""); assert(d != d)`
+reported a false `FAILED` (nondet `d` may equal itself) where CBMC says `SUCCESSFUL`. `fix_builtin_call`
+now rewrites the call into `lhs = ieee_div(0.0, 0.0)` — mirroring CBMC's own body exactly, using an
+id already in the operand-wrap set that migrates and defaults its rounding mode like the rest of the
+`ieee_*` family. The NaN-payload string argument is ignored (it does not affect NaN-ness, and ESBMC's
+own C frontend likewise folds `__builtin_nan` to a constant NaN without dereferencing it).
+Deliberately restricted to `double`/`float`: **CBMC 6.5.0 does not model `__builtin_nanl` as a NaN**
+(its result compares equal to itself, so `x != x` is `FALSE` — CBMC itself reports `FAILED`), so
+`nanl` is left as a bodyless external, whose nondet return already yields the same `FAILED` verdict,
+preserving parity rather than manufacturing a divergence. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3): `cbmc_nan` (`d != d` and `f != f` both SUCCESSFUL) and `cbmc_nan_fail`
+(`d == 0.0` FAILED — a NaN equals nothing, confirming a real NaN, not just an unconstrained value).
 
 **Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, `alloca`/`__builtin_alloca`, `free`,
 `fabsf`/`fabs`/`fabsl`, `realloc`, `nearbyint`, and `fma` are recognised — the
