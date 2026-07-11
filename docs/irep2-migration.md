@@ -3871,6 +3871,40 @@ finding); (4) S4 converter-side width reconciliation in
 `build_binary_expression`; (5) S5 argument-cast census + completion;
 (6) honour `adjust()`'s error return at the `python_language.cpp` call site.
 
+#### Blocker 1 outcome (2026-07-11) — throw exception ids derived in `python_adjust`; the flip probe now verifies simple programs end-to-end
+
+`adjust_expr` gains a `code_cpp_throw2t` arm: an **empty** `exception_list`
+on an operand-carrying throw is completed via the new
+`derive_exception_ids`, mirroring `convert_exception_id` across every shape
+the frontend emits: `[bare class, direct bases...]` for a class operand
+(both the by-name `symbol_type2t` tag and the S2-resolved `struct_type2t`,
+whose `name` is the bare tag), `"void_ptr"` for the untypeable-raise
+`any_type()` operand (review-caught: `raise pkg.Error(...)` falls back to a
+`pointer(empty)` operand — a conservative-empty policy here would re-create
+the very `front()` crash the arm prevents), a `_ptr` suffix through real
+pointers, and legacy's never-empty synthetic-id fallback. A legacy-filled
+list is untouched (`adjust_side_effect_throw` overwrites unconditionally
+and runs first, so the arm is inert today); a bare re-raise keeps its empty
+list, as legacy does. Second review catch (M2): the type-symbol pre-pass's
+own write-back would have dropped the legacy-only `"bases"` sub-irep before
+this derivation read it — the pre-pass now **re-attaches `"bases"` on the
+legacy view across its write-back**, discharging the `"bases"` half of
+scope limit (4) for the tags it rewrites (unit-pinned end-to-end: a padded
+tag still yields the full `[E, Exception]` chain).
+
+**Flip-probe re-run (same env-gated hop-skip method, reverted after):**
+the four census probes that previously died 4/4 SIGSEGV in
+`remove_exceptions` now verify **4/4 `VERIFICATION SUCCESSFUL` with
+`clang_cpp_adjust` skipped entirely** — the accumulated pass (B.1 source
+resolution + S1 type completion + S2 literals + type-symbol pre-pass +
+exception ids) is already a sufficient resolver for simple programs, and
+the `python_irep2_adjust_nested_attr` fixture case also passes hop-off.
+Harder exception tests still fail hop-off (`except_tuple_types` FAILED:
+catch-side hierarchy matching needs the `"bases"` carriage — blocker 2;
+`try_except_else` retains one exit-invariant survivor), which is the point:
+**blockers 2–5 are now empirically measurable**, and the hop-off run of the
+exception suite is the natural work-list generator for them.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
