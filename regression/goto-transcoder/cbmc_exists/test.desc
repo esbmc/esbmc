@@ -1,0 +1,4 @@
+CORE
+cbmc_exists.goto
+--binary
+^VERIFICATION SUCCESSFUL$
