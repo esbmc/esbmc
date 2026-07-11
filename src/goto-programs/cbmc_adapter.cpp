@@ -218,6 +218,46 @@ void fix_expression(irept &irep)
     }
   }
 
+  if (irep.id() == "find_first_set")
+  {
+    // CBMC lowers __builtin_ffs/ffsl/ffsll to a find_first_set irep, which
+    // migrate_expr has no handler for (it aborts with "migrate expr failed").
+    // find_first_set(x) is the 1-based index of the least-significant set bit,
+    // or 0 when x is zero -- exactly __builtin_ffs. ESBMC's native path does not
+    // model ffs at all, so, as with clz/ctz above, reproduce it here in terms of
+    // ids migrate_expr already lowers rather than adding an irep2 node:
+    //   ffs(x) = (x == 0) ? 0 : popcount(~x & (x - 1)) + 1
+    // The popcount term is exactly ctz(x) (see the count_trailing_zeros rewrite
+    // above); the x == 0 guard is load-bearing because ~0 & (0 - 1) is all-ones,
+    // whose popcount is the width, not 0. Scoped to the CBMC --binary path, so it
+    // never perturbs native handling (which never emits find_first_set).
+    const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept optype = operand.find("type"); // operand's bitvector type
+    const irept restype = irep.find("type");   // int result type (signedbv/32)
+
+    // ctz(x) = popcount(~x & (x - 1)), reusing the trailing-zeros formula.
+    irept ctz_arg = mk_binary(
+      "bitand",
+      optype,
+      mk_unary("bitnot", optype, operand),
+      mk_binary("-", optype, operand, mk_bv_const(optype, 1)));
+    irept popcount("popcount");
+    popcount.add("type") = restype; // migrate forces int32; kept well-formed
+    popcount.get_sub().push_back(ctz_arg);
+
+    // ctz(x) + 1, then guard the zero input: (x == 0) ? 0 : ctz(x) + 1.
+    irept ctz_plus1 =
+      mk_binary("+", restype, popcount, mk_bv_const(restype, 1));
+    irept bool_ty("bool");
+    irept is_zero = mk_binary("=", bool_ty, operand, mk_bv_const(optype, 0));
+
+    irep.id("if");
+    irep.get_sub().clear();
+    irep.get_sub().push_back(is_zero);
+    irep.get_sub().push_back(mk_bv_const(restype, 0));
+    irep.get_sub().push_back(ctz_plus1);
+  }
+
   if (irep.id() == "sign" && irep.find("type").id() == "bool")
   {
     // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
@@ -734,6 +774,30 @@ irept build_fma_rhs(const irept &lhs, const irept::subt &args)
   return result;
 }
 
+// __builtin_nan("")/__builtin_nanf("") construct a quiet NaN. CBMC's own
+// <builtin-library-__builtin_nan> body returns floatbv_div(0, 0, rounding_mode),
+// i.e. 0.0/0.0, so mirror that exactly: ieee_div of two +0.0 constants of the
+// result's float type. The NaN-payload string argument is ignored -- it does not
+// affect NaN-ness, and ESBMC's own C frontend likewise folds __builtin_nan to a
+// constant NaN without dereferencing it. ieee_div is in fix_expression's
+// operand-wrap set and defaults its rounding mode like the rest of the ieee_*
+// family. Restricted to double/float: CBMC 6.5.0 does not model __builtin_nanl
+// as a NaN (its result compares equal to itself, so x != x is FALSE), so nanl is
+// deliberately left as a bodyless external -- whose nondet return already yields
+// the same FAILED verdict CBMC gives -- to preserve verdict parity.
+irept build_nan_rhs(const irept &lhs)
+{
+  const irept ftype = lhs.find("type");
+  irept zero(irep_idt("constant"));
+  zero.add("type") = ftype;
+  zero.add("value") = mk("0"); // hex 0 -> +0.0 after width-aware conversion
+  irept result(irep_idt("ieee_div"));
+  result.add("type") = ftype;
+  result.get_sub().push_back(zero);
+  result.get_sub().push_back(zero);
+  return result;
+}
+
 // __builtin_huge_val{,f,l} / __builtin_inf{,f,l} construct positive infinity.
 // CBMC's <builtin-library-*> bodies return it, but the bodies do not survive the
 // reader/adapter (their flattened floatbv nodes have no migrate handler), so
@@ -788,6 +852,30 @@ bool fix_builtin_call(irept &code)
     return false;
 
   const std::string callee = sub[1].find("identifier").id_string();
+
+  // memcpy/memset/memmove: CBMC inlines a <builtin-library-*> body that performs
+  // the copy via ARRAY_COPY/ARRAY_REPLACE/ARRAY_SET OTHER-instructions, which
+  // ESBMC's symex has no handler for and silently skips -- so the copy never
+  // happens and a post-copy read of the destination reports a false FAILED.
+  // Rather than teach symex those array ops, retarget the call to ESBMC's own
+  // well-tested memory intrinsic: symex dispatches any c:@F@__ESBMC* call to
+  // run_intrinsic purely by callee name (symex_main.cpp), so only the function
+  // symbol's identifier needs to change -- the 3-argument signature (dst/src/n,
+  // s/c/n) already matches intrinsic_memcpy/memset/memmove, and the lhs may be
+  // nil (the return value is often discarded). The instruction stays a
+  // FUNCTION_CALL, so return false: the caller then keeps CBMC's original
+  // FUNCTION_CALL instruction type rather than forcing it to ASSIGN.
+  static const std::unordered_map<std::string, const char *> mem_intrinsics = {
+    {"memcpy", "c:@F@__ESBMC_memcpy"},
+    {"memset", "c:@F@__ESBMC_memset"},
+    {"memmove", "c:@F@__ESBMC_memmove"}};
+  auto mem_it = mem_intrinsics.find(callee);
+  if (mem_it != mem_intrinsics.end())
+  {
+    code.get_sub()[1].set("identifier", mem_it->second);
+    return false;
+  }
+
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
@@ -829,6 +917,8 @@ bool fix_builtin_call(irept &code)
     rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
   else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
     rhs = build_fma_rhs(lhs, args);
+  else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
+    rhs = build_nan_rhs(lhs);
   else if (
     callee == "__builtin_huge_val" || callee == "__builtin_huge_valf" ||
     callee == "__builtin_huge_vall" || callee == "__builtin_inf" ||

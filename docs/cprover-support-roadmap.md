@@ -100,6 +100,9 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
+| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
@@ -295,6 +298,21 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
 
+**Find-first-set builtin `find_first_set` — ✅ landed.** `__builtin_ffs`/`ffsl`/`ffsll`
+lower to a CBMC `find_first_set` irep — the 1-based index of the least-significant set bit,
+or 0 when the argument is zero — which `migrate_expr` has *no* handler for (aborts with
+`migrate expr failed`), and, like `clz`/`ctz`, ESBMC has no `ffs` irep2 node and its native
+path does not model `__builtin_ffs` at all. Rather than add a node, `fix_expression`
+reproduces it from ids `migrate_expr` already lowers: `ffs(x) = (x == 0) ? 0 :
+popcount(~x & (x − 1)) + 1`, where the `popcount(~x & (x − 1))` term is exactly the `ctz(x)`
+formula reused from the `count_trailing_zeros` rewrite above. The `x == 0` guard is
+load-bearing — `~0 & (0 − 1)` is all-ones, whose popcount is the type *width*, not 0 — so
+without it `ffs(0)` would wrongly be `width + 1`. Scoped to the `--binary` path, so it cannot
+perturb native handling (which never emits `find_first_set`). Verdict parity with CBMC,
+dual-solver (Bitwuzla + Z3), across a 32-bit value, the zero-input guard, and a 64-bit
+`ffsll` operand (`cbmc_ffs` SUCCESSFUL), plus an off-by-one negative that confirms the value
+is really computed, not vacuously passed (`cbmc_ffs_fail`: `ffs(0x100) == 8` FAILED where the
+true answer is 9).
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/
 `overflow--`/`overflow-*` predicate ireps (distinct from `overflow_result-<op>`, which returns
@@ -567,6 +585,45 @@ forms `migrate_expr` computes concretely: `nearbyint`/`nearbyintf`/`nearbyintl` 
 `c:@__ESBMC_rounding_mode` like `ieee_sqrt`. `build_sqrt_rhs` was generalised to
 `build_unary_fp_rhs(lhs, args, id)` (shared by sqrt, nearbyint, and abs) and `ieee_fma` added
 to the operand-wrap set. Tests `cbmc_nearbyint`/`cbmc_fma` (+ `_fail`), all dyadic values.
+
+**`memcpy` / `memset` / `memmove` — ✅ landed.** Distinct from the value-returning builtins above:
+CBMC inlines a `<builtin-library-memcpy>` (etc.) body that performs the copy via `ARRAY_COPY` /
+`ARRAY_REPLACE` (memset: `ARRAY_SET`) — CBMC `OTHER` instructions carrying `array_copy` /
+`array_replace` / `array_set` codet statements that **ESBMC's symex has no handler for and silently
+skips**, so the copy never happens and any read of the destination after the call reports a false
+`FAILED` (`char d[4]; memcpy(d, "abc", 4); assert(d[0]=='a')` failed where CBMC says `SUCCESSFUL`).
+Rather than teach symex those array ops, `fix_builtin_call` **retargets** the call to ESBMC's own
+well-tested memory intrinsic — `memcpy` → `c:@F@__ESBMC_memcpy`, `memset` → `c:@F@__ESBMC_memset`,
+`memmove` → `c:@F@__ESBMC_memmove` — by rewriting only the callee symbol's identifier: symex
+dispatches any `c:@F@__ESBMC*` call to `run_intrinsic` purely by name (`symex_main.cpp`), the
+3-argument signature already matches, and a nil lhs (discarded return) is fine, so the instruction
+stays a `FUNCTION_CALL` (the adapter returns `false`, leaving CBMC's original instruction type).
+`intrinsic_memcpy`/`memmove`/`memset` compute a constant-size copy directly but **bump to the
+`__memcpy_impl`/`__memmove_impl`/`__memset_impl` byte-loop bodies** when the size or pointers are
+symbolic (and, for memmove, when the regions overlap); those bodies live in ESBMC's `string.c`
+operational model and are **not** in a CBMC binary, so the additions boilerplate
+(`synthesize_cprover_additions`) now also references `memcpy`/`memmove`/`memset`, force-linking
+them. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_memcpy` (full 4-byte copy),
+`cbmc_memset` (fill), `cbmc_memmove` (overlapping `memmove(a+1, a, 4)`), all `SUCCESSFUL`, and
+`cbmc_memcpy_fail` (`dst[0] == 'z'` after copying `'a'`) `FAILED`. A symbolic-size copy verifies to
+CBMC's verdict too, but takes the byte-loop path and so needs an `--unwind` bound like any other
+symbolic-length loop — unchanged from ESBMC's native `memcpy` semantics.
+**`__builtin_nan` / `__builtin_nanf` — ✅ landed.** CBMC provides a bodied
+`<builtin-library-__builtin_nan>` model that returns `floatbv_div(0, 0, __CPROVER_rounding_mode)`
+(i.e. `0.0/0.0`, a quiet NaN), but that body does not survive the reader/adapter (its
+`floatbv_div` flattened-IEEE node has no `migrate_expr` handler), so the function reaches symex
+as a **bodyless external returning nondet** — and `double d = __builtin_nan(""); assert(d != d)`
+reported a false `FAILED` (nondet `d` may equal itself) where CBMC says `SUCCESSFUL`. `fix_builtin_call`
+now rewrites the call into `lhs = ieee_div(0.0, 0.0)` — mirroring CBMC's own body exactly, using an
+id already in the operand-wrap set that migrates and defaults its rounding mode like the rest of the
+`ieee_*` family. The NaN-payload string argument is ignored (it does not affect NaN-ness, and ESBMC's
+own C frontend likewise folds `__builtin_nan` to a constant NaN without dereferencing it).
+Deliberately restricted to `double`/`float`: **CBMC 6.5.0 does not model `__builtin_nanl` as a NaN**
+(its result compares equal to itself, so `x != x` is `FALSE` — CBMC itself reports `FAILED`), so
+`nanl` is left as a bodyless external, whose nondet return already yields the same `FAILED` verdict,
+preserving parity rather than manufacturing a divergence. Verdict parity with CBMC, dual-solver
+(Bitwuzla + Z3): `cbmc_nan` (`d != d` and `f != f` both SUCCESSFUL) and `cbmc_nan_fail`
+(`d == 0.0` FAILED — a NaN equals nothing, confirming a real NaN, not just an unconstrained value).
 
 **`__builtin_huge_val{,f,l}` / `__builtin_inf{,f,l}` — ✅ landed.** CBMC provides bodied
 `<builtin-library-*>` models for these positive-infinity builtins, but the bodies do not survive
