@@ -5048,6 +5048,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // A list passed to a callee may be mutated there (e.g. appended to), which
+    // the caller's static length tracking does not observe. Mark the symbol so
+    // later constant-index accesses fall back to the runtime bounds check
+    // instead of a stale convert-time IndexError (GitHub #5991). Marking a
+    // non-list symbol is harmless -- the flag is only read on the list
+    // constant-index path.
+    if (arg.is_symbol())
+      converter_.mark_list_call_escaped(arg.identifier().as_string());
+
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
