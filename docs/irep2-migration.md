@@ -4096,6 +4096,39 @@ Honouring `adjust()`'s error return (prereq 6) should land with the F-A3
 fix so detected inconsistencies degrade to a clean frontend error instead
 of a symex crash.
 
+#### F-A1 drill, round 1 (2026-07-11) — negative results that reshape the fix
+
+Drilling `builtin2` (`chr`/`ord` round-trip) hop-off with throw-site
+instrumentation produced three load-bearing negative results:
+
+1. **The throw is `empty_type2t::get_width`, not `symbol_type2t`'s** — the
+   exception class is shared, and the F-A1 family name ("unresolved symbol
+   type") was wrong in the specific: the surviving type is *empty*, not
+   by-name. All four `get_width` throw sites raise the same
+   `symbolic_type_excp`.
+2. **Bodies are clean at adjust time.** An instrumented walk over every
+   node the pass visits found no empty-typed *expression* (only code
+   statements, which are legitimately typeless). The empty-typed expression
+   that reaches `get_width` is therefore **introduced downstream of the
+   pass** — during goto-convert or symex — so no `python_adjust` arm can
+   fix F-A1 directly, and a speculative empty-symbol re-type arm written
+   during the drill was discarded unproven (C-Live discipline).
+3. **The observable GOTO delta for `builtin2` is narrow**: hop-on carries
+   legacy `adjust_expr_rel`'s integer promotions in the return expression
+   (`(signed int)(back_to_char[0]) == 65`); hop-off compares the raw
+   `char`-typed accesses. Both shapes are IREP2-legal (same-type operands),
+   so the promotions themselves are unlikely to be the crash cause — but
+   they are the only body difference, so the crash path runs through how
+   symex/goto-convert consume the unpromoted form (suspect: the
+   `char[0]`-typed string variable's zero-size array meeting the return
+   binding of `__python_chr`'s `char*`).
+
+**Next probe (round 2):** instrument the *consumer* — catch
+`symbolic_type_excp` at its symex/goto-convert call frames (or log the
+expression being widthed) to name the constructing site, rather than
+walking the pass's view again. The fix will live where that node is built,
+not in `python_adjust`.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
