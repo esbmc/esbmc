@@ -20,6 +20,6 @@ __ESBMC_assume(-1000.0 <= b <= 1000.0)
 
 z: complex = complex(a, b)
 
-assert cmath.isfinite(z)        # E1
-assert not cmath.isnan(z)       # E2
-assert not cmath.isinf(z)       # E3
+assert cmath.isfinite(z)  # E1
+assert not cmath.isnan(z)  # E2
+assert not cmath.isinf(z)  # E3

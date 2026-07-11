@@ -9,4 +9,4 @@ import cmath
 
 z: complex = complex(3.0, 4.0)
 
-assert abs(z) == 4.0        # F1 — falsifiable (modulus is 5.0)
+assert abs(z) == 4.0  # F1 — falsifiable (modulus is 5.0)
