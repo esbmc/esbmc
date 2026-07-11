@@ -3773,9 +3773,21 @@ dual-solver (Bitwuzla + Z3) verdicts unchanged; exception-heavy regressions
 (`try_except_else{,_fail}`, `except_tuple_types{,_fail}`,
 `list_index_valueerror{,_fail}`, `slice_step_zero_valueerror`) hold identical
 verdicts flag-on vs flag-off (the eager retype does not disturb cpp-throw
-catch matching); 76/76 fixture + acceptance families; 24/24 unit tests. The
-flag-on pipeline is exit-invariant-clean for the first time — the B.5 flip's
-hard-fail risk from Finding 2 is retired.
+catch matching); 76/76 fixture + acceptance families; 27/27 unit tests. The
+exit invariant additionally flags a *resolved*-struct literal whose operand
+count disagrees with its component list (`constant_struct2t`'s constructor
+asserts only the type kind, so that mismatch would otherwise reach symex
+silently). The flag-on pipeline is exit-invariant-clean for the first time —
+the B.5 flip's hard-fail risk from Finding 2 is retired.
+
+**Flip note (S6 prerequisite, alongside the type-symbol pre-pass above):**
+cpp-throw catch matching is safe under S2 only because exception ids are
+derived *upstream* — `clang_cpp_adjust::convert_exception_id` builds
+`code_cpp_throw2t`'s `exception_list` from the thrown *symbol* type's
+identifier (`substr(4)` off the `tag-` name) before this pass runs. Once the
+flip removes the `clang_cpp_adjust` hop, that derivation must be re-homed
+(either into `python_adjust` before the eager literal retype, or taught to
+read the resolved `struct_type2t::name`).
 
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
