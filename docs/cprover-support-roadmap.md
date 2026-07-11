@@ -100,6 +100,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -566,6 +567,21 @@ forms `migrate_expr` computes concretely: `nearbyint`/`nearbyintf`/`nearbyintl` 
 `c:@__ESBMC_rounding_mode` like `ieee_sqrt`. `build_sqrt_rhs` was generalised to
 `build_unary_fp_rhs(lhs, args, id)` (shared by sqrt, nearbyint, and abs) and `ieee_fma` added
 to the operand-wrap set. Tests `cbmc_nearbyint`/`cbmc_fma` (+ `_fail`), all dyadic values.
+
+**`__builtin_huge_val{,f,l}` / `__builtin_inf{,f,l}` — ✅ landed.** CBMC provides bodied
+`<builtin-library-*>` models for these positive-infinity builtins, but the bodies do not survive
+the reader/adapter (their flattened `floatbv` nodes have no `migrate_expr` handler), so each reaches
+symex as a **bodyless external returning nondet** — and `double d = __builtin_huge_val(); assert(d > 1e30)`
+reported a false `FAILED` where CBMC says `SUCCESSFUL`. `fix_builtin_call` now rewrites the call into a
+direct +∞ `floatbv` **constant** — sign 0, exponent all ones, mantissa 0 — emitted as the full-width
+binary bit pattern (`fix_expression`'s constant branch leaves an already-width-length string
+unchanged), so it is correct for **every** width including the 128-bit `long double` (binary128),
+unlike a 64-bit literal. Unlike `nanl` (§4.4, which CBMC does *not* model as a NaN), CBMC models the
+long-double `huge_vall`/`infl` as genuine +∞, so those are handled too. `__builtin_inf` (double, no
+suffix) is folded to a constant by CBMC and never reaches the adapter as a call — it is matched for
+uniformity and is harmless. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_inf` pins the
+result to +∞ precisely via `x > 0 && x == x + 1` (the only finite-rejecting, sign-checking identity)
+across `double`/`float`/`long double`, and `cbmc_inf_fail` (`d == 0.0` ⇒ FAILED).
 
 **Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, `alloca`/`__builtin_alloca`, `free`,
 `fabsf`/`fabs`/`fabsl`, `realloc`, `nearbyint`, and `fma` are recognised — the
