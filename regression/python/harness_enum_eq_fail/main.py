@@ -14,4 +14,4 @@ class Color(Enum):
     GREEN = 2
 
 
-assert Color.RED == Color.GREEN     # F1 — falsifiable (distinct members)
+assert Color.RED == Color.GREEN  # F1 — falsifiable (distinct members)

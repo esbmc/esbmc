@@ -20,12 +20,12 @@ class Color(Enum):
     BLUE = 3
 
 
-assert Color.RED == Color.RED                       # E1
-assert not (Color.RED != Color.RED)                 # E1
-assert Color.RED != Color.GREEN                     # E2
-assert not (Color.RED == Color.GREEN)               # E2
-assert (Color.RED != Color.BLUE) == (not (Color.RED == Color.BLUE))   # E3
+assert Color.RED == Color.RED  # E1
+assert not (Color.RED != Color.RED)  # E1
+assert Color.RED != Color.GREEN  # E2
+assert not (Color.RED == Color.GREEN)  # E2
+assert (Color.RED != Color.BLUE) == (not (Color.RED == Color.BLUE))  # E3
 
-assert Color.RED.value == 1                         # E4
-assert Color.GREEN.value == 2                       # E4
-assert Color.BLUE.value == 3                        # E4
+assert Color.RED.value == 1  # E4
+assert Color.GREEN.value == 2  # E4
+assert Color.BLUE.value == 3  # E4
