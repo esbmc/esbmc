@@ -7,4 +7,4 @@
 #   F1: np.sum([1, 2, 3]) == 7.  The sum is 6.
 import numpy as np
 
-assert np.sum([1, 2, 3]) == 7       # F1 — falsifiable (sum is 6)
+assert np.sum([1, 2, 3]) == 7  # F1 — falsifiable (sum is 6)
