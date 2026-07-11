@@ -21,8 +21,8 @@ q.put(a)
 q.put(b)
 q.put(c)
 
-assert q.qsize() == 3        # E1
-assert q.get() == c          # E2
-assert q.get() == b          # E2
-assert q.get() == a          # E2
-assert q.empty()             # E3
+assert q.qsize() == 3  # E1
+assert q.get() == c  # E2
+assert q.get() == b  # E2
+assert q.get() == a  # E2
+assert q.empty()  # E3

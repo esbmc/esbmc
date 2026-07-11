@@ -17,20 +17,20 @@ from queue import Queue
 a: int = nondet_int()
 b: int = nondet_int()
 
-q: Queue = Queue(2)          # maxsize == 2
+q: Queue = Queue(2)  # maxsize == 2
 
-assert q.empty()             # E1
-assert not q.full()          # E1
+assert q.empty()  # E1
+assert not q.full()  # E1
 
 q.put(a)
-assert not q.empty()         # E2
-assert q.qsize() == 1        # E2
-assert not q.full()          # E2
+assert not q.empty()  # E2
+assert q.qsize() == 1  # E2
+assert not q.full()  # E2
 
 q.put(b)
-assert q.full()              # E3 (qsize 2 >= maxsize 2)
-assert q.qsize() == 2        # E3
+assert q.full()  # E3 (qsize 2 >= maxsize 2)
+assert q.qsize() == 2  # E3
 
 x: int = q.get()
-assert not q.full()          # E4
-assert not q.empty()         # E4
+assert not q.full()  # E4
+assert not q.empty()  # E4

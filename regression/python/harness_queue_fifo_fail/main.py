@@ -18,4 +18,4 @@ q: Queue = Queue()
 q.put(a)
 q.put(b)
 
-assert q.get() == b          # F1 — falsifiable (FIFO returns a first)
+assert q.get() == b  # F1 — falsifiable (FIFO returns a first)
