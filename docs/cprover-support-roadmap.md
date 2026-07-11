@@ -100,6 +100,7 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
@@ -584,6 +585,28 @@ forms `migrate_expr` computes concretely: `nearbyint`/`nearbyintf`/`nearbyintl` 
 `build_unary_fp_rhs(lhs, args, id)` (shared by sqrt, nearbyint, and abs) and `ieee_fma` added
 to the operand-wrap set. Tests `cbmc_nearbyint`/`cbmc_fma` (+ `_fail`), all dyadic values.
 
+**`memcpy` / `memset` / `memmove` — ✅ landed.** Distinct from the value-returning builtins above:
+CBMC inlines a `<builtin-library-memcpy>` (etc.) body that performs the copy via `ARRAY_COPY` /
+`ARRAY_REPLACE` (memset: `ARRAY_SET`) — CBMC `OTHER` instructions carrying `array_copy` /
+`array_replace` / `array_set` codet statements that **ESBMC's symex has no handler for and silently
+skips**, so the copy never happens and any read of the destination after the call reports a false
+`FAILED` (`char d[4]; memcpy(d, "abc", 4); assert(d[0]=='a')` failed where CBMC says `SUCCESSFUL`).
+Rather than teach symex those array ops, `fix_builtin_call` **retargets** the call to ESBMC's own
+well-tested memory intrinsic — `memcpy` → `c:@F@__ESBMC_memcpy`, `memset` → `c:@F@__ESBMC_memset`,
+`memmove` → `c:@F@__ESBMC_memmove` — by rewriting only the callee symbol's identifier: symex
+dispatches any `c:@F@__ESBMC*` call to `run_intrinsic` purely by name (`symex_main.cpp`), the
+3-argument signature already matches, and a nil lhs (discarded return) is fine, so the instruction
+stays a `FUNCTION_CALL` (the adapter returns `false`, leaving CBMC's original instruction type).
+`intrinsic_memcpy`/`memmove`/`memset` compute a constant-size copy directly but **bump to the
+`__memcpy_impl`/`__memmove_impl`/`__memset_impl` byte-loop bodies** when the size or pointers are
+symbolic (and, for memmove, when the regions overlap); those bodies live in ESBMC's `string.c`
+operational model and are **not** in a CBMC binary, so the additions boilerplate
+(`synthesize_cprover_additions`) now also references `memcpy`/`memmove`/`memset`, force-linking
+them. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_memcpy` (full 4-byte copy),
+`cbmc_memset` (fill), `cbmc_memmove` (overlapping `memmove(a+1, a, 4)`), all `SUCCESSFUL`, and
+`cbmc_memcpy_fail` (`dst[0] == 'z'` after copying `'a'`) `FAILED`. A symbolic-size copy verifies to
+CBMC's verdict too, but takes the byte-loop path and so needs an `--unwind` bound like any other
+symbolic-length loop — unchanged from ESBMC's native `memcpy` semantics.
 **`__builtin_nan` / `__builtin_nanf` — ✅ landed.** CBMC provides a bodied
 `<builtin-library-__builtin_nan>` model that returns `floatbv_div(0, 0, __CPROVER_rounding_mode)`
 (i.e. `0.0/0.0`, a quiet NaN), but that body does not survive the reader/adapter (its
