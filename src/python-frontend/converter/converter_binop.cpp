@@ -536,13 +536,6 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
-inline bool is_ieee_op(const exprt &expr)
-{
-  const std::string &id = expr.id().as_string();
-  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
-         id == "ieee_div";
-}
-
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
@@ -1599,9 +1592,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     return math_handler_.handle_int_modulo(lhs, rhs, bin_expr);
 
-  // Promote operands for IEEE operations
-  promote_ieee_operands(bin_expr, lhs, rhs);
-
   // Handle chained comparisons
   if (element.contains("comparators") && element["comparators"].size() > 1)
     return handle_chained_comparisons_logic(element, bin_expr);
@@ -2454,6 +2444,39 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
+
+  // S4 width reconciliation (docs/irep2-migration.md, "Call-rewrite
+  // outcome"): complete the int/float and float/float-width mixes the arms
+  // below do not cover — today clang_cpp_adjust's
+  // adjust_expr_binary_arithmetic inserts these casts post-hoc, and after
+  // the B.5 flip nothing would. Mirrors the C usual arithmetic conversions
+  // for the shapes Python emits (CPython semantics agree): the integer side
+  // converts to the float type, the narrower float widens to the wider.
+  // Bitwise operands were already coerced to int above, so no float reaches
+  // a bitwise op; bv/bv mixes keep the existing converter rules below. On
+  // the live pipeline the legacy pass re-derives the same common type and
+  // becomes a no-op on the pre-reconciled operands (A/B byte-parity gated).
+  {
+    const bool lhs_float = lhs.type().is_floatbv();
+    const bool rhs_float = rhs.type().is_floatbv();
+    if (lhs_float && is_bv_or_bool(rhs.type()))
+      rhs = typecast_exprt(rhs, lhs.type());
+    else if (rhs_float && is_bv_or_bool(lhs.type()))
+      lhs = typecast_exprt(lhs, rhs.type());
+    else if (lhs_float && rhs_float && lhs.type() != rhs.type())
+    {
+      // Distinct float types always differ in width today (the frontend
+      // emits IEEE float16/32/64 only); an equal-width different-format
+      // pair (e.g. a future bfloat16) would fall through unreconciled.
+      const unsigned lw = bit_width(lhs.type());
+      const unsigned rw = bit_width(rhs.type());
+      if (lw < rw)
+        lhs = typecast_exprt(lhs, rhs.type());
+      else if (rw < lw)
+        rhs = typecast_exprt(rhs, lhs.type());
+    }
+  }
+
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2535,18 +2558,3 @@ exprt python_converter::build_binary_expression(
   return bin_expr;
 }
 
-void python_converter::promote_ieee_operands(
-  exprt &bin_expr,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  if (!is_ieee_op(bin_expr))
-    return;
-
-  const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-
-  if (!lhs.type().is_floatbv())
-    bin_expr.op0() = typecast_exprt(lhs, target_type);
-  if (!rhs.type().is_floatbv())
-    bin_expr.op1() = typecast_exprt(rhs, target_type);
-}

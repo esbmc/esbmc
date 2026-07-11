@@ -3991,6 +3991,48 @@ S4 lives converter-side in `build_binary_expression`; the lambda body is
 the first concrete reproducer for it. That is the next work item, with the
 flag-off GOTO-byte A/B gate the census prescribed.
 
+#### S4 outcome (2026-07-11) — int/float reconciliation landed converter-side; the diverse hop-off sweep is 10/10 green
+
+The gap was narrower than the census framed it: `build_binary_expression`
+already normalises bv/bv width mixes (both the non-relational max-width
+rule and the relational common-width rule) — what it never reconciled was
+the **int/float mix and the float/float width mix**, exactly the casts
+`adjust_expr_binary_arithmetic` inserts post-hoc today. A 30-line block
+after the bitwise int-coercion completes them at construction: the integer
+side converts to the float type, the narrower float widens to the wider (C
+usual arithmetic conversions; CPython agrees for the shapes Python emits).
+The #5581 sub-`int` hazard does not arise — the block deliberately avoids
+`c_implicit_typecast_arithmetic` and its promotion floor, casting directly
+to the float operand's type.
+
+**Gates:** GOTO-byte A/B **byte-identical** vs base on both an
+`int * float` program and the `lambda_default_arg` test (the legacy pass
+re-derives the same casts and becomes a no-op — the census's idempotence
+prediction confirmed); 203/203 div/mod/pow/mult/compare/int8/dtype +
+326/326 math/gamma/round/float/lambda + 76/76 fixture.
+
+**Review outcomes folded in:** `promote_ieee_operands` became provably
+dead under the new block (the reconciliation runs on the same mutated
+operand references before any ieee id is picked) and was **removed** —
+the A/B dump stayed byte-identical to the original base with the removal
+in, which is the empirical C-Dead discharge; `try_resolve_constant_double`
+now peels typecasts over constants so `7 // 2.0`-style folds survive the
+new casts (the F2 model-size regression); the float32-Div parity question
+(F1) is **moot today** — `np.float32` scalars cannot reach the general
+binop path (unsupported constructor; numpy array ops promote in
+`numpy_call_expr`'s own rank table), recorded here in case that changes;
+an equal-width different-format float pair (a future bfloat16) would fall
+through unreconciled — commented at the site (F3).
+
+**Hop-off:** `lambda_default_arg` — the S4 reproducer — now
+**`VERIFICATION SUCCESSFUL` under Bitwuzla and Z3** with
+`clang_cpp_adjust` skipped, and a 10-test diverse sweep (exceptions,
+finally, lambdas, dicts, dunders, strings, f-strings, list ops) is **10/10
+SUCCESSFUL**. Every named flip blocker with a known reproducer is now
+discharged. **Next: the S6 flip-readiness census** — run the *full*
+`regression/python` suite hop-off (the RV2-shaped gate) to enumerate
+whatever long tail remains before the flip itself can be attempted.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
