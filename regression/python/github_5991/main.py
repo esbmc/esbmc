@@ -12,4 +12,4 @@ my_push(h, 1)
 
 assert len(h) == 4
 assert h[0] == 2
-assert h[3] == 1        # the appended element — previously a spurious IndexError
+assert h[3] == 1  # the appended element — previously a spurious IndexError
