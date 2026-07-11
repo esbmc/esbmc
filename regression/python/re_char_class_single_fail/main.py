@@ -6,4 +6,4 @@
 # non-deterministic result for the unrecognised "[a-z]" pattern.
 import re
 
-assert re.match("[a-z]", "H")       # falsifiable — 'H' is not in [a-z]
+assert re.match("[a-z]", "H")  # falsifiable — 'H' is not in [a-z]
