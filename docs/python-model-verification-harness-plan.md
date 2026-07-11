@@ -1,10 +1,11 @@
 # Plan: extend verification-harness coverage of the Python operational models
 
-**Status:** PROPOSED
-**Date:** 2026-07-10
+**Status:** EXECUTED — Tiers 1–3 complete (see §9); all surfaced model gaps
+resolved (see §10). `torch` intentionally deferred.
+**Date:** 2026-07-10 (proposal); 2026-07-11 (execution)
 **Related:** PR #5958 (math ints / int / builtins / nondet), PR #5961 (random /
 collections / gamma-remainder), PR #5963 (gamma/lgamma wrong-π model fix). This
-plan continues the same effort.
+plan continues the same effort; the per-model harness PRs are listed in §9.
 **Scope:** the operational models under `src/python-frontend/models/**`. The
 Python *preprocessor* (`src/python-frontend/preprocessor/**`, `parser/**`) runs
 on CPython and is not ESBMC-verifiable; it is exercised indirectly by the whole
@@ -217,3 +218,53 @@ research spikes rather than routine harness work.
   vacuously (precondition too tight, or asserting a tautology) adds no coverage.
   Every positive harness must have a `_fail` sibling or a concrete anchor that
   demonstrably exercises the model.
+
+## 9. Execution log (2026-07-11)
+
+All three tiers were executed as a sequence of small, per-model PRs. Each PR
+carries a positive harness plus at least one `_fail`, follows §2, and was
+verified individually (the shared dev box is contended, so parallel local ctest
+runs can spuriously time out — see §8).
+
+| Tier | Model | PR | Notes |
+|---|---|---|---|
+| 1 | heapq | #5965 | min-heap invariant; int-only; symbolic heappush + post-append index hit a list-model IndexError (avoided, worth a separate fix) |
+| 1 | queue | #5966 | FIFO/LIFO order, empty/full — nondet payloads |
+| 1 | float | #5968 | `is_integer`; chained `float(n).is_integer()` mis-lowers, split via a local |
+| 1 | string | #5969 | constants via indexing; high-unwind `len`/`in` hangs the runner |
+| 1 | enum | #5970 | value equality; concrete-only (symbolic member select unsupported) |
+| 2 | exceptions | #5971 | nondet dispatch, hierarchy, message survival |
+| 2 | decimal | #5972 | algebraic identities; concrete-only (`Decimal()` rejects nondet) |
+| 2 | datetime/time/os | #5973 | field defaults, `sleep` guard, `listdir` |
+| 2 | dataclasses | #5976 | preprocessor `@dataclass` synthesis (init/eq/default/replace) |
+| 3 | cmath | #5977 | modulus non-negativity + perfect-square anchors; `abs(z)**2==re**2+im**2` is NOT sound in IEEE-754 (falsified by ESBMC) |
+| 3 | re | #5981 | literal match/search/fullmatch; char-class patterns return an unconstrained bool (model gap) |
+| 3 | threading | #5983 | Lock mutual exclusion; requires `--data-races-check` or the proof is vacuous |
+| 3 | numpy | #5984 | concrete array/reduce/scalar-math; `np.add` unsupported, `np.sum` constants-only |
+
+**Audited and skipped.** `typing` — pure type-alias stubs, no runtime surface.
+`consensus` — trivial `hash()==42`, negligible value.
+
+**Deferred.** `torch` — heaviest tensor model, and like numpy it has no nondet
+surface, so it adds nothing beyond what numpy already demonstrates.
+
+## 10. Model gaps surfaced — all resolved
+
+The harness effort surfaced three suspected model gaps; each was root-caused and
+closed:
+
+- **`re` character-class patterns returning an unconstrained bool** (#5981) —
+  **fixed in PR #5986.** A bare `[x-y]` class (no quantifier) fell through to the
+  matcher's non-deterministic fallback; `try_match_char_class_range` and
+  `search()` now recognise it.
+- **`time.time()` `global` counter stalls the converter** (#5973) — **was a
+  misdiagnosis, not a bug** (PR #5987). `time.time()` verifies correctly; the
+  apparent stall was shared-machine CPU contention. The monotonicity coverage
+  the misdiagnosis had blocked was added instead.
+- **`heapq`/list-model IndexError on `heappush`/post-append indexing** (#5965) —
+  **fixed in PR #5997.** Root cause was general (not heapq-specific): the
+  convert-time constant-index bounds check used the caller's static list length,
+  blind to a mutation performed through a function argument. Lists that escape
+  into a call now fall back to the runtime bounds check. Follow-up PR #6000
+  makes non-negative out-of-bounds reads raise a catchable `IndexError`,
+  matching CPython.
