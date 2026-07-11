@@ -210,6 +210,14 @@ std::string type_handler::get_python_type_name(const typet &t) const
     return "int";
   if ((t.is_array() || t.is_pointer()) && t.subtype() == char_type())
     return "str";
+
+  // Internal model aggregates know their Python kind; without this a tuple
+  // would be named by its struct tag (GitHub #5936).
+  const typet resolved = (t.id() == "symbol") ? converter_.ns.follow(t) : t;
+  const irep_idt kind = python_aggregate_kind(resolved);
+  if (kind == "tuple" || kind == "dict")
+    return kind.as_string();
+
   if (t.id() == "symbol")
   {
     std::string tag = t.get_string("identifier");

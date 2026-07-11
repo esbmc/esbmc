@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cmath>
 #include <functional>
+#include <unordered_set>
 
 static double round_ties_to_even_consteval(const double value)
 {
@@ -307,16 +308,206 @@ std::optional<PyConstValue> python_consteval::try_eval_call(
   return PyConstValue::make_none();
 }
 
+// A seeded container is a snapshot; if any element is itself mutable, code
+// like `m = l[0]` hands out a live reference the alias scan below cannot
+// see, so only containers of recursively immutable elements are seedable.
+static bool is_recursively_immutable(const PyConstValue &v)
+{
+  switch (v.kind)
+  {
+  case PyConstValue::NONE:
+  case PyConstValue::BOOL:
+  case PyConstValue::INT:
+  case PyConstValue::FLOAT:
+  case PyConstValue::STRING:
+    return true;
+  case PyConstValue::LIST:
+    return false;
+  case PyConstValue::TUPLE:
+    for (const auto &e : v.tuple_val)
+      if (!is_recursively_immutable(e))
+        return false;
+    return true;
+  }
+  return false;
+}
+
+// Names whose container value could change without any assignment statement:
+// mutated in place through a non-pure method or a subscript store/delete,
+// aliased (bare-name assignment RHS, ternary branch, return value, parameter
+// default), or passed to a callee that may mutate them (issue #5955). The
+// scan walks the whole module, function bodies included, since a top-level
+// call can execute them. Seeding is an optimization, so every doubtful shape
+// poisons: a lost seed only means the fold falls through to the operational
+// model.
+static std::unordered_set<std::string>
+collect_unsafe_container_names(const nlohmann::json &ast)
+{
+  std::unordered_set<std::string> unsafe;
+
+  // Peel subscript/attribute chains so `l[0].append(x)` poisons `l`.
+  auto poison = [&unsafe](const nlohmann::json &node) {
+    const nlohmann::json *base = &node;
+    while (base->is_object() &&
+           (base->value("_type", "") == "Subscript" ||
+            base->value("_type", "") == "Attribute") &&
+           base->contains("value"))
+      base = &(*base)["value"];
+    if (
+      base->is_object() && base->value("_type", "") == "Name" &&
+      base->contains("id"))
+      unsafe.insert((*base)["id"].get<std::string>());
+  };
+
+  // Poison every Name anywhere beneath a node — the fallback for alias
+  // shapes not proven reference-free below.
+  std::function<void(const nlohmann::json &)> poison_all_names =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          poison_all_names(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+      if (node.value("_type", "") == "Name")
+        poison(node);
+      for (const auto &child : node)
+        poison_all_names(child);
+    };
+
+  // Poison every name an expression could hand back a reference through.
+  // Default-deny: any shape not proven reference-free poisons every Name
+  // beneath it — a lost seed only costs a fold, never soundness. The
+  // reference-free shapes rely on the immutable-element seed gate below:
+  // BinOp/Subscript/comprehension results are fresh objects or element
+  // reads, and a seeded container's elements are all unaliasable scalars.
+  // Call results are covered by the walk's Call rule, which poisons any
+  // argument a callee could return an alias of.
+  std::function<void(const nlohmann::json &)> poison_aliases =
+    [&](const nlohmann::json &node) {
+      if (!node.is_object())
+        return;
+      const std::string t = node.value("_type", "");
+      if (t == "Name")
+        poison(node);
+      else if (
+        (t == "Tuple" || t == "List" || t == "Set") && node.contains("elts"))
+        for (const auto &e : node["elts"])
+          poison_aliases(e);
+      else if (t == "IfExp" || t == "BoolOp")
+      {
+        // Both yield one of their operands.
+        if (node.contains("body"))
+          poison_aliases(node["body"]);
+        if (node.contains("orelse"))
+          poison_aliases(node["orelse"]);
+        if (node.contains("values"))
+          for (const auto &v : node["values"])
+            poison_aliases(v);
+      }
+      else if (t == "Starred" && node.contains("value"))
+        poison_aliases(node["value"]);
+      else if (t == "Dict" && node.contains("values"))
+        for (const auto &v : node["values"])
+          poison_aliases(v);
+      else if (
+        t != "Constant" && t != "BinOp" && t != "UnaryOp" && t != "Compare" &&
+        t != "Call" && t != "Subscript" && t != "Attribute" &&
+        t != "JoinedStr" && t != "ListComp" && t != "SetComp" &&
+        t != "DictComp" && t != "GeneratorExp")
+        poison_all_names(node);
+    };
+
+  static const std::unordered_set<std::string> pure_methods = {
+    "count", "index"};
+  static const std::unordered_set<std::string> pure_builtins = {
+    "len", "sorted", "min", "max", "sum", "any", "all", "str", "tuple", "list"};
+
+  std::function<void(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          walk(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+
+      const std::string t = node.value("_type", "");
+
+      if (
+        t == "Attribute" && node.contains("value") &&
+        !pure_methods.count(node.value("attr", "")))
+        poison(node["value"]);
+      else if (
+        t == "Subscript" && node.contains("value") && node.contains("ctx") &&
+        (node["ctx"].value("_type", "") == "Store" ||
+         node["ctx"].value("_type", "") == "Del"))
+        poison(node["value"]);
+      else if (t == "Call")
+      {
+        const bool pure_callee =
+          node.contains("func") && node["func"].is_object() &&
+          node["func"].value("_type", "") == "Name" &&
+          pure_builtins.count(node["func"].value("id", ""));
+        // A pure builtin neither mutates nor returns an alias of a bare Name
+        // argument (min(l) yields an element, unaliasable by the immutable-
+        // element seed gate), so those are exempt. A container-literal
+        // argument can smuggle the reference out — min([l]) IS l — so every
+        // other argument shape poisons regardless of the callee. Starred
+        // call arguments cannot reach a fold today: the AST preprocessor
+        // rejects f(*l) with a TypeError before conversion.
+        auto poison_argument = [&](const nlohmann::json &a) {
+          if (pure_callee && a.is_object() && a.value("_type", "") == "Name")
+            return;
+          poison_aliases(a);
+        };
+        if (node.contains("args"))
+          for (const auto &a : node["args"])
+            poison_argument(a);
+        if (node.contains("keywords"))
+          for (const auto &kw : node["keywords"])
+            if (kw.is_object() && kw.contains("value"))
+              poison_argument(kw["value"]);
+      }
+      else if (t == "NamedExpr" && node.contains("value"))
+        // The walrus target aliases the value wherever the expression
+        // appears (if conditions, call arguments, comprehension guards).
+        poison_aliases(node["value"]);
+      else if (
+        (t == "Assign" || t == "AnnAssign" || t == "Return") &&
+        node.contains("value") && !node["value"].is_null())
+        poison_aliases(node["value"]);
+      else if (
+        t == "FunctionDef" && node.contains("args") &&
+        node["args"].is_object() && node["args"].contains("defaults"))
+        for (const auto &d : node["args"]["defaults"])
+          poison_aliases(d);
+
+      for (const auto &child : node)
+        walk(child);
+    };
+
+  walk(ast);
+  return unsafe;
+}
+
 void python_consteval::seed_globals(Env &env)
 {
   if (!ast_.contains("body") || !ast_["body"].is_array())
     return;
 
-  // Count every top-level write to each name (any Assign/AnnAssign/AugAssign
-  // target, including names bound through tuple/list unpacking). A name written
-  // more than once does not have a single stable module-scope value, so seeding
-  // it with its final value could mis-evaluate an assert that runs at an
-  // earlier program point — only single-write names are safe to seed.
+  // Count every module-scope write to each name (any Assign/AnnAssign/
+  // AugAssign target — including tuple/list/starred unpacking — plus
+  // `except ... as` bindings), walking through module-level compound
+  // statements but not into function or class bodies, which write their own
+  // scope. A name written more than once does not have a single stable
+  // module-scope value, so seeding it with its final value could
+  // mis-evaluate an assert that runs at an earlier program point — only
+  // single-write names are safe to seed.
   std::unordered_map<std::string, int> write_count;
   std::function<void(const nlohmann::json &)> count_target =
     [&](const nlohmann::json &tgt) {
@@ -328,29 +519,94 @@ void python_consteval::seed_globals(Env &env)
       else if ((tt == "Tuple" || tt == "List") && tgt.contains("elts"))
         for (const auto &e : tgt["elts"])
           count_target(e);
+      else if (tt == "Starred" && tgt.contains("value"))
+        count_target(tgt["value"]);
+    };
+  std::function<void(const nlohmann::json &)> count_stmt_writes =
+    [&](const nlohmann::json &stmt) {
+      if (!stmt.contains("_type"))
+        return;
+      const std::string &t = stmt["_type"];
+      if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "ClassDef")
+        return;
+      if (t == "Assign" && stmt.contains("targets"))
+        for (const auto &tgt : stmt["targets"])
+          count_target(tgt);
+      else if (
+        (t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
+        count_target(stmt["target"]);
+      // For-loop targets and `with ... as` bindings need no cases here:
+      // the AST preprocessor rewrites for-loops into while-loops whose
+      // per-iteration `target = arr[i]` assignment the recursion below
+      // counts, and `with` never survives to a fold. Revisit if either
+      // changes.
+      if (stmt.contains("handlers") && stmt["handlers"].is_array())
+        for (const auto &h : stmt["handlers"])
+        {
+          if (h.is_object() && h.contains("name") && h["name"].is_string())
+            ++write_count[h["name"].get<std::string>()];
+          if (h.is_object() && h.contains("body") && h["body"].is_array())
+            for (const auto &sub : h["body"])
+              count_stmt_writes(sub);
+        }
+      for (const char *key : {"body", "orelse", "finalbody"})
+        if (stmt.contains(key) && stmt[key].is_array())
+          for (const auto &sub : stmt[key])
+            count_stmt_writes(sub);
     };
   for (const auto &stmt : ast_["body"])
-  {
-    if (!stmt.contains("_type"))
-      continue;
-    const std::string &t = stmt["_type"];
-    if (t == "Assign" && stmt.contains("targets"))
-      for (const auto &tgt : stmt["targets"])
-        count_target(tgt);
-    else if ((t == "AnnAssign" || t == "AugAssign") && stmt.contains("target"))
-      count_target(stmt["target"]);
-  }
+    count_stmt_writes(stmt);
+
+  // Names any function can rebind via `global` have no stable module-scope
+  // value either; collect them across the whole AST (this scan must descend
+  // into function bodies, unlike the write counter).
+  std::unordered_set<std::string> global_rebound;
+  std::function<void(const nlohmann::json &)> collect_global_decls =
+    [&](const nlohmann::json &node) {
+      if (node.is_array())
+      {
+        for (const auto &e : node)
+          collect_global_decls(e);
+        return;
+      }
+      if (!node.is_object())
+        return;
+      if (node.value("_type", "") == "Global" && node.contains("names"))
+        for (const auto &n : node["names"])
+          if (n.is_string())
+            global_rebound.insert(n.get<std::string>());
+      for (const auto &child : node)
+        collect_global_decls(child);
+    };
+  collect_global_decls(ast_);
+
+  const std::unordered_set<std::string> container_unsafe =
+    collect_unsafe_container_names(ast_);
 
   auto seed_one =
     [&](const nlohmann::json &target, const nlohmann::json &value) {
       if (!target.contains("_type") || target["_type"] != "Name")
         return;
       const std::string name = target["id"].get<std::string>();
-      if (write_count[name] != 1)
+      if (write_count[name] != 1 || global_rebound.count(name))
         return;
       auto val = eval_expr(value, env);
-      if (val)
-        env[name] = *val;
+      if (!val)
+        return;
+      // A container may change without an assignment statement — through a
+      // mutating method, subscript store, alias, or escape into a callee —
+      // so a seed here would bake in a stale value (issue #5955). Scalars
+      // are immutable, so for them the write counter and the `global` set
+      // above are sufficient.
+      if (val->kind == PyConstValue::LIST || val->kind == PyConstValue::TUPLE)
+      {
+        if (container_unsafe.count(name))
+          return;
+        for (const auto &e : val->tuple_val)
+          if (!is_recursively_immutable(e))
+            return;
+      }
+      env[name] = *val;
     };
 
   for (const auto &stmt : ast_["body"])

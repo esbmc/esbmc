@@ -1159,6 +1159,17 @@ void goto_checkt::check_rec(
     return;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+    // A quantifier binds a fresh logical variable ranging over its whole type;
+    // its body is a pure predicate, not executed code. Runtime safety checks
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
+    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // out-of-bounds access, since i is universally quantified, not a concrete
+    // index. CBMC likewise emits no such checks inside a quantifier body. Skip
+    // the whole node so the array theory (not goto_check) models the body.
+    return;
+
   default:
     break;
   }
