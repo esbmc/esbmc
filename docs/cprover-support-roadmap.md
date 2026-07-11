@@ -96,6 +96,7 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
+| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
@@ -213,6 +214,24 @@ width-truncation (`s.a = 9` in a 3-bit field ⇒ `1`), signed wrap (`int a:3`, `
 function body** additionally trip the pre-existing `struct_tag/union_tag should have been
 resolved` gap (§4.3 anon/tag resolution) — orthogonal to this fix and still open; the tests
 use file-scope struct definitions.
+
+**Enum type `c_enum_tag` — ✅ fixed.** CBMC references an enum type via a `c_enum_tag` node —
+the tag counterpart of `c_enum`, exactly as `struct_tag`/`union_tag` reference `struct`/`union`.
+`migrate_type` maps `c_enum`/`incomplete_c_enum` to a signed int (C99 6.7.2.2.3, "the type of
+an enumeration is int") but has **no case for the tag**, so *any* enum-typed object — an enum
+variable, an enum struct member, an enum function parameter — aborted with `ERROR: c_enum_tag`.
+Unlike `struct_tag`/`union_tag`, resolving the tag through the adapter's cache is neither
+possible (the cache holds only `struct`/`union` definitions, `cbmc_adapt`) nor necessary:
+`migrate_type` collapses every `c_enum` to `signedbv[int_width]` regardless of the enum's
+declared underlying width, so `fix_type` rewrites `c_enum_tag` to a bare `c_enum` and lets
+migrate produce the identical int type. Contained to the CBMC-binary path (`fix_type` is never
+reached by native frontends). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across an
+enum variable/comparison, enum arithmetic, explicitly-valued flag enums (`F_A | F_C`), and an
+enum struct member (`cbmc_enum`), plus a negative case (`cbmc_enum_fail`: `BLUE == GREEN`
+FAILED, confirming the value is really compared, not a vacuous pass). A C23 enum with a *fixed*
+non-`int` underlying type would still collapse to `int` here — consistent with `migrate_type`'s
+own `c_enum` handling, so not a new divergence — and is a migrate-level concern if it ever
+matters.
 
 ### 4.4 Intrinsic & expression coverage (Phase 2) — 🔶 IN PROGRESS
 `fix_expression` recognises a fixed set of expression ids that get their CBMC-raw operands

@@ -427,6 +427,20 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     return;
   }
 
+  if (self.id() == "c_enum_tag")
+  {
+    // CBMC references an enum type via a c_enum_tag node -- the tag counterpart
+    // of c_enum, mirroring struct_tag/union_tag. migrate_type maps c_enum/
+    // incomplete_c_enum to a signed int (C99 6.7.2.2.3) but has no case for the
+    // tag, so any enum-typed object aborts with "ERROR: c_enum_tag". An enum is
+    // consistently int-typed and migrate discards the underlying width anyway,
+    // so rather than resolve the tag through the cache (which only holds struct/
+    // union definitions) rewrite it to a bare c_enum and let migrate yield the
+    // same int type.
+    self = mk("c_enum");
+    return;
+  }
+
   if (self.id() == "c_bit_field")
   {
     // CBMC types a bitfield member as c_bit_field{width: N; sub[0]: <underlying
