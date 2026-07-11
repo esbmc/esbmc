@@ -1,0 +1,4 @@
+CORE
+cbmc_memcpy.goto
+--binary
+^VERIFICATION SUCCESSFUL$
