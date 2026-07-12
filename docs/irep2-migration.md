@@ -3919,6 +3919,54 @@ Blocker #1's list entry (1) is refined accordingly: *re-home the derivation to a
 post-conversion pass that reads resolved operand types — not to throw
 construction.*
 
+#### S3 assessment (2026-07-12) — member/index operand coercion is structurally N/A for IREP2; S3 ≈ already done
+
+The S-list frames S3 as "reproduce the pointer-deref / `p[i]`→`*(p+i)` / index
+typecast steps for the pointer-backed Python container/instance sources"
+(mirroring `clang_c_adjust::adjust_index`/`adjust_member`). A code audit shows
+that framing is a **legacy-`exprt` view that does not carry over to IREP2** — the
+Key-implementation-insight of `irep2-keystone-implementation-plan.md` (§"most of
+`clang_cpp_adjust`'s completion must happen at converter construction") is right,
+and this pins it for the index/member surface specifically:
+
+- **`index2t`/`member2t` cannot hold a pointer source.** The construction asserts
+  permit only array/vector (`index2t`, `irep2_expr.h:1646`) or struct/union
+  (`member2t`) sources, plus the transient `symbol_type` B.1 resolves. So there is
+  **no pointer-sourced `index2t` to desugar** — the `p[i]`→`*(p+i)` rewrite
+  (`clang_c_adjust_expr.cpp:487-495`) and `adjust_member`'s base-wrapping
+  (`:296-312`) are structurally unreachable on IREP2 nodes.
+- **The converter already does the desugaring at construction.** `build_index`
+  (`python_expr_builder.cpp:106-122`) falls back to the legacy `index_exprt` for a
+  dyn-array/pointer source (Python lists, strings, dicts — the pointer-backed
+  containers) and only builds an `index2t` over an array/vector/`symbol_type`
+  source; `build_deref_member` (`:92-101`) pre-builds the `dereference2t` for a
+  pointer-to-struct instance, so the `member2t` source is already the resolved
+  struct. The pointer cases the S-list worried about therefore never reach an
+  IREP2 node needing coercion — they ride the legacy node `clang_cpp_adjust` still
+  owns until V.3 migrates *that* builder, a separate track.
+- **The one IREP2-applicable step — the `symbol_type` source follow — is already
+  B.1, and already unit-tested** for both arms (`python_adjust_test.cpp`: "B.1
+  follows a direct symbol_type member source to its struct" and "…index source to
+  its array").
+
+**Residual.** The sole `adjust_index` step with no converter/B.1 analogue is the
+index-operand typecast `gen_typecast(ns, index_expr, index_type())`
+(`clang_c_adjust_expr.cpp:484`): `build_index` migrates the index operand raw, and
+today `clang_cpp_adjust` supplies the `index_type()` cast (visible as the
+`[(signed long int)i]` casts in flag-off GOTO). Whether an IREP2 `index2t` *needs*
+that cast post-flip is a **symex-tolerance question that cannot be settled without
+the flip** (on the flag-on pipeline `clang_cpp_adjust` still runs first and
+supplies it, so any `python_adjust` reproduction is a byte-identical no-op — an
+inert-but-unverifiable-for-necessity capability). Recorded as an open flip-era
+item, not built speculatively.
+
+**Consequence for the plan.** S3 is **≈ done**: its only IREP2-applicable behaviour
+(symbol-type source following) landed in B.1. The remaining pre-flip S-work is
+therefore S4 (width reconciliation — largely drained by the keystone W-tasks 1–4b)
+and blocker #1 (post-conversion, per the probe above); S5 still trails blocker #1.
+This shortens the critical path to the S6 flip by removing an S-step that read as
+open but is structurally satisfied.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
