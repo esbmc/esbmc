@@ -3871,6 +3871,54 @@ finding); (4) S4 converter-side width reconciliation in
 `build_binary_expression`; (5) S5 argument-cast census + completion;
 (6) honour `adjust()`'s error return at the `python_language.cpp` call site.
 
+#### Blocker #1 re-homing probe (2026-07-12) — "at throw construction" is refuted; the derivation needs the post-conversion state
+
+The census above placed blocker #1's natural home "converter-side at throw
+construction (`python_exception_handler` knows the class and its bases when it
+builds the cpp-throw)". A direct probe **refutes that placement.**
+
+**Method.** Made `clang_cpp_adjust::convert_exception_id` a namespace-parameterised
+`static` (behaviour-preserving: the three in-tree call sites and two recursive
+calls pass `ns`; baseline unchanged) and called it at the operand-carrying
+cpp-throw construction in `python_exception_handler::get_raise_statement`
+(`:382`), attaching the derived `exception_list` exactly as
+`adjust_side_effect_throw` does. Intended to be inert (the still-running
+`clang_cpp_adjust` hop overwrites the list with a byte-identical one) and to be
+validated by a temporary parity assert in `adjust_side_effect_throw`.
+
+**Result: SIGSEGV during conversion**, before any parity assert could fire.
+`convert_exception_id`'s symbol arm dereferences `ns.lookup(identifier)->get_type()`
+with **no null guard** (`clang_cpp_adjust_expr.cpp:455`); at construction time
+`identifier` is the by-name tag `type_handler::get_typet(exc_name)` emits
+(observed: `tag-ValueError`), which **does not resolve** in the converter's
+namespace — the Python exception class lives under a mangled id
+(`py:…@C@ValueError@…`), never under `tag-ValueError`, so the lookup returns
+`nullptr`. Baseline (hop on) is green on the same program, so the legacy pass
+does **not** take that failing lookup: by the time `clang_cpp_adjust` runs it has
+already `adjust_expr`'d the throw operand, so it derives ids from the *resolved*
+operand type (concrete struct / `#cpp_type`), not the transient `symbol_type`
+present at construction.
+
+**Consequences.**
+1. **Blocker #1's home is a post-conversion pass, not throw construction.** The
+   derivation depends on operand-type resolution (symbol→struct following, or the
+   `#cpp_type`/`bases` a completed table carries) that only exists *after*
+   conversion. Re-homing must therefore run where that state is available — a
+   converter-side pass over the finished symbol table *before* `clang_cpp_adjust`,
+   or (aligning with the S-series end state) inside `python_adjust`, which already
+   runs post-conversion and becomes the sole resolver after the S6 flip. This
+   also entangles blocker #1 with S3 (member/index/operand resolution): the id
+   source is the *resolved* operand, so #1 sits downstream of S3, not ahead of it.
+2. **`convert_exception_id`'s unguarded `ns.lookup(...)->get_type()` is a latent
+   crash-vs-diagnostic fragility** — a sibling of the `remove_exceptions`
+   `t.exception_list.front()` one flagged above. Both should be hardened in the
+   flip-era work; both are unreachable on the current pipeline (the lookup only
+   sees resolved types post-`adjust_expr`), so neither is shipped now.
+
+Blocker #1's list entry (1) is refined accordingly: *re-home the derivation to a
+post-conversion pass that reads resolved operand types — not to throw
+construction.*
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
