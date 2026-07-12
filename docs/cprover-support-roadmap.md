@@ -100,10 +100,12 @@ and the symbol/function table layout.
 | 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
 | Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
 | Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -298,6 +300,21 @@ needed and the CBMC path gains `ctz` coverage the native path still lacks. Scope
 dual-solver, across 32-/64-bit widths and a symbolic (no-`assume`) case
 (`cbmc_clz`/`_fail`, `cbmc_ctz`/`_fail`).
 
+**Rotate expressions `rol`/`ror` — ✅ landed.** `__builtin_rotateleft{8,16,32,64}` /
+`__builtin_rotateright...` lower to CBMC `rol`/`ror` ireps (value, distance), which `migrate_expr`
+has *no* handler for (aborts with `migrate expr failed`) — and, like `clz`/`ctz`, ESBMC has no
+rotate irep2 node. `fix_expression` reproduces the rotate from ids `migrate_expr` already lowers
+(`shl`, `lshr`, `bitor`, `bitand`, `-`): `rol(x, n) = (x << d) | (x >> (W − d))` and
+`ror(x, n) = (x >> d) | (x << (W − d))`, where `d = n mod W`. CBMC takes the distance **mod the
+width** (`rol(x, W) == x`, `rol(x, W + k) == rol(x, k)`); the width is always a power of two, so
+`& (W − 1)` is the modulus. The complement `W − d` is likewise masked with `W − 1` so `d == 0`
+produces a 0-bit shift rather than an (edge-case) full-width shift — `rol(x, 0)` then reduces to
+`(x << 0) | (x >> 0) == x`. Scoped to the `--binary` path, so it never perturbs native handling
+(which never emits `rol`/`ror`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across
+`rol`/`ror` at 32- and 64-bit widths and the mod-width edge (`rol(x, 32) == x`,
+`rol(x, 36) == rol(x, 4)`): `cbmc_rotate` (SUCCESSFUL) and `cbmc_rotate_fail` (a wrong expected
+value → FAILED, confirming the rotation is really computed).
+
 **Find-first-set builtin `find_first_set` — ✅ landed.** `__builtin_ffs`/`ffsl`/`ffsll`
 lower to a CBMC `find_first_set` irep — the 1-based index of the least-significant set bit,
 or 0 when the argument is zero — which `migrate_expr` has *no* handler for (aborts with
@@ -313,6 +330,20 @@ dual-solver (Bitwuzla + Z3), across a 32-bit value, the zero-input guard, and a 
 `ffsll` operand (`cbmc_ffs` SUCCESSFUL), plus an off-by-one negative that confirms the value
 is really computed, not vacuously passed (`cbmc_ffs_fail`: `ffs(0x100) == 8` FAILED where the
 true answer is 9).
+
+**Bit-reversal expression `bitreverse` — ✅ landed.** `__builtin_bitreverse{8,16,32,64}` lower to a
+CBMC `bitreverse` irep (reverse the bit order: bit `i` ↔ bit `W−1−i`), which `migrate_expr` has *no*
+handler for (aborts with `migrate expr failed`) — and, like `clz`/`ctz`, ESBMC has no `bitreverse`
+irep2 node. `fix_expression` reproduces it from ids `migrate_expr` already lowers (`bitand`, `shl`,
+`lshr`, `bitor`) via the standard SWAR reversal — swap adjacent bits, then 2-bit groups, then 4-bit,
+… doubling the group size each step: `acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)`, where
+`mask_k` selects the low `k` bits of every `2k`-bit block (`0x5555…`, `0x3333…`, `0x0F0F…`, …). The
+loop is width-generic (⌈log₂W⌉ steps for W = 8/16/32/64) and self-referential like the `clz` smear.
+Scoped to the `--binary` path, so it never perturbs native handling (which never emits `bitreverse`).
+Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_bitreverse` (32-bit alternating-bit
+swap `0xAAAAAAAA → 0x55555555`, low-nibble-to-high `0x0F → 0xF0000000`, and a 64-bit MSB case) and
+`cbmc_bitreverse_fail` (a wrong expected value → FAILED, confirming the reversal is really computed).
+
 **Overflow predicates `overflow-<op>` — ✅ landed.** `__builtin_add_overflow_p`/
 `__builtin_sub_overflow_p`/`__builtin_mul_overflow_p` lower to CBMC's bool-typed `overflow-+`/
 `overflow--`/`overflow-*` predicate ireps (distinct from `overflow_result-<op>`, which returns
