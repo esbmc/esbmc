@@ -167,6 +167,44 @@ bool python_converter::function_has_missing_return_paths(
   return true; // No explicit return found
 }
 
+bool python_converter::function_is_generator(
+  const nlohmann::json &function_node)
+{
+  // A function is a generator iff its own body contains a `yield` / `yield from`
+  // expression. Recurse through nested statement bodies but stop at nested
+  // function/lambda scopes: a yield inside those belongs to the inner
+  // generator, not this one.
+  std::function<bool(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &node) -> bool {
+    if (node.is_object())
+    {
+      auto it = node.find("_type");
+      if (it != node.end() && it->is_string())
+      {
+        const std::string &kind = it->get_ref<const std::string &>();
+        if (kind == "Yield" || kind == "YieldFrom")
+          return true;
+        if (
+          kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+          kind == "Lambda")
+          return false;
+      }
+      for (const auto &child : node.items())
+        if (scan(child.value()))
+          return true;
+    }
+    else if (node.is_array())
+    {
+      for (const auto &child : node)
+        if (scan(child))
+          return true;
+    }
+    return false;
+  };
+
+  return scan(function_node["body"]);
+}
+
 TypeFlags
 python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
@@ -932,10 +970,13 @@ void python_converter::validate_return_paths(
   const code_typet &type,
   exprt &function_body)
 {
-  // Skip validation for void returns and constructors
+  // Skip validation for void/None returns and constructors. A None-returning
+  // function (none_type()) implicitly returns None when it falls off the end,
+  // so a "missing" return path is correct Python, not a defect.
   if (
     type.return_type().is_empty() ||
     type.return_type().id() == typet::t_empty ||
+    type.return_type() == none_type() ||
     type.return_type().id() == "constructor" ||
     !function_has_missing_return_paths(function_node))
   {
@@ -1346,11 +1387,65 @@ void python_converter::get_function_definition(
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
 
-  // Process function body. Mark it as a function body (not a conditional one)
-  // so straight-line retyping (#4770/#4774) is permitted on the function's own
-  // unconditional statements — see the retype gate in get_var_assign.
-  exprt function_body =
-    get_block(function_node["body"], /*is_function_body=*/true);
+  // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
+  // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
+  // function_call_expr::build_nondet_call(), so a direct call never runs this
+  // body. Some reference stubs — notably SV-COMP's _sv_verifier.py — implement
+  // them with constructs the frontend cannot model (a function-local
+  // `import sys`, sys.float_info, generator expressions); converting those
+  // bodies used to abort() in converter_expr (a core dump) as soon as the
+  // module was imported. Return the stub's type suffix (e.g. "int") so we can
+  // synthesise a safe body instead of converting the real one; "" otherwise.
+  auto nondet_stub_suffix = [](const std::string &name) -> std::string {
+    for (const std::string_view prefix : {"__VERIFIER_nondet_", "nondet_"})
+    {
+      if (name.rfind(prefix, 0) == 0)
+      {
+        const std::string suffix = name.substr(prefix.size());
+        if (
+          suffix == "int" || suffix == "char" || suffix == "bool" ||
+          suffix == "float" || suffix == "str" || suffix == "complex")
+          return suffix;
+      }
+    }
+    return "";
+  };
+
+  const std::string nondet_suffix = nondet_stub_suffix(func_name);
+
+  exprt function_body;
+  if (!nondet_suffix.empty())
+  {
+    // The stub can be passed as a first-class value and called indirectly
+    // through a function pointer (SV-COMP's `nondet_list(nondet_int)` /
+    // `nondet_dict(...)`); in that case symex resolves the pointer to this
+    // symbol and needs a real, pointable body. An empty body makes
+    // function-pointer resolution dereference an incomplete callee and crash.
+    // Synthesise `return NONDET(natural_type)` and pin the declared return
+    // type to match, mirroring build_nondet_call's per-type value.
+    typet natural_type =
+      (nondet_suffix == "str")    ? gen_pointer_type(char_type())
+      : (nondet_suffix == "char") ? char_type()
+                                  : type_handler_.get_typet(nondet_suffix);
+
+    type.return_type() = natural_type;
+    added_symbol->set_type(type);
+
+    exprt nondet_value("sideeffect", natural_type);
+    nondet_value.statement("nondet");
+    code_returnt return_stmt;
+    return_stmt.return_value() = nondet_value;
+    code_blockt block;
+    block.copy_to_operands(return_stmt);
+    function_body = block;
+  }
+  else
+  {
+    // Process function body. Mark it as a function body (not a conditional one)
+    // so straight-line retyping (#4770/#4774) is permitted on the function's
+    // own unconditional statements — see the retype gate in get_var_assign.
+    function_body = get_block(function_node["body"], /*is_function_body=*/true);
+  }
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
@@ -1426,6 +1521,28 @@ void python_converter::get_function_definition(
   if (type_assertions_enabled())
     get_typechecker().inject_parameter_type_assertions(
       function_node, id, type, function_body);
+
+  // Python semantics: a user function with no value-returning path implicitly
+  // returns None. Model such a function as returning none_type() and append an
+  // explicit `return None`, so a caller that binds the result (`x = f()`) gets
+  // a defined None value rather than a nondet slot — matching the already-
+  // correct `return None` path (issue #5914). Constructors ("constructor"
+  // return type) and library/import models, whose void calls exist only for
+  // side effects, are left as-is. Generators (functions containing `yield`)
+  // also have an empty return type here but do NOT implicitly return None —
+  // calling one yields a generator object — so they must not be promoted.
+  if (
+    type.return_type().is_empty() && !is_loading_models &&
+    !is_importing_module && !function_is_generator(function_node))
+  {
+    type.return_type() = none_type();
+    added_symbol->set_type(type);
+
+    code_returnt implicit_none;
+    implicit_none.return_value() = gen_zero(none_type());
+    implicit_none.location() = get_location_from_decl(function_node);
+    function_body.copy_to_operands(implicit_none);
+  }
 
   // Add ESBMC_Hide label for models/imports
   if (is_loading_models || is_importing_module)

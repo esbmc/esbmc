@@ -674,7 +674,14 @@ smt_astt smt_solver_baset::convert_is_normal(const expr2tc &expr)
     // |f| <= max_normal: f <= max_normal && f >= -max_normal
     smt_astt below_max =
       mk_and(mk_le(operand, max_val), mk_ge(operand, neg_max));
-    return mk_and(above_min, below_max);
+    smt_astt normal_check = mk_and(above_min, below_max);
+    if (ir_ieee)
+    {
+      smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+      if (nan_pred)
+        return mk_and(mk_not(nan_pred), normal_check);
+    }
+    return normal_check;
   }
 
   smt_astt operand = convert_ast(isnormal.value);
@@ -705,7 +712,14 @@ smt_astt smt_solver_baset::convert_is_finite(const expr2tc &expr)
     smt_astt operand = convert_ast(isfinite.value);
     smt_astt pos_ok = mk_le(operand, max_val);
     smt_astt neg_ok = mk_ge(operand, mk_sub(get_zero_real(), max_val));
-    return mk_and(pos_ok, neg_ok);
+    smt_astt finite_check = mk_and(pos_ok, neg_ok);
+    if (ir_ieee)
+    {
+      smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+      if (nan_pred)
+        return mk_and(mk_not(nan_pred), finite_check);
+    }
+    return finite_check;
   }
 
   smt_astt value = convert_ast(isfinite.value);

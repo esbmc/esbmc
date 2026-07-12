@@ -162,6 +162,18 @@ public:
     return type_handler_;
   }
 
+  /// Record that a list symbol escaped into a function/method call and may have
+  /// been mutated by the callee; see @ref call_escaped_lists_ (GitHub #5991).
+  void mark_list_call_escaped(const std::string &id)
+  {
+    call_escaped_lists_.insert(id);
+  }
+
+  bool is_list_call_escaped(const std::string &id) const
+  {
+    return call_escaped_lists_.find(id) != call_escaped_lists_.end();
+  }
+
   bool type_assertions_enabled() const;
 
   const std::string &python_file() const
@@ -365,6 +377,8 @@ private:
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
+
+  bool function_is_generator(const nlohmann::json &function_node);
 
   exprt materialize_list_function_call(
     const exprt &expr,
@@ -725,6 +739,29 @@ private:
   std::string infer_type_from_any_annotation(
     const nlohmann::json &ast_node,
     const std::string &lhs_type);
+
+  /**
+   * @brief Preserves the array type of a subscript RHS instead of falling
+   * back to the uninformative `Any` (void*) annotation.
+   *
+   * `row = a[i]` on a numpy array has no static annotation the Python-side
+   * annotator can infer, so it defaults to `Any`; storing the symbol as
+   * void* loses the array type and either reads back NONDET values or
+   * crashes on a later chained subscript (`row[0]`). Scoped narrowly to a
+   * `Subscript` RHS whose resolved type is a fixed-size array of at most
+   * 2 dimensions, and to a source array of at most 2 dimensions, so
+   * n-D indexing remains explicitly unsupported rather than silently
+   * mis-modelled.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type (only consulted/adjusted when
+   *   this is `any_type()`).
+   * @return The array type to use, or the unmodified `current_type` when the
+   *   RHS is not an eligible subscript.
+   */
+  typet resolve_any_subscript_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
 
   // =========================================================================
   // Unpacking helper methods
@@ -1109,10 +1146,40 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+  // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
+  // where the division is really code-generated in its execution context.
+  // Suppress it while a lambda body is converted at its definition (operands
+  // are still unbound parameters) and during the discarded type-probe pass of
+  // an assignment RHS (which would otherwise emit the guard twice as dead code
+  // and evaluate a side-effecting divisor an extra time).
+  bool converting_lambda_body_ = false;
+  bool in_rhs_type_probe_ = false;
+  // Set by resolve_any_subscript_array_type when it adopts an array type for
+  // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
+  // raw index/slice expression rather than an already-materialized array
+  // symbol, and the backend rejects a single whole-array-to-whole-array
+  // code_assignt between those (Z3 sort mismatch) -- get_var_assign's final
+  // store must copy it element by element instead.
+  bool any_subscript_array_needs_copy_ = false;
+  // The exprt resolve_any_subscript_array_type already built while probing
+  // the RHS's real type. get_var_assign's RHS fetch reuses it instead of
+  // converting the same Subscript AST node a second time (which would
+  // duplicate any temporaries/instructions the probe emitted, e.g. for
+  // fancy/mask/column selection).
+  exprt cached_any_subscript_rhs_;
+  bool has_cached_any_subscript_rhs_ = false;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
   bool build_static_lists = false;
+
+  /// List symbols passed as an argument to a function/method call, keyed by
+  /// symbol id. Such a list may have been mutated (e.g. appended to) by the
+  /// callee, which the caller's static length tracking (list_type_map / the AST
+  /// literal) does not observe. The convert-time constant-index bounds check in
+  /// python-list/list_access.cpp is therefore suppressed for these lists, so the
+  /// access falls back to the sound runtime __ESBMC_list_at path (GitHub #5991).
+  std::set<std::string> call_escaped_lists_;
 
   /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;

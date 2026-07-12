@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: assigning a 3-D\+ array-typed subscript result to a variable is not supported

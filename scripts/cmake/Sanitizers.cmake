@@ -12,8 +12,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
 
     # ThreadSanitizer
     set(TSAN_FLAGS "-fsanitize=thread -g -O1")
-    # AddressSanitizer
-    set(ASAN_FLAGS "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1")
+    # AddressSanitizer.  -fsanitize-recover=address makes findings recoverable
+    # so that, combined with halt_on_error=0, the process continues past a
+    # report instead of aborting.  This is required for the build-time c2goto
+    # invocations to survive bundled-clang findings (see sanitizers.yml) and
+    # lets a single esbmc run surface more than one runtime finding.
+    set(ASAN_FLAGS "-fsanitize=address -fsanitize-recover=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1")
     # LeakSanitizer
     set(LSAN_FLAGS "-fsanitize=leak -fno-omit-frame-pointer -g -O1")
     # MemorySanitizer

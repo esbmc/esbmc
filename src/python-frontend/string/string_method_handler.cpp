@@ -27,13 +27,13 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <climits>
 #include <iomanip>
 #include <limits>
 #include <optional>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -107,6 +107,43 @@ static char to_upper_char(char c)
   return static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 }
 
+// Render a constant float as CPython's str() / empty-"{}" field does. A
+// whole-number float below 1e16 renders as its integer digits plus ".0"
+// (str(1.0) == "1.0", str(1000000.0) == "1000000.0").
+//
+// Every other float renders with the fewest significant digits that still read
+// back as the same double, which is exactly how CPython's repr chooses its
+// digits. The default ostream format instead prints 6 significant digits, so it
+// silently truncated str(1.23456789) to "1.23457" and folded the false
+// `"{}".format(1.23456789) == "1.23457"` to true.
+//
+// %g then picks fixed vs. exponential notation on the same rule CPython uses:
+// exponential iff the decimal exponent is < -4 or >= the significant-digit
+// count. The two agree here because a float that is not whole always needs more
+// significant digits than its exponent, and every whole float below 1e16 is
+// handled above; CPython's own cut-over at 1e16 is what the branch encodes.
+static std::string format_float_value(double d)
+{
+  if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
+  {
+    std::string s = std::to_string(static_cast<long long>(d));
+    if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
+      s.insert(s.begin(), '-');
+    return s + ".0";
+  }
+
+  const round_to_nearest_guard guard;
+  char buf[40];
+  for (int precision = 1; precision < 17; ++precision)
+  {
+    std::snprintf(buf, sizeof(buf), "%.*g", precision, d);
+    if (std::strtod(buf, nullptr) == d)
+      return buf;
+  }
+  std::snprintf(buf, sizeof(buf), "%.17g", d);
+  return buf;
+}
+
 static std::string
 format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 {
@@ -131,11 +168,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (ov.is_boolean())
       return ov.get<bool>() ? "-1" : "0";
     if (ov.is_number_float())
-    {
-      std::ostringstream oss;
-      oss << -ov.get<double>();
-      return oss.str();
-    }
+      return format_float_value(-ov.get<double>());
   }
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
@@ -154,26 +187,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     if (arg["value"].is_number_integer())
       return std::to_string(arg["value"].get<long long>());
     if (arg["value"].is_number_float())
-    {
-      const double d = arg["value"].get<double>();
-      // A whole-number float below 1e16 renders in CPython's str() as its
-      // integer digits plus ".0" (str(1.0) == "1.0", str(1000000.0) ==
-      // "1000000.0"). The default ostream format got this wrong: it dropped the
-      // ".0" and switched to exponential at 1e6. Fold that case exactly. Every
-      // other float keeps the prior ostream behaviour, which already matches
-      // CPython's exponential form for |x| >= 1e16 and |x| < 1e-4; a fixed "%f"
-      // would only trade one divergence range for another.
-      if (std::isfinite(d) && d == std::floor(d) && std::fabs(d) < 1e16)
-      {
-        std::string s = std::to_string(static_cast<long long>(d));
-        if (std::signbit(d) && s[0] != '-') // str(-0.0) == "-0.0"
-          s.insert(s.begin(), '-');
-        return s + ".0";
-      }
-      std::ostringstream oss;
-      oss << d;
-      return oss.str();
-    }
+      return format_float_value(arg["value"].get<double>());
     throw std::runtime_error("format() unsupported constant type");
   }
 
@@ -316,6 +330,18 @@ std::string apply_format_spec(
                            (type == '\0' || type == 'd') && prec < 0) ||
                          (width > 0 && fill == '0')))
     throw std::runtime_error("unsupported grouping in format spec");
+
+  // An integer value with a float presentation type (f/F/e/E/g/G) is formatted
+  // as a float, matching CPython ("{:.2f}".format(5) == "5.00"). CPython
+  // converts the int to a float first, so the (double) cast reproduces its
+  // rounding exactly for every value in range (both round to nearest-even).
+  if (
+    kind == KIND_INT && (type == 'f' || type == 'F' || type == 'e' ||
+                         type == 'E' || type == 'g' || type == 'G'))
+  {
+    dval = static_cast<double>(ival);
+    kind = KIND_FLOAT;
+  }
 
   // Build the value body (without field padding) and a default alignment.
   std::string body;
@@ -609,14 +635,21 @@ std::optional<exprt> dispatch_splitlines_method(
 
   const nlohmann::json *keepends_node = resolve_positional_or_keyword_arg(
     method_name, args, keyword_values, "keepends", 0, false);
-  if (keepends_node != nullptr && !is_falsey_constant(*keepends_node))
+  bool keepends = false;
+  if (keepends_node != nullptr)
   {
-    throw std::runtime_error(
-      "splitlines() with keepends=True is not supported");
+    // The split is folded at conversion time, so keepends must be a compile-
+    // time constant; a non-constant flag falls back to the unsupported error.
+    if (
+      !keepends_node->contains("_type") ||
+      (*keepends_node)["_type"] != "Constant")
+      throw std::runtime_error(
+        "splitlines() with a non-constant keepends is not supported");
+    keepends = !is_falsey_constant(*keepends_node);
   }
 
   return self.handle_string_splitlines(
-    call_json, get_receiver_expr(), get_location());
+    call_json, get_receiver_expr(), get_location(), keepends);
 }
 
 struct split_method_argst
@@ -969,7 +1002,11 @@ static bool is_none_literal_json(const nlohmann::json &node)
     node["id"].is_string() && node["id"] == "None");
 }
 
-static bool is_utf8_literal_json(const nlohmann::json &node)
+// True for an encoding literal whose byte representation of ASCII text is the
+// same as UTF-8: utf-8 and the pure-ASCII encodings. The encode/decode folds
+// only proceed for ASCII content (bytes < 0x80), for which these encodings are
+// byte-identical, so accepting them is sound.
+static bool is_ascii_compatible_encoding_json(const nlohmann::json &node)
 {
   if (!(node.contains("_type") && node["_type"] == "Constant" &&
         node.contains("value") && node["value"].is_string()))
@@ -978,7 +1015,27 @@ static bool is_utf8_literal_json(const nlohmann::json &node)
   }
 
   const std::string encoding = node["value"].get<std::string>();
-  return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8");
+  return boost::iequals(encoding, "utf-8") ||
+         boost::iequals(encoding, "utf8") ||
+         boost::iequals(encoding, "ascii") ||
+         boost::iequals(encoding, "us-ascii");
+}
+
+// True for a strict ASCII encoding literal ("ascii"/"us-ascii"), which — unlike
+// utf-8 — cannot encode a non-ASCII character (CPython raises
+// UnicodeEncodeError). Callers that fold an encode round-trip must require ASCII
+// content when this holds.
+static bool is_strict_ascii_encoding_json(const nlohmann::json &node)
+{
+  if (!(node.contains("_type") && node["_type"] == "Constant" &&
+        node.contains("value") && node["value"].is_string()))
+  {
+    return false;
+  }
+
+  const std::string encoding = node["value"].get<std::string>();
+  return boost::iequals(encoding, "ascii") ||
+         boost::iequals(encoding, "us-ascii");
 }
 
 std::optional<exprt> dispatch_decode_join_method(
@@ -999,12 +1056,12 @@ std::optional<exprt> dispatch_decode_join_method(
 
     bool decode_utf8 = args.empty();
     if (args.size() == 1)
-      decode_utf8 = is_utf8_literal_json(args[0]);
+      decode_utf8 = is_ascii_compatible_encoding_json(args[0]);
 
     if (
       const nlohmann::json *encoding_kw =
         find_keyword_value(keyword_values, "encoding"))
-      decode_utf8 = is_utf8_literal_json(*encoding_kw);
+      decode_utf8 = is_ascii_compatible_encoding_json(*encoding_kw);
 
     if (
       decode_utf8 && receiver_json.contains("_type") &&
@@ -1020,7 +1077,8 @@ std::optional<exprt> dispatch_decode_join_method(
         receiver_json.contains("args") && receiver_json["args"].is_array() &&
         receiver_json["args"].size() == 1)
       {
-        encode_utf8 = is_utf8_literal_json(receiver_json["args"][0]);
+        encode_utf8 =
+          is_ascii_compatible_encoding_json(receiver_json["args"][0]);
       }
 
       if (
@@ -1033,16 +1091,45 @@ std::optional<exprt> dispatch_decode_join_method(
             kw.contains("arg") && kw["arg"].is_string() &&
             kw["arg"] == "encoding" && kw.contains("value"))
           {
-            encode_utf8 = is_utf8_literal_json(kw["value"]);
+            encode_utf8 = is_ascii_compatible_encoding_json(kw["value"]);
             break;
           }
         }
       }
 
+      // A strict-ASCII encode ("café".encode("ascii")) raises
+      // UnicodeEncodeError on non-ASCII source, so only fold the round-trip
+      // when the source is ASCII. utf-8 round-trips any content unrestricted.
+      bool encode_strict_ascii = false;
+      if (
+        receiver_json.contains("args") && receiver_json["args"].is_array() &&
+        receiver_json["args"].size() == 1)
+        encode_strict_ascii =
+          is_strict_ascii_encoding_json(receiver_json["args"][0]);
+      if (
+        receiver_json.contains("keywords") &&
+        receiver_json["keywords"].is_array())
+        for (const auto &kw : receiver_json["keywords"])
+          if (
+            kw.contains("arg") && kw["arg"].is_string() &&
+            kw["arg"] == "encoding" && kw.contains("value"))
+            encode_strict_ascii = is_strict_ascii_encoding_json(kw["value"]);
+
       if (
         encode_utf8 && receiver_json["func"].contains("value") &&
         !receiver_json["func"]["value"].is_null())
       {
+        if (encode_strict_ascii)
+        {
+          std::string inner;
+          if (
+            !string_handler::extract_constant_string(
+              receiver_json["func"]["value"], converter, inner) ||
+            !std::all_of(inner.begin(), inner.end(), [](char c) {
+              return static_cast<unsigned char>(c) < 0x80;
+            }))
+            return nil_exprt();
+        }
         return converter.get_expr(receiver_json["func"]["value"]);
       }
     }
@@ -1069,11 +1156,11 @@ std::optional<exprt> dispatch_decode_join_method(
 
     bool encode_utf8 = args.empty();
     if (args.size() == 1)
-      encode_utf8 = is_utf8_literal_json(args[0]);
+      encode_utf8 = is_ascii_compatible_encoding_json(args[0]);
     if (
       const nlohmann::json *encoding_kw =
         find_keyword_value(keyword_values, "encoding"))
-      encode_utf8 = is_utf8_literal_json(*encoding_kw);
+      encode_utf8 = is_ascii_compatible_encoding_json(*encoding_kw);
 
     // Standalone "...".encode(): a constant str encodes to its bytes. The
     // UTF-8 encoding of an ASCII string is the identical byte sequence; a
@@ -2922,7 +3009,8 @@ exprt string_handler::handle_string_removesuffix(
 exprt string_handler::handle_string_splitlines(
   const nlohmann::json &call,
   const exprt &string_obj,
-  const locationt &location)
+  const locationt &location,
+  bool keepends)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
@@ -2953,9 +3041,14 @@ exprt string_handler::handle_string_splitlines(
   {
     if (input[i] == '\n' || input[i] == '\r')
     {
-      parts.push_back(input.substr(start, i - start));
+      size_t term_len = 1;
       if (input[i] == '\r' && (i + 1) < input.size() && input[i + 1] == '\n')
-        ++i;
+        term_len = 2;
+      // keepends retains the line terminator(s) in the line; otherwise the
+      // line is the content before them.
+      parts.push_back(
+        input.substr(start, (i - start) + (keepends ? term_len : 0)));
+      i += term_len - 1;
       start = i + 1;
     }
   }

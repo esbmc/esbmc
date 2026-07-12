@@ -258,6 +258,7 @@ collect_ubuntu_packages() {
     default-jdk
     tar
     xz-utils
+    z3
   )
 
   if [[ "$ARCH" != "aarch64" ]]; then
@@ -454,7 +455,13 @@ run_fetch() {
 
   case "$OS" in
     Linux)
-      run_with_sudo apt-get update
+      # 'apt-get update' is best-effort: CI runners ship third-party repos
+      # (e.g. packages.microsoft.com azure-cli/prod) that ESBMC never needs but
+      # that intermittently serve a malformed InRelease ("NOSPLIT"), making
+      # apt-get exit 100 and abort the build under 'set -e'. The Ubuntu repos we
+      # actually depend on still refresh; a genuinely missing package fails
+      # loudly at 'apt-get install' below, so continuing here is safe.
+      run_with_sudo apt-get update || log "warning: 'apt-get update' failed; continuing with cached indices"
       fetch_gmp_source
       ;;
     Darwin)

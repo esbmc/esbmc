@@ -1,0 +1,4 @@
+CORE
+cbmc_llabs.goto
+--binary
+^VERIFICATION SUCCESSFUL$

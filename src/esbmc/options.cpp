@@ -466,7 +466,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bidirectional",
      NULL,
      "Search the inductive step counterexample for assignments"},
-    {"unlimited-k-steps", NULL, "Set max number of iteration to UINT_MAX"},
+    {"unlimited-k-steps",
+     NULL,
+     "Remove the upper bound on the number of k-induction steps"},
     {"max-inductive-step",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Set max k value for the inductive step"},
@@ -522,6 +524,18 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzllob",
+     NULL,
+     "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
+     "running an external mallob binary in one-shot mono mode"},
+    {"bitwuzllob-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Command running Mallob in mono mode; every %f is replaced by the "
+     "SMT-LIB2 formula file (default: \"mallob -mono=%f -mono-app=SMT\")"},
+    {"bitwuzllob-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample "
+     "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -614,6 +628,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable runtime isinstance assertions for annotated code"},
     {"memory-leak-check", NULL, "Enable memory leak check"},
     {"overflow-check", NULL, "Enable arithmetic over- and underflow check"},
+    {"restrict-check",
+     NULL,
+     "Check C restrict-qualified pointer parameters do not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
@@ -642,6 +659,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"unchecked-return-value-check",
      NULL,
      "Enable check for unchecked return values of fallible calls (CWE-252)"},
+    {"dead-store-check",
+     NULL,
+     "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
@@ -852,7 +872,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "Deprecated no-op (accepted for backward compatibility). goto_convert "
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
-     "bypass and the --no-irep2-bodies escape hatch have been removed."}}},
+     "bypass and the --no-irep2-bodies escape hatch have been removed."},
+    {"irep2-native-body",
+     NULL,
+     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
+     "Route function bodies to an IREP2-native goto_convert that consumes "
+     "code_*2t directly and inherits the statement location onto value "
+     "operands at consumption, skipping the whole-body legacy round-trip. "
+     "Grown one statement kind at a time; any body containing an unsupported "
+     "construct falls back to the round-trip path, so flag-on is byte-"
+     "identical to flag-off until the native path is complete."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},
