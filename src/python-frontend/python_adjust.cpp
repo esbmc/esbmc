@@ -20,6 +20,37 @@ bool python_adjust::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  // Type symbols first, so symbolic-type resolution below always receives
+  // fixed-up (macro-expanded, padded) tags — the same two-phase structure as
+  // clang_c_adjust::adjust() (clang_c_adjust_expr.cpp:31-42). Scoped to
+  // Python-mode symbols (RV-adj4): every converter-emitted tag is mode
+  // "Python" (create_symbol, converter_util.cpp), while C/C++-header types
+  // may contain bitfields whose #bitfield flag does not survive the IREP2
+  // round-trip — re-padding those from the migrated view would write back a
+  // corrupted layout. Inert on the live flag-on pipeline: clang_cpp_adjust
+  // already completed every table type and adjust_type is a fixpoint on
+  // complete types, so the write-back never fires until the flip makes this
+  // pass the sole resolver.
+  // Two further round-trip losses bound what the write-back below may carry
+  // (both inert while the write-back never fires, both flip-era work): an
+  // explicit "alignment" attribute is dropped by migrate_type, so an
+  // over-aligned tag would be under-padded vs the legacy pass (the Python
+  // frontend emits none); and legacy-only sub-ireps — most importantly the
+  // "bases" list exception_typeid.cpp and base_type.cpp read for the
+  // exception hierarchy — do not survive set_type(type2tc). See scope limit
+  // (4) in the header.
+  for (symbolt *symbol : symbol_list)
+  {
+    if (!symbol->is_type || symbol->mode != "Python")
+      continue;
+
+    const type2tc original = symbol->get_type2();
+    type2tc t = original;
+    adjust_type(t);
+    if (t != original)
+      symbol->set_type(t);
+  }
+
   bool error = false;
   for (symbolt *symbol : symbol_list)
   {
