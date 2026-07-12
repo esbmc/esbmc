@@ -3683,6 +3683,64 @@ drift the SMT encoding; *RV-adj6 (eager-vs-lazy source)* — the parity subtlety
 above. Until S1–S6 land and RV2 is discharged the F-P11 converter wall stays
 blocked by design; no further pre-adjust converter drain can proceed ahead of it.
 
+#### S1 outcome (2026-07-11) — `adjust_type` landed; two empirical findings
+
+**S1 is in** (branch `feat/python-adjust-s1-type-completion`):
+`python_adjust::adjust_type` reproduces the legacy completion steps a Python
+body exercises — recursive macro symbol-type expansion, array (VLA) size +
+element-type adjustment, and struct/union member-type recursion followed by
+alignment padding — and `adjust_expr` now completes each node's own type first
+(`with_type` only on change), mirroring the legacy `adjust_expr`'s leading
+`adjust_type(expr.type())`. Three deliberate deviations from the legacy pass,
+documented in the header: an unknown *top-level* type symbol is left by-name
+for the B.4 exit invariant to flag rather than `abort()`ed (an unknown tag
+buried inside an aggregate still aborts downstream in `add_padding`'s
+`ns.follow`); the `vector_typet` half of `is_array_like` has no arm (the
+Python frontend never emits vector types — a census-confirmed dead branch);
+and **type symbols themselves are not yet adjusted** — the legacy `adjust()`
+completes all `is_type` symbols *first* "so that symbolic-type resolution
+always receives fixed up types" (`clang_c_adjust_expr.cpp:31-42`), which
+`clang_cpp_adjust` still does on the live pipeline. **The B.5 flip must add a
+type-symbol pre-pass** (an S-step no entry in the S1–S6 list covers today)
+before `python_adjust` becomes the sole resolver, or `ns.follow`/`add_padding`
+will resolve against unadjusted tag layouts. Padding satisfies RV-adj5 *by
+construction*:
+the pass reuses `add_padding` itself through the lossless
+`migrate_type_back` → `add_padding` → `migrate_type` round-trip rather than
+reimplementing its alignment arithmetic. Gate: 20/20 unit tests
+(`python_adjust_test`, every new branch exercised), 76/76 flag-on fixture +
+acceptance-family regressions, dual-solver (Bitwuzla + Z3) verdict parity,
+stderr byte-parity vs. the unpatched master build.
+
+**Finding 1 — `#is_padding` does not survive the IREP2 round-trip (new
+RV-adj5 sub-hazard, resolved).** `struct_type2t` carries no per-member
+attribute channel, so a padded struct that round-trips through IREP2 loses the
+`#is_padding` component flag; `add_padding` then aligns the existing pad
+member as if it were a regular field (`padding.cpp:262` vs `:276`) and
+double-pads — the legacy idempotence assert (`clang_c_adjust_expr.cpp:741-743`)
+holds only because typet-land preserves the flag. S1 re-derives the flag from
+the reserved pad-member names (`anon_pad$`/`anon_bit_field_pad$`/
+`ext_int_pad$` — `$` cannot appear in a Python identifier) before re-padding;
+idempotence is unit-pinned. **S2 must inherit this re-derivation** when it
+completes `constant_struct2t` literals against a padded layout, and the
+eventual W3/V.2 attribute-carriage design should list `#is_padding` among the
+attributes needing an IREP2-native home.
+
+**Finding 2 — the flag-on pipeline already reports pre-existing B.4
+exit-invariant errors on OM model bodies (pre-S1, master).** Running any
+fixture test flag-on emits ~26 `python_adjust: symbol ... retains an
+unresolved by-name ... node` errors for operational-model functions
+(`min`/`max`/`sorted`/`sum`/`any`/`reversed`/`choice`/...) on the **unpatched
+master build** (A/B-confirmed 2026-07-11; verdicts still SUCCESSFUL because
+`typecheck` does not fail on the pass's error return and `clang_cpp_adjust`'s
+resolution feeds goto-convert). So the B.4 "0 divergences" validation was
+verdict-level; post-`clang_cpp_adjust` OM bodies genuinely retain by-name
+member/index/struct-literal nodes the current `resolve_source` cannot follow.
+This is direct empirical input to RV-adj6 and sizes the real B.5 completion
+gap: S2/S3 must resolve exactly these survivors (or the B.5 flip's exit
+invariant will hard-fail), and the next S-step should start by classifying
+those ~26 bodies' unresolved nodes.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
