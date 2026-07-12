@@ -360,6 +360,13 @@ how your system LLVM was packaged you may also need `libzstd-dev` and
 package Clang 18 or newer, install one from <https://apt.llvm.org> and bump the
 version number in the package names and paths above.
 
+Keep `LLVM_DIR` and `Clang_DIR` on the **same** toolchain version. Mixing them
+(e.g. `LLVM_DIR` on `llvm-16` while `Clang_DIR` is `clang-18`) links
+`libLLVM-16` against `libclang-cpp-18` and fails late with
+`undefined reference … DSO missing from command line`; ESBMC now stops such a
+configuration at CMake time. When switching compiler versions, reconfigure in a
+fresh build directory — a stale `CMakeCache.txt` keeps the old paths.
+
 ### Build the solvers
 
 {{% details title="Boolector" closed="true" %}}
