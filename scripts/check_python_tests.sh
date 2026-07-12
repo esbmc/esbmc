@@ -169,6 +169,7 @@ ignored_dirs=(
 ignored_prefixes=(
   "github_4666_"
   "github_4668_"
+  "harness_numpy_"
 )
 
 for dir in */; do
