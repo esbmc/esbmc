@@ -206,7 +206,9 @@ static const exprt *find_constructor_call(const exprt &e)
   {
     const irept &init = e.initializer();
     if (init.is_not_nil())
-      if (const exprt *c = find_constructor_call(static_cast<const exprt &>(init)))
+      if (
+        const exprt *c =
+          find_constructor_call(static_cast<const exprt &>(init)))
         return c;
   }
 
@@ -247,13 +249,11 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
     // are constructed by static_lifetime_init, not from the function body, so
     // leave their declaration untouched -- expanding here would construct them
     // a second time on every call.
-    const bool is_static_local =
-      code_decl.op0().is_symbol() &&
-      [&] {
-        const symbolt *s =
-          ns.lookup(to_symbol_expr(code_decl.op0()).get_identifier());
-        return s && s->static_lifetime;
-      }();
+    const bool is_static_local = code_decl.op0().is_symbol() && [&] {
+      const symbolt *s =
+        ns.lookup(to_symbol_expr(code_decl.op0()).get_identifier());
+      return s && s->static_lifetime;
+    }();
 
     const exprt *ctor = nullptr;
     if (
