@@ -4164,6 +4164,66 @@ work-list and doubles as the prereq-6 error-propagation fix); (3) the flip
 itself stays gated on RV2 (this census re-run clean, dual-solver) — flag
 default stays off until the gap is drained.
 
+#### F-A sub-classification (2026-07-11) — the crash mass resolves into six named root causes; one dominates
+
+The "bare-signal" appearance was an artifact of first-error pollution (the
+crashes print their diagnostic via `libc++abi: terminating ...`, and the
+census signature grep surfaced a preceding mypy line instead — no `.ips`
+symbolication needed). Re-sweeping all 246 crashing gap tests and grepping
+the exception text directly:
+
+| Sub-family | Count | Signature (examples) | Root cause |
+|---|---|---|---|
+| **F-A1: unresolved symbol type at an IREP2 consumer** | **116 (47%)** | `type2t::symbolic_type_excp` (`builtin2`, `cast`, `casting-chr-func`) | **the S3 gap proper** — a transient `symbol_type2t` survives into symex/solver code that needs a concrete type (get_width/follow); the single dominant flip work item |
+| F-A2: pointer-offset index | 24 | `Unexpected index type in compute_pointer_offset` (`concat3/11`, `github_3090_*`) | string concat/subscript emits an index shape only the legacy adjust normalises (F-C, larger than first counted) |
+| F-A3: Optional/tuple literal completion | 32 | the pass's own exit-invariant detail lines — `struct literal 'tag-Optional_signedbv...'` / `tag-tuple_*` (`dict17/25/28/31/32_fail`) | S2's arm cannot complete these literals (operand-count vs component mismatch, or unregistered synthetic tags); the invariant *catches* it but the discarded `adjust()` error return (prereq 6) lets execution continue into a crash — F-B and this are one family |
+| F-A4: any-type/void\* typecast | 15 | `Unexpected type in int/ptr typecast` (`github_2992_logic`, `github_3337_*`) | the unannotated-parameter void\* carrier meets a cast the legacy pass reshaped |
+| F-A5: encoding mismatches | 12+9+8+4 | `Bitwuzla error` / `Select on tuple` / call-arg `got struct, expected struct` / `shr` | S4/S5 residue in other node builders; the struct-vs-struct arg mismatch smells like padded-vs-unpadded layouts meeting at a call |
+| F-A6: harness artifact | 7 | `--python-irep2-adjust cannot be specified more than once` (`python_irep2_adjust_*`) | the census harness appended the flag to descs that already carry it — **false gap entries; true gap is 271, pass rate 92.4%** |
+
+**Consequence for ordering.** F-A1 (116) + F-A3/F-B (32+18 overlapping) are
+both S3-shaped: the resolution `python_adjust` performs today
+(member/index sources, aggregate literals) is not yet the *whole* body-wide
+completion — the next work item is drilling one F-A1 reproducer
+(`builtin2` is tiny) to find which node kind carries the surviving
+`symbol_type2t`, then extending the pass arm-by-arm exactly as S1–S4 did.
+Honouring `adjust()`'s error return (prereq 6) should land with the F-A3
+fix so detected inconsistencies degrade to a clean frontend error instead
+of a symex crash.
+
+#### F-A1 drill, round 1 (2026-07-11) — negative results that reshape the fix
+
+Drilling `builtin2` (`chr`/`ord` round-trip) hop-off with throw-site
+instrumentation produced three load-bearing negative results:
+
+1. **The throw is `empty_type2t::get_width`, not `symbol_type2t`'s** — the
+   exception class is shared, and the F-A1 family name ("unresolved symbol
+   type") was wrong in the specific: the surviving type is *empty*, not
+   by-name. All four `get_width` throw sites raise the same
+   `symbolic_type_excp`.
+2. **Bodies are clean at adjust time.** An instrumented walk over every
+   node the pass visits found no empty-typed *expression* (only code
+   statements, which are legitimately typeless). The empty-typed expression
+   that reaches `get_width` is therefore **introduced downstream of the
+   pass** — during goto-convert or symex — so no `python_adjust` arm can
+   fix F-A1 directly, and a speculative empty-symbol re-type arm written
+   during the drill was discarded unproven (C-Live discipline).
+3. **The observable GOTO delta for `builtin2` is narrow**: hop-on carries
+   legacy `adjust_expr_rel`'s integer promotions in the return expression
+   (`(signed int)(back_to_char[0]) == 65`); hop-off compares the raw
+   `char`-typed accesses. Both shapes are IREP2-legal (same-type operands),
+   so the promotions themselves are unlikely to be the crash cause — but
+   they are the only body difference, so the crash path runs through how
+   symex/goto-convert consume the unpromoted form (suspect: the
+   `char[0]`-typed string variable's zero-size array meeting the return
+   binding of `__python_chr`'s `char*`).
+
+**Next probe (round 2):** instrument the *consumer* — catch
+`symbolic_type_excp` at its symex/goto-convert call frames (or log the
+expression being widthed) to name the constructing site, rather than
+walking the pass's view again. The fix will live where that node is built,
+not in `python_adjust`.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
