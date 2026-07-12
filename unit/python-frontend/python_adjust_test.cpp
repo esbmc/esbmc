@@ -316,6 +316,10 @@ TEST_CASE(
   // adjust() walks code symbols, resolving transient member sources in the
   // body and writing the symbol back. The body wraps `obj.x` (obj : tag-Foo);
   // after adjust() the stored body's member source is the resolved struct.
+  // The pre-pass adjust_type's the concrete tag-Foo struct, driving
+  // add_padding's alignment arithmetic (config.ansi_c); set the data model so
+  // it does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Foo", "x");
 
@@ -777,6 +781,10 @@ TEST_CASE(
   // carries a resolved struct type is flagged when its operand count
   // disagrees with the component list (constant_struct2t's constructor
   // asserts only the type kind, so this would otherwise reach symex).
+  // The pre-pass adjust_type's the concrete tag-Mismatch struct, driving
+  // add_padding's alignment arithmetic (config.ansi_c); set the data model so
+  // it does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Mismatch", "x");
 
