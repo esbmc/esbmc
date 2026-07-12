@@ -160,6 +160,8 @@ ignored_dirs=(
   "string-symbolic-8"
   "complex_str_nonconstant"
   "dataclass_factory_kwarg_ignored"
+  "harness_time_monotonic"
+  "harness_time_monotonic_fail"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for
