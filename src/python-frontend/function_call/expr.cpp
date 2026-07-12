@@ -5341,6 +5341,28 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
+      // A numpy array is modeled as a fixed-size C array, not the heap
+      // PyListObject struct backing Python's `list`. Passing its address to
+      // a list-typed parameter (the default for both `List[T]`-annotated and
+      // untyped parameters) reinterprets raw element bytes as PyListObject
+      // fields instead of decaying to a compatible element pointer, which
+      // silently produced wrong results/alignment faults instead of a real
+      // bug (no regression relied on this, since it never worked). Reject it
+      // explicitly rather than emit an unsound cast.
+      if (
+        arg.type().subtype() != char_type() && param_idx < params.size() &&
+        params[param_idx].type().is_pointer())
+      {
+        const typet &target =
+          converter_.ns.follow(params[param_idx].type().subtype());
+        if (
+          target.is_struct() && to_struct_type(target).tag().as_string().find(
+                                  "__ESBMC_PyListObj") != std::string::npos)
+          throw std::runtime_error(
+            "TypeError: numpy arrays cannot be passed as function "
+            "parameters yet");
+      }
+
       if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
       {
         arg = string_constantt(
