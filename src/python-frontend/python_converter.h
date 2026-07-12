@@ -162,6 +162,18 @@ public:
     return type_handler_;
   }
 
+  /// Record that a list symbol escaped into a function/method call and may have
+  /// been mutated by the callee; see @ref call_escaped_lists_ (GitHub #5991).
+  void mark_list_call_escaped(const std::string &id)
+  {
+    call_escaped_lists_.insert(id);
+  }
+
+  bool is_list_call_escaped(const std::string &id) const
+  {
+    return call_escaped_lists_.find(id) != call_escaped_lists_.end();
+  }
+
   bool type_assertions_enabled() const;
 
   const std::string &python_file() const
@@ -1160,6 +1172,14 @@ private:
   bool is_importing_module = false;
   bool base_ctor_called = false;
   bool build_static_lists = false;
+
+  /// List symbols passed as an argument to a function/method call, keyed by
+  /// symbol id. Such a list may have been mutated (e.g. appended to) by the
+  /// callee, which the caller's static length tracking (list_type_map / the AST
+  /// literal) does not observe. The convert-time constant-index bounds check in
+  /// python-list/list_access.cpp is therefore suppressed for these lists, so the
+  /// access falls back to the sound runtime __ESBMC_list_at path (GitHub #5991).
+  std::set<std::string> call_escaped_lists_;
 
   /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;

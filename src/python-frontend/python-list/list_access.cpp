@@ -2280,7 +2280,13 @@ exprt python_list::handle_index_access(
             it->second.size() == list_node["value"]["elts"].size();
         }
 
-        if (has_const_index && !is_slice_derived_var && is_stable_list_literal)
+        // A list that escaped into a function/method call may have been grown
+        // by the callee, which this static length does not reflect; skip the
+        // convert-time bounds check so the runtime __ESBMC_list_at path handles
+        // it (GitHub #5991).
+        if (
+          has_const_index && !is_slice_derived_var && is_stable_list_literal &&
+          !converter_.is_list_call_escaped(list_name))
         {
           const size_t known_size = it->second.size();
           const bool oob = negative_index ? (index_abs > known_size)
