@@ -104,6 +104,7 @@ and the symbol/function table layout.
 | Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
@@ -654,6 +655,21 @@ Deliberately restricted to `double`/`float`: **CBMC 6.5.0 does not model `__buil
 preserving parity rather than manufacturing a divergence. Verdict parity with CBMC, dual-solver
 (Bitwuzla + Z3): `cbmc_nan` (`d != d` and `f != f` both SUCCESSFUL) and `cbmc_nan_fail`
 (`d == 0.0` FAILED — a NaN equals nothing, confirming a real NaN, not just an unconstrained value).
+
+**`__builtin_huge_val{,f,l}` / `__builtin_inf{,f,l}` — ✅ landed.** CBMC provides bodied
+`<builtin-library-*>` models for these positive-infinity builtins, but the bodies do not survive
+the reader/adapter (their flattened `floatbv` nodes have no `migrate_expr` handler), so each reaches
+symex as a **bodyless external returning nondet** — and `double d = __builtin_huge_val(); assert(d > 1e30)`
+reported a false `FAILED` where CBMC says `SUCCESSFUL`. `fix_builtin_call` now rewrites the call into a
+direct +∞ `floatbv` **constant** — sign 0, exponent all ones, mantissa 0 — emitted as the full-width
+binary bit pattern (`fix_expression`'s constant branch leaves an already-width-length string
+unchanged), so it is correct for **every** width including the 128-bit `long double` (binary128),
+unlike a 64-bit literal. Unlike `nanl` (§4.4, which CBMC does *not* model as a NaN), CBMC models the
+long-double `huge_vall`/`infl` as genuine +∞, so those are handled too. `__builtin_inf` (double, no
+suffix) is folded to a constant by CBMC and never reaches the adapter as a call — it is matched for
+uniformity and is harmless. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3): `cbmc_inf` pins the
+result to +∞ precisely via `x > 0 && x == x + 1` (the only finite-rejecting, sign-checking identity)
+across `double`/`float`/`long double`, and `cbmc_inf_fail` (`d == 0.0` ⇒ FAILED).
 
 **Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, `alloca`/`__builtin_alloca`, `free`,
 `fabsf`/`fabs`/`fabsl`, `realloc`, `nearbyint`, and `fma` are recognised — the

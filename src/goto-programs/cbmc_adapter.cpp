@@ -877,6 +877,40 @@ irept build_nan_rhs(const irept &lhs)
   return result;
 }
 
+// __builtin_huge_val{,f,l} / __builtin_inf{,f,l} construct positive infinity.
+// CBMC's <builtin-library-*> bodies return it, but the bodies do not survive the
+// reader/adapter (their flattened floatbv nodes have no migrate handler), so
+// these reach symex as bodyless externals returning nondet -- and a valid
+// `double x = __builtin_huge_val(); assert(x > 1e30)` reports a false FAILED.
+// Emit +Inf directly as a floatbv constant: sign 0, exponent all ones, mantissa
+// 0. The value is written as the full-width binary bit pattern (fix_expression's
+// constant branch leaves an already-width-length string unchanged), which works
+// for every width including 128-bit long double -- unlike a 64-bit literal.
+// (__builtin_inf -- double, no suffix -- is folded to a constant by CBMC and
+// never reaches here; it is matched for uniformity and is harmless.)
+irept build_inf_rhs(const irept &lhs)
+{
+  const irept ftype = lhs.find("type");
+  const std::size_t width = bv_width(ftype);
+  const std::string fs = ftype.find("f").id_string();
+  const std::size_t frac =
+    (!fs.empty() && fs.find_first_not_of("0123456789") == std::string::npos)
+      ? static_cast<std::size_t>(std::stoul(fs))
+      : 0;
+  // width = 1 (sign) + exp_bits + frac, so exp_bits = width - 1 - frac.
+  const std::size_t exp_bits = (width > frac + 1) ? width - 1 - frac : 0;
+
+  // MSB-first: sign(0), exponent(all ones), fraction(zeros).
+  std::string bits(width, '0');
+  for (std::size_t i = 1; i <= exp_bits; ++i)
+    bits[i] = '1';
+
+  irept c(irep_idt("constant"));
+  c.add("type") = ftype;
+  c.add("value") = mk(bits);
+  return c;
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -964,6 +998,11 @@ bool fix_builtin_call(irept &code)
     rhs = build_fma_rhs(lhs, args);
   else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
     rhs = build_nan_rhs(lhs);
+  else if (
+    callee == "__builtin_huge_val" || callee == "__builtin_huge_valf" ||
+    callee == "__builtin_huge_vall" || callee == "__builtin_inf" ||
+    callee == "__builtin_inff" || callee == "__builtin_infl")
+    rhs = build_inf_rhs(lhs);
   // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
   // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
   // must be in fix_expression's operand-wrap set for the argument to reach it.
