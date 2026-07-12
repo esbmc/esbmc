@@ -264,6 +264,10 @@ TEST_CASE(
 {
   // A member2t whose source is already a resolved struct must be left alone
   // (idempotence: re-running the adjuster is a no-op on resolved nodes).
+  // A concrete-struct source drives adjust_type's struct arm through
+  // add_padding, whose alignment arithmetic reads config.ansi_c; set the data
+  // model so the pass does not divide by a zero alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Baz", "z");
 
@@ -341,6 +345,10 @@ TEST_CASE(
   // When the body has nothing to resolve (its member source is already a
   // resolved struct), adjust() must not rewrite the symbol — the value stays
   // byte-identical so the legacy cache and goto-convert body are untouched.
+  // The concrete-struct source drives add_padding, whose alignment arithmetic
+  // reads config.ansi_c; set the data model so it does not divide by a zero
+  // alignment (SIGFPE on x86).
+  config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   const type2tc struct_t = add_struct_type(ctx, "Qux", "w");
 
