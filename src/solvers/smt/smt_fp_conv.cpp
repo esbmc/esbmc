@@ -674,7 +674,14 @@ smt_astt smt_solver_baset::convert_is_normal(const expr2tc &expr)
     // |f| <= max_normal: f <= max_normal && f >= -max_normal
     smt_astt below_max =
       mk_and(mk_le(operand, max_val), mk_ge(operand, neg_max));
-    return mk_and(above_min, below_max);
+    smt_astt normal_check = mk_and(above_min, below_max);
+    if (ir_ieee)
+    {
+      smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+      if (nan_pred)
+        return mk_and(mk_not(nan_pred), normal_check);
+    }
+    return normal_check;
   }
 
   smt_astt operand = convert_ast(isnormal.value);
