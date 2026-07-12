@@ -295,6 +295,48 @@ void fix_expression(irept &irep)
     irep.get_sub().push_back(ctz_plus1);
   }
 
+  if (irep.id() == "bitreverse")
+  {
+    // CBMC lowers __builtin_bitreverse{8,16,32,64} to a bitreverse irep (reverse
+    // the bit order: bit i <-> bit W-1-i), which migrate_expr has no handler for
+    // (aborts with "migrate expr failed"); ESBMC has no bitreverse irep2 node.
+    // As with clz/ctz above, reproduce it from ids migrate_expr already lowers
+    // (bitand, shl, lshr, bitor) via the standard SWAR reversal: swap adjacent
+    // bits, then 2-bit groups, then 4-bit, ... doubling the group size each step
+    //   acc = ((acc & mask_k) << k) | ((acc >> k) & mask_k)
+    // where mask_k selects the low k bits of every 2k-bit block. Scoped to the
+    // CBMC --binary path, so it never perturbs native handling.
+    const irept operand = irep.get_sub().empty() ? irept() : irep.get_sub()[0];
+    const irept optype = operand.find("type"); // value's bitvector type
+    const std::size_t width = bv_width(optype);
+
+    irept acc = operand;
+    for (std::size_t k = 1; k < width; k <<= 1)
+    {
+      // mask_k: low k bits set in each 2k-bit block, across the full width.
+      const unsigned long long block = (k >= 64) ? ~0ULL : ((1ULL << k) - 1);
+      unsigned long long m = 0;
+      for (std::size_t pos = 0; pos < width; pos += 2 * k)
+        m |= block << pos;
+      const irept mask = mk_bv_const(optype, m);
+
+      // acc = ((acc & mask) << k) | ((acc >> k) & mask)
+      irept lo = mk_binary(
+        "shl",
+        optype,
+        mk_binary("bitand", optype, acc, mask),
+        mk_bv_const(optype, k));
+      irept hi = mk_binary(
+        "bitand",
+        optype,
+        mk_binary("lshr", optype, acc, mk_bv_const(optype, k)),
+        mask);
+      acc = mk_binary("bitor", optype, lo, hi);
+    }
+
+    irep = acc;
+  }
+
   if (irep.id() == "sign" && irep.find("type").id() == "bool")
   {
     // CBMC's sign-bit predicate "sign" is bool-typed and used directly in
