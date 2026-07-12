@@ -48,7 +48,25 @@ bool python_adjust::adjust()
     type2tc t = original;
     adjust_type(t);
     if (t != original)
+    {
+      // Preserve the legacy-only "bases" sub-irep across the write-back:
+      // set_type(type2tc) invalidates the legacy cache and the lazy
+      // back-migration reconstructs only components/tag/packed, silently
+      // dropping the inheritance list that exception-hierarchy consumers
+      // (derive_exception_ids below, exception_typeid.cpp, base_type.cpp)
+      // read. Re-attach it on the legacy view so both views stay coherent.
+      // This discharges the "bases" half of scope limit (4) for the tags
+      // this pre-pass rewrites; the remaining legacy-only attributes
+      // (component access, #is_padding) stay cosmetic.
+      const irept bases = symbol->get_type().find("bases");
       symbol->set_type(t);
+      if (bases.is_not_nil())
+      {
+        typet patched = symbol->get_type();
+        patched.set("bases", bases);
+        symbol->set_type(std::move(patched));
+      }
+    }
   }
 
   bool error = false;
@@ -231,6 +249,94 @@ void python_adjust::adjust_expr(expr2tc &expr)
         expr = constant_struct2tc(resolved, ops);
     }
   }
+  else if (is_code_cpp_throw2t(expr))
+  {
+    // Flip blocker #1 (docs/irep2-migration.md, "Flip-probe census"): the
+    // exception-id chain is derived only by clang_cpp_adjust today
+    // (adjust_side_effect_throw); once that hop is gone, every
+    // operand-carrying THROW reaches remove_exceptions with an empty
+    // exception_list and crashes its unguarded front(). Complete an empty
+    // list here from the operand's class type. A list the legacy pass
+    // already filled is left untouched, so this arm is inert until the flip;
+    // a bare re-raise (nil operand) keeps its empty list, as legacy does.
+    // The operand was already recursed above, so under S2 its type may be
+    // the resolved struct rather than the by-name tag — both derive the same
+    // chain.
+    const code_cpp_throw2t &t = to_code_cpp_throw2t(expr);
+    if (t.exception_list.empty() && !is_nil_expr(t.operand))
+    {
+      const std::vector<irep_idt> ids = derive_exception_ids(t.operand->type);
+      if (!ids.empty())
+        expr = code_cpp_throw2tc(t.operand, ids, t.location);
+    }
+  }
+}
+
+std::vector<irep_idt>
+python_adjust::derive_exception_ids(const type2tc &type) const
+{
+  std::vector<irep_idt> ids;
+  derive_exception_ids_rec(type, "", ids);
+  return ids;
+}
+
+void python_adjust::derive_exception_ids_rec(
+  const type2tc &type,
+  const std::string &suffix,
+  std::vector<irep_idt> &ids) const
+{
+  // Mirror clang_cpp_adjust::convert_exception_id for the shapes the Python
+  // frontend emits (remove_exceptions' register_chain builds the transitive
+  // hierarchy from these one-level chains). A pointer operand is real: the
+  // untypeable-raise fallback types the operand any_type() = pointer(empty)
+  // (python_exception_handler get_raise_statement), which legacy derives as
+  // "void_ptr". The trailing never-empty fallback mirrors legacy's — callers
+  // (remove_exceptions) dereference front(), so an unknown shape must yield
+  // a synthetic id that simply never matches a real throw, not an empty
+  // list. (Legacy also appends a `#cpp_type` id when present; that attribute
+  // does not survive migration and Python types never carry it.)
+  if (is_pointer_type(type))
+  {
+    const type2tc &sub = to_pointer_type(type).subtype;
+    if (is_empty_type(sub))
+      ids.emplace_back("void_ptr" + suffix);
+    else
+      derive_exception_ids_rec(sub, "_ptr" + suffix, ids);
+    return;
+  }
+
+  std::string bare;
+  if (is_symbol_type(type))
+  {
+    const std::string id = to_symbol_type(type).symbol_name.as_string();
+    bare = has_prefix(id, "tag-") ? id.substr(4) : id;
+  }
+  else if (is_struct_type(type))
+    // migrate_type stores the legacy `tag` attribute — the bare class name.
+    bare = to_struct_type(type).name.as_string();
+
+  if (!bare.empty())
+  {
+    ids.emplace_back(bare + suffix);
+    // Direct bases, declaration order, one level — exactly the legacy
+    // derivation. The "bases" list lives only on the legacy view of the tag
+    // symbol (the W3 attribute-carriage gap); the type-symbol pre-pass
+    // preserves it across its write-back precisely so this read stays valid.
+    const symbolt *tag = context.find_symbol("tag-" + bare);
+    if (tag != nullptr && tag->is_type && tag->get_type().is_struct())
+    {
+      const irept &bases = tag->get_type().find("bases");
+      for (const auto &b : bases.get_sub())
+      {
+        const std::string bid = b.id().as_string();
+        ids.emplace_back(
+          (has_prefix(bid, "tag-") ? bid.substr(4) : bid) + suffix);
+      }
+    }
+  }
+
+  if (ids.empty())
+    ids.emplace_back(get_type_id(type) + suffix);
 }
 
 void python_adjust::adjust_type(type2tc &type)
