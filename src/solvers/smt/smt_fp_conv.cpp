@@ -705,7 +705,14 @@ smt_astt smt_solver_baset::convert_is_finite(const expr2tc &expr)
     smt_astt operand = convert_ast(isfinite.value);
     smt_astt pos_ok = mk_le(operand, max_val);
     smt_astt neg_ok = mk_ge(operand, mk_sub(get_zero_real(), max_val));
-    return mk_and(pos_ok, neg_ok);
+    smt_astt finite_check = mk_and(pos_ok, neg_ok);
+    if (ir_ieee)
+    {
+      smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+      if (nan_pred)
+        return mk_and(mk_not(nan_pred), finite_check);
+    }
+    return finite_check;
   }
 
   smt_astt value = convert_ast(isfinite.value);
