@@ -328,13 +328,25 @@ ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=On
 ESBMC_STATIC=ON
 ```
 
+A static build passes `-static` to the linker, so every system library ESBMC
+(and the downloaded LLVM) depends on must be available as a static archive.
+On Ubuntu, make sure the `.a` variants are installed, e.g. `sudo apt-get install
+zlib1g-dev` (provides `libz.a`); without it the configure step fails with
+`ld: attempted static link of dynamic object .../libz.so`. If in doubt, use the
+shared build below, or drive the static build through `./scripts/build.sh`,
+which provisions the static toolchain the same way ESBMC's release CI does.
+
 For a shared build, use the system LLVM/Clang instead (Ubuntu example):
 
 ```sh
-sudo apt-get install libclang-cpp16-dev
+sudo apt-get install libclang-16-dev libclang-cpp16-dev
 ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16"
 ESBMC_STATIC=OFF
 ```
+
+`libclang-16-dev` ships `/usr/lib/cmake/clang-16/ClangConfig.cmake`, which
+`find_package(Clang)` needs; without it the configure step fails with
+`Could not find a package configuration file provided by "Clang"`.
 
 ### Build the solvers
 
@@ -358,7 +370,8 @@ brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
 {{% /details %}}
 
 {{% details title="Bitwuzla" closed="true" %}} Requires MPFR >= 4.2.1
-(`apt-get install libmpfr-dev` / `brew install mpfr`).
+(`apt-get install libmpfr-dev` / `brew install mpfr`) and Meson
+(`pip install meson`).
 
 ```sh
 git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
