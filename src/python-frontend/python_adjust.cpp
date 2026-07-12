@@ -405,7 +405,6 @@ void python_adjust::collect_unresolved_sources(
       std::to_string(to_struct_type(expr->type).members.size()) +
       " component(s)");
 
-  expr->foreach_operand([this, &out](const expr2tc &e) {
-    collect_unresolved_sources(e, out);
-  });
+  expr->foreach_operand(
+    [this, &out](const expr2tc &e) { collect_unresolved_sources(e, out); });
 }
