@@ -249,7 +249,7 @@ ESBMC exactly as on Linux — follow the **Ubuntu / Debian** tab. {{% /details %
 
 | package   | required | minimum version |
 | --------- | -------- | --------------- |
-| clang     | yes      | 11.0.0          |
+| clang     | yes      | 18.0.0          |
 | boost     | yes      | 1.77            |
 | CMake     | yes      | 3.18.0          |
 | Boolector | no       | 3.2.2           |
@@ -328,13 +328,37 @@ ESBMC_CLANG=-DDOWNLOAD_DEPENDENCIES=On
 ESBMC_STATIC=ON
 ```
 
-For a shared build, use the system LLVM/Clang instead (Ubuntu example):
+A static build passes `-static` to the linker, so every system library ESBMC
+(and the downloaded LLVM) depends on must be available as a static archive.
+On Ubuntu, make sure the `.a` variants are installed, e.g. `sudo apt-get install
+zlib1g-dev` (provides `libz.a`); without it the configure step fails with
+`ld: attempted static link of dynamic object .../libz.so`. If in doubt, use the
+shared build below, or drive the static build through `./scripts/build.sh`,
+which provisions the static toolchain the same way ESBMC's release CI does.
+
+For a shared build, use the system LLVM/Clang instead. Because this recipe does
+not pass `-DDOWNLOAD_DEPENDENCIES`, the fmt, nlohmann-json, yaml-cpp and immer
+libraries must also come from the system. Use **Clang 18 or newer**: current
+ESBMC uses the C++23 explicit-object-parameter ("deducing this") API added in
+Clang 18, so older toolchains such as `llvm-16` no longer compile it and fail
+with `'clang::CXXMethodDecl' has no member named
+'isExplicitObjectMemberFunction'`. ESBMC's CI builds this configuration with
+Clang 21; any version `>= 18` works. Ubuntu example:
 
 ```sh
-sudo apt-get install libclang-cpp16-dev
-ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16"
+sudo apt-get install libclang-18-dev libclang-cpp18-dev \
+  libfmt-dev nlohmann-json3-dev libyaml-cpp-dev libimmer-dev
+ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-18"
 ESBMC_STATIC=OFF
 ```
+
+`libclang-18-dev` ships `/usr/lib/cmake/clang-18/ClangConfig.cmake`, which
+`find_package(Clang)` needs; without it the configure step fails with
+`Could not find a package configuration file provided by "Clang"`. Depending on
+how your system LLVM was packaged you may also need `libzstd-dev` and
+`libcurlpp-dev`, which its CMake targets pull in. If your distribution does not
+package Clang 18 or newer, install one from <https://apt.llvm.org> and bump the
+version number in the package names and paths above.
 
 ### Build the solvers
 
@@ -358,7 +382,8 @@ brew install z3 && cp -rp $(brew info z3 | egrep "/usr[/a-zA-Z\.0-9]+ " -o) z3
 {{% /details %}}
 
 {{% details title="Bitwuzla" closed="true" %}} Requires MPFR >= 4.2.1
-(`apt-get install libmpfr-dev` / `brew install mpfr`).
+(`apt-get install libmpfr-dev` / `brew install mpfr`) and Meson
+(`pip install meson`).
 
 ```sh
 git clone --depth=1 --branch=0.9.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install && cd ../..
