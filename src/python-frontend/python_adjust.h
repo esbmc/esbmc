@@ -39,6 +39,30 @@ public:
   /// sources (`self.b.a`) resolve inner-to-outer.
   void adjust_expr(expr2tc &expr);
 
+  /// IREP2-native `clang_c_adjust::adjust_type` (V.1k/B.5 milestone step S1):
+  /// expand a macro `symbol_type2t` to the symbol's type, adjust an array's
+  /// (VLA) size expression and element type, and complete a struct/union by
+  /// recursing its member types and inserting alignment padding. Padding
+  /// reuses the legacy `add_padding` through the type round-trip
+  /// (`migrate_type_back` → `add_padding` → `migrate_type`) — lossless for
+  /// every type the Python frontend emits (a packed *union* would drop its
+  /// packed flag, but the converter emits no unions) — so the layout is
+  /// byte-identical to the legacy pass by construction (risk RV-adj5). A
+  /// non-macro tag reference deliberately stays by-name, exactly as the
+  /// legacy pass leaves it (parity subtlety RV-adj6); IREP2 has no incomplete
+  /// aggregates (an incomplete type stays a `symbol_type2t`), so the legacy
+  /// `!type.incomplete()` guard has no analogue here.
+  ///
+  /// Known S1 scope limits vs the legacy pass, deliberate until later
+  /// S-steps: (1) an unknown top-level type symbol is left by-name for the
+  /// exit invariant instead of abort()ing; (2) no `vector_typet` arm (the
+  /// Python frontend never emits vector types); (3) *type symbols themselves*
+  /// are not adjusted — the legacy adjust() completes all `is_type` symbols
+  /// first so resolution sees fixed-up tags; on the live pipeline
+  /// `clang_cpp_adjust` still does that, and the B.5 flip must add the
+  /// type-symbol pre-pass before this pass becomes the sole resolver.
+  void adjust_type(type2tc &type);
+
 protected:
   contextt &context;
   namespacet ns;
