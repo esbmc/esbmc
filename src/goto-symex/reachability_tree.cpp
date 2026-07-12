@@ -410,13 +410,20 @@ bool reachability_treet::check_for_hash_collision() const
   if (it == hit_hashes.end())
     return false;
 
-  // Only prune when the recorded state was reached with a context-switch count
-  // no greater than the current one. In that case the recorded state had at
-  // least as much remaining switch budget (CS_bound - CS_number), so whatever
-  // interleavings the current state could still reach were already reachable
-  // from the recorded one. If the recorded cswitch is larger, the current
-  // state has strictly more budget and may reach interleavings the recorded
-  // state could not — pruning it would be unsound under --context-bound.
+  // Without a context bound (CS_bound == -1), CS_number has no effect on the
+  // transition system — it only gates scheduling via check_if_ileaves_blocked
+  // when CS_bound != -1. States with an equal fingerprint are then bisimilar
+  // regardless of their cswitch count, so any collision may be pruned soundly.
+  if (CS_bound == -1)
+    return true;
+
+  // Under a context bound, only prune when the recorded state was reached with
+  // a context-switch count no greater than the current one. In that case the
+  // recorded state had at least as much remaining switch budget
+  // (CS_bound - CS_number), so whatever interleavings the current state could
+  // still reach were already reachable from the recorded one. If the recorded
+  // cswitch is larger, the current state has strictly more budget and may reach
+  // interleavings the recorded state could not — pruning it would be unsound.
   return it->second <= ex_state.get_context_switch();
 }
 
