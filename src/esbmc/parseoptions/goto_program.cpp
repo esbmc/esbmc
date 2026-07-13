@@ -331,10 +331,11 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 // Bridge CBMC's plain-named bodyless libc externals (e.g. `ceil`, `strlen`) to
 // the operational-model bodies the additions link under the C-frontend-mangled
 // id (`c:@F@ceil`). CBMC emits libm (ceil/floor/trunc/round, float/long-double
-// variants) and string.h (strlen/strcmp/strncmp) functions as bodyless
-// FUNCTION_CALL externals; unlike sqrt/fabs -- rewritten to expressions in
-// cbmc_adapter -- they have no ESBMC expression form and must run the library
-// body. Copying the bodied function's body and type onto the bodyless
+// variants) and string.h (strlen/strcmp/strncmp/strcpy/strncpy/strcat/strncat/
+// strchr) functions as bodyless FUNCTION_CALL externals; unlike sqrt/fabs --
+// rewritten to expressions in cbmc_adapter -- they have no ESBMC expression
+// form and must run the library body. Copying the bodied function's body and
+// type onto the bodyless
 // declaration lets symex resolve the call: argument_assignments binds actual
 // args using the copied type's parameter names, which match the copied body
 // (goto-symex/symex_function.cpp). The string bodies are byte loops, so a call
@@ -342,11 +343,12 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
 {
   static const char *const libc[] = {
-    "ceilf",     "ceil",     "ceill",     "floorf", "floor",  "floorl",
-    "truncf",    "trunc",    "truncl",    "roundf", "round",  "roundl",
-    "copysignf", "copysign", "copysignl", "fminf",  "fmin",   "fminl",
-    "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",   "fdiml",
-    "modff",     "modf",     "modfl",     "strlen", "strcmp", "strncmp"};
+    "ceilf",     "ceil",     "ceill",     "floorf",  "floor",  "floorl",
+    "truncf",    "trunc",    "truncl",    "roundf",  "round",  "roundl",
+    "copysignf", "copysign", "copysignl", "fminf",   "fmin",   "fminl",
+    "fmaxf",     "fmax",     "fmaxl",     "fdimf",   "fdim",   "fdiml",
+    "modff",     "modf",     "modfl",     "strlen",  "strcmp", "strncmp",
+    "strcpy",    "strncpy",  "strcat",    "strncat", "strchr"};
 
   for (const char *name : libc)
   {
@@ -409,6 +411,8 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)modff,     (void *)modf,     (void *)modfl,\n"
     "  (void *)memcpy,    (void *)memmove,  (void *)memset,\n"
     "  (void *)strlen,    (void *)strcmp,   (void *)strncmp,\n"
+    "  (void *)strcpy,    (void *)strncpy,  (void *)strcat,\n"
+    "  (void *)strncat,   (void *)strchr,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
