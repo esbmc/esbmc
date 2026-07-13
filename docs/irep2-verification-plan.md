@@ -884,6 +884,7 @@ as a progress tracker.
 | Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
 | **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
+| **M4** | H-B4 guard set-algebra logical equivalence (P0-soundness) | `unit/irep2/guard_algebra.test.cpp` | **Tier B** — drives the **real** `guard2tc` `operator-=` / `operator|=`, then checks the genuine `as_expr()` result trees against naive references (`-=` = conjunct set difference `AND(g1 \ g2)`; `|=` = `as_expr(g1) ∨ as_expr(g2)`) by **exhaustive boolean evaluation** over every 2ⁿ atom assignment — an exact equivalence check on boolean terms, no external SMT. Anti-vacuity: swapping `|=`'s residual `or2tc→and2tc`, and neutering `-=`'s set-difference filter, each fail 2/3 cases. | 3 cases, 5721 assertions PASS | **Done** (this PR). Verifies the genuine operators, not a model. |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -911,9 +912,14 @@ nondet input, but reach the real classes differently:
   `NDEBUG` library is an ODR/layout mismatch (the repo build never does this).
   The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
 
-**Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
-overflow (R1). These are genuine arithmetic kernels: implement as a fix to the
-real `irep2_expr.cpp`/`irep2_type.cpp` plus a Tier-B unit test asserting the
-checked accessor on the real `constant_int2t`/`get_width` (fix-and-prove-in-one-PR
-per §7).
+**Methodology (hard rule).** Every harness verifies the **actual irep2 C++**, never
+a hand-written C/standalone model of it. Logical-equivalence checks (guard algebra)
+evaluate the real `as_expr()` trees exhaustively over boolean assignments rather than
+shelling out to an external SMT solver — exact for boolean terms and fully in-process.
+
+**Next task:** M5 relational laws on the real classes — H-B1 (ordering is a strict
+weak order; equality is an equivalence: sweep triples of real `expr2tc`/`type2tc`
+asserting irreflexivity/asymmetry/transitivity and `lt==0 ⇔ ==`), then H-B2 (CRC↔cmp
+consistency), H-B5 (`with_type`/per-kind sweep driven off `expr_kinds.inc`). Also
+remaining: H-A10 (`gen_zero`/`gen_one` recursion on real `irep2_utils`).
 
