@@ -83,6 +83,7 @@ and the symbol/function table layout.
 | Builtin-call rewrite for `fabs`/`fabsf`/`fabsl` FUNCTION_CALLs → `abs` expr (§4.8, Phase 2) | ✅ (PR #5789) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -701,6 +702,21 @@ libm functions whose operational-model bodies match CBMC's verdict. Deliberately
 transcendentals (`sin`/`cos`/`exp`/`log`/`pow`, ...), whose approximations differ between the two
 tools, and `fmod`, whose CBMC model is itself nondet (a precise ESBMC body would diverge in the
 over-approximation direction). Tests `cbmc_copysign`/`_fail`, `cbmc_fmax`/`_fail`.
+
+**Extended (PR #6039) to `modf`/`modff`/`modfl`** — another *exact-result* libm function,
+distinguished from the rest of the bridged family by an **out-parameter**: `modf(value, iptr)`
+splits `value` into its integer part (written through `iptr`) and its returned fractional part,
+with no rounding. CBMC models it precisely (`modf(3.75, &ip)` ⇒ `ip == 3.0`, return `0.75`),
+but ESBMC saw the CBMC binary's plain-named `modf` as a **bodyless external returning nondet**,
+so a valid split reported a false `FAILED` where CBMC says `SUCCESSFUL`. The bridge mechanism is
+width- and signature-agnostic — it copies the bodied `c:@F@modf`'s body **and type** onto the
+bodyless declaration, and `argument_assignments` binds the `double` and `double *` actuals by the
+copied type's parameter names — so the pointer out-param needs no special handling beyond adding
+the three names to the `libm[]` list and their addresses to the additions boilerplate (which
+force-links the operational-model body, itself defined via truncate-toward-zero `nearbyint` +
+`copysign` in `libm/modf.c`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across all
+three widths (`cbmc_modf` SUCCESSFUL) and a wrong-fraction negative (`cbmc_modf_fail`:
+`modf(3.75,…) == 0.5` ⇒ FAILED, confirming the split is really computed, not vacuously passed).
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
