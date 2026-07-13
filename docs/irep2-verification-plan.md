@@ -26,7 +26,7 @@ verification tasks directly from this document.
    refcount (`irep_container`, `irep2t::refcount`) and copy-on-write `detach()`
    must never double-free, use-after-free, leak, or free a still-referenced
    node — including under the self-aliasing assignment the code explicitly
-   guards against (`irep2.h:190-225`).
+   guards against (`irep_container::operator=`, `irep2.h:190-225`).
 2. **Algorithmic correctness of the value-semantics operations.** `crc`
    (hashing), `cmp`/`operator==` (structural equality), `lt`/`operator<`
    (ordering), `clone`, `with_type`, and operand/subtype traversal must be
@@ -53,9 +53,10 @@ verification tasks directly from this document.
 
 ## 2. Scope and the reach of ESBMC on this codebase
 
-`src/irep2` is ~10.2k LOC of modern C++ (C++20/23: `std::apply`,
-`std::unreachable`, fold expressions, `if constexpr`, concepts-style traits),
-linked against `immer`, `bigint`, `fmt`, Boost, and `std::atomic`. ESBMC's C++
+`src/irep2` is ~8.8k lines of modern C++ (plus an 832-line README) — C++20/23:
+`std::apply`, `std::unreachable`, fold expressions, `if constexpr`,
+concepts-style traits — linked against `immer`, `bigint`, `fmt`, Boost, and
+`std::atomic`. ESBMC's C++
 frontend cannot practically ingest the whole subsystem end-to-end (template
 metaprogramming over `K::fields`, `immer`'s persistent trie, `fmt` internals).
 Pretending otherwise would produce vacuous "proofs." The plan therefore splits
@@ -75,9 +76,11 @@ targets into three honest tiers.
   `unit/irep2/CMakeLists.txt` `new_unit_test(...)`).
 - Tier C: notes in this document + a `MALLOC_PERTURB_`/TSan CI recipe.
 
-**ESBMC binary for Tier A:** `build/src/esbmc/esbmc` (v8.4.0 present in this
-tree). Default solver per repo convention is Bitwuzla; dead-code / soundness
-gates require **dual-solver agreement (Bitwuzla + Z3)**.
+**ESBMC binary for Tier A:** `build/src/esbmc/esbmc` from a current `master`
+build. Record the exact commit hash in the verdict log (§10/§11) when the
+harnesses are run, so results are reproducible against a pinned artefact.
+Default solver per repo convention is Bitwuzla; dead-code / soundness gates
+require **dual-solver agreement (Bitwuzla + Z3)**.
 
 ---
 
@@ -88,7 +91,7 @@ gates require **dual-solver agreement (Bitwuzla + Z3)**.
                       /      \
                  type2t      expr2t   (type_id/expr_id enum + switch dispatch)
                     |            |
-        <kind>_type2t...   <kind>2t...   (124 expr kinds, 15 type kinds; each: fields tuple + field_names)
+        <kind>_type2t...   <kind>2t...   (122 expr kinds, 15 type kinds; each: fields tuple + field_names)
                     \            /
               irep_container<T>  ==  type2tc / expr2tc   (COW smart pointer, value semantics)
                          |
@@ -97,9 +100,15 @@ gates require **dual-solver agreement (Bitwuzla + Z3)**.
 
 **Core mechanisms and their source of truth**
 
+> **Anchor convention.** Every `file:line` reference names the enclosing
+> symbol (`Class::member`, function, or field) alongside the line, so an anchor
+> stays resolvable via `grep` even after a ±1 line drift. Treat the symbol name
+> as authoritative and the line number as a hint; re-`grep` before relying on a
+> line.
+
 | Mechanism | File / lines | One-line contract |
 |-----------|--------------|-------------------|
-| Intrusive atomic refcount | `irep2.h:495`, `irep_container` ctors/`release` `irep2.h:158-425` | ctor `fetch_add(relaxed)`; `release` `fetch_sub(release)`, delete on `1→0` behind an acquire fence. |
+| Intrusive atomic refcount | `irep2t::refcount` `irep2.h:495`; `irep_container` ctors / `irep_container::release` `irep2.h:158-425` | ctor `fetch_add(relaxed)`; `release` `fetch_sub(release)`, delete on `1→0` behind an acquire fence. |
 | Copy-on-write | `irep_container::detach` `irep2.h:287-298`; non-const `get()` `irep2.h:251-264` | non-const access clones when `refcount > 1`, then invalidates `crc_val`. |
 | Self-alias-safe assignment | `operator=` `irep2.h:190-225` | snapshot `ref.ptr_` and bump **before** `release()`, so `x = to_array_type(x).subtype` cannot UAF. |
 | Single-allocation factory | `make_irep` `irep2.h:450-456` | one `new T(...)`, adopt at refcount 1 via private tag ctor. |
@@ -130,7 +139,7 @@ comparison friends. Owns the refcount lifecycle.
 `type_id`. Both expose `crc/cmp/lt/clone/tostring/pretty` and (expr side)
 `get_sub_expr/get_num_sub_exprs/with_type/simplify/foreach_operand`.
 
-**C3. Concrete kinds (124 expr + 15 type).** Each is a flat struct of `expr2tc`/
+**C3. Concrete kinds (122 expr + 15 type — counts derived from `expr_kinds.inc` / `type_kinds.inc`).** Each is a flat struct of `expr2tc`/
 `type2tc`/scalar fields plus `static constexpr fields` and `field_names[]`.
 Non-trivial per-kind logic: `constant_int2t::as_ulong/as_long`
 (`irep2_expr.cpp:101-112`); `constant_string2t` byte reconstruction
@@ -188,7 +197,7 @@ task's required checks to ESBMC flags:
 
 | Property | ESBMC flag(s) | Primary targets in `irep2` |
 |----------|---------------|----------------------------|
-| Memory safety (bounds, invalid deref, UAF, double-free, leak) | `--memory-leak-check --no-slice` (pointer/bounds/deref checks are **on by default**) | C1 refcount/`release`/`detach`; `do_get_sub_expr<vector>` index math (`irep2_utils.cpp:338-355`); `constant_string_access::operator[]` (`irep2_expr.cpp:255-265`) |
+| Memory safety (bounds, invalid deref, UAF, double-free, leak) | `--memory-leak-check` (pointer/bounds/deref checks are **on by default**) | C1 refcount/`release`/`detach`; `do_get_sub_expr<vector>` index math (`irep2_utils.cpp:338-355`); `constant_string_access::operator[]` (`irep2_expr.cpp:255-265`) |
 | Arithmetic overflow / underflow | `--overflow-check --unsigned-overflow-check` | `num_elems * sub_width` (`irep2_type.cpp:146,159`); struct width accumulation (`:188-191`); `hash_combine` shifts; `feed_bigint` `heap_buf.size()*2`; refcount `fetch_add` wrap |
 | Division / modulo by zero | **on by default** (disable via `--no-div-by-zero-check`) | `struct_union_get_component_number`, any width-ratio math in string reconstruction (`w`), `distribute_vector_operation` lane count |
 | Invalid pointer dereference | **on by default** | `dynamic_cast` result use in `array/vector::get_width` (`irep2_type.cpp:141-144,155-157`); `object_descriptor2t::get_root_object` walk (`irep2_expr.cpp:360-373`) |
@@ -264,6 +273,22 @@ Each entry gives: **target**, **preconditions** (`assume`), **postconditions /
 assertions**, **ESBMC invocation**, and the **anti-vacuity (failing) variant**.
 Code is a faithful sketch; the implementer transcribes the cited source exactly.
 
+> **Sequencing of the R1/R2/R3 harnesses (CI must stay green).** H-A5 (R1),
+> H-A6 (R2) and the H-A5 deref variant (R3) are expected to **FAIL on the
+> current source** — they encode invariants the code does not yet enforce. A
+> `CORE` harness asserting `^VERIFICATION SUCCESSFUL$` would therefore make CI
+> red the moment it lands. Two acceptable landing patterns, in order of
+> preference:
+> 1. **Fix-and-prove in one PR** — the R-fix (`irep2_type.cpp` /
+>    `irep2_expr.cpp`) and the passing `CORE` harness land together, so the
+>    harness is green from its first commit and pins the fix as a regression.
+>    This is the required pattern for R1/R2/R3.
+> 2. **`KNOWNBUG` first** — if a finding must be recorded before its fix is
+>    ready, land the harness as `KNOWNBUG` (documents the reproducer without
+>    failing CI), then flip it to `CORE` in the fix PR.
+>
+> Never land an R-harness as `CORE`-SUCCESSFUL ahead of its fix.
+
 ### Tier A — ESBMC-verifiable kernels
 
 #### H-A1 — Refcount conservation & single-free (P0-mem)
@@ -275,11 +300,20 @@ never underflows.
 
 ```c
 // model: one node, N container "slots"; refcount is the ground truth.
-unsigned refcount = 0;      // node not yet adopted
+// A container can only *copy* the node from another live container (copy
+// ctor bumps the source's node refcount) — you cannot adopt a freed node.
+// Slot 0 is seeded live with refcount 1 to model the make_irep that created
+// the node; the loop then only copies-from-live or drops.
+unsigned refcount = 1;      // node created by make_irep (slot 0 holds it)
 int deleted = 0;            // free counter
-_Bool slot_live[N];         // which slots hold the node
+_Bool slot_live[N] = {1};   // slot_live[0]=1, rest 0
 
-void adopt(int s){ if(!slot_live[s]){ slot_live[s]=1; refcount++; } }      // copy-in
+// copy the node from a live source `src` into dead slot `dst` (copy ctor)
+void copy(int src, int dst){
+  if(!slot_live[src] || slot_live[dst]) return;  // source must be live
+  slot_live[dst]=1;
+  refcount++;                            // fetch_add on the live source's node
+}
 void drop(int s){                                                         // release()
   if(!slot_live[s]) return;
   slot_live[s]=0;
@@ -289,23 +323,29 @@ void drop(int s){                                                         // rel
 }
 int main(){
   for(int step=0; step<K; step++){
-    int s = nondet_int(); __ESBMC_assume(0<=s && s<N);
-    if(nondet_bool()) adopt(s); else drop(s);
+    int a=nondet_int(), b=nondet_int();
+    __ESBMC_assume(0<=a && a<N && 0<=b && b<N);
+    if(nondet_bool()) copy(a,b); else drop(a);
     // invariant: live slot count == refcount
     unsigned live=0; for(int i=0;i<N;i++) live+=slot_live[i];
-    assert(live==refcount);              // I1
+    assert(live==refcount);              // I1 — refcount = #live handles
     assert(!(deleted>0) || refcount==0); // freed ⇒ nobody points at it
   }
   return 0;
 }
 ```
 
+Because `copy` requires a live source, once the last handle is dropped
+(`refcount==0`, `deleted==1`) no further `copy` can resurrect the node — this
+matches container semantics and removes the spurious "resurrect a freed node"
+counterexample a source-agnostic `adopt` would report.
+
 **Invocation:** `esbmc H_A1.c --overflow-check --unsigned-overflow-check
 --k-induction` (unbounded step loop; require convergence). Also full-unwind for
 `K = N+2`.
-**Failing variant:** change `adopt` to skip the `refcount++` (models a missed
-`fetch_add`) → the `live==refcount` invariant must fail, proving the harness
-catches a leak/early-free.
+**Failing variant:** change `copy` to skip the `refcount++` (models a missed
+`fetch_add` on the copy ctor) → the `live==refcount` invariant must fail, proving
+the harness catches a leak/early-free.
 
 #### H-A2 — COW detach clones iff shared, invalidates CRC (P0-mem, I2/I3)
 
@@ -374,26 +414,37 @@ write flagged.
 (`:188-191`), `union` max (`:199-201`).
 
 ```c
-unsigned int width_array(unsigned long num_elems, unsigned int sub_width){
+#include <stdint.h>
+// Use a fixed-width accumulator (uint64_t), NOT `unsigned long`: on ILP32
+// `unsigned long` is 32-bit and equals `unsigned int`, so the check would be
+// vacuous. The production `num_elems` is itself `unsigned long` (as_ulong),
+// so on ILP32 R1 manifests as an *overflow* of the product before truncation;
+// on LP64 it is a truncation on the narrowing to `unsigned int`. The harness
+// must cover both by making num_elems a full-width uint64_t.
+unsigned int width_array(uint64_t num_elems, unsigned int sub_width){
   // FAITHFUL: return (unsigned int)(num_elems * sub_width);
-  unsigned long prod = (unsigned long)num_elems * sub_width;
-  assert(prod <= UINT_MAX);          // R1: silently truncates today
+  uint64_t prod = num_elems * (uint64_t)sub_width;
+  assert(num_elems == 0 || prod / num_elems == sub_width); // no 64-bit overflow (ILP32 path)
+  assert(prod <= UINT_MAX);                                // no truncation (LP64 path)  — R1
   return (unsigned int)prod;
 }
-unsigned int width_struct(unsigned int *ws, int n){
-  unsigned int w=0;
-  for(int i=0;i<n;i++){ assert((unsigned long)w + ws[i] <= UINT_MAX); w+=ws[i]; }
-  return w;
+unsigned int width_struct(const unsigned int *ws, int n){
+  uint64_t w=0;
+  for(int i=0;i<n;i++){ w += ws[i]; assert(w <= UINT_MAX); } // accumulation overflow — R1
+  return (unsigned int)w;
 }
 ```
 Drive with `num_elems`, `sub_width`, member widths nondet within realistic
-caps and *also* at adversarial extremes.
+caps and *also* at adversarial extremes. Run the harness under **both** the
+32-bit (`--32`) and 64-bit (`--64`, the default) machine-word models so the
+ILP32 overflow and the LP64 truncation are each exercised.
 **Invocation:** `--overflow-check --unsigned-overflow-check`.
 **Expected outcome:** **FAILS on the current code** (no guard exists) — this is a
 finding (R1), not a passing proof. The passing harness is the *post-fix* version
 with a checked-width path (throw `array_size_excp` or saturate) added to
 `irep2_type.cpp`; that fix triggers a **Mode C C-Live** obligation for the new
-branch.
+branch. Sequencing (CI): the R1 fix and this harness must land in the **same
+PR** — see the sequencing note under §7 preamble.
 
 #### H-A6 — `as_ulong` / `as_long` truncation (P0-soundness) — **exposes R2**
 
@@ -403,16 +454,18 @@ magnitude `> UINT64_MAX` is silently truncated by `to_uint64()` — the code eve
 carries the `XXXjmorse` TODO.
 
 ```c
+#include <stdint.h>
 // model value as a bounded big integer (two-limb) → u64.
-unsigned long as_ulong(bigval v){
+uint64_t as_ulong(bigval v){
   assert(!is_negative(v));
   assert(fits_u64(v));   // R2: MISSING in production
   return to_u64(v);
 }
 ```
 **Invocation:** `--overflow-check`. **Expected:** fails without the
-`fits_u64` guard, demonstrating the missing invariant I10; passing harness pins
-the guarded version.
+`fits_u64` guard, demonstrating the missing invariant I10; the passing harness
+pins the guarded version. Same **fix-and-prove-in-one-PR** sequencing as H-A5
+(see §7 preamble) — do not land as `CORE`-SUCCESSFUL before the R2 fix.
 
 #### H-A7 — `constant_string` byte reconstruction (P2-mem/bounds)
 
@@ -439,7 +492,13 @@ uint32_t reconstruct(const unsigned char*s, size_t slen, unsigned w, _Bool le,
 **Invocation:** `--overflow-check --ub-shift-check` (array-bounds is on by
 default). Add a differential check: big-endian reconstruction of 2 bytes equals
 `(s[0]<<8)|s[1]`.
-**Failing variant:** drop the `w<=4` assumption → shift ≥ 32 UB flagged.
+**Failing variant:** widen the width assumption to `w ∈ {1..8}` (i.e.
+`__ESBMC_assume(1<=w && w<=8)`) — this admits `w ∈ {5,6,8}` where `sh = 8*(w-1)`
+reaches 40..56, so the `sh < 32` shift-UB assertion fails **for the intended
+reason**. Do *not* simply drop the `w<=4` bound down to `w>=0`: that admits
+`w==0`, which makes the harness's own `slen % w` / `slen/w` preconditions divide
+by zero, so the variant would fail for the wrong reason (a precondition div-0
+rather than the shift UB under test). Keep `w>=1`.
 
 #### H-A8 — Sub-expression index accumulation (P1-bounds)
 
@@ -525,13 +584,29 @@ case mirroring H-A3 on the genuine `expr2tc`.
 #### H-B4 — Guard algebra logical equivalence (P0-soundness)
 
 For small nondet conjunct sets, build `g1`, `g2`; compute `g1 -= g2` and `g1 |=
-g2`; then check with an SMT query that `as_expr()` of the result is logically
-equal to the reference semantics (`g1 ∧ ¬(shared) ` for `-=` in the
-symex-intended sense; `g1 ∨ g2` for `|=`). Because the operators are *heavily*
-optimised (`irep2_guard.cpp:334-649`), this differential check against the naive
-definition is the only credible correctness argument. Cross-check `operator==`
-(`:657-681`) reflexivity/symmetry and the crc-fast-path (equal guards, one with a
-cached crc) never returns a wrong answer.
+g2`; then check with an SMT query that `as_expr()` of the result is **structurally
+identical (or logically equivalent) to a naive reference implementation**, not to
+a hand-written logical formula:
+
+- **`-=` oracle — conjunct set difference, *not* `g1 ∧ ¬(shared)`.**
+  `operator-=` (`irep2_guard.cpp:334`) computes
+  `result = ⋀( conjuncts(g1) \ conjuncts(g2) )` — the conjunction of the
+  conjuncts of `g1` that are absent from `g2` (order-independent set
+  difference). This is a *syntactic* operation and is **not** logically
+  equivalent to `g1 ∧ ¬(g1∧g2 shared part)`; specifying the oracle as
+  `g1 ∧ ¬(shared)` verifies the wrong law and would spuriously flag correct
+  code. The reference must be the naive O(N) loop: `for c in g1.guard_list: if
+  c ∉ set(g2.guard_list): push c`, then conjunct. Assert the optimised result's
+  `guard_list` equals the reference's as a set (and `as_expr()` matches under
+  the canonical left-leaning chain).
+- **`|=` oracle — `g1 ∨ g2`.** Here the logical form *is* correct: assert
+  `as_expr(g1 |= g2) ⇔ (as_expr(g1) ∨ as_expr(g2))` is valid (its negation
+  UNSAT).
+
+Because the operators are *heavily* optimised (`irep2_guard.cpp:334-649`), this
+differential check against the naive definition is the only credible correctness
+argument. Cross-check `operator==` (`:657-681`) reflexivity/symmetry and that the
+crc-fast-path (equal guards, one with a cached crc) never returns a wrong answer.
 
 #### H-B5 — `with_type` / dispatch totality (P2-robustness)
 
@@ -540,9 +615,12 @@ round-trip (`e.with_type(e->type)` structurally equal to `e`), or that the kind
 is on the documented unsupported list and `with_type` aborts deliberately
 (`irep2_expr.cpp:538-568`). Guards against a new kind silently falling into the
 `abort()` path. Pair with an exhaustiveness probe: constructing one node of each
-of the 124 expr + 15 type kinds and exercising `crc/cmp/clone/tostring/
-get_num_sub_exprs` (forces `assert_kind_invariants<K>` for every K and smoke-tests
-every dispatcher case).
+kind and exercising `crc/cmp/clone/tostring/get_num_sub_exprs` (forces
+`assert_kind_invariants<K>` for every K and smoke-tests every dispatcher case).
+The sweep must derive the expected kind count from the `expr_kinds.inc` /
+`type_kinds.inc` manifests (an X-macro count, e.g. a `constexpr` fold over the
+same `.inc`) rather than a hard-coded literal, so it can never drift out of sync
+when a kind is added or removed.
 
 ---
 
@@ -747,24 +825,50 @@ The plan applies established verification practice without over-claiming novelty
 - **Dual-solver agreement.** Soundness-critical runs (guard algebra, width fixes)
   require Bitwuzla **and** Z3 to agree, matching the project's Mode-C requirement.
 
-## Appendix B — Standard `test.desc` template for Tier-A harnesses
+## Appendix B — `test.desc` format for Tier-A harnesses
 
+`test.desc` has **no comment syntax**: line 1 is the mode
+(`CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH`), line 2 the source file, line 3 the
+ESBMC flags, and **every line from 4 onward is consumed verbatim as an expected
+output regex** by `regression/testing_tool.py`. Do not put explanatory comments
+in the file — a stray `#…` becomes a regex that never matches. Flags are also
+**per-harness**, not universal: only the loop-bearing kernels use
+`--k-induction`; the arithmetic kernels (H-A5/H-A6/H-A7) are plain BMC.
+
+Passing harness (loop-bearing kernel, e.g. H-A1 refcount):
 ```
 CORE
-irep2_<kernel>_<ok|fail>.c
+irep2_refcount_ok.c
 --overflow-check --unsigned-overflow-check --memory-leak-check --k-induction
-^VERIFICATION SUCCESSFUL$          # (or ^VERIFICATION FAILED$ for the fail variant)
+^VERIFICATION SUCCESSFUL$
 ```
 
-Reference invocation for local iteration:
+Passing harness (straight-line arithmetic kernel, e.g. H-A5/H-A6/H-A7 — no
+`--k-induction`):
+```
+CORE
+irep2_width_ok.c
+--overflow-check --unsigned-overflow-check
+^VERIFICATION SUCCESSFUL$
+```
+
+Failing / anti-vacuity variant (line 3 flags identical to its passing twin; only
+the expected-verdict regex changes):
+```
+CORE
+irep2_width_fail.c
+--overflow-check --unsigned-overflow-check
+^VERIFICATION FAILED$
+```
+
+Reference invocation for local iteration (a fail variant witnessing R1):
 ```sh
 build/src/esbmc/esbmc regression/esbmc/irep2_width_fail/irep2_width_fail.c \
   --overflow-check --unsigned-overflow-check
 # expect a counterexample witnessing R1 (width truncation) on unfixed code.
 ```
-```
 
-Cross-checking a Tier-A kernel against the source before transcription:
+Cross-check a Tier-A kernel against the source before transcription:
 ```sh
 grep -n "get_width" src/irep2/irep2_type.cpp     # confirm the arithmetic line
 ```
