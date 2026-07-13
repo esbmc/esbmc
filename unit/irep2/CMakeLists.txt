@@ -1,4 +1,5 @@
 new_unit_test(irep2test "irep2.test.cpp" "util_esbmc")
+new_unit_test(irep2refcounttest "refcount.test.cpp" "util_esbmc")
 
 # Microbenchmarks: built but not discovered as ctest cases. Run locally
 # with: ./unit/irep2/irep2bench '[bench]' to capture before/after numbers

@@ -878,14 +878,24 @@ grep -n "get_width" src/irep2/irep2_type.cpp     # confirm the arithmetic line
 ## Execution log (per-harness verdicts)
 
 Appended as each harness is implemented and run, per §12 deliverable #6. Records
-the ESBMC artefact used, the verdict, and the landing PR so the plan doubles as a
-progress tracker.
+the harness location, technique, verdict, and the landing PR so the plan doubles
+as a progress tracker.
 
-| Milestone | Harness | Location | ESBMC verdict | Solver / artefact | Status |
+| Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
-| **M0** | H-A1 refcount conservation & single-free (`_ok` + anti-vacuity `_fail`) | `regression/esbmc/irep2_refcount_{ok,fail}/` | `_ok`: SUCCESSFUL; `_fail`: FAILED (I1 `live==refcount` violated) | Bitwuzla (default), ESBMC 8.4.0 (`master` @ 4ba1903130) | **Done** — doubles as the M0 green+red smoke pair proving the pipeline detects an injected refcount defect. |
+| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp` | **Tier B** — Catch2 property tests driving the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 4 cases, 23 assertions PASS on `master` @ 4ba1903130 | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B (ESBMC cannot ingest the templated `irep2` end-to-end). Built under the `Sanitizer` build type (ASan) the same cases also witness double-free / UAF freedom. |
+
+**Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
+than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
+the ownership/refcount contract is directly observable on the real
+`irep_container` (the `refcount` atomic is a public member). Tier-A standalone
+C harnesses remain the right tool only for the self-contained arithmetic kernels
+(H-A5/H-A6 width & `as_ulong`) that *can* be lifted out of the template layer
+faithfully.
 
 **Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
-overflow (R1). Both are *fix-and-prove-in-one-PR* per the §7 sequencing note
-(land the checked-accessor fix and the passing `CORE` harness together).
+overflow (R1). These are genuine arithmetic kernels: implement as a fix to the
+real `irep2_expr.cpp`/`irep2_type.cpp` plus a Tier-B unit test asserting the
+checked accessor on the real `constant_int2t`/`get_width` (fix-and-prove-in-one-PR
+per §7).
 
