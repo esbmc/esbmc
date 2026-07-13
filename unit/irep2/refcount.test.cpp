@@ -92,7 +92,7 @@ TEST_CASE(
   b = a; // release B (freed), fetch_add on A -> 2
 
   REQUIRE(live_refcount(a) == 2);
-  REQUIRE(node_of(b) == A);          // b now aliases A
+  REQUIRE(node_of(b) == A); // b now aliases A
   REQUIRE(to_constant_int2t(b).value.to_uint64() == 7);
 }
 
