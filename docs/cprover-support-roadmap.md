@@ -84,6 +84,7 @@ and the symbol/function table layout.
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
+| Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #TBD) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -717,6 +718,20 @@ force-links the operational-model body, itself defined via truncate-toward-zero 
 `copysign` in `libm/modf.c`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across all
 three widths (`cbmc_modf` SUCCESSFUL) and a wrong-fraction negative (`cbmc_modf_fail`:
 `modf(3.75,…) == 0.5` ⇒ FAILED, confirming the split is really computed, not vacuously passed).
+
+**Generalised (PR #TBD) to the libc string family: `strlen`/`strcmp`/`strncmp`.** The bridge is not
+libm-specific — it copies any bodied `c:@F@name` onto its bodyless plain-named counterpart — so it
+extends verbatim to the string.h query functions, which CBMC likewise emits as **bodyless externals
+returning nondet** (`strlen("hello")` reported a false `FAILED` where CBMC says `SUCCESSFUL`).
+`link_cbmc_libm_bodies` was renamed to `link_cbmc_libc_bodies` and the three names added to its list
+and the additions boilerplate. The one behavioural difference from the libm entries: ESBMC's
+`strlen`/`strcmp`/`strncmp` operational-model bodies (`libc/string.c`) are **byte loops**, not
+straight-line, so a call reaching them must be given an `--unwind` bound like any other loop —
+unchanged from ESBMC's native string semantics, and the same requirement the memcpy byte-loop path
+already carries. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), `--unwind 8`: `cbmc_strlen`
+(incl. empty string), `cbmc_strcmp` (equal / `<` / `>`), `cbmc_strncmp` (prefix-equal vs differing)
+all SUCCESSFUL, and `cbmc_strlen_fail` (`strlen("hello") == 4`) FAILED. `strcpy`/`strcat` (which write
+through a destination pointer) are the same mechanism and are a natural follow-up.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
