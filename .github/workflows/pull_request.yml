@@ -264,7 +264,7 @@ jobs:
 
   coverage:
     name: Build and upload coverage to Codecov
-    runs-on: ubuntu-24.04
+    runs-on: ['self-hosted', 'Linux', 'x64', 'cov']
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
@@ -274,7 +274,7 @@ jobs:
       - name: Run tests
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j4 --progress . || true
+        run: mkdir -p build/coverage && cd build/ && ctest -j32 --progress . || true
       - name: Merge coverage data
         run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
