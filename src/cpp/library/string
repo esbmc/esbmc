@@ -1499,7 +1499,6 @@ __ESBMC_HIDE:
   return *this;
 }
 
-
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(const char *s)

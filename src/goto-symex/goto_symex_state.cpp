@@ -68,28 +68,26 @@ void goto_symex_statet::initialize(
   top().calling_location = symex_targett::sourcet(top().end_of_function, prog);
 }
 
-// True when every array dimension nested inside 'type' has a statically
-// constant length (no symbolic- or infinite-sized array). Constant-propagating
-// an aggregate field update is only safe when its size is fixed: inlining a
-// concrete-size value into a symbolic-size field produces a size-mismatched
-// array-to-array typecast the SMT backend cannot lower ("Typecast for
-// unexpected type" on a std::map char-array node). Scalars and pointers are
-// always fixed-size.
+// True when 'type' and every array nested in it has a statically constant
+// size. Propagating an aggregate field update is only sound when fixed-size: a
+// concrete-size value inlined into a symbolic-size field yields a
+// size-mismatched array typecast the SMT backend cannot lower.
 static bool type_has_constant_size(const type2tc &type)
 {
   if (is_array_type(type))
   {
     const array_type2t &a = to_array_type(type);
-    if (a.size_is_infinite || is_nil_expr(a.array_size) ||
-        !is_constant_int2t(a.array_size))
+    if (
+      a.size_is_infinite || is_nil_expr(a.array_size) ||
+      !is_constant_int2t(a.array_size))
       return false;
     return type_has_constant_size(a.subtype);
   }
   if (is_struct_type(type) || is_union_type(type))
   {
-    const std::vector<type2tc> &members =
-      is_struct_type(type) ? to_struct_type(type).members
-                           : to_union_type(type).members;
+    const std::vector<type2tc> &members = is_struct_type(type)
+                                            ? to_struct_type(type).members
+                                            : to_union_type(type).members;
     for (const type2tc &m : members)
       if (!type_has_constant_size(m))
         return false;
@@ -190,16 +188,11 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // fields stay symbolic, exploding the path space
       // (try_catch/nec_ex5-recursive).
       //
-      // Scalar and pointer field updates always propagate. Aggregate
-      // (struct/array/union) field updates propagate too, but only when the
-      // field type is statically fixed-size (type_has_constant_size): inlining
-      // a concrete-size value into a symbolic-size field produces a
-      // size-mismatched array-to-array typecast the SMT backend cannot lower --
-      // a char-array member of a std::map node triggered "Typecast for
-      // unexpected type". Propagating fixed-size aggregate fields keeps the
-      // index/link scalars of container nodes (e.g. std::list<std::string>
-      // node.next_idx) concrete so loops over the pool fold instead of
-      // unrolling to the static capacity.
+      // Aggregate (struct/array/union) fields propagate too, but only when
+      // statically fixed-size (see type_has_constant_size). This keeps the
+      // link/index scalars of container nodes (e.g. std::list<std::string>
+      // node.next_idx) concrete so pool loops fold instead of unrolling to
+      // capacity.
       bool all_constant_updates = true;
       expr2tc current = expr;
 
@@ -214,8 +207,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
           type_has_constant_size(uv->type);
-        if (
-          !(scalar_update || aggregate_update) || !constant_propagation(uv))
+        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
         {
           all_constant_updates = false;
           break;
