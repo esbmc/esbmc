@@ -29,6 +29,8 @@
 #include <irep2/irep2_utils.h>
 #include <util/config.h>
 
+#include "refcount_ops.h"
+
 namespace
 {
 // Read a node's live refcount WITHOUT perturbing it: the const get()
@@ -141,4 +143,49 @@ TEST_CASE(
   REQUIRE(live_refcount(a) == 1);    // a sole-owns its clone
   REQUIRE(live_refcount(b) == 1);    // b sole-owns the original
   REQUIRE(*a == *b);                 // structural value unchanged
+}
+
+// Nondeterministic-input replay: the same byte-stream operation driver that
+// libFuzzer exercises (refcount_ops.h / refcount.fuzz.cpp) is run here on
+// deterministic inputs so the property is pinned in normal CI even with
+// fuzzing off. Each input decodes to a sequence of make/copy/move/detach/
+// reset/swap operations on real expr2tc slots; run_ops verifies refcount
+// conservation (I1) against the genuine container after every step.
+TEST_CASE(
+  "irep2 refcount conservation under nondet operation sequences",
+  "[core][irep2][refcount]")
+{
+  using irep2_refcount_fuzz::run_ops;
+
+  SECTION("hand-crafted sequences exercising each opcode")
+  {
+    // {sel, arg} pairs: sel's low 3 bits pick the op and high bits pick slot
+    // i; arg picks slot j (or the value for make). The rows walk make/copy/
+    // copy-ctor/move/detach/reset/swap in varied orders.
+    const uint8_t seqs[][8] = {
+      {0x00, 7, 0x09, 0, 0x11, 0, 0x1c, 0},
+      {0x00, 3, 0x0a, 0, 0x02, 0, 0x0d, 0},
+      {0x00, 9, 0x0e, 0, 0x16, 1, 0x1d, 2},
+      {0x00, 1, 0x09, 0, 0x0a, 0, 0x22, 1},
+    };
+    for (const auto &s : seqs)
+      REQUIRE(run_ops(s, sizeof(s)));
+  }
+
+  SECTION("fixed-seed pseudo-random op streams (deterministic)")
+  {
+    // A simple LCG gives reproducible "nondet-shaped" coverage without any
+    // wall-clock/random dependency: thousands of ops across many seeds.
+    for (uint32_t seed = 1; seed <= 64; ++seed)
+    {
+      uint8_t buf[512];
+      uint32_t x = seed;
+      for (uint8_t &b : buf)
+      {
+        x = x * 1103515245u + 12345u; // glibc LCG constants
+        b = static_cast<uint8_t>(x >> 16);
+      }
+      REQUIRE(run_ops(buf, sizeof(buf)));
+    }
+  }
 }

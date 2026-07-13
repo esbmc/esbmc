@@ -883,7 +883,7 @@ as a progress tracker.
 
 | Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
-| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp` | **Tier B** — Catch2 property tests driving the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 4 cases, 23 assertions PASS on `master` @ 4ba1903130 | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B (ESBMC cannot ingest the templated `irep2` end-to-end). Built under the `Sanitizer` build type (ASan) the same cases also witness double-free / UAF freedom. |
+| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -892,6 +892,24 @@ the ownership/refcount contract is directly observable on the real
 C harnesses remain the right tool only for the self-contained arithmetic kernels
 (H-A5/H-A6 width & `as_ulong`) that *can* be lifted out of the template layer
 faithfully.
+
+**Nondeterministic input — fuzzing vs. ESBMC (empirical).** Both explore with
+nondet input, but reach the real classes differently:
+- **ESBMC on the real classes: not possible.** A driver that `#include`s the real
+  `irep2` headers fails to parse at the *first* stdlib header — ESBMC's bundled
+  C++ operational models do not provide `<atomic>` (nor `immer`, `fmt`), and there
+  is no model for `std::atomic::fetch_add` or `immer`'s persistent trie. Confirmed
+  by direct trial. So nondet-input + ESBMC applies only to the **lifted arithmetic
+  kernels** (Tier A: H-A5/H-A6/H-A7), where it gives bounded-exhaustive proofs a
+  fuzzer only samples.
+- **Fuzzing on the real classes: the right nondet tool here.** `refcount.fuzz.cpp`
+  drives the genuine `irep_container` with libFuzzer bytes under ASan. The same
+  `run_ops` driver is replayed deterministically by the unit test so the property
+  is pinned in normal CI even with fuzzing off. NB the fuzz target must be built
+  **internally consistent** w.r.t. `NDEBUG`: the `#ifndef NDEBUG writer_thread`
+  member changes `sizeof(irep2t)`, so mixing an asserts-on object with an
+  `NDEBUG` library is an ODR/layout mismatch (the repo build never does this).
+  The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
 
 **Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
 overflow (R1). These are genuine arithmetic kernels: implement as a fix to the
