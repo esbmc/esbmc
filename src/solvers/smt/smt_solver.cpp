@@ -1363,6 +1363,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
+      if (ir_ieee && is_floatbv_type(abs.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     break;
   }
