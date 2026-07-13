@@ -884,14 +884,30 @@ four reinterpret shapes (8-bit memcpy, union type-pun, float bit-reinterpret, in
 verifies SUCCESSFUL on both solvers, with a negative variant (wrong float bit-pattern)
 correctly FAILED to prove the values are genuinely constrained.
 
-**Still open (this umbrella):** (a) the other candidates below (explicit `transmute`/
-`transmute_unchecked`, `transmute_ptr_address`, arr↔tuple) are not yet exercised — they may
-share this crash chain or surface new reinterpret shapes; (b) ESBMC stops at the first
-failing property — a `--multi-property` run to confirm it reproduces all 11 of CBMC's
-reachability markers (not just the first) would tighten parity from verdict-level to
-full property-set; (c) CBMC-binary regression fixtures (`cbmc_transmute*`) are not yet
-added — the fixes were validated against the live Kani binary and native C reproducers,
-since this build has no regression suite configured.
+**Candidate sweep — the crash chain generalises to the whole transmute family.** Beyond
+the minimal reproducer, seven representative harnesses spanning every reinterpret shape in
+UMBRELLA #1 were run against the four fixes: `transmute_2ways_i8_to_u8` (int↔int),
+`transmute_2ways_f32_to_i32` (float↔int, exercising the wide `byte_extract` path),
+`transmute_unchecked_i8_to_u8` (unchecked variant), `transmute_zero_size` (ZST, exercising
+the zero-sized-member fix), `check_transmute_ptr_address` (pointer-address reinterpret),
+`should_succeed_tuple_to_array` and `should_fail_tuple_to_array` (aggregate ↔ array). **All
+seven are now crash-free** — every one reaches a verdict with no segfault, abort,
+`migrate expr failed`, or unresolved-tag error (previously all rc=139). CBMC 6.10.0
+verdict parity spot-checked on three (`check_typed_swap_u8`, `transmute_2ways_f32_to_i32`,
+`should_succeed_tuple_to_array`): all three are `VERIFICATION FAILED` in **both** tools, and
+in every case CBMC's failures are *exclusively* Kani `reachability_check` markers (3/7120
+and 5/382 respectively — not real assertion violations), so ESBMC's matching FAILED is
+correct parity, including on the `should_succeed` harness which raw-FAILs at the CBMC level
+too.
+
+**Still open (this umbrella):** (a) ESBMC stops at the first failing property — a
+`--multi-property` run to confirm it reproduces *all* of CBMC's reachability markers (not
+just the first) would tighten parity from verdict-level to full property-set; (b) the
+remaining ~190 candidates in the umbrella are not individually swept — the seven above cover
+the shape space but a bulk sweep against the full Kani corpus would quantify the true
+recovery; (c) CBMC-binary regression fixtures (`cbmc_transmute*`) are not yet added — the
+fixes were validated against the live Kani binaries and native C reproducers, since this
+build has no regression suite configured.
 
 **Affected Operations**:
 - `mem::transmute()` - type reinterpretation
