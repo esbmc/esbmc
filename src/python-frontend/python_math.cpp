@@ -386,6 +386,12 @@ python_math::try_resolve_constant_double(const exprt &operand) const
     return std::nullopt;
 
   exprt resolved = operand;
+  // Peel typecasts over constants: build_binary_expression may wrap a
+  // constant int in a typecast-to-float. Such casts are value-preserving
+  // here since the caller converts to double anyway.
+  while (resolved.id() == "typecast" && resolved.operands().size() == 1 &&
+         resolved.op0().is_constant())
+    resolved = resolved.op0();
   if (!resolved.is_constant())
     return std::nullopt;
 
