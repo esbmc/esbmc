@@ -344,7 +344,7 @@ static void link_cbmc_libm_bodies(goto_functionst &goto_functions)
     "truncf",    "trunc",    "truncl",    "roundf", "round", "roundl",
     "copysignf", "copysign", "copysignl", "fminf",  "fmin",  "fminl",
     "fmaxf",     "fmax",     "fmaxl",     "fdimf",  "fdim",  "fdiml",
-    "modff",     "modf",     "modfl"};
+    "modff",     "modf",     "modfl",     "rintf",  "rint",  "rintl"};
 
   for (const char *name : libm)
   {
@@ -404,6 +404,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)fmaxf,     (void *)fmax,     (void *)fmaxl,\n"
     "  (void *)fdimf,     (void *)fdim,     (void *)fdiml,\n"
     "  (void *)modff,     (void *)modf,     (void *)modfl,\n"
+    "  (void *)rintf,     (void *)rint,     (void *)rintl,\n"
     "  (void *)memcpy,    (void *)memmove,  (void *)memset,\n"
     "};\n"
     "int main(void) { return 0; }\n";

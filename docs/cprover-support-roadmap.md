@@ -84,6 +84,7 @@ and the symbol/function table layout.
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
+| Libm body bridge extended to `rint`/`rintf`/`rintl` (round to nearest integer, ambient rounding mode) (§4.8, Phase 2) | ✅ (PR #TBD) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -717,6 +718,19 @@ force-links the operational-model body, itself defined via truncate-toward-zero 
 `copysign` in `libm/modf.c`). Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across all
 three widths (`cbmc_modf` SUCCESSFUL) and a wrong-fraction negative (`cbmc_modf_fail`:
 `modf(3.75,…) == 0.5` ⇒ FAILED, confirming the split is really computed, not vacuously passed).
+
+**Extended (PR #TBD) to `rint`/`rintf`/`rintl`** — round-to-nearest-integer, the last of the
+*exact-result* libm functions the corpus exercises. Unlike `modf` (which forces round-toward-zero
+internally), `rint` rounds under the **ambient** rounding mode; ESBMC's operational-model body
+(`libm/rint.c`) is `nearbyint(f)`, whose floatbv encoding honours `__ESBMC_rounding_mode`. On the
+CBMC binary the plain-named `rint` was a **bodyless external returning nondet**, so a valid
+`rint(2.5) == 2.0` reported a false `FAILED` where CBMC verifies `SUCCESSFUL`. Same one-line bridge
+as `modf` (three names into the `libm[]` list + the additions boilerplate). The `--binary` path's
+default rounding mode is round-to-nearest-even, matching CBMC: verified across the round-half-to-even
+ties `rint(2.5) == 2.0` and `rint(3.5) == 4.0` (not 3.0/4.0 under a naive round-half-up), dual-solver
+(Bitwuzla + Z3), all three widths (`cbmc_rint` SUCCESSFUL), plus a wrong-tie negative (`cbmc_rint_fail`:
+`rint(2.5) == 3.0` ⇒ FAILED). `lrint`/`llrint` (integer-returning) already match CBMC and are left
+as-is. This closes the exact-result libm bridge family.
 
 **Ruled out as an alternative fix** (for the remaining libm family, from the #5743
 diagnosis pass): making `esbmc_parseoptions.cpp`'s `synthesize_cprover_additions`
