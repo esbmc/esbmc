@@ -997,7 +997,7 @@ TEST_CASE(
 namespace
 {
 // Register a lambda/def-alias call variable: a Python-mode symbol whose
-// table type is pointer-to-code (the python_lambda.cpp:50 shape).
+// table type is pointer-to-code.
 type2tc add_funcptr_var(contextt &ctx, const std::string &id)
 {
   const type2tc code_t = code_type2tc(
@@ -1020,9 +1020,8 @@ TEST_CASE(
   "python_adjust rewrites a statement call through a function pointer",
   "[python-adjust]")
 {
-  // `op(3)` as a statement: the callee symbol's table type is
-  // pointer-to-code, so the arm re-types it, wraps the dereference, and
-  // casts the argument to the declared parameter type.
+  // `op(3)` as a statement: the arm re-types the pointer-to-code callee,
+  // wraps the dereference, and casts the argument to the parameter type.
   contextt ctx;
   const type2tc code_t = add_funcptr_var(ctx, "py_fptr_stmt");
 
@@ -1078,8 +1077,7 @@ TEST_CASE(
   "[python-adjust]")
 {
   // No-op guards: an unregistered callee symbol, and a registered one whose
-  // pointer type does not point at code — both must fall through to
-  // goto-convert's own diagnostic path unchanged.
+  // pointer type does not point at code — both must be left unchanged.
   contextt ctx;
   symbolt var;
   var.id = var.name = "py_int_ptr_var";

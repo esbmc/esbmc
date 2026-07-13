@@ -2445,17 +2445,11 @@ exprt python_converter::build_binary_expression(
     return static_cast<const bv_typet &>(t).get_width();
   };
 
-  // S4 width reconciliation (docs/irep2-migration.md, "Call-rewrite
-  // outcome"): complete the int/float and float/float-width mixes the arms
-  // below do not cover — today clang_cpp_adjust's
-  // adjust_expr_binary_arithmetic inserts these casts post-hoc, and after
-  // the B.5 flip nothing would. Mirrors the C usual arithmetic conversions
-  // for the shapes Python emits (CPython semantics agree): the integer side
-  // converts to the float type, the narrower float widens to the wider.
-  // Bitwise operands were already coerced to int above, so no float reaches
-  // a bitwise op; bv/bv mixes keep the existing converter rules below. On
-  // the live pipeline the legacy pass re-derives the same common type and
-  // becomes a no-op on the pre-reconciled operands (A/B byte-parity gated).
+  // Reconcile the int/float and float/float-width mixes the arms below do
+  // not cover, following the C usual arithmetic conversions (CPython agrees
+  // for the shapes Python emits): the integer side converts to the float
+  // type, the narrower float widens to the wider. Bitwise operands were
+  // already coerced to int above, so no float reaches a bitwise op.
   {
     const bool lhs_float = lhs.type().is_floatbv();
     const bool rhs_float = rhs.type().is_floatbv();
@@ -2465,9 +2459,8 @@ exprt python_converter::build_binary_expression(
       lhs = typecast_exprt(lhs, rhs.type());
     else if (lhs_float && rhs_float && lhs.type() != rhs.type())
     {
-      // Distinct float types always differ in width today (the frontend
-      // emits IEEE float16/32/64 only); an equal-width different-format
-      // pair (e.g. a future bfloat16) would fall through unreconciled.
+      // Distinct float types differ in width today (float16/32/64 only); an
+      // equal-width different-format pair would fall through unreconciled.
       const unsigned lw = bit_width(lhs.type());
       const unsigned rw = bit_width(rhs.type());
       if (lw < rw)
@@ -2557,4 +2550,3 @@ exprt python_converter::build_binary_expression(
 
   return bin_expr;
 }
-

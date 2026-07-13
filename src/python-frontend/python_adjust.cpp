@@ -281,8 +281,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
     is_sideeffect2t(expr) &&
     to_sideeffect2t(expr).kind == sideeffect2t::allockind::function_call)
   {
-    // Expression-form call (`assert f(3) == 6` migrates the call as a
-    // function_call sideeffect whose operand is the callee).
+    // Expression-form call (e.g. `assert f(3) == 6`): the callee is the
+    // sideeffect operand.
     const sideeffect2t &s = to_sideeffect2t(expr);
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
@@ -316,42 +316,27 @@ bool python_adjust::wrap_function_pointer_callee(
   expr2tc &fn,
   std::vector<expr2tc> &args)
 {
-  // The lambda/def-alias variable call (`op = lambda ...; op(3)`): the
-  // variable's *symbol-table* type is pointer-to-code (python_lambda.cpp:50)
-  // while goto-convert's do_function_call_symbol requires a code-typed
-  // callee (builtin_functions.cpp:627). On the legacy pipeline adjust_expr
-  // re-types the symbol expression from the table and the call adjuster
-  // wraps the pointer callee in an implicit dereference
-  // (clang_c_adjust_expr.cpp:918-926) — reproduce both steps, plus the
-  // legacy per-argument reconciliation (adjust_function_call_arguments,
-  // :933-961): each argument is cast to its declared parameter type, which
-  // the converter does for direct calls but not on this indirect path (the
-  // untyped `int` argument against a `float y=1.5` parameter otherwise
-  // reaches the solver width-mismatched). Inert today: the legacy pass
-  // already rewrote these calls before migration, so the callee arrives as
-  // a dereference, not a symbol. Default arguments need no handling here —
-  // the converter fills omitted trailing defaults at the call site during
-  // conversion (converter_funcall), before this pass.
+  // A lambda/def-alias call (`op = lambda ...; op(3)`): the callee symbol's
+  // table type is pointer-to-code, but goto-convert wants a code-typed
+  // callee. Re-type it from the table, dereference onto the code type, and
+  // cast each argument to its declared parameter type — the legacy
+  // adjust_symbol + implicit-deref + adjust_function_call_arguments trio.
+  // Inert on the default pipeline (legacy rewrites these calls before
+  // migration, so the callee already arrives as a dereference).
   if (is_nil_expr(fn) || !is_symbol2t(fn))
     return false;
   const irep_idt &name = to_symbol2t(fn).thename;
   const symbolt *fs = context.find_symbol(name);
   if (fs == nullptr || !is_pointer_type(fs->get_type2()))
     return false;
-  // The pointee is a structural code_type2t directly (python_lambda.cpp
-  // builds gen_pointer_type over the code type; Python has no code
-  // typedefs to follow) and never carries ellipsis (only catch-handler
-  // types do).
+  // Python points directly at the code type (no typedefs to follow).
   const type2tc &pointee = to_pointer_type(fs->get_type2()).subtype;
   if (!is_code_type(pointee))
     return false;
 
-  // Cast only number/pointer argument kinds — the combos symex itself
-  // reconciles (symex_function.cpp) — so an aggregate arg from an upstream
-  // typing bug keeps symex's clear per-argument diagnostic instead of an
-  // unencodable typecast2t. The call node's own return type is left to
-  // symex's return-value cast; a residual body-side divergence is the S4
-  // family (docs/irep2-migration.md, "Call-rewrite outcome").
+  // Cast only scalar/pointer argument kinds; an aggregate arg from an
+  // upstream typing bug keeps symex's own per-argument diagnostic rather
+  // than an unencodable typecast.
   const auto is_castable_kind = [](const type2tc &t) {
     return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
            is_bool_type(t) || is_pointer_type(t);
@@ -365,9 +350,8 @@ bool python_adjust::wrap_function_pointer_callee(
       args[i] = typecast2tc(want, args[i]);
   }
 
-  // Unlike the legacy deref (which keeps the unfollowed subtype,
-  // clang_c_adjust_expr.cpp:920), the node is built directly over the code
-  // type — goto-convert's dereference dispatch wants a code-typed callee.
+  // Build the dereference over the code type — goto-convert's dispatch
+  // wants a code-typed callee.
   fn = dereference2tc(pointee, symbol2tc(fs->get_type2(), name));
   return true;
 }
