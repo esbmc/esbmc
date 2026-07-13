@@ -11,6 +11,13 @@
 # and --data-races-check (the flag that keeps interleaving generation alive;
 # without it the search terminates early and the claim passes vacuously).
 #
+# Bounded --unwind 2 (not --incremental-bmc): the user code is loop-free and the
+# threading model's start/join fully unroll within one step, so a single bounded
+# solve is complete here — unwinding assertions stay ON, so an insufficient bound
+# would surface as VERIFICATION FAILED, never a false SUCCESSFUL. This avoids the
+# incremental re-solve overhead that pushed this proof to ~115s against the CI's
+# 120s cap and made it flaky. Do not restore --incremental-bmc.
+#
 # ENSURES:
 #   E1: under the Lock, counter == 2 in every schedule [mutual exclusion holds]
 import threading
