@@ -85,7 +85,7 @@ TEST_CASE(
 
   const BigInt two_pow_64 =
     BigInt(static_cast<BigInt::ullong_t>(UINT64_MAX)) + BigInt(1); // 2^64
-  const constant_int2t &big = as_uint(BigInt(two_pow_64));
+  const constant_int2t big = as_uint(BigInt(two_pow_64));
 
   REQUIRE_FALSE(big.value.is_uint64()); // as_ulong()'s guard would fire
   REQUIRE_FALSE(big.value.is_int64());  // as_long()'s guard would fire
