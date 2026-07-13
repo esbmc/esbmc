@@ -817,13 +817,81 @@ Analysis of 1,378 Kani benchmark tests run against ESBMC backend reveals systema
 
 ## UMBRELLA #1: Transmute/Type Reinterpretation Crashes
 
-**Status**: 🔴 BROKEN
+**Status**: 🟢 CRASH CHAIN RESOLVED + CBMC-verdict parity on the minimal reproducer (`check_typed_swap_u8`); other candidates pending
 **Impact**: ~200+ tests
 **Severity**: 🔴 CRITICAL
-**Exit Codes**: rc=139 (both parse & verify)
+**Exit Codes**: rc=139 (both parse & verify) — **no longer reproduces** on `check_typed_swap_u8`
 
 **Description**:
 ESBMC crashes with segmentation fault when processing `transmute` operations and type-casting intrinsics. Both safe `transmute` and unsafe `transmute_unchecked` variants fail during both parse and verify phases. The lowering layer cannot properly represent bit-level type reinterpretation in the C intermediate representation.
+
+**Root cause & fix (minimal reproducer `check_typed_swap_u8`) — ✅ crash chain resolved.**
+The single rc=139 was not one bug but a chain of four, each masking the next; fixing all
+four takes the reproducer from an immediate stack-overflow segfault to a clean end-to-end
+verification verdict. Discovered and fixed by direct testing against the real Kani
+CBMC binary (`--binary --function …check_typed_swap_u8`), dual-solver (Bitwuzla + Z3):
+
+1. **Recursive-aggregate stack overflow → segfault** (`cbmc_adapter.cpp::fix_type`). Rust
+   `core` aggregates are pervasively self-referential (a struct holding a pointer back to
+   its own tag). `fix_type` inlined a tag's definition out of the struct-tag cache
+   unconditionally, so a self-reference recursed forever and blew the stack — the literal
+   rc=139. Fixed by threading an `expanding` set of the tag identifiers currently on the
+   recursion stack; a tag already being inlined is left as a `symbol` type instead, which
+   `migrate_type` resolves lazily via the symbol table — the same way ESBMC's own frontends
+   encode recursive aggregates. A fresh stack is seeded per top-level type.
+2. **`union` missing from the operand-wrap set → empty `constant_union2t` abort**
+   (`cbmc_adapter.cpp::fix_expression`, §4.4 shape). Exactly the `pointer_offset`/`popcount`
+   failure mode: a `union` constant carries its single initialiser as a raw operand, but
+   `union` was absent from `fix_expression`'s wrap-set, so the operand never moved into the
+   `"operands"` named-sub `migrate_expr`'s `forall_operands` reads. Migrate then built a
+   `constant_union2t` with **no** `datatype_members`, which every consumer that indexes
+   `datatype_members[0]` (value_set, dereference, symex_assign) aborts on. Rust's
+   `MaybeUninit` makes this ubiquitous — its active variant's value is a nondet sideeffect
+   that must survive migration, so the union stays soundly nondeterministic. Fixed by adding
+   `"union"` to the wrap-set (symmetric to the pre-existing `"struct"`).
+3. **Zero-sized union member → 65-bit-vs-64-bit sort mismatch** (`smt_solver.cpp`, union
+   `with` encoding). A Rust enum payload union `{ Ok:(i64)=64b, Err:(())=0b }` written at
+   its zero-sized `Err(())` variant took `mem_bits = 0`, and the encoding built a degenerate
+   `get_uint_type(0)` bitvector; the solver widened the 0-width operand to 1 bit, so the
+   `concat` produced a value **one bit wider** than the union sort (Z3/Bitwuzla both reject
+   it). Fixed by recognising that a zero-sized member occupies no storage — writing it leaves
+   the union's bit representation unchanged — and short-circuiting to the source value.
+4. **Wide `byte_extract` → pointer/non-bv target yielded an 8-bit bitvector**
+   (`smt_byteops.cpp::convert_byte_extract_bv_mode`). This is the **bit-level type
+   reinterpretation** at the heart of the umbrella. ESBMC's own `byte_extract2t` is a
+   byte-granular primitive — every internal construction uses an 8-bit type and the SMT
+   conversion always extracted exactly one byte, ignoring the result type — but
+   `migrate.cpp` maps CBMC's `byte_extract_little_endian` 1:1 with its (possibly wide)
+   result type. Rust's `without_provenance_mut::<()>(0)` reinterprets integer `0` as a
+   `*mut ()`, i.e. `byte_extract(0_u64, offset 0, *mut ())`, which produced an 8-bit
+   bitvector assigned to a pointer-struct LHS. Fixed by generalising the extraction to
+   `data.type`'s width and reinterpreting the extracted bits into the target sort via a
+   `bitcast` when the target isn't a plain bitvector (pointer/float/aggregate; the
+   int→pointer bitcast falls through to ESBMC's pointer typecast, giving a null pointer for
+   `0`). The 8-bit path is byte-identical (`out_width == 8` collapses to the original
+   single-byte extraction), so native frontends are unaffected.
+
+**Verified — CBMC-verdict parity (roadmap §6 oracle).** On the same binary and function,
+**CBMC 6.10.0 also reports `VERIFICATION FAILED`** (11 of 3036 checks), so ESBMC matches
+CBMC's top-level verdict. Moreover the failures agree at the *property* level: all 11 of
+CBMC's failures are Kani `reachability_check` coverage markers (`KANI_CHECK_ID_…`, which are
+designed to "fail" when the code is reachable — not real assertion violations; the harness's
+substantive checks all pass in both tools), and ESBMC's first-found failure —
+`num::<impl usize>::abs_diff`, `KANI_CHECK_ID_core…::core_11`, line 1278 — is an **exact
+match** to one of CBMC's 11 (ESBMC stops at the first failing property by default, CBMC
+enumerates all). Separately: all 421 ESBMC unit tests pass; end-to-end C sanity across the
+four reinterpret shapes (8-bit memcpy, union type-pun, float bit-reinterpret, int→pointer)
+verifies SUCCESSFUL on both solvers, with a negative variant (wrong float bit-pattern)
+correctly FAILED to prove the values are genuinely constrained.
+
+**Still open (this umbrella):** (a) the other candidates below (explicit `transmute`/
+`transmute_unchecked`, `transmute_ptr_address`, arr↔tuple) are not yet exercised — they may
+share this crash chain or surface new reinterpret shapes; (b) ESBMC stops at the first
+failing property — a `--multi-property` run to confirm it reproduces all 11 of CBMC's
+reachability markers (not just the first) would tighten parity from verdict-level to
+full property-set; (c) CBMC-binary regression fixtures (`cbmc_transmute*`) are not yet
+added — the fixes were validated against the live Kani binary and native C reproducers,
+since this build has no regression suite configured.
 
 **Affected Operations**:
 - `mem::transmute()` - type reinterpretation
