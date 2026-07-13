@@ -56,22 +56,18 @@ TEST_CASE("array get_width overflows unsigned int (R1)", "[core][irep2]")
 #endif
 }
 
-// R3: a vector whose size is a non-constant (solver-determined) expression has
-// no static width. get_width must throw dyn_sized_array_excp instead of
-// dereferencing the failed dynamic_cast, which is a null-pointer deref in
-// release builds where the assert is compiled out. This mirrors the guard the
-// array path has always had; the two paths must behave identically.
+// R3: a vector with a non-constant size must throw, not null-deref the failed
+// dynamic_cast (its guarding assert is compiled out under NDEBUG).
 TEST_CASE("vector get_width rejects a symbolic size (R3)", "[core][irep2]")
 {
   config.ansi_c.word_size = 64;
 
-  // A symbol is not a constant_int, so array_size->expr_id != constant_int_id.
   expr2tc sym_size = symbol2tc(get_uint_type(64), "vec_size");
 
   type2tc vec = vector_type2tc(get_uint_type(16), sym_size);
   REQUIRE_THROWS_AS(vec->get_width(), array_type2t::dyn_sized_array_excp);
 
-  // The array path already rejected this case; confirm the symmetry.
+  // Same input, array path: confirm the two behave identically.
   type2tc arr = array_type2tc(get_uint_type(16), sym_size, false);
   REQUIRE_THROWS_AS(arr->get_width(), array_type2t::dyn_sized_array_excp);
 }

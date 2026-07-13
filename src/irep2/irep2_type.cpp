@@ -155,12 +155,8 @@ unsigned int array_type2t::get_width() const
 
 unsigned int vector_type2t::get_width() const
 {
-  // A vector with a non-constant (solver-determined) size has no static
-  // width. Mirror array_type2t::get_width's dynamic-size guard and throw
-  // rather than falling through to the dynamic_cast below: that cast fails
-  // for a symbolic size and the assert(const_elem_size != nullptr) is
-  // compiled out under NDEBUG, so const_elem_size->as_ulong() is a
-  // null-pointer dereference in release builds (R3).
+  // A non-constant size fails the dynamic_cast below; the guarding assert is
+  // compiled out under NDEBUG, so guard here as array_type2t::get_width does.
   if (array_size->expr_id != expr2t::constant_int_id)
     throw array_type2t::dyn_sized_array_excp(array_size);
 
