@@ -798,8 +798,17 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   }
 
   // do destructor
+  //
+  // The C++ frontend's `array_init$` is a construction helper: it builds an
+  // aggregate/array member, then copies its contents into the object under
+  // construction (`*this = array_init$`).  Giving it an automatic scope-exit
+  // destructor would run the copied members' destructors a second time (and
+  // double-free any resource-owning member), so skip it -- its members are
+  // owned and destroyed through `*this`.  `array_init$` is a reserved
+  // synthetic name (`$` cannot appear in a user identifier), so this cannot
+  // match a user variable.
   code_function_callt destructor;
-  if (get_destructor(ns, s->get_type(), destructor))
+  if (s->name != "array_init$" && get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);

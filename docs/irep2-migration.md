@@ -4028,6 +4028,7 @@ A broader hop-off sample (`dict40`, `raise_noarg_custom_exception`,
 — the S3 member/index-at-scale and S5 argument-cast families). Those are
 the blocker-3+ work-list.
 
+<<<<<<< feat/python-adjust-blocker3-diagnosis
 #### No-verdict diagnosis outcome (2026-07-11) — try_finally fixed (a blocker-2 straggler); scope limit (3) closed; the lambda-call rewrite is the pinned next step
 
 **`try_finally` was not a new family** — it was a blocker-2 straggler: the
@@ -4062,6 +4063,8 @@ kind carrying the call (likely a `sideeffect` function-call expression
 inside the statement, not a `code_function_call2t`), then rebuild the arm
 against that shape.
 
+=======
+>>>>>>> master
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
