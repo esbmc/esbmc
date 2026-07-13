@@ -1568,6 +1568,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (int_encoding)
     {
       a = mk_neg(args[0]);
+      if (ir_ieee && is_floatbv_type(neg.value))
+        ir_ieee_api->propagate_nan_pred(a, args[0]);
     }
     else if (is_floatbv_type(neg.value))
     {
