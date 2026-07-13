@@ -4000,6 +4000,71 @@ catch-side hierarchy matching needs the `"bases"` carriage — blocker 2;
 **blockers 2–5 are now empirically measurable**, and the hop-off run of the
 exception suite is the natural work-list generator for them.
 
+#### Blocker 2 outcome (2026-07-11) — catch ids derived at construction; the exception suite holds correct verdicts hop-off
+
+The blocker-2 diagnosis sharpened on implementation: the catch side's
+failure mode was not the `"bases"` hierarchy after all, but the same
+missing-id disease as blocker 1 in a different organ. The per-handler
+`"exception_id"` attribute is set only by `clang_cpp_adjust::adjust_catch`
+(from the block's type; `clang_cpp_adjust_code.cpp:206-225`), and the
+source-form cpp-catch **migration reads that attribute**
+(`migrate.cpp:2488-2526`) — skip the hop and every handler migrates with an
+empty id that matches no throw, so catches silently never fire (the
+`except_tuple_types` wrong verdict). Fix: `emit_catch_block` now derives
+the id at construction — bare class name for a class tag, `"ellipsis"` for
+the bare-except catch-all, the type id otherwise — exactly what
+`adjust_catch`'s `convert_exception_id` `front()` yields for each shape.
+The legacy pass still runs today and overwrites with the identical value:
+**GOTO-byte A/B parity verified** (`--goto-functions-only`, stash method,
+byte-identical), 43/43 `regression/python` exception tests green.
+
+**Hop-off validation:** `except_tuple_types{,_fail}`, `try_except_else`,
+`list_index_valueerror{,_fail}` all give **correct verdicts** (positives
+SUCCESSFUL, negatives FAILED) with `clang_cpp_adjust` skipped — catch
+matching now works end-to-end without the legacy hop, throw + catch both.
+A broader hop-off sample (`dict40`, `raise_noarg_custom_exception`,
+`contains_dunder` pass) narrows the remaining gap to programs that produce
+**no verdict** hop-off: `try_finally` and `lambda_default_arg` (crash/hang
+— the S3 member/index-at-scale and S5 argument-cast families). Those are
+the blocker-3+ work-list.
+
+<<<<<<< feat/python-adjust-blocker3-diagnosis
+#### No-verdict diagnosis outcome (2026-07-11) — try_finally fixed (a blocker-2 straggler); scope limit (3) closed; the lambda-call rewrite is the pinned next step
+
+**`try_finally` was not a new family** — it was a blocker-2 straggler: the
+synthetic finally + re-raise catch-all handler is built outside
+`emit_catch_block` (`python_exception_handler.cpp`, `get_try_statement`)
+and set only its ellipsis *type*, so hop-off its `exception_id` migrated
+empty and failed `remove_exceptions`' handler-shape check with a clean
+diagnostic (not a crash). Fixed with the same construction-time pre-set
+(`exception_id = "ellipsis"`); GOTO-byte A/B identical on the normal
+pipeline; `try_finally` hop-off now **`VERIFICATION SUCCESSFUL`**. Census
+confirmed this was the only remaining cpp-catch construction site without
+the pre-set.
+
+**Scope limit (3) closed**: `adjust()` now completes each non-type
+Python-mode symbol's *own* type (the legacy `adjust_symbol` analogue,
+write-back only on change, unit-pinned with the non-Python skip). This
+resolved the lambda-*variable* symbol-type half of the
+`lambda_default_arg` hop-off failure.
+
+**Pinned next step — the lambda/def-alias *call* rewrite.** The remaining
+hop-off failure is precise: `goto-convert`'s `do_function_call_symbol`
+checks the callee symbol's table type (`builtin_functions.cpp:627`), and a
+lambda variable's table type is pointer-to-code (`python_lambda.cpp:50`).
+On the legacy pipeline `adjust_expr` re-types symbol expressions from the
+table and `adjust_side_effect_function_call` wraps the pointer callee in an
+implicit dereference (`clang_c_adjust_expr.cpp:918-926`), turning the
+direct-symbol call into a function-pointer call. A first
+`code_function_call2t` arm in `python_adjust` did **not fire** for the
+failing shape and was removed rather than shipped unproven — the next
+iteration must first dump the migrated body to identify the actual node
+kind carrying the call (likely a `sideeffect` function-call expression
+inside the statement, not a `code_function_call2t`), then rebuild the arm
+against that shape.
+
+=======
+>>>>>>> master
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written

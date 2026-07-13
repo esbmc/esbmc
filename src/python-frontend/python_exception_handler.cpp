@@ -142,6 +142,12 @@ void python_exception_handler::get_try_statement(
   {
     exprt finally_handler = converter_.get_block(element["finalbody"]);
     finally_handler.type().set("ellipsis", true); // catch-all
+    // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
+    // outside that path, and migration reads the attribute per handler — an
+    // unset id migrates empty and fails remove_exceptions' handler-shape
+    // check once the legacy adjust_catch (which would derive "ellipsis" from
+    // the type above) no longer runs.
+    finally_handler.set("exception_id", "ellipsis");
     side_effect_exprt rethrow("cpp-throw", empty_typet());
     rethrow.location() = converter_.get_location_from_decl(element);
     codet rethrow_code("expression");
@@ -463,6 +469,33 @@ void python_exception_handler::emit_catch_block(
     // produces the "ellipsis" exception_id, which remove_exceptions lowers
     // as a catch-all handler.
     catch_block.type().set("ellipsis", true);
+  }
+
+  // Flip blocker #2 (docs/irep2-migration.md, "Flip-probe census"): derive
+  // the per-handler exception id at construction, exactly as
+  // clang_cpp_adjust::adjust_catch does from this same block type. That pass
+  // still runs today and overwrites the attribute with the identical value
+  // (its convert_exception_id front() is the bare class name for a class
+  // tag, "ellipsis" for the catch-all, and the type id for the degenerate
+  // non-throwable shapes — modulo legacy's `_ptr` recursion on array/pointer
+  // catch types, whose synthetic ids never name a throwable Python class
+  // either way), so the pipeline stays byte-identical — but migration reads
+  // this attribute (migrate.cpp, source-form cpp-catch), and once the flip
+  // removes the legacy hop, an unset attribute migrates as an empty id that
+  // matches no throw.
+  {
+    const typet &ct = catch_block.type();
+    std::string exc_id;
+    if (ct.id() == "symbol")
+    {
+      const std::string tid = ct.identifier().as_string();
+      exc_id = tid.rfind("tag-", 0) == 0 ? tid.substr(4) : tid;
+    }
+    else if (ct.ellipsis())
+      exc_id = "ellipsis";
+    else
+      exc_id = ct.id().as_string();
+    catch_block.set("exception_id", exc_id);
   }
 
   block.move_to_operands(catch_block);

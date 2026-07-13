@@ -1,6 +1,12 @@
+#include <functional>
+
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/exception_specification.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {
@@ -185,6 +191,34 @@ void clang_cpp_adjust::adjust_for(codet &code)
     clang_c_adjust::adjust_for(code);
 }
 
+// Recursively locate the constructor-call side-effect inside a declaration
+// initializer.  Mirrors find_constructor_call in clang_cpp_main.cpp: for a
+// `temporary_object` the call lives under the named "initializer" sub-irep
+// (not an operand), so unwrap that before recursing into operands.
+static const exprt *find_constructor_call(const exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.get_bool("constructor"))
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+  {
+    const irept &init = e.initializer();
+    if (init.is_not_nil())
+      if (
+        const exprt *c =
+          find_constructor_call(static_cast<const exprt &>(init)))
+        return c;
+  }
+
+  forall_operands (it, e)
+    if (const exprt *c = find_constructor_call(*it))
+      return c;
+
+  return nullptr;
+}
+
 void clang_cpp_adjust::adjust_decl_block(codet &code)
 {
   codet new_block("decl-block");
@@ -196,6 +230,85 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 
     adjust_expr(*it);
     code_declt &code_decl = to_code_decl(to_code(*it));
+
+    // A local (automatic-storage) array of class type with a non-trivial
+    // constructor must have *every* element constructed.  The frontend leaves
+    // a single constructor call on the declaration and relies on
+    // clang_cpp_maint::adjust_init to expand it per element -- but that only
+    // runs for static-storage objects, so a local array would construct only
+    // element 0.  Fan the call out here into one constructor call per element
+    // (recursing into nested arrays), each with `this` pointing at that
+    // element.  See regression esbmc-cpp11/constructors/Constructor9-1.
+    // Only whole-array default/value construction qualifies: the initializer
+    // is a *single* constructor call (wrapped in a temporary_object) whose
+    // type is the whole array.  Aggregate initialisation such as
+    // `B a[2] = {B(1), B(2)}` lowers to a constant_array of per-element
+    // initialisers instead, and must NOT be fanned out (that would construct
+    // every element with element 0's arguments).
+    // Static-storage locals (function-local statics, e.g. `static B a[2];`)
+    // are constructed by static_lifetime_init, not from the function body, so
+    // leave their declaration untouched -- expanding here would construct them
+    // a second time on every call.
+    const bool is_static_local = code_decl.op0().is_symbol() && [&] {
+      const symbolt *s =
+        ns.lookup(to_symbol_expr(code_decl.op0()).get_identifier());
+      return s && s->static_lifetime;
+    }();
+
+    const exprt *ctor = nullptr;
+    if (
+      !is_static_local && code_decl.operands().size() == 2 &&
+      ns.follow(code_decl.op0().type()).is_array())
+    {
+      const exprt &init = code_decl.op1();
+      const bool single_ctor_init =
+        init.id() == "sideeffect" &&
+        (init.statement() == "temporary_object" ||
+         (init.statement() == "function_call" && init.get_bool("constructor")));
+      if (single_ctor_init)
+        ctor = find_constructor_call(init);
+    }
+    if (ctor)
+    {
+      const exprt array = code_decl.op0();
+      const side_effect_expr_function_callt call =
+        to_side_effect_expr_function_call(*ctor);
+
+      // Emit the bare declaration (no initializer) first.
+      code_declt bare_decl(code_decl.op0());
+      bare_decl.location() = code_decl.location();
+      new_block.copy_to_operands(bare_decl);
+
+      std::function<void(const exprt &)> construct_elements =
+        [&](const exprt &arr) {
+          const array_typet &arr_type = to_array_type(ns.follow(arr.type()));
+          BigInt count;
+          if (to_integer(arr_type.size(), count))
+          {
+            log_error("cannot determine array size for local ctor init");
+            abort();
+          }
+
+          const typet &elem_type = arr_type.subtype();
+          for (BigInt idx = 0; idx < count; ++idx)
+          {
+            exprt element =
+              index_exprt(arr, from_integer(idx, index_type()), elem_type);
+            if (ns.follow(elem_type).is_array())
+            {
+              construct_elements(element);
+              continue;
+            }
+            side_effect_expr_function_callt elem_call = call;
+            elem_call.arguments()[0] = address_of_exprt(element);
+            exprt as_code = elem_call;
+            convert_expression_to_code(as_code);
+            new_block.copy_to_operands(as_code);
+          }
+        };
+      construct_elements(array);
+      continue;
+    }
 
     new_block.copy_to_operands(code_decl);
   }
