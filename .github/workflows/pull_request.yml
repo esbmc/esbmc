@@ -205,7 +205,7 @@ jobs:
             echo "No CMake files to lint."
             exit 0
           fi
-          cmakelint --config=.cmakelintrc "${files[@]}"
+          cmakelint --config=.config/cmakelintrc "${files[@]}"
 
 
   # Check project with YAPF
