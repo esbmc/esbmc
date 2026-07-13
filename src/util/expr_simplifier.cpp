@@ -1648,11 +1648,13 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     const constant_array2t &arr = to_constant_array2t(src);
-    unsigned long the_idx = idx.as_ulong();
-    if (the_idx >= arr.datatype_members.size())
+    // Bound-check on the BigInt (correct at any width) before as_ulong(), so a
+    // wider-than-64-bit index bails out of simplification instead of being
+    // truncated — mirrors the constant_vector path below.
+    if (idx.value >= arr.datatype_members.size())
       return expr2tc();
 
-    return arr.datatype_members[the_idx];
+    return arr.datatype_members[idx.as_ulong()];
   }
 
   if (is_constant_vector2t(src) && is_constant_int2t(idx_e))
@@ -1680,13 +1682,14 @@ expr2tc index2t::do_simplify() const
       return expr2tc();
 
     const constant_string2t &str = to_constant_string2t(src);
-    unsigned long the_idx = idx.as_ulong();
-    if (the_idx >= str.array_size()) // allow reading null term.
+    // BigInt bound-check before as_ulong() (allow reading null term), so a
+    // wider-than-64-bit index bails rather than truncating.
+    if (idx.value >= str.array_size())
       return expr2tc();
 
     // String constants had better be some kind of integer type
     assert(is_bv_type(type));
-    expr2tc c = str.at(the_idx);
+    expr2tc c = str.at(idx.as_ulong());
     assert(c);
     return c;
   }
