@@ -883,7 +883,13 @@ as a progress tracker.
 
 | Milestone | Harness | Location | Technique | Verdict | Status |
 |---|---|---|---|---|---|
-| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. |
+| **M0** | H-A1 refcount conservation, single-free & self-alias UAF-safety (I1) | `unit/irep2/refcount.test.cpp`, `refcount_ops.h`, `refcount.fuzz.cpp` | **Tier B** — Catch2 property tests + a **nondeterministic-input** operation driver, both over the **real** `irep_container<T>`; reads the actual `irep2t::refcount` atomic after copy / move / assign / detach | 5 cases, 91 assertions PASS on `master` @ 4ba1903130; libFuzzer run 2,000,000 execs, no violation | **Done** (PR #6024). Verifies the genuine implementation, not a model, per §2 Tier B. The `run_ops` driver decodes a byte stream (libFuzzer, or fixed-seed in the unit test) into a sequence of container ops and checks refcount conservation after each; the libFuzzer target (`-DENABLE_FUZZER=On`) adds ASan UAF/double-free coverage. Built under the `Sanitizer` build type (ASan) the fixed cases also witness UAF freedom. Also pins **H-A2** (COW detach clones iff shared) and **H-A3** (self-aliasing assignment UAF-safety) as Tier-B cases on the real container. |
+| **M1** | H-A6 `as_ulong`/`as_long` >64-bit truncation (R2, I10) | `unit/irep2/const_int.test.cpp`; fix in `irep2_expr.cpp:101-118` | **Tier B** — real `constant_int2t`; `as_ulong` now asserts `value.is_uint64()`, `as_long` asserts `value.is_int64()` before the `to_uint64/to_int64` narrowing | PASS on real classes | **Done** (PR #6027, fix-and-prove-in-one-PR). |
+| **M1** | H-A5 `get_width` >32-bit width overflow (R1) | `unit/irep2/get_width.test.cpp`; fix in `irep2_type.cpp:129-215` | **Tier B** — real `array/vector/struct::get_width`; 64-bit-accumulate + reject a product/sum that truncates on the narrow to `unsigned int` | PASS; truncation observed only under NDEBUG | **Done** (PR #6029). |
+| **M2** | H-A7 `constant_string` byte reconstruction | `unit/irep2/const_string.test.cpp` | **Tier B** — real `constant_string_access`; bounds/shift/endianness | PASS | **Done** (PR #6030). |
+| **M2** | H-A8 `get_sub_expr` index accumulation | `unit/irep2/subexpr_index.test.cpp` | **Tier B** — real dispatch; no `size_t` underflow, in-bounds, null past end | PASS | **Done** (PR #6032). |
+| **M3** | H-A4 `hash_combine` + `feed_bigint` CRC ingestion | `unit/irep2/crc_bigint.test.cpp` | **Tier B** — real BigInt CRC heap-grow path; no OOB, sign mixed | PASS | **Done** (PR #6033). |
+| **M3** | H-A5 deref variant — `vector_type2t::get_width` symbolic-size guard (R3) | `unit/irep2/get_width.test.cpp`; fix in `irep2_type.cpp:156-171` | **Tier B** — real `vector_type2t`; a non-`constant_int` size now throws `dyn_sized_array_excp` instead of null-deref'ing the failed `dynamic_cast` (assert compiled out under NDEBUG). Anti-vacuity: unfixed code **SIGSEGVs** on the same input under RelWithDebInfo | PASS (fixed); SIGSEGV (unfixed) | **Done** (this PR, fix-and-prove-in-one-PR). Adds only the guard branch (**C-Live**, discharged by the reachability witness — the test input reaches it and the pre-fix crash proves the path executes); no assert removed, so no C-Dead. |
 
 **Approach note.** H-A1 is realised as a **Tier-B** harness (real classes) rather
 than a Tier-A standalone C model: verifying `irep2`'s *actual* C++ is the goal, and
@@ -911,9 +917,18 @@ nondet input, but reach the real classes differently:
   `NDEBUG` library is an ODR/layout mismatch (the repo build never does this).
   The oracle uses `abort()`, not `assert()`, so it stays live under `NDEBUG`.
 
-**Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
-overflow (R1). These are genuine arithmetic kernels: implement as a fix to the
-real `irep2_expr.cpp`/`irep2_type.cpp` plus a Tier-B unit test asserting the
-checked accessor on the real `constant_int2t`/`get_width` (fix-and-prove-in-one-PR
-per §7).
+**Progress summary.** Tier-A kernels are complete: H-A1/H-A2/H-A3 (refcount, COW
+detach, self-alias — PR #6024), H-A4 (CRC/BigInt — #6033), H-A5/R1 (width overflow
+— #6029), H-A5-deref/R3 (vector-width guard — this PR), H-A6/R2 (`as_ulong` — #6027),
+H-A7 (string recon — #6030), H-A8 (sub-expr index — #6032). All three source-level
+findings R1/R2/R3 are fixed-and-pinned. Remaining Tier-A: H-A9 (guard prefix walk),
+H-A10 (`gen_zero`/`gen_one` recursion).
+
+**Next task:** M4 — H-A9 guard shared-prefix walk (`common_pointer_prefix_size`
+`irep2_guard.cpp:64-108`) agrees with the naive element-scan reference, then H-B4
+(guard algebra logical equivalence). Highest soundness stakes; run dual-solver
+(Bitwuzla + Z3). H-A9 is a lifted Tier-A kernel (conjunct-id arrays, no atomics),
+so ESBMC-on-a-standalone-model is viable here — unlike the refcount/COW harnesses
+which had to be Tier-B. See R4 (§10): the walk's correctness depends on the
+debug-only canonical-chain assert, so the harness is the load-bearing regression.
 
