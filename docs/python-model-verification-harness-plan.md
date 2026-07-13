@@ -1,7 +1,8 @@
 # Plan: extend verification-harness coverage of the Python operational models
 
 **Status:** EXECUTED — Tiers 1–3 complete (see §9); all surfaced model gaps
-resolved (see §10). `torch` intentionally deferred.
+resolved (see §10). `torch` was subsequently harnessed (PR #6017); no model
+remains uncovered.
 **Date:** 2026-07-10 (proposal); 2026-07-11 (execution)
 **Related:** PR #5958 (math ints / int / builtins / nondet), PR #5961 (random /
 collections / gamma-remainder), PR #5963 (gamma/lgamma wrong-π model fix). This
@@ -241,12 +242,19 @@ runs can spuriously time out — see §8).
 | 3 | re | #5981 | literal match/search/fullmatch; char-class patterns return an unconstrained bool (model gap) |
 | 3 | threading | #5983 | Lock mutual exclusion; requires `--data-races-check` or the proof is vacuous |
 | 3 | numpy | #5984 | concrete array/reduce/scalar-math; `np.add` unsupported, `np.sum` constants-only |
+| 3 | torch | #6017 | mm right-identity, allclose reflexivity/discrimination, cat width+value; concrete anchors, minimal tensors to fit the CI budget |
 
 **Audited and skipped.** `typing` — pure type-alias stubs, no runtime surface.
 `consensus` — trivial `hash()==42`, negligible value.
 
-**Deferred.** `torch` — heaviest tensor model, and like numpy it has no nondet
-surface, so it adds nothing beyond what numpy already demonstrates.
+**Torch, revisited.** `torch` was initially deferred as "no nondet surface, so
+it adds nothing beyond numpy." On closer inspection the torch model carries real
+algorithmic contracts numpy's constant stubs lack — a triple-loop matrix
+multiply (`mm`/`matmul`), column concatenation (`cat`), and an element-wise
+tolerance compare (`allclose`) — so it was harnessed with concrete anchors
+(PR #6017). Like the other float-heavy models, `cat`+`allclose` stacked in one
+harness blows the CI budget, so tensor sizes and unwind bounds are kept minimal
+and value checks use direct indexing rather than a second model call.
 
 ## 10. Model gaps surfaced — all resolved
 
