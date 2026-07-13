@@ -576,7 +576,14 @@ void expand_anon_struct(const irept &self)
   abort();
 }
 
-void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
+// `expanding` holds the tag identifiers whose definitions are currently being
+// inlined on the recursion stack, so a recursive aggregate (e.g. a Rust struct
+// holding a pointer to itself) can be detected and broken -- see the tag branch
+// below. The two-argument overload seeds it for external callers.
+void fix_type(
+  irept &self,
+  const std::unordered_map<std::string, irept> &cache,
+  std::unordered_set<std::string> &expanding)
 {
   if (self.id() == "c_bool")
   {
@@ -623,7 +630,7 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     // Detect the bool underlying before that rewrite and keep the result "bool".
     const bool bool_underlying =
       underlying.id() == "bool" || underlying.id() == "c_bool";
-    fix_type(underlying, cache);
+    fix_type(underlying, cache, expanding);
     const irep_idt bf_width = self.find("width").id();
     self.id(bool_underlying ? irep_idt("bool") : underlying.id());
     self.get_sub().clear();
@@ -652,7 +659,7 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     !self.get_sub().empty())
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     // The pointed-to type is the sole positional sub, exactly like the array
     // case below -- it must be assigned directly, not wrapped in an
     // intermediate group irep. typet::subtype() (util/type.h) is a direct
@@ -684,11 +691,11 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
   if (!is_tag)
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     return;
   }
 
@@ -703,18 +710,42 @@ void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
     return;
   }
 
+  // Recursive-aggregate guard: if this tag is already being inlined higher up
+  // the stack, inlining its definition again would never terminate (e.g. a
+  // Rust struct holding a pointer to itself, ubiquitous in core). Leave a
+  // 'symbol' type behind instead; migrate_type maps it to symbol_type2tc(ident)
+  // resolved lazily via the symbol table -- exactly how ESBMC's own frontends
+  // encode recursive aggregates -- and the type symbol named `ident` carries
+  // the concrete definition.
+  if (!expanding.insert(ident).second)
+  {
+    irept ref = mk("symbol");
+    ref.identifier(ident);
+    self = ref;
+    return;
+  }
+
   self = it->second;
 
   // The resolved aggregate may itself contain tags; redo the cache walk.
   if (irep_contains(self, "struct_tag") || irep_contains(self, "union_tag"))
   {
     for (auto &v : self.get_sub())
-      fix_type(v, cache);
+      fix_type(v, cache, expanding);
     for (auto &p : self.get_named_sub())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
     for (auto &p : self.get_comments())
-      fix_type(p.second, cache);
+      fix_type(p.second, cache, expanding);
   }
+
+  expanding.erase(ident);
+}
+
+// External entry point: fresh expansion stack per top-level type.
+void fix_type(irept &self, const std::unordered_map<std::string, irept> &cache)
+{
+  std::unordered_set<std::string> expanding;
+  fix_type(self, cache, expanding);
 }
 
 // Builds the malloc/alloca side_effect_exprt (irep shape) do_mem would have
