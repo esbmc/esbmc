@@ -872,3 +872,20 @@ Cross-check a Tier-A kernel against the source before transcription:
 ```sh
 grep -n "get_width" src/irep2/irep2_type.cpp     # confirm the arithmetic line
 ```
+
+---
+
+## Execution log (per-harness verdicts)
+
+Appended as each harness is implemented and run, per §12 deliverable #6. Records
+the ESBMC artefact used, the verdict, and the landing PR so the plan doubles as a
+progress tracker.
+
+| Milestone | Harness | Location | ESBMC verdict | Solver / artefact | Status |
+|---|---|---|---|---|---|
+| **M0** | H-A1 refcount conservation & single-free (`_ok` + anti-vacuity `_fail`) | `regression/esbmc/irep2_refcount_{ok,fail}/` | `_ok`: SUCCESSFUL; `_fail`: FAILED (I1 `live==refcount` violated) | Bitwuzla (default), ESBMC 8.4.0 (`master` @ 4ba1903130) | **Done** — doubles as the M0 green+red smoke pair proving the pipeline detects an injected refcount defect. |
+
+**Next task:** M1 — H-A6 `as_ulong`/`as_long` truncation (R2), then H-A5 width
+overflow (R1). Both are *fix-and-prove-in-one-PR* per the §7 sequencing note
+(land the checked-accessor fix and the passing `CORE` harness together).
+
