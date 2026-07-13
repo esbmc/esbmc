@@ -508,6 +508,7 @@ void fix_expression(irept &irep)
     "bitxor",
     "bitnot",
     "struct",
+    "union",
     "return",
     "r_ok",
     "w_ok",
