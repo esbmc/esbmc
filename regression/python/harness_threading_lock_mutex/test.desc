@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --context-bound 2 --data-races-check
+--unwind 2 --context-bound 2 --data-races-check
 ^VERIFICATION SUCCESSFUL$
