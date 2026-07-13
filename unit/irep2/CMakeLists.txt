@@ -1,4 +1,5 @@
 new_unit_test(irep2test "irep2.test.cpp" "util_esbmc")
+new_unit_test(irep2crcbiginttest "crc_bigint.test.cpp" "util_esbmc")
 new_unit_test(irep2refcounttest "refcount.test.cpp" "util_esbmc")
 new_fuzz_test(irep2refcountfuzz "refcount.fuzz.cpp" "util_esbmc")
 new_unit_test(irep2constinttest "const_int.test.cpp" "util_esbmc")
