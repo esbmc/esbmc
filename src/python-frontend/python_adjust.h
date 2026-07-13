@@ -93,6 +93,12 @@ protected:
   /// since a member/index cannot be constructed over a raw pointer.
   bool resolve_source(expr2tc &source);
 
+  /// If `fn` is a symbol whose table type is pointer-to-code — the
+  /// lambda/def-alias call variable — re-type it from the table, wrap it in a
+  /// dereference onto the code type, and cast each argument to its declared
+  /// parameter type. Returns true when rewritten.
+  bool wrap_function_pointer_callee(expr2tc &fn, std::vector<expr2tc> &args);
+
   /// Derive a cpp-throw's exception-id chain from its operand's type,
   /// mirroring `clang_cpp_adjust::convert_exception_id`: the bare class name
   /// followed by its direct bases for a class operand (both the by-name

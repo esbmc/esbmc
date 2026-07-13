@@ -268,6 +268,27 @@ void python_adjust::adjust_expr(expr2tc &expr)
         expr = constant_struct2tc(resolved, ops);
     }
   }
+  else if (is_code_function_call2t(expr))
+  {
+    // Statement-form call through a lambda/def-alias variable.
+    const code_function_call2t &c = to_code_function_call2t(expr);
+    expr2tc fn = c.function;
+    std::vector<expr2tc> args = c.operands;
+    if (wrap_function_pointer_callee(fn, args))
+      expr = code_function_call2tc(c.ret, fn, args, c.location);
+  }
+  else if (
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::function_call)
+  {
+    // Expression-form call (e.g. `assert f(3) == 6`): the callee is the
+    // sideeffect operand.
+    const sideeffect2t &s = to_sideeffect2t(expr);
+    expr2tc fn = s.operand;
+    std::vector<expr2tc> args = s.arguments;
+    if (wrap_function_pointer_callee(fn, args))
+      expr = sideeffect2tc(s.type, fn, s.size, args, s.alloctype, s.kind);
+  }
   else if (is_code_cpp_throw2t(expr))
   {
     // Flip blocker #1 (docs/irep2-migration.md, "Flip-probe census"): the
@@ -289,6 +310,50 @@ void python_adjust::adjust_expr(expr2tc &expr)
         expr = code_cpp_throw2tc(t.operand, ids, t.location);
     }
   }
+}
+
+bool python_adjust::wrap_function_pointer_callee(
+  expr2tc &fn,
+  std::vector<expr2tc> &args)
+{
+  // A lambda/def-alias call (`op = lambda ...; op(3)`): the callee symbol's
+  // table type is pointer-to-code, but goto-convert wants a code-typed
+  // callee. Re-type it from the table, dereference onto the code type, and
+  // cast each argument to its declared parameter type — the legacy
+  // adjust_symbol + implicit-deref + adjust_function_call_arguments trio.
+  // Inert on the default pipeline (legacy rewrites these calls before
+  // migration, so the callee already arrives as a dereference).
+  if (is_nil_expr(fn) || !is_symbol2t(fn))
+    return false;
+  const irep_idt &name = to_symbol2t(fn).thename;
+  const symbolt *fs = context.find_symbol(name);
+  if (fs == nullptr || !is_pointer_type(fs->get_type2()))
+    return false;
+  // Python points directly at the code type (no typedefs to follow).
+  const type2tc &pointee = to_pointer_type(fs->get_type2()).subtype;
+  if (!is_code_type(pointee))
+    return false;
+
+  // Cast only scalar/pointer argument kinds; an aggregate arg from an
+  // upstream typing bug keeps symex's own per-argument diagnostic rather
+  // than an unencodable typecast.
+  const auto is_castable_kind = [](const type2tc &t) {
+    return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
+           is_bool_type(t) || is_pointer_type(t);
+  };
+  const code_type2t &ct = to_code_type(pointee);
+  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
+  {
+    const type2tc &want = ct.arguments[i];
+    const type2tc &got = args[i]->type;
+    if (is_castable_kind(want) && is_castable_kind(got) && got != want)
+      args[i] = typecast2tc(want, args[i]);
+  }
+
+  // Build the dereference over the code type — goto-convert's dispatch
+  // wants a code-typed callee.
+  fn = dereference2tc(pointee, symbol2tc(fs->get_type2(), name));
+  return true;
 }
 
 std::vector<irep_idt>
