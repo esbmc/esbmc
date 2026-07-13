@@ -84,7 +84,7 @@ and the symbol/function table layout.
 | Libm body bridge: `ceil`/`floor`/`trunc`/`round` (+`f`/`l`) resolve to the operational-model bodies (§4.8, Phase 2) | ✅ (PR #5814) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `copysign`/`fmin`/`fmax`/`fdim` (+`f`/`l`) (§4.8, Phase 2) | ✅ (PR #5815) | `esbmc_parseoptions.cpp::link_cbmc_libm_bodies` |
 | Libm body bridge extended to `modf`/`modff`/`modfl` (integer/fractional split via pointer out-param) (§4.8, Phase 2) | ✅ (PR #6039) | `parseoptions/goto_program.cpp::link_cbmc_libm_bodies` |
-| Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #TBD) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
+| Body bridge generalised to libc: `strlen`/`strcmp`/`strncmp` string.h query functions (byte-loop bodies, need `--unwind`); `link_cbmc_libm_bodies` → `link_cbmc_libc_bodies` (§4.8, Phase 2) | ✅ (PR #6045) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
@@ -719,7 +719,7 @@ force-links the operational-model body, itself defined via truncate-toward-zero 
 three widths (`cbmc_modf` SUCCESSFUL) and a wrong-fraction negative (`cbmc_modf_fail`:
 `modf(3.75,…) == 0.5` ⇒ FAILED, confirming the split is really computed, not vacuously passed).
 
-**Generalised (PR #TBD) to the libc string family: `strlen`/`strcmp`/`strncmp`.** The bridge is not
+**Generalised (PR #6045) to the libc string family: `strlen`/`strcmp`/`strncmp`.** The bridge is not
 libm-specific — it copies any bodied `c:@F@name` onto its bodyless plain-named counterpart — so it
 extends verbatim to the string.h query functions, which CBMC likewise emits as **bodyless externals
 returning nondet** (`strlen("hello")` reported a false `FAILED` where CBMC says `SUCCESSFUL`).
