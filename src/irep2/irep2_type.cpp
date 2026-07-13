@@ -145,13 +145,12 @@ unsigned int array_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  // Reject a product that would truncate on the narrowing to unsigned int
-  // (finding R1): a wrong (small) width would otherwise reach the SMT
-  // encoding. Computed in 64 bits so the check is valid on both LP64 and
-  // ILP32 hosts.
-  uint64_t full = (uint64_t)num_elems * sub_width;
-  assert(full <= std::numeric_limits<unsigned int>::max());
-  return static_cast<unsigned int>(full);
+  // R1: reject a product that truncates on the narrowing to unsigned int.
+  // Division form so the multiply cannot itself overflow.
+  assert(
+    sub_width == 0 ||
+    num_elems <= std::numeric_limits<unsigned int>::max() / sub_width);
+  return static_cast<unsigned int>(num_elems * sub_width);
 }
 
 unsigned int vector_type2t::get_width() const
@@ -164,9 +163,11 @@ unsigned int vector_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  uint64_t full = (uint64_t)num_elems * sub_width; // R1: see array_type2t
-  assert(full <= std::numeric_limits<unsigned int>::max());
-  return static_cast<unsigned int>(full);
+  // R1: see array_type2t::get_width.
+  assert(
+    sub_width == 0 ||
+    num_elems <= std::numeric_limits<unsigned int>::max() / sub_width);
+  return static_cast<unsigned int>(num_elems * sub_width);
 }
 
 unsigned int pointer_type2t::get_width() const
@@ -192,8 +193,7 @@ unsigned int cpp_name_type2t::get_width() const
 
 unsigned int struct_type2t::get_width() const
 {
-  // Accumulate in 64 bits and reject a total that would truncate on the
-  // narrowing to unsigned int (finding R1).
+  // R1: accumulate in 64 bits and reject a total that truncates.
   std::vector<type2tc>::const_iterator it;
   uint64_t width = 0;
   for (it = members.begin(); it != members.end(); ++it)

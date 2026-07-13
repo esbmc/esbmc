@@ -1,9 +1,5 @@
-// H-A5 — array/vector/struct get_width overflow (R1), verified against the
-// real irep2 types (src/irep2/irep2_type.cpp). get_width multiplies element
-// count by subtype width (array/vector) and sums member widths (struct) into
-// an unsigned int, silently truncating a total that exceeds 32 bits. The
-// guards added compute in 64 bits and assert the result fits; this suite pins
-// the correct widths and documents the overflow trigger on real types.
+// R1: get_width widths for real array/vector/struct types, plus the overflow
+// trigger the added 64-bit guards reject.
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
@@ -43,10 +39,6 @@ TEST_CASE("array/vector/struct get_width for normal sizes", "[core][irep2]")
   REQUIRE(st->get_width() == 40);
 }
 
-// R1: an array whose bit-width exceeds 2^32-1. num_elems * sub_width overflows
-// unsigned int; the added guard (computed in 64 bits) rejects it in an
-// asserts-on build. Under NDEBUG the guard is compiled out and the raw
-// truncation is exhibited.
 TEST_CASE("array get_width overflows unsigned int (R1)", "[core][irep2]")
 {
   config.ansi_c.word_size = 64;
@@ -55,9 +47,11 @@ TEST_CASE("array get_width overflows unsigned int (R1)", "[core][irep2]")
   type2tc arr = array_type2tc(get_uint_type(8), array_size(num_elems), false);
 
   const uint64_t full = (uint64_t)num_elems * 8;
-  REQUIRE(full > std::numeric_limits<unsigned int>::max()); // guard's trigger
+  REQUIRE(full > std::numeric_limits<unsigned int>::max());
 
+  // The guard aborts under asserts-on, so get_width() is only called (and its
+  // truncation observed) under NDEBUG.
 #ifdef NDEBUG
-  REQUIRE(arr->get_width() == static_cast<unsigned int>(full)); // truncated
+  REQUIRE(arr->get_width() == static_cast<unsigned int>(full));
 #endif
 }
