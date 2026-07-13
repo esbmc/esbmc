@@ -634,7 +634,14 @@ smt_astt smt_solver_baset::convert_is_inf(const expr2tc &expr)
     smt_astt operand = convert_ast(isinf.value);
     smt_astt pos_inf = mk_gt(operand, max_val);
     smt_astt neg_inf = mk_lt(operand, mk_sub(get_zero_real(), max_val));
-    return mk_or(pos_inf, neg_inf);
+    smt_astt inf_check = mk_or(pos_inf, neg_inf);
+    if (ir_ieee)
+    {
+      smt_astt nan_pred = ir_ieee_api->get_nan_pred(operand);
+      if (nan_pred)
+        return mk_and(mk_not(nan_pred), inf_check);
+    }
+    return inf_check;
   }
 
   smt_astt operand = convert_ast(isinf.value);
