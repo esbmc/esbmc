@@ -10,6 +10,8 @@
 #include "cstdlib"
 #include "memory"
 
+#define STRING_CAPACITY 128
+
 extern "C" void itoa(int value, char *str, int base);
 
 namespace std
@@ -117,7 +119,7 @@ class basic_string
 {
 public:
   static const size_t npos = static_cast<size_t>(-1);
-  char *str;
+  char str[STRING_CAPACITY];
   int _size;
 
   class const_iterator;
@@ -569,7 +571,6 @@ public:
     int n = two.pos, i, k;
     __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
     this->_size = n - pos + 1;
-    this->str = new char[this->_size + 1];
     for (k = 0, i = pos; i <= n; i++, k++)
       this->str[k] = s[i];
     this->str[k] = '\0';
@@ -605,7 +606,6 @@ public:
     totalLength += (n - pos + 1);
     int i, j, k;
     basic_string<CharT, Traits, Alloc> result;
-    result.str = new char[totalLength + 1];
     for (i = 0; i < this->_size; i++)
     {
       result.str[i] = this->str[i];
@@ -616,7 +616,15 @@ public:
     }
     result.str[j] = '\0';
     this->_size = totalLength;
-    this->str = result.str;
+    {
+      int _q = 0;
+      while (result.str[_q] != '\0' && _q < STRING_CAPACITY - 1)
+      {
+        this->str[_q] = result.str[_q];
+        ++_q;
+      }
+      this->str[_q] = '\0';
+    }
     return *this;
   }
   void swap(basic_string<CharT, Traits, Alloc> &s);
@@ -652,19 +660,18 @@ public:
     int i, k, len = this->length();
     __ESBMC_assert(pos < len, "overflow");
     int lenOne = pos + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - (pos + n)) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos + n; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = len - n;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
     for (i = 0; i < lenOne - 1; i++)
     {
@@ -691,19 +698,18 @@ public:
     int n = (end.pos - begin.pos) + 1;
     __ESBMC_assert(pos < len, "overflow");
     int lenOne = pos + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - (pos + n)) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos + n; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = len - n;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
     for (i = 0; i < lenOne - 1; i++)
     {
@@ -785,19 +791,18 @@ public:
     __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
     __ESBMC_assert(lim < sLen, "basic_string overflow");
     int lenOne = pos1 + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos1; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - pos1) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos1; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = n + len;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
 
     for (i = 0; i < lenOne - 1; i++)
@@ -820,7 +825,7 @@ public:
     __ESBMC_assert(p.pos >= 0, "The first parameter must be greater than zero");
     int pos1 = p.pos;
     int n = 1;
-    char *s = new char[n + 1];
+    char s[STRING_CAPACITY];
     for (int i = 0; i < n; i++)
     {
       s[i] = c;
@@ -829,19 +834,18 @@ public:
     int sLen = n;
     __ESBMC_assert(pos1 < len, "overflow");
     int lenOne = pos1 + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos1; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - pos1) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos1; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = len + n;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
 
     for (i = 0; i < lenOne - 1; i++)
@@ -867,7 +871,7 @@ public:
     __ESBMC_assert(p.pos >= 0, "The first parameter must be greater than zero");
     __ESBMC_assert(n >= 0, "The second parameter must be greater than zero");
     int pos1 = p.pos;
-    char *s = new char[n + 1];
+    char s[STRING_CAPACITY];
     for (int i = 0; i < n; i++)
     {
       s[i] = c;
@@ -877,13 +881,12 @@ public:
     __ESBMC_assert(pos1 < len, "overflow");
     if (pos1 == (len - 1))
     {
-      char *one = new char[len];
+      char one[STRING_CAPACITY];
       for (i = 0; i < len; i++)
       {
         one[i] = this->str[i];
       }
       int totalLen = len + n;
-      this->str = new char[totalLen + 1];
       this->_size = totalLen;
       for (i = 0; i < len; i++)
       {
@@ -897,19 +900,18 @@ public:
       return *this;
     }
     int lenOne = pos1 + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos1; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - pos1) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos1; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = len + n;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
 
     for (i = 0; i < lenOne - 1; i++)
@@ -933,7 +935,7 @@ public:
     __ESBMC_assert(p.pos >= 0, "The first parameter must be greater than zero");
     __ESBMC_assert(n >= 0, "The second parameter must be greater than zero");
     int pos1 = p.pos;
-    char *s = new char[n + 1];
+    char s[STRING_CAPACITY];
     for (int i = 0; i < n; i++)
     {
       s[i] = c;
@@ -943,13 +945,12 @@ public:
     __ESBMC_assert(pos1 < len, "overflow");
     if (pos1 == (len - 1))
     {
-      char *one = new char[len];
+      char one[STRING_CAPACITY];
       for (i = 0; i < len; i++)
       {
         one[i] = this->str[i];
       }
       int totalLen = len + n;
-      this->str = new char[totalLen + 1];
       this->_size = totalLen;
       for (i = 0; i < len; i++)
       {
@@ -963,19 +964,18 @@ public:
       return *this;
     }
     int lenOne = pos1 + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (i = 0; i < pos1; i++)
     {
       one[i] = this->str[i];
     }
     int lenTwo = (len - pos1) + 1;
-    char *two = new char[lenTwo];
+    char two[STRING_CAPACITY];
     for (k = 0, i = pos1; i < len; i++, k++)
     {
       two[k] = this->str[i];
     }
     int totalLen = len + n;
-    this->str = new char[totalLen + 1];
     this->_size = totalLen;
 
     for (i = 0; i < lenOne - 1; i++)
@@ -1007,14 +1007,13 @@ public:
     __ESBMC_assert((pos < len) && ((pos + n) <= len), "basic_string overflow");
     int i, k;
     int lenOne = n + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (k = 0, i = pos; i < (pos + n); k++, i++)
     {
       one[k] = this->str[i];
     }
     one[k] = '\0';
     basic_string<CharT, Traits, Alloc> tmp(one);
-    delete[] one; // Freeing dynamically allocated memory
     return tmp;
   }
 
@@ -1026,25 +1025,25 @@ public:
     int len = this->length();
     __ESBMC_assert(pos < len, "basic_string overflow");
     int lenOne = len + 1;
-    char *one = new char[lenOne];
+    char one[STRING_CAPACITY];
     for (k = 0, i = pos; i < len; k++, i++)
     {
       one[k] = this->str[i];
     }
     one[k] = '\0';
     basic_string<CharT, Traits, Alloc> tmp(one);
-    delete[] one; // Freeing dynamically allocated memory
     return tmp;
   }
 
   basic_string<CharT, Traits, Alloc>::iterator begin() const
   {
-    return basic_string<CharT, Traits, Alloc>::iterator(this->str);
+    return basic_string<CharT, Traits, Alloc>::iterator(
+      const_cast<char *>(this->str));
   }
 
   basic_string<CharT, Traits, Alloc>::iterator end() const
   {
-    basic_string<CharT, Traits, Alloc>::iterator end(this->str);
+    basic_string<CharT, Traits, Alloc>::iterator end(const_cast<char *>(this->str));
     end.pos = this->length() - 1;
     return end;
   }
@@ -1059,7 +1058,6 @@ public:
     __ESBMC_assert(last >= 0, "The second parameter must be greater than zero");
     int i;
     this->_size = first;
-    this->str = new char[first + 1];
     for (i = 0; i < first; i++)
     {
       this->str[i] = last;
@@ -1099,7 +1097,6 @@ namespace std
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string()
 {
-  str = new char[1];
   str[0] =
     '\0'; // Assign the null terminator to represent an empty basic_string
   _size = 0;
@@ -1111,7 +1108,6 @@ basic_string<CharT, Traits, Alloc>::basic_string(const CharT *s)
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "basic_string<CharT, Traits, Alloc> invalid");
   _size = strlen(s);
-  str = new char[_size + 1];
 
   strcpy(str, s);
 }
@@ -1124,7 +1120,6 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "invalid basic_string");
 
   int i;
-  str = new char[n + 1];
   _size = n;
   for (i = 0; (i < _size) && (s[i] != '\0'); i++)
     str[i] = s[i];
@@ -1145,7 +1140,6 @@ __ESBMC_HIDE:
   int sz = s._size - n + 1;
   if (sz < 0)
     sz = 0;
-  this->str = new char[sz];
   this->_size = s._size - n;
   for (i = n, j = 0; s.str[i] != '\0'; i++, j++)
     this->str[j] = s.str[i];
@@ -1156,7 +1150,6 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string(int len)
 {
   __ESBMC_assert(len >= 0, "the parameter must be greater or equal than zero");
-  str = new char[len + 1];
   _size = len;
 }
 
@@ -1164,7 +1157,6 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string(char c, size_t n)
 {
   __ESBMC_assert(n > 0, "the second parameter must be different than zero");
-  str = new char[n + 1];
   for (int i = 0; i < n; i++)
     str[i] = c;
   str[n] = '\0';
@@ -1175,7 +1167,7 @@ template <typename CharT, typename Traits, typename Alloc>
 char *basic_string<CharT, Traits, Alloc>::c_str() const
 {
 __ESBMC_HIDE:
-  return str;
+  return const_cast<char *>(str);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1490,7 +1482,6 @@ basic_string<CharT, Traits, Alloc>::operator=(
 {
 __ESBMC_HIDE:
   this->_size = str.length();
-  this->str = new char[this->_size + 1];
   strcpy(this->str, str.str);
   return *this;
 }
@@ -1504,10 +1495,10 @@ __ESBMC_HIDE:
   if (this == &str)
     return *this;
   this->_size = str.length();
-  this->str = new char[this->_size + 1];
   strcpy(this->str, str.str);
   return *this;
 }
+
 
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc> &
@@ -1516,7 +1507,6 @@ basic_string<CharT, Traits, Alloc>::operator=(const char *s)
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   this->_size = strlen(s);
-  this->str = new char[this->_size + 1];
   strcpy(this->str, s); // Copy the contents of s to str
   return *this; // Return a reference to the modified basic_string object
 }
@@ -1527,7 +1517,6 @@ basic_string<CharT, Traits, Alloc>::operator=(char s)
 {
 __ESBMC_HIDE:
   this->_size = 1;
-  this->str = new char[this->_size + 1];
   this->str[0] = s;
   this->str[1] = '\0';
   return *this;
@@ -1551,7 +1540,6 @@ __ESBMC_HIDE:
   for (j = i, k = 0; j < totalLen; j++, k++)
     temp[j] = s.str[k];
   temp[j] = '\0';
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
   strcpy(this->str, temp);
   return *this;
@@ -1574,7 +1562,6 @@ __ESBMC_HIDE:
   for (j = i, k = 0; j < totalLen; j++, k++)
     temp[j] = s[k];
   temp[j] = '\0';
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
   strcpy(this->str, temp);
   return *this;
@@ -1598,7 +1585,6 @@ __ESBMC_HIDE:
   temp[i] = s;
   i++;
   temp[i] = '\0';
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
   strcpy(this->str, temp);
   return *this;
@@ -1610,11 +1596,37 @@ void basic_string<CharT, Traits, Alloc>::swap(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  basic_string<CharT, Traits, Alloc> aux(s.str);
-  s.str = this->str;
-  s._size = this->_size;
-  this->str = aux.str;
-  this->_size = aux._size;
+  char tmp[STRING_CAPACITY];
+  {
+    int _q = 0;
+    while (this->str[_q] != '\0' && _q < STRING_CAPACITY - 1)
+    {
+      tmp[_q] = this->str[_q];
+      ++_q;
+    }
+    tmp[_q] = '\0';
+  }
+  {
+    int _q = 0;
+    while (s.str[_q] != '\0' && _q < STRING_CAPACITY - 1)
+    {
+      this->str[_q] = s.str[_q];
+      ++_q;
+    }
+    this->str[_q] = '\0';
+  }
+  {
+    int _q = 0;
+    while (tmp[_q] != '\0' && _q < STRING_CAPACITY - 1)
+    {
+      s.str[_q] = tmp[_q];
+      ++_q;
+    }
+    s.str[_q] = '\0';
+  }
+  int _tsz = this->_size;
+  this->_size = s._size;
+  s._size = _tsz;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1642,14 +1654,13 @@ void basic_string<CharT, Traits, Alloc>::resize(size_t n)
 __ESBMC_HIDE:
   __ESBMC_assert(n > 0, "The parameter must be greater than zero");
   int num = this->_size, i;
-  char *tmp = new char[n + 1];
+  char tmp[STRING_CAPACITY];
   for (i = 0; i < n; i++)
   {
     tmp[i] = this->str[i];
   }
   tmp[i] = '\0';
   this->_size = n;
-  this->str = new char[n + 1];
   for (i = 0; i < n; i++)
     this->str[i] = tmp[i];
   this->str[i] = '\0';
@@ -1664,7 +1675,6 @@ __ESBMC_HIDE:
   num = this->length();
   basic_string<CharT, Traits, Alloc> tmp(this->str);
   this->_size = n;
-  this->str = new char[n + 1];
   for (i = 0; i < num; i++)
     this->str[i] = tmp.str[i];
   for (i = num; i < (this->_size); i++)
@@ -1694,7 +1704,6 @@ __ESBMC_HIDE:
     "basic_string overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   this->_size = (n);
-  this->str = new char[this->_size + 1];
   strncpy(this->str, s.str + pos, n);
   return *this;
 }
@@ -1707,7 +1716,6 @@ __ESBMC_HIDE:
   __ESBMC_assert((n < strlen(s)) && (n >= 0), "basic_string overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   this->_size = (n);
-  this->str = new char[this->_size];
   strncpy(this->str, s, n);
   return *this;
 }
@@ -1730,7 +1738,6 @@ __ESBMC_HIDE:
   __ESBMC_assert(n > 0, "basic_string overflow");
   int i;
   this->_size = n;
-  this->str = new char[n + 1];
   for (i = 0; i < n; i++)
   {
     this->str[i] = c;
@@ -1867,7 +1874,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(n > 0, "basic_string overflow");
   int rhsLen = n;
   int totalLen = this->_size + rhsLen;
-  char *temp = new char[totalLen + 1];
+  char temp[STRING_CAPACITY];
   int i, j, k;
 
   for (i = 0; i < this->_size; i++)
@@ -1905,10 +1912,10 @@ __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int len = this->length();
   int lim = pos;
-  char *s1 = new char[len + 1];
+  char s1[STRING_CAPACITY];
   strcpy(s1, this->str);
   int slen = s.length();
-  char *s2 = new char[slen + 1];
+  char s2[STRING_CAPACITY];
   strcpy(s2, s.str);
   pos = -1;
   size_t i, j;
@@ -1953,11 +1960,11 @@ __ESBMC_HIDE:
 
   int len = this->length();
   int lim = pos;
-  char *s1 = new char[len + 1];
+  char s1[STRING_CAPACITY];
   strcpy(s1, this->str);
 
   int slen = n;
-  char *s2 = new char[slen + 1];
+  char s2[STRING_CAPACITY];
   for (i = 0; i < slen; i++)
   {
     s2[i] = s[i];
@@ -1999,10 +2006,10 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   int len = this->length();
   int lim = pos;
-  char *s1 = new char[len + 1];
+  char s1[STRING_CAPACITY];
   strcpy(s1, this->str);
   int slen = strlen(s);
-  char *s2 = new char[slen + 1];
+  char s2[STRING_CAPACITY];
   strcpy(s2, s);
   pos = -1;
   size_t i, j;
@@ -2042,19 +2049,18 @@ __ESBMC_HIDE:
   __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int lenOne = pos1 + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos1; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - pos1) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos1; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = s.length() + len;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -2090,19 +2096,18 @@ __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int lim = n + pos2;
   int lenOne = pos1 + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos1; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - pos1) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos1; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = n + len;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -2134,19 +2139,18 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   __ESBMC_assert(lim < sLen, "basic_string overflow");
   int lenOne = pos1 + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos1; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - pos1) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos1; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = n + len;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -2175,19 +2179,18 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   int sLen = strlen(s);
   int lenOne = pos1 + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos1; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - pos1) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos1; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = len + strlen(s);
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -2216,25 +2219,24 @@ __ESBMC_HIDE:
   __ESBMC_assert(
     (pos1 >= 0) && (pos1 < len) && ((pos1 + n) < len) && (n > 0),
     "basic_string overflow");
-  char *s = new char[n + 1];
+  char s[STRING_CAPACITY];
   for (i = 0; i < n; i++)
   {
     s[i] = c;
   }
   int lenOne = pos1 + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos1; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - pos1) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos1; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = len + n;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -2262,19 +2264,18 @@ __ESBMC_HIDE:
     (pos < this->length()) && ((pos + n) <= this->length()), "overflow");
   int i, k, len = this->length();
   int lenOne = pos + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - (pos + n)) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos + n; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = len - n;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
   for (i = 0; i < lenOne - 1; i++)
   {
@@ -2298,19 +2299,18 @@ __ESBMC_HIDE:
     (pos < this->length()) && ((pos + n) <= this->length()), "overflow");
   int i, k, len = this->length();
   int lenOne = pos + 1;
-  char *one = new char[lenOne];
+  char one[STRING_CAPACITY];
   for (i = 0; i < pos; i++)
   {
     one[i] = this->str[i];
   }
   int lenTwo = (len - (pos + n)) + 1;
-  char *two = new char[lenTwo];
+  char two[STRING_CAPACITY];
   for (k = 0, i = pos + n; i < len; i++, k++)
   {
     two[k] = this->str[i];
   }
   int totalLen = len - n;
-  this->str = new char[totalLen + 1];
   this->_size = totalLen;
   for (i = 0; i < lenOne - 1; i++)
   {
@@ -2355,7 +2355,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   this->erase(pos1, n1);
   int i, k;
-  char *tmp = new char[n2 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = pos2; i < (n2 + pos2); i++, k++)
     tmp[k] = s.str[i];
   tmp[k] = '\0';
@@ -2377,7 +2377,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   this->erase(pos1, n1);
   int i, k;
-  char *tmp = new char[n2 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = 0; i < n2; i++, k++)
     tmp[k] = s[i];
   tmp[k] = '\0';
@@ -2398,7 +2398,7 @@ __ESBMC_HIDE:
   this->erase(pos1, n1);
   int i, k, n2;
   n2 = strlen(s);
-  char *tmp = new char[n2 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = 0; i < n2; i++, k++)
     tmp[k] = s[i];
   tmp[k] = '\0';
@@ -2419,7 +2419,7 @@ __ESBMC_HIDE:
   __ESBMC_assert(n2 > 0, "overflow");
   this->erase(pos1, n1);
   int k;
-  char *tmp = new char[n2 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0; k < n2; k++)
     tmp[k] = c;
   tmp[k] = '\0';
@@ -2489,7 +2489,7 @@ __ESBMC_HIDE:
   int tmpk = tmp_two - tmp_one;
   this->erase(tmp_one, tmpk);
   int k;
-  char *tmp = new char[n2 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0; k < n2; k++)
     tmp[k] = c;
   tmp[k] = '\0';
@@ -2563,7 +2563,7 @@ __ESBMC_HIDE:
     (pos1 < this->length()) && ((pos1 + n1) <= this->length()), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   int i, k;
-  char *tmp = new char[n1 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
   {
     tmp[k] = this->str[i];
@@ -2596,7 +2596,7 @@ __ESBMC_HIDE:
     (pos1 < this->length()) && ((pos1 + n1) <= this->length()), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int i, k;
-  char *tmp = new char[n1 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
   {
     tmp[k] = this->str[i];
@@ -2634,14 +2634,14 @@ __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int i, k;
 
-  char *tmp = new char[n1 + 1];
+  char tmp[STRING_CAPACITY];
   for (k = 0, i = pos1; i < (pos1 + n1); i++, k++)
   {
     tmp[k] = this->str[i];
   }
   tmp[k] = '\0';
 
-  char *tmp2 = new char[n2 + 1];
+  char tmp2[STRING_CAPACITY];
   for (k = 0, i = pos2; i < (pos2 + n2); i++, k++)
   {
     tmp2[k] = s.str[i];
@@ -2954,11 +2954,11 @@ __ESBMC_HIDE:
   int lim = pos;
 
   int len = this->length();
-  char *s1 = new char[len + 1];
+  char s1[STRING_CAPACITY];
   strcpy(s1, this->str);
 
   int slen = strlen(s);
-  char *s2 = new char[slen + 1];
+  char s2[STRING_CAPACITY];
   strcpy(s2, s);
 
   for (i = len - 1; i >= lim; i--)
@@ -2992,7 +2992,6 @@ basic_string<CharT, Traits, Alloc> operator+(
   totalLength += rhs.size();
   int i, j, k;
   basic_string<CharT, Traits, Alloc> result;
-  result.str = new char[totalLength + 1];
   for (i = 0; i < lhs.size(); i++)
   {
     result.str[i] = lhs.str[i];
@@ -3014,7 +3013,6 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char *rhs)
   totalLength += strlen(rhs);
   int i, j, k;
   basic_string<CharT, Traits, Alloc> result;
-  result.str = new char[totalLength + 1];
   for (i = 0; i < lhs.size(); i++)
   {
     result.str[i] = lhs.str[i];
@@ -3036,7 +3034,6 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char rhc)
   totalLength += 1;
   int i;
   basic_string<CharT, Traits, Alloc> result;
-  result.str = new char[totalLength + 1];
   for (i = 0; i < lhs.size(); i++)
   {
     result.str[i] = lhs.str[i];
@@ -3056,7 +3053,6 @@ operator+(char *lhs, basic_string<CharT, Traits, Alloc> rhs)
   totalLength += rhs.size();
   int i, j, k;
   basic_string<CharT, Traits, Alloc> result;
-  result.str = new char[totalLength + 1];
   for (i = 0; i < lhsLen; i++)
   {
     result.str[i] = lhs[i];
@@ -3084,7 +3080,6 @@ basic_string operator+(char * lhs, char rhc) {
 	totalLength += 1;
 	int i;
 	basic_string result;
-	result.str = new char[totalLength + 1];
 	for(i = 0; i < lhsLen; i++){
 		result.str[i] = lhs[i];
 	}
@@ -3102,7 +3097,6 @@ operator+(char lhc, basic_string<CharT, Traits, Alloc> rhs)
   totalLength += rhs.size();
   int i, j, k;
   basic_string<CharT, Traits, Alloc> result;
-  result.str = new char[totalLength + 1];
   result.str[0] = lhc;
   for (j = 1, k = 0; j < totalLength; j++, k++)
   {
