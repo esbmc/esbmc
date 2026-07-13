@@ -1,5 +1,6 @@
 new_unit_test(irep2test "irep2.test.cpp" "util_esbmc")
 new_unit_test(irep2refcounttest "refcount.test.cpp" "util_esbmc")
 new_fuzz_test(irep2refcountfuzz "refcount.fuzz.cpp" "util_esbmc")
+new_unit_test(irep2subexprindextest "subexpr_index.test.cpp" "util_esbmc")
 new_unit_test(irep2constinttest "const_int.test.cpp" "util_esbmc")
 new_unit_test(irep2getwidthtest "get_width.test.cpp" "util_esbmc")
