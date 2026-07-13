@@ -48,7 +48,7 @@ TEST_CASE("irep2 refcount tracks live handles (I1)", "[core][irep2][refcount]")
       REQUIRE(live_refcount(a) == 3);
       REQUIRE(!c);                       // moved-from container is empty
       REQUIRE(node_of(d) == node_of(a)); // d owns the stolen node
-    } // d destroyed -> 2
+    }                                    // d destroyed -> 2
     REQUIRE(live_refcount(a) == 2);
   } // b destroyed -> 1
   REQUIRE(live_refcount(a) == 1);
