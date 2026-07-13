@@ -1,25 +1,7 @@
-// H-A1 — Refcount conservation, single-free, and self-alias UAF-safety,
-// verified against the *actual* irep_container<T> implementation
-// (src/irep2/irep2.h), not a hand-written model.
-//
-// These Catch2 property tests drive the genuine expr2tc / irep_container
-// value-semantics machinery — copy ctor (fetch_add), move ctor (steal),
-// copy/move assignment (snapshot-bump-before-release), release()
-// (fetch_sub + delete-iff-prev==1) and detach() (COW clone) — and assert
-// the representation invariant I1 (refcount == number of live handles) by
-// reading the real atomic `irep2t::refcount` after each operation.
-//
-// This is the Tier-B strategy of docs/irep2-verification-plan.md §2: the
-// template/immer/fmt/atomic layering of irep2 cannot be soundly ingested
-// by ESBMC end-to-end, so the observable ownership contract is exercised
-// directly against the real classes (cf. unit/irep2/irep2.bench.cpp).
-// The value/refcount assertions catch wrong-count and wrong-value
-// regressions directly; built under the Sanitizer build type
-// (`./scripts/build.sh -b Sanitizer -s ASAN`) the same cases additionally
-// witness the double-free / use-after-free freedom the assertions alone
-// cannot observe.
+// H-A1: refcount conservation, single-free and self-alias safety of the real
+// irep_container, checked by reading irep2t::refcount after each operation.
 
-#define CATCH_CONFIG_MAIN // Catch provides main() for this test executable
+#define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include <utility>
 
@@ -33,23 +15,19 @@
 
 namespace
 {
-// Read a node's live refcount WITHOUT perturbing it: the const get()
-// overload hands back the pointee without detaching, and `refcount` is a
-// public mutable atomic on irep2t.
+// const get() reads the node without detaching, so it does not perturb the
+// refcount being measured.
 unsigned live_refcount(const expr2tc &c)
 {
   return c.get()->refcount.load(std::memory_order_relaxed);
 }
 
-// Node identity without detaching (const get()).
 const expr2t *node_of(const expr2tc &c)
 {
   return c.get();
 }
 } // namespace
 
-// I1: refcount equals the number of live containers pointing at the node,
-// tracked exactly across copy, move, and scoped destruction.
 TEST_CASE("irep2 refcount tracks live handles (I1)", "[core][irep2][refcount]")
 {
   config.ansi_c.word_size = 32;
@@ -76,10 +54,7 @@ TEST_CASE("irep2 refcount tracks live handles (I1)", "[core][irep2][refcount]")
   REQUIRE(live_refcount(a) == 1);
 }
 
-// Copy-assignment conserves the count: it bumps the source and releases
-// the previous pointee (which, at refcount 1, is freed exactly once —
-// witnessed under a `Sanitizer` (ASan) build). The surviving node's
-// value is intact.
+// Copy-assign bumps the source and releases the previous pointee.
 TEST_CASE(
   "irep2 copy-assign releases old and bumps new",
   "[core][irep2][refcount]")
@@ -98,12 +73,9 @@ TEST_CASE(
   REQUIRE(to_constant_int2t(b).value.to_uint64() == 7);
 }
 
-// H-A3: the self-aliasing assignment `x = <member-of-x's-own-node>` must
-// be use-after-free-safe. irep_container::operator= snapshots and bumps
-// the source pointer BEFORE release() runs, so even though releasing x's
-// sole-owned add node destroys the very operand the RHS references, the
-// operand survives the assignment. This reproduces the hazard the header
-// documents at irep2.h:190-225 (`x = to_array_type(x).subtype`).
+// H-A3: assigning a container from a member of the node it solely owns must
+// not use-after-free (operator= snapshots+bumps the source before release()).
+// Mirrors the `x = to_array_type(x).subtype` hazard from irep2.h.
 TEST_CASE(
   "irep2 self-aliasing assignment is UAF-safe (H-A3)",
   "[core][irep2][refcount]")
@@ -123,9 +95,7 @@ TEST_CASE(
   REQUIRE(live_refcount(x) == 1);
 }
 
-// COW detach on a shared node clones into a fresh refcount-1 object,
-// leaving the other handle sole owner of the original — value preserved,
-// counts conserved on both sides.
+// COW detach on a shared node clones, leaving the other handle sole owner.
 TEST_CASE(
   "irep2 COW detach conserves refcount and isolates mutation",
   "[core][irep2][refcount]")
@@ -145,12 +115,8 @@ TEST_CASE(
   REQUIRE(*a == *b);                 // structural value unchanged
 }
 
-// Nondeterministic-input replay: the same byte-stream operation driver that
-// libFuzzer exercises (refcount_ops.h / refcount.fuzz.cpp) is run here on
-// deterministic inputs so the property is pinned in normal CI even with
-// fuzzing off. Each input decodes to a sequence of make/copy/move/detach/
-// reset/swap operations on real expr2tc slots; run_ops verifies refcount
-// conservation (I1) against the genuine container after every step.
+// run_ops over deterministic inputs: many operation sequences on real
+// containers, each checked for refcount conservation (I1).
 TEST_CASE(
   "irep2 refcount conservation under nondet operation sequences",
   "[core][irep2][refcount]")
@@ -159,9 +125,7 @@ TEST_CASE(
 
   SECTION("hand-crafted sequences exercising each opcode")
   {
-    // {sel, arg} pairs: sel's low 3 bits pick the op and high bits pick slot
-    // i; arg picks slot j (or the value for make). The rows walk make/copy/
-    // copy-ctor/move/detach/reset/swap in varied orders.
+    // {sel, arg} pairs: sel low 3 bits = op, high bits = slot i; arg = slot j.
     const uint8_t seqs[][8] = {
       {0x00, 7, 0x09, 0, 0x11, 0, 0x1c, 0},
       {0x00, 3, 0x0a, 0, 0x02, 0, 0x0d, 0},
@@ -174,8 +138,7 @@ TEST_CASE(
 
   SECTION("fixed-seed pseudo-random op streams (deterministic)")
   {
-    // A simple LCG gives reproducible "nondet-shaped" coverage without any
-    // wall-clock/random dependency: thousands of ops across many seeds.
+    // LCG gives reproducible coverage with no wall-clock/random dependency.
     for (uint32_t seed = 1; seed <= 64; ++seed)
     {
       uint8_t buf[512];

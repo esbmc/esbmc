@@ -1,19 +1,6 @@
-// Nondeterministic-input operation harness for the real irep_container<T>
-// refcount lifecycle (H-A1, shared by the libFuzzer target refcount.fuzz.cpp
-// and the deterministic Catch2 replay in refcount.test.cpp).
-//
-// A byte stream (from libFuzzer, or a fixed-seed generator in the unit test)
-// is decoded into a sequence of container operations — make / copy-assign /
-// copy-ctor / move / detach / reset / swap — over N real expr2tc slots. After
-// every operation the harness applies a *direct differential oracle* against
-// the genuine implementation: for each live node, the real irep2t::refcount
-// atomic must equal the number of slots that actually point at that node
-// (invariant I1). Reading identity/refcount goes through the CONST get()
-// overload so the check never triggers detach() and perturbs what it measures.
-//
-// The refcount miscount is caught by this oracle on any build; use-after-free
-// / double-free are caught by ASan when built as the libFuzzer target
-// (-fsanitize=fuzzer,address) or under a `Sanitizer` build.
+// Shared driver: decode a byte stream into container operations on N real
+// expr2tc slots and check that each live node's refcount equals its
+// live-handle count (I1). Used by refcount.fuzz.cpp and refcount.test.cpp.
 
 #pragma once
 
@@ -29,14 +16,13 @@
 
 namespace irep2_refcount_fuzz
 {
-// I1: every live node's real refcount == number of slots pointing at it.
 inline bool conservation_holds(const std::vector<expr2tc> &slots)
 {
   for (const expr2tc &s : slots)
   {
     if (!s)
       continue;
-    const expr2t *node = s.get(); // const get(): no detach, no perturbation
+    const expr2t *node = s.get(); // const get(): does not detach/perturb
     unsigned live = 0;
     for (const expr2tc &t : slots)
       if (t && t.get() == node)
@@ -47,9 +33,7 @@ inline bool conservation_holds(const std::vector<expr2tc> &slots)
   return true;
 }
 
-// Decode `data` as an opcode stream and drive N real containers, checking
-// refcount conservation after each step. Returns false iff the oracle is
-// ever violated (the real refcount disagrees with the live-handle count).
+// Returns false iff a step leaves some node's refcount != its live-handle count.
 inline bool run_ops(const uint8_t *data, size_t size, size_t slot_count = 5)
 {
   config.ansi_c.word_size = 32;
@@ -65,35 +49,35 @@ inline bool run_ops(const uint8_t *data, size_t size, size_t slot_count = 5)
 
     switch (op)
     {
-    case 0: // make a fresh node (refcount 1)
+    case 0: // make
       slots[i] = gen_ulong(arg);
       break;
-    case 1: // copy-assign: release old, fetch_add on source
+    case 1: // copy-assign
       slots[i] = slots[j];
       break;
-    case 2: // move-assign: steal, no bump (self-move is guarded)
+    case 2: // move-assign
       slots[i] = std::move(slots[j]);
       break;
-    case 3: // copy-ctor into a temporary, then assign it in
+    case 3: // copy-ctor then assign
     {
       expr2tc tmp(slots[j]);
       slots[i] = tmp;
       break;
     }
-    case 4: // detach: non-const get() clones iff shared
+    case 4: // detach (non-const get)
       if (slots[i])
         (void)slots[i].get();
       break;
-    case 5: // reset via assignment of an empty container
+    case 5: // reset
       slots[i] = expr2tc();
       break;
-    case 6: // swap two slots
+    case 6: // swap
     {
       using std::swap;
       swap(slots[i], slots[j]);
       break;
     }
-    default: // reset via reset()
+    default:
       slots[i].reset();
       break;
     }

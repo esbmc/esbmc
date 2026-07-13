@@ -1,10 +1,5 @@
 new_unit_test(irep2test "irep2.test.cpp" "util_esbmc")
 new_unit_test(irep2refcounttest "refcount.test.cpp" "util_esbmc")
-
-# libFuzzer harness driving the real irep_container refcount lifecycle with
-# nondeterministic input (built only with -DENABLE_FUZZER=On). The same
-# run_ops() driver is replayed deterministically by irep2refcounttest so the
-# property is covered in normal CI regardless of the fuzzer.
 new_fuzz_test(irep2refcountfuzz "refcount.fuzz.cpp" "util_esbmc")
 
 # Microbenchmarks: built but not discovered as ctest cases. Run locally
