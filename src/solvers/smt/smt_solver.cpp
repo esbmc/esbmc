@@ -1029,18 +1029,32 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
                      expr->type, to_constant_string2t(with.update_field).value)
                      .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
-      expr2tc upd = bitcast2tc(
-        get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
-      if (mem_bits < bits)
-        upd = concat2tc(
-          get_uint_type(bits),
-          extract2tc(
-            get_uint_type(bits - mem_bits),
-            with.source_value,
-            bits - 1,
-            mem_bits),
-          upd);
-      a = convert_ast(upd);
+      if (mem_bits == 0)
+      {
+        // A zero-sized union member (e.g. a Rust unit enum variant such as
+        // Result's Err carrying only ()) occupies no storage, so writing it
+        // leaves the union's bit representation unchanged. Encoding it via
+        // get_uint_type(0) would build a degenerate 0-width bitvector that the
+        // solver widens to 1 bit, producing a value one bit wider than the
+        // union sort.
+        a = convert_ast(with.source_value);
+      }
+      else
+      {
+        expr2tc upd = bitcast2tc(
+          get_uint_type(mem_bits),
+          typecast2tc(tu.members[c], with.update_value));
+        if (mem_bits < bits)
+          upd = concat2tc(
+            get_uint_type(bits),
+            extract2tc(
+              get_uint_type(bits - mem_bits),
+              with.source_value,
+              bits - 1,
+              mem_bits),
+            upd);
+        a = convert_ast(upd);
+      }
     }
     else
     {
