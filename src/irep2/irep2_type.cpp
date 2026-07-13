@@ -1,3 +1,5 @@
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
@@ -143,7 +145,13 @@ unsigned int array_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  return num_elems * sub_width;
+  // Reject a product that would truncate on the narrowing to unsigned int
+  // (finding R1): a wrong (small) width would otherwise reach the SMT
+  // encoding. Computed in 64 bits so the check is valid on both LP64 and
+  // ILP32 hosts.
+  uint64_t full = (uint64_t)num_elems * sub_width;
+  assert(full <= std::numeric_limits<unsigned int>::max());
+  return static_cast<unsigned int>(full);
 }
 
 unsigned int vector_type2t::get_width() const
@@ -156,7 +164,9 @@ unsigned int vector_type2t::get_width() const
   assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
-  return num_elems * sub_width;
+  uint64_t full = (uint64_t)num_elems * sub_width; // R1: see array_type2t
+  assert(full <= std::numeric_limits<unsigned int>::max());
+  return static_cast<unsigned int>(full);
 }
 
 unsigned int pointer_type2t::get_width() const
@@ -182,13 +192,15 @@ unsigned int cpp_name_type2t::get_width() const
 
 unsigned int struct_type2t::get_width() const
 {
-  // Iterate over members accumulating width.
+  // Accumulate in 64 bits and reject a total that would truncate on the
+  // narrowing to unsigned int (finding R1).
   std::vector<type2tc>::const_iterator it;
-  unsigned int width = 0;
+  uint64_t width = 0;
   for (it = members.begin(); it != members.end(); ++it)
     width += (*it)->get_width();
 
-  return width;
+  assert(width <= std::numeric_limits<unsigned int>::max());
+  return static_cast<unsigned int>(width);
 }
 
 unsigned int union_type2t::get_width() const
