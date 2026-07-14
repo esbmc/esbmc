@@ -2,7 +2,7 @@
 
 #include <catch2/catch.hpp>
 #include <python-frontend/python_annotation/python_annotation.h>
-#include <python-frontend/global_scope.h>
+#include <python-frontend/module/global_scope.h>
 #include <nlohmann/json.hpp>
 
 TEST_CASE("Add type annotation")

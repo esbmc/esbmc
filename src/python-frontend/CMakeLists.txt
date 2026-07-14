@@ -54,8 +54,8 @@ add_library(pythonfrontend STATIC
             python_set.cpp
             python_typechecking.cpp
             pythonastgen.c
-            module_manager.cpp
-            module_locator.cpp
+            module/module_manager.cpp
+            module/module_locator.cpp
             python_annotation/annotation_intrinsics.cpp
             python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp

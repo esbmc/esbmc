@@ -1,5 +1,5 @@
-#include <python-frontend/module_manager.h>
-#include <python-frontend/module.h>
+#include <python-frontend/module/module_manager.h>
+#include <python-frontend/module/module.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <util/message.h>
