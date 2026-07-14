@@ -204,6 +204,12 @@ bool esbmc_parseoptionst::create_goto_program(
 {
   try
   {
+    // --sol is documented as usable standalone ("also accepted as a
+    // positional argument", options.cpp), but its value was never copied
+    // into cmdline.args.
+    if (cmdline.args.empty() && cmdline.isset("sol"))
+      cmdline.args.push_back(cmdline.getval("sol"));
+
     if (cmdline.args.size() == 0)
     {
       log_error("Please provide a program to verify");
